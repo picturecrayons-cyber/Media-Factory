@@ -41,6 +41,12 @@ export const Route = createRootRoute({
         <HeadContent />
       </head>
       <body className="bg-bg text-fg antialiased">
+        <a
+          href="#main"
+          className="fixed left-4 top-4 z-50 bg-accent px-3 py-2 text-accent-fg opacity-0 pointer-events-none focus:opacity-100 focus:pointer-events-auto"
+        >
+          Skip to content
+        </a>
         <PreviewHostBridge />
         <QueryClientProvider client={queryClient}>
           <AuthProvider>

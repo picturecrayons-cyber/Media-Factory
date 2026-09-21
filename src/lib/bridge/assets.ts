@@ -12,6 +12,13 @@ import { assertNotDevUser } from "./guards";
 
 const UPLOADABLE: ReadonlySet<string> = new Set(["DRAFT", "UPLOADING", "PREPARING"]);
 
+const ALLOWED_MIME: Record<(typeof ASSET_KINDS)[number], readonly string[]> = {
+  poster: ["image/jpeg", "image/png", "image/webp"],
+  screener: ["video/mp4", "video/quicktime"],
+  master: ["video/mp4", "video/quicktime", "application/mxf", "application/octet-stream"],
+  subtitle: ["text/vtt", "application/x-subrip", "text/plain"],
+};
+
 async function hasLicenseEntitlement(userId: string, titleId: string): Promise<boolean> {
   const sql = await getSql();
   const rows = await sql<{ n: number }>`
@@ -39,6 +46,10 @@ export const requestAssetUpload = createServerFn({ method: "POST" })
     if (!title) throw new Error("Not found");
     if (title.ownerUserId !== actor.userId && !actor.internalRole) throw new Error("Forbidden");
     if (!UPLOADABLE.has(title.status)) throw new Error("Uploads are closed for this status");
+    const allowed = ALLOWED_MIME[data.kind];
+    if (!allowed.includes(data.contentType)) {
+      throw new Error("File type is not allowed for this asset");
+    }
     const { signUpload, titleAssetKey } = await import("./s3.server");
     const key = titleAssetKey({
       ownerUserId: title.ownerUserId,

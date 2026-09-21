@@ -61,7 +61,7 @@ export function BridgeShell({
           </nav>
         </div>
       </header>
-      <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
+      <main id="main" className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
         <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-accent">Title record</p>
         <h1 className="mt-2 font-display text-3xl sm:text-4xl">{title}</h1>
         <div className="mt-8">{children}</div>

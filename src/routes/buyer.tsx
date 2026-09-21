@@ -43,7 +43,7 @@ function Buyer() {
       {(actor) => (
         <BridgeShell actor={actor} title="Buyer catalog">
           <p className="mb-6 max-w-2xl text-sm leading-relaxed text-muted">
-            Only titles at live-for-buyers or later appear here. A license is an entitlement after captured payment.
+            Only titles at LIVE FOR BUYERS appear here. A license is an entitlement after captured payment.
           </p>
           <BuyerBody />
         </BridgeShell>
@@ -96,7 +96,7 @@ function BuyerBody() {
   return (
     <div className="space-y-4">
       {!titles.length ? (
-        <p className="text-sm text-muted">No live titles yet. Nothing is for sale until licensing-ready clears.</p>
+        <p className="text-sm text-muted">No live titles yet. Nothing is for sale until rights clear and the title is published for buyers.</p>
       ) : (
         <ul className="divide-y divide-line rounded-sm border border-line">
           {titles.map((t) => (

@@ -295,6 +295,23 @@ export async function ingestRazorpayWebhook(rawBody: string, signature: string |
       orderId: payment.order_id,
       paymentId: payment.id,
     });
+  } else if (eventName === "payment.failed" && payment?.order_id) {
+    await sql`
+      update bridge_payments
+      set status = ${"failed"}
+      where provider_order_id = ${payment.order_id} and status <> 'captured'
+    `;
+    await writeAudit({
+      actorUserId: "razorpay-webhook",
+      action: "PAYMENT_FAILED",
+      entityType: "bridge_payment",
+      entityId: payment.order_id,
+    });
+  } else if (eventName === "order.paid" && payment?.id && payment.order_id && payment.status === "captured") {
+    await grantFromCapturedPayment({
+      orderId: payment.order_id,
+      paymentId: payment.id,
+    });
   }
   await sql`
     update bridge_webhook_events set status = ${"processed"}, processed_at = now()

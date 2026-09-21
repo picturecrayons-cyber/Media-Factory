@@ -41,6 +41,7 @@ export type BridgeTitle = {
   name: string;
   nameMl: string | null;
   ownerUserId: string;
+  organizationId: string | null;
   ownerAccountType: AccountType;
   status: TitleStatus;
   synopsis: string;
@@ -68,6 +69,7 @@ export const PERMISSIONS = [
   "title.license",
   "title.negotiate",
   "title.deliver",
+  "title.reverse",
   "asset.sign_upload",
   "asset.sign_download",
   "payment.create_order",

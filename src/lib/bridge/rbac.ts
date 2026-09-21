@@ -13,6 +13,7 @@ const INTERNAL_PERMISSIONS: Record<InternalRole, readonly Permission[]> = {
     "title.license",
     "title.negotiate",
     "title.deliver",
+    "title.reverse",
     "asset.sign_download",
     "finance.read",
     "users.invite_internal",
@@ -29,6 +30,7 @@ const INTERNAL_PERMISSIONS: Record<InternalRole, readonly Permission[]> = {
     "title.license",
     "title.negotiate",
     "title.deliver",
+    "title.reverse",
     "asset.sign_upload",
     "asset.sign_download",
     "payment.create_order",
@@ -66,6 +68,7 @@ export type Actor = {
   emailVerified: boolean;
   accountType: AccountType;
   internalRole: InternalRole | null;
+  organizationId?: string | null;
 };
 
 const TRANSITION_PERMISSION: Record<string, Permission> = {
@@ -105,10 +108,17 @@ export function assertPermission(actor: Actor, permission: Permission): void {
 
 export function canReadTitle(
   actor: Actor,
-  title: { ownerUserId: string; status: TitleStatus },
+  title: { ownerUserId: string; status: TitleStatus; organizationId?: string | null },
 ): boolean {
   if (!actor.emailVerified) return false;
   if (title.ownerUserId === actor.userId) return hasPermission(actor, "title.read_own");
+  if (
+    title.organizationId &&
+    actor.organizationId &&
+    title.organizationId === actor.organizationId
+  ) {
+    return hasPermission(actor, "title.read_own");
+  }
   if (actor.internalRole) return hasPermission(actor, "title.read_catalog");
   if (actor.accountType === "buyer") {
     return hasPermission(actor, "title.read_catalog") && isBuyerVisible(title.status);

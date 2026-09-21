@@ -12,6 +12,7 @@ export type BridgeActor = Actor & {
   email: string;
   displayName: string;
   organizationName: string | null;
+  organizationId: string | null;
 };
 
 function mapRow(r: {
@@ -20,6 +21,7 @@ function mapRow(r: {
   display_name: string;
   account_type: string;
   organization_name: string | null;
+  organization_id: string | null;
   internal_role: string | null;
   email_verified: boolean;
 }): BridgeActor {
@@ -29,6 +31,7 @@ function mapRow(r: {
     displayName: r.display_name,
     accountType: r.account_type as AccountType,
     organizationName: r.organization_name,
+    organizationId: r.organization_id,
     internalRole: (r.internal_role as InternalRole | null) ?? null,
     emailVerified: !!r.email_verified,
   };
@@ -43,10 +46,12 @@ export async function loadActor(userId: string): Promise<BridgeActor | null> {
     display_name: string;
     account_type: string;
     organization_name: string | null;
+    organization_id: string | null;
     internal_role: string | null;
     email_verified: boolean;
   }>`
-    select user_id, email, display_name, account_type, organization_name, internal_role, email_verified
+    select user_id, email, display_name, account_type, organization_name, organization_id,
+           internal_role, email_verified
     from bridge_profiles where user_id = ${userId} limit 1
   `;
   return rows[0] ? mapRow(rows[0]) : null;

@@ -77,11 +77,25 @@ export const completeOnboarding = createServerFn({ method: "POST" })
       throw new Error("Organization name is required");
     }
 
+    let organizationId: string | null = null;
+    if (org) {
+      organizationId = randomBytes(16).toString("hex");
+      const kind = data.accountType === "buyer" ? "buyer" : data.accountType === "studio" ? "studio" : "internal";
+      await sql`
+        insert into bridge_organizations (id, name, kind, created_by)
+        values (${organizationId}, ${org}, ${kind}, ${context.userId})
+      `;
+      await sql`
+        insert into bridge_organization_members (organization_id, user_id, member_role)
+        values (${organizationId}, ${context.userId}, ${"owner"})
+      `;
+    }
+
     await sql`
       insert into bridge_profiles (
-        user_id, email, display_name, account_type, organization_name, internal_role, email_verified, invited_by
+        user_id, email, display_name, account_type, organization_name, organization_id, internal_role, email_verified, invited_by
       ) values (
-        ${context.userId}, ${email}, ${data.displayName}, ${data.accountType}, ${org},
+        ${context.userId}, ${email}, ${data.displayName}, ${data.accountType}, ${org}, ${organizationId},
         ${internalRole}, ${verified}, ${invitedBy}
       )
     `;
