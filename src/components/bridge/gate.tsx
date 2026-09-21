@@ -1,6 +1,7 @@
 import { Link, Navigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import type { ReactNode } from "react";
+import { toast } from "sonner";
 import { RedirectToSignIn } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { getBridgeSession, type BridgeActor } from "@/lib/bridge/session";
@@ -61,7 +62,11 @@ export function RequireBridge({
         <Button
           type="button"
           onClick={() => {
-            void requestEmailVerification().catch(() => undefined);
+            void requestEmailVerification()
+              .then(() => toast("Verification mail sent"))
+              .catch((err) =>
+                toast(err instanceof Error ? err.message : "Transactional email is not configured"),
+              );
           }}
         >
           Send verification
