@@ -24,5 +24,10 @@ jobs:
       - name: Forbid legacy dumps
         run: |
           test ! -e stream-vista.zip
-          ! git ls-files | grep -E 'stream-vista\.zip|legacy-dump'
+          tracked="$(git ls-files | grep -E '(^|/)(stream-vista\.zip|legacy-dump\.json|django-dump\.json)$' || true)"
+          if [ -n "$tracked" ]; then
+            echo "Forbidden dump is tracked:"
+            echo "$tracked"
+            exit 1
+          fi
       - run: npm run build
