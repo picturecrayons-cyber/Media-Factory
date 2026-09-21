@@ -15,11 +15,16 @@ const LINKS: { to: string; label: string; show: (a: BridgeActor) => boolean }[] 
 
 export function BrandMark({ className }: { className?: string }) {
   return (
-    <Link to="/" className={cn("flex items-center gap-3", className)}>
-      <span className="grid h-8 w-8 place-items-center border border-accent text-[10px] font-medium tracking-[0.18em] text-accent">
-        CB
+    <Link to="/" className={cn("flex items-center", className)} aria-label="Crayons Bridge">
+      <span className="rounded-sm bg-logo-plate px-2 py-1">
+        <img
+          src="/brand/crayons-bridge-logo.png"
+          alt="Crayons Bridge"
+          className="h-10 w-auto sm:h-12"
+          width={198}
+          height={48}
+        />
       </span>
-      <span className="font-display text-lg tracking-wide">Crayons Bridge</span>
     </Link>
   );
 }
