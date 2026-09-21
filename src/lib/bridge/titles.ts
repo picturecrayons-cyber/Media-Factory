@@ -144,7 +144,7 @@ export const listTitles = createServerFn({ method: "GET" })
     assertNotDevUser(context.userId);
     const actor = await requireActor(context.userId);
     const sql = await getSql();
-    let rows: TitleRow[] = [];
+    let rows: TitleRow[];
     if (actor.internalRole) {
       assertPermission(actor, "title.read_catalog");
       rows = await sql<TitleRow>`select * from bridge_titles order by updated_at desc limit 200`;
