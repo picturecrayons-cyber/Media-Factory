@@ -93,7 +93,8 @@ function Home() {
         <section className="border-t border-line">
           <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6">
             <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-muted">Environment</p>
-            <ul className="mt-4 grid grid-cols-2 gap-2 text-sm sm:grid-cols-4">
+            <ul className="mt-4 grid grid-cols-2 gap-2 text-sm sm:grid-cols-3 lg:grid-cols-5">
+              <EnvChip label="Postgres" ok={integrations?.postgres} />
               <EnvChip label="S3" ok={integrations?.s3} />
               <EnvChip label="Razorpay" ok={integrations?.razorpay} />
               <EnvChip label="Mail" ok={integrations?.mail} />

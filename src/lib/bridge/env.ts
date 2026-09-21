@@ -20,10 +20,12 @@ export const bridgeEnv = {
   smtpPass: () => read("SMTP_PASS") || read("HOSTINGER_SMTP_PASS"),
   mailFrom: () => read("MAIL_FROM") || "abijithasokan@crayonspictures.com",
   appUrl: () => read("BETTER_AUTH_URL") || read("APP_URL") || "https://bridge.crayonspictures.com",
+  databaseUrl: () => read("DATABASE_URL"),
 };
 
 export function integrationStatus() {
   return {
+    postgres: Boolean(bridgeEnv.databaseUrl()),
     supabase: Boolean(bridgeEnv.supabaseUrl() && (bridgeEnv.supabaseAnon() || bridgeEnv.supabaseService())),
     razorpay: Boolean(bridgeEnv.razorpayKeyId() && bridgeEnv.razorpayKeySecret()),
     razorpayWebhook: Boolean(bridgeEnv.razorpayWebhookSecret()),
