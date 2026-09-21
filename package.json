@@ -16,7 +16,7 @@
     "preview:stop": "node scripts/preview.mjs stop",
     "typecheck": "tsc --noEmit",
     "check:auth": "node scripts/check-auth-invariant.mjs",
-    "test": "node --test scripts/assert-no-legacy-dump.test.mjs && node --experimental-strip-types --test src/lib/app-data/app-data.test.ts src/lib/app-data/readiness-schedule.test.ts src/lib/auth/gate-identity.test.ts src/lib/auth/sign-in-gate.test.ts src/lib/bridge/lifecycle.test.ts src/lib/bridge/rbac.test.ts src/lib/bridge/canonical.test.ts src/lib/bridge/razorpay-crypto.test.ts src/lib/bridge/legacy-map.test.ts src/lib/bridge/loop-handoff.test.ts src/lib/bridge/loop-publish.test.ts src/lib/bridge/blockers.test.ts",
+    "test": "node --test scripts/assert-no-legacy-dump.test.mjs && node --experimental-strip-types --test src/lib/app-data/app-data.test.ts src/lib/app-data/readiness-schedule.test.ts src/lib/auth/gate-identity.test.ts src/lib/auth/sign-in-gate.test.ts src/lib/bridge/lifecycle.test.ts src/lib/bridge/rbac.test.ts src/lib/bridge/canonical.test.ts src/lib/bridge/razorpay-crypto.test.ts src/lib/bridge/legacy-map.test.ts src/lib/bridge/loop-handoff.test.ts src/lib/bridge/loop-publish.test.ts src/lib/bridge/blockers.test.ts src/lib/bridge/verify-mail.test.ts src/lib/bridge/studio-metrics.test.ts",
     "secret-scan": "node scripts/secret-scan.mjs",
     "lint": "eslint .",
     "format": "prettier --write ."

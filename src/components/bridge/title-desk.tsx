@@ -18,7 +18,7 @@ export function TitleList({ empty }: { empty: string }) {
           <Link
             to="/title/$id"
             params={{ id: t.id }}
-            className="flex flex-wrap items-center justify-between gap-3 px-4 py-4 hover:bg-fg/5"
+            className="flex flex-wrap items-center justify-between gap-3 px-3 py-2.5 hover:bg-fg/5"
           >
             <div>
               <p className="font-medium">{t.name}</p>
@@ -35,7 +35,7 @@ export function TitleList({ empty }: { empty: string }) {
   );
 }
 
-export function CreateTitleForm() {
+export function CreateTitleForm({ compact = false }: { compact?: boolean }) {
   const qc = useQueryClient();
   const navigate = useNavigate();
   const [name, setName] = useState("");
@@ -68,14 +68,14 @@ export function CreateTitleForm() {
   }
 
   return (
-    <form onSubmit={onSubmit} className="grid gap-3 rounded-sm border border-line bg-surface p-4 sm:grid-cols-2">
+    <form onSubmit={onSubmit} className="grid gap-2 rounded-sm border border-line bg-surface p-3 sm:grid-cols-2">
       <label className="text-sm sm:col-span-2">
         Title
         <input
           required
           value={name}
           onChange={(e) => setName(e.target.value)}
-          className="mt-1 h-11 w-full rounded-sm border border-line-strong bg-elevated px-3"
+          className="mt-1 h-9 w-full rounded-sm border border-line-strong bg-elevated px-3"
         />
       </label>
       <label className="text-sm">
@@ -83,7 +83,7 @@ export function CreateTitleForm() {
         <input
           value={nameMl}
           onChange={(e) => setNameMl(e.target.value)}
-          className="mt-1 h-11 w-full rounded-sm border border-line-strong bg-elevated px-3"
+          className="mt-1 h-9 w-full rounded-sm border border-line-strong bg-elevated px-3"
         />
       </label>
       <label className="text-sm">
@@ -92,30 +92,32 @@ export function CreateTitleForm() {
           inputMode="numeric"
           value={year}
           onChange={(e) => setYear(e.target.value)}
-          className="mt-1 h-11 w-full rounded-sm border border-line-strong bg-elevated px-3"
+          className="mt-1 h-9 w-full rounded-sm border border-line-strong bg-elevated px-3"
         />
       </label>
-      <label className="text-sm sm:col-span-2">
-        Synopsis
-        <textarea
-          value={synopsis}
-          onChange={(e) => setSynopsis(e.target.value)}
-          rows={3}
-          className="mt-1 w-full rounded-sm border border-line-strong bg-elevated px-3 py-2"
-        />
-      </label>
+      {compact ? null : (
+        <label className="text-sm sm:col-span-2">
+          Synopsis
+          <textarea
+            value={synopsis}
+            onChange={(e) => setSynopsis(e.target.value)}
+            rows={2}
+            className="mt-1 w-full rounded-sm border border-line-strong bg-elevated px-3 py-2"
+          />
+        </label>
+      )}
       <label className="text-sm">
         License fee (INR)
         <input
           inputMode="decimal"
           value={fee}
           onChange={(e) => setFee(e.target.value)}
-          className="mt-1 h-11 w-full rounded-sm border border-line-strong bg-elevated px-3"
+          className="mt-1 h-9 w-full rounded-sm border border-line-strong bg-elevated px-3"
         />
       </label>
       <div className="flex items-end">
-        <Button type="submit" disabled={mut.isPending} className="w-full">
-          {mut.isPending ? "Opening…" : "Open draft"}
+        <Button type="submit" disabled={mut.isPending} className="h-9 w-full">
+          {mut.isPending ? "Opening…" : "+ Add Title"}
         </Button>
       </div>
     </form>

@@ -32,17 +32,19 @@ export function BrandMark({ className }: { className?: string }) {
 export function BridgeShell({
   actor,
   title,
+  kicker = "Title record",
   children,
 }: {
   actor: BridgeActor;
   title: string;
+  kicker?: string;
   children: ReactNode;
 }) {
   const home = workspaceHome(actor);
   return (
     <div className="min-h-screen bg-bg">
       <header className="border-b border-line">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-4 py-4 sm:px-6">
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-4 py-3 sm:px-6">
           <BrandMark />
           <nav className="flex flex-wrap items-center gap-1 text-sm">
             {LINKS.filter((l) => l.show(actor)).map((l) => (
@@ -61,10 +63,10 @@ export function BridgeShell({
           </nav>
         </div>
       </header>
-      <main id="main" className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
-        <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-accent">Title record</p>
-        <h1 className="mt-2 font-display text-3xl sm:text-4xl">{title}</h1>
-        <div className="mt-8">{children}</div>
+      <main id="main" className="mx-auto max-w-6xl px-4 py-6 sm:px-6">
+        <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-accent">{kicker}</p>
+        <h1 className="mt-1 font-display text-3xl sm:text-4xl">{title}</h1>
+        <div className="mt-6">{children}</div>
       </main>
     </div>
   );

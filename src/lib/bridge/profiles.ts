@@ -9,6 +9,13 @@ import { assertPermission, workspaceHome } from "./rbac";
 import { createHash, randomBytes } from "node:crypto";
 import { bridgeEnv } from "./env";
 import { assertNotDevUser } from "./guards";
+import { TRANSACTIONAL_FROM } from "./canonical";
+import {
+  VERIFY_TTL_MS,
+  assertVerifyResendAllowed,
+  canonicalVerifyUrl,
+  verificationEmailCopy,
+} from "./verify-mail";
 
 function tokenPair() {
   const token = randomBytes(32).toString("hex");
@@ -16,9 +23,56 @@ function tokenPair() {
   return { token, hash };
 }
 
-async function mail(opts: { to: string; subject: string; text: string }) {
+async function mail(opts: { to: string; subject: string; text: string; html?: string }) {
   const { sendBridgeMail } = await import("./mail.server");
   return sendBridgeMail(opts);
+}
+
+async function sendVerificationNow(opts: {
+  userId: string;
+  email: string;
+  displayName?: string | null;
+  throttle?: boolean;
+}) {
+  const sql = await getSql();
+  if (opts.throttle !== false) {
+    const recent = await sql<{ created_at: string | Date }>`
+      select created_at from bridge_email_challenges
+      where user_id = ${opts.userId} and purpose = ${"verify"}
+      order by created_at desc limit 1
+    `;
+    assertVerifyResendAllowed(recent[0]?.created_at ?? null);
+  }
+  await sql`
+    update bridge_email_challenges
+    set consumed_at = now()
+    where user_id = ${opts.userId} and purpose = ${"verify"} and consumed_at is null
+  `;
+  const { token, hash } = tokenPair();
+  const id = randomBytes(16).toString("hex");
+  const url = canonicalVerifyUrl(bridgeEnv.appUrl(), token);
+  const copy = verificationEmailCopy({
+    displayName: opts.displayName,
+    url,
+    to: opts.email,
+  });
+  await sql`
+    insert into bridge_email_challenges (id, user_id, email, purpose, token_hash, expires_at)
+    values (${id}, ${opts.userId}, ${opts.email}, ${"verify"}, ${hash}, ${new Date(Date.now() + VERIFY_TTL_MS).toISOString()})
+  `;
+  try {
+    await mail({ to: opts.email, subject: copy.subject, text: copy.text, html: copy.html });
+  } catch (err) {
+    await sql`update bridge_email_challenges set consumed_at = now() where id = ${id}`;
+    throw err instanceof Error ? err : new Error("SMTP send failed");
+  }
+  await writeAudit({
+    actorUserId: opts.userId,
+    action: "email.verification_requested",
+    entityType: "bridge_profile",
+    entityId: opts.userId,
+    metadata: { from: TRANSACTIONAL_FROM },
+  });
 }
 
 export const completeOnboarding = createServerFn({ method: "POST" })
@@ -108,6 +162,18 @@ export const completeOnboarding = createServerFn({ method: "POST" })
     });
     const actor = await loadActor(context.userId);
     if (!actor) throw new Error("Profile create failed");
+    if (!verified) {
+      try {
+        await sendVerificationNow({
+          userId: context.userId,
+          email,
+          displayName: actor.displayName,
+          throttle: false,
+        });
+      } catch {
+        /* SMTP unset fails closed for mail only — account still exists unverified */
+      }
+    }
     return { home: workspaceHome(actor), profile: actor };
   });
 
@@ -120,23 +186,11 @@ export const requestEmailVerification = createServerFn({ method: "POST" })
     const emailRows = await sql<{ email: string }>`select email from "user" where id = ${context.userId} limit 1`;
     const email = actor?.email || emailRows[0]?.email;
     if (!email) throw new Error("No email on account");
-    const { token, hash } = tokenPair();
-    const id = randomBytes(16).toString("hex");
-    await sql`
-      insert into bridge_email_challenges (id, user_id, email, purpose, token_hash, expires_at)
-      values (${id}, ${context.userId}, ${email}, ${"verify"}, ${hash}, ${new Date(Date.now() + 24 * 3600 * 1000).toISOString()})
-    `;
-    const url = `${bridgeEnv.appUrl()}/verify-email?token=${token}`;
-    await mail({
-      to: email,
-      subject: "Verify your Crayons Bridge email",
-      text: `Confirm this email for Crayons Bridge (StreamVista OPC Pvt Ltd):\n\n${url}\n\nThis link expires in 24 hours.`,
-    });
-    await writeAudit({
-      actorUserId: context.userId,
-      action: "email.verification_requested",
-      entityType: "bridge_profile",
-      entityId: context.userId,
+    await sendVerificationNow({
+      userId: context.userId,
+      email,
+      displayName: actor?.displayName,
+      throttle: true,
     });
     return { sent: true };
   });
