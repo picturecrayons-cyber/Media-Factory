@@ -1,28 +1,25 @@
 @import "tailwindcss";
 
 @theme {
-  --color-bg: #050507;
-  --color-surface: #0e0e14;
-  --color-elevated: #161622;
-  --color-panel: #121218;
-  --color-fg: #f4efe6;
-  --color-muted: #9a948c;
-  --color-faint: #6b665f;
-  --color-line: #ffffff14;
-  --color-line-strong: #ffffff26;
-  --color-accent: #e50914;
-  --color-accent-fg: #fff7f5;
-  --color-loop: #d946ef;
-  --color-ok: #10b981;
-  --color-warn: #f59e0b;
-  --font-display: "Cinzel", "Times New Roman", serif;
-  --font-sans: "Outfit", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-  --radius-xs: 4px;
-  --radius-sm: 8px;
-  --radius-md: 12px;
-  --radius-lg: 18px;
-  --radius-xl: 28px;
+  --color-bg: #0b0a09;
+  --color-surface: #141210;
+  --color-elevated: #1c1916;
+  --color-fg: #efe6d4;
+  --color-muted: #9a8f7e;
+  --color-faint: #6e675b;
+  --color-line: #efe6d41f;
+  --color-line-strong: #efe6d438;
+  --color-accent: #c48a3a;
+  --color-accent-fg: #1a140c;
+  --color-ok: #8aa37a;
+  --color-warn: #c48a3a;
+  --font-display: "Fraunces", "Times New Roman", serif;
+  --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+  --radius-xs: 2px;
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 14px;
   --shadow-lift: 0 24px 80px #000000a6;
 }
 
@@ -34,9 +31,21 @@
     background: var(--color-bg);
     color: var(--color-fg);
   }
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
   body {
     font-family: var(--font-sans);
     letter-spacing: 0.01em;
+  }
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
+  p {
+    text-wrap: pretty;
   }
   button:not(:disabled),
   [role="button"]:not(:disabled) {
@@ -44,7 +53,7 @@
   }
   ::selection {
     background: var(--color-accent);
-    color: white;
+    color: var(--color-accent-fg);
   }
 }
 
@@ -61,83 +70,9 @@
   font-family: var(--font-display);
 }
 
-.cinema-fade {
-  background: linear-gradient(
-    180deg,
-    #05050700 0%,
-    #050507cc 55%,
-    var(--color-bg) 100%
-  );
-}
-
-.poster-hover {
-  transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1),
-    box-shadow 220ms cubic-bezier(0.22, 1, 0.36, 1);
-}
-.poster-hover:hover {
-  transform: scale(1.06) translateY(-4px);
-  box-shadow: var(--shadow-lift);
-}
-
-.hide-scroll {
-  scrollbar-width: none;
-}
-.hide-scroll::-webkit-scrollbar {
-  display: none;
-}
-
-.kenburns {
-  animation: ken 28s ease-in-out infinite alternate;
-}
-@keyframes ken {
-  from {
-    transform: scale(1.04) translate3d(0, 0, 0);
-  }
-  to {
-    transform: scale(1.12) translate3d(-2%, 1%, 0);
-  }
-}
-
-.scanline::after {
-  content: "";
-  pointer-events: none;
-  position: absolute;
-  inset: 0;
-  background: repeating-linear-gradient(
-    to bottom,
-    #ffffff00 0px,
-    #ffffff00 2px,
-    #ffffff06 3px
-  );
-  mix-blend-mode: overlay;
-  opacity: 0.35;
-}
-
-.loop-user {
-  display: flex;
-  align-items: center;
-}
-.loop-user > div {
-  gap: 0.5rem;
-}
-.loop-user span.text-sm {
-  display: none;
-}
-@media (min-width: 640px) {
-  .loop-user span.text-sm {
-    display: inline;
-    max-width: 9rem;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    font-size: 0.75rem;
-    color: var(--color-muted);
-  }
-}
-.loop-user button {
-  font-size: 0.7rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  text-decoration: none;
-  opacity: 0.7;
+.lab-grid {
+  background-image:
+    linear-gradient(var(--color-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--color-line) 1px, transparent 1px);
+  background-size: 48px 48px;
 }

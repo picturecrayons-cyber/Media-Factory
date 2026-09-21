@@ -1,0 +1,28 @@
+name: CI
+
+on:
+  push:
+    branches: ["feat/crayons-bridge-production"]
+  pull_request:
+    branches: ["main"]
+  workflow_dispatch:
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npx eslint "src/lib/bridge/**/*.{ts,tsx}" "src/routes/**/*.{ts,tsx}" "src/components/bridge/**/*.{ts,tsx}" "src/components/ui/**/*.tsx"
+      - run: npm test
+      - run: node scripts/secret-scan.mjs
+      - name: Forbid legacy dumps
+        run: |
+          test ! -e stream-vista.zip
+          ! git ls-files | grep -E 'stream-vista\.zip|legacy-dump'
+      - run: npm run build

@@ -1,43 +1,62 @@
-# CRAYONS LOOP
+# Crayons Bridge
 
-Premium Malayalam / global cinema streaming — catalog, kids safe mode, SVOD + TVOD, and a 10-command-center owner ops desk.
+Title record, rights, and licensing OS. Legal owner: **StreamVista OPC Pvt Ltd**.
 
-Mapped from [crayonsloop.com](https://crayonsloop.com): public cinema, account & family profiles, Mission Control, ingest, rights, QC, localization, screeners, and edge transfers.
+Production domain: `bridge.crayonspictures.com` · Vercel project `bridge` · GitHub `picturecrayons-cyber/Media-Factory`.
+
+This branch (`feat/crayons-bridge-production`) rebuilds Bridge on TanStack Start. It is **not** CRAYONS LOOP. Loop cinema routes, PIN gates, and fake payments are removed here.
+
+## Canonical pins
+
+| Thing | Value |
+|---|---|
+| Supabase | `uakpqqardziifcwzvgfx` |
+| Mail from | `abijithasokan@crayonspictures.com` |
+| Vercel | project `bridge`, **preview only** on this branch |
+
+Any other Supabase project is rejected in `src/lib/bridge/canonical.ts`.
 
 ## Stack
 
-- TanStack Start (file routing) + React 19
-- Tailwind v4
-- Postgres (Neon in production, PGLite in preview)
-- Better Auth (Google / X / email)
-- Zustand for cinema UI (kids mode, search)
+- TanStack Start + React 19
+- Better Auth (email/password + Google / X) — no mock / `dev-user` Bridge ops
+- Postgres via `getSql()` (PGLite in preview, `DATABASE_URL` when set)
+- Private AWS S3 signed URLs (fail closed)
+- Razorpay order + signature verify + idempotent webhook (entitlement **only** after capture)
+- Hostinger SMTP (fail closed)
+
+## Desks
+
+| Path | Who |
+|---|---|
+| `/` | Public landing |
+| `/login` `/signup` `/forgot-password` `/reset-password` `/verify-email` | Auth |
+| `/onboarding` | Account type: independent creator / studio / buyer |
+| `/creator` `/studio` | Title create + upload |
+| `/buyer` | Live catalog + license checkout |
+| `/internal` | Invite-only QC / legal / finance / admin |
+| `/title/$id` | One title record |
+
+Lifecycle: `DRAFT → UPLOADING → PREPARING → QC_REVIEW → RIGHTS_REVIEW → LICENSING_READY → LIVE_FOR_BUYERS → IN_NEGOTIATION → LICENSED → DELIVERED`.
+
+`LICENSED` is not a manual advance. It is granted after a captured Razorpay payment.
 
 ## Scripts
 
 ```bash
 npm install
-npm run dev          # 0.0.0.0:8080
-npm run build
+npm run dev
 npm run typecheck
+npm test
+npm run build
+node scripts/secret-scan.mjs
+node --experimental-strip-types scripts/legacy-migrate.mjs --file /private/titles.json
 ```
 
-Set `DATABASE_URL` for Neon. Auth credentials are injected at deploy. Do not commit `.env` files.
+Legacy import is dry-run only. See [docs/legacy-mapping.md](docs/legacy-mapping.md).
 
-## Surfaces
-
-| Path | What |
-|---|---|
-| `/` | Cinema home + hero |
-| `/browse` `/title/:slug` `/watch/:slug` | Catalog & studio player |
-| `/kids` | U-rated portal (PIN `0000` to exit) |
-| `/account` | Profiles, entitlements, invoices |
-| `/plans` | Monthly ₹149 · Annual ₹999 · TVOD ₹79 / ₹249 |
-| `/admin` | Mission Control — Connect · Sync · Map · Configure · Undo |
-| `/owner/workspace` | Ingest · Rights · QC |
-| `/owner/supply-chain` | Localization |
-| `/owner/sharing` | Forensic screeners |
-| `/owner/transfers` | Edge / S3 transfers |
+Do not merge `main` or promote production from this branch without owner approval.
 
 ## License
 
-Proprietary — StreamVista / Crayons Pictures. All rights reserved.
+Proprietary — StreamVista OPC Pvt Ltd / Crayons Pictures. All rights reserved.

@@ -1,15 +1,13 @@
 import { cn } from "@/lib/cn";
 import type { ButtonHTMLAttributes } from "react";
 
-type Variant = "primary" | "ghost" | "outline" | "danger" | "loop";
+type Variant = "primary" | "ghost" | "outline" | "danger";
 
 const styles: Record<Variant, string> = {
-  primary:
-    "bg-accent text-accent-fg hover:brightness-110 shadow-[0_0_0_1px_#ffffff10]",
-  ghost: "bg-fg/10 text-fg hover:bg-fg/16",
+  primary: "bg-accent text-accent-fg hover:brightness-110",
+  ghost: "bg-fg/8 text-fg hover:bg-fg/14",
   outline: "border border-line-strong text-fg hover:bg-fg/8",
-  danger: "bg-accent/90 text-accent-fg hover:bg-accent",
-  loop: "bg-loop text-bg hover:brightness-110",
+  danger: "border border-line-strong text-fg hover:bg-fg/10",
 };
 
 export function Button({
@@ -20,7 +18,7 @@ export function Button({
   return (
     <button
       className={cn(
-        "inline-flex h-11 items-center justify-center gap-2 rounded-md px-4 text-sm font-medium transition-[transform,background-color,filter] duration-150 active:scale-[0.98] disabled:opacity-50",
+        "inline-flex h-11 min-h-11 items-center justify-center gap-2 rounded-sm px-4 text-sm font-medium transition-[transform,background-color,filter] duration-150 active:scale-[0.98] disabled:opacity-50",
         styles[variant],
         className,
       )}
