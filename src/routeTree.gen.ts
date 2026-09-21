@@ -11,25 +11,19 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AccountRouteImport } from './routes/account'
-import { Route as BrowseRouteImport } from './routes/browse'
-import { Route as KidsRouteImport } from './routes/kids'
+import { Route as BuyerRouteImport } from './routes/buyer'
+import { Route as CreatorRouteImport } from './routes/creator'
+import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
+import { Route as InternalRouteImport } from './routes/internal'
 import { Route as LoginRouteImport } from './routes/login'
-import { Route as MyListRouteImport } from './routes/my-list'
-import { Route as PlansRouteImport } from './routes/plans'
-import { Route as SubmitFilmRouteImport } from './routes/submit-film'
-import { Route as AdminIndexRouteImport } from './routes/admin.index'
-import { Route as AdminCommandCenterRouteImport } from './routes/admin.command-center'
-import { Route as AdminCustomizationRouteImport } from './routes/admin.customization'
-import { Route as AdminPlansRouteImport } from './routes/admin.plans'
-import { Route as AdminRevenueRouteImport } from './routes/admin.revenue'
-import { Route as AdminTitlesRouteImport } from './routes/admin.titles'
-import { Route as OwnerSharingRouteImport } from './routes/owner.sharing'
-import { Route as OwnerSupplyChainRouteImport } from './routes/owner.supply-chain'
-import { Route as OwnerTransfersRouteImport } from './routes/owner.transfers'
-import { Route as OwnerWorkspaceRouteImport } from './routes/owner.workspace'
-import { Route as TitleSlugRouteImport } from './routes/title.$slug'
-import { Route as WatchSlugRouteImport } from './routes/watch.$slug'
+import { Route as OnboardingRouteImport } from './routes/onboarding'
+import { Route as ResetPasswordRouteImport } from './routes/reset-password'
+import { Route as SignupRouteImport } from './routes/signup'
+import { Route as StudioRouteImport } from './routes/studio'
+import { Route as VerifyEmailRouteImport } from './routes/verify-email'
+import { Route as TitleIdRouteImport } from './routes/title.$id'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
+import { Route as ApiRazorpayWebhookRouteImport } from './routes/api/razorpay/webhook'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -41,14 +35,24 @@ const AccountRoute = AccountRouteImport.update({
   path: '/account',
   getParentRoute: () => rootRouteImport,
 } as any)
-const BrowseRoute = BrowseRouteImport.update({
-  id: '/browse',
-  path: '/browse',
+const BuyerRoute = BuyerRouteImport.update({
+  id: '/buyer',
+  path: '/buyer',
   getParentRoute: () => rootRouteImport,
 } as any)
-const KidsRoute = KidsRouteImport.update({
-  id: '/kids',
-  path: '/kids',
+const CreatorRoute = CreatorRouteImport.update({
+  id: '/creator',
+  path: '/creator',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ForgotPasswordRoute = ForgotPasswordRouteImport.update({
+  id: '/forgot-password',
+  path: '/forgot-password',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const InternalRoute = InternalRouteImport.update({
+  id: '/internal',
+  path: '/internal',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LoginRoute = LoginRouteImport.update({
@@ -56,79 +60,34 @@ const LoginRoute = LoginRouteImport.update({
   path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
-const MyListRoute = MyListRouteImport.update({
-  id: '/my-list',
-  path: '/my-list',
+const OnboardingRoute = OnboardingRouteImport.update({
+  id: '/onboarding',
+  path: '/onboarding',
   getParentRoute: () => rootRouteImport,
 } as any)
-const PlansRoute = PlansRouteImport.update({
-  id: '/plans',
-  path: '/plans',
+const ResetPasswordRoute = ResetPasswordRouteImport.update({
+  id: '/reset-password',
+  path: '/reset-password',
   getParentRoute: () => rootRouteImport,
 } as any)
-const SubmitFilmRoute = SubmitFilmRouteImport.update({
-  id: '/submit-film',
-  path: '/submit-film',
+const SignupRoute = SignupRouteImport.update({
+  id: '/signup',
+  path: '/signup',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AdminIndexRoute = AdminIndexRouteImport.update({
-  id: '/admin/',
-  path: '/admin/',
+const StudioRoute = StudioRouteImport.update({
+  id: '/studio',
+  path: '/studio',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AdminCommandCenterRoute = AdminCommandCenterRouteImport.update({
-  id: '/admin/command-center',
-  path: '/admin/command-center',
+const VerifyEmailRoute = VerifyEmailRouteImport.update({
+  id: '/verify-email',
+  path: '/verify-email',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AdminCustomizationRoute = AdminCustomizationRouteImport.update({
-  id: '/admin/customization',
-  path: '/admin/customization',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AdminPlansRoute = AdminPlansRouteImport.update({
-  id: '/admin/plans',
-  path: '/admin/plans',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AdminRevenueRoute = AdminRevenueRouteImport.update({
-  id: '/admin/revenue',
-  path: '/admin/revenue',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AdminTitlesRoute = AdminTitlesRouteImport.update({
-  id: '/admin/titles',
-  path: '/admin/titles',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const OwnerSharingRoute = OwnerSharingRouteImport.update({
-  id: '/owner/sharing',
-  path: '/owner/sharing',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const OwnerSupplyChainRoute = OwnerSupplyChainRouteImport.update({
-  id: '/owner/supply-chain',
-  path: '/owner/supply-chain',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const OwnerTransfersRoute = OwnerTransfersRouteImport.update({
-  id: '/owner/transfers',
-  path: '/owner/transfers',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const OwnerWorkspaceRoute = OwnerWorkspaceRouteImport.update({
-  id: '/owner/workspace',
-  path: '/owner/workspace',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const TitleSlugRoute = TitleSlugRouteImport.update({
-  id: '/title/$slug',
-  path: '/title/$slug',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const WatchSlugRoute = WatchSlugRouteImport.update({
-  id: '/watch/$slug',
-  path: '/watch/$slug',
+const TitleIdRoute = TitleIdRouteImport.update({
+  id: '/title/$id',
+  path: '/title/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
@@ -136,171 +95,134 @@ const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   path: '/api/auth/$',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiRazorpayWebhookRoute = ApiRazorpayWebhookRouteImport.update({
+  id: '/api/razorpay/webhook',
+  path: '/api/razorpay/webhook',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/account': typeof AccountRoute
-  '/browse': typeof BrowseRoute
-  '/kids': typeof KidsRoute
+  '/buyer': typeof BuyerRoute
+  '/creator': typeof CreatorRoute
+  '/forgot-password': typeof ForgotPasswordRoute
+  '/internal': typeof InternalRoute
   '/login': typeof LoginRoute
-  '/my-list': typeof MyListRoute
-  '/plans': typeof PlansRoute
-  '/submit-film': typeof SubmitFilmRoute
-  '/admin/command-center': typeof AdminCommandCenterRoute
-  '/admin/customization': typeof AdminCustomizationRoute
-  '/admin/plans': typeof AdminPlansRoute
-  '/admin/revenue': typeof AdminRevenueRoute
-  '/admin/titles': typeof AdminTitlesRoute
-  '/owner/sharing': typeof OwnerSharingRoute
-  '/owner/supply-chain': typeof OwnerSupplyChainRoute
-  '/owner/transfers': typeof OwnerTransfersRoute
-  '/owner/workspace': typeof OwnerWorkspaceRoute
-  '/title/$slug': typeof TitleSlugRoute
-  '/watch/$slug': typeof WatchSlugRoute
-  '/admin/': typeof AdminIndexRoute
+  '/onboarding': typeof OnboardingRoute
+  '/reset-password': typeof ResetPasswordRoute
+  '/signup': typeof SignupRoute
+  '/studio': typeof StudioRoute
+  '/verify-email': typeof VerifyEmailRoute
+  '/title/$id': typeof TitleIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/razorpay/webhook': typeof ApiRazorpayWebhookRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/account': typeof AccountRoute
-  '/browse': typeof BrowseRoute
-  '/kids': typeof KidsRoute
+  '/buyer': typeof BuyerRoute
+  '/creator': typeof CreatorRoute
+  '/forgot-password': typeof ForgotPasswordRoute
+  '/internal': typeof InternalRoute
   '/login': typeof LoginRoute
-  '/my-list': typeof MyListRoute
-  '/plans': typeof PlansRoute
-  '/submit-film': typeof SubmitFilmRoute
-  '/admin/command-center': typeof AdminCommandCenterRoute
-  '/admin/customization': typeof AdminCustomizationRoute
-  '/admin/plans': typeof AdminPlansRoute
-  '/admin/revenue': typeof AdminRevenueRoute
-  '/admin/titles': typeof AdminTitlesRoute
-  '/owner/sharing': typeof OwnerSharingRoute
-  '/owner/supply-chain': typeof OwnerSupplyChainRoute
-  '/owner/transfers': typeof OwnerTransfersRoute
-  '/owner/workspace': typeof OwnerWorkspaceRoute
-  '/title/$slug': typeof TitleSlugRoute
-  '/watch/$slug': typeof WatchSlugRoute
-  '/admin': typeof AdminIndexRoute
+  '/onboarding': typeof OnboardingRoute
+  '/reset-password': typeof ResetPasswordRoute
+  '/signup': typeof SignupRoute
+  '/studio': typeof StudioRoute
+  '/verify-email': typeof VerifyEmailRoute
+  '/title/$id': typeof TitleIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/razorpay/webhook': typeof ApiRazorpayWebhookRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/account': typeof AccountRoute
-  '/browse': typeof BrowseRoute
-  '/kids': typeof KidsRoute
+  '/buyer': typeof BuyerRoute
+  '/creator': typeof CreatorRoute
+  '/forgot-password': typeof ForgotPasswordRoute
+  '/internal': typeof InternalRoute
   '/login': typeof LoginRoute
-  '/my-list': typeof MyListRoute
-  '/plans': typeof PlansRoute
-  '/submit-film': typeof SubmitFilmRoute
-  '/admin/command-center': typeof AdminCommandCenterRoute
-  '/admin/customization': typeof AdminCustomizationRoute
-  '/admin/plans': typeof AdminPlansRoute
-  '/admin/revenue': typeof AdminRevenueRoute
-  '/admin/titles': typeof AdminTitlesRoute
-  '/owner/sharing': typeof OwnerSharingRoute
-  '/owner/supply-chain': typeof OwnerSupplyChainRoute
-  '/owner/transfers': typeof OwnerTransfersRoute
-  '/owner/workspace': typeof OwnerWorkspaceRoute
-  '/title/$slug': typeof TitleSlugRoute
-  '/watch/$slug': typeof WatchSlugRoute
-  '/admin/': typeof AdminIndexRoute
+  '/onboarding': typeof OnboardingRoute
+  '/reset-password': typeof ResetPasswordRoute
+  '/signup': typeof SignupRoute
+  '/studio': typeof StudioRoute
+  '/verify-email': typeof VerifyEmailRoute
+  '/title/$id': typeof TitleIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/razorpay/webhook': typeof ApiRazorpayWebhookRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
     | '/account'
-    | '/browse'
-    | '/kids'
+    | '/buyer'
+    | '/creator'
+    | '/forgot-password'
+    | '/internal'
     | '/login'
-    | '/my-list'
-    | '/plans'
-    | '/submit-film'
-    | '/admin/command-center'
-    | '/admin/customization'
-    | '/admin/plans'
-    | '/admin/revenue'
-    | '/admin/titles'
-    | '/owner/sharing'
-    | '/owner/supply-chain'
-    | '/owner/transfers'
-    | '/owner/workspace'
-    | '/title/$slug'
-    | '/watch/$slug'
-    | '/admin/'
+    | '/onboarding'
+    | '/reset-password'
+    | '/signup'
+    | '/studio'
+    | '/verify-email'
+    | '/title/$id'
     | '/api/auth/$'
+    | '/api/razorpay/webhook'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/account'
-    | '/browse'
-    | '/kids'
+    | '/buyer'
+    | '/creator'
+    | '/forgot-password'
+    | '/internal'
     | '/login'
-    | '/my-list'
-    | '/plans'
-    | '/submit-film'
-    | '/admin/command-center'
-    | '/admin/customization'
-    | '/admin/plans'
-    | '/admin/revenue'
-    | '/admin/titles'
-    | '/owner/sharing'
-    | '/owner/supply-chain'
-    | '/owner/transfers'
-    | '/owner/workspace'
-    | '/title/$slug'
-    | '/watch/$slug'
-    | '/admin'
+    | '/onboarding'
+    | '/reset-password'
+    | '/signup'
+    | '/studio'
+    | '/verify-email'
+    | '/title/$id'
     | '/api/auth/$'
+    | '/api/razorpay/webhook'
   id:
     | '__root__'
     | '/'
     | '/account'
-    | '/browse'
-    | '/kids'
+    | '/buyer'
+    | '/creator'
+    | '/forgot-password'
+    | '/internal'
     | '/login'
-    | '/my-list'
-    | '/plans'
-    | '/submit-film'
-    | '/admin/command-center'
-    | '/admin/customization'
-    | '/admin/plans'
-    | '/admin/revenue'
-    | '/admin/titles'
-    | '/owner/sharing'
-    | '/owner/supply-chain'
-    | '/owner/transfers'
-    | '/owner/workspace'
-    | '/title/$slug'
-    | '/watch/$slug'
-    | '/admin/'
+    | '/onboarding'
+    | '/reset-password'
+    | '/signup'
+    | '/studio'
+    | '/verify-email'
+    | '/title/$id'
     | '/api/auth/$'
+    | '/api/razorpay/webhook'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AccountRoute: typeof AccountRoute
-  BrowseRoute: typeof BrowseRoute
-  KidsRoute: typeof KidsRoute
+  BuyerRoute: typeof BuyerRoute
+  CreatorRoute: typeof CreatorRoute
+  ForgotPasswordRoute: typeof ForgotPasswordRoute
+  InternalRoute: typeof InternalRoute
   LoginRoute: typeof LoginRoute
-  MyListRoute: typeof MyListRoute
-  PlansRoute: typeof PlansRoute
-  SubmitFilmRoute: typeof SubmitFilmRoute
-  AdminCommandCenterRoute: typeof AdminCommandCenterRoute
-  AdminCustomizationRoute: typeof AdminCustomizationRoute
-  AdminPlansRoute: typeof AdminPlansRoute
-  AdminRevenueRoute: typeof AdminRevenueRoute
-  AdminTitlesRoute: typeof AdminTitlesRoute
-  OwnerSharingRoute: typeof OwnerSharingRoute
-  OwnerSupplyChainRoute: typeof OwnerSupplyChainRoute
-  OwnerTransfersRoute: typeof OwnerTransfersRoute
-  OwnerWorkspaceRoute: typeof OwnerWorkspaceRoute
-  TitleSlugRoute: typeof TitleSlugRoute
-  WatchSlugRoute: typeof WatchSlugRoute
-  AdminIndexRoute: typeof AdminIndexRoute
+  OnboardingRoute: typeof OnboardingRoute
+  ResetPasswordRoute: typeof ResetPasswordRoute
+  SignupRoute: typeof SignupRoute
+  StudioRoute: typeof StudioRoute
+  VerifyEmailRoute: typeof VerifyEmailRoute
+  TitleIdRoute: typeof TitleIdRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
+  ApiRazorpayWebhookRoute: typeof ApiRazorpayWebhookRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -319,18 +241,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AccountRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/browse': {
-      id: '/browse'
-      path: '/browse'
-      fullPath: '/browse'
-      preLoaderRoute: typeof BrowseRouteImport
+    '/buyer': {
+      id: '/buyer'
+      path: '/buyer'
+      fullPath: '/buyer'
+      preLoaderRoute: typeof BuyerRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/kids': {
-      id: '/kids'
-      path: '/kids'
-      fullPath: '/kids'
-      preLoaderRoute: typeof KidsRouteImport
+    '/creator': {
+      id: '/creator'
+      path: '/creator'
+      fullPath: '/creator'
+      preLoaderRoute: typeof CreatorRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/forgot-password': {
+      id: '/forgot-password'
+      path: '/forgot-password'
+      fullPath: '/forgot-password'
+      preLoaderRoute: typeof ForgotPasswordRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/internal': {
+      id: '/internal'
+      path: '/internal'
+      fullPath: '/internal'
+      preLoaderRoute: typeof InternalRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/login': {
@@ -340,109 +276,46 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/my-list': {
-      id: '/my-list'
-      path: '/my-list'
-      fullPath: '/my-list'
-      preLoaderRoute: typeof MyListRouteImport
+    '/onboarding': {
+      id: '/onboarding'
+      path: '/onboarding'
+      fullPath: '/onboarding'
+      preLoaderRoute: typeof OnboardingRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/plans': {
-      id: '/plans'
-      path: '/plans'
-      fullPath: '/plans'
-      preLoaderRoute: typeof PlansRouteImport
+    '/reset-password': {
+      id: '/reset-password'
+      path: '/reset-password'
+      fullPath: '/reset-password'
+      preLoaderRoute: typeof ResetPasswordRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/submit-film': {
-      id: '/submit-film'
-      path: '/submit-film'
-      fullPath: '/submit-film'
-      preLoaderRoute: typeof SubmitFilmRouteImport
+    '/signup': {
+      id: '/signup'
+      path: '/signup'
+      fullPath: '/signup'
+      preLoaderRoute: typeof SignupRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/admin/': {
-      id: '/admin/'
-      path: '/admin'
-      fullPath: '/admin/'
-      preLoaderRoute: typeof AdminIndexRouteImport
+    '/studio': {
+      id: '/studio'
+      path: '/studio'
+      fullPath: '/studio'
+      preLoaderRoute: typeof StudioRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/admin/command-center': {
-      id: '/admin/command-center'
-      path: '/admin/command-center'
-      fullPath: '/admin/command-center'
-      preLoaderRoute: typeof AdminCommandCenterRouteImport
+    '/verify-email': {
+      id: '/verify-email'
+      path: '/verify-email'
+      fullPath: '/verify-email'
+      preLoaderRoute: typeof VerifyEmailRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/admin/customization': {
-      id: '/admin/customization'
-      path: '/admin/customization'
-      fullPath: '/admin/customization'
-      preLoaderRoute: typeof AdminCustomizationRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/admin/plans': {
-      id: '/admin/plans'
-      path: '/admin/plans'
-      fullPath: '/admin/plans'
-      preLoaderRoute: typeof AdminPlansRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/admin/revenue': {
-      id: '/admin/revenue'
-      path: '/admin/revenue'
-      fullPath: '/admin/revenue'
-      preLoaderRoute: typeof AdminRevenueRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/admin/titles': {
-      id: '/admin/titles'
-      path: '/admin/titles'
-      fullPath: '/admin/titles'
-      preLoaderRoute: typeof AdminTitlesRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/owner/sharing': {
-      id: '/owner/sharing'
-      path: '/owner/sharing'
-      fullPath: '/owner/sharing'
-      preLoaderRoute: typeof OwnerSharingRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/owner/supply-chain': {
-      id: '/owner/supply-chain'
-      path: '/owner/supply-chain'
-      fullPath: '/owner/supply-chain'
-      preLoaderRoute: typeof OwnerSupplyChainRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/owner/transfers': {
-      id: '/owner/transfers'
-      path: '/owner/transfers'
-      fullPath: '/owner/transfers'
-      preLoaderRoute: typeof OwnerTransfersRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/owner/workspace': {
-      id: '/owner/workspace'
-      path: '/owner/workspace'
-      fullPath: '/owner/workspace'
-      preLoaderRoute: typeof OwnerWorkspaceRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/title/$slug': {
-      id: '/title/$slug'
-      path: '/title/$slug'
-      fullPath: '/title/$slug'
-      preLoaderRoute: typeof TitleSlugRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/watch/$slug': {
-      id: '/watch/$slug'
-      path: '/watch/$slug'
-      fullPath: '/watch/$slug'
-      preLoaderRoute: typeof WatchSlugRouteImport
+    '/title/$id': {
+      id: '/title/$id'
+      path: '/title/$id'
+      fullPath: '/title/$id'
+      preLoaderRoute: typeof TitleIdRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/auth/$': {
@@ -452,31 +325,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAuthSplatRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/razorpay/webhook': {
+      id: '/api/razorpay/webhook'
+      path: '/api/razorpay/webhook'
+      fullPath: '/api/razorpay/webhook'
+      preLoaderRoute: typeof ApiRazorpayWebhookRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AccountRoute: AccountRoute,
-  BrowseRoute: BrowseRoute,
-  KidsRoute: KidsRoute,
+  BuyerRoute: BuyerRoute,
+  CreatorRoute: CreatorRoute,
+  ForgotPasswordRoute: ForgotPasswordRoute,
+  InternalRoute: InternalRoute,
   LoginRoute: LoginRoute,
-  MyListRoute: MyListRoute,
-  PlansRoute: PlansRoute,
-  SubmitFilmRoute: SubmitFilmRoute,
-  AdminCommandCenterRoute: AdminCommandCenterRoute,
-  AdminCustomizationRoute: AdminCustomizationRoute,
-  AdminPlansRoute: AdminPlansRoute,
-  AdminRevenueRoute: AdminRevenueRoute,
-  AdminTitlesRoute: AdminTitlesRoute,
-  OwnerSharingRoute: OwnerSharingRoute,
-  OwnerSupplyChainRoute: OwnerSupplyChainRoute,
-  OwnerTransfersRoute: OwnerTransfersRoute,
-  OwnerWorkspaceRoute: OwnerWorkspaceRoute,
-  TitleSlugRoute: TitleSlugRoute,
-  WatchSlugRoute: WatchSlugRoute,
-  AdminIndexRoute: AdminIndexRoute,
+  OnboardingRoute: OnboardingRoute,
+  ResetPasswordRoute: ResetPasswordRoute,
+  SignupRoute: SignupRoute,
+  StudioRoute: StudioRoute,
+  VerifyEmailRoute: VerifyEmailRoute,
+  TitleIdRoute: TitleIdRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
+  ApiRazorpayWebhookRoute: ApiRazorpayWebhookRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
