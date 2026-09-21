@@ -1,4 +1,4 @@
-import { GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { GetObjectCommand, HeadBucketCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { bridgeEnv } from "./env";
 
@@ -35,6 +35,12 @@ export async function signDownload(opts: { key: string; expiresIn?: number }) {
   const command = new GetObjectCommand({ Bucket: bucket, Key: opts.key });
   const url = await getSignedUrl(s3, command, { expiresIn: opts.expiresIn ?? 300 });
   return { url, key: opts.key, bucket, method: "GET" as const };
+}
+
+export async function probePrivateBucket(): Promise<boolean> {
+  const { s3, bucket } = client();
+  await s3.send(new HeadBucketCommand({ Bucket: bucket }));
+  return true;
 }
 
 export function titleAssetKey(opts: { ownerUserId: string; titleId: string; kind: string; filename: string }) {

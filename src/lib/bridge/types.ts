@@ -77,5 +77,8 @@ export const PERMISSIONS = [
   "finance.read",
   "users.invite_internal",
   "audit.read",
+  "directory.read",
+  "integrations.read",
+  "partner.invite",
 ] as const;
 export type Permission = (typeof PERMISSIONS)[number];

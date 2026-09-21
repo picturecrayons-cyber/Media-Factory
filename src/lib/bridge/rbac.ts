@@ -2,10 +2,10 @@ import type { AccountType, InternalRole, Permission, TitleStatus } from "./types
 import { isBuyerVisible } from "./lifecycle.ts";
 
 const INTERNAL_PERMISSIONS: Record<InternalRole, readonly Permission[]> = {
-  viewer: ["title.read_catalog", "audit.read"],
-  qc_reviewer: ["title.read_catalog", "title.qc_review", "asset.sign_download", "audit.read"],
-  legal_reviewer: ["title.read_catalog", "title.rights_review", "asset.sign_download", "audit.read"],
-  finance: ["title.read_catalog", "finance.read", "entitlement.read_own", "audit.read"],
+  viewer: ["title.read_catalog", "audit.read", "directory.read", "integrations.read"],
+  qc_reviewer: ["title.read_catalog", "title.qc_review", "asset.sign_download", "audit.read", "directory.read", "integrations.read"],
+  legal_reviewer: ["title.read_catalog", "title.rights_review", "asset.sign_download", "audit.read", "directory.read", "integrations.read"],
+  finance: ["title.read_catalog", "finance.read", "entitlement.read_own", "audit.read", "directory.read", "integrations.read"],
   admin: [
     "title.read_catalog",
     "title.qc_review",
@@ -18,6 +18,9 @@ const INTERNAL_PERMISSIONS: Record<InternalRole, readonly Permission[]> = {
     "finance.read",
     "users.invite_internal",
     "audit.read",
+    "directory.read",
+    "integrations.read",
+    "partner.invite",
   ],
   super_admin: [
     "title.create",
@@ -38,6 +41,9 @@ const INTERNAL_PERMISSIONS: Record<InternalRole, readonly Permission[]> = {
     "finance.read",
     "users.invite_internal",
     "audit.read",
+    "directory.read",
+    "integrations.read",
+    "partner.invite",
   ],
 };
 
