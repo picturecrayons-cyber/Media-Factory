@@ -6,7 +6,9 @@ export async function sendBridgeMail(opts: { to: string; subject: string; text: 
   const user = bridgeEnv.smtpUser();
   const pass = bridgeEnv.smtpPass();
   if (!host || !user || !pass) {
-    throw new Error("Transactional email is not configured");
+    throw new Error(
+      "SMTP_PASS is unset. Use the Hostinger mailbox password for abijithasokan@crayonspictures.com (not IMAP, not the hPanel login). Bind it on Vercel Preview only.",
+    );
   }
   const port = Number(bridgeEnv.smtpPort() || "465");
   const nodemailer = await import("nodemailer");

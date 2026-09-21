@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import { toast } from "sonner";
 import { RedirectToSignIn } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
-import { getBridgeSession, type BridgeActor } from "@/lib/bridge/session";
+import { getBridgePublicStatus, getBridgeSession, type BridgeActor } from "@/lib/bridge/session";
 import { requestEmailVerification } from "@/lib/bridge/profiles";
 import { Button } from "@/components/ui/button";
 import { BrandMark } from "./shell";
@@ -34,6 +34,11 @@ export function RequireBridge({
     enabled: Boolean(user),
     retry: false,
   });
+  const mailQ = useQuery({
+    queryKey: ["bridge-public"],
+    queryFn: () => getBridgePublicStatus(),
+  });
+  const mailReady = mailQ.data?.integrations.mail;
 
   if (isPending || (user && sessionQ.isPending)) {
     return (
@@ -57,15 +62,23 @@ export function RequireBridge({
       <Frame>
         <h1 className="font-display text-2xl">Verify your email</h1>
         <p className="text-sm leading-relaxed text-muted">
-          Bridge operations require a verified mailbox. A Hostinger message is sent to {profile.email}.
+          A verification mail is sent from abijithasokan@crayonspictures.com to {profile.email}.
+          Bridge uses SMTP send only — not IMAP, not Gmail app setup.
         </p>
+        {!mailReady ? (
+          <p className="text-sm text-muted">
+            Mail password is unset. Add SMTP_PASS on the Vercel Preview for this branch (Hostinger mailbox
+            password). Do not paste it into chat or git.
+          </p>
+        ) : null}
         <Button
           type="button"
+          disabled={!mailReady}
           onClick={() => {
             void requestEmailVerification()
               .then(() => toast("Verification mail sent"))
               .catch((err) =>
-                toast(err instanceof Error ? err.message : "Transactional email is not configured"),
+                toast(err instanceof Error ? err.message : "Mail send failed"),
               );
           }}
         >
