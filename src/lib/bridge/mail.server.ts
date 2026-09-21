@@ -8,7 +8,7 @@ export async function sendBridgeMail(opts: { to: string; subject: string; text: 
   if (!host || !user || !pass) {
     throw new Error("Transactional email is not configured");
   }
-  const port = Number(bridgeEnv.smtpPort() || "587");
+  const port = Number(bridgeEnv.smtpPort() || "465");
   const nodemailer = await import("nodemailer");
   const transporter = nodemailer.createTransport({
     host,

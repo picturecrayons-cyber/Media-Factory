@@ -8,6 +8,8 @@ export const LEGAL_OWNER = "StreamVista OPC Pvt Ltd";
 export const PRODUCTION_DOMAIN = "bridge.crayonspictures.com";
 export const TRANSACTIONAL_FROM = "abijithasokan@crayonspictures.com";
 export const VERCEL_PROJECT = "bridge";
+export const HOSTINGER_SMTP_HOST = "smtp.hostinger.com";
+export const HOSTINGER_SMTP_PORT = "465";
 
 export function supabaseRefFromUrl(url: string | undefined): string | null {
   if (!url) return null;

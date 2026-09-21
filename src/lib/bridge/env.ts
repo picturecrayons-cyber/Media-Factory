@@ -1,3 +1,5 @@
+import { HOSTINGER_SMTP_HOST, HOSTINGER_SMTP_PORT, TRANSACTIONAL_FROM } from "./canonical";
+
 function read(key: string): string | undefined {
   const v = typeof process === "undefined" ? undefined : process.env[key]?.trim();
   return v || undefined;
@@ -14,11 +16,11 @@ export const bridgeEnv = {
   awsAccessKey: () => read("AWS_ACCESS_KEY_ID"),
   awsSecretKey: () => read("AWS_SECRET_ACCESS_KEY"),
   s3Bucket: () => read("S3_BUCKET"),
-  smtpHost: () => read("SMTP_HOST") || read("HOSTINGER_SMTP_HOST"),
-  smtpPort: () => read("SMTP_PORT") || "587",
-  smtpUser: () => read("SMTP_USER") || read("HOSTINGER_SMTP_USER"),
+  smtpHost: () => read("SMTP_HOST") || read("HOSTINGER_SMTP_HOST") || HOSTINGER_SMTP_HOST,
+  smtpPort: () => read("SMTP_PORT") || HOSTINGER_SMTP_PORT,
+  smtpUser: () => read("SMTP_USER") || read("HOSTINGER_SMTP_USER") || TRANSACTIONAL_FROM,
   smtpPass: () => read("SMTP_PASS") || read("HOSTINGER_SMTP_PASS"),
-  mailFrom: () => read("MAIL_FROM") || "abijithasokan@crayonspictures.com",
+  mailFrom: () => read("MAIL_FROM") || TRANSACTIONAL_FROM,
   appUrl: () => read("BETTER_AUTH_URL") || read("APP_URL") || "https://bridge.crayonspictures.com",
   databaseUrl: () => read("DATABASE_URL"),
 };
