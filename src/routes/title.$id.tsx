@@ -7,8 +7,8 @@ import { BridgeShell } from "@/components/bridge/shell";
 import { StatusRail } from "@/components/bridge/status-rail";
 import { Button } from "@/components/ui/button";
 import { advanceTitle, getTitle, reverseTitle } from "@/lib/bridge/titles";
-import { listTitleAssets, requestAssetUpload } from "@/lib/bridge/assets";
-import { submitQcReview, saveTitleRights, authorizeDelivery } from "@/lib/bridge/desks";
+import { submitQcReview, saveTitleRights, authorizeDelivery, licenseTitleToLoop } from "@/lib/bridge/desks";
+import { listTitleAssets, requestAssetUpload, requestAssetDownload } from "@/lib/bridge/assets";
 import { nextStatus } from "@/lib/bridge/lifecycle";
 import { hasPermission, permissionForTransition } from "@/lib/bridge/rbac";
 import { TITLE_STATUSES, type AssetKind } from "@/lib/bridge/types";
@@ -108,13 +108,21 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
       </section>
 
       <section>
-        <h3 className="font-display text-xl">Assets</h3>
+        <h3 className="font-display text-xl">Private assets</h3>
+        <p className="mt-2 text-sm text-muted">
+          Masters stay in this desk. They are never a public Loop URL.
+        </p>
         {canUpload ? <UploadPanel titleId={title.id} /> : null}
         <ul className="mt-3 space-y-2 text-sm">
           {(assetsQ.data?.assets ?? []).length ? (
             (assetsQ.data?.assets ?? []).map((a) => (
-              <li key={a.id} className="rounded-sm border border-line px-3 py-2 font-mono text-xs">
-                {a.kind} · {a.id}
+              <li key={a.id} className="flex flex-wrap items-center justify-between gap-2 rounded-sm border border-line px-3 py-2">
+                <span className="font-mono text-xs">
+                  {a.kind} · {a.id.slice(0, 8)}
+                </span>
+                {hasPermission(actor, "asset.sign_download") ? (
+                  <SignedOpen assetId={a.id} />
+                ) : null}
               </li>
             ))
           ) : (
@@ -155,7 +163,13 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
 
       {canDeliver ? (
         <section>
-          <h3 className="font-display text-xl">Delivery</h3>
+          <h3 className="font-display text-xl">License to Loop</h3>
+          <p className="mt-2 text-sm text-muted">
+            CRAYONS LOOP is the public storefront. This desk licenses a captured title to Loop.
+            The S3 object stays private. Ingest unset = blocked, not fake success.
+          </p>
+          <LoopLicenseForm titleId={title.id} />
+          <p className="mt-6 text-sm text-muted">Buyer package (signed GET), not a public master:</p>
           <DeliveryForm titleId={title.id} />
         </section>
       ) : null}
@@ -375,6 +389,41 @@ function RightsForm({ titleId }: { titleId: string }) {
         Approve rights
       </Button>
     </form>
+  );
+}
+
+function SignedOpen({ assetId }: { assetId: string }) {
+  const mut = useMutation({
+    mutationFn: () => requestAssetDownload({ data: { assetId } }),
+    onSuccess: (signed) => {
+      window.open(signed.url, "_blank", "noopener,noreferrer");
+    },
+    onError: (err) => toast(err instanceof Error ? err.message : "Signed GET denied"),
+  });
+  return (
+    <Button type="button" variant="outline" disabled={mut.isPending} onClick={() => mut.mutate()}>
+      Signed GET
+    </Button>
+  );
+}
+
+function LoopLicenseForm({ titleId }: { titleId: string }) {
+  const qc = useQueryClient();
+  const mut = useMutation({
+    mutationFn: () => licenseTitleToLoop({ data: { titleId } }),
+    onSuccess: () => {
+      toast("Loop ingest accepted");
+      void qc.invalidateQueries({ queryKey: ["bridge-title", titleId] });
+      void qc.invalidateQueries({ queryKey: ["bridge-titles"] });
+    },
+    onError: (err) => toast(err instanceof Error ? err.message : "Loop license blocked"),
+  });
+  return (
+    <div className="mt-4">
+      <Button type="button" disabled={mut.isPending} onClick={() => mut.mutate()}>
+        License to Loop
+      </Button>
+    </div>
   );
 }
 

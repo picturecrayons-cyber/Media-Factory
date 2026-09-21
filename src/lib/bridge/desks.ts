@@ -9,6 +9,8 @@ import { assertPermission, canReadTitle } from "./rbac";
 import { loadTitle, recordTransition } from "./titles";
 import { writeAudit } from "./audit";
 import { rightsAreEvidenced } from "./blockers";
+import { bridgeEnv } from "./env";
+import { assertLoopHandoffReady, loopHandoffBody, signLoopHandoffBody } from "./loop-handoff";
 
 const QC_DECISIONS = ["pass", "fail", "request_changes"] as const;
 
@@ -237,4 +239,117 @@ export const authorizeDelivery = createServerFn({ method: "POST" })
       reason: "server-authorized delivery after captured payment",
     });
     return { deliveryId: id, title: await loadTitle(title.id) };
+  });
+
+export const licenseTitleToLoop = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({ titleId: z.string().min(8) }))
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireActor(context.userId);
+    assertPermission(actor, "title.deliver");
+    const title = await loadTitle(data.titleId);
+    if (!title || !canReadTitle(actor, title)) throw new Error("Not found");
+    if (title.status !== "LICENSED") {
+      throw new Error("Loop license requires a captured payment and LICENSED status");
+    }
+    if (!title.masterKey) throw new Error("Private master is required before Loop license");
+    const sql = await getSql();
+    const paid = await sql<{ id: string }>`
+      select id from bridge_payments
+      where title_id = ${title.id} and status = 'captured'
+      order by created_at desc limit 1
+    `;
+    const paymentId = paid[0]?.id;
+    if (!paymentId) throw new Error("No captured Razorpay payment for this title");
+
+    const releaseId = randomBytes(16).toString("hex");
+    let handoff: { url: string; secret: string };
+    try {
+      handoff = assertLoopHandoffReady({
+        url: bridgeEnv.loopHandoffUrl(),
+        secret: bridgeEnv.loopHandoffSecret(),
+      });
+    } catch (err) {
+      await sql`
+        insert into bridge_loop_releases (id, title_id, payment_id, status, actor_user_id, reason)
+        values (${releaseId}, ${title.id}, ${paymentId}, ${"blocked"}, ${actor.userId}, ${"Loop ingest unset"})
+      `;
+      await writeAudit({
+        actorUserId: actor.userId,
+        actorRole: actor.internalRole,
+        action: "LOOP_LICENSE_BLOCKED",
+        entityType: "bridge_title",
+        entityId: title.id,
+        previousState: "LICENSED",
+        newState: "LICENSED",
+        reason: "Loop ingest unset — master stays private on Bridge",
+      });
+      throw err instanceof Error ? err : new Error("Loop ingest unset");
+    }
+
+    const { signDownload } = await import("./s3.server");
+    const signed = await signDownload({ key: title.masterKey, expiresIn: 300 });
+    const expiresAt = new Date(Date.now() + 300_000).toISOString();
+    const body = loopHandoffBody({
+      source: "crayons-bridge",
+      titleId: title.id,
+      slug: title.slug,
+      name: title.name,
+      language: title.language,
+      year: title.year,
+      masterKey: title.masterKey,
+      downloadUrl: signed.url,
+      expiresAt,
+    });
+    const signature = signLoopHandoffBody(body, handoff.secret);
+    const res = await fetch(handoff.url, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-bridge-signature": `sha256=${signature}`,
+      },
+      body,
+    });
+    if (!res.ok) {
+      const reason = `Loop ingest HTTP ${res.status}`;
+      await sql`
+        insert into bridge_loop_releases (id, title_id, payment_id, status, http_status, actor_user_id, reason)
+        values (${releaseId}, ${title.id}, ${paymentId}, ${"failed"}, ${res.status}, ${actor.userId}, ${reason})
+      `;
+      await writeAudit({
+        actorUserId: actor.userId,
+        actorRole: actor.internalRole,
+        action: "LOOP_LICENSE_FAILED",
+        entityType: "bridge_title",
+        entityId: title.id,
+        previousState: "LICENSED",
+        newState: "LICENSED",
+        reason,
+      });
+      throw new Error(`${reason}. Title stays private on Bridge.`);
+    }
+
+    await sql`
+      insert into bridge_loop_releases (id, title_id, payment_id, status, http_status, actor_user_id, reason)
+      values (${releaseId}, ${title.id}, ${paymentId}, ${"accepted"}, ${res.status}, ${actor.userId}, ${"Loop ingest accepted"})
+    `;
+    await recordTransition({
+      titleId: title.id,
+      from: "LICENSED",
+      to: "DELIVERED",
+      actorUserId: actor.userId,
+      note: "licensed to CRAYONS LOOP after capture",
+    });
+    await writeAudit({
+      actorUserId: actor.userId,
+      actorRole: actor.internalRole,
+      action: "LOOP_LICENSED",
+      entityType: "bridge_title",
+      entityId: title.id,
+      previousState: "LICENSED",
+      newState: "DELIVERED",
+      reason: "private master handed to Loop ingest; object remains non-public",
+    });
+    return { releaseId, title: await loadTitle(title.id) };
   });

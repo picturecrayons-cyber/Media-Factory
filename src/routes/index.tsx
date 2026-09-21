@@ -56,14 +56,16 @@ function Home() {
         </div>
         <p className="mt-10 max-w-xl text-sm leading-relaxed text-faint">
           Private control plane — not a public catalog. Invite-only QC, legal, and finance desks.
-          Licensed only after a captured Razorpay payment.
+          Licensed only after a captured Razorpay payment. CRAYONS LOOP receives that license from
+          this desk; masters are never public objects.
         </p>
-        <ul className="mt-12 grid grid-cols-2 gap-2 text-sm sm:grid-cols-5">
+        <ul className="mt-12 grid grid-cols-2 gap-2 text-sm sm:grid-cols-3">
           <EnvChip label="Postgres" ok={integrations?.postgres} />
           <EnvChip label="S3" ok={integrations?.s3} />
           <EnvChip label="Razorpay" ok={integrations?.razorpay} />
           <EnvChip label="Mail" ok={integrations?.mail} />
           <EnvChip label="Supabase pin" ok={integrations?.supabase} />
+          <EnvChip label="Loop ingest" ok={integrations?.loop} />
         </ul>
       </main>
     </div>

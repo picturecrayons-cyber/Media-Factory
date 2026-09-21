@@ -24,6 +24,8 @@ export const bridgeEnv = {
   mailFrom: () => read("MAIL_FROM") || TRANSACTIONAL_FROM,
   appUrl: () => read("BETTER_AUTH_URL") || read("APP_URL") || "https://bridge.crayonspictures.com",
   databaseUrl: () => read("DATABASE_URL"),
+  loopHandoffUrl: () => read("LOOP_HANDOFF_URL"),
+  loopHandoffSecret: () => read("LOOP_HANDOFF_SECRET"),
 };
 
 export function integrationStatus() {
@@ -34,5 +36,6 @@ export function integrationStatus() {
     razorpayWebhook: Boolean(bridgeEnv.razorpayWebhookSecret()),
     s3: Boolean(bridgeEnv.s3Bucket() && bridgeEnv.awsAccessKey() && bridgeEnv.awsSecretKey()),
     mail: Boolean(bridgeEnv.smtpHost() && bridgeEnv.smtpUser() && bridgeEnv.smtpPass()),
+    loop: Boolean(bridgeEnv.loopHandoffUrl() && bridgeEnv.loopHandoffSecret()),
   };
 }

@@ -25,7 +25,8 @@ function Internal() {
       {(actor) => (
         <BridgeShell actor={actor} title="Operations desk">
           <p className="mb-6 text-sm text-muted">
-            {actor.internalRole?.replaceAll("_", " ")} · {actor.email}
+            {actor.internalRole?.replaceAll("_", " ")} · {actor.email}. Private masters live here.
+            Loop receives a license only after capture.
           </p>
           <InternalBody
             canInvite={hasPermission(actor, "users.invite_internal")}
@@ -79,7 +80,15 @@ function InternalBody({
         {desk === "qc" ? <TitleQueue titles={qcQueue} empty="No titles in QC review." /> : null}
         {desk === "rights" ? <TitleQueue titles={rightsQueue} empty="No titles in rights review." /> : null}
         {desk === "finance" ? canFinance ? <FinanceDesk /> : <p className="text-sm text-muted">Unauthorized.</p> : null}
-        {desk === "delivery" ? <TitleQueue titles={deliveryQueue} empty="No licensed titles waiting on delivery." /> : null}
+        {desk === "delivery" ? (
+          <div className="space-y-4">
+            <p className="text-sm text-muted">
+              Licensed titles waiting for Loop ingest. Objects stay private on Bridge until ingest
+              accepts a signed GET. Unset ingest fails closed.
+            </p>
+            <TitleQueue titles={deliveryQueue} empty="No licensed titles waiting on Loop." />
+          </div>
+        ) : null}
         {desk === "audit" ? canAudit ? <AuditDesk /> : <p className="text-sm text-muted">Unauthorized.</p> : null}
         {desk === "settings" ? canInvite ? <InviteForm /> : <p className="text-sm text-muted">No settings for this role.</p> : null}
       </div>
