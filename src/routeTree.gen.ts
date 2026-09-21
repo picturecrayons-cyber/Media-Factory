@@ -20,6 +20,8 @@ import { Route as OnboardingRouteImport } from './routes/onboarding'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as SignupRouteImport } from './routes/signup'
 import { Route as StudioRouteImport } from './routes/studio'
+import { Route as SubmitFilmRouteImport } from './routes/submit-film'
+import { Route as StudioSubmitFilmRouteImport } from './routes/studio.submit-film'
 import { Route as VerifyEmailRouteImport } from './routes/verify-email'
 import { Route as TitleIdRouteImport } from './routes/title.$id'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
@@ -80,6 +82,16 @@ const StudioRoute = StudioRouteImport.update({
   path: '/studio',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SubmitFilmRoute = SubmitFilmRouteImport.update({
+  id: '/submit-film',
+  path: '/submit-film',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const StudioSubmitFilmRoute = StudioSubmitFilmRouteImport.update({
+  id: '/studio/submit-film',
+  path: '/studio/submit-film',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const VerifyEmailRoute = VerifyEmailRouteImport.update({
   id: '/verify-email',
   path: '/verify-email',
@@ -113,6 +125,8 @@ export interface FileRoutesByFullPath {
   '/reset-password': typeof ResetPasswordRoute
   '/signup': typeof SignupRoute
   '/studio': typeof StudioRoute
+  '/submit-film': typeof SubmitFilmRoute
+  '/studio/submit-film': typeof StudioSubmitFilmRoute
   '/verify-email': typeof VerifyEmailRoute
   '/title/$id': typeof TitleIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
@@ -130,6 +144,8 @@ export interface FileRoutesByTo {
   '/reset-password': typeof ResetPasswordRoute
   '/signup': typeof SignupRoute
   '/studio': typeof StudioRoute
+  '/submit-film': typeof SubmitFilmRoute
+  '/studio/submit-film': typeof StudioSubmitFilmRoute
   '/verify-email': typeof VerifyEmailRoute
   '/title/$id': typeof TitleIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
@@ -148,6 +164,8 @@ export interface FileRoutesById {
   '/reset-password': typeof ResetPasswordRoute
   '/signup': typeof SignupRoute
   '/studio': typeof StudioRoute
+  '/submit-film': typeof SubmitFilmRoute
+  '/studio/submit-film': typeof StudioSubmitFilmRoute
   '/verify-email': typeof VerifyEmailRoute
   '/title/$id': typeof TitleIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
@@ -167,6 +185,8 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/signup'
     | '/studio'
+    | '/submit-film'
+    | '/studio/submit-film'
     | '/verify-email'
     | '/title/$id'
     | '/api/auth/$'
@@ -184,6 +204,8 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/signup'
     | '/studio'
+    | '/submit-film'
+    | '/studio/submit-film'
     | '/verify-email'
     | '/title/$id'
     | '/api/auth/$'
@@ -201,6 +223,8 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/signup'
     | '/studio'
+    | '/submit-film'
+    | '/studio/submit-film'
     | '/verify-email'
     | '/title/$id'
     | '/api/auth/$'
@@ -219,6 +243,8 @@ export interface RootRouteChildren {
   ResetPasswordRoute: typeof ResetPasswordRoute
   SignupRoute: typeof SignupRoute
   StudioRoute: typeof StudioRoute
+  SubmitFilmRoute: typeof SubmitFilmRoute
+  StudioSubmitFilmRoute: typeof StudioSubmitFilmRoute
   VerifyEmailRoute: typeof VerifyEmailRoute
   TitleIdRoute: typeof TitleIdRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
@@ -304,6 +330,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof StudioRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/submit-film': {
+      id: '/submit-film'
+      path: '/submit-film'
+      fullPath: '/submit-film'
+      preLoaderRoute: typeof SubmitFilmRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/studio/submit-film': {
+      id: '/studio/submit-film'
+      path: '/studio/submit-film'
+      fullPath: '/studio/submit-film'
+      preLoaderRoute: typeof StudioSubmitFilmRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/verify-email': {
       id: '/verify-email'
       path: '/verify-email'
@@ -347,6 +387,8 @@ const rootRouteChildren: RootRouteChildren = {
   ResetPasswordRoute: ResetPasswordRoute,
   SignupRoute: SignupRoute,
   StudioRoute: StudioRoute,
+  SubmitFilmRoute: SubmitFilmRoute,
+  StudioSubmitFilmRoute: StudioSubmitFilmRoute,
   VerifyEmailRoute: VerifyEmailRoute,
   TitleIdRoute: TitleIdRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,

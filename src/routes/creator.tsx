@@ -12,6 +12,7 @@ function Creator() {
         <BridgeShell actor={actor} title="Creator desk">
           <p className="mb-6 max-w-2xl text-sm leading-relaxed text-muted">
             Each film is one title record. Upload stays on private S3. Buyers cannot see drafts.
+            Full acquisition form: Submit film.
           </p>
           <CreateTitleForm />
           <h2 className="mt-10 font-display text-2xl">Your titles</h2>

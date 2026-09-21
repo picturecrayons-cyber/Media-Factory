@@ -8,6 +8,7 @@ import { workspaceHome } from "@/lib/bridge/rbac";
 const LINKS: { to: string; label: string; show: (a: BridgeActor) => boolean }[] = [
   { to: "/creator", label: "Creator", show: (a) => !a.internalRole && a.accountType === "independent_creator" },
   { to: "/studio", label: "Studio", show: (a) => !a.internalRole && a.accountType === "studio" },
+  { to: "/submit-film", label: "Submit film", show: (a) => !a.internalRole && (a.accountType === "independent_creator" || a.accountType === "studio") },
   { to: "/buyer", label: "Buyer", show: (a) => !a.internalRole && a.accountType === "buyer" },
   { to: "/internal", label: "Internal", show: (a) => Boolean(a.internalRole) },
   { to: "/account", label: "Account", show: () => true },

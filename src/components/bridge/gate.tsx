@@ -25,7 +25,7 @@ export function RequireBridge({
   allow,
 }: {
   children: (actor: BridgeActor) => ReactNode;
-  allow?: "creator" | "studio" | "buyer" | "internal";
+  allow?: "creator" | "studio" | "buyer" | "internal" | "filmmaker";
 }) {
   const { user, isPending } = useCurrentUserState();
   const sessionQ = useQuery({
@@ -52,7 +52,11 @@ export function RequireBridge({
   const profile = sessionQ.data?.profile ?? null;
   if (!profile) return <Navigate to="/onboarding" />;
   if (allow === "internal" && !profile.internalRole) return <Navigate to={sessionQ.data?.home ?? "/"} />;
-  if (allow && allow !== "internal" && (profile.internalRole || profile.accountType !== (
+  if (allow === "filmmaker") {
+    if (profile.internalRole || (profile.accountType !== "independent_creator" && profile.accountType !== "studio")) {
+      return <Navigate to={sessionQ.data?.home ?? "/"} />;
+    }
+  } else if (allow && allow !== "internal" && (profile.internalRole || profile.accountType !== (
     allow === "creator" ? "independent_creator" : allow
   ))) {
     return <Navigate to={sessionQ.data?.home ?? "/"} />;

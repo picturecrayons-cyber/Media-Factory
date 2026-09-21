@@ -56,6 +56,9 @@ function StudioBody() {
           <Button type="button" onClick={() => { setTab("slate"); setAddOpen(true); }}>
             + Add Title
           </Button>
+          <Link to="/studio/submit-film">
+            <Button type="button" variant="outline">Submit film</Button>
+          </Link>
           <Button type="button" variant="outline" onClick={() => setTab("slate")}>
             View slate
           </Button>
