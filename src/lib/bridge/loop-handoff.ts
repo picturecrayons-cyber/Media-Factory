@@ -1,5 +1,7 @@
 import { createHmac } from "node:crypto";
 
+/** B2B buyer delivery HMAC. Catalog publish uses loop-publish.ts and must not send masterKey. */
+
 export function assertLoopHandoffReady(input: { url?: string; secret?: string }) {
   const url = input.url?.trim() ?? "";
   const secret = input.secret?.trim() ?? "";

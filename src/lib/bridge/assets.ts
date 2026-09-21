@@ -17,6 +17,8 @@ const ALLOWED_MIME: Record<(typeof ASSET_KINDS)[number], readonly string[]> = {
   screener: ["video/mp4", "video/quicktime"],
   master: ["video/mp4", "video/quicktime", "application/mxf", "application/octet-stream"],
   subtitle: ["text/vtt", "application/x-subrip", "text/plain"],
+  playback: ["video/mp4", "application/vnd.apple.mpegurl", "application/x-mpegurl"],
+  trailer: ["video/mp4"],
 };
 
 async function hasLicenseEntitlement(userId: string, titleId: string): Promise<boolean> {
@@ -45,7 +47,12 @@ export const requestAssetUpload = createServerFn({ method: "POST" })
     const title = await loadTitle(data.titleId);
     if (!title) throw new Error("Not found");
     if (title.ownerUserId !== actor.userId && !actor.internalRole) throw new Error("Forbidden");
-    if (!UPLOADABLE.has(title.status)) throw new Error("Uploads are closed for this status");
+    if (!UPLOADABLE.has(title.status) && data.kind !== "playback" && data.kind !== "trailer") {
+      throw new Error("Uploads are closed for this status");
+    }
+    if ((data.kind === "playback" || data.kind === "trailer") && !actor.internalRole && title.ownerUserId !== actor.userId) {
+      throw new Error("Forbidden");
+    }
     const allowed = ALLOWED_MIME[data.kind];
     if (!allowed.includes(data.contentType)) {
       throw new Error("File type is not allowed for this asset");
@@ -69,6 +76,12 @@ export const requestAssetUpload = createServerFn({ method: "POST" })
     }
     if (data.kind === "master") {
       await sql`update bridge_titles set master_key = ${key}, updated_at = now() where id = ${title.id}`;
+    }
+    if (data.kind === "playback") {
+      await sql`update bridge_titles set playback_key = ${key}, updated_at = now() where id = ${title.id}`;
+    }
+    if (data.kind === "trailer") {
+      await sql`update bridge_titles set trailer_key = ${key}, updated_at = now() where id = ${title.id}`;
     }
     await writeAudit({
       actorUserId: actor.userId,
