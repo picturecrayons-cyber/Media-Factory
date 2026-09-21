@@ -5,6 +5,7 @@ import { join } from "node:path";
 const ROOT = process.cwd();
 const FORBIDDEN = [
   "tqzimuwozhipqgyerdff",
+  "jpfyhahrdxbtwximsglj",
   "rzp_live_",
   "rzp_test_",
   "AKIA",

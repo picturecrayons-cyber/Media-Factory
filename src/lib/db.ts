@@ -1,4 +1,5 @@
 import { pendingMigrations } from "../../scripts/migration-plan.mjs";
+import { assertAllowedDatabaseUrl, withRequiredSsl } from "./bridge/canonical";
 
 /** Which database backend is active. */
 export type DbSource = "neon" | "pglite";
@@ -9,6 +10,8 @@ const rawDatabaseUrl =
   typeof process !== "undefined" ? process.env.DATABASE_URL : undefined;
 const databaseUrl =
   rawDatabaseUrl && rawDatabaseUrl.trim() ? rawDatabaseUrl : undefined;
+
+if (databaseUrl) assertAllowedDatabaseUrl(databaseUrl);
 
 /**
  * Vercel serverless has no PGLite wasm data file (`/var/task/_libs/pglite.data`).
@@ -110,7 +113,18 @@ function createNeonSql(): Promise<Sql> {
     types.setTypeParser(OID_INT8, Number);
     types.setTypeParser(OID_DATE, identity);
     types.setTypeParser(OID_INTERVAL, identity);
-    const pool = new Pool({ connectionString: databaseUrl });
+    const url = databaseUrl;
+    if (!url) throw new Error("DATABASE_URL is required for Postgres");
+    assertAllowedDatabaseUrl(url);
+    // Transaction pooler (Supavisor :6543) does not support named prepared
+    // statements. `pool.query(text, params)` uses unnamed statements only.
+    const pool = new Pool({
+      connectionString: withRequiredSsl(url),
+      max: vercelRuntime ? 3 : 10,
+      idleTimeoutMillis: 10_000,
+      connectionTimeoutMillis: 8_000,
+      allowExitOnIdle: true,
+    });
     return toSql(async <T>(text: string, params: unknown[]) => {
       const res = await pool.query(text, params);
       return res.rows as T[];

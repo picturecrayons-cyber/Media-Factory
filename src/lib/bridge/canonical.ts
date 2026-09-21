@@ -1,7 +1,7 @@
 /** Canonical StreamVista / Crayons Bridge infrastructure pins. Never print secret values. */
 
 export const CANONICAL_SUPABASE_REF = "uakpqqardziifcwzvgfx";
-export const FORBIDDEN_SUPABASE_REFS = ["tqzimuwozhipqgyerdff"] as const;
+export const FORBIDDEN_SUPABASE_REFS = ["tqzimuwozhipqgyerdff", "jpfyhahrdxbtwximsglj"] as const;
 export const CANONICAL_SUPABASE_URL = `https://${CANONICAL_SUPABASE_REF}.supabase.co`;
 export const PRODUCT_NAME = "Crayons Bridge";
 export const LEGAL_OWNER = "StreamVista OPC Pvt Ltd";
@@ -38,4 +38,22 @@ export function databaseUrlLooksForbidden(connectionString: string | undefined):
   return (FORBIDDEN_SUPABASE_REFS as readonly string[]).some((ref) =>
     connectionString.includes(ref),
   );
+}
+
+export function assertAllowedDatabaseUrl(connectionString: string): void {
+  if (databaseUrlLooksForbidden(connectionString)) {
+    throw new Error("Forbidden Supabase project ref — canonical project only.");
+  }
+  const isSupabase = /supabase\.co|pooler\.supabase\.com/i.test(connectionString);
+  if (isSupabase && !connectionString.includes(CANONICAL_SUPABASE_REF)) {
+    throw new Error("Non-canonical Supabase project is not allowed.");
+  }
+}
+
+/** Append sslmode=require without logging the URI. Does not rewrite passwords. */
+export function withRequiredSsl(connectionString: string): string {
+  if (/sslmode=/i.test(connectionString)) return connectionString;
+  return connectionString.includes("?")
+    ? `${connectionString}&sslmode=require`
+    : `${connectionString}?sslmode=require`;
 }
