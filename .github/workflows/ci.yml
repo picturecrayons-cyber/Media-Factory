@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: ["feat/crayons-bridge-production"]
+    branches: ["feat/crayons-bridge-production", "fix/bridge-production-gate-20260923"]
   pull_request:
     branches: ["main"]
   workflow_dispatch:

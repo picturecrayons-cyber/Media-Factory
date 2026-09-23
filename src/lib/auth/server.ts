@@ -95,6 +95,32 @@ const explicitBaseURL = env("BETTER_AUTH_URL");
 // Explicit `string[]` (not a readonly tuple) — Better Auth's DynamicBaseURLConfig
 // requires a mutable `allowedHosts: string[]`.
 const previewAllowedHosts: string[] = [...PREVIEW_ALLOWED_HOSTS];
+const VERCEL_ORIGIN_ENV_KEYS = [
+  "VERCEL_URL",
+  "VERCEL_BRANCH_URL",
+  "VERCEL_PROJECT_PRODUCTION_URL",
+] as const;
+
+function normalizeOrigin(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  try {
+    const candidate = /^https?:\/\//i.test(value) ? value : `https://${value}`;
+    return new URL(candidate).origin;
+  } catch {
+    return undefined;
+  }
+}
+
+const deployedOrigins = [
+  normalizeOrigin(explicitBaseURL),
+  normalizeOrigin(env("APP_URL")),
+  ...VERCEL_ORIGIN_ENV_KEYS.map((key) => normalizeOrigin(env(key))),
+  "https://bridge.crayonspictures.com",
+  "https://bridge-kappa-six.vercel.app",
+  "https://bridge-stream-vista-opc-pvt-ltd-s-projects.vercel.app",
+  "https://bridge-git-main-stream-vista-opc-pvt-ltd-s-projects.vercel.app",
+].filter((origin): origin is string => Boolean(origin));
+
 // Local `npm run dev` (port 8080 contract). Browsers may send Origin as any of
 // these for the same server — trusting only `localhost` rejects `127.0.0.1` and
 // breaks email/password with "Invalid origin".
@@ -115,15 +141,14 @@ const baseURL = explicitBaseURL ?? {
 
 // Origins Better Auth accepts on credentialed POSTs (sign-up/sign-in, etc.).
 // Missing entries here surface as FORBIDDEN "Invalid origin".
-const trustedOrigins: string[] = explicitBaseURL
-  ? [explicitBaseURL, ...LOCAL_DEV_ORIGINS]
-  : [
-      // Host wildcards (matched against Origin's host)
-      ...previewAllowedHosts,
-      // Full-origin wildcards (matched against Origin)
-      ...previewAllowedHosts.flatMap((host) => [`https://${host}`, `http://${host}`]),
-      ...LOCAL_DEV_ORIGINS,
-    ];
+const trustedOrigins: string[] = Array.from(
+  new Set([
+    ...deployedOrigins,
+    ...previewAllowedHosts,
+    ...previewAllowedHosts.flatMap((host) => [`https://${host}`, `http://${host}`]),
+    ...LOCAL_DEV_ORIGINS,
+  ]),
+);
 
 const databaseUrl = env("DATABASE_URL");
 
