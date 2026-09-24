@@ -61,14 +61,22 @@ export async function grantFromCapturedPayment(opts: {
     title_id: string | null;
     amount_paise: number;
     status: string;
+    currency: string;
+    provider_payment_id: string | null;
   }>`
-    select id, user_id, title_id, amount_paise, status
+    select id, user_id, title_id, amount_paise, status, currency, provider_payment_id
     from bridge_payments where provider_order_id = ${opts.orderId} limit 1
   `;
   const payment = rows[0];
   if (!payment) throw new Error("Unknown order");
-  if (captured.amount !== payment.amount_paise) {
-    throw new Error("Amount mismatch");
+  if (captured.amount !== payment.amount_paise || captured.currency !== payment.currency || payment.currency !== "INR") {
+    throw new Error("Amount or currency mismatch");
+  }
+  if (payment.provider_payment_id && payment.provider_payment_id !== opts.paymentId) {
+    throw new Error("Order already linked to another payment");
+  }
+  if (opts.actorUserId && opts.actorUserId !== payment.user_id) {
+    throw new Error("Payment does not belong to this account");
   }
 
   await sql`
@@ -281,24 +289,46 @@ export async function ingestRazorpayWebhook(rawBody: string, signature: string |
     payment?.id && eventName ? `${eventName}:${payment.id}` : createHash("sha256").update(rawBody).digest("hex");
   const payloadHash = createHash("sha256").update(rawBody).digest("hex");
   const sql = await getSql();
-  const inserted = await sql<{ event_id: string }>`
+  await sql`
     insert into bridge_webhook_events (event_id, event_name, payload_hash, status)
     values (${eventId}, ${eventName}, ${payloadHash}, ${"received"})
     on conflict (event_id) do nothing
+  `;
+  const existing = await sql<{ status: string; payload_hash: string }>`
+    select status, payload_hash from bridge_webhook_events where event_id = ${eventId}
+  `;
+  if (existing[0]?.payload_hash !== payloadHash) throw new Error("Webhook event ID collision");
+  if (existing[0]?.status === "processed") return { duplicate: true };
+  const claim = await sql<{ event_id: string }>`
+    update bridge_webhook_events
+    set status = ${"processing"}, processing_started_at = now(), attempts = attempts + 1
+    where event_id = ${eventId}
+      and (
+        status in ('received', 'failed')
+        or (status = 'processing' and processing_started_at < now() - interval '2 minutes')
+      )
     returning event_id
   `;
-  if (!inserted[0]) {
-    return { duplicate: true };
+  if (!claim[0]) throw new Error("Webhook event is already processing");
+  try {
+    if (eventName === "payment.captured" && payment?.id && payment.order_id) {
+      await grantFromCapturedPayment({
+        orderId: payment.order_id,
+        paymentId: payment.id,
+      });
+    }
+    await sql`
+      update bridge_webhook_events
+      set status = ${"processed"}, processed_at = now(), processing_started_at = null
+      where event_id = ${eventId}
+    `;
+    return { duplicate: false, eventName };
+  } catch (error) {
+    await sql`
+      update bridge_webhook_events
+      set status = ${"failed"}, processing_started_at = null
+      where event_id = ${eventId}
+    `;
+    throw error;
   }
-  if (eventName === "payment.captured" && payment?.id && payment.order_id) {
-    await grantFromCapturedPayment({
-      orderId: payment.order_id,
-      paymentId: payment.id,
-    });
-  }
-  await sql`
-    update bridge_webhook_events set status = ${"processed"}, processed_at = now()
-    where event_id = ${eventId}
-  `;
-  return { duplicate: false, eventName };
 }
