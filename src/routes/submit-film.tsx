@@ -1,6 +1,6 @@
 import { createFileRoute, Navigate } from "@tanstack/react-router";
 
-export const Route = createFileRoute("/submit-film")({
+export const Route = createFileRoute("/submit-film" as any)({
   component: SubmitFilmEntry,
 });
 
