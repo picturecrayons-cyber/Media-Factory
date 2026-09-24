@@ -156,13 +156,17 @@ export const createLicenseOrder = createServerFn({ method: "POST" })
       id: string;
       provider_order_id: string | null;
       amount_paise: number;
+      title_id: string | null;
       status: string;
     }>`
-      select id, provider_order_id, amount_paise, status
+      select id, provider_order_id, amount_paise, title_id, status
       from bridge_payments
       where user_id = ${actor.userId} and purpose = ${"title_license"} and idempotency_key = ${data.idempotencyKey}
       limit 1
     `;
+    if (existing[0] && existing[0].title_id !== title.id) {
+      throw new Error("Idempotency key belongs to another title");
+    }
     if (existing[0]?.provider_order_id) {
       return {
         orderId: existing[0].provider_order_id,
@@ -184,7 +188,7 @@ export const createLicenseOrder = createServerFn({ method: "POST" })
     });
 
     const id = randomBytes(16).toString("hex");
-    await sql`
+    const inserted = await sql<{ id: string }>`
       insert into bridge_payments (
         id, user_id, title_id, purpose, provider_order_id, amount_paise, currency, status, idempotency_key
       ) values (
@@ -192,7 +196,25 @@ export const createLicenseOrder = createServerFn({ method: "POST" })
         ${title.licensingFeePaise}, ${"INR"}, ${"created"}, ${data.idempotencyKey}
       )
       on conflict (user_id, purpose, idempotency_key) do nothing
+      returning id
     `;
+    if (!inserted[0]) {
+      const winner = await sql<{ id: string; title_id: string | null; provider_order_id: string | null; amount_paise: number }>`
+        select id, title_id, provider_order_id, amount_paise from bridge_payments
+        where user_id = ${actor.userId} and purpose = ${"title_license"} and idempotency_key = ${data.idempotencyKey}
+        limit 1
+      `;
+      if (!winner[0]?.provider_order_id || winner[0].title_id !== title.id) {
+        throw new Error("Idempotency key belongs to another title or order is unavailable");
+      }
+      return {
+        orderId: winner[0].provider_order_id,
+        amountPaise: winner[0].amount_paise,
+        currency: "INR",
+        keyId,
+        paymentRecordId: winner[0].id,
+      };
+    }
 
     if (title.status === "LIVE_FOR_BUYERS") {
       await recordTransition({
