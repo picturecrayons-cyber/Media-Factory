@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: ["feat/crayons-bridge-production", "fix/bridge-production-gate-20260923"]
+    branches: ["feat/crayons-bridge-production", "fix/bridge-production-gate-20260923", "fix/bridge-final-production-gate-20260924"]
   pull_request:
     branches: ["main"]
   workflow_dispatch:
@@ -17,6 +17,8 @@ jobs:
           node-version: "22"
           cache: npm
       - run: npm ci
+      # Generate TanStack's route tree before checking route type literals.
+      - run: npm run build
       - run: npm run typecheck
       - run: npx eslint "src/lib/bridge/**/*.{ts,tsx}" "src/routes/**/*.{ts,tsx}" "src/components/bridge/**/*.{ts,tsx}" "src/components/ui/**/*.tsx"
       - run: npm test
@@ -30,4 +32,3 @@ jobs:
             echo "$tracked"
             exit 1
           fi
-      - run: npm run build

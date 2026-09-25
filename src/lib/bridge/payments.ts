@@ -61,14 +61,22 @@ export async function grantFromCapturedPayment(opts: {
     title_id: string | null;
     amount_paise: number;
     status: string;
+    currency: string;
+    provider_payment_id: string | null;
   }>`
-    select id, user_id, title_id, amount_paise, status
+    select id, user_id, title_id, amount_paise, status, currency, provider_payment_id
     from bridge_payments where provider_order_id = ${opts.orderId} limit 1
   `;
   const payment = rows[0];
   if (!payment) throw new Error("Unknown order");
-  if (captured.amount !== payment.amount_paise) {
-    throw new Error("Amount mismatch");
+  if (captured.amount !== payment.amount_paise || captured.currency !== payment.currency || payment.currency !== "INR") {
+    throw new Error("Amount or currency mismatch");
+  }
+  if (payment.provider_payment_id && payment.provider_payment_id !== opts.paymentId) {
+    throw new Error("Order already linked to another payment");
+  }
+  if (opts.actorUserId && opts.actorUserId !== payment.user_id) {
+    throw new Error("Payment does not belong to this account");
   }
 
   await sql`
@@ -148,13 +156,17 @@ export const createLicenseOrder = createServerFn({ method: "POST" })
       id: string;
       provider_order_id: string | null;
       amount_paise: number;
+      title_id: string | null;
       status: string;
     }>`
-      select id, provider_order_id, amount_paise, status
+      select id, provider_order_id, amount_paise, title_id, status
       from bridge_payments
       where user_id = ${actor.userId} and purpose = ${"title_license"} and idempotency_key = ${data.idempotencyKey}
       limit 1
     `;
+    if (existing[0] && existing[0].title_id !== title.id) {
+      throw new Error("Idempotency key belongs to another title");
+    }
     if (existing[0]?.provider_order_id) {
       return {
         orderId: existing[0].provider_order_id,
@@ -176,7 +188,7 @@ export const createLicenseOrder = createServerFn({ method: "POST" })
     });
 
     const id = randomBytes(16).toString("hex");
-    await sql`
+    const inserted = await sql<{ id: string }>`
       insert into bridge_payments (
         id, user_id, title_id, purpose, provider_order_id, amount_paise, currency, status, idempotency_key
       ) values (
@@ -184,7 +196,25 @@ export const createLicenseOrder = createServerFn({ method: "POST" })
         ${title.licensingFeePaise}, ${"INR"}, ${"created"}, ${data.idempotencyKey}
       )
       on conflict (user_id, purpose, idempotency_key) do nothing
+      returning id
     `;
+    if (!inserted[0]) {
+      const winner = await sql<{ id: string; title_id: string | null; provider_order_id: string | null; amount_paise: number }>`
+        select id, title_id, provider_order_id, amount_paise from bridge_payments
+        where user_id = ${actor.userId} and purpose = ${"title_license"} and idempotency_key = ${data.idempotencyKey}
+        limit 1
+      `;
+      if (!winner[0]?.provider_order_id || winner[0].title_id !== title.id) {
+        throw new Error("Idempotency key belongs to another title or order is unavailable");
+      }
+      return {
+        orderId: winner[0].provider_order_id,
+        amountPaise: winner[0].amount_paise,
+        currency: "INR",
+        keyId,
+        paymentRecordId: winner[0].id,
+      };
+    }
 
     if (title.status === "LIVE_FOR_BUYERS") {
       await recordTransition({
@@ -281,24 +311,46 @@ export async function ingestRazorpayWebhook(rawBody: string, signature: string |
     payment?.id && eventName ? `${eventName}:${payment.id}` : createHash("sha256").update(rawBody).digest("hex");
   const payloadHash = createHash("sha256").update(rawBody).digest("hex");
   const sql = await getSql();
-  const inserted = await sql<{ event_id: string }>`
+  await sql`
     insert into bridge_webhook_events (event_id, event_name, payload_hash, status)
     values (${eventId}, ${eventName}, ${payloadHash}, ${"received"})
     on conflict (event_id) do nothing
+  `;
+  const existing = await sql<{ status: string; payload_hash: string }>`
+    select status, payload_hash from bridge_webhook_events where event_id = ${eventId}
+  `;
+  if (existing[0]?.payload_hash !== payloadHash) throw new Error("Webhook event ID collision");
+  if (existing[0]?.status === "processed") return { duplicate: true };
+  const claim = await sql<{ event_id: string }>`
+    update bridge_webhook_events
+    set status = ${"processing"}, processing_started_at = now(), attempts = attempts + 1
+    where event_id = ${eventId}
+      and (
+        status in ('received', 'failed')
+        or (status = 'processing' and processing_started_at < now() - interval '2 minutes')
+      )
     returning event_id
   `;
-  if (!inserted[0]) {
-    return { duplicate: true };
+  if (!claim[0]) throw new Error("Webhook event is already processing");
+  try {
+    if (eventName === "payment.captured" && payment?.id && payment.order_id) {
+      await grantFromCapturedPayment({
+        orderId: payment.order_id,
+        paymentId: payment.id,
+      });
+    }
+    await sql`
+      update bridge_webhook_events
+      set status = ${"processed"}, processed_at = now(), processing_started_at = null
+      where event_id = ${eventId}
+    `;
+    return { duplicate: false, eventName };
+  } catch (error) {
+    await sql`
+      update bridge_webhook_events
+      set status = ${"failed"}, processing_started_at = null
+      where event_id = ${eventId}
+    `;
+    throw error;
   }
-  if (eventName === "payment.captured" && payment?.id && payment.order_id) {
-    await grantFromCapturedPayment({
-      orderId: payment.order_id,
-      paymentId: payment.id,
-    });
-  }
-  await sql`
-    update bridge_webhook_events set status = ${"processed"}, processed_at = now()
-    where event_id = ${eventId}
-  `;
-  return { duplicate: false, eventName };
 }
