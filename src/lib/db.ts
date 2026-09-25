@@ -10,8 +10,24 @@ const rawDatabaseUrl =
   typeof process !== "undefined"
     ? process.env.DATABASE_URL ?? process.env.POSTGRES_URL
     : undefined;
-const databaseUrl =
-  rawDatabaseUrl && rawDatabaseUrl.trim() ? rawDatabaseUrl : undefined;
+function normalizePostgresUrl(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  try {
+    const url = new URL(value);
+    // pg-connection-string can override the explicit ssl object when sslmode is
+    // present in the URL. Remove SSL query params so node-postgres uses the
+    // explicit runtime TLS configuration below.
+    for (const key of ["sslmode", "sslrootcert", "sslcert", "sslkey", "uselibpqcompat"]) {
+      url.searchParams.delete(key);
+    }
+    return url.toString();
+  } catch {
+    return value;
+  }
+}
+const databaseUrl = normalizePostgresUrl(
+  rawDatabaseUrl && rawDatabaseUrl.trim() ? rawDatabaseUrl : undefined,
+);
 
 /**
  * Vercel serverless has no PGLite wasm data file (`/var/task/_libs/pglite.data`).
