@@ -321,9 +321,13 @@ export async function ingestRazorpayWebhook(rawBody: string, signature: string |
   `;
   if (existing[0]?.payload_hash !== payloadHash) throw new Error("Webhook event ID collision");
   if (existing[0]?.status === "processed") return { duplicate: true };
+  const claimToken = randomBytes(16).toString("hex");
   const claim = await sql<{ event_id: string }>`
     update bridge_webhook_events
-    set status = ${"processing"}, processing_started_at = now(), attempts = attempts + 1
+    set status = ${"processing"},
+        processing_started_at = now(),
+        processing_token = ${claimToken},
+        attempts = attempts + 1
     where event_id = ${eventId}
       and (
         status in ('received', 'failed')
@@ -339,17 +343,22 @@ export async function ingestRazorpayWebhook(rawBody: string, signature: string |
         paymentId: payment.id,
       });
     }
-    await sql`
+    const completed = await sql<{ event_id: string }>`
       update bridge_webhook_events
-      set status = ${"processed"}, processed_at = now(), processing_started_at = null
-      where event_id = ${eventId}
+      set status = ${"processed"},
+          processed_at = now(),
+          processing_started_at = null,
+          processing_token = null
+      where event_id = ${eventId} and processing_token = ${claimToken}
+      returning event_id
     `;
+    if (!completed[0]) throw new Error("Webhook processing lease was superseded");
     return { duplicate: false, eventName };
   } catch (error) {
     await sql`
       update bridge_webhook_events
-      set status = ${"failed"}, processing_started_at = null
-      where event_id = ${eventId}
+      set status = ${"failed"}, processing_started_at = null, processing_token = null
+      where event_id = ${eventId} and processing_token = ${claimToken}
     `;
     throw error;
   }
