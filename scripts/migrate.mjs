@@ -15,7 +15,19 @@ const readEnv = (key) => {
   const value = process.env[key]?.trim();
   return value ? value : undefined;
 };
-const databaseUrl = readEnv("DATABASE_URL") ?? readEnv("POSTGRES_URL");
+const normalizePostgresUrl = (value) => {
+  if (!value) return undefined;
+  try {
+    const url = new URL(value);
+    for (const key of ["sslmode", "sslrootcert", "sslcert", "sslkey", "uselibpqcompat"]) {
+      url.searchParams.delete(key);
+    }
+    return url.toString();
+  } catch {
+    return value;
+  }
+};
+const databaseUrl = normalizePostgresUrl(readEnv("DATABASE_URL") ?? readEnv("POSTGRES_URL"));
 if (!databaseUrl) {
   console.log(
     "[migrate] DATABASE_URL/POSTGRES_URL not set — skipping (the local PGLite fallback migrates itself).",
