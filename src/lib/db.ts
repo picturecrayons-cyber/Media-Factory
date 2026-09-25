@@ -3,10 +3,13 @@ import { pendingMigrations } from "../../scripts/migration-plan.mjs";
 /** Which database backend is active. */
 export type DbSource = "neon" | "pglite";
 
-// An empty/whitespace DATABASE_URL (an easy misconfig in deploy UIs) must mean
-// "unset" — otherwise production would silently run on the PGLite fallback.
+// Prefer an explicit DATABASE_URL when present. On Vercel, the native Supabase
+// integration injects POSTGRES_URL, so accept that as the canonical fallback.
+// Empty/whitespace values are treated as unset to avoid a silent PGLite fallback.
 const rawDatabaseUrl =
-  typeof process !== "undefined" ? process.env.DATABASE_URL : undefined;
+  typeof process !== "undefined"
+    ? process.env.DATABASE_URL ?? process.env.POSTGRES_URL
+    : undefined;
 const databaseUrl =
   rawDatabaseUrl && rawDatabaseUrl.trim() ? rawDatabaseUrl : undefined;
 
@@ -20,7 +23,7 @@ const vercelWithoutPostgres = vercelRuntime && !databaseUrl;
 
 function vercelPostgresRequired(): never {
   throw new Error(
-    "DATABASE_URL is required on Vercel. Embedded PGLite cannot boot on serverless and is sandbox-only.",
+    "DATABASE_URL or POSTGRES_URL is required on Vercel. Embedded PGLite cannot boot on serverless and is sandbox-only.",
   );
 }
 
