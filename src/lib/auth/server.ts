@@ -123,7 +123,22 @@ const trustedOrigins: string[] = Array.from(
   ]),
 );
 
-const databaseUrl = env("DATABASE_URL") ?? env("POSTGRES_URL");
+function normalizePostgresUrl(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  try {
+    const url = new URL(value);
+    // pg-connection-string can override the explicit ssl object when sslmode is
+    // present in the URL. Remove SSL query params so node-postgres uses the
+    // explicit runtime TLS configuration below.
+    for (const key of ["sslmode", "sslrootcert", "sslcert", "sslkey", "uselibpqcompat"]) {
+      url.searchParams.delete(key);
+    }
+    return url.toString();
+  } catch {
+    return value;
+  }
+}
+const databaseUrl = normalizePostgresUrl(env("DATABASE_URL") ?? env("POSTGRES_URL"));
 const issuerBase = grokIssuer.replace(/\/+$/, "");
 const grokAuthorizationUrl = `${issuerBase}/api/auth/oauth2/authorize`;
 const grokTokenUrl = `${issuerBase}/api/auth/oauth2/token`;
