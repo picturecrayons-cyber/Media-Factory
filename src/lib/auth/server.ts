@@ -123,7 +123,7 @@ const trustedOrigins: string[] = Array.from(
   ]),
 );
 
-const databaseUrl = env("DATABASE_URL");
+const databaseUrl = env("DATABASE_URL") ?? env("POSTGRES_URL");
 const issuerBase = grokIssuer.replace(/\/+$/, "");
 const grokAuthorizationUrl = `${issuerBase}/api/auth/oauth2/authorize`;
 const grokTokenUrl = `${issuerBase}/api/auth/oauth2/token`;
