@@ -1,17 +1,12 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
 import { BrandMark } from "@/components/bridge/shell";
 import { Button } from "@/components/ui/button";
-import { getBridgePublicStatus } from "@/lib/bridge/session";
 import { SignedIn, SignedOut, UserButton } from "@/lib/auth/gates";
 import { TITLE_STATUS_ORDER } from "@/lib/bridge/lifecycle";
 
 export const Route = createFileRoute("/")({ component: Home });
 
 function Home() {
-  const statusQ = useQuery({ queryKey: ["bridge-public"], queryFn: () => getBridgePublicStatus() });
-  const integrations = statusQ.data?.integrations;
-
   return (
     <div className="min-h-screen bg-bg">
       <header className="sticky top-0 z-40 border-b border-line bg-surface/95 backdrop-blur">
@@ -35,12 +30,8 @@ function Home() {
           <div className="mx-auto grid max-w-7xl gap-10 px-4 py-16 sm:px-6 lg:grid-cols-[1.15fr_.85fr] lg:py-24">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">StreamVista OPC Pvt Ltd</p>
-              <h1 className="mt-4 max-w-3xl font-display text-5xl font-semibold leading-[1.05] tracking-tight sm:text-6xl">
-                One bridge from content to market.
-              </h1>
-              <p className="mt-5 max-w-2xl text-base leading-7 text-muted sm:text-lg">
-                Upload masters, clear rights, license securely, authorize distribution and track delivery from one professional workspace.
-              </p>
+              <h1 className="mt-4 max-w-3xl font-display text-5xl font-semibold leading-[1.05] tracking-tight sm:text-6xl">One bridge from content to market.</h1>
+              <p className="mt-5 max-w-2xl text-base leading-7 text-muted sm:text-lg">Upload masters, clear rights, license securely, authorize distribution and track delivery from one professional workspace.</p>
               <div className="mt-7 flex flex-wrap gap-3">
                 <Link to="/signup"><Button>Create account</Button></Link>
                 <Link to="/login"><Button variant="outline">Sign in</Button></Link>
@@ -90,22 +81,6 @@ function Home() {
             </div>
           </div>
         </section>
-
-        <section className="mx-auto max-w-7xl px-4 py-10 sm:px-6">
-          <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-line bg-surface p-5">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted">Platform status</p>
-              <p className="mt-1 text-sm text-muted">Integrations fail closed until verified.</p>
-            </div>
-            <div className="flex flex-wrap gap-2 text-xs">
-              <Status label="Postgres" ok={integrations?.postgres} />
-              <Status label="S3" ok={integrations?.s3} />
-              <Status label="Razorpay" ok={integrations?.razorpay} />
-              <Status label="Mail" ok={integrations?.mail} />
-              <Status label="Supabase" ok={integrations?.supabase} />
-            </div>
-          </div>
-        </section>
       </main>
     </div>
   );
@@ -119,13 +94,5 @@ function DeskCard({ kicker, title, body, cta }: { kicker: string; title: string;
       <p className="mt-2 text-sm leading-6 text-muted">{body}</p>
       <Link to={cta} className="mt-5 inline-flex text-sm font-semibold text-accent hover:underline">Open workspace →</Link>
     </article>
-  );
-}
-
-function Status({ label, ok }: { label: string; ok?: boolean }) {
-  return (
-    <span className="rounded-full border border-line bg-elevated px-3 py-1.5">
-      {label}: <span className={ok ? "text-ok" : "text-faint"}>{ok ? "ready" : "pending"}</span>
-    </span>
   );
 }
