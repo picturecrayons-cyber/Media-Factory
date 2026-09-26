@@ -4,10 +4,10 @@ import type { ButtonHTMLAttributes } from "react";
 type Variant = "primary" | "ghost" | "outline" | "danger";
 
 const styles: Record<Variant, string> = {
-  primary: "bg-accent text-accent-fg hover:brightness-110",
-  ghost: "bg-fg/8 text-fg hover:bg-fg/14",
-  outline: "border border-line-strong text-fg hover:bg-fg/8",
-  danger: "border border-line-strong text-fg hover:bg-fg/10",
+  primary: "bg-accent text-accent-fg shadow-[0_10px_24px_rgba(8,184,232,.22)] hover:bg-accent-strong",
+  ghost: "bg-accent-soft text-fg hover:bg-accent-soft/70",
+  outline: "border border-line-strong bg-surface text-fg hover:bg-accent-soft",
+  danger: "border border-line-strong bg-surface text-fg hover:bg-fg/5",
 };
 
 export function Button({
@@ -18,7 +18,7 @@ export function Button({
   return (
     <button
       className={cn(
-        "inline-flex h-11 min-h-11 items-center justify-center gap-2 rounded-sm px-4 text-sm font-medium transition-[transform,background-color,filter] duration-150 active:scale-[0.98] disabled:opacity-50",
+        "inline-flex h-11 min-h-11 items-center justify-center gap-2 rounded-full px-5 text-sm font-semibold transition-[transform,background-color,filter,box-shadow] duration-150 active:scale-[0.98] disabled:opacity-50",
         styles[variant],
         className,
       )}
