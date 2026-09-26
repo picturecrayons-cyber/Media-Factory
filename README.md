@@ -4,23 +4,23 @@ Title record, rights, and licensing OS. Legal owner: **StreamVista OPC Pvt Ltd**
 
 Production domain: `bridge.crayonspictures.com` · Vercel project `bridge` · GitHub `picturecrayons-cyber/Media-Factory`.
 
-This branch (`feat/crayons-bridge-production`) rebuilds Bridge on TanStack Start. It is **not** CRAYONS LOOP. Loop cinema routes, PIN gates, and fake payments are removed here.
+Crayons Bridge is the B2B control plane for title records, rights, licensing, delivery authorization, and operational workflows. CRAYONS LOOP remains the consumer streaming frontend.
 
 ## Canonical pins
 
 | Thing | Value |
 |---|---|
-| Supabase | `uakpqqardziifcwzvgfx` |
+| Supabase | `mlmgugivsyoxzdgwkbpu` |
 | Mail from | `abijithasokan@crayonspictures.com` |
-| Vercel | project `bridge`, **preview only** on this branch |
+| Vercel | project `bridge` · production from `main` |
 
-Any other Supabase project is rejected in `src/lib/bridge/canonical.ts`.
+Any non-canonical Supabase project is rejected in `src/lib/bridge/canonical.ts`.
 
 ## Stack
 
 - TanStack Start + React 19
-- Better Auth (email/password + Google / X) — no mock / `dev-user` Bridge ops
-- Postgres via `getSql()` (PGLite in preview, `DATABASE_URL` when set)
+- Supabase Auth for production email/password authentication
+- Postgres via `getSql()`
 - Private AWS S3 signed URLs (fail closed)
 - Razorpay order + signature verify + idempotent webhook (entitlement **only** after capture)
 - Hostinger SMTP (fail closed)
@@ -55,7 +55,7 @@ node --experimental-strip-types scripts/legacy-migrate.mjs --file /private/title
 
 Legacy import is dry-run only. See [docs/legacy-mapping.md](docs/legacy-mapping.md).
 
-Do not merge `main` or promote production from this branch without owner approval.
+Production releases are cut from `main` only after preview/build verification.
 
 ## License
 
