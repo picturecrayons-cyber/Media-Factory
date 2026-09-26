@@ -6,10 +6,7 @@ import type { BridgeActor } from "@/lib/bridge/session";
 import { workspaceHome } from "@/lib/bridge/rbac";
 
 const LINKS: { to: string; label: string; show: (a: BridgeActor) => boolean }[] = [
-  { to: "/creator", label: "Creator", show: (a) => !a.internalRole && a.accountType === "independent_creator" },
-  { to: "/studio", label: "Studio", show: (a) => !a.internalRole && a.accountType === "studio" },
-  { to: "/buyer", label: "Buyer", show: (a) => !a.internalRole && a.accountType === "buyer" },
-  { to: "/internal", label: "Admin", show: (a) => Boolean(a.internalRole) },
+  { to: "/workspace", label: "Workspace", show: () => true },
   { to: "/account", label: "Account", show: () => true },
 ];
 
