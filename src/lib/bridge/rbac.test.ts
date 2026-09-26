@@ -65,9 +65,9 @@ describe("rbac", () => {
     assert.equal(hasPermission(qc, "title.qc_review"), true);
   });
 
-  it("routes workspaces by account and internal role", () => {
-    assert.equal(workspaceHome(creator()), "/creator");
-    assert.equal(workspaceHome(buyer()), "/buyer");
-    assert.equal(workspaceHome(qc), "/internal");
+  it("routes every authenticated role into the unified workspace", () => {
+    assert.equal(workspaceHome(creator()), "/workspace");
+    assert.equal(workspaceHome(buyer()), "/workspace");
+    assert.equal(workspaceHome(qc), "/workspace");
   });
 });

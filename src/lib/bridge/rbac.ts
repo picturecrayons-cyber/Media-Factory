@@ -122,9 +122,6 @@ export function canReadTitle(
   return false;
 }
 
-export function workspaceHome(actor: Actor): string {
-  if (actor.internalRole) return "/internal";
-  if (actor.accountType === "buyer") return "/buyer";
-  if (actor.accountType === "studio") return "/studio";
-  return "/creator";
+export function workspaceHome(_actor: Actor): string {
+  return "/workspace";
 }

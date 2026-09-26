@@ -56,10 +56,12 @@ function Home() {
         </section>
 
         <section className="mx-auto max-w-7xl px-4 py-12 sm:px-6">
-          <div className="grid gap-4 lg:grid-cols-3">
-            <DeskCard kicker="Creator" title="Submit and manage titles" body="Create durable title records, upload private masters, and move through QC, rights and licensing." cta="/creator" />
-            <DeskCard kicker="Studio" title="Run the full slate" body="Manage title operations, rights, licensing, delivery and teams from one control plane." cta="/studio" />
-            <DeskCard kicker="Buyer" title="Access ready titles" body="View authorized titles, screeners, negotiations, licenses and deliveries based on permission." cta="/buyer" />
+          <div className="rounded-3xl border border-line bg-surface p-6 sm:p-8">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">One workspace</p>
+            <h2 className="mt-2 font-display text-3xl font-semibold">Role-based access. Title-centred operations.</h2>
+            <p className="mt-3 max-w-3xl text-sm leading-6 text-muted">
+              Creators, studios, buyers and invited internal teams enter the same Bridge workspace. Account type sets context; server-enforced permissions decide which titles, modules and actions are available.
+            </p>
           </div>
         </section>
 
@@ -83,16 +85,5 @@ function Home() {
         </section>
       </main>
     </div>
-  );
-}
-
-function DeskCard({ kicker, title, body, cta }: { kicker: string; title: string; body: string; cta: "/creator" | "/studio" | "/buyer" }) {
-  return (
-    <article className="rounded-3xl border border-line bg-surface p-6 shadow-[0_16px_50px_rgba(19,104,130,.08)]">
-      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">{kicker}</p>
-      <h3 className="mt-3 font-display text-2xl font-semibold">{title}</h3>
-      <p className="mt-2 text-sm leading-6 text-muted">{body}</p>
-      <Link to={cta} className="mt-5 inline-flex text-sm font-semibold text-accent hover:underline">Open workspace →</Link>
-    </article>
   );
 }
