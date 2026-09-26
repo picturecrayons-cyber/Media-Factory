@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { RedirectToSignIn } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
@@ -17,11 +17,25 @@ const LABELS: Record<(typeof ACCOUNT_TYPES)[number], string> = {
   buyer: "Buyer",
 };
 
+const SESSION_TIMEOUT_MS = 12_000;
+
+async function getBridgeSessionWithTimeout() {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      getBridgeSession(),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error("Session check timed out. Please retry.")), SESSION_TIMEOUT_MS);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 function goHome(home: string, navigate: ReturnType<typeof useNavigate>) {
   if (home === "/creator" || home === "/studio" || home === "/buyer" || home === "/internal") {
-    void navigate({ to: home });
-  } else {
-    void navigate({ to: "/onboarding" });
+    void navigate({ to: home, replace: true });
   }
 }
 
@@ -30,9 +44,10 @@ function Onboarding() {
   const navigate = useNavigate();
   const sessionQ = useQuery({
     queryKey: ["bridge-session"],
-    queryFn: () => getBridgeSession(),
+    queryFn: getBridgeSessionWithTimeout,
     enabled: Boolean(user),
-    retry: false,
+    retry: 1,
+    retryDelay: 500,
   });
   const [displayName, setDisplayName] = useState("");
   const [accountType, setAccountType] = useState<(typeof ACCOUNT_TYPES)[number]>("independent_creator");
@@ -40,16 +55,35 @@ function Onboarding() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  if (isPending || (user && sessionQ.isPending)) {
+  const home = sessionQ.data?.profile ? sessionQ.data.home : null;
+  useEffect(() => {
+    if (home) goHome(home, navigate);
+  }, [home, navigate]);
+
+  if (isPending || (user && sessionQ.isPending) || home) {
     return (
       <main className="grid min-h-screen place-items-center bg-bg p-6">
-        <p className="text-sm text-muted">Loading session…</p>
+        <p className="text-sm text-muted">{home ? "Opening workspace…" : "Loading session…"}</p>
       </main>
     );
   }
   if (!user) return <RedirectToSignIn />;
-  if (sessionQ.data?.profile) {
-    goHome(sessionQ.data.home, navigate);
+
+  if (sessionQ.isError) {
+    return (
+      <main className="grid min-h-screen place-items-center bg-bg p-6">
+        <div className="w-full max-w-sm space-y-4 rounded-md border border-line bg-surface p-6">
+          <BrandMark />
+          <h1 className="font-display text-2xl">Session needs a retry</h1>
+          <p className="text-sm leading-relaxed text-muted">
+            We could not finish loading your Bridge session. Your account is not lost.
+          </p>
+          <Button type="button" className="w-full" onClick={() => void sessionQ.refetch()}>
+            Retry session
+          </Button>
+        </div>
+      </main>
+    );
   }
 
   async function onSubmit(e: FormEvent) {
