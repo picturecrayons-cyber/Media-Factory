@@ -17,6 +17,9 @@ const INTERNAL_PERMISSIONS: Record<InternalRole, readonly Permission[]> = {
     "finance.read",
     "users.invite_internal",
     "audit.read",
+    "loop.publish",
+    "loop.revoke",
+    "loop.certify_playback",
   ],
   super_admin: [
     "title.create",
@@ -36,6 +39,9 @@ const INTERNAL_PERMISSIONS: Record<InternalRole, readonly Permission[]> = {
     "finance.read",
     "users.invite_internal",
     "audit.read",
+    "loop.publish",
+    "loop.revoke",
+    "loop.certify_playback",
   ],
 };
 
