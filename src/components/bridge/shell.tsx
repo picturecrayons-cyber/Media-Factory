@@ -16,7 +16,7 @@ const LINKS: { to: string; label: string; show: (a: BridgeActor) => boolean }[] 
 export function BrandMark({ className }: { className?: string }) {
   return (
     <Link to="/" className={cn("inline-flex items-center", className)} aria-label="Crayons Bridge home">
-      <img src="/brand/bridge-logo.png" alt="Crayons Bridge" className="h-11 w-auto object-contain sm:h-12" />
+      <img src="/brand/bridge-logo.png" alt="Crayons Bridge" className="h-12 w-auto max-w-[190px] object-contain sm:h-14 sm:max-w-[220px]" />
     </Link>
   );
 }
