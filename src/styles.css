@@ -1,32 +1,32 @@
 @import "tailwindcss";
 
 @theme {
-  --color-bg: #0b0a09;
-  --color-surface: #141210;
-  --color-elevated: #1c1916;
-  --color-fg: #efe6d4;
-  --color-muted: #9a8f7e;
-  --color-faint: #6e675b;
-  --color-line: #efe6d41f;
-  --color-line-strong: #efe6d438;
-  --color-accent: #c48a3a;
-  --color-accent-fg: #1a140c;
-  --color-ok: #8aa37a;
-  --color-warn: #c48a3a;
-  --font-display: "Fraunces", "Times New Roman", serif;
-  --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --color-bg: #f7fbfd;
+  --color-surface: #ffffff;
+  --color-elevated: #f2f8fb;
+  --color-fg: #1f2a37;
+  --color-muted: #6b7280;
+  --color-faint: #9ca3af;
+  --color-line: #0eaed61f;
+  --color-line-strong: #0eaed63a;
+  --color-accent: #08b8e8;
+  --color-accent-strong: #009fcb;
+  --color-accent-soft: #e8f9fe;
+  --color-accent-fg: #ffffff;
+  --color-ok: #18864b;
+  --color-warn: #b7791f;
+  --font-display: "Avenir Next", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Avenir Next", "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
-  --radius-xs: 2px;
-  --radius-sm: 4px;
-  --radius-md: 8px;
-  --radius-lg: 14px;
-  --shadow-lift: 0 24px 80px #000000a6;
+  --radius-xs: 6px;
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+  --shadow-lift: 0 20px 60px #0b7fa31a;
 }
 
 @layer base {
-  html,
-  body,
-  #app {
+  html, body, #app {
     min-height: 100%;
     background: var(--color-bg);
     color: var(--color-fg);
@@ -37,39 +37,22 @@
   }
   body {
     font-family: var(--font-sans);
-    letter-spacing: 0.01em;
+    letter-spacing: 0;
   }
-  h1,
-  h2,
-  h3 {
-    text-wrap: balance;
-  }
-  p {
-    text-wrap: pretty;
-  }
-  button:not(:disabled),
-  [role="button"]:not(:disabled) {
-    cursor: pointer;
-  }
-  ::selection {
-    background: var(--color-accent);
-    color: var(--color-accent-fg);
-  }
+  h1, h2, h3 { text-wrap: balance; }
+  p { text-wrap: pretty; }
+  button:not(:disabled), [role="button"]:not(:disabled) { cursor: pointer; }
+  ::selection { background: #bcefff; color: #123; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
+  *, *::before, *::after {
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
   }
 }
 
-.font-display {
-  font-family: var(--font-display);
-}
-
+.font-display { font-family: var(--font-display); }
 .lab-grid {
   background-image:
     linear-gradient(var(--color-line) 1px, transparent 1px),
