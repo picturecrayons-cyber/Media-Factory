@@ -1,5 +1,5 @@
 import { Link, Navigate } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { RedirectToSignIn } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
@@ -26,12 +26,19 @@ export function RequireBridge({
   children: (actor: BridgeActor) => ReactNode;
   allow?: "creator" | "studio" | "buyer" | "internal";
 }) {
+  const qc = useQueryClient();
   const { user, isPending } = useCurrentUserState();
   const sessionQ = useQuery({
     queryKey: ["bridge-session"],
     queryFn: () => getBridgeSession(),
     enabled: Boolean(user),
     retry: false,
+  });
+  const verifyMail = useMutation({
+    mutationFn: () => requestEmailVerification(),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["bridge-session"] });
+    },
   });
 
   if (isPending || (user && sessionQ.isPending)) {
@@ -56,16 +63,23 @@ export function RequireBridge({
       <Frame>
         <h1 className="font-display text-2xl">Verify your email</h1>
         <p className="text-sm leading-relaxed text-muted">
-          Bridge operations require a verified mailbox. A Hostinger message is sent to {profile.email}.
+          Bridge operations require a verified mailbox. We will send the verification link to {profile.email}.
         </p>
         <Button
           type="button"
-          onClick={() => {
-            void requestEmailVerification().catch(() => undefined);
-          }}
+          disabled={verifyMail.isPending}
+          onClick={() => verifyMail.mutate()}
         >
-          Send verification
+          {verifyMail.isPending ? "Sending…" : "Send verification"}
         </Button>
+        {verifyMail.isSuccess ? (
+          <p className="text-sm text-muted">Verification email sent. Open the newest Crayons Bridge message and use the link within 24 hours.</p>
+        ) : null}
+        {verifyMail.isError ? (
+          <p className="text-sm text-accent">
+            {verifyMail.error instanceof Error ? verifyMail.error.message : "Could not send verification email."}
+          </p>
+        ) : null}
         <Link to="/account" className="block text-sm text-accent underline-offset-4 hover:underline">
           Account
         </Link>
