@@ -1,7 +1,7 @@
 /** Canonical StreamVista / Crayons Bridge infrastructure pins. Never print secret values. */
 
-export const CANONICAL_SUPABASE_REF = "uakpqqardziifcwzvgfx";
-export const FORBIDDEN_SUPABASE_REFS = ["tqzimuwozhipqgyerdff"] as const;
+export const CANONICAL_SUPABASE_REF = "mlmgugivsyoxzdgwkbpu";
+export const FORBIDDEN_SUPABASE_REFS = ["tqzimuwozhipqgyerdff", "uakpqqardziifcwzvgfx"] as const;
 export const CANONICAL_SUPABASE_URL = `https://${CANONICAL_SUPABASE_REF}.supabase.co`;
 export const PRODUCT_NAME = "Crayons Bridge";
 export const LEGAL_OWNER = "StreamVista OPC Pvt Ltd";
