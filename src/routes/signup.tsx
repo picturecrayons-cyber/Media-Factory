@@ -1,4 +1,4 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState, type FormEvent } from "react";
 import { GROK_PROVIDERS, authClient, authEnabled, signIn } from "@/lib/auth/client";
 import { BrandMark } from "@/components/bridge/shell";
@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button";
 export const Route = createFileRoute("/signup")({ component: Signup });
 
 function Signup() {
-  const navigate = useNavigate();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -27,13 +26,27 @@ function Signup() {
         /* ignore */
       }
     }
-    const res = await authClient.signUp.email({ email, password, name, callbackURL: "/onboarding" });
-    setBusy(false);
-    if (res.error) {
-      setError(res.error.message ?? "Sign-up failed");
-      return;
+
+    try {
+      const res = await authClient.signUp.email({ email, password, name, callbackURL: "/onboarding" });
+      if (res.error) {
+        setError(res.error.message ?? "Sign-up failed");
+        return;
+      }
+
+      // A successful sign-up may establish the Better Auth session via an
+      // HttpOnly Set-Cookie response. A client-side router transition can keep
+      // the pre-sign-up useSession cache alive and make onboarding look stuck.
+      // Force one same-origin document navigation so the protected workspace
+      // starts from the session the server just established.
+      if (typeof window !== "undefined") {
+        window.location.assign("/onboarding");
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Sign-up failed");
+    } finally {
+      setBusy(false);
     }
-    navigate({ to: "/onboarding" });
   }
 
   return (
