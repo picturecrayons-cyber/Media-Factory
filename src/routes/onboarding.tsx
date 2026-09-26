@@ -34,8 +34,8 @@ async function getBridgeSessionWithTimeout() {
 }
 
 function goHome(home: string, navigate: ReturnType<typeof useNavigate>) {
-  if (home === "/creator" || home === "/studio" || home === "/buyer" || home === "/internal") {
-    void navigate({ to: home, replace: true });
+  if (home === "/workspace") {
+    void navigate({ to: "/workspace", replace: true });
   }
 }
 
@@ -125,7 +125,7 @@ function Onboarding() {
         className="w-full max-w-md space-y-5 rounded-md border border-line bg-surface p-6"
       >
         <BrandMark />
-        <h1 className="font-display text-2xl">Choose your desk</h1>
+        <h1 className="font-display text-2xl">Set up your Bridge account</h1>
         <p className="text-sm leading-relaxed text-muted">
           This becomes your account type. Internal roles only attach when the invite mailbox matches.
         </p>
