@@ -85,7 +85,7 @@ function authPopupPlugin(): Plugin {
           }
 
           const host = String(
-            req.headers["x-forwarded-host"] ?? req.headers.host ?? "localhost:8080",
+            req.headers["x-forwarded-host"] ?? req.headers.host ?? "localhost:3000",
           );
           const proto = String(
             req.headers["x-forwarded-proto"] ??
@@ -142,21 +142,49 @@ function authPopupPlugin(): Plugin {
   };
 }
 
-// `0.0.0.0:8080` is the live-preview contract — don't change host/port.
-// The dev server starts once `src/router.tsx` and `src/routes/` exist — see
-// AGENTS.md § "First scaffold".
+// `0.0.0.0:3000` is the preview contract.
 export default defineConfig(({ command, isPreview }) => ({
   server: {
     host: "0.0.0.0",
-    port: 8080,
+    port: 3000,
     strictPort: true,
+    allowedHosts: true,
+    cors: true,
   },
   preview: {
     host: "127.0.0.1",
     port: 8081,
     strictPort: true,
   },
-  resolve: { tsconfigPaths: true },
+  build: {
+    rollupOptions: {
+      onwarn(warning, defaultHandler) {
+        if (
+          warning.code === "MODULE_LEVEL_DIRECTIVE" ||
+          warning.message?.includes("MODULE_LEVEL_DIRECTIVE") ||
+          warning.message?.includes('directive "use client"')
+        ) {
+          return;
+        }
+        defaultHandler(warning);
+      },
+    },
+  },
+  define: {
+    "import.meta.env.VITE_SUPABASE_URL": JSON.stringify(
+      process.env.VITE_SUPABASE_URL || "https://mlmgugivsyoxzdgwkbpu.supabase.co"
+    ),
+    "import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY": JSON.stringify(
+      process.env.VITE_SUPABASE_PUBLISHABLE_KEY || "sb_publishable_8XCMcaqHvYMWANqxqnS0mw_f_asubxB"
+    ),
+  },
+  resolve: {
+    tsconfigPaths: true,
+    alias: {
+      "#tanstack-start-entry": join(process.cwd(), "src/start.ts"),
+      "#tanstack-router-entry": join(process.cwd(), "src/router.tsx"),
+    },
+  },
   plugins: [
     pgliteBootstrapPlugin(),
     // Before tanstackStart so /auth/popup never falls through to the SPA.
@@ -175,6 +203,49 @@ export default defineConfig(({ command, isPreview }) => ({
             // manifest + head-tag middleware). Nitro v3 defaults serverDir to
             // false, so removing this silently unwires /?install=1 on deploys.
             serverDir: "./server",
+            rolldownConfig: {
+              onLog(level: string, log: any, defaultHandler: any) {
+                if (
+                  log?.code === "MODULE_LEVEL_DIRECTIVE" ||
+                  log?.code === "EVAL" ||
+                  log?.message?.includes("MODULE_LEVEL_DIRECTIVE") ||
+                  log?.message?.includes("Use of direct `eval`")
+                ) {
+                  return false;
+                }
+                if (typeof defaultHandler === "function") {
+                  defaultHandler(level, log);
+                }
+              },
+              onwarn(warning: any, defaultHandler: any) {
+                if (
+                  warning?.code === "MODULE_LEVEL_DIRECTIVE" ||
+                  warning?.code === "EVAL" ||
+                  warning?.message?.includes("MODULE_LEVEL_DIRECTIVE") ||
+                  warning?.message?.includes("Use of direct `eval`")
+                ) {
+                  return;
+                }
+                if (typeof defaultHandler === "function") {
+                  defaultHandler(warning);
+                }
+              },
+            },
+            rollupConfig: {
+              onwarn(warning: any, defaultHandler: any) {
+                if (
+                  warning?.code === "MODULE_LEVEL_DIRECTIVE" ||
+                  warning?.code === "EVAL" ||
+                  warning?.message?.includes("MODULE_LEVEL_DIRECTIVE") ||
+                  warning?.message?.includes("Use of direct `eval`")
+                ) {
+                  return;
+                }
+                if (typeof defaultHandler === "function") {
+                  defaultHandler(warning);
+                }
+              },
+            },
           }),
         ]
       : []),

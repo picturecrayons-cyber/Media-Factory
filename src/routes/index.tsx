@@ -2,23 +2,112 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { BrandMark } from "@/components/bridge/shell";
 import { Button } from "@/components/ui/button";
 import { SignedIn, SignedOut, UserButton } from "@/lib/auth/gates";
-import { TITLE_STATUS_ORDER } from "@/lib/bridge/lifecycle";
+
+const CRAYONS_LOOP_URL = "https://crayonsloop.com/";
 
 export const Route = createFileRoute("/")({ component: Home });
 
+const WORKFLOW_STEPS = [
+  {
+    step: "01",
+    title: "Upload",
+    description: "Add masters and supporting assets.",
+  },
+  {
+    step: "02",
+    title: "QC",
+    description: "Review technical readiness.",
+  },
+  {
+    step: "03",
+    title: "Rights",
+    description: "Manage ownership and availability.",
+  },
+  {
+    step: "04",
+    title: "License",
+    description: "Manage screeners and deals.",
+  },
+  {
+    step: "05",
+    title: "Deliver",
+    description: "Authorize secure distribution.",
+  },
+  {
+    step: "06",
+    title: "Earn",
+    description: "Track revenue activity.",
+  },
+];
+
+const TRUST_PILLARS = [
+  "Secure Storage",
+  "QC",
+  "Rights",
+  "Licensing",
+  "Delivery",
+];
+
 function Home() {
   return (
-    <div className="min-h-screen bg-bg">
-      <header className="sticky top-0 z-40 border-b border-line bg-surface/95 backdrop-blur">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 sm:px-6">
-          <BrandMark />
-          <div className="flex items-center gap-2 text-sm">
+    <div className="min-h-screen bg-bg text-fg antialiased selection:bg-accent/20 selection:text-fg">
+      {/* 1. Header */}
+      <header className="sticky top-0 z-50 border-b border-line bg-surface/90 backdrop-blur-md">
+        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3.5 sm:px-6">
+          <div className="flex items-center gap-8">
+            <BrandMark />
+            <nav
+              aria-label="Primary Navigation"
+              className="hidden md:flex items-center gap-7 text-xs font-semibold uppercase tracking-wider text-muted"
+            >
+              <a href="#how-it-works" className="hover:text-fg transition-colors">
+                How it works
+              </a>
+              <a href="#creators" className="hover:text-fg transition-colors">
+                Creators
+              </a>
+              <a href="#studios" className="hover:text-fg transition-colors">
+                Studios
+              </a>
+              <a href="#buyers" className="hover:text-fg transition-colors">
+                Buyers
+              </a>
+            </nav>
+          </div>
+
+          <div className="flex items-center gap-3 text-sm">
+            <a
+              href={CRAYONS_LOOP_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-xs font-semibold text-muted hover:text-accent transition-colors px-2 py-1"
+              title="Open Crayons Loop Consumer Streaming"
+            >
+              <span>Crayons Loop</span>
+              <span className="text-[11px] leading-none">↗</span>
+            </a>
+
             <SignedOut>
-              <Link to="/login" className="rounded-full px-4 py-2 font-medium text-muted hover:bg-accent-soft hover:text-fg">Sign in</Link>
-              <Link to="/signup"><Button>Create account</Button></Link>
+              <Link
+                to="/login"
+                className="hidden sm:inline-flex rounded-full px-4 py-1.5 text-xs font-semibold text-muted hover:bg-accent-soft hover:text-fg transition-colors"
+              >
+                Sign in
+              </Link>
+              <Link to="/signup">
+                <Button size="sm" className="rounded-full px-4 py-1.5 text-xs font-semibold shadow-xs">
+                  Create account
+                </Button>
+              </Link>
             </SignedOut>
+
             <SignedIn>
-              <Link to="/onboarding" className="rounded-full bg-accent-soft px-4 py-2 font-medium text-accent">Open workspace</Link>
+              <Link
+                to="/dashboard"
+                className="rounded-full bg-accent-soft px-3.5 py-1.5 text-xs font-semibold text-accent hover:opacity-90 transition-opacity"
+              >
+                Open workspace
+              </Link>
               <UserButton />
             </SignedIn>
           </div>
@@ -26,64 +115,248 @@ function Home() {
       </header>
 
       <main>
+        {/* 2. Hero */}
         <section className="border-b border-line bg-surface">
-          <div className="mx-auto grid max-w-7xl gap-10 px-4 py-16 sm:px-6 lg:grid-cols-[1.15fr_.85fr] lg:py-24">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">StreamVista OPC Pvt Ltd</p>
-              <h1 className="mt-4 max-w-3xl font-display text-5xl font-semibold leading-[1.05] tracking-tight sm:text-6xl">One bridge from content to market.</h1>
-              <p className="mt-5 max-w-2xl text-base leading-7 text-muted sm:text-lg">Upload masters, clear rights, license securely, authorize distribution and track delivery from one professional workspace.</p>
-              <div className="mt-7 flex flex-wrap gap-3">
-                <Link to="/signup"><Button>Create account</Button></Link>
-                <Link to="/login"><Button variant="outline">Sign in</Button></Link>
+          <div className="mx-auto max-w-7xl px-4 py-20 sm:px-6 sm:py-28 lg:py-36">
+            <div className="max-w-3xl">
+              <h1 className="font-display text-4xl font-semibold leading-[1.08] tracking-tight text-fg sm:text-6xl sm:leading-[1.06]">
+                One bridge from content to market.
+              </h1>
+              <p className="mt-5 max-w-2xl text-base leading-relaxed text-muted sm:text-lg">
+                Upload, manage rights, license and deliver from one professional workspace.
+              </p>
+
+              <div className="mt-8 flex flex-wrap items-center gap-3">
+                <Link to="/signup">
+                  <Button className="h-11 rounded-full px-6 text-sm font-semibold shadow-xs">
+                    Create account
+                  </Button>
+                </Link>
+                <Link to="/login">
+                  <Button
+                    variant="outline"
+                    className="h-11 rounded-full border-line px-6 text-sm font-semibold hover:border-line-strong"
+                  >
+                    Sign in
+                  </Button>
+                </Link>
               </div>
-              <div className="mt-7 flex flex-wrap gap-x-5 gap-y-2 text-sm text-muted">
-                <span>Secure Storage</span><span>Technical QC</span><span>Rights</span><span>Screeners</span><span>Licensing</span>
+
+              {/* Trust Indicators */}
+              <div className="mt-14 border-t border-line pt-6">
+                <p className="text-xs font-medium text-muted">
+                  {TRUST_PILLARS.join(" · ")}
+                </p>
               </div>
             </div>
+          </div>
+        </section>
 
-            <div className="rounded-[28px] border border-line bg-elevated p-5 shadow-[0_24px_80px_rgba(8,184,232,.12)]">
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">Workflow</p>
-              <div className="mt-4 grid gap-3">
-                {["Upload", "Prepare", "QC", "Rights", "License", "Deliver", "Earn"].map((item, i) => (
-                  <div key={item} className="flex items-center gap-3 rounded-2xl border border-line bg-surface px-4 py-3">
-                    <span className="grid h-8 w-8 place-items-center rounded-full bg-accent-soft text-xs font-bold text-accent">{String(i + 1).padStart(2, "0")}</span>
-                    <span className="font-medium">{item}</span>
+        {/* 3. How It Works */}
+        <section id="how-it-works" className="border-b border-line bg-surface/50 py-16 sm:py-24">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6">
+            <div className="max-w-2xl">
+              <h2 className="font-display text-3xl font-semibold tracking-tight text-fg sm:text-4xl">
+                From upload to delivery.
+              </h2>
+            </div>
+
+            <div className="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-6">
+              {WORKFLOW_STEPS.map((step, idx) => (
+                <div
+                  key={step.step}
+                  className="flex flex-col justify-between rounded-2xl border border-line bg-surface p-5 transition hover:border-line-strong"
+                >
+                  <div>
+                    <div className="flex items-center justify-between">
+                      <span className="font-mono text-xs font-bold text-accent">{step.step}</span>
+                      {idx < WORKFLOW_STEPS.length - 1 ? (
+                        <span className="hidden lg:inline text-muted/30 text-xs">→</span>
+                      ) : null}
+                    </div>
+                    <h3 className="mt-3 font-display text-lg font-semibold text-fg">
+                      {step.title}
+                    </h3>
+                    <p className="mt-1.5 text-xs leading-relaxed text-muted">{step.description}</p>
                   </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section className="mx-auto max-w-7xl px-4 py-12 sm:px-6">
-          <div className="rounded-3xl border border-line bg-surface p-6 sm:p-8">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">One workspace</p>
-            <h2 className="mt-2 font-display text-3xl font-semibold">Role-based access. Title-centred operations.</h2>
-            <p className="mt-3 max-w-3xl text-sm leading-6 text-muted">
-              Creators, studios, buyers and invited internal teams enter the same Bridge workspace. Account type sets context; server-enforced permissions decide which titles, modules and actions are available.
-            </p>
-          </div>
-        </section>
-
-        <section className="border-y border-line bg-surface">
-          <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6">
-            <div className="flex items-end justify-between gap-4">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">Lifecycle</p>
-                <h2 className="mt-2 font-display text-3xl font-semibold">Rights first. Delivery after authorization.</h2>
-              </div>
-            </div>
-            <div className="mt-6 flex flex-wrap gap-2">
-              {TITLE_STATUS_ORDER.map((step, i) => (
-                <div key={step} className="rounded-full border border-line bg-elevated px-3 py-2">
-                  <span className="text-[10px] font-bold text-accent">{String(i + 1).padStart(2, "0")}</span>
-                  <span className="ml-2 text-xs font-medium">{step.replaceAll("_", " ")}</span>
                 </div>
               ))}
             </div>
           </div>
         </section>
+
+        {/* 4. Audiences: Creators, Studios, Buyers */}
+        <section id="creators" className="border-b border-line bg-surface py-16 sm:py-24">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6">
+            <div className="max-w-2xl">
+              <h2 className="font-display text-3xl font-semibold tracking-tight text-fg sm:text-4xl">
+                Built for the media business.
+              </h2>
+            </div>
+
+            <div className="mt-12 grid gap-8 lg:grid-cols-3">
+              {/* Creators Card */}
+              <div className="flex flex-col justify-between rounded-3xl border border-line bg-elevated p-7 sm:p-8">
+                <div>
+                  <h3 className="font-display text-2xl font-semibold text-fg">
+                    Creators
+                  </h3>
+                  <p className="mt-3 text-sm leading-relaxed text-muted">
+                    Manage your titles from upload to delivery.
+                  </p>
+                </div>
+                <div className="mt-8 pt-5 border-t border-line">
+                  <Link
+                    to="/signup"
+                    search={{ role: "creator" }}
+                    className="inline-flex items-center text-xs font-semibold text-accent hover:underline"
+                  >
+                    Start as Creator →
+                  </Link>
+                </div>
+              </div>
+
+              {/* Studios Card */}
+              <div
+                id="studios"
+                className="flex flex-col justify-between rounded-3xl border border-line bg-elevated p-7 sm:p-8"
+              >
+                <div>
+                  <h3 className="font-display text-2xl font-semibold text-fg">
+                    Studios
+                  </h3>
+                  <p className="mt-3 text-sm leading-relaxed text-muted">
+                    Manage catalogs, teams and rights.
+                  </p>
+                </div>
+                <div className="mt-8 pt-5 border-t border-line">
+                  <Link
+                    to="/signup"
+                    search={{ role: "studio" }}
+                    className="inline-flex items-center text-xs font-semibold text-accent hover:underline"
+                  >
+                    Create Studio Workspace →
+                  </Link>
+                </div>
+              </div>
+
+              {/* Buyers Card */}
+              <div
+                id="buyers"
+                className="flex flex-col justify-between rounded-3xl border border-line bg-elevated p-7 sm:p-8"
+              >
+                <div>
+                  <h3 className="font-display text-2xl font-semibold text-fg">
+                    Buyers
+                  </h3>
+                  <p className="mt-3 text-sm leading-relaxed text-muted">
+                    Discover titles and manage licensing.
+                  </p>
+                </div>
+                <div className="mt-8 pt-5 border-t border-line">
+                  <Link
+                    to="/signup"
+                    search={{ role: "buyer" }}
+                    className="inline-flex items-center text-xs font-semibold text-accent hover:underline"
+                  >
+                    Explore Buyer Access →
+                  </Link>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* 5. Bridge + Loop (Compact Strip) */}
+        <section className="border-b border-line bg-surface/50 py-12 sm:py-16">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 rounded-2xl border border-line bg-surface p-6 sm:p-8">
+              <div>
+                <h3 className="font-display text-xl font-semibold text-fg">
+                  From rights to audience.
+                </h3>
+                <p className="mt-2 text-sm leading-relaxed text-muted max-w-2xl">
+                  Crayons Bridge manages rights, licensing and distribution authorization. Crayons
+                  Loop is the consumer streaming experience.
+                </p>
+              </div>
+
+              <div className="shrink-0">
+                <a
+                  href={CRAYONS_LOOP_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 rounded-full border border-line bg-elevated px-5 py-2.5 text-xs font-semibold text-fg hover:border-line-strong hover:bg-accent-soft hover:text-accent transition-all"
+                >
+                  <span>Explore Crayons Loop</span>
+                  <span className="text-xs">↗</span>
+                </a>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* 6. Final CTA */}
+        <section className="border-b border-line bg-surface py-16 sm:py-24">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6">
+            <div className="mx-auto max-w-2xl text-center">
+              <h2 className="font-display text-3xl font-semibold tracking-tight text-fg sm:text-4xl">
+                Ready to move your content forward?
+              </h2>
+              <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
+                <Link to="/signup">
+                  <Button className="h-11 rounded-full px-6 text-sm font-semibold shadow-xs">
+                    Create account
+                  </Button>
+                </Link>
+                <Link to="/login">
+                  <Button
+                    variant="outline"
+                    className="h-11 rounded-full border-line px-6 text-sm font-semibold hover:border-line-strong"
+                  >
+                    Sign in
+                  </Button>
+                </Link>
+              </div>
+            </div>
+          </div>
+        </section>
       </main>
+
+      {/* 7. Footer */}
+      <footer className="bg-surface py-10 px-4 sm:px-6 text-xs text-muted">
+        <div className="mx-auto max-w-7xl flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div>
+            <span className="font-semibold text-fg">Crayons Bridge</span>
+            <span className="mx-2 text-muted/40">·</span>
+            <span>© 2026 StreamVista OPC Pvt Ltd.</span>
+          </div>
+
+          <nav
+            aria-label="Footer Legal and External Links"
+            className="flex flex-wrap items-center gap-5 text-xs text-muted"
+          >
+            <a href="mailto:privacy@streamvista.com" className="hover:text-fg transition-colors">
+              Privacy
+            </a>
+            <a href="mailto:legal@streamvista.com" className="hover:text-fg transition-colors">
+              Terms
+            </a>
+            <a href="mailto:contact@streamvista.com" className="hover:text-fg transition-colors">
+              Contact
+            </a>
+            <a
+              href={CRAYONS_LOOP_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-fg hover:text-accent font-semibold transition-colors flex items-center gap-0.5"
+            >
+              <span>Crayons Loop</span>
+              <span className="text-[10px]">↗</span>
+            </a>
+          </nav>
+        </div>
+      </footer>
     </div>
   );
 }
