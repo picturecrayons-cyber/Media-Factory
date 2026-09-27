@@ -60,7 +60,9 @@ export function StreamVistaOrders() {
           <li key={order.id} className="rounded-sm border border-line p-4">
             <p className="font-medium">{order.service.replaceAll("_", " ")} · {order.status.replaceAll("_", " ")}</p>
             <p className="mt-1 text-xs text-muted">Request {order.id}</p>
-            {order.source_s3_key ? <p className="mt-2 text-sm">Source verified in private storage</p> : order.status === "requested" ? (
+            {order.source_s3_key ? (
+              <p className="mt-2 text-sm">Source verified in private storage · QC: {order.qc_status === "needs_review" ? "Awaiting human review" : order.qc_status ?? "Pending"}</p>
+            ) : order.status === "requested" ? (
               <label className="mt-3 block text-sm">Upload source
                 <input type="file" disabled={uploading === order.id} className="mt-1 block w-full text-sm" onChange={(event) => { void upload(order.id, event.target.files?.[0]); event.target.value = ""; }} />
               </label>

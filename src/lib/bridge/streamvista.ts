@@ -19,6 +19,7 @@ type Order = {
   source_s3_key: string | null;
   output_s3_key: string | null;
   bridge_title_id: string | null;
+  qc_status?: string | null;
   created_at: string | Date;
 };
 
@@ -51,8 +52,11 @@ export const listStreamVistaOrders = createServerFn({ method: "GET" })
     const actor = await requireActor(context.userId);
     assertPermission(actor, "title.read_own");
     const sql = await getSql();
-    const orders = await sql<Order>`select * from streamvista_orders
-      where owner_user_id = ${actor.userId} order by created_at desc limit 100`;
+    const orders = await sql<Order>`select o.*,
+      (select j.status from streamvista_jobs j where j.order_id = o.id and j.step = 'source_qc'
+       order by j.created_at desc limit 1) as qc_status
+      from streamvista_orders o
+      where o.owner_user_id = ${actor.userId} order by o.created_at desc limit 100`;
     return { orders: orders.map(({ owner_user_id: _owner, ...order }) => order) };
   });
 
@@ -84,12 +88,18 @@ export const confirmStreamVistaUpload = createServerFn({ method: "POST" })
     const { verifyObject } = await import("./s3.server");
     await verifyObject(data.key);
     const sql = await getSql();
-    const rows = await sql<{ id: string }>`update streamvista_orders set source_s3_key = ${data.key}, updated_at = now()
+    const jobId = randomUUID();
+    const rows = await sql<{ id: string }>`with confirmed as (
+      update streamvista_orders set source_s3_key = ${data.key}, updated_at = now()
       where id = ${data.orderId} and owner_user_id = ${actor.userId}
-      and status = 'requested' and source_s3_key is null returning id`;
+      and status = 'requested' and source_s3_key is null returning id
+    )
+    insert into streamvista_jobs (id, order_id, step, status)
+      select ${jobId}, id, 'source_qc', 'needs_review' from confirmed
+      returning id`;
     if (!rows[0]) throw new Error("Upload already confirmed or order changed");
     await writeAudit({ actorUserId: actor.userId, action: "streamvista.source.confirmed", entityType: "streamvista_order", entityId: data.orderId });
-    return { id: data.orderId, status: "requested" as const, sourceVerified: true };
+    return { id: data.orderId, status: "requested" as const, sourceVerified: true, qcJobId: jobId };
   });
 
 export const handoffStreamVistaOrder = createServerFn({ method: "POST" })
