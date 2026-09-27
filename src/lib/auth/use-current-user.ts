@@ -32,6 +32,8 @@ export function useCurrentUserState(): CurrentUserState {
     const resolve = () => {
       void getSupabaseSession().then((session) => {
         if (alive) setState({ user: normalize(session?.user ?? null), isPending: false });
+      }).catch(() => {
+        if (alive) setState({ user: null, isPending: false });
       });
     };
     resolve();
