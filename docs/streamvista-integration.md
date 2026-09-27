@@ -12,6 +12,12 @@
 
 New work must preserve these bindings. Do not create another Supabase project, grant Loop editing authority over Bridge rights, infer RBAC from legacy flags, or bind the other Vercel projects to the Bridge domain. Changes to this contract require explicit owner review, migration plan and end-to-end verification.
 
+## AWS credential transition
+
+Bridge S3 signing uses server-side AWS SDK credentials. Prefer a scoped workload role with temporary credentials for the `crayons-bridge-prod` bucket and only the object prefixes and operations needed by Bridge. The SDK now accepts its default credential chain when no static keys are configured; paired server-only `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` remain supported during a controlled rotation. Never put credentials in a `VITE_` variable or the repository.
+
+Before disabling an existing root access key, identify its current consumers (Vercel environment scopes and any other workers), create and test replacement role credentials with upload and download, switch each consumer, monitor use, then deactivate the old key and verify no failures before deleting it. The AWS console snapshot alone cannot establish which deployment is using a key. Root keys, CloudFront key pairs and certificates require separate inventory and rotation decisions.
+
 Use the existing canonical Supabase database and Supabase Auth identity. StreamVista is the production work layer; Bridge owns title, rights, licensing, approval and Loop publication. A job's `bridge_title_id` is an internal handoff reference, not distribution authorization. Only the Bridge publication preflight can authorize a Loop title.
 
 `streamvista_orders` records the customer, service, lane and source/output S3 keys. `streamvista_jobs` records pipeline stages and human review. Create an order from a server endpoint after verifying the Supabase bearer token and matching `owner_user_id` to that identity. Issue presigned S3 uploads from the server with a narrow key prefix. Set output only after QC approval. Require a Bridge operator to link the approved order to a Bridge title; the existing rights and publication checks remain mandatory. Do not expose AWS credentials to the browser.
