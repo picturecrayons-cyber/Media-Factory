@@ -2,6 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { CreateTitleForm, TitleList } from "@/components/bridge/title-desk";
+import { StreamVistaOrders } from "@/components/bridge/streamvista-orders";
 
 export const Route = createFileRoute("/studio")({ component: Studio });
 
@@ -51,6 +52,8 @@ function Studio() {
             </div>
             <CreateTitleForm />
           </section>
+
+          <StreamVistaOrders />
 
           <section className="mt-8">
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted">Portfolio</p>
