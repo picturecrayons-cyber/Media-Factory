@@ -66,9 +66,19 @@ export const getBridgeSession = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
     assertNotDevUser(context.userId);
-    const actor = await loadActor(context.userId);
+    let actor = await loadActor(context.userId);
     if (!actor) {
       return { userId: context.userId, profile: null, home: "/onboarding" };
+    }
+    // A confirmed Supabase account can return through password sign-in without
+    // visiting the signup callback. Keep the Bridge profile in sync only after
+    // the server has verified Supabase's email confirmation timestamp.
+    if (!actor.emailVerified && context.emailConfirmedAt) {
+      const sql = await getSql();
+      await sql`update bridge_profiles set email_verified = true, updated_at = now()
+        where user_id = ${context.userId} and email_verified = false`;
+      actor = await loadActor(context.userId);
+      if (!actor) throw new Error("Bridge profile could not be loaded");
     }
     return { userId: context.userId, profile: actor, home: workspaceHome(actor) };
   });

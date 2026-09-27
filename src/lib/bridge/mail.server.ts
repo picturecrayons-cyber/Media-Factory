@@ -66,14 +66,13 @@ export function formatBrandedEmailHtml(title: string, bodyHtml: string, cta?: { 
 </html>`;
 }
 
-export async function sendTransactionalEmail(opts: TransactionalEmailOptions): Promise<{ ok: boolean; messageId?: string; simulated?: boolean }> {
+export async function sendTransactionalEmail(opts: TransactionalEmailOptions): Promise<{ ok: boolean; messageId?: string }> {
   const host = bridgeEnv.smtpHost();
   const user = bridgeEnv.smtpUser();
   const pass = bridgeEnv.smtpPass();
 
   if (!host || !user || !pass) {
-    console.info(`[mail.server] SMTP not configured. Simulating delivery to ${opts.to}: "${opts.subject}"`);
-    return { ok: true, simulated: true };
+    throw new Error("Transactional email is not configured");
   }
 
   const port = Number(bridgeEnv.smtpPort() || "587");
