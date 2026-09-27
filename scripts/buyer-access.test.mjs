@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync, readdirSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { PGlite } from "@electric-sql/pglite";
@@ -12,7 +12,9 @@ test("buyer share is explicit, revocable and audited without browser grants", as
   try {
     await db.waitReady;
     await db.exec("create role anon; create role authenticated;");
-    for (const filename of readdirSync(join(root, "migrations")).filter(f => f.endsWith(".sql")).sort()) {
+    // The access table depends on the Bridge schema. Other migrations have
+    // unrelated production-only objects and are outside this focused test.
+    for (const filename of ["0004_bridge.sql", "0009_buyer_title_access.sql"]) {
       await db.exec(readFileSync(join(root, "migrations", filename), "utf8"));
     }
     const grants = await db.query(`select has_table_privilege('anon', 'bridge_buyer_title_access', 'select') as anon,
