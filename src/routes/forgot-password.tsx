@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState, type FormEvent } from "react";
-import { requestPasswordReset } from "@/lib/bridge/profiles";
+import { requestSupabasePasswordReset } from "@/lib/auth/client";
 import { BrandMark } from "@/components/bridge/shell";
 import { Button } from "@/components/ui/button";
 
@@ -17,7 +17,7 @@ function Forgot() {
     setBusy(true);
     setError(null);
     try {
-      await requestPasswordReset({ data: { email } });
+      await requestSupabasePasswordReset(email);
       setDone(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not send reset mail");
@@ -33,7 +33,7 @@ function Forgot() {
         <h1 className="font-display text-2xl">Reset password</h1>
         {done ? (
           <p className="text-sm leading-relaxed text-muted">
-            If that mailbox has an account, a reset link is on its way. The link expires in two hours.
+            If that mailbox has an account, a reset link is on its way. Follow the link to set a new password.
           </p>
         ) : (
           <form className="space-y-3" onSubmit={(e) => void onSubmit(e)}>
