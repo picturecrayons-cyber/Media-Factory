@@ -10,7 +10,7 @@ type NavItem = {
   to?: string;
   href?: string;
   label: string;
-  group: "WORKSPACE" | "BUSINESS" | "OPERATIONS" | "ADMIN";
+  group: "WORKSPACE" | "BUSINESS" | "LOOP CMS" | "OPERATIONS" | "ADMIN";
   show: (a: BridgeActor) => boolean;
 };
 
@@ -22,6 +22,10 @@ const NAV: NavItem[] = [
   { to: "/workspace", label: "Rights", group: "BUSINESS", show: () => true },
   { to: "/workspace", label: "Licensing", group: "BUSINESS", show: () => true },
   { to: "/buyer", label: "Buyers & Screeners", group: "BUSINESS", show: (a) => a.accountType === "buyer" || Boolean(a.internalRole) },
+  { to: "/loop-cms", label: "Loop CMS", group: "LOOP CMS", show: (a) => Boolean(a.internalRole) },
+  { to: "/loop-cms", label: "Catalog & Publish", group: "LOOP CMS", show: (a) => Boolean(a.internalRole) },
+  { to: "/loop-cms", label: "Artwork & Metadata", group: "LOOP CMS", show: (a) => Boolean(a.internalRole) },
+  { to: "/loop-cms", label: "Homepage & Visibility", group: "LOOP CMS", show: (a) => Boolean(a.internalRole) },
   { to: "/internal", label: "Distribution", group: "OPERATIONS", show: (a) => Boolean(a.internalRole) },
   { to: "/internal", label: "Deliveries", group: "OPERATIONS", show: (a) => Boolean(a.internalRole) },
   { to: "/internal", label: "Audit & Operations", group: "ADMIN", show: (a) => Boolean(a.internalRole) },
@@ -31,25 +35,12 @@ const NAV: NavItem[] = [
 function SidebarLink({ item }: { item: NavItem }) {
   if (item.href) {
     return (
-      <a
-        href={item.href}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="bridge-nav-item"
-      >
+      <a href={item.href} target="_blank" rel="noopener noreferrer" className="bridge-nav-item">
         <span>{item.label}</span><span className="text-[10px]">↗</span>
       </a>
     );
   }
-  return (
-    <Link
-      to={item.to!}
-      className="bridge-nav-item"
-      activeProps={{ className: "bridge-nav-item bridge-nav-active" }}
-    >
-      {item.label}
-    </Link>
-  );
+  return <Link to={item.to!} className="bridge-nav-item" activeProps={{ className: "bridge-nav-item bridge-nav-active" }}>{item.label}</Link>;
 }
 
 export function BrandMark({ className }: { className?: string }) {
@@ -60,16 +51,8 @@ export function BrandMark({ className }: { className?: string }) {
   );
 }
 
-export function BridgeShell({
-  actor,
-  title,
-  children,
-}: {
-  actor: BridgeActor;
-  title: string;
-  children: ReactNode;
-}) {
-  const groups: NavItem["group"][] = ["WORKSPACE", "BUSINESS", "OPERATIONS", "ADMIN"];
+export function BridgeShell({ actor, title, children }: { actor: BridgeActor; title: string; children: ReactNode }) {
+  const groups: NavItem["group"][] = ["WORKSPACE", "BUSINESS", "LOOP CMS", "OPERATIONS", "ADMIN"];
   return (
     <div className="min-h-screen bg-bg text-fg">
       <div className="grid min-h-screen lg:grid-cols-[260px_1fr]">
@@ -84,9 +67,7 @@ export function BridgeShell({
                   <p className="px-3 pb-2 text-[10px] font-semibold tracking-[0.2em] text-faint">{group}</p>
                   <div className="space-y-1">
                     {items.map((item, index) => <SidebarLink key={group + item.label + index} item={item} />)}
-                    {group === "OPERATIONS" && actor.internalRole ? (
-                      <SidebarLink item={{ href: CRAYONS_LOOP_URL, label: "Open Crayons Loop", group, show: () => true }} />
-                    ) : null}
+                    {group === "LOOP CMS" && actor.internalRole ? <SidebarLink item={{ href: CRAYONS_LOOP_URL, label: "Open Loop storefront", group, show: () => true }} /> : null}
                   </div>
                 </div>
               );
@@ -105,22 +86,16 @@ export function BridgeShell({
             <div className="lg:hidden"><BrandMark /></div>
             <div className="hidden lg:block">
               <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-accent">Crayons Bridge</p>
-              <p className="text-sm text-muted">Media supply chain · rights · licensing · delivery</p>
+              <p className="text-sm text-muted">Media supply chain · rights · Loop CMS · delivery</p>
             </div>
             <div className="flex items-center gap-3">
-              {actor.internalRole ? (
-                <span className="hidden rounded-full border border-line bg-elevated px-3 py-1 text-xs font-medium text-muted sm:inline-flex">
-                  {actor.internalRole.replaceAll("_", " ")}
-                </span>
-              ) : null}
+              {actor.internalRole ? <span className="hidden rounded-full border border-line bg-elevated px-3 py-1 text-xs font-medium text-muted sm:inline-flex">{actor.internalRole.replaceAll("_", " ")}</span> : null}
               <UserButton />
             </div>
           </header>
 
           <main className="mx-auto max-w-[1500px] px-4 py-6 sm:px-6 lg:px-8">
-            <div className="mb-7">
-              <h1 className="font-display text-3xl font-semibold tracking-tight sm:text-4xl">{title}</h1>
-            </div>
+            <div className="mb-7"><h1 className="font-display text-3xl font-semibold tracking-tight sm:text-4xl">{title}</h1></div>
             {children}
           </main>
         </div>
