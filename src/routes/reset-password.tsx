@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState, type FormEvent } from "react";
-import { getSupabaseSession, signOut, updateSupabasePassword } from "@/lib/auth/client";
+import { hasSupabaseRecoverySession, signOut, updateSupabasePassword } from "@/lib/auth/client";
 import { BrandMark } from "@/components/bridge/shell";
 import { Button } from "@/components/ui/button";
 
@@ -10,9 +10,10 @@ function Reset() {
   const [linkReady, setLinkReady] = useState(false);
   const [checking, setChecking] = useState(true);
   useEffect(() => {
-    void getSupabaseSession().then((session) => {
-      setLinkReady(Boolean(session));
-    }).catch(() => setLinkReady(false)).finally(() => setChecking(false));
+    void hasSupabaseRecoverySession()
+      .then(setLinkReady)
+      .catch(() => setLinkReady(false))
+      .finally(() => setChecking(false));
   }, []);
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
