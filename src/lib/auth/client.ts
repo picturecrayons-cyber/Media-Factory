@@ -7,6 +7,7 @@ const SUPABASE_URL = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.
 const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined;
 const STORAGE_KEY = "crayons-bridge.supabase-session";
 const AUTH_EVENT = "crayons-bridge-auth-change";
+const RECOVERY_MARKER_KEY = "crayons-bridge.supabase-recovery-session";
 
 type SupabaseUser = {
   id: string;
@@ -88,6 +89,7 @@ async function consumeEmailCallback(): Promise<SupabaseSession | null> {
   const accessToken = params.get("access_token");
   const refreshToken = params.get("refresh_token");
   if (!accessToken || !refreshToken) return null;
+  const callbackType = params.get("type");
   const user = await authRequest("user", { headers: { Authorization: `Bearer ${accessToken}` } }) as SupabaseUser;
   if (!user.id) throw new Error("Email confirmation did not return a valid user.");
   const expiresIn = Number(params.get("expires_in") || 3600);
@@ -99,6 +101,11 @@ async function consumeEmailCallback(): Promise<SupabaseSession | null> {
     user,
   };
   writeSession(session);
+  if (callbackType === "recovery") {
+    window.sessionStorage.setItem(RECOVERY_MARKER_KEY, accessToken);
+  } else {
+    window.sessionStorage.removeItem(RECOVERY_MARKER_KEY);
+  }
   window.history.replaceState(window.history.state, "", window.location.pathname + window.location.search);
   return session;
 }
@@ -139,14 +146,24 @@ export async function requestSupabasePasswordReset(email: string): Promise<void>
   });
 }
 
+export async function hasSupabaseRecoverySession(): Promise<boolean> {
+  if (typeof window === "undefined") return false;
+  const session = await getSupabaseSession();
+  if (!session) return false;
+  return window.sessionStorage.getItem(RECOVERY_MARKER_KEY) === session.access_token;
+}
+
 export async function updateSupabasePassword(password: string): Promise<void> {
   const session = await getSupabaseSession();
-  if (!session) throw new Error("Reset link is invalid or expired. Request a new one.");
+  if (!session || typeof window === "undefined" || window.sessionStorage.getItem(RECOVERY_MARKER_KEY) !== session.access_token) {
+    throw new Error("Reset link is invalid or expired. Request a new one.");
+  }
   await authRequest("user", {
     method: "PUT",
     headers: { Authorization: `Bearer ${session.access_token}` },
     body: JSON.stringify({ password }),
   });
+  window.sessionStorage.removeItem(RECOVERY_MARKER_KEY);
 }
 
 export async function signInWithEmail(email: string, password: string) {
