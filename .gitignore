@@ -7,12 +7,10 @@ node_modules
 .env
 .env.*
 !.env.example
-dist
 .output
 .nitro
 coverage
 screenshots
-artifacts
 *.log
 .DS_Store
 .vscode

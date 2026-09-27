@@ -157,6 +157,7 @@ export default defineConfig(({ command, isPreview }) => ({
     strictPort: true,
   },
   build: {
+    outDir: "dist",
     rollupOptions: {
       onwarn(warning, defaultHandler) {
         if (

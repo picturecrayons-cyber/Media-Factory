@@ -96,4 +96,12 @@ if (!htmlContent) {
 writeFileSync(join(DIST, "index.html"), htmlContent, "utf8");
 writeFileSync(join(DIST, "404.html"), htmlContent, "utf8");
 
-console.log("[prepare-dist] Successfully populated dist/ with production build artifacts!");
+// Also write to project root index.html to ensure entry point is present
+writeFileSync(join(ROOT, "index.html"), htmlContent, "utf8");
+
+// Mirror dist to build directory to support both artifact output conventions
+const BUILD = join(ROOT, "build");
+mkdirSync(BUILD, { recursive: true });
+cpSync(DIST, BUILD, { recursive: true });
+
+console.log("[prepare-dist] Successfully populated dist/ and build/ with production build artifacts!");
