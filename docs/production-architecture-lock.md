@@ -18,9 +18,11 @@ This file is the owner-approved production architecture contract. Changes to any
 
 Bridge owns ingest, master assets, metadata, QC, rights, ownership, territories, languages, licensing, buyer/deal controls, publication authorization, B2B payments, settlements, audit and operations.
 
-Loop owns consumer browse/search, playback, profiles, watchlist/progress, subscriptions/TVOD consumer entitlements and account UX.
+Bridge is also the canonical CMS, admin workspace and control panel for Crayons Loop. All staff/operator controls for Loop catalog management, title publication, artwork/metadata curation, homepage rails, visibility scheduling, distribution status and operational review live in Bridge. Loop is not a second back-office application.
 
-Loop must not create an independent rights/licensing editor. Consumer catalog publication must flow:
+Loop owns only the consumer runtime: browse/search presentation, playback, profiles, watchlist/progress, subscriptions/TVOD consumer entitlements and account UX. Loop may render published catalog state, but it must not expose an independent operator CMS, direct master ingest, rights/licensing editor, or privileged admin control plane.
+
+Direct ingest of masters/assets happens in Bridge only. Loop receives only Bridge-approved publication/delivery state. Consumer catalog publication must flow:
 
 `bridge_titles -> bridge_loop_publications -> loop_titles -> Loop UI`
 
