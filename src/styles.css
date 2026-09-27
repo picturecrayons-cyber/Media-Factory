@@ -26,30 +26,34 @@
 }
 
 @layer base {
-  html, body, #app {
-    min-height: 100%;
-    background: var(--color-bg);
-    color: var(--color-fg);
-  }
-  html {
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
-  }
-  body {
-    font-family: var(--font-sans);
-    letter-spacing: 0;
-  }
+  html, body, #app { min-height: 100%; background: var(--color-bg); color: var(--color-fg); }
+  html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+  body { font-family: var(--font-sans); letter-spacing: 0; }
   h1, h2, h3 { text-wrap: balance; }
   p { text-wrap: pretty; }
   button:not(:disabled), [role="button"]:not(:disabled) { cursor: pointer; }
   ::selection { background: #bcefff; color: #123; }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
-    animation-duration: 0.01ms !important;
-    transition-duration: 0.01ms !important;
+@layer components {
+  .bridge-nav-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .75rem;
+    border-radius: 12px;
+    padding: .65rem .75rem;
+    color: var(--color-muted);
+    font-size: .875rem;
+    font-weight: 600;
+    transition: background-color .15s ease, color .15s ease;
   }
+  .bridge-nav-item:hover { background: var(--color-elevated); color: var(--color-fg); }
+  .bridge-nav-active { background: var(--color-accent-soft); color: var(--color-accent-strong); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }
 
 .font-display { font-family: var(--font-display); }
