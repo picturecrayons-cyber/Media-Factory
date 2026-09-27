@@ -1,5 +1,5 @@
 -- Crayons Bridge canonical schema (Postgres).
--- Apply to canonical Supabase project uakpqqardziifcwzvgfx only.
+-- Canonical project as verified 2026-09-27: mlmgugivsyoxzdgwkbpu.
 -- Do not seed demo titles, fake payments, or revenue.
 
 create table if not exists bridge_profiles (
