@@ -131,6 +131,24 @@ export async function signUpWithEmail(input: { email: string; password: string; 
   return { user: body?.user ?? body, session: body?.access_token ? body : null };
 }
 
+export async function requestSupabasePasswordReset(email: string): Promise<void> {
+  const redirectTo = typeof window !== "undefined" ? `${window.location.origin}/reset-password` : undefined;
+  await authRequest(`recover${redirectTo ? `?redirect_to=${encodeURIComponent(redirectTo)}` : ""}`, {
+    method: "POST",
+    body: JSON.stringify({ email }),
+  });
+}
+
+export async function updateSupabasePassword(password: string): Promise<void> {
+  const session = await getSupabaseSession();
+  if (!session) throw new Error("Reset link is invalid or expired. Request a new one.");
+  await authRequest("user", {
+    method: "PUT",
+    headers: { Authorization: `Bearer ${session.access_token}` },
+    body: JSON.stringify({ password }),
+  });
+}
+
 export async function signInWithEmail(email: string, password: string) {
   const body = (await authRequest("token?grant_type=password", {
     method: "POST",
