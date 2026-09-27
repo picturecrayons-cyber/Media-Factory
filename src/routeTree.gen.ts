@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AccountRouteImport } from './routes/account'
 import { Route as BuyerRouteImport } from './routes/buyer'
 import { Route as CreatorRouteImport } from './routes/creator'
+import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
 import { Route as InternalRouteImport } from './routes/internal'
 import { Route as LoginRouteImport } from './routes/login'
@@ -20,7 +21,11 @@ import { Route as OnboardingRouteImport } from './routes/onboarding'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as SignupRouteImport } from './routes/signup'
 import { Route as StudioRouteImport } from './routes/studio'
+import { Route as SubmitFilmRouteImport } from './routes/submit-film'
 import { Route as VerifyEmailRouteImport } from './routes/verify-email'
+import { Route as WorkspaceRouteImport } from './routes/workspace'
+import { Route as AuthCallbackRouteImport } from './routes/auth/callback'
+import { Route as AuthConfirmRouteImport } from './routes/auth/confirm'
 import { Route as TitleIdRouteImport } from './routes/title.$id'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as ApiRazorpayWebhookRouteImport } from './routes/api/razorpay/webhook'
@@ -43,6 +48,11 @@ const BuyerRoute = BuyerRouteImport.update({
 const CreatorRoute = CreatorRouteImport.update({
   id: '/creator',
   path: '/creator',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DashboardRoute = DashboardRouteImport.update({
+  id: '/dashboard',
+  path: '/dashboard',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ForgotPasswordRoute = ForgotPasswordRouteImport.update({
@@ -80,9 +90,29 @@ const StudioRoute = StudioRouteImport.update({
   path: '/studio',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SubmitFilmRoute = SubmitFilmRouteImport.update({
+  id: '/submit-film',
+  path: '/submit-film',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const VerifyEmailRoute = VerifyEmailRouteImport.update({
   id: '/verify-email',
   path: '/verify-email',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const WorkspaceRoute = WorkspaceRouteImport.update({
+  id: '/workspace',
+  path: '/workspace',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthCallbackRoute = AuthCallbackRouteImport.update({
+  id: '/auth/callback',
+  path: '/auth/callback',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthConfirmRoute = AuthConfirmRouteImport.update({
+  id: '/auth/confirm',
+  path: '/auth/confirm',
   getParentRoute: () => rootRouteImport,
 } as any)
 const TitleIdRoute = TitleIdRouteImport.update({
@@ -106,6 +136,7 @@ export interface FileRoutesByFullPath {
   '/account': typeof AccountRoute
   '/buyer': typeof BuyerRoute
   '/creator': typeof CreatorRoute
+  '/dashboard': typeof DashboardRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/internal': typeof InternalRoute
   '/login': typeof LoginRoute
@@ -113,7 +144,11 @@ export interface FileRoutesByFullPath {
   '/reset-password': typeof ResetPasswordRoute
   '/signup': typeof SignupRoute
   '/studio': typeof StudioRoute
+  '/submit-film': typeof SubmitFilmRoute
   '/verify-email': typeof VerifyEmailRoute
+  '/workspace': typeof WorkspaceRoute
+  '/auth/callback': typeof AuthCallbackRoute
+  '/auth/confirm': typeof AuthConfirmRoute
   '/title/$id': typeof TitleIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/razorpay/webhook': typeof ApiRazorpayWebhookRoute
@@ -123,6 +158,7 @@ export interface FileRoutesByTo {
   '/account': typeof AccountRoute
   '/buyer': typeof BuyerRoute
   '/creator': typeof CreatorRoute
+  '/dashboard': typeof DashboardRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/internal': typeof InternalRoute
   '/login': typeof LoginRoute
@@ -130,7 +166,11 @@ export interface FileRoutesByTo {
   '/reset-password': typeof ResetPasswordRoute
   '/signup': typeof SignupRoute
   '/studio': typeof StudioRoute
+  '/submit-film': typeof SubmitFilmRoute
   '/verify-email': typeof VerifyEmailRoute
+  '/workspace': typeof WorkspaceRoute
+  '/auth/callback': typeof AuthCallbackRoute
+  '/auth/confirm': typeof AuthConfirmRoute
   '/title/$id': typeof TitleIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/razorpay/webhook': typeof ApiRazorpayWebhookRoute
@@ -141,6 +181,7 @@ export interface FileRoutesById {
   '/account': typeof AccountRoute
   '/buyer': typeof BuyerRoute
   '/creator': typeof CreatorRoute
+  '/dashboard': typeof DashboardRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/internal': typeof InternalRoute
   '/login': typeof LoginRoute
@@ -148,7 +189,11 @@ export interface FileRoutesById {
   '/reset-password': typeof ResetPasswordRoute
   '/signup': typeof SignupRoute
   '/studio': typeof StudioRoute
+  '/submit-film': typeof SubmitFilmRoute
   '/verify-email': typeof VerifyEmailRoute
+  '/workspace': typeof WorkspaceRoute
+  '/auth/callback': typeof AuthCallbackRoute
+  '/auth/confirm': typeof AuthConfirmRoute
   '/title/$id': typeof TitleIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/razorpay/webhook': typeof ApiRazorpayWebhookRoute
@@ -160,6 +205,7 @@ export interface FileRouteTypes {
     | '/account'
     | '/buyer'
     | '/creator'
+    | '/dashboard'
     | '/forgot-password'
     | '/internal'
     | '/login'
@@ -167,7 +213,11 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/signup'
     | '/studio'
+    | '/submit-film'
     | '/verify-email'
+    | '/workspace'
+    | '/auth/callback'
+    | '/auth/confirm'
     | '/title/$id'
     | '/api/auth/$'
     | '/api/razorpay/webhook'
@@ -177,6 +227,7 @@ export interface FileRouteTypes {
     | '/account'
     | '/buyer'
     | '/creator'
+    | '/dashboard'
     | '/forgot-password'
     | '/internal'
     | '/login'
@@ -184,7 +235,11 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/signup'
     | '/studio'
+    | '/submit-film'
     | '/verify-email'
+    | '/workspace'
+    | '/auth/callback'
+    | '/auth/confirm'
     | '/title/$id'
     | '/api/auth/$'
     | '/api/razorpay/webhook'
@@ -194,6 +249,7 @@ export interface FileRouteTypes {
     | '/account'
     | '/buyer'
     | '/creator'
+    | '/dashboard'
     | '/forgot-password'
     | '/internal'
     | '/login'
@@ -201,7 +257,11 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/signup'
     | '/studio'
+    | '/submit-film'
     | '/verify-email'
+    | '/workspace'
+    | '/auth/callback'
+    | '/auth/confirm'
     | '/title/$id'
     | '/api/auth/$'
     | '/api/razorpay/webhook'
@@ -212,6 +272,7 @@ export interface RootRouteChildren {
   AccountRoute: typeof AccountRoute
   BuyerRoute: typeof BuyerRoute
   CreatorRoute: typeof CreatorRoute
+  DashboardRoute: typeof DashboardRoute
   ForgotPasswordRoute: typeof ForgotPasswordRoute
   InternalRoute: typeof InternalRoute
   LoginRoute: typeof LoginRoute
@@ -219,7 +280,11 @@ export interface RootRouteChildren {
   ResetPasswordRoute: typeof ResetPasswordRoute
   SignupRoute: typeof SignupRoute
   StudioRoute: typeof StudioRoute
+  SubmitFilmRoute: typeof SubmitFilmRoute
   VerifyEmailRoute: typeof VerifyEmailRoute
+  WorkspaceRoute: typeof WorkspaceRoute
+  AuthCallbackRoute: typeof AuthCallbackRoute
+  AuthConfirmRoute: typeof AuthConfirmRoute
   TitleIdRoute: typeof TitleIdRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiRazorpayWebhookRoute: typeof ApiRazorpayWebhookRoute
@@ -253,6 +318,13 @@ declare module '@tanstack/react-router' {
       path: '/creator'
       fullPath: '/creator'
       preLoaderRoute: typeof CreatorRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/dashboard': {
+      id: '/dashboard'
+      path: '/dashboard'
+      fullPath: '/dashboard'
+      preLoaderRoute: typeof DashboardRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/forgot-password': {
@@ -304,11 +376,39 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof StudioRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/submit-film': {
+      id: '/submit-film'
+      path: '/submit-film'
+      fullPath: '/submit-film'
+      preLoaderRoute: typeof SubmitFilmRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/verify-email': {
       id: '/verify-email'
       path: '/verify-email'
       fullPath: '/verify-email'
       preLoaderRoute: typeof VerifyEmailRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/workspace': {
+      id: '/workspace'
+      path: '/workspace'
+      fullPath: '/workspace'
+      preLoaderRoute: typeof WorkspaceRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/auth/callback': {
+      id: '/auth/callback'
+      path: '/auth/callback'
+      fullPath: '/auth/callback'
+      preLoaderRoute: typeof AuthCallbackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/auth/confirm': {
+      id: '/auth/confirm'
+      path: '/auth/confirm'
+      fullPath: '/auth/confirm'
+      preLoaderRoute: typeof AuthConfirmRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/title/$id': {
@@ -340,6 +440,7 @@ const rootRouteChildren: RootRouteChildren = {
   AccountRoute: AccountRoute,
   BuyerRoute: BuyerRoute,
   CreatorRoute: CreatorRoute,
+  DashboardRoute: DashboardRoute,
   ForgotPasswordRoute: ForgotPasswordRoute,
   InternalRoute: InternalRoute,
   LoginRoute: LoginRoute,
@@ -347,7 +448,11 @@ const rootRouteChildren: RootRouteChildren = {
   ResetPasswordRoute: ResetPasswordRoute,
   SignupRoute: SignupRoute,
   StudioRoute: StudioRoute,
+  SubmitFilmRoute: SubmitFilmRoute,
   VerifyEmailRoute: VerifyEmailRoute,
+  WorkspaceRoute: WorkspaceRoute,
+  AuthCallbackRoute: AuthCallbackRoute,
+  AuthConfirmRoute: AuthConfirmRoute,
   TitleIdRoute: TitleIdRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiRazorpayWebhookRoute: ApiRazorpayWebhookRoute,
@@ -357,10 +462,11 @@ export const routeTree = rootRouteImport
   ._addFileTypes<FileRouteTypes>()
 
 import type { getRouter } from './router.tsx'
-import type { createStart } from '@tanstack/react-start'
+import type { startInstance } from './start.ts'
 declare module '@tanstack/react-start' {
   interface Register {
     ssr: true
     router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
   }
 }

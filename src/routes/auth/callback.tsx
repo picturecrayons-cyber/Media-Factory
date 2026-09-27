@@ -1,7 +1,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
-import { resendConfirmationEmail } from "@/lib/auth/client";
+import { markRecoverySession, resendConfirmationEmail } from "@/lib/auth/client";
 import { syncSupabaseSessionUser } from "@/lib/bridge/profiles";
 import { BrandMark } from "@/components/bridge/shell";
 import { Button } from "@/components/ui/button";
@@ -74,6 +74,9 @@ function AuthCallback() {
           | "magiclink"
           | "email_change"
           | undefined;
+        if (type === "recovery" && !tokenHash && !code && !new URLSearchParams(url.hash.slice(1)).get("access_token")) {
+          throw new Error("Recovery callback is missing its secure token.");
+        }
 
         // 1. Verify token hash via verifyOtp (preferred Supabase auth email confirmation path)
         if (tokenHash && type) {
@@ -115,6 +118,7 @@ function AuthCallback() {
 
         // 5. Handle password recovery redirect
         if (type === "recovery") {
+          markRecoverySession(session.access_token);
           void navigate({ to: "/reset-password" });
           return;
         }

@@ -7,6 +7,18 @@ export { GROK_PROVIDERS };
 
 export type SupabaseUser = User;
 export type SupabaseSession = Session;
+const RECOVERY_MARKER_KEY = "crayons-bridge.supabase-recovery-session";
+
+export function markRecoverySession(accessToken: string): void {
+  if (typeof window !== "undefined") window.sessionStorage.setItem(RECOVERY_MARKER_KEY, accessToken);
+}
+
+export async function hasSupabaseRecoverySession(): Promise<boolean> {
+  if (typeof window === "undefined") return false;
+  const { data, error } = await supabase.auth.getSession();
+  return !error && !!data.session?.access_token &&
+    window.sessionStorage.getItem(RECOVERY_MARKER_KEY) === data.session.access_token;
+}
 
 let cachedSession: Session | null = null;
 let sessionPromise: Promise<Session | null> | null = null;
@@ -115,16 +127,19 @@ export async function resetPasswordForEmail(email: string) {
 }
 
 export async function updatePassword(password: string) {
+  if (!(await hasSupabaseRecoverySession())) throw new Error("Reset link is invalid or expired. Request a new one.");
   const { data, error } = await supabase.auth.updateUser({
     password,
   });
 
   if (error) throw error;
+  if (typeof window !== "undefined") window.sessionStorage.removeItem(RECOVERY_MARKER_KEY);
   return data.user;
 }
 
 export async function signOut(redirectTo = "/login"): Promise<void> {
   cachedSession = null;
+  if (typeof window !== "undefined") window.sessionStorage.removeItem(RECOVERY_MARKER_KEY);
   try {
     await supabase.auth.signOut();
   } catch (err) {

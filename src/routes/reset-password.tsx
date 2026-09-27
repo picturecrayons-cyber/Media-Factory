@@ -1,7 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState, type FormEvent } from "react";
-import { supabase } from "@/lib/supabase";
-import { updatePassword } from "@/lib/auth/client";
+import { hasSupabaseRecoverySession, updatePassword } from "@/lib/auth/client";
 import { BrandMark } from "@/components/bridge/shell";
 import { Button } from "@/components/ui/button";
 
@@ -21,22 +20,8 @@ function Reset() {
     let alive = true;
     async function checkSession() {
       if (typeof window === "undefined") return;
-
-      const url = new URL(window.location.href);
-      const code = url.searchParams.get("code");
-
-      if (code) {
-        try {
-          await supabase.auth.exchangeCodeForSession(code);
-        } catch (err) {
-          console.warn("[reset-password] exchangeCode error:", err);
-        }
-      }
-
-      const { data } = await supabase.auth.getSession();
-      if (alive) {
-        setSessionReady(Boolean(data.session));
-      }
+      const ready = await hasSupabaseRecoverySession();
+      if (alive) setSessionReady(ready);
     }
 
     void checkSession();
@@ -159,7 +144,7 @@ function Reset() {
 
             <Button
               type="submit"
-              disabled={busy}
+      disabled={busy || !sessionReady}
               className="w-full h-11 rounded-full font-semibold shadow-sm transition active:scale-[0.98]"
             >
               {busy ? "Updating…" : "Update password"}

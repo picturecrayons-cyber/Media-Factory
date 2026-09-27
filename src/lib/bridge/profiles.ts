@@ -28,6 +28,7 @@ export const syncSupabaseSessionUser = createServerFn({ method: "POST" })
     const sql = await getSql();
     const existing = await loadActor(context.userId);
     const email = context.userEmail || existing?.email;
+    if (!context.emailConfirmedAt) throw new Error("Confirm your email before entering Bridge.");
 
     if (existing) {
       if (!existing.emailVerified) {
@@ -55,11 +56,12 @@ export const completeOnboarding = createServerFn({ method: "POST" })
     assertNotDevUser(context.userId);
     const sql = await getSql();
     const existing = await loadActor(context.userId);
+    if (!context.emailConfirmedAt) throw new Error("Confirm your email before entering Bridge.");
     if (existing) return { home: workspaceHome(existing), profile: existing };
 
     const email = context.userEmail;
     if (!email) throw new Error("Account email is required from Supabase session");
-    const verified = true; // Supabase verified user session
+    const verified = true;
 
     let internalRole: string | null = null;
     let invitedBy: string | null = null;

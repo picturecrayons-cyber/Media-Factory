@@ -49,7 +49,18 @@ export function RequireBridge({
     );
   }
   if (!user) return <RedirectToSignIn />;
-  if (sessionQ.error) return <RedirectToSignIn />;
+  if (sessionQ.error) {
+    return (
+      <Frame>
+        <h1 className="font-display text-2xl">Could not open workspace</h1>
+        <p role="alert" className="text-sm text-muted">
+          Your Bridge session could not be checked. Retry, or sign in again if your session expired.
+        </p>
+        <Button type="button" onClick={() => void sessionQ.refetch()}>Retry session</Button>
+        <Link to="/login" className="block text-sm text-accent underline-offset-4 hover:underline">Sign in</Link>
+      </Frame>
+    );
+  }
   const profile = sessionQ.data?.profile ?? null;
   if (!profile) return <Navigate to="/onboarding" />;
   if (allow === "internal" && !profile.internalRole) return <Navigate to={sessionQ.data?.home ?? "/"} />;

@@ -19,6 +19,7 @@ export class UnauthorizedError extends Error {
 export type VerifiedUser = {
   id: string;
   email: string | null;
+  email_confirmed_at: string | null;
   user_metadata?: Record<string, unknown>;
 };
 
@@ -37,6 +38,7 @@ export async function getSessionUser(bearerToken?: string): Promise<VerifiedUser
     const user = (await response.json()) as {
       id?: string;
       email?: string | null;
+      email_confirmed_at?: string | null;
       user_metadata?: Record<string, unknown>;
     };
 
@@ -44,6 +46,7 @@ export async function getSessionUser(bearerToken?: string): Promise<VerifiedUser
     return {
       id: user.id,
       email: user.email ?? null,
+      email_confirmed_at: user.email_confirmed_at ?? null,
       user_metadata: user.user_metadata,
     };
   } catch (err) {

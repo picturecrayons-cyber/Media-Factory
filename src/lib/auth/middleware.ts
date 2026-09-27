@@ -15,5 +15,5 @@ export const authMiddleware = createMiddleware({ type: "function" })
     const { requireUser } = await import("./verify.server");
     assertSameSiteRequest();
     const user = await requireUser(context.bearerToken);
-    return next({ context: { userId: user.id, userEmail: user.email } });
+    return next({ context: { userId: user.id, userEmail: user.email, emailConfirmedAt: user.email_confirmed_at } });
   });
