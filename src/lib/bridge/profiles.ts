@@ -37,12 +37,10 @@ export const completeOnboarding = createServerFn({ method: "POST" })
     const existing = await loadActor(context.userId);
     if (existing) return { home: workspaceHome(existing), profile: existing };
 
-    const emailRows = await sql<{ email: string; email_confirmed_at: string | null }>`
-      select email, email_confirmed_at from auth.users where id = ${context.userId}::uuid limit 1
-    `;
-    const email = emailRows[0]?.email;
+    const supabaseIdentity = context.authUser as { email?: string | null; email_confirmed_at?: string | null } | undefined;
+    const email = supabaseIdentity?.email?.trim();
     if (!email) throw new Error("Account email is required");
-    const verified = !!emailRows[0]?.email_confirmed_at;
+    const verified = !!supabaseIdentity?.email_confirmed_at;
     if (!verified) throw new Error("Confirm your email before entering Bridge.");
 
     let internalRole: string | null = null;
