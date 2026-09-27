@@ -11,7 +11,12 @@ export function TitleList({ empty }: { empty: string }) {
   const titles = titlesQ.data?.titles ?? [];
   if (titlesQ.isPending) return <p className="text-sm text-muted">Loading titles…</p>;
   if (titlesQ.isError) {
-    return <p role="alert" className="text-sm text-accent">Could not load titles. Please retry.</p>;
+    return (
+      <div role="alert" className="flex flex-wrap items-center gap-3 text-sm text-accent">
+        <p>Could not load titles.</p>
+        <Button type="button" onClick={() => void titlesQ.refetch()}>Retry</Button>
+      </div>
+    );
   }
   if (!titles.length) return <p className="text-sm text-muted">{empty}</p>;
   return (
