@@ -10,6 +10,9 @@ export function TitleList({ empty }: { empty: string }) {
   const titlesQ = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles() });
   const titles = titlesQ.data?.titles ?? [];
   if (titlesQ.isPending) return <p className="text-sm text-muted">Loading titles…</p>;
+  if (titlesQ.isError) {
+    return <p role="alert" className="text-sm text-accent">Could not load titles. Please retry.</p>;
+  }
   if (!titles.length) return <p className="text-sm text-muted">{empty}</p>;
   return (
     <ul className="divide-y divide-line rounded-sm border border-line">
