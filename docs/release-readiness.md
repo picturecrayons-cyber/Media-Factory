@@ -111,3 +111,29 @@ All four integration gates above require real E2E evidence:
 - custom domains PASS
 
 Production remains unchanged until those checks are recorded.
+
+
+## Product boundary: Bridge is the LOOP CMS and Admin control plane
+
+Crayons Bridge is the authoritative CMS/admin system for Crayons LOOP.
+
+Bridge owns:
+- title ingest and master assets
+- metadata and artwork
+- QC and technical readiness
+- rights, ownership, territories, languages and windows
+- licensing and commercial terms
+- LOOP publication authorization, suspension and revocation
+- buyer/deal controls, delivery authorization, payments, audit and operations
+
+Crayons LOOP owns:
+- consumer home/browse/search presentation
+- playback
+- profiles, watchlist and watch progress
+- subscriptions, TVOD consumer entitlements and account UX
+
+LOOP must not provide an independent rights/licensing editor. A LOOP title should enter the consumer catalog only through a Bridge-authorized publication record. The canonical relationship is:
+
+`bridge_titles → bridge_loop_publications → loop_titles → LOOP consumer UI`
+
+The Vercel project `bridge` remains the production deployment target for this CMS/admin control plane. The separate Vercel project `crayonsloop` remains the consumer streaming application.
