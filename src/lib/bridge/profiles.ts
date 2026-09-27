@@ -21,6 +21,27 @@ async function mail(opts: { to: string; subject: string; text: string }) {
   return sendBridgeMail(opts);
 }
 
+export const syncSupabaseSessionUser = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }) => {
+    assertNotDevUser(context.userId);
+    const sql = await getSql();
+    const existing = await loadActor(context.userId);
+    const email = context.userEmail || existing?.email;
+    if (!context.emailConfirmedAt) throw new Error("Confirm your email before entering Bridge.");
+
+    if (existing) {
+      if (!existing.emailVerified) {
+        await sql`update bridge_profiles set email_verified = true, updated_at = now() where user_id = ${context.userId}`;
+        const updated = await loadActor(context.userId);
+        return { profile: updated, isComplete: true, home: workspaceHome(updated!) };
+      }
+      return { profile: existing, isComplete: true, home: workspaceHome(existing) };
+    }
+
+    return { profile: null, isComplete: false, email };
+  });
+
 export const completeOnboarding = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(
@@ -35,13 +56,12 @@ export const completeOnboarding = createServerFn({ method: "POST" })
     assertNotDevUser(context.userId);
     const sql = await getSql();
     const existing = await loadActor(context.userId);
+    if (!context.emailConfirmedAt) throw new Error("Confirm your email before entering Bridge.");
     if (existing) return { home: workspaceHome(existing), profile: existing };
 
-    const supabaseIdentity = context.authUser as { email?: string | null; email_confirmed_at?: string | null } | undefined;
-    const email = supabaseIdentity?.email?.trim();
-    if (!email) throw new Error("Account email is required");
-    const verified = !!supabaseIdentity?.email_confirmed_at;
-    if (!verified) throw new Error("Confirm your email before entering Bridge.");
+    const email = context.userEmail;
+    if (!email) throw new Error("Account email is required from Supabase session");
+    const verified = true;
 
     let internalRole: string | null = null;
     let invitedBy: string | null = null;
@@ -83,6 +103,12 @@ export const completeOnboarding = createServerFn({ method: "POST" })
         ${context.userId}, ${email}, ${data.displayName}, ${data.accountType}, ${org},
         ${internalRole}, ${verified}, ${invitedBy}
       )
+      on conflict (user_id) do update set
+        display_name = excluded.display_name,
+        account_type = excluded.account_type,
+        organization_name = excluded.organization_name,
+        email_verified = true,
+        updated_at = now()
     `;
     await writeAudit({
       actorUserId: context.userId,
@@ -101,12 +127,11 @@ export const requestEmailVerification = createServerFn({ method: "POST" })
   .handler(async ({ context }) => {
     assertNotDevUser(context.userId);
     const actor = await loadActor(context.userId);
-    const sql = await getSql();
-    const emailRows = await sql<{ email: string }>`select email from "user" where id = ${context.userId} limit 1`;
-    const email = actor?.email || emailRows[0]?.email;
+    const email = actor?.email || context.userEmail;
     if (!email) throw new Error("No email on account");
     const { token, hash } = tokenPair();
     const id = randomBytes(16).toString("hex");
+    const sql = await getSql();
     await sql`
       insert into bridge_email_challenges (id, user_id, email, purpose, token_hash, expires_at)
       values (${id}, ${context.userId}, ${email}, ${"verify"}, ${hash}, ${new Date(Date.now() + 24 * 3600 * 1000).toISOString()})
@@ -141,63 +166,9 @@ export const confirmEmailVerification = createServerFn({ method: "POST" })
     }
     await sql`update bridge_email_challenges set consumed_at = now() where id = ${row.id}`;
     await sql`update bridge_profiles set email_verified = true, updated_at = now() where user_id = ${row.user_id}`;
-    await sql`update "user" set "emailVerified" = true, "updatedAt" = now() where id = ${row.user_id}`;
     await writeAudit({
       actorUserId: row.user_id,
       action: "email.verified",
-      entityType: "bridge_profile",
-      entityId: row.user_id,
-    });
-    return { ok: true };
-  });
-
-export const requestPasswordReset = createServerFn({ method: "POST" })
-  .validator(z.object({ email: z.string().email() }))
-  .handler(async ({ data }) => {
-    const sql = await getSql();
-    const users = await sql<{ id: string; email: string }>`
-      select id, email from "user" where lower(email) = ${data.email.toLowerCase()} limit 1
-    `;
-    if (users[0]) {
-      const { token, hash } = tokenPair();
-      const id = randomBytes(16).toString("hex");
-      await sql`
-        insert into bridge_email_challenges (id, user_id, email, purpose, token_hash, expires_at)
-        values (${id}, ${users[0].id}, ${users[0].email}, ${"reset"}, ${hash}, ${new Date(Date.now() + 2 * 3600 * 1000).toISOString()})
-      `;
-      const url = `${bridgeEnv.appUrl()}/reset-password?token=${token}`;
-      await mail({
-        to: users[0].email,
-        subject: "Reset your Crayons Bridge password",
-        text: `Reset your password:\n\n${url}\n\nThis link expires in 2 hours. If you did not request it, ignore this email.`,
-      });
-    }
-    return { sent: true };
-  });
-
-export const confirmPasswordReset = createServerFn({ method: "POST" })
-  .validator(z.object({ token: z.string().min(16), password: z.string().min(10).max(72) }))
-  .handler(async ({ data }) => {
-    const sql = await getSql();
-    const hash = createHash("sha256").update(data.token).digest("hex");
-    const rows = await sql<{ id: string; user_id: string | null; expires_at: string; consumed_at: string | null }>`
-      select id, user_id, expires_at, consumed_at from bridge_email_challenges
-      where token_hash = ${hash} and purpose = 'reset' limit 1
-    `;
-    const row = rows[0];
-    if (!row || row.consumed_at || !row.user_id || new Date(row.expires_at) < new Date()) {
-      throw new Error("Reset link is invalid or expired");
-    }
-    const { hashPassword } = await import("better-auth/crypto");
-    const passwordHash = await hashPassword(data.password);
-    await sql`
-      update account set password = ${passwordHash}, "updatedAt" = now()
-      where "userId" = ${row.user_id} and "providerId" = 'credential'
-    `;
-    await sql`update bridge_email_challenges set consumed_at = now() where id = ${row.id}`;
-    await writeAudit({
-      actorUserId: row.user_id,
-      action: "password.reset",
       entityType: "bridge_profile",
       entityId: row.user_id,
     });

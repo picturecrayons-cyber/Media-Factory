@@ -1,0 +1,8 @@
+{
+  "name": "Crayons Bridge",
+  "description": "Crayons Bridge — title record, rights, and licensing OS. StreamVista OPC Pvt Ltd.",
+  "permissions": [],
+  "capabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

@@ -87,6 +87,9 @@ const deployedHosts = deployedOrigins
   .filter((host): host is string => Boolean(host));
 
 const LOCAL_DEV_ORIGINS: string[] = [
+  "http://localhost:3000",
+  "http://127.0.0.1:3000",
+  "http://[::1]:3000",
   "http://localhost:8080",
   "http://127.0.0.1:8080",
   "http://[::1]:8080",
@@ -103,7 +106,7 @@ const dynamicBaseURL = {
     ]),
   ),
   protocol: "auto" as const,
-  fallback: explicitBaseURL ?? "http://localhost:8080",
+  fallback: explicitBaseURL ?? "http://localhost:3000",
 };
 
 // A Preview request must own its OAuth callback. Using the canonical

@@ -33,10 +33,9 @@ async function getBridgeSessionWithTimeout() {
   }
 }
 
-function goHome(home: string, navigate: ReturnType<typeof useNavigate>) {
-  if (home === "/workspace") {
-    void navigate({ to: "/workspace", replace: true });
-  }
+function goHome(home: string | null | undefined, navigate: ReturnType<typeof useNavigate>) {
+  const dest = home || "/dashboard";
+  void navigate({ to: dest as any, replace: true });
 }
 
 function Onboarding() {

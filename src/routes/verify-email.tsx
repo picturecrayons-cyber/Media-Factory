@@ -8,8 +8,17 @@ export const Route = createFileRoute("/verify-email")({ component: Verify });
 
 function Verify() {
   const qc = useQueryClient();
-  const token =
-    typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("token") ?? "" : "";
+  const searchStr = typeof window !== "undefined" ? window.location.search : "";
+  const params = typeof window !== "undefined" ? new URLSearchParams(searchStr) : new URLSearchParams();
+  const token = params.get("token") ?? "";
+  const hasSupabaseToken = params.has("token_hash") || params.has("code");
+
+  useEffect(() => {
+    if (hasSupabaseToken && typeof window !== "undefined") {
+      window.location.replace(`/auth/confirm${searchStr}`);
+    }
+  }, [hasSupabaseToken, searchStr]);
+
   const mut = useMutation({
     mutationFn: () => confirmEmailVerification({ data: { token } }),
     onSuccess: () => {
