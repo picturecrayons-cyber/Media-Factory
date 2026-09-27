@@ -6,18 +6,56 @@ import type { BridgeActor } from "@/lib/bridge/session";
 
 const CRAYONS_LOOP_URL = import.meta.env.VITE_LOOP_URL || "https://crayonsloop.com";
 
-const LINKS: { to: string; label: string; show: (a: BridgeActor) => boolean }[] = [
-  { to: "/dashboard", label: "Dashboard", show: () => true },
-  { to: "/workspace", label: "Titles", show: () => true },
-  { to: "/buyer", label: "Buyers", show: (a) => a.accountType === "buyer" || Boolean(a.internalRole) },
-  { to: "/internal", label: "Deliveries & Operations", show: (a) => Boolean(a.internalRole) },
-  { to: "/account", label: "Account & Team", show: () => true },
+type NavItem = {
+  to?: string;
+  href?: string;
+  label: string;
+  group: "WORKSPACE" | "BUSINESS" | "OPERATIONS" | "ADMIN";
+  show: (a: BridgeActor) => boolean;
+};
+
+const NAV: NavItem[] = [
+  { to: "/dashboard", label: "Dashboard", group: "WORKSPACE", show: () => true },
+  { to: "/workspace", label: "Titles", group: "WORKSPACE", show: () => true },
+  { to: "/workspace", label: "Submissions", group: "WORKSPACE", show: (a) => a.accountType !== "buyer" },
+  { to: "/workspace", label: "Assets & QC", group: "WORKSPACE", show: (a) => a.accountType !== "buyer" || Boolean(a.internalRole) },
+  { to: "/workspace", label: "Rights", group: "BUSINESS", show: () => true },
+  { to: "/workspace", label: "Licensing", group: "BUSINESS", show: () => true },
+  { to: "/buyer", label: "Buyers & Screeners", group: "BUSINESS", show: (a) => a.accountType === "buyer" || Boolean(a.internalRole) },
+  { to: "/internal", label: "Distribution", group: "OPERATIONS", show: (a) => Boolean(a.internalRole) },
+  { to: "/internal", label: "Deliveries", group: "OPERATIONS", show: (a) => Boolean(a.internalRole) },
+  { to: "/internal", label: "Audit & Operations", group: "ADMIN", show: (a) => Boolean(a.internalRole) },
+  { to: "/account", label: "Team & Account", group: "ADMIN", show: () => true },
 ];
+
+function SidebarLink({ item }: { item: NavItem }) {
+  if (item.href) {
+    return (
+      <a
+        href={item.href}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="bridge-nav-item"
+      >
+        <span>{item.label}</span><span className="text-[10px]">↗</span>
+      </a>
+    );
+  }
+  return (
+    <Link
+      to={item.to!}
+      className="bridge-nav-item"
+      activeProps={{ className: "bridge-nav-item bridge-nav-active" }}
+    >
+      {item.label}
+    </Link>
+  );
+}
 
 export function BrandMark({ className }: { className?: string }) {
   return (
     <Link to="/" className={cn("inline-flex items-center", className)} aria-label="Crayons Bridge home">
-      <img src="/brand/logo.png" alt="Crayons Bridge" className="h-11 w-auto object-contain sm:h-12" />
+      <img src="/brand/logo.png" alt="Crayons Bridge" className="h-10 w-auto object-contain" />
     </Link>
   );
 }
@@ -31,45 +69,62 @@ export function BridgeShell({
   title: string;
   children: ReactNode;
 }) {
+  const groups: NavItem["group"][] = ["WORKSPACE", "BUSINESS", "OPERATIONS", "ADMIN"];
   return (
-    <div className="min-h-screen bg-bg">
-      <header className="sticky top-0 z-40 border-b border-line bg-surface/95 backdrop-blur">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
-          <BrandMark />
-          <nav className="hidden items-center gap-2 text-sm md:flex">
-            {LINKS.filter((l) => l.show(actor)).map((l) => (
-              <Link
-                key={l.to}
-                to={l.to}
-                className="rounded-full px-3.5 py-1.5 font-medium text-muted transition hover:bg-accent-soft hover:text-fg"
-                activeProps={{ className: "bg-accent-soft text-accent font-semibold" }}
-              >
-                {l.label}
-              </Link>
-            ))}
-            <div className="ml-2 pl-2 border-l border-line flex items-center gap-2">
-              <a
-                href={CRAYONS_LOOP_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-xs font-semibold text-amber-400 hover:bg-amber-500/20 transition flex items-center gap-1"
-                title="Open Crayons Loop Consumer Streaming"
-              >
-                <span>Crayons Loop</span>
-                <span className="text-[10px]">↗</span>
-              </a>
+    <div className="min-h-screen bg-bg text-fg">
+      <div className="grid min-h-screen lg:grid-cols-[260px_1fr]">
+        <aside className="hidden border-r border-line bg-surface lg:flex lg:flex-col">
+          <div className="border-b border-line px-5 py-5"><BrandMark /></div>
+          <div className="flex-1 overflow-y-auto px-3 py-4">
+            {groups.map((group) => {
+              const items = NAV.filter((n) => n.group === group && n.show(actor));
+              if (!items.length) return null;
+              return (
+                <div key={group} className="mb-6">
+                  <p className="px-3 pb-2 text-[10px] font-semibold tracking-[0.2em] text-faint">{group}</p>
+                  <div className="space-y-1">
+                    {items.map((item, index) => <SidebarLink key={group + item.label + index} item={item} />)}
+                    {group === "OPERATIONS" && actor.internalRole ? (
+                      <SidebarLink item={{ href: CRAYONS_LOOP_URL, label: "Open Crayons Loop", group, show: () => true }} />
+                    ) : null}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <div className="border-t border-line p-4">
+            <div className="rounded-2xl bg-elevated p-3">
+              <p className="truncate text-sm font-semibold">{actor.organizationName || actor.displayName}</p>
+              <p className="mt-1 truncate text-xs text-muted">{actor.internalRole?.replaceAll("_", " ") || actor.accountType.replaceAll("_", " ")}</p>
+            </div>
+          </div>
+        </aside>
+
+        <div className="min-w-0">
+          <header className="sticky top-0 z-40 flex items-center justify-between border-b border-line bg-surface/95 px-4 py-3 backdrop-blur sm:px-6 lg:px-8">
+            <div className="lg:hidden"><BrandMark /></div>
+            <div className="hidden lg:block">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-accent">Crayons Bridge</p>
+              <p className="text-sm text-muted">Media supply chain · rights · licensing · delivery</p>
+            </div>
+            <div className="flex items-center gap-3">
+              {actor.internalRole ? (
+                <span className="hidden rounded-full border border-line bg-elevated px-3 py-1 text-xs font-medium text-muted sm:inline-flex">
+                  {actor.internalRole.replaceAll("_", " ")}
+                </span>
+              ) : null}
               <UserButton />
             </div>
-          </nav>
+          </header>
+
+          <main className="mx-auto max-w-[1500px] px-4 py-6 sm:px-6 lg:px-8">
+            <div className="mb-7">
+              <h1 className="font-display text-3xl font-semibold tracking-tight sm:text-4xl">{title}</h1>
+            </div>
+            {children}
+          </main>
         </div>
-      </header>
-      <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8">
-        <div className="mb-6">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">Crayons Bridge</p>
-          <h1 className="mt-2 font-display text-3xl font-semibold tracking-tight text-fg sm:text-4xl">{title}</h1>
-        </div>
-        {children}
-      </main>
+      </div>
     </div>
   );
 }
