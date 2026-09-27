@@ -82,7 +82,30 @@ async function refreshSession(session: SupabaseSession): Promise<SupabaseSession
   }
 }
 
+async function consumeEmailCallback(): Promise<SupabaseSession | null> {
+  if (typeof window === "undefined") return null;
+  const params = new URLSearchParams(window.location.hash.slice(1));
+  const accessToken = params.get("access_token");
+  const refreshToken = params.get("refresh_token");
+  if (!accessToken || !refreshToken) return null;
+  const user = await authRequest("user", { headers: { Authorization: `Bearer ${accessToken}` } }) as SupabaseUser;
+  if (!user.id) throw new Error("Email confirmation did not return a valid user.");
+  const expiresIn = Number(params.get("expires_in") || 3600);
+  const session: SupabaseSession = {
+    access_token: accessToken,
+    refresh_token: refreshToken,
+    expires_in: expiresIn,
+    expires_at: Math.floor(Date.now() / 1000) + expiresIn,
+    user,
+  };
+  writeSession(session);
+  window.history.replaceState(window.history.state, "", window.location.pathname + window.location.search);
+  return session;
+}
+
 export async function getSupabaseSession(): Promise<SupabaseSession | null> {
+  const callback = await consumeEmailCallback();
+  if (callback) return callback;
   const session = readSession();
   if (!session) return null;
   const expiresAt = session.expires_at ?? 0;
@@ -96,14 +119,12 @@ export function getBearerToken(): string | null {
 
 export async function signUpWithEmail(input: { email: string; password: string; name: string }) {
   const redirectTo = typeof window !== "undefined" ? `${window.location.origin}/onboarding` : undefined;
-  const body = await authRequest("signup", {
+  const body = await authRequest(`signup${redirectTo ? `?redirect_to=${encodeURIComponent(redirectTo)}` : ""}`, {
     method: "POST",
     body: JSON.stringify({
       email: input.email,
       password: input.password,
       data: { name: input.name, full_name: input.name },
-      gotrue_meta_security: {},
-      ...(redirectTo ? { email_redirect_to: redirectTo } : {}),
     }),
   });
   if (body?.access_token && body?.refresh_token) writeSession(body as SupabaseSession);
