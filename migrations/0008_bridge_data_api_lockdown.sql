@@ -1,7 +1,7 @@
 -- Crayons Bridge Data API boundary hardening.
 --
 -- Bridge currently authenticates and authorizes application requests in the
--- server runtime (Better Auth + server-side RBAC) and accesses Postgres through
+-- server runtime (verified Supabase Auth + server-side RBAC) and accesses Postgres through
 -- the server database connection. The public Supabase Data API is therefore not
 -- an authorization surface for Bridge operational tables.
 --
@@ -23,5 +23,11 @@ revoke all privileges on table public.bridge_entitlements from anon, authenticat
 revoke all privileges on table public.bridge_audit_logs from anon, authenticated;
 revoke all privileges on table public.bridge_email_challenges from anon, authenticated;
 revoke all privileges on table public.bridge_invites from anon, authenticated;
-revoke all privileges on table public.bridge_loop_identity_links from anon, authenticated;
+-- This link table is provisioned in the canonical shared project by an
+-- independent migration; a fresh local PGlite workspace may not have it.
+do $$ begin
+  if to_regclass('public.bridge_loop_identity_links') is not null then
+    revoke all privileges on table public.bridge_loop_identity_links from anon, authenticated;
+  end if;
+end $$;
 revoke all privileges on table public.bridge_loop_publications from anon, authenticated;

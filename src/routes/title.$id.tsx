@@ -7,7 +7,7 @@ import { BridgeShell } from "@/components/bridge/shell";
 import { StatusRail } from "@/components/bridge/status-rail";
 import { Button } from "@/components/ui/button";
 import { advanceTitle, getTitle } from "@/lib/bridge/titles";
-import { listTitleAssets, requestAssetUpload } from "@/lib/bridge/assets";
+import { confirmAssetUpload, listTitleAssets, requestAssetUpload } from "@/lib/bridge/assets";
 import {
   getLoopPublication,
   authorizeLoopPublication,
@@ -542,6 +542,7 @@ function UploadPanel({ titleId }: { titleId: string }) {
         body: file,
       });
       if (!put.ok) throw new Error("S3 upload failed");
+      await confirmAssetUpload({ data: { assetId: signed.assetId } });
     },
     onSuccess: () => {
       toast.success("Media asset secured");

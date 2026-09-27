@@ -10,6 +10,7 @@ import { loadTitle } from "./titles";
 import { writeAudit } from "./audit";
 import { assertNotDevUser } from "./guards";
 import { assertTitleRead } from "./buyer-access";
+import { persistVerifiedAsset } from "./asset-confirmation";
 
 const UPLOADABLE: ReadonlySet<string> = new Set(["DRAFT", "UPLOADING", "PREPARING"]);
 
@@ -54,20 +55,50 @@ export const requestAssetUpload = createServerFn({ method: "POST" })
       insert into bridge_assets (id, title_id, kind, s3_key, content_type, created_by)
       values (${id}, ${title.id}, ${data.kind}, ${key}, ${data.contentType}, ${actor.userId})
     `;
-    if (data.kind === "poster") {
-      await sql`update bridge_titles set poster_key = ${key}, updated_at = now() where id = ${title.id}`;
-    }
-    if (data.kind === "master") {
-      await sql`update bridge_titles set master_key = ${key}, updated_at = now() where id = ${title.id}`;
-    }
     await writeAudit({
       actorUserId: actor.userId,
-      action: "asset.upload_signed",
+      action: "asset.upload_authorized",
       entityType: "bridge_asset",
       entityId: id,
       metadata: { titleId: title.id, kind: data.kind },
     });
     return { assetId: id, ...signed };
+  });
+
+export const confirmAssetUpload = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({ assetId: z.string().min(8) }))
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireActor(context.userId);
+    assertPermission(actor, "asset.sign_upload");
+    const sql = await getSql();
+    const rows = await sql<{ id: string; title_id: string; kind: string; s3_key: string; created_by: string; byte_size: number | null }>`
+      select id, title_id, kind, s3_key, created_by, byte_size
+      from bridge_assets where id = ${data.assetId} limit 1
+    `;
+    const asset = rows[0];
+    if (!asset || asset.created_by !== actor.userId) throw new Error("Asset not found");
+    const title = await loadTitle(asset.title_id);
+    if (!title || (title.ownerUserId !== actor.userId && !actor.internalRole) || !UPLOADABLE.has(title.status)) {
+      throw new Error("Upload confirmation is closed for this title");
+    }
+    if (asset.byte_size != null) return { assetId: asset.id, byteSize: Number(asset.byte_size), verified: true };
+
+    // HeadObject must succeed before any asset is exposed or the title receives
+    // a master/poster reference. A signed PUT alone is only authorization.
+    const { verifyObject } = await import("./s3.server");
+    const object = await verifyObject(asset.s3_key);
+    const confirmed = await persistVerifiedAsset(sql, {
+      assetId: asset.id, actorUserId: actor.userId, internalActor: Boolean(actor.internalRole),
+      titleId: title.id, kind: asset.kind, byteSize: object.byteSize, contentType: object.contentType,
+    });
+    if (!confirmed) {
+      const current = await sql<{ byte_size: number | null }>`select byte_size from bridge_assets where id = ${asset.id}`;
+      if (current[0]?.byte_size != null) return { assetId: asset.id, byteSize: Number(current[0].byte_size), verified: true };
+      throw new Error("Asset confirmation changed; retry after refreshing the title");
+    }
+    return { assetId: asset.id, byteSize: object.byteSize, verified: true };
   });
 
 export const requestAssetDownload = createServerFn({ method: "POST" })
@@ -84,7 +115,8 @@ export const requestAssetDownload = createServerFn({ method: "POST" })
       kind: string;
       s3_key: string;
     }>`
-      select id, title_id, kind, s3_key from bridge_assets where id = ${data.assetId} limit 1
+      select id, title_id, kind, s3_key from bridge_assets
+      where id = ${data.assetId} and byte_size > 0 limit 1
     `;
     const asset = rows[0];
     if (!asset) throw new Error("Not found");
@@ -128,7 +160,7 @@ export const listTitleAssets = createServerFn({ method: "GET" })
       created_at: string | Date;
     }>`
       select id, kind, s3_key, content_type, created_at
-      from bridge_assets where title_id = ${title.id}
+      from bridge_assets where title_id = ${title.id} and byte_size > 0
         and (${Boolean(actor.internalRole || actor.userId === title.ownerUserId)} or kind in ('poster', 'screener'))
       order by created_at desc
     `;
