@@ -4,11 +4,12 @@ import { randomBytes } from "node:crypto";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import { ASSET_KINDS } from "./types";
-import { assertPermission, canReadTitle } from "./rbac";
+import { assertPermission } from "./rbac";
 import { requireActor } from "./session";
 import { loadTitle } from "./titles";
 import { writeAudit } from "./audit";
 import { assertNotDevUser } from "./guards";
+import { assertTitleRead } from "./buyer-access";
 
 const UPLOADABLE: ReadonlySet<string> = new Set(["DRAFT", "UPLOADING", "PREPARING"]);
 
@@ -88,10 +89,12 @@ export const requestAssetDownload = createServerFn({ method: "POST" })
     const asset = rows[0];
     if (!asset) throw new Error("Not found");
     const title = await loadTitle(asset.title_id);
-    if (!title || !canReadTitle(actor, title)) throw new Error("Not found");
+    if (!title) throw new Error("Not found");
+    await assertTitleRead(actor, title);
     const isOwner = title.ownerUserId === actor.userId;
     const isInternal = Boolean(actor.internalRole);
     if (!isOwner && !isInternal) {
+      if (asset.kind === "master") throw new Error("Source master access requires separate authorization");
       if (asset.kind !== "poster") {
         const entitled = await hasLicenseEntitlement(actor.userId, title.id);
         if (!entitled) throw new Error("License entitlement required");
@@ -114,7 +117,8 @@ export const listTitleAssets = createServerFn({ method: "GET" })
   .handler(async ({ context, data }) => {
     const actor = await requireActor(context.userId);
     const title = await loadTitle(data.titleId);
-    if (!title || !canReadTitle(actor, title)) throw new Error("Not found");
+    if (!title) throw new Error("Not found");
+    await assertTitleRead(actor, title);
     const sql = await getSql();
     const rows = await sql<{
       id: string;
@@ -124,13 +128,15 @@ export const listTitleAssets = createServerFn({ method: "GET" })
       created_at: string | Date;
     }>`
       select id, kind, s3_key, content_type, created_at
-      from bridge_assets where title_id = ${title.id} order by created_at desc
+      from bridge_assets where title_id = ${title.id}
+        and (${Boolean(actor.internalRole || actor.userId === title.ownerUserId)} or kind in ('poster', 'screener'))
+      order by created_at desc
     `;
     return {
       assets: rows.map((r) => ({
         id: r.id,
         kind: r.kind,
-        key: r.s3_key,
+        key: actor.accountType === "buyer" && !actor.internalRole ? null : r.s3_key,
         contentType: r.content_type,
         createdAt: r.created_at instanceof Date ? r.created_at.toISOString() : String(r.created_at),
       })),

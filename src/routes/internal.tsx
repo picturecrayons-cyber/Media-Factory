@@ -18,6 +18,7 @@ import {
 } from "@/lib/bridge/loop-publication";
 import { INTERNAL_ROLES } from "@/lib/bridge/types";
 import { hasPermission } from "@/lib/bridge/rbac";
+import { listBuyerAccess, setBuyerTitleAccess } from "@/lib/bridge/buyer-access";
 
 export const Route = createFileRoute("/internal")({ component: Internal });
 
@@ -33,6 +34,7 @@ function Internal() {
             canInvite={hasPermission(actor, "users.invite_internal")}
             canPublish={hasPermission(actor, "loop.publish")}
             canRevoke={hasPermission(actor, "loop.revoke")}
+            canShare={hasPermission(actor, "title.license")}
           />
         </BridgeShell>
       )}
@@ -44,10 +46,12 @@ function InternalBody({
   canInvite,
   canPublish,
   canRevoke,
+  canShare,
 }: {
   canInvite: boolean;
   canPublish: boolean;
   canRevoke: boolean;
+  canShare: boolean;
 }) {
   const titlesQ = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles() });
   const logsQ = useQuery({ queryKey: ["bridge-audit"], queryFn: () => listAuditLogs() });
@@ -60,6 +64,7 @@ function InternalBody({
 
       {/* 2. Team Invitation Module */}
       {canInvite ? <InviteForm /> : null}
+      {canShare ? <BuyerAccessDesk titles={titles.filter(t => ["LIVE_FOR_BUYERS", "IN_NEGOTIATION", "LICENSED", "DELIVERED"].includes(t.status))} /> : null}
 
       {/* 3. Catalog Queue */}
       <section className="space-y-4">
@@ -113,6 +118,46 @@ function InternalBody({
       </section>
     </div>
   );
+}
+
+function BuyerAccessDesk({ titles }: { titles: { id: string; name: string }[] }) {
+  const qc = useQueryClient();
+  const accessQ = useQuery({ queryKey: ["bridge-buyer-access"], queryFn: () => listBuyerAccess() });
+  const [titleId, setTitleId] = useState("");
+  const [buyerUserId, setBuyerUserId] = useState("");
+  const [expiresAt, setExpiresAt] = useState("");
+  const change = useMutation({
+    mutationFn: (input: { titleId: string; buyerUserId: string; allow: boolean }) =>
+      setBuyerTitleAccess({ data: { ...input, expiresAt: input.allow && expiresAt ? new Date(expiresAt).toISOString() : null } }),
+    onSuccess: () => {
+      toast.success("Buyer access updated");
+      void qc.invalidateQueries({ queryKey: ["bridge-buyer-access"] });
+      void qc.invalidateQueries({ queryKey: ["bridge-audit"] });
+    },
+    onError: (err) => toast.error(err instanceof Error ? err.message : "Buyer access update failed"),
+  });
+  return <section className="space-y-4">
+    <div><h2 className="font-display text-2xl font-semibold text-fg">Buyer title access</h2>
+      <p className="text-xs text-muted">Share an eligible title with a verified buyer. Access can expire or be revoked.</p></div>
+    {accessQ.isError ? <p role="alert">Buyer access is unavailable. Check the database migration.</p> : null}
+    <form className="grid gap-3 rounded-2xl border border-line bg-surface p-4 sm:grid-cols-4" onSubmit={e => {
+      e.preventDefault();
+      if (titleId && buyerUserId) change.mutate({ titleId, buyerUserId, allow: true });
+    }}>
+      <select required aria-label="Title" value={titleId} onChange={e => setTitleId(e.target.value)} className="border border-line bg-elevated p-2">
+        <option value="">Select title</option>{titles.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+      </select>
+      <select required aria-label="Verified buyer" value={buyerUserId} onChange={e => setBuyerUserId(e.target.value)} className="border border-line bg-elevated p-2">
+        <option value="">Select verified buyer</option>{accessQ.data?.buyers.map(b => <option key={b.userId} value={b.userId}>{b.name} · {b.email}</option>)}
+      </select>
+      <input aria-label="Expiry (optional)" type="datetime-local" value={expiresAt} onChange={e => setExpiresAt(e.target.value)} className="border border-line bg-elevated p-2" />
+      <Button type="submit" disabled={change.isPending || accessQ.isError}>Grant access</Button>
+    </form>
+    <ul className="space-y-2 text-sm">{accessQ.data?.shares.map(s => <li key={`${s.titleId}:${s.buyerUserId}`} className="flex flex-wrap items-center justify-between gap-3 border border-line bg-surface p-3">
+      <span>{titles.find(t => t.id === s.titleId)?.name ?? s.titleId} · {accessQ.data?.buyers.find(b => b.userId === s.buyerUserId)?.email ?? s.buyerUserId}{s.expiresAt ? ` · expires ${new Date(s.expiresAt).toLocaleString()}` : ""}</span>
+      <Button type="button" disabled={change.isPending} onClick={() => change.mutate({ titleId: s.titleId, buyerUserId: s.buyerUserId, allow: false })}>Revoke</Button>
+    </li>)}</ul>
+  </section>;
 }
 
 const DISTRIBUTION_TABS = [

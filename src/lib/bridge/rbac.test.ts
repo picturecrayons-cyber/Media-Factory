@@ -44,7 +44,7 @@ describe("rbac", () => {
     assert.equal(hasPermission(creator(), "payment.create_order"), false);
   });
 
-  it("lets buyers read live catalog and pay, not create titles", () => {
+  it("requires an explicit share before a buyer can read a live title", () => {
     assert.equal(hasPermission(buyer(), "title.create"), false);
     assert.equal(hasPermission(buyer(), "title.read_catalog"), true);
     assert.equal(hasPermission(buyer(), "payment.create_order"), true);
@@ -54,8 +54,14 @@ describe("rbac", () => {
     );
     assert.equal(
       canReadTitle(buyer(), { ownerUserId: "u1", status: "LIVE_FOR_BUYERS" }),
+      false,
+    );
+    assert.equal(
+      canReadTitle(buyer(), { ownerUserId: "u1", status: "LIVE_FOR_BUYERS" }, true),
       true,
     );
+    assert.equal(canReadTitle(buyer(false), { ownerUserId: "u1", status: "LIVE_FOR_BUYERS" }, true), false);
+    assert.equal(canReadTitle(buyer(), { ownerUserId: "u1", status: "DRAFT" }, true), false);
   });
 
   it("maps lifecycle steps to permissions and withholds LICENSED", () => {

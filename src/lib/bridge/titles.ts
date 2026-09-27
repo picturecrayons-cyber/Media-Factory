@@ -10,6 +10,7 @@ import { assertPermission, canReadTitle, permissionForTransition } from "./rbac"
 import { requireActor } from "./session";
 import { writeAudit } from "./audit";
 import { assertNotDevUser } from "./guards";
+import { assertTitleRead } from "./buyer-access";
 
 type TitleRow = {
   id: string;
@@ -148,8 +149,15 @@ export const listTitles = createServerFn({ method: "GET" })
     } else if (actor.accountType === "buyer") {
       assertPermission(actor, "title.read_catalog");
       rows = await sql<TitleRow>`
-        select * from bridge_titles
+        select * from bridge_titles t
         where status in ('LIVE_FOR_BUYERS','IN_NEGOTIATION','LICENSED','DELIVERED')
+          and (
+            exists (select 1 from bridge_buyer_title_access a
+              where a.title_id = t.id and a.buyer_user_id = ${actor.userId}
+                and a.revoked_at is null and (a.expires_at is null or a.expires_at > now()))
+            or exists (select 1 from bridge_entitlements e
+              where e.title_id = t.id and e.user_id = ${actor.userId} and e.access_type = 'license')
+          )
         order by updated_at desc limit 200
       `;
     } else {
@@ -159,7 +167,12 @@ export const listTitles = createServerFn({ method: "GET" })
         order by updated_at desc limit 200
       `;
     }
-    return { titles: rows.map(mapTitle) };
+    return { titles: rows.map((row) => {
+      const title = mapTitle(row);
+      return actor.accountType === "buyer" && !actor.internalRole
+        ? { ...title, masterKey: null, posterKey: null }
+        : title;
+    }) };
   });
 
 export const getTitle = createServerFn({ method: "GET" })
@@ -169,7 +182,11 @@ export const getTitle = createServerFn({ method: "GET" })
     assertNotDevUser(context.userId);
     const actor = await requireActor(context.userId);
     const title = await loadTitle(data.id);
-    if (!title || !canReadTitle(actor, title)) throw new Error("Not found");
+    if (!title) throw new Error("Not found");
+    await assertTitleRead(actor, title);
+    if (actor.accountType === "buyer" && !actor.internalRole) {
+      return { title: { ...title, masterKey: null, posterKey: null }, events: [] };
+    }
     const sql = await getSql();
     const events = await sql<{
       from_status: string | null;

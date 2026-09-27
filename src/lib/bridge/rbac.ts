@@ -112,12 +112,13 @@ export function assertPermission(actor: Actor, permission: Permission): void {
 export function canReadTitle(
   actor: Actor,
   title: { ownerUserId: string; status: TitleStatus },
+  buyerHasAccess = false,
 ): boolean {
   if (!actor.emailVerified) return false;
   if (title.ownerUserId === actor.userId) return hasPermission(actor, "title.read_own");
   if (actor.internalRole) return hasPermission(actor, "title.read_catalog");
   if (actor.accountType === "buyer") {
-    return hasPermission(actor, "title.read_catalog") && isBuyerVisible(title.status);
+    return buyerHasAccess && hasPermission(actor, "title.read_catalog") && isBuyerVisible(title.status);
   }
   return false;
 }

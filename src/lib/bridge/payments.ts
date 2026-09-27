@@ -6,11 +6,12 @@ import { getSql } from "@/lib/db";
 import { bridgeEnv } from "./env";
 import { paymentVerifyBody, verifyRazorpaySignature } from "./razorpay-crypto";
 import { loadActor, requireActor } from "./session";
-import { assertPermission, canReadTitle } from "./rbac";
+import { assertPermission } from "./rbac";
 import { loadTitle, recordTransition } from "./titles";
 import { writeAudit } from "./audit";
 import { isBuyerVisible } from "./lifecycle";
 import { assertNotDevUser } from "./guards";
+import { assertTitleRead } from "./buyer-access";
 
 function requireRazorpayKeys() {
   const keyId = bridgeEnv.razorpayKeyId();
@@ -140,7 +141,8 @@ export const createLicenseOrder = createServerFn({ method: "POST" })
     const actor = await requireActor(context.userId);
     assertPermission(actor, "payment.create_order");
     const title = await loadTitle(data.titleId);
-    if (!title || !canReadTitle(actor, title)) throw new Error("Not found");
+    if (!title) throw new Error("Not found");
+    await assertTitleRead(actor, title);
     if (!isBuyerVisible(title.status) && title.status !== "LIVE_FOR_BUYERS") {
       throw new Error("Title is not available for licensing");
     }
