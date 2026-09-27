@@ -7,14 +7,16 @@ function client() {
   const access = bridgeEnv.awsAccessKey();
   const secret = bridgeEnv.awsSecretKey();
   const bucket = bridgeEnv.s3Bucket();
-  if (!region || !access || !secret || !bucket) {
+  if (!region || !bucket || Boolean(access) !== Boolean(secret)) {
     throw new Error("Private S3 is not configured");
   }
   return {
     bucket,
     s3: new S3Client({
       region,
-      credentials: { accessKeyId: access, secretAccessKey: secret },
+      // Prefer the SDK's temporary credential chain (such as an IAM role).
+      // Existing server-only key pairs remain supported during rotation.
+      ...(access && secret ? { credentials: { accessKeyId: access, secretAccessKey: secret } } : {}),
     }),
   };
 }
