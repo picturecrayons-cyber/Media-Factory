@@ -67,13 +67,21 @@ function Signup() {
         return;
       }
 
-      // Otherwise show confirmation screen
+      // Supabase intentionally obscures repeated signups. A response with an
+      // identities array present but empty means this email already belongs
+      // to an existing account; do not falsely promise a new confirmation mail.
+      if (result.user && Array.isArray(result.user.identities) && result.user.identities.length === 0) {
+        setError("An account with this email address already exists. Please sign in or reset your password.");
+        return;
+      }
+
+      // Otherwise this is a genuine unverified signup; show confirmation screen.
       setSubmittedEmail(email.trim());
     } catch (err: unknown) {
       console.error("[Signup error]", err);
       const message = err instanceof Error ? err.message : String(err);
       if (message.includes("User already registered") || message.includes("already registered")) {
-        setError("An account with this email address already exists. Please sign in.");
+        setError("An account with this email address already exists. Please sign in or reset your password.");
       } else if (message.includes("Password should be")) {
         setError(message);
       } else {
