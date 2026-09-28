@@ -1,5 +1,6 @@
 export type GateName = "INGEST" | "QC" | "LEGAL" | "RIGHTS" | "PACKAGE" | "AUTHORIZED";
 export type GateState = "PASS" | "PENDING" | "FAILED" | "UNAVAILABLE";
+type DestinationPackageState = "REVOKED" | "HOLD" | "READY" | "AUTHORIZED" | "DELIVERED";
 
 export type SupplyGate = {
   state: GateState;
@@ -63,6 +64,15 @@ function inForce(grant: RightsWindow, now: Date): boolean {
   return windowStart(grant) <= time && time < windowEnd(grant);
 }
 
+function normalizePackageState(states: string[]): DestinationPackageState | null {
+  if (states.includes("REVOKED")) return "REVOKED";
+  if (states.length === 0) return null;
+  if (states.every((state) => state === "DELIVERED")) return "DELIVERED";
+  if (states.every((state) => state === "AUTHORIZED" || state === "DELIVERED")) return "AUTHORIZED";
+  if (states.every((state) => state === "READY" || state === "AUTHORIZED" || state === "DELIVERED")) return "READY";
+  return "HOLD";
+}
+
 export function deriveSupplyGates(input: {
   recordsAvailable: boolean;
   verifiedAssetCount: number;
@@ -121,11 +131,7 @@ export function deriveSupplyGates(input: {
 
   const separated = qc.state === "PASS" && legal.state === "PASS" && rights.state === "PASS";
   const states = input.packageStates ?? (input.packageState ? [input.packageState] : []);
-  const packageState = states.includes("REVOKED") ? "REVOKED"
-    : states.length === 0 ? null
-    : states.every((state) => state === "AUTHORIZED" || state === "DELIVERED") ? "AUTHORIZED"
-    : states.every((state) => ["READY", "AUTHORIZED", "DELIVERED"].includes(state)) ? "READY"
-    : "HOLD";
+  const packageState = normalizePackageState(states);
   const packaged: SupplyGate = !separated
     ? { state: "UNAVAILABLE", detail: "A destination package cannot be ready until QC, legal and rights each pass separately." }
     : packageState === "READY" || packageState === "AUTHORIZED" || packageState === "DELIVERED"
