@@ -98,6 +98,14 @@ export const createTitle = createServerFn({ method: "POST" })
       year: z.number().int().min(1895).max(2100).optional(),
       runtimeMinutes: z.number().int().min(1).max(600).optional(),
       licensingFeePaise: z.number().int().min(0).max(50_000_000).optional(),
+      metadata: z.object({
+        contentType: z.string().max(80).optional(),
+        country: z.string().max(80).optional(),
+        releaseDate: z.string().max(40).optional(),
+        director: z.string().max(160).optional(),
+        producer: z.string().max(200).optional(),
+        cast: z.string().max(2000).optional(),
+      }).optional(),
     }),
   )
   .handler(async ({ context, data }) => {
@@ -117,6 +125,25 @@ export const createTitle = createServerFn({ method: "POST" })
         ${data.year ?? null}, ${data.runtimeMinutes ?? null}, ${data.licensingFeePaise ?? 0}
       )
     `;
+    if (data.metadata) {
+      await sql`
+        insert into bridge_title_metadata (
+          title_id, content_type, country, release_date, director, producer, cast_text
+        ) values (
+          ${id}, ${data.metadata.contentType ?? null}, ${data.metadata.country ?? null},
+          ${data.metadata.releaseDate ?? null}, ${data.metadata.director ?? null},
+          ${data.metadata.producer ?? null}, ${data.metadata.cast ?? null}
+        )
+        on conflict (title_id) do update set
+          content_type = excluded.content_type,
+          country = excluded.country,
+          release_date = excluded.release_date,
+          director = excluded.director,
+          producer = excluded.producer,
+          cast_text = excluded.cast_text,
+          updated_at = now()
+      `;
+    }
     await recordTransition({
       titleId: id,
       from: null,
