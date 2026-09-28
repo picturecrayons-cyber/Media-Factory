@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { authMiddleware } from "@/lib/auth/middleware";
-import { getSql } from "@/lib/db";
+import { getSql, type Sql } from "@/lib/db";
 import { ACCOUNT_TYPES, INTERNAL_ROLES } from "./types";
 import { writeAudit } from "./audit";
 import { loadActor } from "./session";
@@ -20,6 +20,21 @@ function tokenPair() {
 async function mail(opts: { to: string; subject: string; text: string }) {
   const { sendBridgeMail } = await import("./mail.server");
   return sendBridgeMail(opts);
+}
+
+async function persistSupabaseIdentityLink(sql: Sql, bridgeUserId: string, authUserId: string) {
+  await sql`
+    insert into bridge_loop_identity_links (
+      bridge_user_id, auth_user_id, verification_method, verified_at, verified_by
+    ) values (
+      ${bridgeUserId}, ${authUserId}::uuid, 'supabase_auth_onboarding', now(), ${bridgeUserId}
+    )
+    on conflict (auth_user_id) do update set
+      bridge_user_id = excluded.bridge_user_id,
+      verification_method = excluded.verification_method,
+      verified_at = excluded.verified_at,
+      verified_by = excluded.verified_by
+  `;
 }
 
 export const syncSupabaseSessionUser = createServerFn({ method: "POST" })
@@ -58,7 +73,11 @@ export const completeOnboarding = createServerFn({ method: "POST" })
     const sql = await getSql();
     const existing = await loadActor(context.userId);
     if (!context.emailConfirmedAt) throw new Error("Confirm your email before entering Bridge.");
-    if (existing) return { home: workspaceHome(existing), profile: existing };
+    if (existing) {
+      // Retry a link write that may have failed after the profile was inserted.
+      await persistSupabaseIdentityLink(sql, existing.userId, context.userId);
+      return { home: workspaceHome(existing), profile: existing };
+    }
 
     const email = context.userEmail;
     if (!email) throw new Error("Account email is required from Supabase session");
@@ -113,18 +132,7 @@ export const completeOnboarding = createServerFn({ method: "POST" })
         updated_at = now()
     `;
 
-    await sql`
-      insert into bridge_loop_identity_links (
-        bridge_user_id, auth_user_id, verification_method, verified_at, verified_by
-      ) values (
-        ${profileId}, ${context.userId}::uuid, 'supabase_auth_onboarding', now(), ${profileId}
-      )
-      on conflict (auth_user_id) do update set
-        bridge_user_id = excluded.bridge_user_id,
-        verification_method = excluded.verification_method,
-        verified_at = excluded.verified_at,
-        verified_by = excluded.verified_by
-    `;
+    await persistSupabaseIdentityLink(sql, profileId, context.userId);
     await writeAudit({
       actorUserId: context.userId,
       action: "profile.onboard",
