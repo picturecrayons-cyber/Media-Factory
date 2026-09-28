@@ -29,7 +29,7 @@ type TitleRow = {
   content_type: string;
   country_of_origin: string | null;
   release_date: string | Date | null;
-  credits: unknown;
+  credits: Array<{ role: string; name: string }>;
   created_at: string | Date;
   updated_at: string | Date;
 };
