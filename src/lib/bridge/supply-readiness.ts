@@ -69,7 +69,8 @@ export function deriveSupplyGates(input: {
   qcStatus: string | null;
   legalStatus: string | null;
   rights: RightsWindow[];
-  packageState: string | null;
+  packageState?: string | null;
+  packageStates?: string[];
   now?: Date;
 }): Record<GateName, SupplyGate> {
   const now = input.now ?? new Date();
@@ -119,7 +120,12 @@ export function deriveSupplyGates(input: {
         : { state: "PENDING", detail: "Rights exist but none are currently valid." };
 
   const separated = qc.state === "PASS" && legal.state === "PASS" && rights.state === "PASS";
-  const packageState = input.packageState;
+  const states = input.packageStates ?? (input.packageState ? [input.packageState] : []);
+  const packageState = states.includes("REVOKED") ? "REVOKED"
+    : states.length === 0 ? null
+    : states.every((state) => state === "AUTHORIZED" || state === "DELIVERED") ? "AUTHORIZED"
+    : states.every((state) => ["READY", "AUTHORIZED", "DELIVERED"].includes(state)) ? "READY"
+    : "HOLD";
   const packaged: SupplyGate = !separated
     ? { state: "UNAVAILABLE", detail: "A destination package cannot be ready until QC, legal and rights each pass separately." }
     : packageState === "READY" || packageState === "AUTHORIZED" || packageState === "DELIVERED"
