@@ -5,6 +5,7 @@ import { RedirectToSignIn } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { completeOnboarding } from "@/lib/bridge/profiles";
 import { getBridgeSession } from "@/lib/bridge/session";
+import { getSupabaseSession } from "@/lib/auth/client";
 import { ACCOUNT_TYPES } from "@/lib/bridge/types";
 import { BrandMark } from "@/components/bridge/shell";
 import { Button } from "@/components/ui/button";
@@ -69,16 +70,35 @@ function Onboarding() {
   if (!user) return <RedirectToSignIn />;
 
   if (sessionQ.isError) {
+    async function retrySession() {
+      setError(null);
+      try {
+        const refreshed = await getSupabaseSession({ forceRefresh: true });
+        if (!refreshed) {
+          setError("Your confirmation succeeded, but the browser session could not be refreshed. Sign in once with the password you created.");
+          return;
+        }
+        const result = await sessionQ.refetch();
+        if (result.error) throw result.error;
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Could not refresh your session.");
+      }
+    }
+
     return (
       <main className="grid min-h-screen place-items-center bg-bg p-6">
         <div className="w-full max-w-sm space-y-4 rounded-md border border-line bg-surface p-6">
           <BrandMark />
           <h1 className="font-display text-2xl">Session needs a retry</h1>
           <p className="text-sm leading-relaxed text-muted">
-            We could not finish loading your Bridge session. Your account is not lost.
+            Your email is confirmed. Bridge only needs to refresh the browser session before onboarding.
           </p>
-          <Button type="button" className="w-full" onClick={() => void sessionQ.refetch()}>
-            Retry session
+          {error ? <p role="alert" className="text-sm text-accent">{error}</p> : null}
+          <Button type="button" className="w-full" onClick={() => void retrySession()}>
+            Refresh session
+          </Button>
+          <Button type="button" variant="outline" className="w-full" onClick={() => void navigate({ to: "/login" })}>
+            Sign in again
           </Button>
         </div>
       </main>
