@@ -15,6 +15,10 @@ describe("master download denial", () => {
     assert.match(decision.reason, /does not authorize a master/);
   });
 
+  it("lets internal reviewers with buyer accounts download a master", () => {
+    assert.equal(downloadDecision({ kind: "master", actorIsOwner: false, actorIsInternal: true, accountType: "buyer", hasLicenseEntitlement: false }).allow, true);
+  });
+
   it("lets the owner download a master and a buyer download only a screener", () => {
     assert.equal(downloadDecision({
       kind: "master",
