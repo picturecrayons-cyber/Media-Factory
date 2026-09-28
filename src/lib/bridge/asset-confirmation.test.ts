@@ -25,6 +25,8 @@ test("only a verified upload sets the master reference, once, with an audit even
       byteSize: 120,
       contentType: "video/mp4",
       checksum: "etag-1",
+      sourceKey: "bridge/creator/title1234/master/video.mp4",
+      sealedKey: "bridge/creator/title1234/master/video.mp4.verified/uuid-1",
     };
     const state = async () => (await db.query<{ master_key: string | null; byte_size: number | null }>(`
       select t.master_key, a.byte_size from bridge_titles t join bridge_assets a on a.title_id=t.id
@@ -33,8 +35,9 @@ test("only a verified upload sets the master reference, once, with an audit even
     assert.equal(await persistVerifiedAsset(sql, { ...args, actorUserId: "intruder" }), false);
     assert.deepEqual(await state(), { master_key: null, byte_size: null });
     assert.equal(await persistVerifiedAsset(sql, args), true);
-    assert.deepEqual(await state(), { master_key: "bridge/creator/title1234/master/video.mp4", byte_size: 120 });
+    assert.deepEqual(await state(), { master_key: "bridge/creator/title1234/master/video.mp4.verified/uuid-1", byte_size: 120 });
     assert.equal(await persistVerifiedAsset(sql, args), false);
+    assert.equal(await persistVerifiedAsset(sql, { ...args, assetId: "asset1234", sourceKey: "wrong" }), false);
     const audit = await db.query<{ action: string; metadata: string }>(
       "select action, metadata from bridge_audit_logs where entity_id='asset1234'",
     );
