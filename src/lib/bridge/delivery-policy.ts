@@ -13,7 +13,7 @@ export function downloadDecision(opts: {
   hasLicenseEntitlement: boolean;
 }): DownloadDecision {
   if (opts.kind === "master") {
-    if (opts.accountType === "buyer" || (!opts.actorIsOwner && !opts.actorIsInternal)) {
+    if (!opts.actorIsOwner && !opts.actorIsInternal) {
       return {
         allow: false,
         reason: "A screener or catalog grant does not authorize a master download",
