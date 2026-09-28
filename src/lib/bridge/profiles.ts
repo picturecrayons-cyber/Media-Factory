@@ -97,11 +97,12 @@ export const completeOnboarding = createServerFn({ method: "POST" })
       throw new Error("Organization name is required");
     }
 
+    const profileId = context.userId;
     await sql`
       insert into bridge_profiles (
         user_id, email, display_name, account_type, organization_name, internal_role, email_verified, invited_by
       ) values (
-        ${context.userId}, ${email}, ${data.displayName}, ${data.accountType}, ${org},
+        ${profileId}, ${email}, ${data.displayName}, ${data.accountType}, ${org},
         ${internalRole}, ${verified}, ${invitedBy}
       )
       on conflict (user_id) do update set
@@ -110,6 +111,19 @@ export const completeOnboarding = createServerFn({ method: "POST" })
         organization_name = excluded.organization_name,
         email_verified = true,
         updated_at = now()
+    `;
+
+    await sql`
+      insert into bridge_loop_identity_links (
+        bridge_user_id, auth_user_id, verification_method, verified_at, verified_by
+      ) values (
+        ${profileId}, ${context.userId}::uuid, 'supabase_auth_onboarding', now(), ${profileId}
+      )
+      on conflict (auth_user_id) do update set
+        bridge_user_id = excluded.bridge_user_id,
+        verification_method = excluded.verification_method,
+        verified_at = excluded.verified_at,
+        verified_by = excluded.verified_by
     `;
     await writeAudit({
       actorUserId: context.userId,
