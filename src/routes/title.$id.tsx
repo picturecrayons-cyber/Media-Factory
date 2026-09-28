@@ -10,6 +10,7 @@ import { getLoopPublication } from "@/lib/bridge/loop-publication";
 import { getTitleSupplyChain } from "@/lib/bridge/supply-chain";
 import { getTitle } from "@/lib/bridge/titles";
 import type { AssetKind } from "@/lib/bridge/types";
+import { hasPermission } from "@/lib/bridge/rbac";
 import type { BridgeActor } from "@/lib/bridge/session";
 import type { GateState } from "@/lib/bridge/supply-readiness";
 
@@ -41,7 +42,8 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
   const assets = assetsQ.data?.assets ?? [];
   const chain = chainQ.data;
   const pub = pubQ.data?.publication;
-  const canUpload = actor.userId === title?.ownerUserId || Boolean(actor.internalRole);
+  const canUpload = hasPermission(actor, "asset.sign_upload")
+    && (actor.userId === title?.ownerUserId || Boolean(actor.internalRole));
 
   if (titleQ.isPending) return <p className="text-sm text-muted">Loading title workspace…</p>;
   if (!title) return <p className="text-sm text-muted">Title not found.</p>;
