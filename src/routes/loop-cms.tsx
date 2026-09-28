@@ -2,7 +2,6 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
-import { StatusChip } from "@/components/bridge/status-rail";
 import { listTitles } from "@/lib/bridge/titles";
 import { listLoopPublicationReadiness } from "@/lib/bridge/loop-publication";
 
@@ -35,7 +34,7 @@ function LoopCmsBody() {
   const titles = titlesQ.data?.titles ?? [];
   const publications = pubsQ.data?.titles ?? [];
   const ready = publications.filter((item) => item.ready).length;
-  const live = publications.filter((item) => item.publication?.authorizationStatus?.toLowerCase() === "live").length;
+  const live = publications.filter((item) => item.publication?.authorizationStatus === "LIVE").length;
 
   return (
     <div className="space-y-8">
@@ -68,15 +67,20 @@ function LoopCmsBody() {
           <p className="text-sm text-muted">Current Bridge-to-Loop readiness from the canonical publication service.</p>
         </div>
         <div className="overflow-hidden rounded-2xl border border-line bg-surface">
-          {publications.length ? publications.slice(0, 12).map((item) => (
-            <div key={item.title.id} className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-5 py-4 last:border-b-0">
-              <div>
-                <p className="font-medium">{item.title.name}</p>
-                <p className="mt-1 text-xs text-muted">{item.ready ? "Eligible for operator review" : "Requires Bridge readiness work"}</p>
+          {publications.length ? publications.slice(0, 12).map((item) => {
+            const status = item.publication?.authorizationStatus ?? (item.ready ? "READY" : "ACTION_REQUIRED");
+            return (
+              <div key={item.id} className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-5 py-4 last:border-b-0">
+                <div>
+                  <p className="font-medium">{item.name}</p>
+                  <p className="mt-1 text-xs text-muted">{item.ready ? "Eligible for operator review" : "Requires Bridge readiness work"}</p>
+                </div>
+                <span className="inline-flex items-center rounded-sm border border-line-strong px-2 py-1 font-mono text-[11px] uppercase tracking-[0.16em] text-accent">
+                  {status.replaceAll("_", " ")}
+                </span>
               </div>
-              <StatusChip status={item.publication?.authorizationStatus ?? (item.ready ? "READY" : "ACTION_REQUIRED")} />
-            </div>
-          )) : <p className="px-5 py-8 text-sm text-muted">No publication records available.</p>}
+            );
+          }) : <p className="px-5 py-8 text-sm text-muted">No publication records available.</p>}
         </div>
       </section>
     </div>
