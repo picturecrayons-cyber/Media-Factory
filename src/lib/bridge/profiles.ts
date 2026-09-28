@@ -5,6 +5,7 @@ import { getSql } from "@/lib/db";
 import { ACCOUNT_TYPES, INTERNAL_ROLES } from "./types";
 import { writeAudit } from "./audit";
 import { loadActor } from "./session";
+import { verificationProfileId } from "./verification-profile-id";
 import { assertPermission, workspaceHome } from "./rbac";
 import { createHash, randomBytes } from "node:crypto";
 import { bridgeEnv } from "./env";
@@ -127,15 +128,15 @@ export const requestEmailVerification = createServerFn({ method: "POST" })
   .handler(async ({ context }) => {
     assertNotDevUser(context.userId);
     const actor = await loadActor(context.userId);
-    if (!actor) throw new Error("Bridge profile required");
-    const email = actor.email;
+    const profileId = verificationProfileId(actor);
+    const email = actor!.email;
     if (!email) throw new Error("No email on account");
     const { token, hash } = tokenPair();
     const id = randomBytes(16).toString("hex");
     const sql = await getSql();
     await sql`
       insert into bridge_email_challenges (id, user_id, email, purpose, token_hash, expires_at)
-      values (${id}, ${actor.userId}, ${email}, ${"verify"}, ${hash}, ${new Date(Date.now() + 24 * 3600 * 1000).toISOString()})
+      values (${id}, ${profileId}, ${email}, ${"verify"}, ${hash}, ${new Date(Date.now() + 24 * 3600 * 1000).toISOString()})
     `;
     const url = `${bridgeEnv.appUrl()}/verify-email?token=${token}`;
     await mail({
@@ -147,7 +148,7 @@ export const requestEmailVerification = createServerFn({ method: "POST" })
       actorUserId: context.userId,
       action: "email.verification_requested",
       entityType: "bridge_profile",
-      entityId: actor.userId,
+      entityId: profileId,
     });
     return { sent: true };
   });
