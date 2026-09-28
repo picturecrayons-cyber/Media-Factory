@@ -8,7 +8,8 @@ import { createMiddleware } from "@tanstack/react-start";
 export const authMiddleware = createMiddleware({ type: "function" })
   .client(async ({ next }) => {
     const { getBearerToken } = await import("./client");
-    return next({ sendContext: { bearerToken: getBearerToken() ?? undefined } });
+    const bearerToken = await getBearerToken();
+    return next({ sendContext: { bearerToken: bearerToken ?? undefined } });
   })
   .server(async ({ next, context }) => {
     const { assertSameSiteRequest } = await import("./isolation.server");
