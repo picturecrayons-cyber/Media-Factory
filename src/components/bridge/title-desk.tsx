@@ -88,6 +88,11 @@ export function CreateTitleForm() {
 
   function onSubmit(e: FormEvent) {
     e.preventDefault();
+    const feeInr = fee ? Number(fee) : undefined;
+    if (feeInr !== undefined && (!Number.isFinite(feeInr) || feeInr < 0 || feeInr > 20_000_000)) {
+      toast("License fee must be between ₹0 and ₹2,00,00,000");
+      return;
+    }
     mut.mutate();
   }
 
@@ -202,6 +207,7 @@ export function CreateTitleForm() {
           inputMode="decimal"
           value={fee}
           onChange={(e) => setFee(e.target.value)}
+          placeholder="Optional · up to ₹2,00,00,000"
           className="mt-1 h-11 w-full rounded-sm border border-line-strong bg-elevated px-3"
         />
       </label>
