@@ -25,6 +25,7 @@ const NAV: NavItem[] = [
   { to: "/internal", label: "Distribution", group: "OPERATIONS", show: (a) => Boolean(a.internalRole) },
   { to: "/internal", label: "Deliveries", group: "OPERATIONS", show: (a) => Boolean(a.internalRole) },
   { to: "/internal", label: "Audit & Operations", group: "ADMIN", show: (a) => Boolean(a.internalRole) },
+  { to: "/admin", label: "Admin Control Plane", group: "ADMIN", show: (a) => a.internalRole === "admin" || a.internalRole === "super_admin" },
   { to: "/account", label: "Team & Account", group: "ADMIN", show: () => true },
 ];
 
