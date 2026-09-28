@@ -55,6 +55,8 @@ node --experimental-strip-types scripts/legacy-migrate.mjs --file /private/title
 
 Legacy import is dry-run only. See [docs/legacy-mapping.md](docs/legacy-mapping.md).
 
+Authentication architecture: [docs/authentication-architecture.md](docs/authentication-architecture.md).
+
 Production releases are cut from `main` only after preview/build verification.
 
 ## License
