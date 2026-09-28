@@ -81,6 +81,13 @@ describe("supply gates", () => {
     assert.equal(gates.AUTHORIZED.state, "PASS");
   });
 
+  it("does not authorize a title with a revoked or held destination", () => {
+    const input = { recordsAvailable: true, verifiedAssetCount: 1, qcStatus: "PASSED", legalStatus: "APPROVED", rights: [grant()], now };
+    assert.equal(deriveSupplyGates({ ...input, packageStates: ["AUTHORIZED", "REVOKED"] }).AUTHORIZED.state, "FAILED");
+    assert.equal(deriveSupplyGates({ ...input, packageStates: ["AUTHORIZED", "HOLD"] }).AUTHORIZED.state, "UNAVAILABLE");
+    assert.equal(deriveSupplyGates({ ...input, packageStates: ["AUTHORIZED", "READY"] }).PACKAGE.state, "PASS");
+  });
+
   it("keeps legal failed even when QC passed", () => {
     const gates = deriveSupplyGates({
       recordsAvailable: true,
