@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { listTitles, listAuditLogs } from "@/lib/bridge/titles";
 import { listLoopPublicationReadiness } from "@/lib/bridge/loop-publication";
 import { hasPermission } from "@/lib/bridge/rbac";
+import { listAdminProfiles } from "@/lib/bridge/profiles";
 
 export const Route = createFileRoute("/admin")({ component: AdminControlPlane });
 
@@ -45,8 +46,11 @@ function AdminBody({ actor }: { actor: any }) {
   const titlesQ = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles() });
   const auditQ = useQuery({ queryKey: ["bridge-audit"], queryFn: () => listAuditLogs() });
   const distQ = useQuery({ queryKey: ["loop-publication-readiness"], queryFn: () => listLoopPublicationReadiness() });
+  const profilesQ = useQuery({ queryKey: ["bridge-admin-profiles"], queryFn: () => listAdminProfiles() });
   const titles = titlesQ.data?.titles ?? [];
   const distribution = distQ.data?.titles ?? [];
+  const profiles = profilesQ.data?.profiles ?? [];
+  const organizations = new Set(profiles.map((p) => p.organizationName).filter(Boolean));
   const qcQueue = titles.filter((t) => t.status === "PREPARING" || t.status === "QC_REVIEW").length;
   const rightsQueue = titles.filter((t) => t.status === "RIGHTS_REVIEW").length;
   const buyerReady = titles.filter((t) => ["LICENSING_READY","LIVE_FOR_BUYERS","IN_NEGOTIATION","LICENSED"].includes(t.status)).length;
@@ -69,13 +73,15 @@ function AdminBody({ actor }: { actor: any }) {
         </div>
       </section>
 
-      <section className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+      <section className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-7">
         {[
           ["Total Titles", titles.length, "Canonical catalog"],
           ["QC Queue", qcQueue, "Prepare / QC review"],
           ["Rights Queue", rightsQueue, "Legal clearance"],
           ["Buyer Ready", buyerReady, "Licensing pipeline"],
           ["Loop Live", live, "Authorized publications"],
+          ["Users", profiles.length, "Bridge profiles"],
+          ["Organizations", organizations.size, "Studio / buyer organizations"],
         ].map(([label, value, caption]) => (
           <article key={String(label)} className="rounded-2xl border border-line bg-surface p-5">
             <p className="text-xs font-semibold uppercase tracking-wider text-muted">{label}</p>
@@ -100,6 +106,36 @@ function AdminBody({ actor }: { actor: any }) {
               <p className="mt-2 text-sm leading-relaxed text-muted">{description}</p>
             </Link>
           ))}
+        </div>
+      </section>
+
+      <section className="mt-8 rounded-3xl border border-line bg-surface p-6">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">Users & organizations</p>
+            <h3 className="mt-1 font-display text-2xl font-semibold">Bridge identity inventory</h3>
+            <p className="mt-1 text-xs text-muted">Authoritative Bridge profiles only. Role changes remain invite/onboarding controlled.</p>
+          </div>
+          <Link to="/internal"><Button variant="outline">Invite internal user</Button></Link>
+        </div>
+        <div className="mt-5 overflow-x-auto">
+          <table className="w-full min-w-[760px] text-left text-sm">
+            <thead className="border-b border-line text-xs uppercase tracking-wider text-muted">
+              <tr><th className="px-3 py-3">User</th><th className="px-3 py-3">Account</th><th className="px-3 py-3">Organization</th><th className="px-3 py-3">Internal role</th><th className="px-3 py-3">Verified</th></tr>
+            </thead>
+            <tbody className="divide-y divide-line">
+              {profiles.slice(0, 50).map((profile) => (
+                <tr key={profile.userId}>
+                  <td className="px-3 py-3"><p className="font-medium">{profile.displayName}</p><p className="text-xs text-muted">{profile.email}</p></td>
+                  <td className="px-3 py-3">{profile.accountType.replaceAll("_", " ")}</td>
+                  <td className="px-3 py-3">{profile.organizationName ?? "—"}</td>
+                  <td className="px-3 py-3">{profile.internalRole?.replaceAll("_", " ") ?? "—"}</td>
+                  <td className="px-3 py-3">{profile.emailVerified ? "yes" : "no"}</td>
+                </tr>
+              ))}
+              {!profiles.length ? <tr><td colSpan={5} className="px-3 py-8 text-center text-muted">No Bridge profiles found.</td></tr> : null}
+            </tbody>
+          </table>
         </div>
       </section>
 
