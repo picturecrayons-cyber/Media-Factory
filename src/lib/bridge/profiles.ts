@@ -120,6 +120,33 @@ export const completeOnboarding = createServerFn({ method: "POST" })
     });
     const actor = await loadActor(context.userId);
     if (!actor) throw new Error("Profile create failed");
+
+    const welcomeClaim = await sql<{ user_id: string }>`
+      update bridge_profiles
+      set welcome_email_sent_at = now(), updated_at = now()
+      where user_id = ${context.userId} and welcome_email_sent_at is null
+      returning user_id
+    `;
+    if (welcomeClaim.length > 0) {
+      try {
+        const { sendWelcomeEmail } = await import("./mail.server");
+        await sendWelcomeEmail({ to: email, name: data.displayName });
+        await writeAudit({
+          actorUserId: context.userId,
+          action: "email.welcome_sent",
+          entityType: "bridge_profile",
+          entityId: context.userId,
+        });
+      } catch (error) {
+        await sql`
+          update bridge_profiles
+          set welcome_email_sent_at = null, updated_at = now()
+          where user_id = ${context.userId}
+        `;
+        console.error("[bridge] Welcome email failed", error);
+      }
+    }
+
     return { home: workspaceHome(actor), profile: actor };
   });
 
