@@ -65,6 +65,18 @@ describe("rbac", () => {
     assert.equal(hasPermission(qc, "title.qc_review"), true);
   });
 
+  it("denies another organization's user a private title, including a guessed live status", () => {
+    const otherStudio = {
+      userId: "studio-other",
+      emailVerified: true,
+      accountType: "studio" as const,
+      internalRole: null,
+    };
+    assert.equal(canReadTitle(otherStudio, { ownerUserId: "u1", status: "DRAFT" }), false);
+    assert.equal(canReadTitle(otherStudio, { ownerUserId: "u1", status: "LIVE_FOR_BUYERS" }), false);
+    assert.equal(canReadTitle(otherStudio, { ownerUserId: "u1", status: "DELIVERED" }), false);
+  });
+
   it("routes every authenticated role into the unified workspace", () => {
     assert.equal(workspaceHome(creator()), "/workspace");
     assert.equal(workspaceHome(buyer()), "/workspace");

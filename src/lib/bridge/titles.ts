@@ -169,7 +169,16 @@ export const getTitle = createServerFn({ method: "GET" })
     assertNotDevUser(context.userId);
     const actor = await requireActor(context.userId);
     const title = await loadTitle(data.id);
-    if (!title || !canReadTitle(actor, title)) throw new Error("Not found");
+    if (!title || !canReadTitle(actor, title)) {
+      await writeAudit({
+        actorUserId: actor.userId,
+        action: "title.read_denied",
+        entityType: "bridge_title",
+        entityId: data.id,
+        metadata: { found: Boolean(title) },
+      });
+      throw new Error("Not found");
+    }
     const sql = await getSql();
     const events = await sql<{
       from_status: string | null;

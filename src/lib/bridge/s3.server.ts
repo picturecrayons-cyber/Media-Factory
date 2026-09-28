@@ -43,7 +43,11 @@ export async function verifyObject(key: string) {
   const { s3, bucket } = client();
   const result = await s3.send(new HeadObjectCommand({ Bucket: bucket, Key: key }));
   if (!result.ContentLength || result.ContentLength <= 0) throw new Error("Uploaded object is empty");
-  return { byteSize: result.ContentLength, contentType: result.ContentType ?? null };
+  return {
+    byteSize: result.ContentLength,
+    contentType: result.ContentType ?? null,
+    etag: result.ETag?.replaceAll('"', "") ?? null,
+  };
 }
 
 export function titleAssetKey(opts: { ownerUserId: string; titleId: string; kind: string; filename: string }) {

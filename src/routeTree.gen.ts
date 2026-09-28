@@ -11,12 +11,14 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AccountRouteImport } from './routes/account'
+import { Route as AdminRouteImport } from './routes/admin'
 import { Route as BuyerRouteImport } from './routes/buyer'
 import { Route as CreatorRouteImport } from './routes/creator'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
 import { Route as InternalRouteImport } from './routes/internal'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as LoopCmsRouteImport } from './routes/loop-cms'
 import { Route as OnboardingRouteImport } from './routes/onboarding'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as SignupRouteImport } from './routes/signup'
@@ -38,6 +40,11 @@ const IndexRoute = IndexRouteImport.update({
 const AccountRoute = AccountRouteImport.update({
   id: '/account',
   path: '/account',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminRoute = AdminRouteImport.update({
+  id: '/admin',
+  path: '/admin',
   getParentRoute: () => rootRouteImport,
 } as any)
 const BuyerRoute = BuyerRouteImport.update({
@@ -68,6 +75,11 @@ const InternalRoute = InternalRouteImport.update({
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LoopCmsRoute = LoopCmsRouteImport.update({
+  id: '/loop-cms',
+  path: '/loop-cms',
   getParentRoute: () => rootRouteImport,
 } as any)
 const OnboardingRoute = OnboardingRouteImport.update({
@@ -134,12 +146,14 @@ const ApiRazorpayWebhookRoute = ApiRazorpayWebhookRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/account': typeof AccountRoute
+  '/admin': typeof AdminRoute
   '/buyer': typeof BuyerRoute
   '/creator': typeof CreatorRoute
   '/dashboard': typeof DashboardRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/internal': typeof InternalRoute
   '/login': typeof LoginRoute
+  '/loop-cms': typeof LoopCmsRoute
   '/onboarding': typeof OnboardingRoute
   '/reset-password': typeof ResetPasswordRoute
   '/signup': typeof SignupRoute
@@ -156,12 +170,14 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/account': typeof AccountRoute
+  '/admin': typeof AdminRoute
   '/buyer': typeof BuyerRoute
   '/creator': typeof CreatorRoute
   '/dashboard': typeof DashboardRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/internal': typeof InternalRoute
   '/login': typeof LoginRoute
+  '/loop-cms': typeof LoopCmsRoute
   '/onboarding': typeof OnboardingRoute
   '/reset-password': typeof ResetPasswordRoute
   '/signup': typeof SignupRoute
@@ -179,12 +195,14 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/account': typeof AccountRoute
+  '/admin': typeof AdminRoute
   '/buyer': typeof BuyerRoute
   '/creator': typeof CreatorRoute
   '/dashboard': typeof DashboardRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/internal': typeof InternalRoute
   '/login': typeof LoginRoute
+  '/loop-cms': typeof LoopCmsRoute
   '/onboarding': typeof OnboardingRoute
   '/reset-password': typeof ResetPasswordRoute
   '/signup': typeof SignupRoute
@@ -203,12 +221,14 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/account'
+    | '/admin'
     | '/buyer'
     | '/creator'
     | '/dashboard'
     | '/forgot-password'
     | '/internal'
     | '/login'
+    | '/loop-cms'
     | '/onboarding'
     | '/reset-password'
     | '/signup'
@@ -225,12 +245,14 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/account'
+    | '/admin'
     | '/buyer'
     | '/creator'
     | '/dashboard'
     | '/forgot-password'
     | '/internal'
     | '/login'
+    | '/loop-cms'
     | '/onboarding'
     | '/reset-password'
     | '/signup'
@@ -247,12 +269,14 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/account'
+    | '/admin'
     | '/buyer'
     | '/creator'
     | '/dashboard'
     | '/forgot-password'
     | '/internal'
     | '/login'
+    | '/loop-cms'
     | '/onboarding'
     | '/reset-password'
     | '/signup'
@@ -270,12 +294,14 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AccountRoute: typeof AccountRoute
+  AdminRoute: typeof AdminRoute
   BuyerRoute: typeof BuyerRoute
   CreatorRoute: typeof CreatorRoute
   DashboardRoute: typeof DashboardRoute
   ForgotPasswordRoute: typeof ForgotPasswordRoute
   InternalRoute: typeof InternalRoute
   LoginRoute: typeof LoginRoute
+  LoopCmsRoute: typeof LoopCmsRoute
   OnboardingRoute: typeof OnboardingRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
   SignupRoute: typeof SignupRoute
@@ -304,6 +330,13 @@ declare module '@tanstack/react-router' {
       path: '/account'
       fullPath: '/account'
       preLoaderRoute: typeof AccountRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin': {
+      id: '/admin'
+      path: '/admin'
+      fullPath: '/admin'
+      preLoaderRoute: typeof AdminRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/buyer': {
@@ -346,6 +379,13 @@ declare module '@tanstack/react-router' {
       path: '/login'
       fullPath: '/login'
       preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/loop-cms': {
+      id: '/loop-cms'
+      path: '/loop-cms'
+      fullPath: '/loop-cms'
+      preLoaderRoute: typeof LoopCmsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/onboarding': {
@@ -438,12 +478,14 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AccountRoute: AccountRoute,
+  AdminRoute: AdminRoute,
   BuyerRoute: BuyerRoute,
   CreatorRoute: CreatorRoute,
   DashboardRoute: DashboardRoute,
   ForgotPasswordRoute: ForgotPasswordRoute,
   InternalRoute: InternalRoute,
   LoginRoute: LoginRoute,
+  LoopCmsRoute: LoopCmsRoute,
   OnboardingRoute: OnboardingRoute,
   ResetPasswordRoute: ResetPasswordRoute,
   SignupRoute: SignupRoute,
