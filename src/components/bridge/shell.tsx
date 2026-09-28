@@ -45,8 +45,9 @@ function SidebarLink({ item }: { item: NavItem }) {
 
 export function BrandMark({ className }: { className?: string }) {
   return (
-    <Link to="/" className={cn("inline-flex items-center", className)} aria-label="Crayons Bridge home">
-      <img src="/brand/logo.png" alt="Crayons Bridge" className="h-10 w-auto object-contain" />
+    <Link to="/" className={cn("inline-flex items-center gap-2 font-display text-base font-semibold tracking-tight text-fg", className)} aria-label="Crayons Bridge home">
+      <span aria-hidden="true" className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-accent text-sm font-bold text-accent-fg">C</span>
+      <span>CRAYONS <span className="text-accent">BRIDGE</span></span>
     </Link>
   );
 }
