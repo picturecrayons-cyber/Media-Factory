@@ -1,6 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { randomBytes } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import { ASSET_KINDS } from "./types";
@@ -95,10 +95,16 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
     }
     if (asset.byte_size != null) return { assetId: asset.id, byteSize: Number(asset.byte_size), verified: true };
 
-    const { verifyObject } = await import("./s3.server");
+    const { verifyObject, sealVerifiedObject } = await import("./s3.server");
     const object = await verifyObject(asset.s3_key);
     if (data.expectedByteSize != null && object.byteSize !== data.expectedByteSize) {
       throw new Error("Uploaded object size does not match the file that was sent");
+    }
+    if (!object.etag) throw new Error("Object ETag is required for immutable verification");
+    const sealedKey = `${asset.s3_key}.verified/${randomUUID()}`;
+    const sealed = await sealVerifiedObject(asset.s3_key, sealedKey, object.etag);
+    if (sealed.byteSize !== object.byteSize || sealed.etag !== object.etag) {
+      throw new Error("Verified copy differs from the uploaded object");
     }
     const confirmed = await persistVerifiedAsset(sql, {
       assetId: asset.id,
@@ -106,9 +112,11 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
       internalActor: Boolean(actor.internalRole),
       titleId: title.id,
       kind: asset.kind,
-      byteSize: object.byteSize,
-      contentType: object.contentType,
-      checksum: object.etag,
+      byteSize: sealed.byteSize,
+      contentType: sealed.contentType,
+      checksum: sealed.etag,
+      sourceKey: asset.s3_key,
+      sealedKey,
     });
     if (!confirmed) {
       const current = await sql<{ byte_size: number | null }>`select byte_size from bridge_assets where id = ${asset.id}`;
