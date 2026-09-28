@@ -125,25 +125,6 @@ export const createTitle = createServerFn({ method: "POST" })
         ${data.year ?? null}, ${data.runtimeMinutes ?? null}, ${data.licensingFeePaise ?? 0}
       )
     `;
-    if (data.metadata) {
-      await sql`
-        insert into bridge_title_metadata (
-          title_id, content_type, country, release_date, director, producer, cast_text
-        ) values (
-          ${id}, ${data.metadata.contentType ?? null}, ${data.metadata.country ?? null},
-          ${data.metadata.releaseDate ?? null}, ${data.metadata.director ?? null},
-          ${data.metadata.producer ?? null}, ${data.metadata.cast ?? null}
-        )
-        on conflict (title_id) do update set
-          content_type = excluded.content_type,
-          country = excluded.country,
-          release_date = excluded.release_date,
-          director = excluded.director,
-          producer = excluded.producer,
-          cast_text = excluded.cast_text,
-          updated_at = now()
-      `;
-    }
     await recordTransition({
       titleId: id,
       from: null,
