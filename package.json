@@ -22,7 +22,8 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "check:release-readiness": "node scripts/release-readiness.mjs",
-    "check:vercel-output": "node scripts/check-vercel-output.mjs"
+    "check:vercel-output": "node scripts/check-vercel-output.mjs",
+    "check:bridge-baseline": "node scripts/check-bridge-baseline.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.864.0",
