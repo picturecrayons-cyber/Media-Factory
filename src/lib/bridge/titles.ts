@@ -105,7 +105,7 @@ export const createTitle = createServerFn({ method: "POST" })
       language: z.string().min(2).max(40).optional(),
       year: z.number().int().min(1895).max(2100).optional(),
       runtimeMinutes: z.number().int().min(1).max(600).optional(),
-      licensingFeePaise: z.number().int().min(0).max(50_000_000).optional(),
+      licensingFeePaise: z.number().int().min(0).max(2_000_000_000).optional(),
       contentType: z.string().min(1).max(80).optional(),
       countryOfOrigin: z.string().max(80).optional(),
       releaseDate: z.string().max(40).optional(),
@@ -225,7 +225,7 @@ export const updateTitle = createServerFn({ method: "POST" })
       language: z.string().min(2).max(40).optional(),
       year: z.number().int().min(1895).max(2100).nullable().optional(),
       runtimeMinutes: z.number().int().min(1).max(600).nullable().optional(),
-      licensingFeePaise: z.number().int().min(0).max(50_000_000).optional(),
+      licensingFeePaise: z.number().int().min(0).max(2_000_000_000).optional(),
     }),
   )
   .handler(async ({ context, data }) => {
