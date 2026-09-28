@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: ["feat/crayons-bridge-production", "fix/bridge-production-gate-20260923", "fix/bridge-final-production-gate-20260924"]
+    branches: ["feat/crayons-bridge-production", "fix/bridge-production-gate-20260923", "fix/bridge-final-production-gate-20260924", "feat/bridge-supabase-auth-protected-routes-20260928", "feat/bridge-verified-gates-20260928"]
   pull_request:
-    branches: ["main"]
+    branches: ["main", "feat/bridge-supabase-auth-protected-routes-20260928"]
   workflow_dispatch:
 
 jobs:
