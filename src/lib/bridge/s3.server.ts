@@ -1,4 +1,4 @@
-import { GetObjectCommand, HeadObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { CopyObjectCommand, GetObjectCommand, HeadObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { bridgeEnv } from "./env";
 
@@ -53,4 +53,17 @@ export async function verifyObject(key: string) {
 export function titleAssetKey(opts: { ownerUserId: string; titleId: string; kind: string; filename: string }) {
   const safe = opts.filename.replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 80);
   return `bridge/${opts.ownerUserId}/${opts.titleId}/${opts.kind}/${Date.now()}-${safe}`;
+}
+
+/** Copy from a replaceable signed-PUT key into a key for which no PUT URL was issued. */
+export async function sealVerifiedObject(sourceKey: string, destinationKey: string, expectedEtag: string) {
+  const { s3, bucket } = client();
+  await s3.send(new CopyObjectCommand({
+    Bucket: bucket,
+    Key: destinationKey,
+    CopySource: `${bucket}/${sourceKey.split("/").map(encodeURIComponent).join("/")}`,
+    CopySourceIfMatch: expectedEtag,
+    MetadataDirective: "COPY",
+  }));
+  return verifyObject(destinationKey);
 }
