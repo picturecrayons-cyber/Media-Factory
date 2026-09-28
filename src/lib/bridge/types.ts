@@ -50,6 +50,10 @@ export type BridgeTitle = {
   licensingFeePaise: number;
   posterKey: string | null;
   masterKey: string | null;
+  contentType: string;
+  countryOfOrigin: string | null;
+  releaseDate: string | null;
+  credits: unknown;
   createdAt: string;
   updatedAt: string;
 };
