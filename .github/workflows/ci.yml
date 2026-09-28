@@ -20,6 +20,7 @@ jobs:
       # Generate TanStack's route tree before checking route type literals.
       - run: npm run build
       - run: node scripts/check-vercel-output.mjs
+      - run: node scripts/check-bridge-baseline.mjs
       - run: npm run typecheck
       - run: npx eslint "src/lib/bridge/**/*.{ts,tsx}" "src/routes/**/*.{ts,tsx}" "src/components/bridge/**/*.{ts,tsx}" "src/components/ui/**/*.tsx"
       - run: npm test
