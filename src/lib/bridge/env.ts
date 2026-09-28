@@ -19,7 +19,7 @@ export const bridgeEnv = {
   smtpUser: () => read("SMTP_USER") || read("HOSTINGER_SMTP_USER"),
   smtpPass: () => read("SMTP_PASS") || read("HOSTINGER_SMTP_PASS"),
   mailFrom: () => read("MAIL_FROM") || "abijithasokan@crayonspictures.com",
-  appUrl: () => read("APP_URL") || read("SITE_URL") || "https://bridge.crayonspictures.com",
+  appUrl: () => read("APP_URL") || read("SITE_URL") || "https://bridge-kappa-six.vercel.app",
   databaseUrl: () => read("DATABASE_URL") || read("POSTGRES_URL"),
 };
 
