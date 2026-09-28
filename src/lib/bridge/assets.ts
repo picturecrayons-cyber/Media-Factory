@@ -69,6 +69,62 @@ export const requestAssetUpload = createServerFn({ method: "POST" })
     return { assetId: id, ...signed };
   });
 
+export const confirmAssetUpload = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({ assetId: z.string().min(8) }))
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireActor(context.userId);
+    assertPermission(actor, "asset.sign_upload");
+    const sql = await getSql();
+    const rows = await sql<{
+      id: string;
+      title_id: string;
+      kind: string;
+      s3_key: string;
+      content_type: string | null;
+      byte_size: number | null;
+      created_by: string;
+    }>`
+      select id, title_id, kind, s3_key, content_type, byte_size, created_by
+      from bridge_assets where id = ${data.assetId} limit 1
+    `;
+    const asset = rows[0];
+    if (!asset) throw new Error("Not found");
+    if (!asset.byte_size || asset.byte_size <= 0) throw new Error("Asset upload is not verified");
+    const title = await loadTitle(asset.title_id);
+    if (!title) throw new Error("Not found");
+    if (asset.created_by !== actor.userId && title.ownerUserId !== actor.userId && !actor.internalRole) {
+      throw new Error("Forbidden");
+    }
+    const { verifyObject } = await import("./s3.server");
+    const verified = await verifyObject(asset.s3_key);
+    await sql`
+      update bridge_assets
+      set byte_size = ${verified.byteSize},
+          content_type = coalesce(${verified.contentType}, content_type)
+      where id = ${asset.id}
+    `;
+    await writeAudit({
+      actorUserId: actor.userId,
+      action: "asset.upload_verified",
+      entityType: "bridge_asset",
+      entityId: asset.id,
+      metadata: {
+        titleId: title.id,
+        kind: asset.kind,
+        byteSize: verified.byteSize,
+        contentType: verified.contentType,
+      },
+    });
+    return {
+      assetId: asset.id,
+      verified: true,
+      byteSize: verified.byteSize,
+      contentType: verified.contentType,
+    };
+  });
+
 export const requestAssetDownload = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(z.object({ assetId: z.string().min(8) }))
@@ -82,8 +138,9 @@ export const requestAssetDownload = createServerFn({ method: "POST" })
       title_id: string;
       kind: string;
       s3_key: string;
+      byte_size: number | null;
     }>`
-      select id, title_id, kind, s3_key from bridge_assets where id = ${data.assetId} limit 1
+      select id, title_id, kind, s3_key, byte_size from bridge_assets where id = ${data.assetId} limit 1
     `;
     const asset = rows[0];
     if (!asset) throw new Error("Not found");
