@@ -5,6 +5,7 @@ import { getSql } from "@/lib/db";
 import { ACCOUNT_TYPES, INTERNAL_ROLES } from "./types";
 import { writeAudit } from "./audit";
 import { loadActor } from "./session";
+import { verificationProfileId } from "./verification-profile-id";
 import { assertPermission, workspaceHome } from "./rbac";
 import { createHash, randomBytes } from "node:crypto";
 import { bridgeEnv } from "./env";
@@ -32,7 +33,7 @@ export const syncSupabaseSessionUser = createServerFn({ method: "POST" })
 
     if (existing) {
       if (!existing.emailVerified) {
-        await sql`update bridge_profiles set email_verified = true, updated_at = now() where user_id = ${context.userId}`;
+        await sql`update bridge_profiles set email_verified = true, updated_at = now() where user_id = ${existing.userId}`;
         const updated = await loadActor(context.userId);
         return { profile: updated, isComplete: true, home: workspaceHome(updated!) };
       }
@@ -119,6 +120,33 @@ export const completeOnboarding = createServerFn({ method: "POST" })
     });
     const actor = await loadActor(context.userId);
     if (!actor) throw new Error("Profile create failed");
+
+    const welcomeClaim = await sql<{ user_id: string }>`
+      update bridge_profiles
+      set welcome_email_sent_at = now(), updated_at = now()
+      where user_id = ${context.userId} and welcome_email_sent_at is null
+      returning user_id
+    `;
+    if (welcomeClaim.length > 0) {
+      try {
+        const { sendWelcomeEmail } = await import("./mail.server");
+        await sendWelcomeEmail({ to: email, name: data.displayName });
+        await writeAudit({
+          actorUserId: context.userId,
+          action: "email.welcome_sent",
+          entityType: "bridge_profile",
+          entityId: context.userId,
+        });
+      } catch (error) {
+        await sql`
+          update bridge_profiles
+          set welcome_email_sent_at = null, updated_at = now()
+          where user_id = ${context.userId}
+        `;
+        console.error("[bridge] Welcome email failed", error);
+      }
+    }
+
     return { home: workspaceHome(actor), profile: actor };
   });
 
@@ -127,14 +155,15 @@ export const requestEmailVerification = createServerFn({ method: "POST" })
   .handler(async ({ context }) => {
     assertNotDevUser(context.userId);
     const actor = await loadActor(context.userId);
-    const email = actor?.email || context.userEmail;
+    const profileId = verificationProfileId(actor);
+    const email = actor!.email;
     if (!email) throw new Error("No email on account");
     const { token, hash } = tokenPair();
     const id = randomBytes(16).toString("hex");
     const sql = await getSql();
     await sql`
       insert into bridge_email_challenges (id, user_id, email, purpose, token_hash, expires_at)
-      values (${id}, ${context.userId}, ${email}, ${"verify"}, ${hash}, ${new Date(Date.now() + 24 * 3600 * 1000).toISOString()})
+      values (${id}, ${profileId}, ${email}, ${"verify"}, ${hash}, ${new Date(Date.now() + 24 * 3600 * 1000).toISOString()})
     `;
     const url = `${bridgeEnv.appUrl()}/verify-email?token=${token}`;
     await mail({
@@ -146,7 +175,7 @@ export const requestEmailVerification = createServerFn({ method: "POST" })
       actorUserId: context.userId,
       action: "email.verification_requested",
       entityType: "bridge_profile",
-      entityId: context.userId,
+      entityId: profileId,
     });
     return { sent: true };
   });

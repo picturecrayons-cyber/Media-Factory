@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState, type FormEvent } from "react";
 import { resendConfirmationEmail, signUpWithEmail } from "@/lib/auth/client";
+import { classifySignupResult } from "@/lib/auth/signup-classification";
 import { BrandMark } from "@/components/bridge/shell";
 import { Button } from "@/components/ui/button";
 
@@ -61,19 +62,21 @@ function Signup() {
         accountType,
       });
 
-      // If session was returned immediately (e.g., auto-confirm is enabled in Supabase)
-      if (result.session) {
+      const signupState = classifySignupResult(result);
+      if (signupState === "session") {
         window.location.assign("/onboarding");
         return;
       }
-
-      // Otherwise show confirmation screen
+      if (signupState === "existing") {
+        setError("An account with this email address already exists. Please sign in or reset your password.");
+        return;
+      }
       setSubmittedEmail(email.trim());
     } catch (err: unknown) {
       console.error("[Signup error]", err);
       const message = err instanceof Error ? err.message : String(err);
       if (message.includes("User already registered") || message.includes("already registered")) {
-        setError("An account with this email address already exists. Please sign in.");
+        setError("An account with this email address already exists. Please sign in or reset your password.");
       } else if (message.includes("Password should be")) {
         setError(message);
       } else {

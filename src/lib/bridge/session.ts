@@ -14,7 +14,7 @@ export type BridgeActor = Actor & {
   organizationName: string | null;
 };
 
-function mapRow(r: {
+type BridgeProfileRow = {
   user_id: string;
   email: string;
   display_name: string;
@@ -22,7 +22,9 @@ function mapRow(r: {
   organization_name: string | null;
   internal_role: string | null;
   email_verified: boolean;
-}): BridgeActor {
+};
+
+function mapRow(r: BridgeProfileRow): BridgeActor {
   return {
     userId: r.user_id,
     email: r.email,
@@ -34,22 +36,35 @@ function mapRow(r: {
   };
 }
 
-export async function loadActor(userId: string): Promise<BridgeActor | null> {
-  assertNotDevUser(userId);
+async function loadActorByBridgeUserId(userId: string): Promise<BridgeActor | null> {
   const sql = await getSql();
-  const rows = await sql<{
-    user_id: string;
-    email: string;
-    display_name: string;
-    account_type: string;
-    organization_name: string | null;
-    internal_role: string | null;
-    email_verified: boolean;
-  }>`
+  const rows = await sql<BridgeProfileRow>`
     select user_id, email, display_name, account_type, organization_name, internal_role, email_verified
     from bridge_profiles where user_id = ${userId} limit 1
   `;
   return rows[0] ? mapRow(rows[0]) : null;
+}
+
+export async function resolveBridgeUserId(authUserId: string): Promise<string> {
+  assertNotDevUser(authUserId);
+  const sql = await getSql();
+  const direct = await sql<{ user_id: string }>`
+    select user_id from bridge_profiles where user_id = ${authUserId} limit 1
+  `;
+  if (direct[0]?.user_id) return direct[0].user_id;
+
+  const linked = await sql<{ bridge_user_id: string }>`
+    select bridge_user_id
+    from bridge_loop_identity_links
+    where auth_user_id = ${authUserId}::uuid
+    limit 1
+  `;
+  return linked[0]?.bridge_user_id ?? authUserId;
+}
+
+export async function loadActor(authUserId: string): Promise<BridgeActor | null> {
+  const bridgeUserId = await resolveBridgeUserId(authUserId);
+  return loadActorByBridgeUserId(bridgeUserId);
 }
 
 export async function requireActor(userId: string): Promise<BridgeActor> {
@@ -70,13 +85,11 @@ export const getBridgeSession = createServerFn({ method: "GET" })
     if (!actor) {
       return { userId: context.userId, profile: null, home: "/onboarding" };
     }
-    // A confirmed Supabase account can return through password sign-in without
-    // visiting the signup callback. Keep the Bridge profile in sync only after
-    // the server has verified Supabase's email confirmation timestamp.
     if (!actor.emailVerified && context.emailConfirmedAt) {
+      const bridgeUserId = await resolveBridgeUserId(context.userId);
       const sql = await getSql();
       await sql`update bridge_profiles set email_verified = true, updated_at = now()
-        where user_id = ${context.userId} and email_verified = false`;
+        where user_id = ${bridgeUserId} and email_verified = false`;
       actor = await loadActor(context.userId);
       if (!actor) throw new Error("Bridge profile could not be loaded");
     }
