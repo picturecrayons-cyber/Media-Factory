@@ -88,6 +88,19 @@ describe("supply gates", () => {
     assert.equal(deriveSupplyGates({ ...input, packageStates: ["AUTHORIZED", "READY"] }).PACKAGE.state, "PASS");
   });
 
+  it("preserves delivered package readiness and authorization", () => {
+    const input = { recordsAvailable: true, verifiedAssetCount: 1, qcStatus: "PASSED", legalStatus: "APPROVED", rights: [grant()], now };
+    const delivered = deriveSupplyGates({ ...input, packageStates: ["DELIVERED", "DELIVERED"] });
+    assert.equal(delivered.PACKAGE.state, "PASS");
+    assert.equal(delivered.PACKAGE.detail, "Package DELIVERED.");
+    assert.equal(delivered.AUTHORIZED.state, "PASS");
+
+    const mixed = deriveSupplyGates({ ...input, packageStates: ["AUTHORIZED", "DELIVERED"] });
+    assert.equal(mixed.PACKAGE.state, "PASS");
+    assert.equal(mixed.PACKAGE.detail, "Package AUTHORIZED.");
+    assert.equal(mixed.AUTHORIZED.state, "PASS");
+  });
+
   it("keeps legal failed even when QC passed", () => {
     const gates = deriveSupplyGates({
       recordsAvailable: true,
