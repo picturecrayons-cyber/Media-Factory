@@ -54,7 +54,7 @@ export const getTitleSupplyChain = createServerFn({ method: "GET" })
     let recordsAvailable = true;
     let qcStatus: string | null = null;
     let legalStatus: string | null = null;
-    let packageState: string | null = null;
+    let packageStates: string[] = [];
     let rights: RightsWindow[] = [];
     try {
       const qcRows = await sql<{ status: string }>`
@@ -90,10 +90,12 @@ export const getTitleSupplyChain = createServerFn({ method: "GET" })
       }));
       const packages = await sql<{ readiness_state: string }>`
         select readiness_state from bridge_destination_packages
-        where title_id = ${title.id}
-        order by package_version desc limit 1
+        where title_id = ${title.id} and package_version = (
+          select max(p.package_version) from bridge_destination_packages p
+          where p.title_id = ${title.id} and p.destination = bridge_destination_packages.destination
+        )
       `;
-      packageState = packages[0]?.readiness_state ?? null;
+      packageStates = packages.map((row) => row.readiness_state);
     } catch (error) {
       const code = (error as { code?: string }).code;
       if (code !== "42P01") throw error;
@@ -101,7 +103,7 @@ export const getTitleSupplyChain = createServerFn({ method: "GET" })
       qcStatus = null;
       legalStatus = null;
       rights = [];
-      packageState = null;
+      packageStates = [];
     }
 
     return {
@@ -110,14 +112,14 @@ export const getTitleSupplyChain = createServerFn({ method: "GET" })
       qcStatus,
       legalStatus,
       rightsCount: rights.length,
-      packageState,
+      packageState: packageStates.length === 1 ? packageStates[0] : null,
       gates: deriveSupplyGates({
         recordsAvailable,
         verifiedAssetCount,
         qcStatus,
         legalStatus,
         rights,
-        packageState,
+        packageStates,
       }),
     };
   });
