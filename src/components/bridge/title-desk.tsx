@@ -49,6 +49,14 @@ export function CreateTitleForm() {
   const [name, setName] = useState("");
   const [nameMl, setNameMl] = useState("");
   const [synopsis, setSynopsis] = useState("");
+  const [language, setLanguage] = useState("Malayalam");
+  const [contentType, setContentType] = useState("Feature Film");
+  const [country, setCountry] = useState("India");
+  const [releaseDate, setReleaseDate] = useState("");
+  const [runtimeMinutes, setRuntimeMinutes] = useState("");
+  const [director, setDirector] = useState("");
+  const [producer, setProducer] = useState("");
+  const [cast, setCast] = useState("");
   const [year, setYear] = useState("");
   const [fee, setFee] = useState("");
   const mut = useMutation({
@@ -58,8 +66,18 @@ export function CreateTitleForm() {
           name,
           nameMl: nameMl || undefined,
           synopsis: synopsis || undefined,
+          language: language || undefined,
           year: year ? Number(year) : undefined,
+          runtimeMinutes: runtimeMinutes ? Number(runtimeMinutes) : undefined,
           licensingFeePaise: fee ? Math.round(Number(fee) * 100) : undefined,
+          metadata: {
+            contentType: contentType || undefined,
+            country: country || undefined,
+            releaseDate: releaseDate || undefined,
+            director: director || undefined,
+            producer: producer || undefined,
+            cast: cast || undefined,
+          },
         },
       }),
     onSuccess: (res) => {
@@ -101,6 +119,74 @@ export function CreateTitleForm() {
           value={year}
           onChange={(e) => setYear(e.target.value)}
           className="mt-1 h-11 w-full rounded-sm border border-line-strong bg-elevated px-3"
+        />
+      </label>
+      <label className="text-sm">
+        Content type
+        <input
+          value={contentType}
+          onChange={(e) => setContentType(e.target.value)}
+          className="mt-1 h-11 w-full rounded-sm border border-line-strong bg-elevated px-3"
+        />
+      </label>
+      <label className="text-sm">
+        Language
+        <input
+          value={language}
+          onChange={(e) => setLanguage(e.target.value)}
+          className="mt-1 h-11 w-full rounded-sm border border-line-strong bg-elevated px-3"
+        />
+      </label>
+      <label className="text-sm">
+        Country
+        <input
+          value={country}
+          onChange={(e) => setCountry(e.target.value)}
+          className="mt-1 h-11 w-full rounded-sm border border-line-strong bg-elevated px-3"
+        />
+      </label>
+      <label className="text-sm">
+        Release date
+        <input
+          type="date"
+          value={releaseDate}
+          onChange={(e) => setReleaseDate(e.target.value)}
+          className="mt-1 h-11 w-full rounded-sm border border-line-strong bg-elevated px-3"
+        />
+      </label>
+      <label className="text-sm">
+        Runtime (minutes)
+        <input
+          inputMode="numeric"
+          value={runtimeMinutes}
+          onChange={(e) => setRuntimeMinutes(e.target.value)}
+          className="mt-1 h-11 w-full rounded-sm border border-line-strong bg-elevated px-3"
+        />
+      </label>
+      <label className="text-sm">
+        Director
+        <input
+          value={director}
+          onChange={(e) => setDirector(e.target.value)}
+          className="mt-1 h-11 w-full rounded-sm border border-line-strong bg-elevated px-3"
+        />
+      </label>
+      <label className="text-sm">
+        Producer / Production
+        <input
+          value={producer}
+          onChange={(e) => setProducer(e.target.value)}
+          className="mt-1 h-11 w-full rounded-sm border border-line-strong bg-elevated px-3"
+        />
+      </label>
+      <label className="text-sm sm:col-span-2">
+        Cast
+        <textarea
+          value={cast}
+          onChange={(e) => setCast(e.target.value)}
+          rows={2}
+          placeholder="Comma-separated names"
+          className="mt-1 w-full rounded-sm border border-line-strong bg-elevated px-3 py-2"
         />
       </label>
       <label className="text-sm sm:col-span-2">
