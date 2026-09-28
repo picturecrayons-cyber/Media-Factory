@@ -43,21 +43,9 @@ export async function getSupabaseSession(): Promise<Session | null> {
   return sessionPromise;
 }
 
-export function getBearerToken(): string | null {
-  if (cachedSession?.access_token) return cachedSession.access_token;
-  if (typeof window !== "undefined") {
-    // Check Supabase's local storage key
-    try {
-      const stored = window.localStorage.getItem("crayons-bridge.sb-auth-token");
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (parsed?.access_token) return parsed.access_token;
-      }
-    } catch {
-      // ignore
-    }
-  }
-  return null;
+export async function getBearerToken(): Promise<string | null> {
+  const session = await getSupabaseSession();
+  return session?.access_token ?? null;
 }
 
 export async function signUpWithEmail(input: {
