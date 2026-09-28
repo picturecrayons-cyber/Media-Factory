@@ -32,7 +32,7 @@ export const syncSupabaseSessionUser = createServerFn({ method: "POST" })
 
     if (existing) {
       if (!existing.emailVerified) {
-        await sql`update bridge_profiles set email_verified = true, updated_at = now() where user_id = ${context.userId}`;
+        await sql`update bridge_profiles set email_verified = true, updated_at = now() where user_id = ${existing.userId}`;
         const updated = await loadActor(context.userId);
         return { profile: updated, isComplete: true, home: workspaceHome(updated!) };
       }
@@ -127,14 +127,15 @@ export const requestEmailVerification = createServerFn({ method: "POST" })
   .handler(async ({ context }) => {
     assertNotDevUser(context.userId);
     const actor = await loadActor(context.userId);
-    const email = actor?.email || context.userEmail;
+    if (!actor) throw new Error("Bridge profile required");
+    const email = actor.email;
     if (!email) throw new Error("No email on account");
     const { token, hash } = tokenPair();
     const id = randomBytes(16).toString("hex");
     const sql = await getSql();
     await sql`
       insert into bridge_email_challenges (id, user_id, email, purpose, token_hash, expires_at)
-      values (${id}, ${context.userId}, ${email}, ${"verify"}, ${hash}, ${new Date(Date.now() + 24 * 3600 * 1000).toISOString()})
+      values (${id}, ${actor.userId}, ${email}, ${"verify"}, ${hash}, ${new Date(Date.now() + 24 * 3600 * 1000).toISOString()})
     `;
     const url = `${bridgeEnv.appUrl()}/verify-email?token=${token}`;
     await mail({
@@ -146,7 +147,7 @@ export const requestEmailVerification = createServerFn({ method: "POST" })
       actorUserId: context.userId,
       action: "email.verification_requested",
       entityType: "bridge_profile",
-      entityId: context.userId,
+      entityId: actor.userId,
     });
     return { sent: true };
   });
