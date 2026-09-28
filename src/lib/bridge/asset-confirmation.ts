@@ -10,12 +10,14 @@ export async function persistVerifiedAsset(sql: Pick<Sql, "query">, opts: {
   byteSize: number;
   contentType: string | null;
   checksum: string | null;
+  sourceKey: string;
+  sealedKey: string;
 }): Promise<boolean> {
   if (!Number.isSafeInteger(opts.byteSize) || opts.byteSize <= 0) throw new Error("Uploaded object is empty");
   const rows = await sql.query<{ entity_id: string }>(`
     with verified as (
-      update bridge_assets a set byte_size = $1, content_type = coalesce($2, a.content_type)
-      where a.id = $3 and a.created_by = $4 and a.byte_size is null
+      update bridge_assets a set byte_size = $1, content_type = coalesce($2, a.content_type), s3_key = $7
+      where a.id = $3 and a.created_by = $4 and a.byte_size is null and a.s3_key = $8
         and exists (select 1 from bridge_titles t where t.id = a.title_id
           and ($5 or t.owner_user_id = $4) and t.status in ('DRAFT','UPLOADING','PREPARING'))
       returning a.id, a.title_id, a.kind, a.s3_key
@@ -42,6 +44,8 @@ export async function persistVerifiedAsset(sql: Pick<Sql, "query">, opts: {
       byteSize: opts.byteSize,
       checksum: opts.checksum,
     }),
+    opts.sealedKey,
+    opts.sourceKey,
   ]);
   return Boolean(rows[0]);
 }
