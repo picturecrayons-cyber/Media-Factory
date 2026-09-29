@@ -13,6 +13,7 @@ export const bridgeEnv = {
   awsRegion: () => read("AWS_REGION") || read("S3_REGION"),
   awsAccessKey: () => read("AWS_ACCESS_KEY_ID"),
   awsSecretKey: () => read("AWS_SECRET_ACCESS_KEY"),
+  awsRoleArn: () => read("AWS_ROLE_ARN"),
   s3Bucket: () => read("AWS_S3_MEDIA_BUCKET") || read("S3_BUCKET"),
   smtpHost: () => read("SMTP_HOST") || read("HOSTINGER_SMTP_HOST"),
   smtpPort: () => read("SMTP_PORT") || "587",
@@ -29,7 +30,7 @@ export function integrationStatus() {
     supabase: Boolean(bridgeEnv.supabaseUrl() && (bridgeEnv.supabaseAnon() || bridgeEnv.supabaseService())),
     razorpay: Boolean(bridgeEnv.razorpayKeyId() && bridgeEnv.razorpayKeySecret()),
     razorpayWebhook: Boolean(bridgeEnv.razorpayWebhookSecret()),
-    s3: Boolean(bridgeEnv.s3Bucket() && bridgeEnv.awsAccessKey() && bridgeEnv.awsSecretKey()),
+    s3: Boolean(bridgeEnv.s3Bucket() && (bridgeEnv.awsRoleArn() || (bridgeEnv.awsAccessKey() && bridgeEnv.awsSecretKey()))),
     mail: Boolean(bridgeEnv.smtpHost() && bridgeEnv.smtpUser() && bridgeEnv.smtpPass()),
   };
 }
