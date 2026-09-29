@@ -160,7 +160,6 @@ function AssetWorkspace({ titleId, tab, assets, uploadsOpen, onUploaded }: {
       await new Promise<void>((resolve, reject) => {
         const xhr = new XMLHttpRequest();
         xhr.open("PUT", signed.url);
-        for (const [key, value] of Object.entries(signed.headers ?? {})) xhr.setRequestHeader(key, String(value));
         xhr.upload.onprogress = (event) => { if (event.lengthComputable) setProgress(Math.round((event.loaded / event.total) * 100)); };
         xhr.onload = () => xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error(`Upload failed (HTTP ${xhr.status})`));
         xhr.onerror = () => reject(new Error("Upload failed before S3 confirmation"));
