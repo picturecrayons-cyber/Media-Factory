@@ -4,7 +4,7 @@ import { useState } from "react";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { getTitle } from "@/lib/bridge/titles";
-import { listTitleAssets } from "@/lib/bridge/assets";
+import { confirmAssetUpload, listTitleAssets, requestAssetDownload, requestAssetUpload } from "@/lib/bridge/assets";
 import { getLoopPublication } from "@/lib/bridge/loop-publication";
 import type { BridgeActor } from "@/lib/bridge/session";
 
@@ -114,6 +114,9 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
             distributionReady={distributionReady}
             packageReady={packageReady}
             loopStatus={pub?.authorizationStatus}
+            titleId={id}
+            assets={assets}
+            onAssetsChanged={() => assetsQ.refetch()}
           />
 
           <section className="grid gap-4 md:grid-cols-2">
@@ -181,11 +184,49 @@ function CreatorStep({ n, label, state }: { n: number; label: string; state: "do
 }
 
 function CreatorPanel({
-  activeTab, assetsCount, titleStatus, hasMaster, distributionReady, packageReady, loopStatus,
+  activeTab, assetsCount, titleStatus, hasMaster, distributionReady, packageReady, loopStatus, titleId, assets, onAssetsChanged,
 }: {
   activeTab: CreatorTab; assetsCount: number; titleStatus: string; hasMaster: boolean;
   distributionReady: boolean; packageReady: boolean; loopStatus?: string | null;
+  titleId: string;
+  assets: Array<{ id: string; kind: string; contentType: string | null; byteSize: number | null; verified: boolean }>;
+  onAssetsChanged: () => Promise<unknown> | unknown;
 }) {
+  const [uploading, setUploading] = useState(false);
+  const [uploadMessage, setUploadMessage] = useState<string | null>(null);
+
+  async function uploadFile(file: File) {
+    setUploading(true);
+    setUploadMessage("Preparing secure upload…");
+    try {
+      const signed = await requestAssetUpload({ data: {
+        titleId,
+        kind: "master",
+        filename: file.name,
+        contentType: file.type || "application/octet-stream",
+      } });
+      setUploadMessage("Uploading to private object storage…");
+      const put = await fetch(signed.url, {
+        method: signed.method,
+        body: file,
+        headers: { "content-type": file.type || "application/octet-stream" },
+      });
+      if (!put.ok) throw new Error(`Upload failed (${put.status})`);
+      setUploadMessage("Verifying and sealing master…");
+      await confirmAssetUpload({ data: { assetId: signed.assetId, expectedByteSize: file.size } });
+      await onAssetsChanged();
+      setUploadMessage("Master verified and sealed.");
+    } catch (error) {
+      setUploadMessage(error instanceof Error ? error.message : "Upload failed");
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function downloadAsset(assetId: string) {
+    const signed = await requestAssetDownload({ data: { assetId } });
+    window.location.assign(signed.url);
+  }
   if (activeTab === "Overview") {
     return (
       <section className="rounded-2xl border border-line bg-surface p-6">
@@ -216,13 +257,51 @@ function CreatorPanel({
       <h2 className="mt-2 font-display text-2xl font-semibold text-fg">{panel.title}</h2>
       <p className="mt-2 max-w-3xl text-sm leading-6 text-muted">{panel.copy}</p>
       {activeTab === "Files" && (
-        <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {["Master Video", "Audio & Dubs", "Subtitles & Accessibility", "Artwork", "Documents"].map((name) => (
-            <div key={name} className="rounded-xl border border-line bg-elevated/40 p-4">
-              <p className="text-sm font-semibold text-fg">{name}</p>
-              <p className="mt-1 text-xs text-muted">Not started</p>
+        <div className="mt-6 space-y-4">
+          <div className="rounded-2xl border border-line bg-elevated/40 p-5">
+            <p className="text-sm font-semibold text-fg">Master Video</p>
+            <p className="mt-1 text-xs text-muted">Upload directly to the private Bridge object store. Bridge verifies the object before accepting it.</p>
+            <label className="mt-4 inline-flex cursor-pointer rounded-full bg-fg px-5 py-2.5 text-sm font-semibold text-bg">
+              {uploading ? "Uploading…" : "Choose Master Film"}
+              <input
+                className="sr-only"
+                type="file"
+                accept="video/*,.mxf,.mov,.mp4"
+                disabled={uploading}
+                onChange={(event) => {
+                  const file = event.currentTarget.files?.[0];
+                  if (file) void uploadFile(file);
+                  event.currentTarget.value = "";
+                }}
+              />
+            </label>
+            {uploadMessage && <p className="mt-3 text-xs text-muted">{uploadMessage}</p>}
+          </div>
+          {assets.length > 0 && (
+            <div className="space-y-2">
+              {assets.map((asset) => (
+                <div key={asset.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-surface p-4">
+                  <div>
+                    <p className="text-sm font-semibold text-fg">{asset.kind}</p>
+                    <p className="mt-1 text-xs text-muted">{asset.verified ? "Verified" : "Processing"}{asset.byteSize ? ` · ${asset.byteSize.toLocaleString()} bytes` : ""}</p>
+                  </div>
+                  {asset.verified && (
+                    <button type="button" onClick={() => void downloadAsset(asset.id)} className="rounded-full border border-line px-4 py-2 text-xs font-semibold text-fg">
+                      Download
+                    </button>
+                  )}
+                </div>
+              ))}
             </div>
-          ))}
+          )}
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {["Audio & Dubs", "Subtitles & Accessibility", "Artwork", "Documents"].map((name) => (
+              <div key={name} className="rounded-xl border border-line bg-elevated/40 p-4">
+                <p className="text-sm font-semibold text-fg">{name}</p>
+                <p className="mt-1 text-xs text-muted">Available after master ingest.</p>
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </section>
