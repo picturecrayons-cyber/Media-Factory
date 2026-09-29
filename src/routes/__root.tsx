@@ -22,6 +22,24 @@ export const Route = createRootRoute({
         content:
           "Crayons Bridge — title record, rights, and licensing OS. StreamVista OPC Pvt Ltd.",
       },
+      { property: "og:type", content: "website" },
+      { property: "og:site_name", content: "Crayons Bridge" },
+      { property: "og:title", content: "Crayons Bridge" },
+      {
+        property: "og:description",
+        content:
+          "Upload, prepare, license, deliver, and earn with Crayons Bridge — the media supply chain, rights, and licensing OS from StreamVista OPC Pvt Ltd.",
+      },
+      { property: "og:url", content: "https://bridge.crayonspictures.com/" },
+      { property: "og:image", content: "https://bridge.crayonspictures.com/og.jpg" },
+      { name: "twitter:card", content: "summary_large_image" },
+      { name: "twitter:title", content: "Crayons Bridge" },
+      {
+        name: "twitter:description",
+        content:
+          "Upload, prepare, license, deliver, and earn with Crayons Bridge.",
+      },
+      { name: "twitter:image", content: "https://bridge.crayonspictures.com/og.jpg" },
     ],
     links: [
       { rel: "icon", type: "image/svg+xml", href: "/favicon.svg" },
