@@ -61,7 +61,21 @@ export const registerDmcaAccount = createServerFn({ method: "POST" })
     }
 
     const result = publicResult(parsed, response.status);
+    const registrationId = crypto.randomUUID();
     const sql = await getSql();
+
+    await sql`
+      insert into bridge_dmca_registrations (
+        id, user_id, email, company_name, dmca_account_id, status
+      ) values (
+        ${registrationId},
+        ${actor.userId},
+        ${actor.email},
+        ${data.companyName},
+        ${result.id},
+        ${result.ok ? "submitted" : "failed"}
+      )
+    `;
 
     await sql`
       insert into bridge_audit_logs (
@@ -69,8 +83,8 @@ export const registerDmcaAccount = createServerFn({ method: "POST" })
       ) values (
         ${actor.userId},
         ${result.ok ? "dmca_registration_submitted" : "dmca_registration_failed"},
-        "dmca_registration",
-        ${result.id},
+        ${"dmca_registration"},
+        ${registrationId},
         ${JSON.stringify({
           email: actor.email,
           companyName: data.companyName,
