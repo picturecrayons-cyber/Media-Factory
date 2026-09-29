@@ -1,7 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState, type FormEvent } from "react";
-import { hasSupabaseRecoverySession, markRecoverySession, updatePassword } from "@/lib/auth/client";
-import { supabase } from "@/lib/supabase";
+import { hasSupabaseRecoverySession, updatePassword } from "@/lib/auth/client";
 import { BrandMark } from "@/components/bridge/shell";
 import { Button } from "@/components/ui/button";
 
@@ -21,19 +20,7 @@ function Reset() {
     let alive = true;
     async function checkSession() {
       if (typeof window === "undefined") return;
-      let ready = await hasSupabaseRecoverySession();
-      if (!ready) {
-        const { data } = await supabase.auth.getSession();
-        const hash = window.location.hash;
-        const search = window.location.search;
-        if (
-          data.session?.access_token &&
-          (hash.includes("type=recovery") || hash.includes("access_token=") || search.includes("type=recovery"))
-        ) {
-          markRecoverySession(data.session.access_token);
-          ready = true;
-        }
-      }
+      const ready = await hasSupabaseRecoverySession();
       if (alive) setSessionReady(ready);
     }
 

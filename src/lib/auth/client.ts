@@ -7,7 +7,8 @@ export { GROK_PROVIDERS };
 
 export type SupabaseUser = User;
 export type SupabaseSession = Session;
-const RECOVERY_MARKER_KEY = "crayons-bridge.supabase-recovery-session";
+export { getPasswordRecoveryRedirectUrl, RECOVERY_MARKER_KEY } from "./recovery-url";
+import { getPasswordRecoveryRedirectUrl, RECOVERY_MARKER_KEY } from "./recovery-url";
 
 export function markRecoverySession(accessToken: string): void {
   if (typeof window !== "undefined") window.sessionStorage.setItem(RECOVERY_MARKER_KEY, accessToken);
@@ -112,8 +113,7 @@ export async function signInWithEmail(email: string, password: string) {
 }
 
 export async function resetPasswordForEmail(email: string) {
-  const origin = typeof window !== "undefined" ? window.location.origin : "https://bridge.crayonspictures.com";
-  const redirectTo = `${origin}/auth/callback?type=recovery`;
+  const redirectTo = getPasswordRecoveryRedirectUrl();
 
   const { data, error } = await supabase.auth.resetPasswordForEmail(email, {
     redirectTo,
