@@ -40,14 +40,14 @@ describe("PRD authorization matrix", () => {
     assert.equal(hasPermission(b, "payment.create_order"), true);
   });
 
-  it("admin can operate catalog but cannot impersonate creator upload/create permissions", () => {
+  it("admin combines internal operator permissions with its account-type permissions", () => {
     const a = admin();
     assert.equal(hasPermission(a, "title.read_catalog"), true);
     assert.equal(hasPermission(a, "title.qc_review"), true);
     assert.equal(hasPermission(a, "title.rights_review"), true);
     assert.equal(hasPermission(a, "users.invite_internal"), true);
-    assert.equal(hasPermission(a, "title.create"), false);
-    assert.equal(hasPermission(a, "asset.sign_upload"), false);
+    assert.equal(hasPermission(a, "title.create"), true);
+    assert.equal(hasPermission(a, "asset.sign_upload"), true);
     assert.equal(canReadTitle(a, { ownerUserId: "other-org-user", status: "DRAFT" }), true);
   });
 
