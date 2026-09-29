@@ -226,6 +226,45 @@ export const confirmEmailVerification = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+export const listAdminProfiles = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }) => {
+    assertNotDevUser(context.userId);
+    const actor = await loadActor(context.userId);
+    if (!actor || (actor.internalRole !== "admin" && actor.internalRole !== "super_admin")) {
+      throw new Error("Admin access required");
+    }
+    const sql = await getSql();
+    const rows = await sql<{
+      user_id: string;
+      email: string;
+      display_name: string;
+      account_type: string;
+      organization_name: string | null;
+      internal_role: string | null;
+      email_verified: boolean;
+      created_at: string | Date;
+    }>`
+      select user_id, email, display_name, account_type, organization_name,
+             internal_role, email_verified, created_at
+      from bridge_profiles
+      order by created_at desc
+      limit 200
+    `;
+    return {
+      profiles: rows.map((row) => ({
+        userId: row.user_id,
+        email: row.email,
+        displayName: row.display_name,
+        accountType: row.account_type,
+        organizationName: row.organization_name,
+        internalRole: row.internal_role,
+        emailVerified: Boolean(row.email_verified),
+        createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : String(row.created_at),
+      })),
+    };
+  });
+
 export const inviteInternalRole = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(z.object({ email: z.string().email(), role: z.enum(INTERNAL_ROLES) }))

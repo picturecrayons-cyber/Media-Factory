@@ -26,6 +26,10 @@ type TitleRow = {
   licensing_fee_paise: number;
   poster_key: string | null;
   master_key: string | null;
+  content_type: string;
+  country_of_origin: string | null;
+  release_date: string | Date | null;
+  credits: Array<{ role: string; name: string }>;
   created_at: string | Date;
   updated_at: string | Date;
 };
@@ -50,6 +54,10 @@ export function mapTitle(r: TitleRow): BridgeTitle {
     licensingFeePaise: Number(r.licensing_fee_paise ?? 0),
     posterKey: r.poster_key,
     masterKey: r.master_key,
+    contentType: r.content_type,
+    countryOfOrigin: r.country_of_origin,
+    releaseDate: r.release_date ? asIso(r.release_date) : null,
+    credits: r.credits,
     createdAt: asIso(r.created_at),
     updatedAt: asIso(r.updated_at),
   };
@@ -97,7 +105,13 @@ export const createTitle = createServerFn({ method: "POST" })
       language: z.string().min(2).max(40).optional(),
       year: z.number().int().min(1895).max(2100).optional(),
       runtimeMinutes: z.number().int().min(1).max(600).optional(),
-      licensingFeePaise: z.number().int().min(0).max(50_000_000).optional(),
+      licensingFeePaise: z.number().int().min(0).max(2_000_000_000).optional(),
+      contentType: z.string().min(1).max(80).optional(),
+      countryOfOrigin: z.string().max(80).optional(),
+      releaseDate: z.string().max(40).optional(),
+      director: z.string().max(160).optional(),
+      producer: z.string().max(200).optional(),
+      cast: z.array(z.string().min(1).max(160)).max(100).optional(),
     }),
   )
   .handler(async ({ context, data }) => {
@@ -110,11 +124,18 @@ export const createTitle = createServerFn({ method: "POST" })
     await sql`
       insert into bridge_titles (
         id, slug, name, name_ml, owner_user_id, owner_account_type, status,
-        synopsis, language, year, runtime_minutes, licensing_fee_paise
+        synopsis, language, year, runtime_minutes, licensing_fee_paise,
+        content_type, country_of_origin, release_date, credits
       ) values (
         ${id}, ${slug}, ${data.name}, ${data.nameMl ?? null}, ${actor.userId}, ${actor.accountType},
         ${"DRAFT"}, ${data.synopsis ?? ""}, ${data.language ?? "Malayalam"},
-        ${data.year ?? null}, ${data.runtimeMinutes ?? null}, ${data.licensingFeePaise ?? 0}
+        ${data.year ?? null}, ${data.runtimeMinutes ?? null}, ${data.licensingFeePaise ?? 0},
+        ${data.contentType ?? "FEATURE"}, ${data.countryOfOrigin ?? null},
+        ${data.releaseDate ?? null}, ${JSON.stringify([
+          ...(data.director ? [{ role: "Director", name: data.director }] : []),
+          ...(data.producer ? [{ role: "Producer", name: data.producer }] : []),
+          ...((data.cast ?? []).map((name) => ({ role: "Cast", name }))),
+        ])}::jsonb
       )
     `;
     await recordTransition({
@@ -204,7 +225,7 @@ export const updateTitle = createServerFn({ method: "POST" })
       language: z.string().min(2).max(40).optional(),
       year: z.number().int().min(1895).max(2100).nullable().optional(),
       runtimeMinutes: z.number().int().min(1).max(600).nullable().optional(),
-      licensingFeePaise: z.number().int().min(0).max(50_000_000).optional(),
+      licensingFeePaise: z.number().int().min(0).max(2_000_000_000).optional(),
     }),
   )
   .handler(async ({ context, data }) => {
