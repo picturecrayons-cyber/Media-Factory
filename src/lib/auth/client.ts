@@ -113,7 +113,7 @@ export async function signInWithEmail(email: string, password: string) {
 
 export async function resetPasswordForEmail(email: string) {
   const origin = typeof window !== "undefined" ? window.location.origin : "https://bridge.crayonspictures.com";
-  const redirectTo = `${origin}/reset-password`;
+  const redirectTo = `${origin}/auth/callback?type=recovery`;
 
   const { data, error } = await supabase.auth.resetPasswordForEmail(email, {
     redirectTo,
