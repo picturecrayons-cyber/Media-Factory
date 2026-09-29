@@ -1,7 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createRootRoute, HeadContent, Outlet, Scripts } from "@tanstack/react-router";
 import { AuthProvider } from "@/lib/auth/provider";
-import { PreviewHostBridge } from "@/components/preview-host-bridge";
 import { Toaster } from "sonner";
 import appCss from "../styles.css?url";
 
@@ -30,8 +29,8 @@ export const Route = createRootRoute({
         content:
           "Upload, prepare, license, deliver, and earn with Crayons Bridge — the media supply chain, rights, and licensing OS from StreamVista OPC Pvt Ltd.",
       },
-      { property: "og:url", content: "https://bridge.crayonspictures.com/" },
-      { property: "og:image", content: "https://bridge.crayonspictures.com/og.jpg" },
+      { property: "og:url", content: "https://crayonspictures.in/" },
+      { property: "og:image", content: "https://crayonspictures.in/og.jpg" },
       { name: "twitter:card", content: "summary_large_image" },
       { name: "twitter:title", content: "Crayons Bridge" },
       {
@@ -39,13 +38,11 @@ export const Route = createRootRoute({
         content:
           "Upload, prepare, license, deliver, and earn with Crayons Bridge.",
       },
-      { name: "twitter:image", content: "https://bridge.crayonspictures.com/og.jpg" },
+      { name: "twitter:image", content: "https://crayonspictures.in/og.jpg" },
     ],
     links: [
       { rel: "icon", type: "image/svg+xml", href: "/favicon.svg" },
       { rel: "stylesheet", href: appCss },
-      { rel: "manifest", href: "/__grok/manifest.webmanifest" },
-      { rel: "apple-touch-icon", href: "/__grok/icon-180.png" },
       { rel: "preconnect", href: "https://fonts.googleapis.com" },
       {
         rel: "stylesheet",
@@ -59,7 +56,6 @@ export const Route = createRootRoute({
         <HeadContent />
       </head>
       <body className="bg-bg text-fg antialiased">
-        <PreviewHostBridge />
         <QueryClientProvider client={queryClient}>
           <AuthProvider>
             <Outlet />
