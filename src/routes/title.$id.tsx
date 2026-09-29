@@ -1,11 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useRef, useState } from "react";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { StatusRail } from "@/components/bridge/status-rail";
 import { getTitle } from "@/lib/bridge/titles";
-import { listTitleAssets } from "@/lib/bridge/assets";
+import { confirmAssetUpload, listTitleAssets, requestAssetUpload } from "@/lib/bridge/assets";
 import { getLoopPublication } from "@/lib/bridge/loop-publication";
 import type { BridgeActor } from "@/lib/bridge/session";
 
@@ -29,6 +29,7 @@ function TitlePage() {
 
 function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
   const [activeTab, setActiveTab] = useState<WorkspaceTab>("Overview");
+  const queryClient = useQueryClient();
   const titleQ = useQuery({ queryKey: ["bridge-title", id], queryFn: () => getTitle({ data: { id } }) });
   const assetsQ = useQuery({ queryKey: ["bridge-assets", id], queryFn: () => listTitleAssets({ data: { titleId: id } }) });
   const pubQ = useQuery({ queryKey: ["loop-pub", id], queryFn: () => getLoopPublication({ data: { bridgeTitleId: id } }) });
@@ -81,12 +82,25 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">{activeTab}</p>
         <h2 className="mt-2 font-display text-2xl font-semibold text-fg">{workspaceHeading(activeTab)}</h2>
         <p className="mt-2 max-w-3xl text-sm leading-6 text-muted">{workspaceCopy(activeTab)}</p>
-        <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <Metric label="Private assets" value={String(assets.length)} />
-          <Metric label="Bridge lifecycle" value={title.status} />
-          <Metric label="Master" value={title.masterKey ? "VERIFIED" : "REQUIRED"} />
-          <Metric label="Crayons Loop" value={pub?.authorizationStatus?.toUpperCase() || "HOLD"} />
-        </div>
+        {isAssetTab(activeTab) ? (
+          <AssetWorkspace
+            titleId={id}
+            tab={activeTab}
+            assets={assets}
+            uploadsOpen={["DRAFT", "UPLOADING", "PREPARING"].includes(title.status)}
+            onUploaded={async () => {
+              await queryClient.invalidateQueries({ queryKey: ["bridge-assets", id] });
+              await queryClient.invalidateQueries({ queryKey: ["bridge-title", id] });
+            }}
+          />
+        ) : (
+          <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <Metric label="Private assets" value={String(assets.length)} />
+            <Metric label="Bridge lifecycle" value={title.status} />
+            <Metric label="Master" value={title.masterKey ? "VERIFIED" : "REQUIRED"} />
+            <Metric label="Crayons Loop" value={pub?.authorizationStatus?.toUpperCase() || "HOLD"} />
+          </div>
+        )}
       </section>
 
       <section className="grid gap-4 md:grid-cols-2">
@@ -95,6 +109,107 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
       </section>
     </div>
   );
+}
+
+type AssetTab = "Video" | "Audio & Dubs" | "Subtitles & Accessibility" | "Artwork" | "Documents";
+type UploadKind = "master" | "screener" | "subtitle" | "poster";
+
+const ASSET_OPTIONS: Record<AssetTab, Array<{ label: string; kind: UploadKind; accept: string }>> = {
+  Video: [
+    { label: "Master", kind: "master", accept: "video/*" },
+    { label: "Trailer / Screener", kind: "screener", accept: "video/*" },
+  ],
+  "Audio & Dubs": [
+    { label: "Audio / Dub / M&E / Descriptive Audio", kind: "screener", accept: "audio/*" },
+  ],
+  "Subtitles & Accessibility": [
+    { label: "Subtitle / SDH / CC / Forced Narrative", kind: "subtitle", accept: ".srt,.vtt,.ttml,.xml,text/*,application/ttml+xml" },
+  ],
+  Artwork: [
+    { label: "Poster / Artwork", kind: "poster", accept: "image/*" },
+  ],
+  Documents: [
+    { label: "Private document / rights evidence", kind: "screener", accept: ".pdf,.doc,.docx,image/*,application/pdf" },
+  ],
+};
+
+function isAssetTab(tab: WorkspaceTab): tab is AssetTab {
+  return tab === "Video" || tab === "Audio & Dubs" || tab === "Subtitles & Accessibility" || tab === "Artwork" || tab === "Documents";
+}
+
+function AssetWorkspace({ titleId, tab, assets, uploadsOpen, onUploaded }: {
+  titleId: string;
+  tab: AssetTab;
+  assets: Array<{ id: string; kind: string; contentType: string | null; byteSize: number | null; verified: boolean; createdAt: string }>;
+  uploadsOpen: boolean;
+  onUploaded: () => Promise<void>;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [optionIndex, setOptionIndex] = useState(0);
+  const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [message, setMessage] = useState<string | null>(null);
+  const options = ASSET_OPTIONS[tab];
+  const option = options[optionIndex] ?? options[0];
+
+  async function upload(file: File) {
+    if (!uploadsOpen || !option) return;
+    setBusy(true); setProgress(0); setMessage(null);
+    try {
+      const signed = await requestAssetUpload({ data: { titleId, kind: option.kind, filename: file.name, contentType: file.type || "application/octet-stream" } });
+      await new Promise<void>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open("PUT", signed.url);
+        for (const [key, value] of Object.entries(signed.headers ?? {})) xhr.setRequestHeader(key, String(value));
+        xhr.upload.onprogress = (event) => { if (event.lengthComputable) setProgress(Math.round((event.loaded / event.total) * 100)); };
+        xhr.onload = () => xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error(`Upload failed (HTTP ${xhr.status})`));
+        xhr.onerror = () => reject(new Error("Upload failed before S3 confirmation"));
+        xhr.send(file);
+      });
+      await confirmAssetUpload({ data: { assetId: signed.assetId, expectedByteSize: file.size } });
+      setProgress(100); setMessage(`${file.name} verified and sealed.`);
+      await onUploaded();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Upload failed");
+    } finally {
+      setBusy(false);
+      if (inputRef.current) inputRef.current.value = "";
+    }
+  }
+
+  const visible = assets.filter((asset) => {
+    if (tab === "Video") return asset.kind === "master" || asset.kind === "screener";
+    if (tab === "Subtitles & Accessibility") return asset.kind === "subtitle";
+    if (tab === "Artwork") return asset.kind === "poster";
+    return asset.kind === "screener";
+  });
+
+  return <div className="mt-6 space-y-5">
+    <div className="rounded-2xl border border-line bg-elevated/40 p-5">
+      <div className="flex flex-wrap items-end gap-3">
+        <label className="min-w-64 flex-1 text-xs font-semibold text-fg">Asset type
+          <select value={optionIndex} onChange={(e) => setOptionIndex(Number(e.target.value))} disabled={busy || !uploadsOpen} className="mt-2 w-full rounded-xl border border-line bg-surface px-3 py-3 text-sm">
+            {options.map((item, index) => <option key={item.label} value={index}>{item.label}</option>)}
+          </select>
+        </label>
+        <input ref={inputRef} type="file" accept={option.accept} disabled={busy || !uploadsOpen} className="hidden" onChange={(e) => { const file = e.target.files?.[0]; if (file) void upload(file); }} />
+        <button type="button" disabled={busy || !uploadsOpen} onClick={() => inputRef.current?.click()} className="rounded-xl bg-fg px-5 py-3 text-xs font-semibold text-bg disabled:cursor-not-allowed disabled:opacity-50">
+          {busy ? `Uploading ${progress}%` : "Add file"}
+        </button>
+      </div>
+      {!uploadsOpen && <p className="mt-3 text-xs text-muted">Uploads are locked after the preparing stage.</p>}
+      {busy && <div className="mt-4 h-2 overflow-hidden rounded-full bg-line"><div className="h-full bg-accent transition-all" style={{ width: `${progress}%` }} /></div>}
+      {message && <p role="status" className="mt-3 text-xs text-muted">{message}</p>}
+    </div>
+    <div className="space-y-2">
+      <h3 className="text-sm font-semibold text-fg">Verified private assets</h3>
+      {visible.length === 0 ? <p className="rounded-xl border border-dashed border-line p-4 text-xs text-muted">No files uploaded in this section.</p> :
+        visible.map((asset) => <div key={asset.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-surface p-4">
+          <div><p className="text-sm font-semibold text-fg">{asset.kind.toUpperCase()}</p><p className="mt-1 text-xs text-muted">{asset.contentType || "unknown type"} · {asset.byteSize ? `${(asset.byteSize / 1024 / 1024).toFixed(2)} MB` : "verifying"}</p></div>
+          <span className="rounded-full border border-line px-3 py-1 text-[10px] font-semibold text-muted">{asset.verified ? "VERIFIED & SEALED" : "PROCESSING"}</span>
+        </div>)}
+    </div>
+  </div>;
 }
 
 function Gate({ label, ready }: { label: string; ready: boolean }) {
