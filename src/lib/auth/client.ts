@@ -23,7 +23,16 @@ export async function hasSupabaseRecoverySession(): Promise<boolean> {
 let cachedSession: Session | null = null;
 let sessionPromise: Promise<Session | null> | null = null;
 
-export async function getSupabaseSession(): Promise<Session | null> {
+export async function getSupabaseSession(opts: { forceRefresh?: boolean } = {}): Promise<Session | null> {
+  if (opts.forceRefresh) {
+    cachedSession = null;
+    sessionPromise = null;
+    const { data: refreshed, error: refreshError } = await supabase.auth.refreshSession();
+    if (!refreshError && refreshed.session) {
+      cachedSession = refreshed.session;
+      return refreshed.session;
+    }
+  }
   if (cachedSession) return cachedSession;
   if (!sessionPromise) {
     sessionPromise = supabase.auth.getSession().then(({ data, error }) => {
@@ -104,7 +113,7 @@ export async function signInWithEmail(email: string, password: string) {
 
 export async function resetPasswordForEmail(email: string) {
   const origin = typeof window !== "undefined" ? window.location.origin : "https://bridge.crayonspictures.com";
-  const redirectTo = `${origin}/reset-password`;
+  const redirectTo = `${origin}/auth/callback?type=recovery`;
 
   const { data, error } = await supabase.auth.resetPasswordForEmail(email, {
     redirectTo,
