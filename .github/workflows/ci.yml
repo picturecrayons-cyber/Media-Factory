@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: ["feat/crayons-bridge-production", "fix/bridge-production-gate-20260923", "fix/bridge-final-production-gate-20260924"]
+    branches: ["main", "feat/crayons-bridge-production", "fix/bridge-production-gate-20260923", "fix/bridge-final-production-gate-20260924"]
   pull_request:
     branches: ["main"]
   workflow_dispatch:
@@ -17,7 +17,6 @@ jobs:
           node-version: "22"
           cache: npm
       - run: npm ci
-      # Generate TanStack's route tree before checking route type literals.
       - run: npm run build
       - run: node scripts/check-vercel-output.mjs
       - run: npm run typecheck
