@@ -1,6 +1,6 @@
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState, type FormEvent } from "react";
+import { useState, type ClipboardEvent, type FormEvent } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { StatusChip } from "@/components/bridge/status-rail";
@@ -86,6 +86,16 @@ export function CreateTitleForm() {
     onError: (err) => toast(err instanceof Error ? err.message : "Could not create title"),
   });
 
+  function onCopy(e: ClipboardEvent<HTMLFormElement>) {
+    const target = e.target as HTMLInputElement | HTMLTextAreaElement | null;
+    if (!target || !(target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement)) return;
+    const start = target.selectionStart ?? 0;
+    const end = target.selectionEnd ?? target.value.length;
+    const selected = target.value.slice(start, end) || target.value;
+    e.preventDefault();
+    e.clipboardData.setData("text/plain", selected);
+  }
+
   function onSubmit(e: FormEvent) {
     e.preventDefault();
     const feeInr = fee ? Number(fee) : undefined;
@@ -97,7 +107,7 @@ export function CreateTitleForm() {
   }
 
   return (
-    <form onSubmit={onSubmit} className="grid gap-3 rounded-sm border border-line bg-surface p-4 sm:grid-cols-2">
+    <form onSubmit={onSubmit} onCopy={onCopy} className="grid gap-3 rounded-sm border border-line bg-surface p-4 sm:grid-cols-2">
       <label className="text-sm sm:col-span-2">
         Title
         <input
