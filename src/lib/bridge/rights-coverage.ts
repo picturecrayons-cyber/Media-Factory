@@ -40,7 +40,7 @@ function mediaCovers(grantedMedia: Set<string>, destination: string, exploitatio
   if (!destinationCovered) return false;
 
   const modelTokensPresent = ["SVOD", "TVOD", "AVOD", "FREE", "PROMOTIONAL"].some((token) => grantedMedia.has(token));
-  if (!modelTokensPresent || broadStreaming) return true;
+  if (!modelTokensPresent) return true;
 
   return exploitationModels.every((model) => grantedMedia.has(model.toUpperCase()));
 }
@@ -56,6 +56,7 @@ function windowCovers(
   const effectiveStart = requestedStart ? new Date(requestedStart) : now;
   const effectiveEnd = requestedEnd ? new Date(requestedEnd) : null;
 
+  if (grantEnd && !effectiveEnd) return false;
   if (grantStart && effectiveStart < grantStart) return false;
   if (grantEnd && effectiveStart >= grantEnd) return false;
   if (grantEnd && effectiveEnd && effectiveEnd > grantEnd) return false;

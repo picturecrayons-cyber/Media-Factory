@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { findCoveringRightsGrant, type BridgeRightsGrant } from "./rights-coverage";
+import { findCoveringRightsGrant, type BridgeRightsGrant } from "./rights-coverage.ts";
 
 const baseGrant: BridgeRightsGrant = {
   id: "grant-1",
@@ -29,6 +29,31 @@ test("accepts an active worldwide OTT grant that covers the requested window", (
 
 test("fails closed when there is no rights grant", () => {
   assert.equal(findCoveringRightsGrant([], request), null);
+});
+
+test("rejects omitted or null publication ends under a finite grant", () => {
+  assert.equal(findCoveringRightsGrant([baseGrant], { ...request, windowEnd: undefined }), null);
+  assert.equal(findCoveringRightsGrant([baseGrant], { ...request, windowEnd: null }), null);
+});
+
+test("allows an unbounded publication only under an unbounded grant", () => {
+  assert.equal(
+    findCoveringRightsGrant([{ ...baseGrant, window_end: null }], { ...request, windowEnd: null })?.id,
+    "grant-1"
+  );
+});
+
+test("accepts a publication ending exactly at the grant end", () => {
+  assert.equal(findCoveringRightsGrant([baseGrant], { ...request, windowEnd: "2027-01-01T00:00:00.000Z" })?.id, "grant-1");
+});
+
+test("broad media tokens preserve explicit exploitation-model restrictions", () => {
+  for (const token of ["OTT", "STREAMING", "DIGITAL", "ALL", "*"]) {
+    const grant = { ...baseGrant, media: [token, "SVOD"] };
+    assert.equal(findCoveringRightsGrant([grant], request), null);
+    assert.equal(findCoveringRightsGrant([grant], { ...request, exploitationModels: ["SVOD"] })?.id, "grant-1");
+    assert.equal(findCoveringRightsGrant([grant], { ...request, exploitationModels: ["SVOD", "TVOD"] }), null);
+  }
 });
 
 test("rejects expired or revoked grants", () => {
