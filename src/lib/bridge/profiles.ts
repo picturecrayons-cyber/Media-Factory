@@ -47,6 +47,10 @@ export const syncSupabaseSessionUser = createServerFn({ method: "POST" })
     if (!context.emailConfirmedAt) throw new Error("Confirm your email before entering Bridge.");
 
     if (existing) {
+      // Backfill/repair the shared Bridge↔Loop identity mapping for every
+      // confirmed Bridge profile, including accounts created before the
+      // identity-link table was introduced. This is idempotent.
+      await persistSupabaseIdentityLink(sql, existing.userId, context.userId);
       if (!existing.emailVerified) {
         await sql`update bridge_profiles set email_verified = true, updated_at = now() where user_id = ${existing.userId}`;
         const updated = await loadActor(context.userId);
