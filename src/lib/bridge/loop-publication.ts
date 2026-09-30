@@ -73,7 +73,18 @@ function iso(v: string | Date | null) {
 }
 
 /** Pre-flight verification checking rights, assets, QC and operator authority */
-export async function verifyDistributionPreflight(sql: any, titleId: string) {
+export async function verifyDistributionPreflight(
+  sql: any,
+  titleId: string,
+  rightsRequest?: {
+    destination: "CRAYONS_LOOP";
+    territories: string[];
+    languages: string[];
+    exploitationModels: string[];
+    windowStart?: string | null;
+    windowEnd?: string | null;
+  }
+) {
   const titles = await sql<{
     id: string;
     slug: string;
@@ -109,6 +120,23 @@ export async function verifyDistributionPreflight(sql: any, titleId: string) {
     reasons.push(
       `Underlying rights clearance and lifecycle status (${title.status}) is not distribution-ready. Must reach at least LICENSING_READY.`
     );
+  }
+
+  if (rightsRequest) {
+    const grants = await sql<BridgeRightsGrant>`
+      select id, status, territories, languages, media, window_start, window_end, exclusivity
+      from bridge_rights_grants
+      where title_id = ${titleId}
+        and status = 'VALID'
+      order by created_at desc
+    `;
+
+    const coveringGrant = findCoveringRightsGrant(grants, rightsRequest);
+    if (!coveringGrant) {
+      reasons.push(
+        "No active Bridge rights grant covers the requested Loop destination, territory, language, exploitation model, and window."
+      );
+    }
   }
 
   // 3. Required presentation assets
