@@ -2,6 +2,8 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { BrandMark } from "@/components/bridge/shell";
 import { Button } from "@/components/ui/button";
 import { SignedIn, SignedOut, UserButton } from "@/lib/auth/gates";
+import { useQuery } from "@tanstack/react-query";
+import { DEFAULT_BRIDGE_SITE_CONTENT, getPublicSiteContent } from "@/lib/bridge/site-content";
 
 const CRAYONS_LOOP_URL = "https://crayonsloop.com/";
 
@@ -49,6 +51,13 @@ const TRUST_PILLARS = [
 ];
 
 function Home() {
+  const contentQ = useQuery({
+    queryKey: ["bridge-site-content"],
+    queryFn: () => getPublicSiteContent(),
+    retry: false,
+  });
+  const content = contentQ.data ?? DEFAULT_BRIDGE_SITE_CONTENT;
+
   return (
     <div className="min-h-screen bg-bg text-fg antialiased selection:bg-accent/20 selection:text-fg">
       {/* 1. Header */}
@@ -86,10 +95,10 @@ function Home() {
           <div className="mx-auto max-w-6xl px-5 py-16 sm:px-6 sm:py-20 lg:py-24">
             <div className="max-w-3xl">
               <h1 className="font-display text-[2.55rem] font-semibold leading-[1.04] tracking-[-0.035em] text-fg sm:text-5xl lg:text-6xl">
-                One bridge from content to market.
+                {content.heroTitle}
               </h1>
               <p className="mt-6 max-w-2xl text-base leading-7 text-muted sm:text-lg">
-                The professional workspace for preparing, protecting, licensing and delivering film and television.
+                {content.heroBody}
               </p>
 
               <div className="mt-8 flex flex-wrap items-center gap-3 sm:mt-10">
@@ -110,7 +119,7 @@ function Home() {
           <div className="mx-auto max-w-7xl px-4 sm:px-6">
             <div className="max-w-2xl">
               <h2 className="font-display text-3xl font-semibold tracking-tight text-fg sm:text-4xl">
-                From upload to delivery.
+                {content.workflowHeading}
               </h2>
             </div>
 
@@ -143,7 +152,7 @@ function Home() {
           <div className="mx-auto max-w-7xl px-4 sm:px-6">
             <div className="max-w-2xl">
               <h2 className="font-display text-3xl font-semibold tracking-tight text-fg sm:text-4xl">
-                Built for the media business.
+                {content.audienceHeading}
               </h2>
             </div>
 
@@ -254,7 +263,7 @@ function Home() {
           <div className="mx-auto max-w-7xl px-4 sm:px-6">
             <div className="mx-auto max-w-2xl text-center">
               <h2 className="font-display text-3xl font-semibold tracking-tight text-fg sm:text-4xl">
-                Ready to move your content forward?
+                {content.finalCtaHeading}
               </h2>
               <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
                 <Link to="/signup">
