@@ -4,7 +4,7 @@ import {
   createPublicKey,
   createSign,
 } from "node:crypto";
-import { bridgeEnv } from "./env";
+import { bridgeEnv } from "./env.ts";
 
 type OciConfig = {
   tenancy: string;
@@ -189,8 +189,7 @@ export async function verifyObject(key: string) {
 }
 
 async function pollWorkRequest(cfg: OciConfig, workRequestId: string) {
-  const base = endpoint(cfg.region);
-  const url = new URL(`https://iaas.${cfg.region}.oraclecloud.com/20160918/workRequests/${encodeURIComponent(workRequestId)}`);
+  const url = new URL(`/workRequests/${encodeURIComponent(workRequestId)}`, endpoint(cfg.region));
   for (let i = 0; i < 30; i += 1) {
     const headers = signHeaders({ cfg, method: "GET", url });
     const res = await fetch(url, { method: "GET", headers });
