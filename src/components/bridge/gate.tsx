@@ -1,8 +1,8 @@
 import { Link, Navigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { RedirectToSignIn } from "@/lib/auth/gates";
-import { getSupabaseSession } from "@/lib/auth/client";
+import { retryWorkspaceSession } from "@/lib/auth/workspace-session-retry";
 import { supabase } from "@/lib/supabase";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { getBridgeSession, type BridgeActor } from "@/lib/bridge/session";
@@ -29,11 +29,13 @@ export function RequireBridge({
   allow?: "creator" | "studio" | "buyer" | "internal";
 }) {
   const qc = useQueryClient();
+  const [retrying, setRetrying] = useState(false);
+  const [retryError, setRetryError] = useState<string | null>(null);
   const { user, isPending } = useCurrentUserState();
   const sessionQ = useQuery({
-    queryKey: ["bridge-session"],
+    queryKey: ["bridge-session", user?.id],
     queryFn: () => getBridgeSession(),
-    enabled: Boolean(user),
+    enabled: !isPending && Boolean(user),
     retry: false,
   });
   const verifyMail = useMutation({
@@ -53,27 +55,36 @@ export function RequireBridge({
   if (!user) return <RedirectToSignIn />;
   if (sessionQ.error) {
     async function retrySession() {
-      const refreshed = await getSupabaseSession({ forceRefresh: true });
-      if (!refreshed) {
-        await supabase.auth.signOut({ scope: "local" }).catch(() => undefined);
-        try {
-          window.localStorage.removeItem("crayons-bridge.sb-auth-token");
-        } catch {
-          /* ignore */
+      if (retrying) return;
+      setRetrying(true);
+      setRetryError(null);
+      try {
+        const outcome = await retryWorkspaceSession({
+          checkUser: () => supabase.auth.getUser(),
+          refetch: () => sessionQ.refetch(),
+          signIn: async () => {
+            await supabase.auth.signOut({ scope: "local" }).catch(() => undefined);
+            window.location.assign("/login");
+          },
+        });
+        if (outcome === "unavailable") {
+          setRetryError("The authentication service is unavailable. Please try again shortly.");
         }
-        window.location.assign("/login");
-        return;
+      } catch {
+        setRetryError("The workspace service is unavailable. Please try again shortly.");
+      } finally {
+        setRetrying(false);
       }
-      await sessionQ.refetch();
     }
 
     return (
       <Frame>
         <h1 className="font-display text-2xl">Could not open workspace</h1>
         <p role="alert" className="text-sm text-muted">
-          Your Bridge session could not be checked. Retry, or sign in again if your session expired.
+          Bridge could not load your workspace. Retry to check the service without clearing your session.
         </p>
-        <Button type="button" onClick={() => void retrySession()}>Retry session</Button>
+        {retryError ? <p role="alert" className="text-sm text-accent">{retryError}</p> : null}
+        <Button type="button" disabled={retrying} onClick={() => void retrySession()}>{retrying ? "Checking…" : "Retry workspace"}</Button>
         <Link to="/login" className="block text-sm text-accent underline-offset-4 hover:underline">Sign in</Link>
       </Frame>
     );
