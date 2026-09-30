@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { RedirectToSignIn } from "@/lib/auth/gates";
 import { getSupabaseSession } from "@/lib/auth/client";
+import { supabase } from "@/lib/supabase";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { getBridgeSession, type BridgeActor } from "@/lib/bridge/session";
 import { requestEmailVerification } from "@/lib/bridge/profiles";
@@ -54,6 +55,12 @@ export function RequireBridge({
     async function retrySession() {
       const refreshed = await getSupabaseSession({ forceRefresh: true });
       if (!refreshed) {
+        await supabase.auth.signOut({ scope: "local" }).catch(() => undefined);
+        try {
+          window.localStorage.removeItem("crayons-bridge.sb-auth-token");
+        } catch {
+          /* ignore */
+        }
         window.location.assign("/login");
         return;
       }
