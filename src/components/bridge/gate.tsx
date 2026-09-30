@@ -31,9 +31,9 @@ export function RequireBridge({
   const qc = useQueryClient();
   const { user, isPending } = useCurrentUserState();
   const sessionQ = useQuery({
-    queryKey: ["bridge-session"],
+    queryKey: ["bridge-session", user?.id],
     queryFn: () => getBridgeSession(),
-    enabled: Boolean(user),
+    enabled: !isPending && Boolean(user),
     retry: false,
   });
   const verifyMail = useMutation({

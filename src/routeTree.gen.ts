@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AccountRouteImport } from './routes/account'
 import { Route as AdminRouteImport } from './routes/admin'
+import { Route as AdminCmsRouteImport } from './routes/admin-cms'
 import { Route as BuyerRouteImport } from './routes/buyer'
 import { Route as CreatorRouteImport } from './routes/creator'
 import { Route as DashboardRouteImport } from './routes/dashboard'
@@ -45,6 +46,11 @@ const AccountRoute = AccountRouteImport.update({
 const AdminRoute = AdminRouteImport.update({
   id: '/admin',
   path: '/admin',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminCmsRoute = AdminCmsRouteImport.update({
+  id: '/admin-cms',
+  path: '/admin-cms',
   getParentRoute: () => rootRouteImport,
 } as any)
 const BuyerRoute = BuyerRouteImport.update({
@@ -147,6 +153,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/account': typeof AccountRoute
   '/admin': typeof AdminRoute
+  '/admin-cms': typeof AdminCmsRoute
   '/buyer': typeof BuyerRoute
   '/creator': typeof CreatorRoute
   '/dashboard': typeof DashboardRoute
@@ -171,6 +178,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/account': typeof AccountRoute
   '/admin': typeof AdminRoute
+  '/admin-cms': typeof AdminCmsRoute
   '/buyer': typeof BuyerRoute
   '/creator': typeof CreatorRoute
   '/dashboard': typeof DashboardRoute
@@ -196,6 +204,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/account': typeof AccountRoute
   '/admin': typeof AdminRoute
+  '/admin-cms': typeof AdminCmsRoute
   '/buyer': typeof BuyerRoute
   '/creator': typeof CreatorRoute
   '/dashboard': typeof DashboardRoute
@@ -222,6 +231,7 @@ export interface FileRouteTypes {
     | '/'
     | '/account'
     | '/admin'
+    | '/admin-cms'
     | '/buyer'
     | '/creator'
     | '/dashboard'
@@ -246,6 +256,7 @@ export interface FileRouteTypes {
     | '/'
     | '/account'
     | '/admin'
+    | '/admin-cms'
     | '/buyer'
     | '/creator'
     | '/dashboard'
@@ -270,6 +281,7 @@ export interface FileRouteTypes {
     | '/'
     | '/account'
     | '/admin'
+    | '/admin-cms'
     | '/buyer'
     | '/creator'
     | '/dashboard'
@@ -295,6 +307,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AccountRoute: typeof AccountRoute
   AdminRoute: typeof AdminRoute
+  AdminCmsRoute: typeof AdminCmsRoute
   BuyerRoute: typeof BuyerRoute
   CreatorRoute: typeof CreatorRoute
   DashboardRoute: typeof DashboardRoute
@@ -337,6 +350,13 @@ declare module '@tanstack/react-router' {
       path: '/admin'
       fullPath: '/admin'
       preLoaderRoute: typeof AdminRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin-cms': {
+      id: '/admin-cms'
+      path: '/admin-cms'
+      fullPath: '/admin-cms'
+      preLoaderRoute: typeof AdminCmsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/buyer': {
@@ -479,6 +499,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AccountRoute: AccountRoute,
   AdminRoute: AdminRoute,
+  AdminCmsRoute: AdminCmsRoute,
   BuyerRoute: BuyerRoute,
   CreatorRoute: CreatorRoute,
   DashboardRoute: DashboardRoute,

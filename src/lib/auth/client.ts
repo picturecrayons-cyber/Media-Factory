@@ -1,6 +1,7 @@
 import { supabase } from "@/lib/supabase";
 import type { Session, User } from "@supabase/supabase-js";
 import { GROK_PROVIDERS } from "./providers";
+import { restoreSupabaseSession } from "./session-restoration";
 
 export const authEnabled = import.meta.env.VITE_AUTH_ENABLED !== "false";
 export { GROK_PROVIDERS };
@@ -21,36 +22,17 @@ export async function hasSupabaseRecoverySession(): Promise<boolean> {
     window.sessionStorage.getItem(RECOVERY_MARKER_KEY) === data.session.access_token;
 }
 
-let cachedSession: Session | null = null;
-let sessionPromise: Promise<Session | null> | null = null;
-
-export async function getSupabaseSession(opts: { forceRefresh?: boolean } = {}): Promise<Session | null> {
-  if (opts.forceRefresh) {
-    cachedSession = null;
-    sessionPromise = null;
-    const { data: refreshed, error: refreshError } = await supabase.auth.refreshSession();
-    if (!refreshError && refreshed.session) {
-      cachedSession = refreshed.session;
-      return refreshed.session;
-    }
+export async function getSupabaseSession(
+  opts: { forceRefresh?: boolean } = {},
+): Promise<Session | null> {
+  // The SDK waits for URL/session restoration and owns refresh-token rotation.
+  // A separate cache can return expired tokens after a reload or failed refresh.
+  try {
+    return await restoreSupabaseSession(supabase.auth, opts);
+  } catch (err) {
+    console.warn("[auth] Session restoration failed:", err);
+    return null;
   }
-  if (cachedSession) return cachedSession;
-  if (!sessionPromise) {
-    sessionPromise = supabase.auth.getSession().then(({ data, error }) => {
-      sessionPromise = null;
-      if (error) {
-        console.warn("[auth] Failed to retrieve session:", error.message);
-        return null;
-      }
-      cachedSession = data.session;
-      return data.session;
-    }).catch((err) => {
-      sessionPromise = null;
-      console.warn("[auth] getSession error:", err);
-      return null;
-    });
-  }
-  return sessionPromise;
 }
 
 export async function getBearerToken(): Promise<string | null> {
@@ -81,7 +63,6 @@ export async function signUpWithEmail(input: {
   });
 
   if (error) throw error;
-  cachedSession = data.session;
   return { user: data.user, session: data.session };
 }
 
@@ -108,7 +89,6 @@ export async function signInWithEmail(email: string, password: string) {
   });
 
   if (error) throw error;
-  cachedSession = data.session;
   return data.session;
 }
 
@@ -135,7 +115,6 @@ export async function updatePassword(password: string) {
 }
 
 export async function signOut(redirectTo = "/login"): Promise<void> {
-  cachedSession = null;
   if (typeof window !== "undefined") window.sessionStorage.removeItem(RECOVERY_MARKER_KEY);
   try {
     await supabase.auth.signOut();
@@ -154,7 +133,6 @@ export async function signIn(_providerId: string): Promise<void> {
 
 export function subscribeAuthChange(listener: (event: string, session: Session | null) => void) {
   const { data } = supabase.auth.onAuthStateChange((event, session) => {
-    cachedSession = session;
     listener(event, session);
   });
   return () => {
@@ -163,7 +141,6 @@ export function subscribeAuthChange(listener: (event: string, session: Session |
 }
 
 export function getStoredSupabaseUser(): User | null {
-  if (cachedSession?.user) return cachedSession.user;
   if (typeof window !== "undefined") {
     try {
       const stored = window.localStorage.getItem("crayons-bridge.sb-auth-token");

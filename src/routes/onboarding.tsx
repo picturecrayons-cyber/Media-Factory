@@ -44,9 +44,9 @@ function Onboarding() {
   const { user, isPending } = useCurrentUserState();
   const navigate = useNavigate();
   const sessionQ = useQuery({
-    queryKey: ["bridge-session"],
+    queryKey: ["bridge-session", user?.id],
     queryFn: getBridgeSessionWithTimeout,
-    enabled: Boolean(user),
+    enabled: !isPending && Boolean(user),
     retry: 1,
     retryDelay: 500,
   });
@@ -106,9 +106,9 @@ function Onboarding() {
       <main className="grid min-h-screen place-items-center bg-bg p-6">
         <div className="w-full max-w-sm space-y-4 rounded-md border border-line bg-surface p-6">
           <BrandMark />
-          <h1 className="font-display text-2xl">Session needs a retry</h1>
+          <h1 className="font-display text-2xl">Could not load onboarding</h1>
           <p className="text-sm leading-relaxed text-muted">
-            Your email is confirmed. Bridge only needs to refresh the browser session before onboarding.
+            Your Bridge account could not be checked. Refresh the session to retry, or sign in again if it expired.
           </p>
           {error ? <p role="alert" className="text-sm text-accent">{error}</p> : null}
           <Button type="button" className="w-full" onClick={() => void retrySession()}>
