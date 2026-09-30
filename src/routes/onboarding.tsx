@@ -5,7 +5,7 @@ import { RedirectToSignIn } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { completeOnboarding } from "@/lib/bridge/profiles";
 import { getBridgeSession } from "@/lib/bridge/session";
-import { getSupabaseSession } from "@/lib/auth/client";
+import { retryWorkspaceSession } from "@/lib/auth/workspace-session-retry";
 import { supabase } from "@/lib/supabase";
 import { ACCOUNT_TYPES } from "@/lib/bridge/types";
 import { BrandMark } from "@/components/bridge/shell";
@@ -55,6 +55,7 @@ function Onboarding() {
   const [organizationName, setOrganizationName] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [retrying, setRetrying] = useState(false);
 
   const home = sessionQ.data?.profile ? sessionQ.data.home : null;
   useEffect(() => {
@@ -72,33 +73,28 @@ function Onboarding() {
 
   if (sessionQ.isError) {
     async function retrySession() {
+      if (retrying) return;
+      setRetrying(true);
       setError(null);
       try {
-        const refreshed = await getSupabaseSession({ forceRefresh: true });
-        if (!refreshed) {
-          // A confirmed mailbox does not guarantee a refresh token is still
-          // present in this browser. Clear any stale client auth state before
-          // sending the user through a clean password sign-in.
-          await supabase.auth.signOut({ scope: "local" }).catch(() => undefined);
-          try {
-            window.localStorage.removeItem("crayons-bridge.sb-auth-token");
-          } catch {
-            /* ignore */
-          }
-          void navigate({ to: "/login", replace: true });
-          return;
+        const outcome = await retryWorkspaceSession({
+          checkUser: () => supabase.auth.getUser(),
+          refetch: async () => {
+            const result = await sessionQ.refetch();
+            if (result.error) throw result.error;
+          },
+          signIn: async () => {
+            await supabase.auth.signOut({ scope: "local" }).catch(() => undefined);
+            void navigate({ to: "/login", replace: true });
+          },
+        });
+        if (outcome === "unavailable") {
+          setError("The authentication service is unavailable. Please try again shortly.");
         }
-        const result = await sessionQ.refetch();
-        if (result.error) throw result.error;
-      } catch (err) {
-        const message = err instanceof Error ? err.message : "Could not refresh your session.";
-        const isDatabaseBindingError =
-          /password authentication failed|ENOTFOUND|Invalid Bridge database binding|DATABASE_URL|POSTGRES_URL/i.test(message);
-        setError(
-          isDatabaseBindingError
-            ? "Bridge could not reach its server database. Please try again shortly."
-            : message,
-        );
+      } catch {
+        setError("Bridge could not load onboarding. Please try again shortly.");
+      } finally {
+        setRetrying(false);
       }
     }
 
@@ -108,11 +104,11 @@ function Onboarding() {
           <BrandMark />
           <h1 className="font-display text-2xl">Could not load onboarding</h1>
           <p className="text-sm leading-relaxed text-muted">
-            Your Bridge account could not be checked. Refresh the session to retry, or sign in again if it expired.
+            Bridge could not load your account. Retry to check the service without clearing your session.
           </p>
           {error ? <p role="alert" className="text-sm text-accent">{error}</p> : null}
-          <Button type="button" className="w-full" onClick={() => void retrySession()}>
-            Refresh session
+          <Button type="button" disabled={retrying} className="w-full" onClick={() => void retrySession()}>
+            {retrying ? "Checking…" : "Retry onboarding"}
           </Button>
           <Button type="button" variant="outline" className="w-full" onClick={() => void navigate({ to: "/login" })}>
             Sign in again
