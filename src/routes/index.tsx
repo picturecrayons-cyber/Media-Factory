@@ -53,8 +53,8 @@ function Home() {
     <div className="min-h-screen bg-bg text-fg antialiased selection:bg-accent/20 selection:text-fg">
       {/* 1. Header */}
       <header className="sticky top-0 z-50 border-b border-line bg-surface/90 backdrop-blur-md">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3.5 sm:px-6">
-          <div className="flex items-center gap-8">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
+          <div className="flex min-w-0 items-center gap-6 lg:gap-8">
             <BrandMark />
             <nav
               aria-label="Primary Navigation"
@@ -117,16 +117,16 @@ function Home() {
       <main>
         {/* 2. Hero */}
         <section className="border-b border-line bg-surface">
-          <div className="mx-auto max-w-7xl px-4 py-20 sm:px-6 sm:py-28 lg:py-36">
-            <div className="max-w-3xl">
-              <h1 className="font-display text-4xl font-semibold leading-[1.08] tracking-tight text-fg sm:text-6xl sm:leading-[1.06]">
+          <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-24 lg:py-28">
+            <div className="max-w-4xl">
+              <h1 className="font-display text-[2.65rem] font-semibold leading-[1.02] tracking-[-0.03em] text-fg sm:text-6xl sm:leading-[1.02] lg:text-7xl">
                 One bridge from content to market.
               </h1>
-              <p className="mt-5 max-w-2xl text-base leading-relaxed text-muted sm:text-lg">
+              <p className="mt-6 max-w-2xl text-base leading-7 text-muted sm:text-lg">
                 Upload, manage rights, license and deliver from one professional workspace.
               </p>
 
-              <div className="mt-8 flex flex-wrap items-center gap-3">
+              <div className="mt-8 flex flex-wrap items-center gap-3 sm:mt-10">
                 <Link to="/signup">
                   <Button className="h-11 rounded-full px-6 text-sm font-semibold shadow-xs">
                     Create account
@@ -143,7 +143,7 @@ function Home() {
               </div>
 
               {/* Trust Indicators */}
-              <div className="mt-14 border-t border-line pt-6">
+              <div className="mt-12 max-w-2xl border-t border-line pt-5 sm:mt-14">
                 <p className="text-xs font-medium text-muted">
                   {TRUST_PILLARS.join(" · ")}
                 </p>
