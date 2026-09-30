@@ -141,7 +141,12 @@ function normalizePostgresUrl(value: string | undefined): string | undefined {
     return value;
   }
 }
-const databaseUrl = normalizePostgresUrl(env("DATABASE_URL") ?? env("POSTGRES_URL"));
+const databaseUrl = normalizePostgresUrl(
+  env("DATABASE_URL") ??
+    env("POSTGRES_URL") ??
+    env("SUPABASE_DB_URL") ??
+    env("SUPABASE_DATABASE_URL"),
+);
 const issuerBase = grokIssuer.replace(/\/+$/, "");
 const grokAuthorizationUrl = `${issuerBase}/api/auth/oauth2/authorize`;
 const grokTokenUrl = `${issuerBase}/api/auth/oauth2/token`;

@@ -27,7 +27,12 @@ const normalizePostgresUrl = (value) => {
     return value;
   }
 };
-const databaseUrl = normalizePostgresUrl(readEnv("DATABASE_URL") ?? readEnv("POSTGRES_URL"));
+const databaseUrl = normalizePostgresUrl(
+  readEnv("DATABASE_URL") ??
+    readEnv("POSTGRES_URL") ??
+    readEnv("SUPABASE_DB_URL") ??
+    readEnv("SUPABASE_DATABASE_URL"),
+);
 if (!databaseUrl) {
   console.log(
     "[migrate] DATABASE_URL/POSTGRES_URL not set — skipping (the local PGLite fallback migrates itself).",
