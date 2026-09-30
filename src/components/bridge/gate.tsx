@@ -2,6 +2,8 @@ import { Link, Navigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { RedirectToSignIn } from "@/lib/auth/gates";
+import { getSupabaseSession } from "@/lib/auth/client";
+import { supabase } from "@/lib/supabase";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { getBridgeSession, type BridgeActor } from "@/lib/bridge/session";
 import { requestEmailVerification } from "@/lib/bridge/profiles";
@@ -50,13 +52,28 @@ export function RequireBridge({
   }
   if (!user) return <RedirectToSignIn />;
   if (sessionQ.error) {
+    async function retrySession() {
+      const refreshed = await getSupabaseSession({ forceRefresh: true });
+      if (!refreshed) {
+        await supabase.auth.signOut({ scope: "local" }).catch(() => undefined);
+        try {
+          window.localStorage.removeItem("crayons-bridge.sb-auth-token");
+        } catch {
+          /* ignore */
+        }
+        window.location.assign("/login");
+        return;
+      }
+      await sessionQ.refetch();
+    }
+
     return (
       <Frame>
         <h1 className="font-display text-2xl">Could not open workspace</h1>
         <p role="alert" className="text-sm text-muted">
           Your Bridge session could not be checked. Retry, or sign in again if your session expired.
         </p>
-        <Button type="button" onClick={() => void sessionQ.refetch()}>Retry session</Button>
+        <Button type="button" onClick={() => void retrySession()}>Retry session</Button>
         <Link to="/login" className="block text-sm text-accent underline-offset-4 hover:underline">Sign in</Link>
       </Frame>
     );
