@@ -83,8 +83,8 @@ function Home() {
       <main>
         {/* 2. Hero */}
         <section className="border-b border-line bg-surface">
-          <div className="mx-auto max-w-6xl px-5 py-16 sm:px-6 sm:py-20 lg:py-24">
-            <div className="max-w-3xl">
+          <div className="mx-auto grid max-w-7xl items-center gap-10 px-5 py-14 sm:px-6 sm:py-16 lg:grid-cols-[0.95fr_1.05fr] lg:gap-12 lg:px-8 lg:py-20">
+            <div className="max-w-2xl">
               <h1 className="font-display text-[2.45rem] font-semibold leading-[1.02] tracking-[-0.04em] text-fg sm:text-5xl lg:text-[3.9rem]">
                 One bridge from content to market.
               </h1>
@@ -100,7 +100,28 @@ function Home() {
                 </Link>
                 <Link to="/login" className="px-2 text-sm font-semibold text-muted hover:text-fg transition-colors">Sign in</Link>
               </div>
+            </div>
 
+            <div className="relative">
+              <div className="pointer-events-none absolute -inset-6 -z-10 bg-[radial-gradient(circle_at_center,rgba(14,165,233,0.14),transparent_65%)] blur-2xl" />
+              <img
+                src="/bridge-home-hero-16x9.png"
+                alt="Crayons Bridge media supply chain"
+                className="w-full rounded-3xl border border-line bg-white object-cover shadow-[0_24px_80px_rgba(15,23,42,0.08)]"
+              />
+            </div>
+          </div>
+
+          <div className="mx-auto max-w-7xl px-5 pb-8 sm:px-6 lg:px-8">
+            <div className="grid gap-3 sm:grid-cols-5">
+              {["Secure storage", "Technical QC", "Rights", "Screeners", "Licensing"].map((item) => (
+                <div
+                  key={item}
+                  className="rounded-2xl border border-line bg-surface px-4 py-3 text-center text-xs font-semibold text-fg shadow-xs"
+                >
+                  {item}
+                </div>
+              ))}
             </div>
           </div>
         </section>
