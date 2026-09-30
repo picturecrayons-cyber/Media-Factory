@@ -10,11 +10,13 @@ export const bridgeEnv = {
   razorpayKeyId: () => read("RAZORPAY_KEY_ID"),
   razorpayKeySecret: () => read("RAZORPAY_KEY_SECRET"),
   razorpayWebhookSecret: () => read("RAZORPAY_WEBHOOK_SECRET"),
-  awsRegion: () => read("AWS_REGION") || read("S3_REGION"),
-  awsAccessKey: () => read("AWS_ACCESS_KEY_ID"),
-  awsSecretKey: () => read("AWS_SECRET_ACCESS_KEY"),
-  awsRoleArn: () => read("AWS_ROLE_ARN"),
-  s3Bucket: () => read("AWS_S3_MEDIA_BUCKET") || read("S3_BUCKET"),
+  ociTenancyOcid: () => read("OCI_TENANCY_OCID"),
+  ociUserOcid: () => read("OCI_USER_OCID"),
+  ociFingerprint: () => read("OCI_FINGERPRINT"),
+  ociPrivateKey: () => read("OCI_PRIVATE_KEY") || read("PRIVATE_KEY"),
+  ociRegion: () => read("OCI_REGION"),
+  ociNamespace: () => read("OCI_NAMESPACE"),
+  ociBucket: () => read("OCI_BUCKET_NAME"),
   smtpHost: () => read("SMTP_HOST") || read("HOSTINGER_SMTP_HOST"),
   smtpPort: () => read("SMTP_PORT") || "587",
   smtpUser: () => read("SMTP_USER") || read("HOSTINGER_SMTP_USER"),
@@ -25,12 +27,21 @@ export const bridgeEnv = {
 };
 
 export function integrationStatus() {
+  const ociStorage = Boolean(
+    bridgeEnv.ociTenancyOcid() &&
+    bridgeEnv.ociUserOcid() &&
+    bridgeEnv.ociPrivateKey() &&
+    bridgeEnv.ociRegion() &&
+    bridgeEnv.ociBucket(),
+  );
   return {
     postgres: Boolean(bridgeEnv.databaseUrl()),
     supabase: Boolean(bridgeEnv.supabaseUrl() && (bridgeEnv.supabaseAnon() || bridgeEnv.supabaseService())),
     razorpay: Boolean(bridgeEnv.razorpayKeyId() && bridgeEnv.razorpayKeySecret()),
     razorpayWebhook: Boolean(bridgeEnv.razorpayWebhookSecret()),
-    s3: Boolean(bridgeEnv.s3Bucket() && (bridgeEnv.awsRoleArn() || (bridgeEnv.awsAccessKey() && bridgeEnv.awsSecretKey()))),
+    // Keep the legacy key temporarily so existing admin UI does not break while storage moves from AWS to OCI.
+    s3: ociStorage,
+    ociStorage,
     mail: Boolean(bridgeEnv.smtpHost() && bridgeEnv.smtpUser() && bridgeEnv.smtpPass()),
   };
 }

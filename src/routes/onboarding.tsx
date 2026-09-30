@@ -6,6 +6,7 @@ import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { completeOnboarding } from "@/lib/bridge/profiles";
 import { getBridgeSession } from "@/lib/bridge/session";
 import { getSupabaseSession } from "@/lib/auth/client";
+import { supabase } from "@/lib/supabase";
 import { ACCOUNT_TYPES } from "@/lib/bridge/types";
 import { BrandMark } from "@/components/bridge/shell";
 import { Button } from "@/components/ui/button";
@@ -75,7 +76,16 @@ function Onboarding() {
       try {
         const refreshed = await getSupabaseSession({ forceRefresh: true });
         if (!refreshed) {
-          setError("Your confirmation succeeded, but the browser session could not be refreshed. Sign in once with the password you created.");
+          // A confirmed mailbox does not guarantee a refresh token is still
+          // present in this browser. Clear any stale client auth state before
+          // sending the user through a clean password sign-in.
+          await supabase.auth.signOut({ scope: "local" }).catch(() => undefined);
+          try {
+            window.localStorage.removeItem("crayons-bridge.sb-auth-token");
+          } catch {
+            /* ignore */
+          }
+          void navigate({ to: "/login", replace: true });
           return;
         }
         const result = await sessionQ.refetch();
