@@ -53,7 +53,7 @@ function Home() {
     <div className="min-h-screen bg-bg text-fg antialiased selection:bg-accent/20 selection:text-fg">
       {/* 1. Header */}
       <header className="sticky top-0 z-50 border-b border-line bg-surface/90 backdrop-blur-md">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-5 py-4 sm:px-6">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-5 px-5 py-3.5 sm:px-6 lg:px-8">
           <div className="flex min-w-0 items-center gap-6 lg:gap-8">
             <BrandMark />
             </div>
@@ -85,14 +85,14 @@ function Home() {
         <section className="border-b border-line bg-surface">
           <div className="mx-auto max-w-6xl px-5 py-16 sm:px-6 sm:py-20 lg:py-24">
             <div className="max-w-3xl">
-              <h1 className="font-display text-[2.55rem] font-semibold leading-[1.04] tracking-[-0.035em] text-fg sm:text-5xl lg:text-6xl">
+              <h1 className="font-display text-[2.45rem] font-semibold leading-[1.02] tracking-[-0.04em] text-fg sm:text-5xl lg:text-[3.9rem]">
                 One bridge from content to market.
               </h1>
-              <p className="mt-6 max-w-2xl text-base leading-7 text-muted sm:text-lg">
+              <p className="mt-5 max-w-2xl text-base leading-7 text-muted sm:text-lg">
                 The professional workspace for preparing, protecting, licensing and delivering film and television.
               </p>
 
-              <div className="mt-8 flex flex-wrap items-center gap-3 sm:mt-10">
+              <div className="mt-7 flex flex-wrap items-center gap-3 sm:mt-8">
                 <Link to="/signup">
                   <Button className="h-11 rounded-full px-6 text-sm font-semibold shadow-xs">
                     Create account
@@ -106,7 +106,7 @@ function Home() {
         </section>
 
         {/* 3. How It Works */}
-        <section id="how-it-works" className="border-b border-line bg-surface/50 py-14 sm:py-20">
+        <section id="how-it-works" className="border-b border-line bg-surface/50 py-10 sm:py-12">
           <div className="mx-auto max-w-7xl px-4 sm:px-6">
             <div className="max-w-2xl">
               <h2 className="font-display text-3xl font-semibold tracking-tight text-fg sm:text-4xl">
@@ -114,11 +114,11 @@ function Home() {
               </h2>
             </div>
 
-            <div className="mt-10 grid gap-px overflow-hidden rounded-2xl border border-line bg-line sm:grid-cols-2 lg:grid-cols-6">
+            <div className="mt-8 grid gap-px overflow-hidden rounded-2xl border border-line bg-line sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
               {WORKFLOW_STEPS.map((step, idx) => (
                 <div
                   key={step.step}
-                  className="flex flex-col justify-between bg-surface p-5"
+                  className="flex min-h-40 flex-col justify-between bg-surface p-5"
                 >
                   <div>
                     <div className="flex items-center justify-between">
@@ -139,7 +139,7 @@ function Home() {
         </section>
 
         {/* 4. Audiences: Creators, Studios, Buyers */}
-        <section id="creators" className="border-b border-line bg-surface py-16 sm:py-24">
+        <section id="creators" className="border-b border-line bg-surface py-14 sm:py-20">
           <div className="mx-auto max-w-7xl px-4 sm:px-6">
             <div className="max-w-2xl">
               <h2 className="font-display text-3xl font-semibold tracking-tight text-fg sm:text-4xl">
@@ -147,7 +147,7 @@ function Home() {
               </h2>
             </div>
 
-            <div className="mt-12 grid gap-8 lg:grid-cols-3">
+            <div className="mt-10 grid gap-6 lg:grid-cols-3">
               {/* Creators Card */}
               <div className="flex flex-col justify-between rounded-3xl border border-line bg-elevated p-7 sm:p-8">
                 <div>
@@ -250,7 +250,7 @@ function Home() {
         </section>
 
         {/* 6. Final CTA */}
-        <section className="border-b border-line bg-surface py-16 sm:py-24">
+        <section className="border-b border-line bg-surface py-14 sm:py-18">
           <div className="mx-auto max-w-7xl px-4 sm:px-6">
             <div className="mx-auto max-w-2xl text-center">
               <h2 className="font-display text-3xl font-semibold tracking-tight text-fg sm:text-4xl">
