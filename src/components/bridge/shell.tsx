@@ -23,7 +23,19 @@ function NavLink({ item }: { item: NavItem }) {
 }
 
 export function BrandMark({ className }: { className?: string }) {
-  return <Link to="/" className={cn("inline-flex items-center", className)} aria-label="Crayons Bridge home"><img src="/brand/logo.png" alt="Crayons Bridge" className="h-8 w-auto object-contain" /></Link>;
+  return (
+    <Link
+      to="/"
+      className={cn("inline-flex items-center shrink-0", className)}
+      aria-label="Crayons Bridge home"
+    >
+      <img
+        src="/brand/logo.png"
+        alt="Crayons Bridge"
+        className="block h-auto w-[116px] object-contain sm:w-[138px] lg:w-[150px]"
+      />
+    </Link>
+  );
 }
 
 export function BridgeShell({ actor, title, children }: { actor: BridgeActor; title: string; children: ReactNode }) {
