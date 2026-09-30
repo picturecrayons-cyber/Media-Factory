@@ -6,7 +6,8 @@ import { getSql } from "@/lib/db";
 import { assertPermission } from "./rbac";
 import { requireActor } from "./session";
 import { assertNotDevUser } from "./guards";
-import { writeAudit } from "./audit";\nimport { findCoveringRightsGrant, type BridgeRightsGrant } from "./rights-coverage";
+import { writeAudit } from "./audit";
+import { findCoveringRightsGrant, type BridgeRightsGrant } from "./rights-coverage";
 
 export type DistributionAuthorizationStatus =
   | "DRAFT"
