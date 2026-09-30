@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { findCoveringRightsGrant, type BridgeRightsGrant } from "./rights-coverage.ts";
+import { assertPublicationCanExtend, findCoveringRightsGrant, type BridgeRightsGrant } from "./rights-coverage.ts";
 
 const baseGrant: BridgeRightsGrant = {
   id: "grant-1",
@@ -79,4 +79,36 @@ test("rejects a publication window outside the grant", () => {
     ),
     null
   );
+});
+
+
+test("rejects a temporally expired grant even when its status is still VALID", () => {
+  assert.equal(findCoveringRightsGrant([baseGrant], { ...request, now: new Date("2028-01-01T00:00:00.000Z") }), null);
+});
+
+test("rejects malformed and reversed rights windows", () => {
+  assert.equal(findCoveringRightsGrant([{ ...baseGrant, window_end: "invalid" }], request), null);
+  assert.equal(findCoveringRightsGrant([baseGrant], { ...request, windowEnd: request.windowStart }), null);
+  assert.equal(findCoveringRightsGrant([baseGrant], { ...request, windowStart: "invalid" }), null);
+});
+
+test("rejects empty publication dimensions", () => {
+  assert.equal(findCoveringRightsGrant([baseGrant], { ...request, territories: [] }), null);
+  assert.equal(findCoveringRightsGrant([baseGrant], { ...request, languages: ["  "] }), null);
+  assert.equal(findCoveringRightsGrant([baseGrant], { ...request, exploitationModels: [] }), null);
+});
+
+test("extension requires current rights coverage for the entire new window", () => {
+  assert.equal(findCoveringRightsGrant([], request), null);
+  assert.equal(findCoveringRightsGrant([baseGrant], { ...request, windowEnd: "2027-02-01T00:00:00.000Z" }), null);
+  assert.equal(findCoveringRightsGrant([baseGrant], request)?.id, "grant-1");
+});
+
+test("extension cannot restore suspended revoked expired or pending publications", () => {
+  for (const status of ["SUSPENDED", "REVOKED", "EXPIRED", "PENDING", "FAILED"]) {
+    assert.throws(() => assertPublicationCanExtend(status, null), /fresh authorization/);
+  }
+  assert.throws(() => assertPublicationCanExtend("live", "2026-09-29T00:00:00.000Z"), /fresh authorization/);
+  assert.doesNotThrow(() => assertPublicationCanExtend("live", null));
+  assert.doesNotThrow(() => assertPublicationCanExtend("authorized", null));
 });
