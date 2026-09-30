@@ -250,7 +250,7 @@ function Home() {
         </section>
 
         {/* 6. Final CTA */}
-        <section className="border-b border-line bg-surface py-14 sm:py-18">
+        <section className="border-b border-line bg-surface py-14 sm:py-20">
           <div className="mx-auto max-w-7xl px-4 sm:px-6">
             <div className="mx-auto max-w-2xl text-center">
               <h2 className="font-display text-3xl font-semibold tracking-tight text-fg sm:text-4xl">
