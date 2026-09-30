@@ -6,7 +6,7 @@ import { getSql } from "@/lib/db";
 import { assertPermission } from "./rbac";
 import { requireActor } from "./session";
 import { assertNotDevUser } from "./guards";
-import { writeAudit } from "./audit";
+import { writeAudit } from "./audit";\nimport { findCoveringRightsGrant, type BridgeRightsGrant } from "./rights-coverage";
 
 export type DistributionAuthorizationStatus =
   | "DRAFT"
@@ -238,7 +238,14 @@ export const authorizeLoopPublication = createServerFn({ method: "POST" })
     }
 
     const sql = await getSql();
-    const preflight = await verifyDistributionPreflight(sql, data.bridgeTitleId);
+    const preflight = await verifyDistributionPreflight(sql, data.bridgeTitleId, {
+      destination: data.destination,
+      territories: data.territories,
+      languages: data.languages,
+      exploitationModels: data.exploitationModels,
+      windowStart: data.windowStart,
+      windowEnd: data.windowEnd,
+    });
     if (!preflight.eligible || !preflight.title) {
       throw new Error(`Distribution Authorization Blocked: ${preflight.reasons.join(" · ")}`);
     }
