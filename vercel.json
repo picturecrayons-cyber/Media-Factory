@@ -1,9 +1,4 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "framework": "tanstack-start",
-  "git": {
-    "deploymentEnabled": {
-      "abijithasokan1992/cra-101-p0-fix-bridge-onboarding-session-refresh-loop-after-email": false
-    }
-  }
+  "framework": "tanstack-start"
 }
