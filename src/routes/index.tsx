@@ -53,47 +53,13 @@ function Home() {
     <div className="min-h-screen bg-bg text-fg antialiased selection:bg-accent/20 selection:text-fg">
       {/* 1. Header */}
       <header className="sticky top-0 z-50 border-b border-line bg-surface/90 backdrop-blur-md">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3.5 sm:px-6">
-          <div className="flex items-center gap-8">
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-5 py-4 sm:px-6">
+          <div className="flex min-w-0 items-center gap-6 lg:gap-8">
             <BrandMark />
-            <nav
-              aria-label="Primary Navigation"
-              className="hidden md:flex items-center gap-7 text-xs font-semibold uppercase tracking-wider text-muted"
-            >
-              <a href="#how-it-works" className="hover:text-fg transition-colors">
-                How it works
-              </a>
-              <a href="#creators" className="hover:text-fg transition-colors">
-                Creators
-              </a>
-              <a href="#studios" className="hover:text-fg transition-colors">
-                Studios
-              </a>
-              <a href="#buyers" className="hover:text-fg transition-colors">
-                Buyers
-              </a>
-            </nav>
-          </div>
+            </div>
 
           <div className="flex items-center gap-3 text-sm">
-            <a
-              href={CRAYONS_LOOP_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 text-xs font-semibold text-muted hover:text-accent transition-colors px-2 py-1"
-              title="Open Crayons Loop Consumer Streaming"
-            >
-              <span>Crayons Loop</span>
-              <span className="text-[11px] leading-none">↗</span>
-            </a>
-
             <SignedOut>
-              <Link
-                to="/login"
-                className="hidden sm:inline-flex rounded-full px-4 py-1.5 text-xs font-semibold text-muted hover:bg-accent-soft hover:text-fg transition-colors"
-              >
-                Sign in
-              </Link>
               <Link to="/signup">
                 <Button size="sm" className="rounded-full px-4 py-1.5 text-xs font-semibold shadow-xs">
                   Create account
@@ -117,43 +83,30 @@ function Home() {
       <main>
         {/* 2. Hero */}
         <section className="border-b border-line bg-surface">
-          <div className="mx-auto max-w-7xl px-4 py-20 sm:px-6 sm:py-28 lg:py-36">
+          <div className="mx-auto max-w-6xl px-5 py-16 sm:px-6 sm:py-20 lg:py-24">
             <div className="max-w-3xl">
-              <h1 className="font-display text-4xl font-semibold leading-[1.08] tracking-tight text-fg sm:text-6xl sm:leading-[1.06]">
+              <h1 className="font-display text-[2.55rem] font-semibold leading-[1.04] tracking-[-0.035em] text-fg sm:text-5xl lg:text-6xl">
                 One bridge from content to market.
               </h1>
-              <p className="mt-5 max-w-2xl text-base leading-relaxed text-muted sm:text-lg">
-                Upload, manage rights, license and deliver from one professional workspace.
+              <p className="mt-6 max-w-2xl text-base leading-7 text-muted sm:text-lg">
+                The professional workspace for preparing, protecting, licensing and delivering film and television.
               </p>
 
-              <div className="mt-8 flex flex-wrap items-center gap-3">
+              <div className="mt-8 flex flex-wrap items-center gap-3 sm:mt-10">
                 <Link to="/signup">
                   <Button className="h-11 rounded-full px-6 text-sm font-semibold shadow-xs">
                     Create account
                   </Button>
                 </Link>
-                <Link to="/login">
-                  <Button
-                    variant="outline"
-                    className="h-11 rounded-full border-line px-6 text-sm font-semibold hover:border-line-strong"
-                  >
-                    Sign in
-                  </Button>
-                </Link>
+                <Link to="/login" className="px-2 text-sm font-semibold text-muted hover:text-fg transition-colors">Sign in</Link>
               </div>
 
-              {/* Trust Indicators */}
-              <div className="mt-14 border-t border-line pt-6">
-                <p className="text-xs font-medium text-muted">
-                  {TRUST_PILLARS.join(" · ")}
-                </p>
-              </div>
             </div>
           </div>
         </section>
 
         {/* 3. How It Works */}
-        <section id="how-it-works" className="border-b border-line bg-surface/50 py-16 sm:py-24">
+        <section id="how-it-works" className="border-b border-line bg-surface/50 py-14 sm:py-20">
           <div className="mx-auto max-w-7xl px-4 sm:px-6">
             <div className="max-w-2xl">
               <h2 className="font-display text-3xl font-semibold tracking-tight text-fg sm:text-4xl">
@@ -161,17 +114,17 @@ function Home() {
               </h2>
             </div>
 
-            <div className="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-6">
+            <div className="mt-10 grid gap-px overflow-hidden rounded-2xl border border-line bg-line sm:grid-cols-2 lg:grid-cols-6">
               {WORKFLOW_STEPS.map((step, idx) => (
                 <div
                   key={step.step}
-                  className="flex flex-col justify-between rounded-2xl border border-line bg-surface p-5 transition hover:border-line-strong"
+                  className="flex flex-col justify-between bg-surface p-5"
                 >
                   <div>
                     <div className="flex items-center justify-between">
                       <span className="font-mono text-xs font-bold text-accent">{step.step}</span>
                       {idx < WORKFLOW_STEPS.length - 1 ? (
-                        <span className="hidden lg:inline text-muted/30 text-xs">→</span>
+                        <span className="hidden lg:inline text-faint text-xs">→</span>
                       ) : null}
                     </div>
                     <h3 className="mt-3 font-display text-lg font-semibold text-fg">
