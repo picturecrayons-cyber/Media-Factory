@@ -19,6 +19,7 @@ const modules = [
   ["Delivery", "Secure delivery, C2C handoff, package readiness and operational audit.", "/internal"],
   ["Revenue", "Verified payments, entitlements and settlement-facing records.", "/buyer"],
   ["Team & RBAC", "Invite internal reviewers and keep server-enforced operational roles.", "/account"],
+  ["Website CMS", "Edit the minimal public Bridge homepage copy.", "/admin-cms"],
 ] as const;
 
 function AdminControlPlane() {
