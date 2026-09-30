@@ -53,3 +53,12 @@
 }
 
 .font-display { font-family:var(--font-display); }
+
+
+@media (max-width: 767px) {
+  .bridge-nav-item { padding:.5rem .7rem; font-size:.82rem; }
+}
+
+@media (max-width: 639px) {
+  header .bridge-brand-lockup img { max-width:116px; }
+}
