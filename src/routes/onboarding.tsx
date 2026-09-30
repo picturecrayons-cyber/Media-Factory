@@ -91,7 +91,14 @@ function Onboarding() {
         const result = await sessionQ.refetch();
         if (result.error) throw result.error;
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Could not refresh your session.");
+        const message = err instanceof Error ? err.message : "Could not refresh your session.";
+        const isDatabaseBindingError =
+          /password authentication failed|ENOTFOUND|Invalid Bridge database binding|DATABASE_URL|POSTGRES_URL/i.test(message);
+        setError(
+          isDatabaseBindingError
+            ? "Bridge could not reach its server database. Please try again shortly."
+            : message,
+        );
       }
     }
 
