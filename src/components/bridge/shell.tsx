@@ -32,7 +32,7 @@ export function BrandMark({ className }: { className?: string }) {
       <img
         src="/brand/logo.png"
         alt="Crayons Bridge"
-        className="bridge-logo block h-auto w-[124px] object-contain sm:w-[144px] lg:w-[156px]"
+        className="bridge-logo block h-[42px] w-[132px] object-contain object-left sm:h-[46px] sm:w-[148px] lg:h-[48px] lg:w-[156px]"
       />
     </Link>
   );
