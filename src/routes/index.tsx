@@ -90,14 +90,14 @@ function Home() {
                 alt="Crayons Bridge"
                 className="bridge-hero-logo mx-auto h-auto w-full max-w-[560px] object-contain sm:max-w-[680px] lg:max-w-[760px]"
               />
-              <h1 className="mx-auto mt-8 max-w-4xl font-display text-[2.45rem] font-semibold leading-[1.02] tracking-[-0.04em] text-fg sm:text-5xl lg:text-[3.9rem]">
+              <h1 className="bridge-hero-copy mx-auto mt-8 max-w-4xl font-display text-[2.45rem] font-semibold leading-[1.02] tracking-[-0.04em] text-fg sm:text-5xl lg:text-[3.9rem]">
                 One bridge from content to market.
               </h1>
-              <p className="mx-auto mt-4 max-w-2xl text-base leading-7 text-muted sm:text-lg">
+              <p className="bridge-hero-subcopy mx-auto mt-4 max-w-2xl text-base leading-7 text-muted sm:text-lg">
                 Prepare. Protect. License. Deliver.
               </p>
 
-              <div className="mt-7 flex flex-wrap items-center justify-center gap-3 sm:mt-8">
+              <div className="bridge-hero-actions mt-7 flex flex-wrap items-center justify-center gap-3 sm:mt-8">
                 <Link to="/signup">
                   <Button className="h-11 rounded-full px-6 text-sm font-semibold shadow-xs">
                     Create account
@@ -123,7 +123,7 @@ function Home() {
               {WORKFLOW_STEPS.map((step, idx) => (
                 <div
                   key={step.step}
-                  className="flex min-h-40 flex-col justify-between bg-surface p-5"
+                  className="bridge-workflow-card flex min-h-40 flex-col justify-between bg-surface p-5"
                 >
                   <div>
                     <div className="flex items-center justify-between">
