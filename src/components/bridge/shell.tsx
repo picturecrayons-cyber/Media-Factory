@@ -20,7 +20,7 @@ function NavLink({ item }: { item: NavItem }) {
 export function BrandMark({ className }: { className?: string }) {
   return (
     <Link to="/" className={cn("inline-flex items-center shrink-0", className)} aria-label="Crayons Bridge home">
-      <img src="/brand/logo.png" alt="Crayons Bridge" className="bridge-logo block h-auto w-[124px] object-contain sm:w-[144px] lg:w-[156px]" />
+      <img src="/brand/logo.png" alt="Crayons Bridge" className="bridge-logo block h-auto w-[168px] object-contain sm:w-[196px] lg:w-[220px]" />
     </Link>
   );
 }
@@ -28,8 +28,8 @@ export function BrandMark({ className }: { className?: string }) {
 export function BridgeShell({ actor, title, children }: { actor: BridgeActor; title: string; children: ReactNode }) {
   return (
     <div className="min-h-screen bg-bg text-fg">
-      <header className="sticky top-0 z-50 border-b border-line bg-surface/95 backdrop-blur">
-        <div className="mx-auto flex max-w-[1440px] items-center gap-6 px-4 py-3 sm:px-6 lg:px-8">
+      <header className="sticky top-0 z-50 border-b border-line bg-surface/88 backdrop-blur-xl">
+        <div className="mx-auto flex max-w-[1440px] items-center gap-6 px-4 py-3.5 sm:px-6 lg:px-8">
           <BrandMark />
           <nav className="hidden flex-1 items-center gap-1 md:flex">{NAV.map((item) => <NavLink key={item.label} item={item} />)}</nav>
           <a href="https://crayonsloop.in/" target="_blank" rel="noreferrer" className="hidden text-sm font-semibold text-muted transition hover:text-fg lg:inline">Open Crayons Loop ↗</a>
