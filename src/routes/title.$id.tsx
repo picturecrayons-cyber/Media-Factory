@@ -22,7 +22,7 @@ function TitlePage() {
   );
 }
 
-function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
+function TitleBody({ id, actor: _actor }: { id: string; actor: BridgeActor }) {
   const [activeTab, setActiveTab] = useState<WorkspaceTab>("Overview");
 
   const titleQ = useQuery({ queryKey: ["bridge-title", id], queryFn: () => getTitle({ data: { id } }) });
@@ -36,13 +36,11 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
   if (titleQ.isPending) return <p className="text-sm text-muted">Loading title workspace…</p>;
   if (!title) return <p className="text-sm text-muted">Title not found.</p>;
 
-  const ingestReady = assets.length > 0;
   const qcReady = Boolean(title.masterKey);
   const legalReady = ["LICENSING_READY", "LIVE_FOR_BUYERS", "IN_NEGOTIATION", "LICENSED", "DELIVERED"].includes(title.status);
   const rightsReady = legalReady;
   const packageReady = Boolean(qcReady && legalReady);
   const distributionReady = Boolean(pub?.authorizationStatus);
-  const pipelineStep = !ingestReady ? 1 : !qcReady ? 2 : !rightsReady ? 3 : !packageReady ? 4 : 5;
 
   return (
     <div className="space-y-5">
@@ -62,8 +60,8 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
             </div>
             {title.synopsis ? <p className="mt-4 max-w-3xl text-sm leading-6 text-muted">{title.synopsis}</p> : null}
             <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-sm">
-              {title.director ? <span><span className="text-muted">Director</span> · {title.director}</span> : null}
-              {title.cast?.length ? <span><span className="text-muted">Cast</span> · {title.cast.join(", ")}</span> : null}
+              {title.credits?.some((c) => c.role === "Director") ? <span><span className="text-muted">Director</span> · {title.credits.filter((c) => c.role === "Director").map((c) => c.name).join(", ")}</span> : null}
+              {title.credits?.some((c) => c.role === "Cast") ? <span><span className="text-muted">Cast</span> · {title.credits.filter((c) => c.role === "Cast").map((c) => c.name).join(", ")}</span> : null}
             </div>
             <div className="mt-5"><button type="button" onClick={() => setActiveTab("Files")} className="rounded-full bg-fg px-5 py-2.5 text-sm font-semibold text-bg">Upload Files</button></div>
           </div>
