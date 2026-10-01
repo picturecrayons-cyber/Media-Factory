@@ -21,7 +21,8 @@
     "secret-scan": "node scripts/secret-scan.mjs",
     "lint": "eslint .",
     "format": "prettier --write .",
-    "check:release-readiness": "node scripts/release-readiness.mjs"
+    "check:release-readiness": "node scripts/release-readiness.mjs",
+    "check:bridge-app-url": "node scripts/check-bridge-app-url.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.864.0",
