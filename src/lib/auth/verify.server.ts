@@ -34,7 +34,12 @@ export async function getSessionUser(bearerToken?: string): Promise<VerifiedUser
       },
     });
 
-    if (!response.ok) return null;
+    if (!response.ok) {
+      if (response.status === 401 || response.status === 403) {
+        throw new UnauthorizedError("Supabase authentication session is invalid or expired.");
+      }
+      throw new Error(`Supabase authentication service returned ${response.status}.`);
+    }
     const user = (await response.json()) as {
       id?: string;
       email?: string | null;
@@ -50,8 +55,9 @@ export async function getSessionUser(bearerToken?: string): Promise<VerifiedUser
       user_metadata: user.user_metadata,
     };
   } catch (err) {
+    if (err instanceof UnauthorizedError) throw err;
     console.error("[auth] Failed to verify Supabase token:", err);
-    return null;
+    throw err;
   }
 }
 
