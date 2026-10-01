@@ -294,15 +294,9 @@ function Home() {
             aria-label="Footer Legal and External Links"
             className="flex flex-wrap items-center gap-5 text-xs text-muted"
           >
-            <a href="mailto:privacy@streamvista.com" className="hover:text-fg transition-colors">
-              Privacy
-            </a>
-            <a href="mailto:legal@streamvista.com" className="hover:text-fg transition-colors">
-              Terms
-            </a>
-            <a href="mailto:contact@streamvista.com" className="hover:text-fg transition-colors">
-              Contact
-            </a>
+            <Link to="/privacy" className="hover:text-fg transition-colors">\n              Privacy\n            </Link>
+            <Link to="/terms" className="hover:text-fg transition-colors">\n              Terms\n            </Link>
+            <Link to="/contact" className="hover:text-fg transition-colors">\n              Contact\n            </Link>
             <a
               href={CRAYONS_LOOP_URL}
               target="_blank"
