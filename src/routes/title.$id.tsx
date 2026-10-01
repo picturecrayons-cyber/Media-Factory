@@ -10,7 +10,7 @@ import type { BridgeActor } from "@/lib/bridge/session";
 
 export const Route = createFileRoute("/title/$id")({ component: TitlePage });
 
-const WORKSPACE_TABS = ["Overview", "Files", "Metadata", "QC", "Rights", "Licensing", "Delivery", "Team", "Billing"] as const;
+const WORKSPACE_TABS = ["Overview", "Files", "Business"] as const;
 type WorkspaceTab = (typeof WORKSPACE_TABS)[number];
 
 function TitlePage() {
@@ -47,13 +47,26 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
   return (
     <div className="space-y-5">
       <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-accent">Canonical Title</p>
-            <h1 className="mt-1 font-display text-2xl font-semibold text-fg sm:text-3xl">{title.name}</h1>
-            <p className="mt-1 text-xs text-muted">{title.language}{title.year ? ` · ${title.year}` : ""} · <span className="font-mono">{title.id}</span></p>
+        <div className="grid gap-5 md:grid-cols-[180px_1fr]">
+          <div className="aspect-[2/3] overflow-hidden rounded-xl border border-line bg-elevated">
+            {title.posterKey ? <img src={title.posterKey} alt="" className="h-full w-full object-cover" /> : <div className="grid h-full place-items-center px-4 text-center text-xs text-muted">Artwork not added yet</div>}
           </div>
-          <span className="rounded-full border border-line bg-elevated px-3 py-1.5 text-xs font-semibold">{title.status}</span>
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-accent">Title</p>
+                <h1 className="mt-1 font-display text-2xl font-semibold text-fg sm:text-3xl">{title.name}</h1>
+                <p className="mt-1 text-sm text-muted">{title.language}{title.year ? ` · ${title.year}` : ""}{title.runtimeMinutes ? ` · ${title.runtimeMinutes} min` : ""}</p>
+              </div>
+              <span className="rounded-full border border-line bg-elevated px-3 py-1.5 text-xs font-semibold">{title.status}</span>
+            </div>
+            {title.synopsis ? <p className="mt-4 max-w-3xl text-sm leading-6 text-muted">{title.synopsis}</p> : null}
+            <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-sm">
+              {title.director ? <span><span className="text-muted">Director</span> · {title.director}</span> : null}
+              {title.cast?.length ? <span><span className="text-muted">Cast</span> · {title.cast.join(", ")}</span> : null}
+            </div>
+            <div className="mt-5"><button type="button" onClick={() => setActiveTab("Files")} className="rounded-full bg-fg px-5 py-2.5 text-sm font-semibold text-bg">Upload Files</button></div>
+          </div>
         </div>
       </section>
 
@@ -63,37 +76,41 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
 
       {activeTab === "Overview" ? (
         <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div><p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Progress</p><h2 className="mt-1 font-display text-xl font-semibold">Content to market</h2></div>
-            {!ingestReady ? <button type="button" onClick={() => setActiveTab("Files")} className="rounded-full bg-fg px-5 py-2.5 text-sm font-semibold text-bg">Upload Master Film</button> : null}
-          </div>
-          <div className="mt-5 grid gap-2 sm:grid-cols-5">{["Prepare","QC","Rights","Licensing","Delivery"].map((label,index)=><PipelineStep key={label} n={index+1} label={label} state={index+1 < pipelineStep ? "done" : index+1 === pipelineStep ? "current" : "todo"} />)}</div>
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Overview</p>
+          <h2 className="mt-1 font-display text-xl font-semibold">Ready for market</h2>
           <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <Metric label="Assets" value={String(assets.length)} /><Metric label="Master" value={title.masterKey ? "VERIFIED" : "REQUIRED"} /><Metric label="Rights" value={rightsReady ? "READY" : "PENDING"} /><Metric label="Delivery" value={distributionReady ? "AUTHORIZED" : packageReady ? "READY" : "PENDING"} />
+            <Metric label="Files" value={assets.length ? "ADDED" : "ADD FILES"} />
+            <Metric label="Rights" value={rightsReady ? "READY" : "PENDING"} />
+            <Metric label="Delivery" value={distributionReady ? "AUTHORIZED" : packageReady ? "READY" : "PENDING"} />
+            <Metric label="Revenue" value="—" />
           </div>
         </section>
       ) : activeTab === "Files" ? (
         <FilesPanel titleId={id} assets={assets} onAssetsChanged={() => assetsQ.refetch()} />
       ) : (
         <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">{activeTab}</p>
-          <h2 className="mt-1 font-display text-xl font-semibold">{tabHeading(activeTab)}</h2>
-          <p className="mt-2 max-w-3xl text-sm leading-6 text-muted">{tabCopy(activeTab, distributionReady, pub?.authorizationStatus)}</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Business</p>
+          <div className="mt-4 grid gap-3 md:grid-cols-2">
+            <BusinessCard title="Rights" status={rightsReady ? "Ready" : "Pending"} copy="Ownership, territory, language and window checks remain enforced by Bridge." />
+            <BusinessCard title="Agreement" status="Review" copy="Legal approvals stay admin-controlled and auditable." />
+            <BusinessCard title="Licensing" status={["IN_NEGOTIATION","LICENSED"].includes(title.status) ? title.status.replaceAll("_"," ") : "Not started"} copy="Commercial terms open only when required." />
+            <BusinessCard title="Delivery" status={distributionReady ? "Authorized" : "Pending"} copy={distributionReady ? "Approved for delivery." : "Delivery stays blocked until files, rights and commercial gates are clear."} />
+            <BusinessCard title="Revenue" status="—" copy="Payment, ledger and settlement logic remains unchanged." />
+          </div>
         </section>
       )}
     </div>
   );
 }
-function PipelineStep({ n, label, state }: { n:number; label:string; state:"done"|"current"|"todo" }) {
-  return <div className={`rounded-xl border p-3 ${state==="current"?"border-fg bg-elevated":"border-line"}`}><p className="text-[10px] font-semibold tracking-wider text-muted">{String(n).padStart(2,"0")} · {label.toUpperCase()}</p><p className="mt-1 text-xs font-semibold">{state==="done"?"Complete":state==="current"?"Current":"Not started"}</p></div>;
-}
 function Metric({ label, value }: { label:string; value:string }) { return <div className="rounded-xl border border-line bg-elevated/40 p-4"><p className="text-xs text-muted">{label}</p><p className="mt-1 text-sm font-semibold">{value}</p></div>; }
+function BusinessCard({ title, status, copy }: { title:string; status:string; copy:string }) {
+  return <div className="rounded-xl border border-line p-4"><div className="flex items-center justify-between gap-3"><h3 className="font-semibold">{title}</h3><span className="rounded-full border border-line px-3 py-1 text-[10px] font-semibold">{status}</span></div><p className="mt-2 text-sm leading-6 text-muted">{copy}</p></div>;
+}
 
 function FilesPanel({ titleId, assets, onAssetsChanged }: { titleId:string; assets:Array<{id:string;kind:string;contentType:string|null;byteSize:number|null;verified:boolean}>; onAssetsChanged:()=>Promise<unknown>|unknown }) {
  const [uploading,setUploading]=useState(false); const [message,setMessage]=useState<string|null>(null);
  async function uploadFile(file:File){setUploading(true);setMessage("Preparing secure upload…");try{const signed=await requestAssetUpload({data:{titleId,kind:"master",filename:file.name,contentType:file.type||"application/octet-stream"}});const put=await fetch(signed.url,{method:signed.method,body:file,headers:{"content-type":file.type||"application/octet-stream"}});if(!put.ok)throw new Error(`Upload failed (${put.status})`);await confirmAssetUpload({data:{assetId:signed.assetId,expectedByteSize:file.size}});await onAssetsChanged();setMessage("Master verified and sealed.");}catch(error){setMessage(error instanceof Error?error.message:"Upload failed");}finally{setUploading(false);}}
  async function download(id:string){const signed=await requestAssetDownload({data:{assetId:id}});window.location.assign(signed.url);}
- return <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6"><p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Files</p><h2 className="mt-1 font-display text-xl font-semibold">Assets</h2><p className="mt-2 text-sm text-muted">Master video and supporting assets remain in the existing private Bridge storage flow.</p><label className="mt-5 inline-flex cursor-pointer rounded-full bg-fg px-5 py-2.5 text-sm font-semibold text-bg">{uploading?"Uploading…":"Upload Master Film"}<input className="sr-only" type="file" accept="video/*,.mxf,.mov,.mp4" disabled={uploading} onChange={(e)=>{const file=e.currentTarget.files?.[0];if(file)void uploadFile(file);e.currentTarget.value="";}} /></label>{message?<p className="mt-3 text-xs text-muted">{message}</p>:null}<div className="mt-5 space-y-2">{assets.map(a=><div key={a.id} className="flex items-center justify-between gap-3 rounded-xl border border-line p-4"><div><p className="text-sm font-semibold">{a.kind}</p><p className="text-xs text-muted">{a.verified?"Verified":"Processing"}{a.byteSize?` · ${a.byteSize.toLocaleString()} bytes`:""}</p></div>{a.verified?<button onClick={()=>void download(a.id)} className="rounded-full border border-line px-4 py-2 text-xs font-semibold">Download</button>:null}</div>)}</div></section>;
+ return <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6"><p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Files</p><h2 className="mt-1 font-display text-xl font-semibold">Upload OTT files</h2><p className="mt-2 text-sm text-muted">Add only what the title needs for delivery.</p><div className="mt-5 grid gap-3 sm:grid-cols-2"><FileTypeCard label="Master Video" status={assets.some(a=>a.kind==="master")?"Added":"Required"} /><FileTypeCard label="Artwork" status={assets.some(a=>a.kind==="artwork")?"Added":"Add"} /><FileTypeCard label="Subtitle" status={assets.some(a=>a.kind==="subtitle")?"Added":"Optional"} /><FileTypeCard label="Audio" status={assets.some(a=>a.kind==="audio")?"Added":"Optional"} /></div><label className="mt-5 inline-flex cursor-pointer rounded-full bg-fg px-5 py-2.5 text-sm font-semibold text-bg">{uploading?"Uploading…":"Upload / Replace"}<input className="sr-only" type="file" disabled={uploading} onChange={(e)=>{const file=e.currentTarget.files?.[0];if(file)void uploadFile(file);e.currentTarget.value="";}} /></label>{message?<p className="mt-3 text-xs text-muted">{message}</p>:null}<div className="mt-5 space-y-2">{assets.map(a=><div key={a.id} className="flex items-center justify-between gap-3 rounded-xl border border-line p-4"><div><p className="text-sm font-semibold">{a.kind}</p><p className="text-xs text-muted">{a.verified?"Ready":"Processing"}</p></div>{a.verified?<button onClick={()=>void download(a.id)} className="rounded-full border border-line px-4 py-2 text-xs font-semibold">Download</button>:null}</div>)}</div></section>;
 }
-function tabHeading(tab:WorkspaceTab){const m:Record<WorkspaceTab,string>={Overview:"Content to market",Files:"Assets",Metadata:"Title metadata",QC:"Technical QC",Rights:"Rights & avails",Licensing:"Licensing",Delivery:"Delivery",Team:"Team access",Billing:"Billing & settlement"};return m[tab];}
-function tabCopy(tab:WorkspaceTab, delivered:boolean, loop?:string|null){const m:Record<WorkspaceTab,string>={Overview:"",Files:"",Metadata:"Canonical title and descriptive metadata.",QC:"Technical review and repair status for the title package.",Rights:"Ownership, territory, language, media, window and restrictions remain controlled by Bridge.",Licensing:"Contract-backed commercial grants and licensing status.",Delivery:delivered?`Delivery is authorized${loop?` · ${loop}`:""}.`:"Delivery activates only after required preparation, QC, rights and licensing gates.",Team:"Workspace participants and access for this title.",Billing:"Commercial and settlement information for this title."};return m[tab];}
+function FileTypeCard({ label, status }: { label:string; status:string }) { return <div className="rounded-xl border border-line p-4"><p className="text-sm font-semibold">{label}</p><p className="mt-1 text-xs text-muted">{status}</p></div>; }
