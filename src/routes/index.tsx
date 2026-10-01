@@ -40,14 +40,6 @@ const WORKFLOW_STEPS = [
   },
 ];
 
-const TRUST_PILLARS = [
-  "Secure Storage",
-  "QC",
-  "Rights",
-  "Licensing",
-  "Delivery",
-];
-
 function Home() {
   return (
     <div className="min-h-screen bg-white text-fg antialiased selection:bg-accent/20 selection:text-fg">
