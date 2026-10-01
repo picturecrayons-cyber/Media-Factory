@@ -47,7 +47,7 @@ function TitleBody({ id, actor: _actor }: { id: string; actor: BridgeActor }) {
       <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
         <div className="grid gap-5 md:grid-cols-[180px_1fr]">
           <div className="aspect-[2/3] overflow-hidden rounded-xl border border-line bg-elevated">
-            {title.posterKey ? <img src={title.posterKey} alt="" className="h-full w-full object-cover" /> : <div className="grid h-full place-items-center px-4 text-center text-xs text-muted">Artwork not added yet</div>}
+            <div className="grid h-full place-items-center px-4 text-center text-xs text-muted">{assets.some((asset) => asset.kind === "artwork") ? "Artwork added" : "Artwork not added yet"}</div>
           </div>
           <div className="min-w-0">
             <div className="flex flex-wrap items-start justify-between gap-3">
