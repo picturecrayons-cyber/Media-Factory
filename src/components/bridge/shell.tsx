@@ -12,6 +12,25 @@ const NAV = [
   { to: "/account", label: "Account" },
 ] as const;
 
+function LoopMark() {
+  return (
+    <a
+      href={LOOP_URL}
+      target="_blank"
+      rel="noreferrer"
+      aria-label="Open Crayons Loop"
+      title="Open Crayons Loop"
+      className="group inline-flex items-center gap-2 rounded-full border border-line bg-surface px-3 py-2 hover:border-line-strong"
+    >
+      <span aria-hidden="true" className="relative inline-flex h-5 w-11 overflow-hidden">
+        <span className="absolute left-0 top-0 font-display text-[15px] font-black lowercase tracking-[-0.08em] text-fg transition-transform duration-300 group-hover:-translate-y-5">loop</span>
+        <span className="absolute left-0 top-5 font-display text-[15px] font-black lowercase tracking-[-0.08em] text-fg transition-transform duration-300 group-hover:-translate-y-5">loop</span>
+      </span>
+      <span className="hidden text-xs font-semibold sm:inline">Crayons Loop ↗</span>
+    </a>
+  );
+}
+
 export function BrandMark({ className }: { className?: string }) {
   return <Link to="/" className={cn("inline-flex items-center shrink-0", className)} aria-label="Crayons Bridge home"><img src="/brand/logo.png" alt="Crayons Bridge" className="bridge-logo block h-auto w-[124px] object-contain sm:w-[144px] lg:w-[156px]" /></Link>;
 }
@@ -22,7 +41,7 @@ export function BridgeShell({ actor, title, children }: { actor: BridgeActor; ti
       <div className="mx-auto flex max-w-[1440px] items-center gap-5 px-4 py-3 sm:px-6 lg:px-8">
         <BrandMark />
         <nav className="hidden flex-1 items-center gap-1 md:flex">{NAV.map((item)=><Link key={item.to} to={item.to} className="bridge-nav-item" activeProps={{className:"bridge-nav-item bridge-nav-active"}}>{item.label}</Link>)}</nav>
-        <a href={LOOP_URL} target="_blank" rel="noreferrer" className="hidden rounded-full border border-line px-4 py-2 text-xs font-semibold hover:border-line-strong md:inline-flex">Crayons Loop ↗</a>
+        <LoopMark />
         <div className="ml-auto flex items-center gap-3">{actor.internalRole?<span className="hidden rounded-full border border-line px-3 py-1 text-xs text-muted sm:inline">{actor.internalRole.replaceAll("_"," ")}</span>:null}<UserButton /></div>
       </div>
     </header>
