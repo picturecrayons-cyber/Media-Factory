@@ -84,8 +84,13 @@ function Home() {
         {/* 2. Hero */}
         <section className="border-b border-line bg-surface">
           <div className="mx-auto max-w-6xl px-5 py-16 sm:px-6 sm:py-20 lg:py-24">
-            <div className="max-w-3xl">
-              <h1 className="font-display text-[2.45rem] font-semibold leading-[1.02] tracking-[-0.04em] text-fg sm:text-5xl lg:text-[3.9rem]">
+            <div className="max-w-4xl">
+              <img
+                src="/brand/logo.png"
+                alt="Crayons Bridge"
+                className="bridge-hero-logo h-auto w-full max-w-[520px] object-contain sm:max-w-[620px] lg:max-w-[720px]"
+              />
+              <h1 className="mt-8 max-w-3xl font-display text-[2.45rem] font-semibold leading-[1.02] tracking-[-0.04em] text-fg sm:text-5xl lg:text-[3.9rem]">
                 One bridge from content to market.
               </h1>
               <p className="mt-5 max-w-2xl text-base leading-7 text-muted sm:text-lg">
