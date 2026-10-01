@@ -10,53 +10,107 @@ import type { BridgeActor } from "@/lib/bridge/session";
 
 export const Route = createFileRoute("/title/$id")({ component: TitlePage });
 
-const TABS = ["Overview","Files","Details","Rights","Delivery","Billing"] as const;
-type Tab = (typeof TABS)[number];
+const WORKSPACE_TABS = ["Overview", "Files", "Business"] as const;
+type WorkspaceTab = (typeof WORKSPACE_TABS)[number];
 
 function TitlePage() {
   const { id } = Route.useParams();
-  return <RequireBridge>{(actor)=><BridgeShell actor={actor} title="Title Workspace"><TitleBody id={id} actor={actor} /></BridgeShell>}</RequireBridge>;
+  return (
+    <RequireBridge>
+      {(actor) => <BridgeShell actor={actor} title="Title Workspace"><TitleBody id={id} actor={actor} /></BridgeShell>}
+    </RequireBridge>
+  );
 }
 
-function TitleBody({ id, actor }: { id:string; actor:BridgeActor }) {
-  const [tab,setTab]=useState<Tab>("Overview");
-  const titleQ=useQuery({queryKey:["bridge-title",id],queryFn:()=>getTitle({data:{id}})});
-  const assetsQ=useQuery({queryKey:["bridge-assets",id],queryFn:()=>listTitleAssets({data:{titleId:id}})});
-  const pubQ=useQuery({queryKey:["loop-pub",id],queryFn:()=>getLoopPublication({data:{bridgeTitleId:id}})});
-  const title=titleQ.data?.title; const assets=assetsQ.data?.assets??[]; const pub=pubQ.data?.publication;
-  if(titleQ.isPending)return <p className="text-sm text-muted">Loading…</p>;
-  if(!title)return <p className="text-sm text-muted">Title not found.</p>;
-  const masterReady=Boolean(title.masterKey);
-  const rightsReady=["LICENSING_READY","LIVE_FOR_BUYERS","IN_NEGOTIATION","LICENSED","DELIVERED"].includes(title.status);
-  const delivered=Boolean(pub?.authorizationStatus);
+function TitleBody({ id, actor: _actor }: { id: string; actor: BridgeActor }) {
+  const [activeTab, setActiveTab] = useState<WorkspaceTab>("Overview");
 
-  return <div className="space-y-4">
-    <section className="rounded-2xl border border-line bg-surface p-5">
-      <div className="flex flex-wrap items-start justify-between gap-4"><div><h2 className="font-display text-2xl font-semibold sm:text-3xl">{title.name}</h2><p className="mt-1 text-xs text-muted">{title.language}{title.year?` · ${title.year}`:""}</p></div><span className="rounded-full border border-line px-3 py-1.5 text-xs font-semibold">{title.status}</span></div>
-    </section>
-    <nav className="flex gap-1 overflow-x-auto border-b border-line pb-3">{TABS.map(x=><button key={x} onClick={()=>setTab(x)} className={`whitespace-nowrap rounded-full px-4 py-2 text-xs ${tab===x?"bg-fg font-semibold text-bg":"text-muted hover:bg-surface"}`}>{x}</button>)}</nav>
-    {tab==="Overview"?<Overview assets={assets.length} masterReady={masterReady} rightsReady={rightsReady} delivered={delivered} openFiles={()=>setTab("Files")} />:
-     tab==="Files"?<FilesPanel titleId={id} assets={assets} onAssetsChanged={()=>assetsQ.refetch()} />:
-     <CompactPanel tab={tab} delivered={delivered} internal={Boolean(actor.internalRole)} />}
-  </div>;
+  const titleQ = useQuery({ queryKey: ["bridge-title", id], queryFn: () => getTitle({ data: { id } }) });
+  const assetsQ = useQuery({ queryKey: ["bridge-assets", id], queryFn: () => listTitleAssets({ data: { titleId: id } }) });
+  const pubQ = useQuery({ queryKey: ["loop-pub", id], queryFn: () => getLoopPublication({ data: { bridgeTitleId: id } }) });
+
+  const title = titleQ.data?.title;
+  const assets = assetsQ.data?.assets ?? [];
+  const pub = pubQ.data?.publication;
+
+  if (titleQ.isPending) return <p className="text-sm text-muted">Loading title workspace…</p>;
+  if (!title) return <p className="text-sm text-muted">Title not found.</p>;
+
+  const qcReady = Boolean(title.masterKey);
+  const legalReady = ["LICENSING_READY", "LIVE_FOR_BUYERS", "IN_NEGOTIATION", "LICENSED", "DELIVERED"].includes(title.status);
+  const rightsReady = legalReady;
+  const packageReady = Boolean(qcReady && legalReady);
+  const distributionReady = Boolean(pub?.authorizationStatus);
+
+  return (
+    <div className="space-y-5">
+      <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
+        <div className="grid gap-5 md:grid-cols-[180px_1fr]">
+          <div className="aspect-[2/3] overflow-hidden rounded-xl border border-line bg-elevated">
+            <div className="grid h-full place-items-center px-4 text-center text-xs text-muted">{assets.some((asset) => asset.kind === "poster") ? "Artwork added" : "Artwork not added yet"}</div>
+          </div>
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-accent">Title</p>
+                <h1 className="mt-1 font-display text-2xl font-semibold text-fg sm:text-3xl">{title.name}</h1>
+                <p className="mt-1 text-sm text-muted">{title.language}{title.year ? ` · ${title.year}` : ""}{title.runtimeMinutes ? ` · ${title.runtimeMinutes} min` : ""}</p>
+              </div>
+              <span className="rounded-full border border-line bg-elevated px-3 py-1.5 text-xs font-semibold">{title.status}</span>
+            </div>
+            {title.synopsis ? <p className="mt-4 max-w-3xl text-sm leading-6 text-muted">{title.synopsis}</p> : null}
+            <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-sm">
+              {title.credits?.some((c) => c.role === "Director") ? <span><span className="text-muted">Director</span> · {title.credits.filter((c) => c.role === "Director").map((c) => c.name).join(", ")}</span> : null}
+              {title.credits?.some((c) => c.role === "Cast") ? <span><span className="text-muted">Cast</span> · {title.credits.filter((c) => c.role === "Cast").map((c) => c.name).join(", ")}</span> : null}
+            </div>
+            <div className="mt-5"><button type="button" onClick={() => setActiveTab("Files")} className="rounded-full bg-fg px-5 py-2.5 text-sm font-semibold text-bg">Upload Files</button></div>
+          </div>
+        </div>
+      </section>
+
+      <nav aria-label="Title Workspace Sections" className="flex gap-1 overflow-x-auto border-b border-line pb-3">
+        {WORKSPACE_TABS.map((tab) => <button key={tab} type="button" onClick={() => setActiveTab(tab)} className={`whitespace-nowrap rounded-full px-4 py-2 text-xs ${activeTab === tab ? "bg-fg text-bg font-semibold" : "text-muted hover:bg-surface hover:text-fg"}`}>{tab}</button>)}
+      </nav>
+
+      {activeTab === "Overview" ? (
+        <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Overview</p>
+          <h2 className="mt-1 font-display text-xl font-semibold">Ready for market</h2>
+          <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <Metric label="Files" value={assets.length ? "ADDED" : "ADD FILES"} />
+            <Metric label="Rights" value={rightsReady ? "READY" : "PENDING"} />
+            <Metric label="Delivery" value={distributionReady ? "AUTHORIZED" : packageReady ? "READY" : "PENDING"} />
+            <Metric label="Revenue" value="—" />
+          </div>
+        </section>
+      ) : activeTab === "Files" ? (
+        <FilesPanel titleId={id} assets={assets} onAssetsChanged={() => assetsQ.refetch()} />
+      ) : (
+        <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Business</p>
+          <div className="mt-4 grid gap-3 md:grid-cols-2">
+            <BusinessCard title="Rights" status={rightsReady ? "Ready" : "Pending"} copy="Ownership, territory, language and window checks remain enforced by Bridge." />
+            <BusinessCard title="Agreement" status="Review" copy="Legal approvals stay admin-controlled and auditable." />
+            <BusinessCard title="Licensing" status={["IN_NEGOTIATION","LICENSED"].includes(title.status) ? title.status.replaceAll("_"," ") : "Not started"} copy="Commercial terms open only when required." />
+            <BusinessCard title="Delivery" status={distributionReady ? "Authorized" : "Pending"} copy={distributionReady ? "Approved for delivery." : "Delivery stays blocked until files, rights and commercial gates are clear."} />
+            <BusinessCard title="Revenue" status="—" copy="Payment, ledger and settlement logic remains unchanged." />
+          </div>
+        </section>
+      )}
+    </div>
+  );
+}
+function Metric({ label, value }: { label:string; value:string }) { return <div className="rounded-xl border border-line bg-elevated/40 p-4"><p className="text-xs text-muted">{label}</p><p className="mt-1 text-sm font-semibold">{value}</p></div>; }
+function BusinessCard({ title, status, copy }: { title:string; status:string; copy:string }) {
+  return <div className="rounded-xl border border-line p-4"><div className="flex items-center justify-between gap-3"><h3 className="font-semibold">{title}</h3><span className="rounded-full border border-line px-3 py-1 text-[10px] font-semibold">{status}</span></div><p className="mt-2 text-sm leading-6 text-muted">{copy}</p></div>;
 }
 
-function Overview({assets,masterReady,rightsReady,delivered,openFiles}:{assets:number;masterReady:boolean;rightsReady:boolean;delivered:boolean;openFiles:()=>void}) {
- return <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
-   <div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-wider text-accent">Ready for OTT</p><h3 className="mt-1 font-display text-xl font-semibold">Complete only what is needed</h3></div><button onClick={openFiles} className="rounded-full bg-fg px-5 py-2.5 text-sm font-semibold text-bg">{masterReady?"Manage Files":"Upload Master"}</button></div>
-   <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4"><Mini label="Files" value={assets?`${assets} added`:"Add files"} /><Mini label="Master" value={masterReady?"Ready":"Required"} /><Mini label="Rights" value={rightsReady?"Ready":"Pending"} /><Mini label="Delivery" value={delivered?"Authorized":"Pending"} /></div>
-   <p className="mt-4 text-xs text-muted">Add the title information and assets viewers need. Bridge keeps QC, storage and authorization checks in the background.</p>
- </section>;
-}
-function Mini({label,value}:{label:string;value:string}){return <div className="rounded-xl border border-line p-4"><p className="text-xs text-muted">{label}</p><p className="mt-1 text-sm font-semibold">{value}</p></div>}
-
-function FilesPanel({titleId,assets,onAssetsChanged}:{titleId:string;assets:Array<{id:string;kind:string;contentType:string|null;byteSize:number|null;verified:boolean}>;onAssetsChanged:()=>Promise<unknown>|unknown}) {
- const [uploading,setUploading]=useState(false); const [message,setMessage]=useState<string|null>(null);
- async function upload(file:File){setUploading(true);setMessage("Uploading…");try{const signed=await requestAssetUpload({data:{titleId,kind:"master",filename:file.name,contentType:file.type||"application/octet-stream"}});const put=await fetch(signed.url,{method:signed.method,body:file,headers:{"content-type":file.type||"application/octet-stream"}});if(!put.ok)throw new Error(`Upload failed (${put.status})`);await confirmAssetUpload({data:{assetId:signed.assetId,expectedByteSize:file.size}});await onAssetsChanged();setMessage("Upload complete.");}catch(e){setMessage(e instanceof Error?e.message:"Upload failed");}finally{setUploading(false);}}
+type SimpleAssetKind = "master" | "poster" | "subtitle" | "screener";
+function FilesPanel({ titleId, assets, onAssetsChanged }: { titleId:string; assets:Array<{id:string;kind:string;contentType:string|null;byteSize:number|null;verified:boolean}>; onAssetsChanged:()=>Promise<unknown>|unknown }) {
+ const [uploading,setUploading]=useState<SimpleAssetKind|null>(null); const [message,setMessage]=useState<string|null>(null);
+ async function uploadFile(kind:SimpleAssetKind,file:File){setUploading(kind);setMessage(`Preparing ${kind} upload…`);try{const signed=await requestAssetUpload({data:{titleId,kind,filename:file.name,contentType:file.type||"application/octet-stream"}});const put=await fetch(signed.url,{method:signed.method,body:file,headers:{"content-type":file.type||"application/octet-stream"}});if(!put.ok)throw new Error(`Upload failed (${put.status})`);await confirmAssetUpload({data:{assetId:signed.assetId,expectedByteSize:file.size}});await onAssetsChanged();setMessage(`${kind[0].toUpperCase()+kind.slice(1)} is ready.`);}catch(error){setMessage(error instanceof Error?error.message:"Upload failed");}finally{setUploading(null);}}
  async function download(id:string){const signed=await requestAssetDownload({data:{assetId:id}});window.location.assign(signed.url);}
- return <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6"><div className="flex flex-wrap items-center justify-between gap-3"><div><h3 className="font-display text-xl font-semibold">Files</h3><p className="mt-1 text-sm text-muted">Master video and OTT assets.</p></div><label className="cursor-pointer rounded-full bg-fg px-5 py-2.5 text-sm font-semibold text-bg">{uploading?"Uploading…":"Upload Master"}<input className="sr-only" type="file" accept="video/*,.mxf,.mov,.mp4" disabled={uploading} onChange={e=>{const f=e.currentTarget.files?.[0];if(f)void upload(f);e.currentTarget.value="";}} /></label></div>{message?<p className="mt-3 text-xs text-muted">{message}</p>:null}<div className="mt-4 space-y-2">{assets.length?assets.map(a=><div key={a.id} className="flex items-center justify-between rounded-xl border border-line p-3"><div><p className="text-sm font-semibold">{a.kind}</p><p className="text-xs text-muted">{a.verified?"Ready":"Processing"}</p></div>{a.verified?<button onClick={()=>void download(a.id)} className="rounded-full border border-line px-4 py-2 text-xs font-semibold">Download</button>:null}</div>):<p className="text-sm text-muted">No files yet.</p>}</div></section>;
+ const cards:[SimpleAssetKind,string,string][]=[["master","Master Video","Required"],["poster","Artwork","Add"],["subtitle","Subtitle","Optional"],["screener","Trailer / Screener","Optional"]];
+ return <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6"><p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Files</p><h2 className="mt-1 font-display text-xl font-semibold">Upload OTT files</h2><p className="mt-2 text-sm text-muted">Add or replace each delivery asset without exposing storage details.</p><div className="mt-5 grid gap-3 sm:grid-cols-2">{cards.map(([kind,label,empty])=><FileTypeCard key={kind} label={label} status={assets.some(a=>a.kind===kind)?"Ready":empty} busy={uploading===kind} onFile={(file)=>void uploadFile(kind,file)} />)}</div>{message?<p className="mt-3 text-xs text-muted">{message}</p>:null}<div className="mt-5 space-y-2">{assets.map(a=><div key={a.id} className="flex items-center justify-between gap-3 rounded-xl border border-line p-4"><div><p className="text-sm font-semibold">{a.kind}</p><p className="text-xs text-muted">{a.verified?"Ready":"Processing"}</p></div>{a.verified?<button onClick={()=>void download(a.id)} className="rounded-full border border-line px-4 py-2 text-xs font-semibold">Download</button>:null}</div>)}</div></section>;
 }
-function CompactPanel({tab,delivered,internal}:{tab:Exclude<Tab,"Overview"|"Files">;delivered:boolean;internal:boolean}) {
- const copy={Details:"Title, year, runtime, synopsis, cast, director and artwork used by OTT destinations.",Rights:"Ownership, territories, languages and availability window.",Delivery:delivered?"Authorized for delivery.":"Review readiness and authorize a destination when requirements are complete.",Billing:"Commercial terms, revenue and settlements."}[tab];
- return <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6"><h3 className="font-display text-xl font-semibold">{tab}</h3><p className="mt-2 max-w-2xl text-sm text-muted">{copy}</p>{tab==="Rights"||tab==="Delivery"||tab==="Billing"?<p className="mt-4 text-xs font-semibold text-muted">{internal?"Admin controls stay here when required.":"Bridge will ask only for information needed at this stage."}</p>:null}</section>;
-}
+function FileTypeCard({ label, status, busy, onFile }: { label:string; status:string; busy:boolean; onFile:(file:File)=>void }) { return <div className="rounded-xl border border-line p-4"><div className="flex items-center justify-between gap-3"><div><p className="text-sm font-semibold">{label}</p><p className="mt-1 text-xs text-muted">{status}</p></div><label className="cursor-pointer rounded-full border border-line px-3 py-1.5 text-xs font-semibold">{busy?"Uploading…":status==="Ready"?"Replace":"Upload"}<input className="sr-only" type="file" disabled={busy} onChange={(e)=>{const file=e.currentTarget.files?.[0];if(file)onFile(file);e.currentTarget.value="";}} /></label></div></div>; }
