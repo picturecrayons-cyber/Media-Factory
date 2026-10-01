@@ -32,13 +32,13 @@ function LoopMark() {
 }
 
 export function BrandMark({ className }: { className?: string }) {
-  return <Link to="/" className={cn("inline-flex items-center shrink-0", className)} aria-label="Crayons Bridge home"><img src="/brand/logo.png" alt="Crayons Bridge" className="bridge-logo block h-auto w-[124px] object-contain sm:w-[144px] lg:w-[156px]" /></Link>;
+  return <Link to="/" className={cn("inline-flex items-center shrink-0", className)} aria-label="Crayons Bridge home"><img src="/brand/logo.png" alt="Crayons Bridge" className="bridge-logo block h-auto w-[168px] object-contain sm:w-[196px] lg:w-[220px]" /></Link>;
 }
 
 export function BridgeShell({ actor, title, children }: { actor: BridgeActor; title: string; children: ReactNode }) {
   return <div className="min-h-screen bg-bg text-fg">
-    <header className="sticky top-0 z-50 border-b border-line bg-surface/95 backdrop-blur">
-      <div className="mx-auto flex max-w-[1440px] items-center gap-5 px-4 py-3 sm:px-6 lg:px-8">
+    <header className="sticky top-0 z-50 border-b border-line bg-surface/88 backdrop-blur-xl">
+      <div className="mx-auto flex max-w-[1440px] items-center gap-5 px-4 py-3.5 sm:px-6 lg:px-8">
         <BrandMark />
         <nav className="hidden flex-1 items-center gap-1 md:flex">{NAV.map((item)=><Link key={item.to} to={item.to} className="bridge-nav-item" activeProps={{className:"bridge-nav-item bridge-nav-active"}}>{item.label}</Link>)}</nav>
         <LoopMark />
