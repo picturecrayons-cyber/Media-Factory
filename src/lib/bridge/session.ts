@@ -77,6 +77,18 @@ export function requireActorPermission(actor: Actor, permission: Permission) {
   assertPermission(actor, permission);
 }
 
+/**
+ * Private Bridge owner/control-plane gate.
+ *
+ * Operational and admin surfaces must not rely on client-side navigation hiding.
+ * A verified internal role is required before protected Bridge routes render.
+ * Creator/studio/buyer account permissions remain available for data-level policy,
+ * but they cannot enter the private owner workspace while this lock is enabled.
+ */
+export function isPrivateBridgeOperator(actor: Actor): boolean {
+  return actor.emailVerified && Boolean(actor.internalRole);
+}
+
 export const getBridgeSession = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
