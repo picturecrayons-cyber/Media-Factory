@@ -1,12 +1,12 @@
 const supabaseUrl =
   process.env.SUPABASE_URL?.replace(/\/$/, "") ||
   process.env.VITE_SUPABASE_URL?.replace(/\/$/, "") ||
-  "https://mlmgugivsyoxzdgwkbpu.supabase.co";
+  "";
 
 const supabasePublishableKey =
   process.env.SUPABASE_PUBLISHABLE_KEY ||
   process.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
-  "sb_publishable_8XCMcaqHvYMWANqxqnS0mw_f_asubxB";
+  "";
 
 export class UnauthorizedError extends Error {
   readonly status = 401;
@@ -24,7 +24,10 @@ export type VerifiedUser = {
 };
 
 export async function getSessionUser(bearerToken?: string): Promise<VerifiedUser | null> {
-  if (!bearerToken || !supabaseUrl || !supabasePublishableKey) return null;
+  if (!bearerToken) return null;
+  if (!supabaseUrl || !supabasePublishableKey) {
+    throw new Error("Supabase server auth configuration is missing.");
+  }
 
   try {
     const response = await fetch(`${supabaseUrl}/auth/v1/user`, {
