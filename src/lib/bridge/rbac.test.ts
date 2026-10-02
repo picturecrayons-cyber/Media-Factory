@@ -102,6 +102,9 @@ describe("PRD authorization matrix", () => {
   it("reserves dashboard and super-admin grants for verified super admins", () => {
     assert.equal(canAccessDashboard(superAdmin()), true);
     assert.equal(canAccessDashboard(admin()), false);
+    assert.equal(canAccessDashboard(qc), false);
+    assert.equal(canAccessDashboard(legal), false);
+    assert.equal(canAccessDashboard(finance), false);
     assert.equal(canAccessDashboard(viewer()), false);
     assert.equal(canGrantInternalRole(admin(), "viewer"), true);
     assert.equal(canGrantInternalRole(admin(), "super_admin"), false);
