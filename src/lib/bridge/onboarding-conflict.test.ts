@@ -14,6 +14,17 @@ test("sanitizes PostgreSQL unique violations and unrelated server errors", () =>
     constraint: "bridge_profiles_email_idx",
   });
   assert.equal(isBridgeProfileEmailConflict(dbError), true);
+  assert.equal(
+    isBridgeProfileEmailConflict(Object.assign(new Error("mentions bridge_profiles_email_idx"), { code: "23505" })),
+    false,
+  );
+  assert.equal(
+    isBridgeProfileEmailConflict(Object.assign(new Error("other unique violation"), {
+      code: "23505",
+      constraint: "some_other_unique_idx",
+    })),
+    false,
+  );
   assert.equal(publicOnboardingError(dbError), ONBOARDING_GENERIC_ERROR_MESSAGE);
   assert.equal(publicOnboardingError(new Error("relation bridge_profiles does not exist")), ONBOARDING_GENERIC_ERROR_MESSAGE);
   assert.equal(publicOnboardingError(new Error(ONBOARDING_EMAIL_CONFLICT_MESSAGE)), ONBOARDING_EMAIL_CONFLICT_MESSAGE);
@@ -43,10 +54,9 @@ test("client blocks duplicate submit and never renders arbitrary exception messa
   assert.doesNotMatch(src, /err instanceof Error \? err\.message/);
 });
 
-test("invite consumption still precedes profile insert, exposing the known atomicity failure", () => {
+test("invite consumption and profile creation are atomic in one statement", () => {
   const src = readFileSync(new URL("./profiles.ts", import.meta.url), "utf8");
-  const consume = src.indexOf("update bridge_invites set accepted_at = now()");
-  const insert = src.indexOf("insert into bridge_profiles");
-  assert.ok(consume >= 0 && insert >= 0 && consume < insert,
-    "expected current bug: invite is consumed before profile creation; PR 2 must make this atomic");
+  assert.match(src, /with consumed_invite as \([\s\S]*update bridge_invites[\s\S]*insert into bridge_profiles/);
+  assert.match(src, /where id = \$\{inviteId\} and accepted_at is null/);
+  assert.match(src, /if \(inserted\.length === 0\) \{[\s\S]*loadActor\(context\.userId\)/);
 });

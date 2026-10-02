@@ -14,11 +14,10 @@ const SAFE_ONBOARDING_MESSAGES = new Set([
 
 export function isBridgeProfileEmailConflict(error: unknown): boolean {
   if (!error || typeof error !== "object") return false;
-  const candidate = error as { code?: unknown; constraint?: unknown; message?: unknown };
+  const candidate = error as { code?: unknown; constraint?: unknown };
   if (candidate.code !== "23505") return false;
   const constraint = typeof candidate.constraint === "string" ? candidate.constraint : "";
-  const message = typeof candidate.message === "string" ? candidate.message : "";
-  return constraint === "bridge_profiles_email_idx" || message.includes("bridge_profiles_email_idx");
+  return constraint === "bridge_profiles_email_idx";
 }
 
 export function publicOnboardingError(error: unknown): string {
