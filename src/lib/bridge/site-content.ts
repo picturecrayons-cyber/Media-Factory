@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
-import { requireActor } from "./session";
+import { requireVerifiedActor } from "./session";
 import { writeAudit } from "./audit";
 import { assertPermission } from "./rbac";
 import { assertNotDevUser } from "./guards";
@@ -60,7 +60,7 @@ export const updateHomepageContent = createServerFn({ method: "POST" })
   .validator(contentSchema)
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
-    const actor = await requireActor(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
     assertPermission(actor, "users.invite_internal");
     const sql = await getSql();
     const rows = await sql<SiteRow>`
