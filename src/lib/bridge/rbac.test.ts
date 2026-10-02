@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { assertPermission, canReadTitle, hasPermission, permissionForTransition, workspaceHome } from "./rbac.ts";
+import { assertPermission, canAccessDashboard, canGrantInternalRole, canReadTitle, hasPermission, permissionForTransition, workspaceHome } from "./rbac.ts";
 import type { Actor } from "./rbac.ts";
 
 const actor = (userId: string, accountType: Actor["accountType"], internalRole: Actor["internalRole"] = null, emailVerified = true): Actor =>
@@ -10,6 +10,7 @@ const studio = () => actor("studio-a", "studio");
 const buyer = () => actor("buyer-a", "buyer");
 const admin = () => actor("admin-a", "independent_creator", "admin");
 const superAdmin = () => actor("super-a", "independent_creator", "super_admin");
+const viewer = () => actor("viewer-a", "independent_creator", "viewer");
 const qc = actor("qc1", "independent_creator", "qc_reviewer");
 
 describe("PRD authorization matrix", () => {
@@ -40,15 +41,15 @@ describe("PRD authorization matrix", () => {
     assert.equal(hasPermission(b, "payment.create_order"), true);
   });
 
-  it("admin combines internal operator permissions with its account-type permissions", () => {
+  it("internal roles do not inherit creator or buyer account powers", () => {
     const a = admin();
     assert.equal(hasPermission(a, "title.read_catalog"), true);
     assert.equal(hasPermission(a, "title.qc_review"), true);
-    assert.equal(hasPermission(a, "title.rights_review"), true);
     assert.equal(hasPermission(a, "users.invite_internal"), true);
-    assert.equal(hasPermission(a, "title.create"), true);
-    assert.equal(hasPermission(a, "asset.sign_upload"), true);
+    assert.equal(hasPermission(a, "title.create"), false);
+    assert.equal(hasPermission(a, "asset.sign_upload"), false);
     assert.equal(canReadTitle(a, { ownerUserId: "other-org-user", status: "DRAFT" }), true);
+    assert.equal(hasPermission(viewer(), "asset.sign_download"), false);
   });
 
   it("only super admin combines operator and creator-side powers", () => {
@@ -64,6 +65,7 @@ describe("PRD authorization matrix", () => {
     assert.equal(hasPermission(buyer(), "asset.sign_upload"), false);
     assert.equal(hasPermission(buyer(), "asset.sign_download"), true);
     assert.equal(hasPermission(qc, "asset.sign_download"), true);
+    assert.equal(hasPermission(viewer(), "asset.sign_download"), false);
   });
 
   it("maps lifecycle steps to separated duties and withholds LICENSED", () => {
@@ -73,11 +75,21 @@ describe("PRD authorization matrix", () => {
     assert.equal(permissionForTransition("IN_NEGOTIATION", "LICENSED"), null);
   });
 
-  it("routes authenticated roles to their role workspace", () => {
+  it("reserves dashboard and super-admin grants for verified super admins", () => {
+    assert.equal(canAccessDashboard(superAdmin()), true);
+    assert.equal(canAccessDashboard(admin()), false);
+    assert.equal(canAccessDashboard(viewer()), false);
+    assert.equal(canGrantInternalRole(admin(), "viewer"), true);
+    assert.equal(canGrantInternalRole(admin(), "super_admin"), false);
+    assert.equal(canGrantInternalRole(superAdmin(), "super_admin"), true);
+  });
+
+  it("routes operators away from the super-admin dashboard", () => {
     assert.equal(workspaceHome(creator()), "/creator");
     assert.equal(workspaceHome(studio()), "/studio");
     assert.equal(workspaceHome(buyer()), "/buyer");
-    assert.equal(workspaceHome(admin()), "/dashboard");
-    assert.equal(workspaceHome(qc), "/dashboard");
+    assert.equal(workspaceHome(superAdmin()), "/dashboard");
+    assert.equal(workspaceHome(admin()), "/internal");
+    assert.equal(workspaceHome(qc), "/internal");
   });
 });
