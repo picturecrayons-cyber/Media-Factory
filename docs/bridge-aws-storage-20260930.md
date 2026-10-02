@@ -32,3 +32,7 @@ Jananam (legacy film 7) and Telugu PRANAYAM 1947 (legacy film 36) are separate r
 ## Release gate
 
 No database import, AWS object write, credential change, main merge or production promotion was performed for local verification. Tests mock AWS requests. Live S3 object existence, bucket CORS/IAM, authorized upload/download, technical QC, C2C delivery and Bridge-to-Loop playback remain unverified. CRA-102 must remain In Progress until the complete provenance/rendering path is verified against the deployed head.
+
+## 2026-10-02 reconciliation
+
+Draft #54 was reconciled with current `main` at `4f4ae2534d4feaa1f9f0565dd18050d36bd03628` without restoring stale storage code. Read-only runtime data currently records `legacy-film-7` as authorized for Loop TVOD with a non-revoked worldwide Malayalam publication and matching Loop title `pranayam-1947`; this newer authorization evidence must not be replaced by the historical legacy-export note above. Direct anonymous S3 requests return 403, consistent with private-object delivery, and do not establish object absence. Exact-head Preview plus authenticated/signed object verification remains required.
