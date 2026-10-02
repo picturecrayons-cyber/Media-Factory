@@ -68,11 +68,12 @@ describe("PRD authorization matrix", () => {
     assert.equal(canMutateTitle(viewer(), foreign, "title.update_own", "title.qc_review"), false);
   });
 
-  it("only super admin combines operator and creator-side powers", () => {
+  it("super admin remains staff-scoped instead of inheriting creator powers", () => {
     const a = superAdmin();
-    assert.equal(hasPermission(a, "title.create"), true);
-    assert.equal(hasPermission(a, "asset.sign_upload"), true);
+    assert.equal(hasPermission(a, "title.create"), false);
+    assert.equal(hasPermission(a, "asset.sign_upload"), false);
     assert.equal(hasPermission(a, "users.invite_internal"), true);
+    assert.equal(hasPermission(a, "title.license"), true);
   });
 
   it("signed asset permissions are role scoped", () => {
