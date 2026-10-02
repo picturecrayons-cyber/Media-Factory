@@ -5,46 +5,48 @@ import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { Button } from "@/components/ui/button";
 import { requestEmailVerification } from "@/lib/bridge/profiles";
-import { UserButton } from "@/lib/auth/gates";
 
 export const Route = createFileRoute("/account")({ component: Account });
 
 function Account() {
   return (
     <RequireBridge>
-      {(actor) => (
-        <BridgeShell actor={actor} title="Account">
-          <dl className="grid gap-4 text-sm sm:grid-cols-2">
-            <div className="rounded-sm border border-line p-4">
-              <dt className="text-muted">Mailbox</dt>
-              <dd className="mt-1">{actor.email}</dd>
+      {(actor) => {
+        const bridgeAdmin = actor.internalRole === "admin" || actor.internalRole === "super_admin";
+        return (
+          <BridgeShell actor={actor} title="Account & Settings">
+            <section className="grid gap-6 lg:grid-cols-2">
+              <div className="rounded-3xl border border-line bg-surface p-6">
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">Personal profile</p>
+                <dl className="mt-4 grid gap-4 text-sm">
+                  <div><dt className="text-muted">Mailbox</dt><dd className="mt-1">{actor.email}</dd></div>
+                  <div><dt className="text-muted">Account type</dt><dd className="mt-1">{actor.accountType.replaceAll("_", " ")}</dd></div>
+                  <div><dt className="text-muted">Organization</dt><dd className="mt-1">{actor.organizationName ?? "—"}</dd></div>
+                  <div><dt className="text-muted">Verification</dt><dd className="mt-1">{actor.emailVerified ? "Verified" : "Verification required"}</dd></div>
+                </dl>
+                {!actor.emailVerified ? <div className="mt-5"><ResendVerify /></div> : null}
+              </div>
+
+              <div className="rounded-3xl border border-line bg-surface p-6">
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">Administrative access</p>
+                <dl className="mt-4 grid gap-4 text-sm">
+                  <div><dt className="text-muted">Bridge internal role</dt><dd className="mt-1">{actor.internalRole?.replaceAll("_", " ") ?? "Not authorized"}</dd></div>
+                  <div><dt className="text-muted">Bridge Admin</dt><dd className="mt-1">{bridgeAdmin ? "Authorized" : "Not authorized"}</dd></div>
+                  <div><dt className="text-muted">Loop CMS</dt><dd className="mt-1">Not authorized — independent Loop CMS authorization is not implemented in this Bridge runtime.</dd></div>
+                </dl>
+                <div className="mt-5 flex flex-wrap gap-3">
+                  {bridgeAdmin ? <Link to="/admin"><Button>Open Bridge Admin</Button></Link> : null}
+                  <Button type="button" variant="outline" disabled title="Requires independent server-authoritative Loop CMS permission">Loop CMS unavailable</Button>
+                </div>
+              </div>
+            </section>
+
+            <div className="mt-6">
+              <Link to="/" className="text-sm text-accent underline-offset-4 hover:underline">Public landing</Link>
             </div>
-            <div className="rounded-sm border border-line p-4">
-              <dt className="text-muted">Type</dt>
-              <dd className="mt-1">{actor.accountType.replaceAll("_", " ")}</dd>
-            </div>
-            <div className="rounded-sm border border-line p-4">
-              <dt className="text-muted">Organization</dt>
-              <dd className="mt-1">{actor.organizationName ?? "—"}</dd>
-            </div>
-            <div className="rounded-sm border border-line p-4">
-              <dt className="text-muted">Internal role</dt>
-              <dd className="mt-1">{actor.internalRole?.replaceAll("_", " ") ?? "none"}</dd>
-            </div>
-            <div className="rounded-sm border border-line p-4">
-              <dt className="text-muted">Email verified</dt>
-              <dd className="mt-1">{actor.emailVerified ? "yes" : "no"}</dd>
-            </div>
-          </dl>
-          <div className="mt-6 flex flex-wrap items-center gap-3">
-            <ResendVerify />
-            <UserButton />
-            <Link to="/" className="text-sm text-accent underline-offset-4 hover:underline">
-              Public landing
-            </Link>
-          </div>
-        </BridgeShell>
-      )}
+          </BridgeShell>
+        );
+      }}
     </RequireBridge>
   );
 }
