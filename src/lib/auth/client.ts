@@ -1,8 +1,10 @@
 import { supabase } from "@/lib/supabase";
 import type { Session, User } from "@supabase/supabase-js";
+import { GROK_PROVIDERS } from "./providers";
 import { restoreSupabaseSession } from "./session-restoration";
 
 export const authEnabled = import.meta.env.VITE_AUTH_ENABLED !== "false";
+export { GROK_PROVIDERS };
 
 export type SupabaseUser = User;
 export type SupabaseSession = Session;
@@ -23,6 +25,8 @@ export async function hasSupabaseRecoverySession(): Promise<boolean> {
 export async function getSupabaseSession(
   opts: { forceRefresh?: boolean } = {},
 ): Promise<Session | null> {
+  // The SDK waits for URL/session restoration and owns refresh-token rotation.
+  // A separate cache can return expired tokens after a reload or failed refresh.
   try {
     return await restoreSupabaseSession(supabase.auth, opts);
   } catch (err) {
@@ -121,6 +125,10 @@ export async function signOut(redirectTo = "/login"): Promise<void> {
     window.localStorage.removeItem("crayons-bridge.sb-auth-token");
     window.location.assign(redirectTo);
   }
+}
+
+export async function signIn(_providerId: string): Promise<void> {
+  throw new Error("Social sign-in is temporarily unavailable. Use email and password.");
 }
 
 export function subscribeAuthChange(listener: (event: string, session: Session | null) => void) {
