@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { listTitles } from "@/lib/bridge/titles";
+import { getDashboardSession } from "@/lib/bridge/session";
 
 export const Route = createFileRoute("/dashboard")({ component: Dashboard });
 
@@ -11,7 +12,10 @@ function Dashboard() {
 }
 
 function DashboardBody() {
-  const titlesQ = useQuery({ queryKey:["bridge-titles"], queryFn:()=>listTitles() });
+  const dashboardQ = useQuery({ queryKey:["bridge-dashboard-session"], queryFn:()=>getDashboardSession(), retry:false });
+  const titlesQ = useQuery({ queryKey:["bridge-titles"], queryFn:()=>listTitles(), enabled: dashboardQ.isSuccess });
+  if (dashboardQ.isPending) return <p className="text-sm text-muted">Checking dashboard access…</p>;
+  if (dashboardQ.isError) return <p role="alert" className="text-sm text-accent">Super admin access required.</p>;
   const titles = titlesQ.data?.titles ?? [];
   const review = titles.filter((t)=>["PREPARING","QC_REVIEW","RIGHTS_REVIEW"].includes(t.status)).length;
   const deals = titles.filter((t)=>["IN_NEGOTIATION","LICENSED"].includes(t.status)).length;
