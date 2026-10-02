@@ -1,0 +1,77 @@
+export type OttIngestKind = "master" | "poster" | "subtitle" | "screener";
+
+type OttIngestRule = {
+  label: string;
+  extensions: readonly string[];
+  mimeTypes: readonly string[];
+};
+
+export const OTT_INGEST_SPEC: Record<OttIngestKind, OttIngestRule> = {
+  master: {
+    label: "Master Video",
+    extensions: [".mp4", ".mov", ".mxf"],
+    mimeTypes: ["video/mp4", "video/quicktime", "application/mxf", "video/mxf"],
+  },
+  poster: {
+    label: "Artwork",
+    extensions: [".png", ".jpg", ".jpeg", ".webp"],
+    mimeTypes: ["image/png", "image/jpeg", "image/webp"],
+  },
+  subtitle: {
+    label: "Subtitle",
+    extensions: [".srt", ".vtt", ".ttml", ".xml"],
+    mimeTypes: [
+      "application/x-subrip",
+      "text/srt",
+      "text/vtt",
+      "application/ttml+xml",
+      "application/xml",
+      "text/xml",
+    ],
+  },
+  screener: {
+    label: "Trailer / Screener",
+    extensions: [".mp4", ".mov", ".mxf"],
+    mimeTypes: ["video/mp4", "video/quicktime", "application/mxf", "video/mxf"],
+  },
+};
+
+function extensionOf(filename: string): string {
+  const index = filename.lastIndexOf(".");
+  return index >= 0 ? filename.slice(index).toLowerCase() : "";
+}
+
+export function getOttIngestAccept(kind: OttIngestKind): string {
+  const rule = OTT_INGEST_SPEC[kind];
+  return [...rule.extensions, ...rule.mimeTypes].join(",");
+}
+
+export function validateOttIngestFile(args: {
+  kind: OttIngestKind;
+  filename: string;
+  contentType?: string | null;
+}): { ok: true } | { ok: false; message: string } {
+  const rule = OTT_INGEST_SPEC[args.kind];
+  const extension = extensionOf(args.filename);
+  const contentType = (args.contentType ?? "").toLowerCase();
+
+  if (!rule.extensions.includes(extension)) {
+    return {
+      ok: false,
+      message: `${rule.label} must use one of: ${rule.extensions.join(", ")}`,
+    };
+  }
+
+  if (
+    contentType &&
+    contentType !== "application/octet-stream" &&
+    !rule.mimeTypes.includes(contentType)
+  ) {
+    return {
+      ok: false,
+      message: `${rule.label} file type does not match the OTT ingest specification.`,
+    };
+  }
+
+  return { ok: true };
+}
