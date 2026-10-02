@@ -11,15 +11,15 @@ import { listAdminProfiles } from "@/lib/bridge/profiles";
 export const Route = createFileRoute("/admin")({ component: AdminControlPlane });
 
 const modules = [
+  ["Incoming Submissions", "Submission review persistence is not enabled yet. Review actions remain unavailable until the dedicated backend workflow is approved.", null],
   ["Operational CMS", "Direct ingest, licensing readiness and Loop publishing from one Bridge surface.", "/cms"],
-  ["Intake", "Creator and studio submissions, title opening, ownership intake.", "/workspace"],
-  ["Assets & QC", "Masters, artwork, subtitles, audio, technical review and preparation.", "/workspace"],
-  ["Legal & Rights", "Ownership, territories, languages, windows and clearance gates.", "/workspace"],
+  ["Titles & Assets", "Review canonical title and asset records without entering Creator/Studio submission mode.", "/cms"],
+  ["Assets & QC", "Masters, artwork, subtitles, audio, technical review and preparation.", "/cms"],
+  ["Legal & Rights", "Ownership, territories, languages, windows and clearance gates.", "/cms"],
   ["Licensing", "Buyer discovery, screeners, negotiation and commercial controls.", "/buyer"],
-  ["Distribution", "Authorize approved titles to Crayons Loop and manage destination windows.", "/internal"],
-  ["Delivery", "Secure delivery, C2C handoff, package readiness and operational audit.", "/internal"],
-  ["Revenue", "Verified payments, entitlements and settlement-facing records.", "/buyer"],
-  ["Team & RBAC", "Invite internal reviewers and keep server-enforced operational roles.", "/account"],
+  ["Deliveries", "Secure delivery, C2C handoff, package readiness and operational audit.", "/deliveries"],
+  ["Users & Studios", "Inspect Bridge identities and organizations. Role changes remain unsupported without a dedicated audited API.", "/admin"],
+  ["Audit History", "Review existing Bridge audit records.", "/admin"],
   ["Website CMS", "Edit the minimal public Bridge homepage copy.", "/admin-cms"],
 ] as const;
 
@@ -69,9 +69,9 @@ function AdminBody({ actor }: { actor: any }) {
             <p className="mt-3 max-w-3xl text-sm leading-relaxed text-muted">Accept creator and studio submissions, move titles through QC and legal clearance, prepare buyer discovery, authorize licensing, package delivery, and publish only approved destinations.</p>
           </div>
           <div className="flex flex-wrap gap-2">
-            {hasPermission(actor, "title.create") ? <Link to="/workspace"><Button>+ Open title</Button></Link> : null}
-            <Link to="/cms"><Button variant="outline">Open CMS</Button></Link>
-            <Link to="/internal"><Button variant="outline">Distribution desk</Button></Link>
+            <Link to="/cms"><Button>Open Bridge CMS</Button></Link>
+            <Button type="button" variant="outline" disabled title="Loop CMS requires independent server-authoritative authorization">Loop CMS unavailable</Button>
+            <a href="https://crayonsloop.in/" target="_blank" rel="noreferrer"><Button variant="outline">Open Crayons Loop ↗</Button></a>
           </div>
         </div>
       </section>
@@ -100,7 +100,7 @@ function AdminBody({ actor }: { actor: any }) {
           <h3 className="mt-1 font-display text-2xl font-semibold">Admin workstations</h3>
         </div>
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          {modules.map(([name, description, to]) => (
+          {modules.map(([name, description, to]) => to ? (
             <Link key={name} to={to} className="group rounded-2xl border border-line bg-surface p-5 transition hover:-translate-y-0.5 hover:shadow-lift">
               <div className="flex items-start justify-between gap-3">
                 <h4 className="font-display text-lg font-semibold">{name}</h4>
@@ -108,6 +108,11 @@ function AdminBody({ actor }: { actor: any }) {
               </div>
               <p className="mt-2 text-sm leading-relaxed text-muted">{description}</p>
             </Link>
+          ) : (
+            <article key={name} className="rounded-2xl border border-line bg-surface p-5 opacity-75">
+              <div className="flex items-start justify-between gap-3"><h4 className="font-display text-lg font-semibold">{name}</h4><span className="rounded-full border border-line px-2 py-1 text-[10px] uppercase text-muted">Unavailable</span></div>
+              <p className="mt-2 text-sm leading-relaxed text-muted">{description}</p>
+            </article>
           ))}
         </div>
       </section>
