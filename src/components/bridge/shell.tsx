@@ -19,8 +19,16 @@ function NavLink({ item }: { item: NavItem }) {
 
 export function BrandMark({ className }: { className?: string }) {
   return (
-    <Link to="/" className={cn("inline-flex items-center shrink-0", className)} aria-label="Crayons Bridge home">
-      <img src="/brand/logo.png" alt="Crayons Bridge" className="bridge-logo block h-auto w-[168px] object-contain sm:w-[196px] lg:w-[220px]" />
+    <Link
+      to="/"
+      className={cn(
+        "inline-flex shrink-0 items-baseline gap-1 font-display text-xl font-semibold tracking-tight text-fg sm:text-2xl",
+        className,
+      )}
+      aria-label="Crayons Bridge home"
+    >
+      <span>Crayons</span>
+      <span className="text-accent">Bridge</span>
     </Link>
   );
 }
