@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { RedirectToSignIn } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
@@ -8,6 +8,7 @@ import { getBridgeSession } from "@/lib/bridge/session";
 import { retryWorkspaceSession } from "@/lib/auth/workspace-session-retry";
 import { supabase } from "@/lib/supabase";
 import { ACCOUNT_TYPES } from "@/lib/bridge/types";
+import { publicOnboardingError } from "@/lib/bridge/onboarding-errors";
 import { BrandMark } from "@/components/bridge/shell";
 import { Button } from "@/components/ui/button";
 
@@ -55,6 +56,7 @@ function Onboarding() {
   const [organizationName, setOrganizationName] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const submitInFlight = useRef(false);
   const [retrying, setRetrying] = useState(false);
 
   const home = sessionQ.data?.profile ? sessionQ.data.home : null;
@@ -120,6 +122,8 @@ function Onboarding() {
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
+    if (submitInFlight.current) return;
+    submitInFlight.current = true;
     setBusy(true);
     setError(null);
     let inviteToken: string | undefined;
@@ -144,8 +148,9 @@ function Onboarding() {
       }
       goHome(res.home, navigate);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not complete onboarding");
+      setError(publicOnboardingError(err));
     } finally {
+      submitInFlight.current = false;
       setBusy(false);
     }
   }
