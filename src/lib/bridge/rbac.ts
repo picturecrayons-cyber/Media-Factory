@@ -90,11 +90,29 @@ export function permissionForTransition(from: TitleStatus, to: TitleStatus): Per
 }
 
 export function permissionsFor(actor: Actor): Set<Permission> {
-  const set = new Set<Permission>(ACCOUNT_PERMISSIONS[actor.accountType]);
-  if (actor.internalRole) {
-    for (const p of INTERNAL_PERMISSIONS[actor.internalRole]) set.add(p);
-  }
-  return set;
+  // Internal staff identities are governed by their explicit staff role.
+  // Account-type powers must never silently widen a staff role (for example,
+  // a viewer profile whose account_type happens to be independent_creator).
+  if (actor.internalRole) return new Set<Permission>(INTERNAL_PERMISSIONS[actor.internalRole]);
+  return new Set<Permission>(ACCOUNT_PERMISSIONS[actor.accountType]);
+}
+
+export function canAccessDashboard(actor: Actor): boolean {
+  return actor.emailVerified && Boolean(actor.internalRole);
+}
+
+const ROLE_GRANTS: Record<InternalRole, readonly InternalRole[]> = {
+  viewer: [],
+  qc_reviewer: [],
+  legal_reviewer: [],
+  finance: [],
+  admin: ["viewer", "qc_reviewer", "legal_reviewer", "finance", "admin"],
+  super_admin: ["viewer", "qc_reviewer", "legal_reviewer", "finance", "admin", "super_admin"],
+};
+
+export function canGrantInternalRole(actor: Actor, role: InternalRole): boolean {
+  if (!actor.emailVerified || !actor.internalRole) return false;
+  return ROLE_GRANTS[actor.internalRole].includes(role);
 }
 
 export function hasPermission(actor: Actor, permission: Permission): boolean {
@@ -125,7 +143,7 @@ export function canReadTitle(
 export function workspaceHome(actor: Actor): string {
   // Resolve the post-auth destination from the server-backed Bridge profile.
   // Signup query parameters are intent only and never grant privileges.
-  if (actor.internalRole) return "/dashboard";
+  if (canAccessDashboard(actor)) return "/dashboard";
   if (actor.accountType === "independent_creator") return "/creator";
   if (actor.accountType === "studio") return "/studio";
   if (actor.accountType === "buyer") return "/buyer";
