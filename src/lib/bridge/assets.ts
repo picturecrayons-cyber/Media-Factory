@@ -11,6 +11,7 @@ import { writeAudit } from "./audit";
 import { assertNotDevUser } from "./guards";
 import { persistVerifiedAsset } from "./asset-confirmation";
 import { downloadDecision } from "./delivery-policy";
+import { validateOttIngestFile, type OttIngestKind } from "./ott-ingest-spec";
 
 const UPLOADABLE: ReadonlySet<string> = new Set(["DRAFT", "UPLOADING", "PREPARING"]);
 
@@ -41,6 +42,9 @@ export const requestAssetUpload = createServerFn({ method: "POST" })
     if (!title) throw new Error("Not found");
     if (title.ownerUserId !== actor.userId && !actor.internalRole) throw new Error("Forbidden");
     if (!UPLOADABLE.has(title.status)) throw new Error("Uploads are closed for this status");
+    if (!["master","poster","subtitle","screener","technical"].includes(data.kind)) throw new Error("This asset kind is not supported by the OTT ingest uploader");
+    const ingestValidation = validateOttIngestFile({ kind: data.kind as OttIngestKind, filename: data.filename, contentType: data.contentType });
+    if (!ingestValidation.ok) throw new Error(ingestValidation.message);
     const { signUpload, titleAssetKey } = await import("./aws-object-storage.server");
     const key = titleAssetKey({
       ownerUserId: title.ownerUserId,
@@ -191,7 +195,7 @@ export const listTitleAssets = createServerFn({ method: "GET" })
     `;
     return {
       assets: rows
-        .filter((r) => !buyer || r.kind !== "master")
+        .filter((r) => !buyer || !["master", "technical"].includes(r.kind))
         .map((r) => ({
           id: r.id,
           kind: r.kind,
