@@ -115,9 +115,20 @@ export function canGrantInternalRole(actor: Actor, role: InternalRole): boolean 
   return ROLE_GRANTS[actor.internalRole].includes(role);
 }
 
+export function hasAccountPermission(actor: Actor, permission: Permission): boolean {
+  return actor.emailVerified && !actor.internalRole && ACCOUNT_PERMISSIONS[actor.accountType].includes(permission);
+}
+
+export function hasStaffPermission(actor: Actor, permission: Permission): boolean {
+  return actor.emailVerified && Boolean(actor.internalRole) &&
+    INTERNAL_PERMISSIONS[actor.internalRole!].includes(permission);
+}
+
 export function hasPermission(actor: Actor, permission: Permission): boolean {
   if (!actor.emailVerified) return false;
-  return permissionsFor(actor).has(permission);
+  return actor.internalRole
+    ? hasStaffPermission(actor, permission)
+    : hasAccountPermission(actor, permission);
 }
 
 export function assertPermission(actor: Actor, permission: Permission): void {
