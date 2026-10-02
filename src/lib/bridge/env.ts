@@ -1,4 +1,4 @@
-import { BRIDGE_CANONICAL_ORIGIN, resolveBridgeCanonicalOrigin } from "./origin";
+import { BRIDGE_CANONICAL_ORIGIN, resolveBridgeCanonicalOrigin } from "./origin.ts";
 function read(key: string): string | undefined {
   const v = typeof process === "undefined" ? undefined : process.env[key]?.trim();
   return v || undefined;
