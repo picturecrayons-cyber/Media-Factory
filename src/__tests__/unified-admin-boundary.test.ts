@@ -1,26 +1,27 @@
-import { describe, expect, it } from "vitest";
+import test from "node:test";
+import assert from "node:assert/strict";
 
-describe("unified admin product boundary", () => {
-  it("does not treat Bridge super_admin as Loop CMS authorization", () => {
-    const actor = { internalRole: "super_admin", accountType: "independent_creator" };
-    const bridgeAdmin = actor.internalRole === "admin" || actor.internalRole === "super_admin";
-    const loopCmsAuthorized = false;
+test("Bridge super_admin does not imply Loop CMS authorization", () => {
+  const actor = { internalRole: "super_admin", accountType: "independent_creator" };
+  const bridgeAdmin = actor.internalRole === "admin" || actor.internalRole === "super_admin";
+  const loopCmsAuthorized = false;
 
-    expect(bridgeAdmin).toBe(true);
-    expect(loopCmsAuthorized).toBe(false);
-  });
+  assert.equal(bridgeAdmin, true);
+  assert.equal(loopCmsAuthorized, false);
+});
 
-  it("keeps public Loop and Loop CMS as separate destinations", () => {
-    const publicLoop = "https://crayonsloop.in/";
-    const loopCms = null;
-    expect(publicLoop).toMatch(/^https:\/\/crayonsloop\.in\/$/);
-    expect(loopCms).toBeNull();
-  });
+test("public Loop and Loop CMS remain separate destinations", () => {
+  const publicLoop = "https://crayonsloop.in/";
+  const loopCms = null;
 
-  it("never embeds credentials in the public Loop URL", () => {
-    const publicLoop = "https://crayonsloop.in/";
-    expect(publicLoop).not.toContain("token=");
-    expect(publicLoop).not.toContain("access_token");
-    expect(publicLoop).not.toContain("refresh_token");
-  });
+  assert.match(publicLoop, /^https:\/\/crayonsloop\.in\/$/);
+  assert.equal(loopCms, null);
+});
+
+test("public Loop URL never embeds credentials", () => {
+  const publicLoop = "https://crayonsloop.in/";
+
+  assert.equal(publicLoop.includes("token="), false);
+  assert.equal(publicLoop.includes("access_token"), false);
+  assert.equal(publicLoop.includes("refresh_token"), false);
 });
