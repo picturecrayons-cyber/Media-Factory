@@ -5,7 +5,7 @@ import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import { ASSET_KINDS } from "./types";
 import { assertPermission, canOperateOnTitle, canReadTitle } from "./rbac";
-import { requireActor } from "./session";
+import { requireVerifiedActor } from "./session";
 import { loadTitle } from "./titles";
 import { writeAudit } from "./audit";
 import { assertNotDevUser } from "./guards";
@@ -35,7 +35,7 @@ export const requestAssetUpload = createServerFn({ method: "POST" })
   )
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
-    const actor = await requireActor(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
     assertPermission(actor, "asset.sign_upload");
     const title = await loadTitle(data.titleId);
     if (!title) throw new Error("Not found");
@@ -70,7 +70,7 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
   .validator(z.object({ assetId: z.string().min(8), expectedByteSize: z.number().int().positive().optional() }))
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
-    const actor = await requireActor(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
     assertPermission(actor, "asset.sign_upload");
     const sql = await getSql();
     const rows = await sql<{
@@ -129,7 +129,7 @@ export const requestAssetDownload = createServerFn({ method: "POST" })
   .validator(z.object({ assetId: z.string().min(8) }))
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
-    const actor = await requireActor(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
     assertPermission(actor, "asset.sign_download");
     const sql = await getSql();
     const rows = await sql<{
@@ -178,7 +178,7 @@ export const listTitleAssets = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .validator(z.object({ titleId: z.string().min(8) }))
   .handler(async ({ context, data }) => {
-    const actor = await requireActor(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
     const title = await loadTitle(data.titleId);
     if (!title || !canReadTitle(actor, title)) throw new Error("Not found");
     const sql = await getSql();
