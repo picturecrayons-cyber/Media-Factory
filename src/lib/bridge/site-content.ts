@@ -2,8 +2,10 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
-import { loadActor } from "./session";
+import { requireActor } from "./session";
 import { writeAudit } from "./audit";
+import { assertPermission } from "./rbac";
+import { assertNotDevUser } from "./guards";
 
 export const DEFAULT_BRIDGE_SITE_CONTENT = {
   heroTitle: "One bridge from content to market.",
@@ -57,10 +59,9 @@ export const updateHomepageContent = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(contentSchema)
   .handler(async ({ context, data }) => {
-    const actor = await loadActor(context.userId);
-    if (!actor || (actor.internalRole !== "admin" && actor.internalRole !== "super_admin")) {
-      throw new Error("Admin access required");
-    }
+    assertNotDevUser(context.userId);
+    const actor = await requireActor(context.userId);
+    assertPermission(actor, "users.invite_internal");
     const sql = await getSql();
     const rows = await sql<SiteRow>`
       insert into bridge_site_content (
