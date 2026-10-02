@@ -5,8 +5,9 @@ import { getPasswordRecoveryRedirectUrl, RECOVERY_MARKER_KEY } from "./recovery-
 
 describe("password recovery flow and callback bypass prevention", () => {
   it("routes password recovery to the recovery callback and never directly to reset-password", () => {
-    const url = getPasswordRecoveryRedirectUrl("https://bridge.crayonspictures.com");
-    assert.equal(url, "https://bridge.crayonspictures.com/auth/callback?type=recovery");
+    const url = getPasswordRecoveryRedirectUrl("https://www.crayonspictures.in");
+    assert.equal(url, "https://www.crayonspictures.in/auth/callback?type=recovery");
+    assert.equal(getPasswordRecoveryRedirectUrl("https://bridge.crayonspictures.com"), "https://www.crayonspictures.in/auth/callback?type=recovery");
     assert.doesNotMatch(url, /^https:\/\/bridge\.crayonspictures\.com\/reset-password$/);
   });
 
