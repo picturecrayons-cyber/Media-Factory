@@ -7,9 +7,11 @@ const authSource = fs.readFileSync(new URL("../src/lib/auth/server.ts", import.m
 const required = [
   [originSource, 'BRIDGE_CANONICAL_ORIGIN = "https://www.crayonspictures.in"'],
   [originSource, 'host.endsWith(RETIRED_SUFFIX)'],
-  [envSource, 'resolveBridgeCanonicalOrigin(read("APP_URL") || read("SITE_URL"), BRIDGE_CANONICAL_ORIGIN)'],
+  [envSource, 'resolveBridgeConfiguredOrigin(read("APP_URL"), read("SITE_URL"))'],
   [authSource, 'BRIDGE_CANONICAL_ORIGIN'],
   [authSource, 'normalizeOrigin(explicitBaseURL) ?? BRIDGE_CANONICAL_ORIGIN'],
+  [originSource, 'isApprovedBridgeOrigin'],
+  [originSource, 'bridgeCallbackUrl'],
 ];
 const missing = required.filter(([source, needle]) => !source.includes(needle)).map(([, needle]) => needle);
 if (missing.length) {
