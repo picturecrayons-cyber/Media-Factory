@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
-import { loadActor } from "./session";
+import { requireVerifiedActor } from "./session";
 import { writeAudit } from "./audit";
 
 export const DEFAULT_BRIDGE_SITE_CONTENT = {
@@ -57,8 +57,8 @@ export const updateHomepageContent = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(contentSchema)
   .handler(async ({ context, data }) => {
-    const actor = await loadActor(context.userId);
-    if (!actor || (actor.internalRole !== "admin" && actor.internalRole !== "super_admin")) {
+    const actor = await requireVerifiedActor(context.userId);
+    if (actor.internalRole !== "admin" && actor.internalRole !== "super_admin") {
       throw new Error("Admin access required");
     }
     const sql = await getSql();

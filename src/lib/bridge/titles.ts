@@ -6,8 +6,8 @@ import { getSql } from "@/lib/db";
 import type { AccountType, TitleStatus } from "./types";
 import { TITLE_STATUSES, type BridgeTitle } from "./types";
 import { assertTransition, nextStatus } from "./lifecycle";
-import { assertPermission, canReadTitle, permissionForTransition } from "./rbac";
-import { requireActor } from "./session";
+import { assertPermission, canReadTitle, hasStaffPermission, permissionForTransition } from "./rbac";
+import { requireVerifiedActor } from "./session";
 import { writeAudit } from "./audit";
 import { assertNotDevUser } from "./guards";
 
@@ -116,7 +116,7 @@ export const createTitle = createServerFn({ method: "POST" })
   )
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
-    const actor = await requireActor(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
     assertPermission(actor, "title.create");
     const id = randomBytes(16).toString("hex");
     const slug = slugify(data.name, id);
@@ -160,7 +160,7 @@ export const listTitles = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
     assertNotDevUser(context.userId);
-    const actor = await requireActor(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
     const sql = await getSql();
     let rows: TitleRow[] = [];
     if (actor.internalRole) {
@@ -188,7 +188,7 @@ export const getTitle = createServerFn({ method: "GET" })
   .validator(z.object({ id: z.string().min(8) }))
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
-    const actor = await requireActor(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
     const title = await loadTitle(data.id);
     if (!title || !canReadTitle(actor, title)) throw new Error("Not found");
     const sql = await getSql();
@@ -230,7 +230,7 @@ export const updateTitle = createServerFn({ method: "POST" })
   )
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
-    const actor = await requireActor(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
     const title = await loadTitle(data.id);
     if (!title) throw new Error("Not found");
     const owns = title.ownerUserId === actor.userId;
@@ -273,7 +273,7 @@ export const advanceTitle = createServerFn({ method: "POST" })
   )
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
-    const actor = await requireActor(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
     const title = await loadTitle(data.id);
     if (!title || !canReadTitle(actor, title)) throw new Error("Not found");
     if (data.to === "LICENSED") {
@@ -283,7 +283,7 @@ export const advanceTitle = createServerFn({ method: "POST" })
     const perm = permissionForTransition(title.status, data.to);
     if (!perm) throw new Error("Transition is not available");
     assertPermission(actor, perm);
-    if (perm === "title.advance_upload" && title.ownerUserId !== actor.userId && !actor.internalRole) {
+    if (perm === "title.advance_upload" && title.ownerUserId !== actor.userId && !hasStaffPermission(actor, perm)) {
       throw new Error("Forbidden");
     }
     const expected = nextStatus(title.status);
@@ -308,7 +308,7 @@ export const advanceTitle = createServerFn({ method: "POST" })
 export const listAuditLogs = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
-    const actor = await requireActor(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
     assertPermission(actor, "audit.read");
     const sql = await getSql();
     const rows = await sql<{
