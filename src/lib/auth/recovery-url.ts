@@ -1,4 +1,4 @@
-import { BRIDGE_CANONICAL_ORIGIN, resolveBridgeCanonicalOrigin } from "../bridge/origin";
+import { BRIDGE_CANONICAL_ORIGIN, resolveBridgeCanonicalOrigin } from "../bridge/origin.ts";
 
 export const RECOVERY_MARKER_KEY = "crayons-bridge.supabase-recovery-session";
 
