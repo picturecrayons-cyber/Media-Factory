@@ -65,13 +65,12 @@ export const OTT_INGEST_SPEC: Record<OttIngestKind, OttIngestRule> = {
       "application/xml",
       "text/xml",
       "text/plain",
-      "application/vnd.apple.installer+xml",
     ],
     mimeByExtension: {
       ".cube": ["text/plain"],
       ".aml": ["application/octet-stream"],
       ".xml": ["application/xml", "text/xml"],
-      ".pkg": ["application/octet-stream", "application/vnd.apple.installer+xml"],
+      ".pkg": ["application/octet-stream"],
     },
   },
 };
