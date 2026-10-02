@@ -1,3 +1,4 @@
+import { resolveBridgeConfiguredOrigin } from "./origin.ts";
 function read(key: string): string | undefined {
   const v = typeof process === "undefined" ? undefined : process.env[key]?.trim();
   return v || undefined;
@@ -27,21 +28,7 @@ export const bridgeEnv = {
   smtpUser: () => read("SMTP_USER") || read("HOSTINGER_SMTP_USER"),
   smtpPass: () => read("SMTP_PASS") || read("HOSTINGER_SMTP_PASS"),
   mailFrom: () => read("MAIL_FROM") || "abijithasokan@crayonspictures.com",
-  appUrl: () => {
-    const configured = read("APP_URL") || read("SITE_URL");
-    if (!configured) return "https://www.crayonspictures.in";
-    try {
-      const url = new URL(configured);
-      const host = url.hostname.toLowerCase();
-      if (host === "bridge.streamvista.in" || host.endsWith(".streamvista.in")) {
-        console.warn("[bridge] Ignoring retired StreamVista app URL; using canonical production domain");
-        return "https://www.crayonspictures.in";
-      }
-      return configured.replace(/\/$/, "");
-    } catch {
-      return "https://www.crayonspictures.in";
-    }
-  },
+  appUrl: () => resolveBridgeConfiguredOrigin(read("APP_URL"), read("SITE_URL")),
   databaseUrl: () => read("DATABASE_URL") || read("POSTGRES_URL"),
 };
 
