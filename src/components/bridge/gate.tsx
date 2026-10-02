@@ -26,7 +26,7 @@ export function RequireBridge({
   allow,
 }: {
   children: (actor: BridgeActor) => ReactNode;
-  allow?: "creator" | "studio" | "buyer" | "internal";
+  allow?: "creator" | "studio" | "buyer" | "internal" | "super_admin";
 }) {
   const qc = useQueryClient();
   const [retrying, setRetrying] = useState(false);
@@ -91,8 +91,9 @@ export function RequireBridge({
   }
   const profile = sessionQ.data?.profile ?? null;
   if (!profile) return <Navigate to="/onboarding" />;
+  if (allow === "super_admin" && profile.internalRole !== "super_admin") return <Navigate to={sessionQ.data?.home ?? "/"} />;
   if (allow === "internal" && !profile.internalRole) return <Navigate to={sessionQ.data?.home ?? "/"} />;
-  if (allow && allow !== "internal" && (profile.internalRole || profile.accountType !== (
+  if (allow && allow !== "internal" && allow !== "super_admin" && (profile.internalRole || profile.accountType !== (
     allow === "creator" ? "independent_creator" : allow
   ))) {
     return <Navigate to={sessionQ.data?.home ?? "/"} />;
