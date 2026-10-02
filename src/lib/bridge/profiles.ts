@@ -6,7 +6,7 @@ import { ACCOUNT_TYPES, INTERNAL_ROLES } from "./types";
 import { writeAudit } from "./audit";
 import { loadActor } from "./session";
 import { verificationProfileId } from "./verification-profile-id";
-import { assertPermission, workspaceHome } from "./rbac";
+import { assertPermission, canGrantInternalRole, workspaceHome } from "./rbac";
 import { createHash, randomBytes } from "node:crypto";
 import { bridgeEnv } from "./env";
 import { assertNotDevUser } from "./guards";
@@ -276,6 +276,7 @@ export const inviteInternalRole = createServerFn({ method: "POST" })
     const actor = await loadActor(context.userId);
     if (!actor) throw new Error("Profile required");
     assertPermission(actor, "users.invite_internal");
+    if (!canGrantInternalRole(actor, data.role)) throw new Error("Forbidden role grant");
     const sql = await getSql();
     const { token, hash } = tokenPair();
     const id = randomBytes(16).toString("hex");
