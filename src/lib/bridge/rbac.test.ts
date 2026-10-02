@@ -12,6 +12,8 @@ const admin = () => actor("admin-a", "independent_creator", "admin");
 const superAdmin = () => actor("super-a", "independent_creator", "super_admin");
 const viewer = () => actor("viewer-a", "independent_creator", "viewer");
 const qc = actor("qc1", "independent_creator", "qc_reviewer");
+const legal = actor("legal1", "independent_creator", "legal_reviewer");
+const finance = actor("finance1", "independent_creator", "finance");
 
 describe("PRD authorization matrix", () => {
   it("fails closed until email is verified", () => {
@@ -41,7 +43,12 @@ describe("PRD authorization matrix", () => {
     assert.equal(hasPermission(b, "payment.create_order"), true);
   });
 
-  it("internal roles do not inherit creator or buyer account powers", () => {
+  it("all internal roles stay within explicit staff permissions even with mixed account types", () => {
+    for (const roleActor of [viewer(), qc, legal, finance, admin(), superAdmin()]) {
+      assert.equal(hasPermission(roleActor, "title.create"), false);
+      assert.equal(hasPermission(roleActor, "asset.sign_upload"), false);
+      assert.equal(hasPermission(roleActor, "payment.create_order"), false);
+    }
     const a = admin();
     assert.equal(hasPermission(a, "title.read_catalog"), true);
     assert.equal(hasPermission(a, "title.qc_review"), true);
@@ -99,6 +106,7 @@ describe("PRD authorization matrix", () => {
     assert.equal(canGrantInternalRole(admin(), "viewer"), true);
     assert.equal(canGrantInternalRole(admin(), "super_admin"), false);
     assert.equal(canGrantInternalRole(superAdmin(), "super_admin"), true);
+    assert.equal(canAccessDashboard(actor("super-u", "independent_creator", "super_admin", false)), false);
     assert.equal(canGrantInternalRole(actor("admin-a", "independent_creator", "admin", false), "viewer"), false);
   });
 
