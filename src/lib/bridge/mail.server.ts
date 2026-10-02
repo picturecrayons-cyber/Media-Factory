@@ -9,8 +9,6 @@ export interface TransactionalEmailOptions {
   category?: string;
 }
 
-const BRIDGE_LOGO_URL = "https://bridge.crayonspictures.com/brand/logo.png";
-
 export function formatBrandedEmailHtml(title: string, bodyHtml: string, cta?: { label: string; url: string }) {
   return `<!DOCTYPE html>
 <html lang="en">
@@ -24,7 +22,7 @@ export function formatBrandedEmailHtml(title: string, bodyHtml: string, cta?: { 
     <tr><td align="center">
       <table width="100%" cellspacing="0" cellpadding="0" style="max-width:600px;background:#ffffff;border:1px solid #dce3e8;border-radius:18px;overflow:hidden;">
         <tr><td style="padding:28px 32px 18px;border-bottom:1px solid #e7edf1;">
-          <img src="${BRIDGE_LOGO_URL}" alt="Crayons Bridge" width="190" style="display:block;max-width:190px;height:auto;border:0;">
+          <div style="font-size:22px;line-height:1.2;font-weight:700;color:#172033;">Crayons <span style="color:#10b5ea;">Bridge</span></div>
         </td></tr>
         <tr><td style="padding:30px 32px;">
           <h1 style="margin:0 0 14px;font-size:24px;line-height:1.3;color:#111827;">${title}</h1>

@@ -77,11 +77,9 @@ function Home() {
         <section className="bridge-home-hero border-b border-line bg-white">
           <div className="mx-auto max-w-7xl px-5 py-14 text-center sm:px-6 sm:py-16 lg:py-20">
             <div className="mx-auto max-w-5xl">
-              <img
-                src="/brand/logo.png"
-                alt="Crayons Bridge"
-                className="bridge-hero-logo mx-auto h-auto w-full max-w-[560px] object-contain sm:max-w-[680px] lg:max-w-[760px]"
-              />
+              <div className="mx-auto flex justify-center">
+                <BrandMark className="text-3xl sm:text-4xl lg:text-5xl" />
+              </div>
               <h1 className="bridge-hero-copy mx-auto mt-8 max-w-4xl font-display text-[2.45rem] font-semibold leading-[1.02] tracking-[-0.04em] text-fg sm:text-5xl lg:text-[3.9rem]">
                 One bridge from content to market.
               </h1>
