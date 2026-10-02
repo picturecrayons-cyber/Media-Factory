@@ -22,19 +22,13 @@ const INTERNAL_PERMISSIONS: Record<InternalRole, readonly Permission[]> = {
     "loop.certify_playback",
   ],
   super_admin: [
-    "title.create",
-    "title.read_own",
     "title.read_catalog",
-    "title.update_own",
-    "title.advance_upload",
     "title.qc_review",
     "title.rights_review",
     "title.license",
     "title.negotiate",
     "title.deliver",
-    "asset.sign_upload",
     "asset.sign_download",
-    "payment.create_order",
     "entitlement.read_own",
     "finance.read",
     "users.invite_internal",
@@ -90,10 +84,12 @@ export function permissionForTransition(from: TitleStatus, to: TitleStatus): Per
 }
 
 export function permissionsFor(actor: Actor): Set<Permission> {
-  const set = new Set<Permission>(ACCOUNT_PERMISSIONS[actor.accountType]);
+  const set = new Set<Permission>();
   if (actor.internalRole) {
     for (const p of INTERNAL_PERMISSIONS[actor.internalRole]) set.add(p);
+    return set;
   }
+  for (const p of ACCOUNT_PERMISSIONS[actor.accountType]) set.add(p);
   return set;
 }
 
@@ -114,7 +110,7 @@ export function canReadTitle(
   title: { ownerUserId: string; status: TitleStatus },
 ): boolean {
   if (!actor.emailVerified) return false;
-  if (title.ownerUserId === actor.userId) return hasPermission(actor, "title.read_own");
+  if (title.ownerUserId === actor.userId && !actor.internalRole) return hasPermission(actor, "title.read_own");
   if (actor.internalRole) return hasPermission(actor, "title.read_catalog");
   if (actor.accountType === "buyer") {
     return hasPermission(actor, "title.read_catalog") && isBuyerVisible(title.status);
@@ -122,10 +118,41 @@ export function canReadTitle(
   return false;
 }
 
+export function canMutateTitle(
+  actor: Actor,
+  title: { ownerUserId: string },
+  ownerPermission: Permission,
+  staffPermission: Permission,
+): boolean {
+  if (!actor.emailVerified) return false;
+  if (actor.internalRole) return hasPermission(actor, staffPermission);
+  return title.ownerUserId === actor.userId && hasPermission(actor, ownerPermission);
+}
+
+export function canOperateOnTitle(
+  actor: Actor,
+  title: { ownerUserId: string },
+  ownerPermission: Permission,
+  staffPermission: Permission | null = null,
+): boolean {
+  if (!actor.emailVerified) return false;
+  if (actor.internalRole) return staffPermission ? hasPermission(actor, staffPermission) : false;
+  return title.ownerUserId === actor.userId && hasPermission(actor, ownerPermission);
+}
+
+export function canAccessDashboard(actor: Actor): boolean {
+  return actor.emailVerified && actor.internalRole === "super_admin";
+}
+
+export function canGrantInternalRole(actor: Actor, role: InternalRole): boolean {
+  if (!actor.emailVerified) return false;
+  if (role === "super_admin") return actor.internalRole === "super_admin";
+  return actor.internalRole === "admin" || actor.internalRole === "super_admin";
+}
+
 export function workspaceHome(actor: Actor): string {
-  // Resolve the post-auth destination from the server-backed Bridge profile.
-  // Signup query parameters are intent only and never grant privileges.
-  if (actor.internalRole) return "/dashboard";
+  if (actor.internalRole === "super_admin") return "/dashboard";
+  if (actor.internalRole) return "/internal";
   if (actor.accountType === "independent_creator") return "/creator";
   if (actor.accountType === "studio") return "/studio";
   if (actor.accountType === "buyer") return "/buyer";

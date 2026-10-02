@@ -4,9 +4,9 @@ import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql, type Sql } from "@/lib/db";
 import { ACCOUNT_TYPES, INTERNAL_ROLES } from "./types";
 import { writeAudit } from "./audit";
-import { loadActor } from "./session";
+import { loadActor, requireVerifiedActor } from "./session";
 import { verificationProfileId } from "./verification-profile-id";
-import { assertPermission, workspaceHome } from "./rbac";
+import { assertPermission, canGrantInternalRole, workspaceHome } from "./rbac";
 import { createHash, randomBytes } from "node:crypto";
 import { bridgeEnv } from "./env";
 import { assertNotDevUser } from "./guards";
@@ -180,7 +180,7 @@ export const requestEmailVerification = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
     assertNotDevUser(context.userId);
-    const actor = await loadActor(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
     const profileId = verificationProfileId(actor);
     const email = actor!.email;
     if (!email) throw new Error("No email on account");
@@ -234,10 +234,8 @@ export const listAdminProfiles = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
     assertNotDevUser(context.userId);
-    const actor = await loadActor(context.userId);
-    if (!actor || (actor.internalRole !== "admin" && actor.internalRole !== "super_admin")) {
-      throw new Error("Admin access required");
-    }
+    const actor = await requireVerifiedActor(context.userId);
+    assertPermission(actor, "users.invite_internal");
     const sql = await getSql();
     const rows = await sql<{
       user_id: string;
@@ -273,9 +271,10 @@ export const inviteInternalRole = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(z.object({ email: z.string().email(), role: z.enum(INTERNAL_ROLES) }))
   .handler(async ({ context, data }) => {
-    const actor = await loadActor(context.userId);
-    if (!actor) throw new Error("Profile required");
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
     assertPermission(actor, "users.invite_internal");
+    if (!canGrantInternalRole(actor, data.role)) throw new Error("Forbidden role grant");
     const sql = await getSql();
     const { token, hash } = tokenPair();
     const id = randomBytes(16).toString("hex");

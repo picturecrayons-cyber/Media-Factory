@@ -15,21 +15,8 @@ type Tab = (typeof tabs)[number];
 
 function OperationalCms() {
   return (
-    <RequireBridge allow="internal">
-      {(actor) => {
-        const isAdmin = actor.internalRole === "admin" || actor.internalRole === "super_admin";
-        if (!isAdmin) {
-          return (
-            <BridgeShell actor={actor} title="Bridge CMS">
-              <section className="rounded-3xl border border-line bg-surface p-8">
-                <h2 className="font-display text-2xl font-semibold">Admin access required</h2>
-                <p className="mt-2 text-sm text-muted">Operational CMS access is restricted to Bridge administrators.</p>
-              </section>
-            </BridgeShell>
-          );
-        }
-        return <CmsBody actor={actor} />;
-      }}
+    <RequireBridge allow="super_admin">
+      {(actor) => <CmsBody actor={actor} />}
     </RequireBridge>
   );
 }
