@@ -1,0 +1,41 @@
+name: Refresh TanStack lockfile
+
+on:
+  push:
+    branches:
+      - fix/tanstack-start-security-20261002
+
+permissions:
+  contents: write
+
+jobs:
+  refresh-lockfile:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: fix/tanstack-start-security-20261002
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Regenerate package-lock with npm
+        run: npm install --package-lock-only --ignore-scripts
+
+      - name: Verify patched TanStack version
+        run: |
+          node -e "const l=require('./package-lock.json'); const v=l.packages['node_modules/@tanstack/react-start']?.version; console.log('react-start',v); if(!v) process.exit(1); const [a,b,c]=v.split('.').map(Number); if(a<1 || (a===1 && (b<168 || (b===168 && c<60)))) process.exit(1);"
+
+      - name: Commit regenerated lockfile and remove temporary workflow
+        run: |
+          rm .github/workflows/refresh-tanstack-lockfile.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package-lock.json .github/workflows/refresh-tanstack-lockfile.yml
+          git diff --cached --quiet && exit 0
+          git commit -m "fix(deps): regenerate TanStack lockfile"
+          git push origin HEAD:fix/tanstack-start-security-20261002

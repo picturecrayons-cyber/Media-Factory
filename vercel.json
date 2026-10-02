@@ -2,9 +2,6 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "tanstack-start",
   "git": {
-    "deploymentEnabled": {
-      "fix/publication-status-contract-20261001": false,
-      "fix/bridge-release-reconciliation-20261001": false
-    }
+    "deploymentEnabled": false
   }
 }
