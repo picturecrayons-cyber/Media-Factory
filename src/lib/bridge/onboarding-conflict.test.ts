@@ -6,7 +6,7 @@ import {
   ONBOARDING_GENERIC_ERROR_MESSAGE,
   isBridgeProfileEmailConflict,
   publicOnboardingError,
-} from "./onboarding-errors";
+} from "./onboarding-errors.ts";
 
 test("sanitizes PostgreSQL unique violations and unrelated server errors", () => {
   const dbError = Object.assign(new Error("duplicate key value violates unique constraint \"bridge_profiles_email_idx\""), {
