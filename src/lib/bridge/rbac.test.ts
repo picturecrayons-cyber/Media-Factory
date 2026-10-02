@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { assertPermission, canAccessDashboard, canGrantInternalRole, canReadTitle, hasPermission, permissionForTransition, workspaceHome } from "./rbac.ts";
+import { assertPermission, canAccessDashboard, canGrantInternalRole, canMutateTitle, canOperateOnTitle, canReadTitle, hasPermission, permissionForTransition, workspaceHome } from "./rbac.ts";
 import type { Actor } from "./rbac.ts";
 
 const actor = (userId: string, accountType: Actor["accountType"], internalRole: Actor["internalRole"] = null, emailVerified = true): Actor =>
@@ -52,6 +52,22 @@ describe("PRD authorization matrix", () => {
     assert.equal(hasPermission(viewer(), "asset.sign_download"), false);
   });
 
+  it("mixed account/staff roles never regain owner mutations through ownership alone", () => {
+    const owned = { ownerUserId: "admin-a" };
+    assert.equal(canOperateOnTitle(admin(), owned, "asset.sign_upload"), false);
+    assert.equal(canMutateTitle(admin(), owned, "title.update_own", "title.license"), true);
+    assert.equal(canOperateOnTitle(viewer(), { ownerUserId: "viewer-a" }, "title.advance_upload"), false);
+    assert.equal(canMutateTitle(viewer(), { ownerUserId: "viewer-a" }, "title.update_own", "title.license"), false);
+  });
+
+  it("cross-title and direct-operation checks require explicit staff permissions", () => {
+    const foreign = { ownerUserId: "creator-b" };
+    assert.equal(canOperateOnTitle(creator(), foreign, "asset.sign_upload"), false);
+    assert.equal(canOperateOnTitle(qc, foreign, "asset.sign_upload"), false);
+    assert.equal(canMutateTitle(qc, foreign, "title.update_own", "title.qc_review"), true);
+    assert.equal(canMutateTitle(viewer(), foreign, "title.update_own", "title.qc_review"), false);
+  });
+
   it("only super admin combines operator and creator-side powers", () => {
     const a = superAdmin();
     assert.equal(hasPermission(a, "title.create"), true);
@@ -82,6 +98,7 @@ describe("PRD authorization matrix", () => {
     assert.equal(canGrantInternalRole(admin(), "viewer"), true);
     assert.equal(canGrantInternalRole(admin(), "super_admin"), false);
     assert.equal(canGrantInternalRole(superAdmin(), "super_admin"), true);
+    assert.equal(canGrantInternalRole(actor("admin-a", "independent_creator", "admin", false), "viewer"), false);
   });
 
   it("routes operators away from the super-admin dashboard", () => {
