@@ -32,6 +32,7 @@ test("OTT ingest validates MIME against the specific extension", () => {
   assert.equal(validateOttIngestFile({ kind: "subtitle", filename: "captions.vtt", contentType: "text/vtt" }).ok, true);
   assert.equal(validateOttIngestFile({ kind: "subtitle", filename: "captions.vtt", contentType: "application/xml" }).ok, false);
   assert.equal(validateOttIngestFile({ kind: "technical", filename: "FrameLine.xml", contentType: "text/plain" }).ok, false);
+  assert.equal(validateOttIngestFile({ kind: "technical", filename: "ALEXA.pkg", contentType: "application/vnd.apple.installer+xml" }).ok, false);
 });
 
 test("opaque browser MIME falls back to extension validation", () => {
