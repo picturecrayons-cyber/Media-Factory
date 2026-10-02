@@ -5,7 +5,7 @@ import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import { bridgeEnv } from "./env";
 import { paymentVerifyBody, verifyRazorpaySignature } from "./razorpay-crypto";
-import { loadActor, requireActor } from "./session";
+import { requireVerifiedActor } from "./session";
 import { assertPermission, canReadTitle } from "./rbac";
 import { loadTitle, recordTransition } from "./titles";
 import { writeAudit } from "./audit";
@@ -123,6 +123,7 @@ export const getCheckoutConfig = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
     assertNotDevUser(context.userId);
+    await requireVerifiedActor(context.userId);
     const { keyId } = requireRazorpayKeys();
     return { keyId };
   });
@@ -137,7 +138,7 @@ export const createLicenseOrder = createServerFn({ method: "POST" })
   )
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
-    const actor = await requireActor(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
     assertPermission(actor, "payment.create_order");
     const title = await loadTitle(data.titleId);
     if (!title || !canReadTitle(actor, title)) throw new Error("Not found");
@@ -254,8 +255,7 @@ export const verifyLicensePayment = createServerFn({ method: "POST" })
   )
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
-    const actor = await loadActor(context.userId);
-    if (!actor) throw new Error("Profile required");
+    const actor = await requireVerifiedActor(context.userId);
     const { keySecret } = requireRazorpayKeys();
     const ok = verifyRazorpaySignature({
       secret: keySecret,
@@ -273,7 +273,7 @@ export const verifyLicensePayment = createServerFn({ method: "POST" })
 export const listOwnEntitlements = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
-    const actor = await requireActor(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
     assertPermission(actor, "entitlement.read_own");
     const sql = await getSql();
     const rows = await sql<{
