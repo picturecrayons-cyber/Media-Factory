@@ -124,12 +124,26 @@ export function canReadTitle(
   return false;
 }
 
-export function canMutateTitle(actor: Actor, title: { ownerUserId: string }, staffPermission: Permission): boolean {
+export function canMutateTitle(
+  actor: Actor,
+  title: { ownerUserId: string },
+  ownerPermission: Permission,
+  staffPermission: Permission,
+): boolean {
   if (!actor.emailVerified) return false;
-  if (!actor.internalRole) {
-    return title.ownerUserId === actor.userId && hasPermission(actor, "title.update_own");
-  }
-  return hasPermission(actor, staffPermission);
+  if (actor.internalRole) return hasPermission(actor, staffPermission);
+  return title.ownerUserId === actor.userId && hasPermission(actor, ownerPermission);
+}
+
+export function canOperateOnTitle(
+  actor: Actor,
+  title: { ownerUserId: string },
+  ownerPermission: Permission,
+  staffPermission: Permission | null = null,
+): boolean {
+  if (!actor.emailVerified) return false;
+  if (actor.internalRole) return staffPermission ? hasPermission(actor, staffPermission) : false;
+  return title.ownerUserId === actor.userId && hasPermission(actor, ownerPermission);
 }
 
 export function canAccessDashboard(actor: Actor): boolean {
