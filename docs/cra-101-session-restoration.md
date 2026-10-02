@@ -28,3 +28,7 @@ Production project read-only: `bridge` / `prj_fT7VTrZMcgP9NutDhPvMhDAPtXNo`, lat
 ## Release gate
 
 No automatic deploy or promotion is authorized. `vercel.json` suppresses Git-triggered deployments for this issue branch only. An authorized exact-head Preview and confirmed-email/recovery browser verification are still required before production promotion. This PR does not certify live end-to-end recovery, SMTP delivery, valid credentials, or database connectivity.
+
+## 2026-10-02 reconciliation
+
+Draft #52 was reconciled with current `main` at `4f4ae2534d4feaa1f9f0565dd18050d36bd03628` without restoring stale copies of files that have since evolved on main. The focused confirmation → restored session → onboarding regression coverage remains present. Acceptance still requires exact-head CI plus authenticated Preview checks for confirmation, reload/session restoration, valid refresh, and expired-session behavior.
