@@ -56,6 +56,10 @@ function windowCovers(
   const effectiveStart = requestedStart ? new Date(requestedStart) : now;
   const effectiveEnd = requestedEnd ? new Date(requestedEnd) : null;
 
+  if (![now, grantStart, grantEnd, effectiveStart, effectiveEnd].every((value) => value === null || Number.isFinite(value.getTime()))) return false;
+  if (grantEnd && grantEnd <= now) return false;
+  if (effectiveEnd && (effectiveEnd <= effectiveStart || effectiveEnd <= now)) return false;
+  if (grantStart && grantEnd && grantEnd <= grantStart) return false;
   if (grantEnd && !effectiveEnd) return false;
   if (grantStart && effectiveStart < grantStart) return false;
   if (grantEnd && effectiveStart >= grantEnd) return false;
@@ -65,6 +69,7 @@ function windowCovers(
 
 export function findCoveringRightsGrant(grants: BridgeRightsGrant[], request: RightsCoverageRequest) {
   const now = request.now ?? new Date();
+  if ([request.territories, request.languages, request.exploitationModels].some((values) => values.length === 0 || values.some((value) => !value.trim()))) return null;
 
   return (
     grants.find((grant) => {
@@ -82,4 +87,10 @@ export function findCoveringRightsGrant(grants: BridgeRightsGrant[], request: Ri
       return true;
     }) ?? null
   );
+}
+
+export function assertPublicationCanExtend(status: string, revokedAt: string | Date | null) {
+  if (revokedAt || !["AUTHORIZED", "LIVE"].includes(status.toUpperCase())) {
+    throw new Error("Only an active publication can be extended; suspended, revoked or expired publications require fresh authorization.");
+  }
 }

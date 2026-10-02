@@ -27,7 +27,21 @@ export const bridgeEnv = {
   smtpUser: () => read("SMTP_USER") || read("HOSTINGER_SMTP_USER"),
   smtpPass: () => read("SMTP_PASS") || read("HOSTINGER_SMTP_PASS"),
   mailFrom: () => read("MAIL_FROM") || "abijithasokan@crayonspictures.com",
-  appUrl: () => read("APP_URL") || read("SITE_URL") || "https://bridge.crayonspictures.com",
+  appUrl: () => {
+    const configured = read("APP_URL") || read("SITE_URL");
+    if (!configured) return "https://www.crayonspictures.in";
+    try {
+      const url = new URL(configured);
+      const host = url.hostname.toLowerCase();
+      if (host === "bridge.streamvista.in" || host.endsWith(".streamvista.in")) {
+        console.warn("[bridge] Ignoring retired StreamVista app URL; using canonical production domain");
+        return "https://www.crayonspictures.in";
+      }
+      return configured.replace(/\/$/, "");
+    } catch {
+      return "https://www.crayonspictures.in";
+    }
+  },
   databaseUrl: () => read("DATABASE_URL") || read("POSTGRES_URL"),
 };
 

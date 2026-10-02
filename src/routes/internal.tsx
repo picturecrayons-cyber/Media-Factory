@@ -139,7 +139,6 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
 
   // Authorization Form State
   const [selectedTitleId, setSelectedTitleId] = useState<string>("");
-  const [destination] = useState("CRAYONS_LOOP");
   const [territories, setTerritories] = useState("IN");
   const [languages, setLanguages] = useState("Malayalam");
   const [model] = useState<ExploitationModel>("TVOD");

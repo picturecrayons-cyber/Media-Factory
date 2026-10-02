@@ -122,6 +122,12 @@ export function canReadTitle(
   return false;
 }
 
-export function workspaceHome(_actor: Actor): string {
-  return "/workspace";
+export function workspaceHome(actor: Actor): string {
+  // Resolve the post-auth destination from the server-backed Bridge profile.
+  // Signup query parameters are intent only and never grant privileges.
+  if (actor.internalRole) return "/dashboard";
+  if (actor.accountType === "independent_creator") return "/creator";
+  if (actor.accountType === "studio") return "/studio";
+  if (actor.accountType === "buyer") return "/buyer";
+  return "/";
 }
