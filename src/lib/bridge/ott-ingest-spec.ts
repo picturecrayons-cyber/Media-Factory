@@ -4,6 +4,7 @@ type OttIngestRule = {
   label: string;
   extensions: readonly string[];
   mimeTypes: readonly string[];
+  mimeByExtension: Readonly<Record<string, readonly string[]>>;
 };
 
 export const OTT_INGEST_SPEC: Record<OttIngestKind, OttIngestRule> = {
@@ -11,11 +12,22 @@ export const OTT_INGEST_SPEC: Record<OttIngestKind, OttIngestRule> = {
     label: "Master Video",
     extensions: [".mp4", ".mov", ".mxf"],
     mimeTypes: ["video/mp4", "video/quicktime", "application/mxf", "video/mxf"],
+    mimeByExtension: {
+      ".mp4": ["video/mp4"],
+      ".mov": ["video/quicktime"],
+      ".mxf": ["application/mxf", "video/mxf"],
+    },
   },
   poster: {
     label: "Artwork",
     extensions: [".png", ".jpg", ".jpeg", ".webp"],
     mimeTypes: ["image/png", "image/jpeg", "image/webp"],
+    mimeByExtension: {
+      ".png": ["image/png"],
+      ".jpg": ["image/jpeg"],
+      ".jpeg": ["image/jpeg"],
+      ".webp": ["image/webp"],
+    },
   },
   subtitle: {
     label: "Subtitle",
@@ -28,11 +40,22 @@ export const OTT_INGEST_SPEC: Record<OttIngestKind, OttIngestRule> = {
       "application/xml",
       "text/xml",
     ],
+    mimeByExtension: {
+      ".srt": ["application/x-subrip", "text/srt"],
+      ".vtt": ["text/vtt"],
+      ".ttml": ["application/ttml+xml", "application/xml", "text/xml"],
+      ".xml": ["application/ttml+xml", "application/xml", "text/xml"],
+    },
   },
   screener: {
     label: "Trailer / Screener",
     extensions: [".mp4", ".mov", ".mxf"],
     mimeTypes: ["video/mp4", "video/quicktime", "application/mxf", "video/mxf"],
+    mimeByExtension: {
+      ".mp4": ["video/mp4"],
+      ".mov": ["video/quicktime"],
+      ".mxf": ["application/mxf", "video/mxf"],
+    },
   },
 };
 
@@ -62,15 +85,14 @@ export function validateOttIngestFile(args: {
     };
   }
 
-  if (
-    contentType &&
-    contentType !== "application/octet-stream" &&
-    !rule.mimeTypes.includes(contentType)
-  ) {
-    return {
-      ok: false,
-      message: `${rule.label} file type does not match the OTT ingest specification.`,
-    };
+  if (contentType && contentType !== "application/octet-stream") {
+    const allowedForExtension = rule.mimeByExtension[extension] ?? [];
+    if (!allowedForExtension.includes(contentType)) {
+      return {
+        ok: false,
+        message: `${rule.label} file type does not match its file extension.`,
+      };
+    }
   }
 
   return { ok: true };
