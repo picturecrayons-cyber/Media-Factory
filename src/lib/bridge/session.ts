@@ -73,6 +73,12 @@ export async function requireActor(userId: string): Promise<BridgeActor> {
   return actor;
 }
 
+export async function requireVerifiedActor(userId: string): Promise<BridgeActor> {
+  const actor = await requireActor(userId);
+  if (!actor.emailVerified) throw new Error("Email verification required");
+  return actor;
+}
+
 export function requireActorPermission(actor: Actor, permission: Permission) {
   assertPermission(actor, permission);
 }
