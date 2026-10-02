@@ -9,6 +9,7 @@ type NavItem = { to: string; label: string };
 const NAV: NavItem[] = [
   { to: "/dashboard", label: "Dashboard" },
   { to: "/workspace", label: "Titles" },
+  { to: "/cms", label: "CMS" },
   { to: "/deliveries", label: "Deliveries" },
   { to: "/account", label: "Account" },
 ];
