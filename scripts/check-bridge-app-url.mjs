@@ -1,13 +1,19 @@
 import fs from "node:fs";
 
-const source = fs.readFileSync(new URL("../src/lib/bridge/env.ts", import.meta.url), "utf8");
+const envSource = fs.readFileSync(new URL("../src/lib/bridge/env.ts", import.meta.url), "utf8");
+const originSource = fs.readFileSync(new URL("../src/lib/bridge/origin.ts", import.meta.url), "utf8");
+const authSource = fs.readFileSync(new URL("../src/lib/auth/server.ts", import.meta.url), "utf8");
+
 const required = [
-  'host === "bridge.streamvista.in"',
-  'host.endsWith(".streamvista.in")',
-  'return "https://www.crayonspictures.in"',
-  'return configured.replace(/\\\/$/, "")',
+  [originSource, 'BRIDGE_CANONICAL_ORIGIN = "https://www.crayonspictures.in"'],
+  [originSource, 'host.endsWith(RETIRED_SUFFIX)'],
+  [envSource, 'resolveBridgeConfiguredOrigin(read("APP_URL"), read("SITE_URL"))'],
+  [authSource, 'BRIDGE_CANONICAL_ORIGIN'],
+  [authSource, 'normalizeOrigin(explicitBaseURL) ?? BRIDGE_CANONICAL_ORIGIN'],
+  [originSource, 'isApprovedBridgeOrigin'],
+  [originSource, 'bridgeCallbackUrl'],
 ];
-const missing = required.filter((needle) => !source.includes(needle));
+const missing = required.filter(([source, needle]) => !source.includes(needle)).map(([, needle]) => needle);
 if (missing.length) {
   console.error("Bridge app URL regression check failed:", missing);
   process.exit(1);

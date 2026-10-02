@@ -2,6 +2,7 @@ import { supabase } from "@/lib/supabase";
 import type { Session, User } from "@supabase/supabase-js";
 import { GROK_PROVIDERS } from "./providers";
 import { restoreSupabaseSession } from "./session-restoration";
+import { bridgeCallbackUrl } from "../bridge/origin";
 
 export const authEnabled = import.meta.env.VITE_AUTH_ENABLED !== "false";
 export { GROK_PROVIDERS };
@@ -46,8 +47,7 @@ export async function signUpWithEmail(input: {
   name: string;
   accountType?: "independent_creator" | "studio" | "buyer";
 }) {
-  const origin = typeof window !== "undefined" ? window.location.origin : "https://bridge.crayonspictures.com";
-  const callbackUrl = `${origin}/auth/callback`;
+  const callbackUrl = bridgeCallbackUrl(typeof window !== "undefined" ? window.location.origin : undefined);
 
   const { data, error } = await supabase.auth.signUp({
     email: input.email,
@@ -67,8 +67,7 @@ export async function signUpWithEmail(input: {
 }
 
 export async function resendConfirmationEmail(email: string) {
-  const origin = typeof window !== "undefined" ? window.location.origin : "https://bridge.crayonspictures.com";
-  const callbackUrl = `${origin}/auth/callback`;
+  const callbackUrl = bridgeCallbackUrl(typeof window !== "undefined" ? window.location.origin : undefined);
 
   const { data, error } = await supabase.auth.resend({
     type: "signup",
