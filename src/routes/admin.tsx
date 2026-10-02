@@ -11,6 +11,7 @@ import { listAdminProfiles } from "@/lib/bridge/profiles";
 export const Route = createFileRoute("/admin")({ component: AdminControlPlane });
 
 const modules = [
+  ["Operational CMS", "Direct ingest, licensing readiness and Loop publishing from one Bridge surface.", "/cms"],
   ["Intake", "Creator and studio submissions, title opening, ownership intake.", "/workspace"],
   ["Assets & QC", "Masters, artwork, subtitles, audio, technical review and preparation.", "/workspace"],
   ["Legal & Rights", "Ownership, territories, languages, windows and clearance gates.", "/workspace"],
@@ -69,6 +70,7 @@ function AdminBody({ actor }: { actor: any }) {
           </div>
           <div className="flex flex-wrap gap-2">
             {hasPermission(actor, "title.create") ? <Link to="/workspace"><Button>+ Open title</Button></Link> : null}
+            <Link to="/cms"><Button variant="outline">Open CMS</Button></Link>
             <Link to="/internal"><Button variant="outline">Distribution desk</Button></Link>
           </div>
         </div>
