@@ -7,7 +7,7 @@ import { listTitles } from "@/lib/bridge/titles";
 export const Route = createFileRoute("/dashboard")({ component: Dashboard });
 
 function Dashboard() {
-  return <RequireBridge>{(actor) => <BridgeShell actor={actor} title="Dashboard"><DashboardBody /></BridgeShell>}</RequireBridge>;
+  return <RequireBridge allow="super_admin">{(actor) => <BridgeShell actor={actor} title="Dashboard"><DashboardBody /></BridgeShell>}</RequireBridge>;
 }
 
 function DashboardBody() {
