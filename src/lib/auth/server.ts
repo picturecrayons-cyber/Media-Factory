@@ -11,6 +11,7 @@ import { getCookie } from "@tanstack/react-start/server";
 import { randomBytes } from "node:crypto";
 import { Pool } from "pg";
 import { ensureDbReady, getPglite } from "../db";
+import { BRIDGE_CANONICAL_ORIGIN, isRetiredBridgeOrigin, normalizeBridgeOrigin } from "../bridge/origin";
 import { emailAndPasswordEnabled } from "./email-password";
 import { GATE_PROVIDER_ID, gateIdentitySessions } from "./gate-session.server";
 import { GROK_PROVIDERS } from "./providers";
@@ -55,13 +56,8 @@ const VERCEL_ORIGIN_ENV_KEYS = [
 ] as const;
 
 function normalizeOrigin(value: string | undefined): string | undefined {
-  if (!value) return undefined;
-  try {
-    const candidate = /^https?:\/\//i.test(value) ? value : `https://${value}`;
-    return new URL(candidate).origin;
-  } catch {
-    return undefined;
-  }
+  const origin = normalizeBridgeOrigin(value);
+  return origin && !isRetiredBridgeOrigin(origin) ? origin : undefined;
 }
 
 function hostnameFromOrigin(origin: string): string | undefined {
@@ -76,10 +72,7 @@ const deployedOrigins = [
   normalizeOrigin(explicitBaseURL),
   normalizeOrigin(env("APP_URL")),
   ...VERCEL_ORIGIN_ENV_KEYS.map((key) => normalizeOrigin(env(key))),
-  "https://bridge.crayonspictures.com",
-  "https://bridge-kappa-six.vercel.app",
-  "https://bridge-stream-vista-opc-pvt-ltd-s-projects.vercel.app",
-  "https://bridge-git-main-stream-vista-opc-pvt-ltd-s-projects.vercel.app",
+  BRIDGE_CANONICAL_ORIGIN,
 ].filter((origin): origin is string => Boolean(origin));
 
 const deployedHosts = deployedOrigins
@@ -106,7 +99,7 @@ const dynamicBaseURL = {
     ]),
   ),
   protocol: "auto" as const,
-  fallback: explicitBaseURL ?? "http://localhost:3000",
+  fallback: normalizeOrigin(explicitBaseURL) ?? BRIDGE_CANONICAL_ORIGIN,
 };
 
 // A Preview request must own its OAuth callback. Using the canonical
@@ -115,7 +108,7 @@ const dynamicBaseURL = {
 // canonical URL.
 const baseURL = env("VERCEL_ENV") === "preview"
   ? dynamicBaseURL
-  : explicitBaseURL ?? dynamicBaseURL;
+  : normalizeOrigin(explicitBaseURL) ?? BRIDGE_CANONICAL_ORIGIN;
 
 const trustedOrigins: string[] = Array.from(
   new Set([
