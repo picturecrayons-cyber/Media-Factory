@@ -4,7 +4,7 @@ import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql, type Sql } from "@/lib/db";
 import { ACCOUNT_TYPES, INTERNAL_ROLES } from "./types";
 import { writeAudit } from "./audit";
-import { loadActor, requireActor } from "./session";
+import { requireVerifiedActor } from "./session";
 import { verificationProfileId } from "./verification-profile-id";
 import { assertPermission, canGrantInternalRole, workspaceHome } from "./rbac";
 import { createHash, randomBytes } from "node:crypto";
@@ -180,7 +180,7 @@ export const requestEmailVerification = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
     assertNotDevUser(context.userId);
-    const actor = await requireActor(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
     const profileId = verificationProfileId(actor);
     const email = actor!.email;
     if (!email) throw new Error("No email on account");
@@ -234,7 +234,7 @@ export const listAdminProfiles = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
     assertNotDevUser(context.userId);
-    const actor = await requireActor(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
     assertPermission(actor, "users.invite_internal");
     const sql = await getSql();
     const rows = await sql<{
@@ -272,7 +272,7 @@ export const inviteInternalRole = createServerFn({ method: "POST" })
   .validator(z.object({ email: z.string().email(), role: z.enum(INTERNAL_ROLES) }))
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
-    const actor = await requireActor(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
     assertPermission(actor, "users.invite_internal");
     if (!canGrantInternalRole(actor, data.role)) throw new Error("Forbidden role grant");
     const sql = await getSql();
