@@ -10,6 +10,7 @@ import { assertPermission, workspaceHome } from "./rbac";
 import { createHash, randomBytes } from "node:crypto";
 import { bridgeEnv } from "./env";
 import { assertNotDevUser } from "./guards";
+import { ONBOARDING_EMAIL_CONFLICT_MESSAGE, isBridgeProfileEmailConflict } from "./onboarding-errors";
 
 function tokenPair() {
   const token = randomBytes(32).toString("hex");
@@ -87,6 +88,16 @@ export const completeOnboarding = createServerFn({ method: "POST" })
     if (!email) throw new Error("Account email is required from Supabase session");
     const verified = true;
 
+    // Email uniqueness is a safety boundary, not an ownership signal. If this
+    // authenticated identity is not already directly/explicitly linked, never
+    // adopt an existing profile merely because the mailbox matches.
+    const emailOwner = await sql<{ user_id: string }>`
+      select user_id from bridge_profiles where lower(email) = lower(${email}) limit 1
+    `;
+    if (emailOwner[0]?.user_id && emailOwner[0].user_id !== context.userId) {
+      throw new Error(ONBOARDING_EMAIL_CONFLICT_MESSAGE);
+    }
+
     let internalRole: string | null = null;
     let invitedBy: string | null = null;
     if (data.inviteToken) {
@@ -121,20 +132,29 @@ export const completeOnboarding = createServerFn({ method: "POST" })
     }
 
     const profileId = context.userId;
-    await sql`
-      insert into bridge_profiles (
-        user_id, email, display_name, account_type, organization_name, internal_role, email_verified, invited_by
-      ) values (
-        ${profileId}, ${email}, ${data.displayName}, ${data.accountType}, ${org},
-        ${internalRole}, ${verified}, ${invitedBy}
-      )
-      on conflict (user_id) do update set
-        display_name = excluded.display_name,
-        account_type = excluded.account_type,
-        organization_name = excluded.organization_name,
-        email_verified = true,
-        updated_at = now()
-    `;
+    try {
+      await sql`
+        insert into bridge_profiles (
+          user_id, email, display_name, account_type, organization_name, internal_role, email_verified, invited_by
+        ) values (
+          ${profileId}, ${email}, ${data.displayName}, ${data.accountType}, ${org},
+          ${internalRole}, ${verified}, ${invitedBy}
+        )
+        on conflict (user_id) do update set
+          display_name = excluded.display_name,
+          account_type = excluded.account_type,
+          organization_name = excluded.organization_name,
+          email_verified = true,
+          updated_at = now()
+      `;
+    } catch (error) {
+      // Close the lookup→insert race without exposing PostgreSQL internals.
+      // A same-user concurrent retry remains idempotent via ON CONFLICT(user_id).
+      if (isBridgeProfileEmailConflict(error)) {
+        throw new Error(ONBOARDING_EMAIL_CONFLICT_MESSAGE);
+      }
+      throw error;
+    }
 
     await persistSupabaseIdentityLink(sql, profileId, context.userId);
     await writeAudit({
