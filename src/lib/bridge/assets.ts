@@ -4,7 +4,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import { ASSET_KINDS } from "./types";
-import { assertPermission, canReadTitle } from "./rbac";
+import { assertPermission, canOperateOnTitle, canReadTitle } from "./rbac";
 import { requireActor } from "./session";
 import { loadTitle } from "./titles";
 import { writeAudit } from "./audit";
@@ -39,7 +39,7 @@ export const requestAssetUpload = createServerFn({ method: "POST" })
     assertPermission(actor, "asset.sign_upload");
     const title = await loadTitle(data.titleId);
     if (!title) throw new Error("Not found");
-    if (title.ownerUserId !== actor.userId && !actor.internalRole) throw new Error("Forbidden");
+    if (!canOperateOnTitle(actor, title, "asset.sign_upload")) throw new Error("Forbidden");
     if (!UPLOADABLE.has(title.status)) throw new Error("Uploads are closed for this status");
     const { signUpload, titleAssetKey } = await import("./aws-object-storage.server");
     const key = titleAssetKey({
@@ -81,9 +81,14 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
       from bridge_assets where id = ${data.assetId} limit 1
     `;
     const asset = rows[0];
-    if (!asset || (asset.created_by !== actor.userId && !actor.internalRole)) throw new Error("Asset not found");
+    if (!asset) throw new Error("Asset not found");
     const title = await loadTitle(asset.title_id);
-    if (!title || (title.ownerUserId !== actor.userId && !actor.internalRole) || !UPLOADABLE.has(title.status)) {
+    if (
+      !title ||
+      !canOperateOnTitle(actor, title, "asset.sign_upload") ||
+      (!actor.internalRole && asset.created_by !== actor.userId) ||
+      !UPLOADABLE.has(title.status)
+    ) {
       throw new Error("Upload confirmation is closed for this title");
     }
     if (asset.byte_size != null) return { assetId: asset.id, byteSize: Number(asset.byte_size), verified: true };
