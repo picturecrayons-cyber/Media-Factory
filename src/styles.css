@@ -59,6 +59,57 @@
   .bridge-nav-item { padding:.5rem .7rem; font-size:.82rem; }
 }
 
-@media (max-width: 639px) {
-  header .bridge-brand-lockup img { max-width:116px; }
+
+
+/* CRA-119 — white business-class Bridge system */
+@layer base {
+  html, body, #app { background:#fff; color:#0f172a; }
+}
+@layer components {
+  .bridge-home-hero {
+    background:
+      radial-gradient(40rem 18rem at 50% 42%, rgba(8,184,232,.08), transparent 70%),
+      linear-gradient(180deg,#fff 0%,#fff 82%,#f8fcff 100%);
+  }
+  .bridge-panel,.bridge-stat {
+    background:#fff;
+    border:1px solid #e6edf2;
+    box-shadow:0 12px 36px rgba(16,24,40,.06);
+  }
+}
+
+/* Executive motion — intentionally restrained */
+.bridge-home-hero { position:relative; overflow:hidden; }
+.bridge-home-hero::before {
+  content:"";
+  position:absolute;
+  inset:-18% -10%;
+  pointer-events:none;
+  background:radial-gradient(34rem 12rem at 50% 48%,rgba(8,184,232,.08),transparent 72%);
+  animation:bridge-ambient-drift 12s ease-in-out infinite alternate;
+}
+.bridge-hero-copy { animation:bridge-copy-arrive 620ms 100ms cubic-bezier(.16,1,.3,1) both; }
+.bridge-hero-subcopy { animation:bridge-copy-arrive 620ms 170ms cubic-bezier(.16,1,.3,1) both; }
+.bridge-hero-actions { animation:bridge-copy-arrive 620ms 240ms cubic-bezier(.16,1,.3,1) both; }
+.bridge-workflow-card {
+  transition:transform 220ms ease,border-color 220ms ease,box-shadow 220ms ease;
+}
+.bridge-workflow-card:hover {
+  transform:translateY(-2px);
+  box-shadow:0 14px 34px rgba(16,24,40,.06);
+}
+@keyframes bridge-copy-arrive {
+  from { opacity:0; transform:translateY(7px); }
+  to { opacity:1; transform:translateY(0); }
+}
+@keyframes bridge-ambient-drift {
+  from { transform:translate3d(-1.2%,0,0) scale(.99); opacity:.55; }
+  to { transform:translate3d(1.2%,-1%,0) scale(1.015); opacity:.9; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .bridge-home-hero::before,.bridge-hero-copy,.bridge-hero-subcopy,.bridge-hero-actions {
+    animation:none !important;
+  }
+  .bridge-workflow-card { transition:none !important; }
+  .bridge-workflow-card:hover { transform:none !important; }
 }

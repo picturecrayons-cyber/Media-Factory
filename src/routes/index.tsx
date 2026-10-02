@@ -40,19 +40,11 @@ const WORKFLOW_STEPS = [
   },
 ];
 
-const TRUST_PILLARS = [
-  "Secure Storage",
-  "QC",
-  "Rights",
-  "Licensing",
-  "Delivery",
-];
-
 function Home() {
   return (
-    <div className="min-h-screen bg-bg text-fg antialiased selection:bg-accent/20 selection:text-fg">
+    <div className="min-h-screen bg-white text-fg antialiased selection:bg-accent/20 selection:text-fg">
       {/* 1. Header */}
-      <header className="sticky top-0 z-50 border-b border-line bg-surface/90 backdrop-blur-md">
+      <header className="sticky top-0 z-50 border-b border-line bg-white/95 backdrop-blur-md">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-5 px-5 py-3.5 sm:px-6 lg:px-8">
           <div className="flex min-w-0 items-center gap-6 lg:gap-8">
             <BrandMark />
@@ -82,17 +74,20 @@ function Home() {
 
       <main>
         {/* 2. Hero */}
-        <section className="border-b border-line bg-surface">
-          <div className="mx-auto max-w-6xl px-5 py-16 sm:px-6 sm:py-20 lg:py-24">
-            <div className="max-w-3xl">
-              <h1 className="font-display text-[2.45rem] font-semibold leading-[1.02] tracking-[-0.04em] text-fg sm:text-5xl lg:text-[3.9rem]">
+        <section className="bridge-home-hero border-b border-line bg-white">
+          <div className="mx-auto max-w-7xl px-5 py-14 text-center sm:px-6 sm:py-16 lg:py-20">
+            <div className="mx-auto max-w-5xl">
+              <div className="mx-auto flex justify-center">
+                <BrandMark className="text-3xl sm:text-4xl lg:text-5xl" />
+              </div>
+              <h1 className="bridge-hero-copy mx-auto mt-8 max-w-4xl font-display text-[2.45rem] font-semibold leading-[1.02] tracking-[-0.04em] text-fg sm:text-5xl lg:text-[3.9rem]">
                 One bridge from content to market.
               </h1>
-              <p className="mt-5 max-w-2xl text-base leading-7 text-muted sm:text-lg">
-                The professional workspace for preparing, protecting, licensing and delivering film and television.
+              <p className="bridge-hero-subcopy mx-auto mt-4 max-w-2xl text-base leading-7 text-muted sm:text-lg">
+                Prepare. Protect. License. Deliver.
               </p>
 
-              <div className="mt-7 flex flex-wrap items-center gap-3 sm:mt-8">
+              <div className="bridge-hero-actions mt-7 flex flex-wrap items-center justify-center gap-3 sm:mt-8">
                 <Link to="/signup">
                   <Button className="h-11 rounded-full px-6 text-sm font-semibold shadow-xs">
                     Create account
@@ -118,7 +113,7 @@ function Home() {
               {WORKFLOW_STEPS.map((step, idx) => (
                 <div
                   key={step.step}
-                  className="flex min-h-40 flex-col justify-between bg-surface p-5"
+                  className="bridge-workflow-card flex min-h-40 flex-col justify-between bg-surface p-5"
                 >
                   <div>
                     <div className="flex items-center justify-between">
@@ -289,15 +284,9 @@ function Home() {
             aria-label="Footer Legal and External Links"
             className="flex flex-wrap items-center gap-5 text-xs text-muted"
           >
-            <a href="mailto:privacy@streamvista.com" className="hover:text-fg transition-colors">
-              Privacy
-            </a>
-            <a href="mailto:legal@streamvista.com" className="hover:text-fg transition-colors">
-              Terms
-            </a>
-            <a href="mailto:contact@streamvista.com" className="hover:text-fg transition-colors">
-              Contact
-            </a>
+            <Link to="/privacy" className="hover:text-fg transition-colors">\n              Privacy\n            </Link>
+            <Link to="/terms" className="hover:text-fg transition-colors">\n              Terms\n            </Link>
+            <Link to="/contact" className="hover:text-fg transition-colors">\n              Contact\n            </Link>
             <a
               href={CRAYONS_LOOP_URL}
               target="_blank"

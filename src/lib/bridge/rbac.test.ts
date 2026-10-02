@@ -73,7 +73,11 @@ describe("PRD authorization matrix", () => {
     assert.equal(permissionForTransition("IN_NEGOTIATION", "LICENSED"), null);
   });
 
-  it("routes authenticated roles into the unified workspace", () => {
-    for (const a of [creator(), studio(), buyer(), admin(), qc]) assert.equal(workspaceHome(a), "/workspace");
+  it("routes authenticated roles to their role workspace", () => {
+    assert.equal(workspaceHome(creator()), "/creator");
+    assert.equal(workspaceHome(studio()), "/studio");
+    assert.equal(workspaceHome(buyer()), "/buyer");
+    assert.equal(workspaceHome(admin()), "/dashboard");
+    assert.equal(workspaceHome(qc), "/dashboard");
   });
 });
