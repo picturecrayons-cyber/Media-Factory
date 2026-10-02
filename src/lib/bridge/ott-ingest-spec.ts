@@ -1,4 +1,4 @@
-export type OttIngestKind = "master" | "poster" | "subtitle" | "screener";
+export type OttIngestKind = "master" | "poster" | "subtitle" | "screener" | "technical";
 
 type OttIngestRule = {
   label: string;
@@ -55,6 +55,23 @@ export const OTT_INGEST_SPEC: Record<OttIngestKind, OttIngestRule> = {
       ".mp4": ["video/mp4"],
       ".mov": ["video/quicktime"],
       ".mxf": ["application/mxf", "video/mxf"],
+    },
+  },
+  technical: {
+    label: "Technical / Camera Package",
+    extensions: [".cube", ".aml", ".xml", ".pkg"],
+    mimeTypes: [
+      "application/octet-stream",
+      "application/xml",
+      "text/xml",
+      "text/plain",
+      "application/vnd.apple.installer+xml",
+    ],
+    mimeByExtension: {
+      ".cube": ["text/plain"],
+      ".aml": ["application/octet-stream"],
+      ".xml": ["application/xml", "text/xml"],
+      ".pkg": ["application/octet-stream", "application/vnd.apple.installer+xml"],
     },
   },
 };
