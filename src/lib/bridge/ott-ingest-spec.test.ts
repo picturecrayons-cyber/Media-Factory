@@ -6,6 +6,7 @@ test("OTT ingest accepts expected master formats", () => {
   assert.equal(validateOttIngestFile({ kind: "master", filename: "feature.MP4", contentType: "video/mp4" }).ok, true);
   assert.equal(validateOttIngestFile({ kind: "master", filename: "feature.mov", contentType: "video/quicktime" }).ok, true);
   assert.equal(validateOttIngestFile({ kind: "master", filename: "feature.mxf", contentType: "application/mxf" }).ok, true);
+  assert.equal(validateOttIngestFile({ kind: "master", filename: "feature.mxf", contentType: "video/mxf" }).ok, true);
 });
 
 test("OTT ingest rejects cross-kind extensions", () => {
@@ -15,9 +16,16 @@ test("OTT ingest rejects cross-kind extensions", () => {
   assert.equal(subtitle.ok, false);
 });
 
-test("OTT ingest validates MIME when browser supplies it", () => {
-  const result = validateOttIngestFile({ kind: "poster", filename: "poster.png", contentType: "image/jpeg" });
-  assert.equal(result.ok, false);
+test("OTT ingest validates MIME against the specific extension", () => {
+  assert.equal(validateOttIngestFile({ kind: "poster", filename: "poster.png", contentType: "image/jpeg" }).ok, false);
+  assert.equal(validateOttIngestFile({ kind: "poster", filename: "poster.jpg", contentType: "image/png" }).ok, false);
+  assert.equal(validateOttIngestFile({ kind: "poster", filename: "poster.jpeg", contentType: "image/jpeg" }).ok, true);
+  assert.equal(validateOttIngestFile({ kind: "subtitle", filename: "captions.vtt", contentType: "text/vtt" }).ok, true);
+  assert.equal(validateOttIngestFile({ kind: "subtitle", filename: "captions.vtt", contentType: "application/xml" }).ok, false);
+});
+
+test("opaque browser MIME falls back to extension validation", () => {
+  assert.equal(validateOttIngestFile({ kind: "master", filename: "feature.mxf", contentType: "application/octet-stream" }).ok, true);
 });
 
 test("picker accept filter includes extensions and MIME types", () => {
