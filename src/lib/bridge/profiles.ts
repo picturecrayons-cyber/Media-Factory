@@ -10,6 +10,7 @@ import { assertPermission, canGrantInternalRole, workspaceHome } from "./rbac";
 import { createHash, randomBytes } from "node:crypto";
 import { bridgeEnv } from "./env";
 import { assertNotDevUser } from "./guards";
+import { ONBOARDING_EMAIL_CONFLICT_MESSAGE, isBridgeProfileEmailConflict } from "./onboarding-errors";
 
 function tokenPair() {
   const token = randomBytes(32).toString("hex");
@@ -29,12 +30,17 @@ async function persistSupabaseIdentityLink(sql: Sql, bridgeUserId: string, authU
     ) values (
       ${bridgeUserId}, ${authUserId}::uuid, 'supabase_auth_onboarding', now(), ${bridgeUserId}
     )
-    on conflict (auth_user_id) do update set
-      bridge_user_id = excluded.bridge_user_id,
-      verification_method = excluded.verification_method,
-      verified_at = excluded.verified_at,
-      verified_by = excluded.verified_by
+    on conflict (auth_user_id) do nothing
   `;
+  const links = await sql<{ bridge_user_id: string }>`
+    select bridge_user_id
+    from bridge_loop_identity_links
+    where auth_user_id = ${authUserId}::uuid
+    limit 1
+  `;
+  if (links[0]?.bridge_user_id !== bridgeUserId) {
+    throw new Error("Authenticated identity is already bound to another Bridge profile");
+  }
 }
 
 export const syncSupabaseSessionUser = createServerFn({ method: "POST" })
@@ -78,71 +84,100 @@ export const completeOnboarding = createServerFn({ method: "POST" })
     const existing = await loadActor(context.userId);
     if (!context.emailConfirmedAt) throw new Error("Confirm your email before entering Bridge.");
     if (existing) {
-      // Retry a link write that may have failed after the profile was inserted.
       await persistSupabaseIdentityLink(sql, existing.userId, context.userId);
       return { home: workspaceHome(existing), profile: existing };
     }
 
     const email = context.userEmail;
     if (!email) throw new Error("Account email is required from Supabase session");
-    const verified = true;
-
-    let internalRole: string | null = null;
-    let invitedBy: string | null = null;
-    if (data.inviteToken) {
-      const hash = createHash("sha256").update(data.inviteToken).digest("hex");
-      const invites = await sql<{
-        id: string;
-        email: string;
-        internal_role: string;
-        invited_by: string;
-        expires_at: string;
-        accepted_at: string | null;
-      }>`
-        select id, email, internal_role, invited_by, expires_at, accepted_at
-        from bridge_invites where token_hash = ${hash} limit 1
-      `;
-      const inv = invites[0];
-      if (!inv || inv.accepted_at || new Date(inv.expires_at) < new Date()) {
-        throw new Error("Invite is invalid or expired");
-      }
-      if (inv.email.toLowerCase() !== email.toLowerCase()) {
-        throw new Error("Invite email does not match this account");
-      }
-      internalRole = inv.internal_role;
-      invitedBy = inv.invited_by;
-      await sql`update bridge_invites set accepted_at = now() where id = ${inv.id}`;
-    }
-
     const org =
       data.accountType === "independent_creator" ? null : (data.organizationName ?? "").trim() || null;
     if (data.accountType !== "independent_creator" && !org) {
       throw new Error("Organization name is required");
     }
 
-    const profileId = context.userId;
-    await sql`
-      insert into bridge_profiles (
-        user_id, email, display_name, account_type, organization_name, internal_role, email_verified, invited_by
-      ) values (
-        ${profileId}, ${email}, ${data.displayName}, ${data.accountType}, ${org},
-        ${internalRole}, ${verified}, ${invitedBy}
-      )
-      on conflict (user_id) do update set
-        display_name = excluded.display_name,
-        account_type = excluded.account_type,
-        organization_name = excluded.organization_name,
-        email_verified = true,
-        updated_at = now()
-    `;
+    let internalRole: string | null = null;
+    try {
+      internalRole = await sql.transaction(async (tx) => {
+        const emailOwner = await tx<{ user_id: string }>`
+          select user_id from bridge_profiles where lower(email) = lower(${email}) limit 1
+        `;
+        if (emailOwner[0]?.user_id && emailOwner[0].user_id !== context.userId) {
+          throw new Error(ONBOARDING_EMAIL_CONFLICT_MESSAGE);
+        }
 
-    await persistSupabaseIdentityLink(sql, profileId, context.userId);
+        let invitedRole: string | null = null;
+        let invitedBy: string | null = null;
+        let inviteId: string | null = null;
+        if (data.inviteToken) {
+          const hash = createHash("sha256").update(data.inviteToken).digest("hex");
+          const invites = await tx<{
+            id: string;
+            email: string;
+            internal_role: string;
+            invited_by: string;
+            expires_at: string;
+            accepted_at: string | null;
+          }>`
+            select id, email, internal_role, invited_by, expires_at, accepted_at
+            from bridge_invites
+            where token_hash = ${hash}
+            limit 1
+            for update
+          `;
+          const inv = invites[0];
+          if (!inv || inv.accepted_at || new Date(inv.expires_at) < new Date()) {
+            throw new Error("Invite is invalid or expired");
+          }
+          if (inv.email.toLowerCase() !== email.toLowerCase()) {
+            throw new Error("Invite email does not match this account");
+          }
+          invitedRole = inv.internal_role;
+          invitedBy = inv.invited_by;
+          inviteId = inv.id;
+        }
+
+        await tx`
+          insert into bridge_profiles (
+            user_id, email, display_name, account_type, organization_name, internal_role, email_verified, invited_by
+          ) values (
+            ${context.userId}, ${email}, ${data.displayName}, ${data.accountType}, ${org},
+            ${invitedRole}, true, ${invitedBy}
+          )
+          on conflict (user_id) do update set
+            display_name = excluded.display_name,
+            account_type = excluded.account_type,
+            organization_name = excluded.organization_name,
+            email_verified = true,
+            updated_at = now()
+        `;
+
+        await persistSupabaseIdentityLink(tx, context.userId, context.userId);
+
+        if (inviteId) {
+          const consumed = await tx<{ id: string }>`
+            update bridge_invites
+            set accepted_at = now()
+            where id = ${inviteId} and accepted_at is null
+            returning id
+          `;
+          if (consumed.length !== 1) throw new Error("Invite is invalid or expired");
+        }
+        return invitedRole;
+      });
+    } catch (error) {
+      if (isBridgeProfileEmailConflict(error)) {
+        throw new Error(ONBOARDING_EMAIL_CONFLICT_MESSAGE);
+      }
+      throw error;
+    }
+
     await writeAudit({
       actorUserId: context.userId,
       action: "profile.onboard",
       entityType: "bridge_profile",
       entityId: context.userId,
-      metadata: { accountType: data.accountType, internalRole: internalRole ?? null },
+      metadata: { accountType: data.accountType, internalRole },
     });
     const actor = await loadActor(context.userId);
     if (!actor) throw new Error("Profile create failed");
