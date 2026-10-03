@@ -11,6 +11,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { bridgeEnv } from "./env";
 import { assertNotDevUser } from "./guards";
 import { ONBOARDING_EMAIL_CONFLICT_MESSAGE, isBridgeProfileEmailConflict } from "./onboarding-errors";
+import { bridgeInvitationUrl, bridgeVerificationUrl } from "./origin";
 
 function tokenPair() {
   const token = randomBytes(32).toString("hex");
@@ -226,7 +227,7 @@ export const requestEmailVerification = createServerFn({ method: "POST" })
       insert into bridge_email_challenges (id, user_id, email, purpose, token_hash, expires_at)
       values (${id}, ${profileId}, ${email}, ${"verify"}, ${hash}, ${new Date(Date.now() + 24 * 3600 * 1000).toISOString()})
     `;
-    const url = `${bridgeEnv.appUrl()}/verify-email?token=${token}`;
+    const url = bridgeVerificationUrl(token, bridgeEnv.appUrl());
     await mail({
       to: email,
       subject: "Verify your Crayons Bridge email",
@@ -317,7 +318,7 @@ export const inviteInternalRole = createServerFn({ method: "POST" })
       insert into bridge_invites (id, email, internal_role, invited_by, token_hash, expires_at)
       values (${id}, ${data.email.toLowerCase()}, ${data.role}, ${context.userId}, ${hash}, ${new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString()})
     `;
-    const url = `${bridgeEnv.appUrl()}/signup?invite=${token}`;
+    const url = bridgeInvitationUrl(token, bridgeEnv.appUrl());
     await mail({
       to: data.email,
       subject: "Crayons Bridge internal invite",
