@@ -9,14 +9,32 @@ import {
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { bridgeEnv } from "./env.ts";
 
+export class StorageUnavailableError extends Error {
+  readonly code = "STORAGE_UNAVAILABLE";
+  constructor(message = "Media storage is temporarily unavailable") {
+    super(message);
+    this.name = "StorageUnavailableError";
+  }
+}
+
+export function isStorageUnavailableError(error: unknown): error is StorageUnavailableError {
+  return error instanceof StorageUnavailableError ||
+    (error instanceof Error && error.message.startsWith("STORAGE_UNAVAILABLE:"));
+}
+
+function storageUnavailable(cause: unknown): StorageUnavailableError {
+  const detail = cause instanceof Error && cause.message ? `: ${cause.message}` : "";
+  return new StorageUnavailableError(`STORAGE_UNAVAILABLE${detail}`);
+}
+
 function config() {
   const region = bridgeEnv.awsRegion();
   const bucket = bridgeEnv.awsBucket();
-  if (!region || !bucket) throw new Error("AWS S3 region and media bucket are required");
+  if (!region || !bucket) throw new StorageUnavailableError("STORAGE_UNAVAILABLE: AWS S3 region and media bucket are required");
   const accessKeyId = bridgeEnv.awsAccessKeyId();
   const secretAccessKey = bridgeEnv.awsSecretAccessKey();
   if (Boolean(accessKeyId) !== Boolean(secretAccessKey))
-    throw new Error("Incomplete AWS credentials");
+    throw new StorageUnavailableError("STORAGE_UNAVAILABLE: Incomplete AWS credentials");
   const client = new S3Client({
     region,
     // Omit explicit credentials for SDK workload-role credentials.
@@ -66,6 +84,9 @@ export async function signUpload(opts: { key: string; contentType: string; expir
       },
     );
     return { url, key, bucket, method: "PUT" as const };
+  } catch (error) {
+    if (isStorageUnavailableError(error)) throw error;
+    throw storageUnavailable(error);
   } finally {
     client.destroy();
   }
@@ -79,6 +100,9 @@ export async function signDownload(opts: { key: string; expiresIn?: number }) {
       expiresIn: expiry(opts.expiresIn, 300),
     });
     return { url, key, bucket, method: "GET" as const };
+  } catch (error) {
+    if (isStorageUnavailableError(error)) throw error;
+    throw storageUnavailable(error);
   } finally {
     client.destroy();
   }
@@ -97,6 +121,9 @@ export async function verifyObject(key: string) {
       contentType: object.ContentType ?? null,
       etag: object.ETag?.replaceAll('"', "") ?? null,
     };
+  } catch (error) {
+    if (isStorageUnavailableError(error)) throw error;
+    throw storageUnavailable(error);
   } finally {
     client.destroy();
   }
@@ -143,6 +170,10 @@ export async function sealVerifiedObject(
       contentType: destination.ContentType ?? null,
       etag: destination.ETag.replaceAll('"', ""),
     };
+  } catch (error) {
+    if (isStorageUnavailableError(error)) throw error;
+    if (error instanceof Error && /multipart|Invalid sealing request|verification failed/.test(error.message)) throw error;
+    throw storageUnavailable(error);
   } finally {
     client.destroy();
   }
