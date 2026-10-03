@@ -31,7 +31,7 @@ function harness(grants: unknown[], allowed = true, existing = false) {
     "@/lib/auth/middleware": { authMiddleware: {} },
     "@/lib/db": { getSql: async () => sql },
     "./rbac": { assertPermission: () => { if (!allowed) throw new Error("Forbidden"); } },
-    "./session": { requireVerifiedActor: async () => ({ userId: "operator", emailVerified: true }) },
+    "./session": { requireActor: async () => ({ userId: "operator" }) },
     "./guards": { assertNotDevUser: () => {} },
     "./audit": { writeAudit: async () => {} },
     "./rights-coverage": rights,
