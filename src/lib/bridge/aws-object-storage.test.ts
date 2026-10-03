@@ -7,6 +7,8 @@ import {
   signUpload,
   signDownload,
   sealVerifiedObject,
+  verifyObject,
+  StorageUnavailableError,
 } from "./aws-object-storage.server.ts";
 import { integrationStatus } from "./env.ts";
 
@@ -87,4 +89,24 @@ test("sealing encodes copy source, pins source ETag and rejects unverified copie
   assert.equal(copies, 1);
   mock.mock.mockImplementation(async () => ({ ContentLength: 6 * 1024 ** 3 }));
   await assert.rejects(sealVerifiedObject("films/master", "bridge/sealed/id", "etag"), /multipart/);
+});
+
+
+test("storage failures fail closed with a stable STORAGE_UNAVAILABLE error", async (t) => {
+  const savedRegion = process.env.AWS_REGION;
+  const savedBucket = process.env.AWS_S3_MEDIA_BUCKET;
+  process.env.AWS_REGION = "us-east-1";
+  process.env.AWS_S3_MEDIA_BUCKET = "test-bucket";
+  t.after(() => {
+    if (savedRegion === undefined) delete process.env.AWS_REGION; else process.env.AWS_REGION = savedRegion;
+    if (savedBucket === undefined) delete process.env.AWS_S3_MEDIA_BUCKET; else process.env.AWS_S3_MEDIA_BUCKET = savedBucket;
+  });
+  t.mock.method(S3Client.prototype, "send", async () => {
+    throw Object.assign(new Error("Access Denied"), { name: "AccessDenied", $metadata: { httpStatusCode: 403 } });
+  });
+  await assert.rejects(verifyObject("bridge/owner/title/master/file.mp4"), (error: unknown) => {
+    assert.ok(error instanceof StorageUnavailableError);
+    assert.match(error.message, /^STORAGE_UNAVAILABLE/);
+    return true;
+  });
 });
