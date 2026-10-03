@@ -7,10 +7,11 @@ import { CreateTitleForm } from "@/components/bridge/title-desk";
 import { listTitles } from "@/lib/bridge/titles";
 import { listLoopPublicationReadiness } from "@/lib/bridge/loop-publication";
 import { hasPermission } from "@/lib/bridge/rbac";
+import { listDestinations } from "@/lib/bridge/destinations";
 
 export const Route = createFileRoute("/cms")({ component: OperationalCms });
 
-const tabs = ["ingest", "licensing", "publishing"] as const;
+const tabs = ["ingest", "licensing", "destinations", "publishing"] as const;
 type Tab = (typeof tabs)[number];
 
 function OperationalCms() {
@@ -26,8 +27,10 @@ function CmsBody({ actor }: { actor: any }) {
   const tab: Tab = tabs.includes(search.tab as Tab) ? (search.tab as Tab) : "ingest";
   const titlesQ = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles() });
   const pubQ = useQuery({ queryKey: ["loop-publication-readiness"], queryFn: () => listLoopPublicationReadiness() });
+  const destinationsQ = useQuery({ queryKey: ["bridge-destinations"], queryFn: () => listDestinations() });
   const titles = titlesQ.data?.titles ?? [];
   const publications = pubQ.data?.titles ?? [];
+  const destinations = destinationsQ.data?.destinations ?? [];
 
   return (
     <BridgeShell actor={actor} title="Bridge CMS">
@@ -58,6 +61,7 @@ function CmsBody({ actor }: { actor: any }) {
       <div className="mt-6">
         {tab === "ingest" ? <IngestDesk actor={actor} /> : null}
         {tab === "licensing" ? <LicensingDesk titles={titles} /> : null}
+        {tab === "destinations" ? <DestinationsDesk destinations={destinations} /> : null}
         {tab === "publishing" ? <PublishingDesk publications={publications} /> : null}
       </div>
     </BridgeShell>
@@ -120,6 +124,34 @@ function LicensingDesk({ titles }: { titles: Array<any> }) {
             {!rows.length ? <tr><td colSpan={5} className="px-3 py-8 text-center text-muted">No titles have cleared licensing readiness yet.</td></tr> : null}
           </tbody>
         </table>
+      </div>
+    </section>
+  );
+}
+
+function DestinationsDesk({ destinations }: { destinations: Array<any> }) {
+  return (
+    <section className="rounded-3xl border border-line bg-surface p-6">
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">Destination registry</p>
+        <h3 className="mt-1 font-display text-2xl font-semibold">Multi-platform distribution network</h3>
+        <p className="mt-2 max-w-3xl text-sm text-muted">Bridge is the authorization source. Crayons Loop is a first-party OTT destination; LoopTube / YouTube is a separate first-party publication destination. Additional partner destinations can be added without changing title ownership or licensing authority.</p>
+      </div>
+      <div className="mt-5 grid gap-3 md:grid-cols-2">
+        {destinations.map((destination) => (
+          <article key={destination.id} className="rounded-2xl border border-line bg-elevated p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h4 className="font-semibold">{destination.name}</h4>
+                <p className="mt-1 text-xs text-muted">{destination.destinationType} · {destination.ownership}</p>
+              </div>
+              <span className="rounded-full border border-line px-3 py-1 text-xs font-semibold">{destination.status}</span>
+            </div>
+            <p className="mt-3 text-xs text-muted">Models: {destination.monetizationModels.join(", ") || "Not configured"}</p>
+            <p className="mt-1 text-xs text-muted">Territories: {destination.territories.join(", ") || "Not configured"}</p>
+          </article>
+        ))}
+        {!destinations.length ? <p className="py-8 text-sm text-muted">No destinations are configured yet.</p> : null}
       </div>
     </section>
   );
