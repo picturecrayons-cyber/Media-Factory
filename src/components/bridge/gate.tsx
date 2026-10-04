@@ -5,7 +5,7 @@ import { RedirectToSignIn } from "@/lib/auth/gates";
 import { retryWorkspaceSession } from "@/lib/auth/workspace-session-retry";
 import { supabase } from "@/lib/supabase";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
-import { getBridgeSession, isPrivateBridgeOperator, type BridgeActor } from "@/lib/bridge/session";
+import { getBridgeSession, type BridgeActor } from "@/lib/bridge/session";
 import { requestEmailVerification } from "@/lib/bridge/profiles";
 import { Button } from "@/components/ui/button";
 import { BrandMark } from "./shell";
@@ -98,20 +98,7 @@ export function RequireBridge({
   ))) {
     return <Navigate to={sessionQ.data?.home ?? "/"} />;
   }
-  if (!isPrivateBridgeOperator(profile)) {
-    return (
-      <Frame>
-        <h1 className="font-display text-2xl">Private Bridge workspace</h1>
-        <p role="alert" className="text-sm leading-relaxed text-muted">
-          This workspace is restricted to authorized Crayons Bridge operators.
-        </p>
-        <Link to="/account" className="block text-sm text-accent underline-offset-4 hover:underline">
-          Account
-        </Link>
-      </Frame>
-    );
-  }
-  if (!profile.emailVerified) {
+  // Public Creator / Studio / Buyer workspaces are governed by the account-type guard above.\n  // Internal operator access remains enforced by the explicit `allow` guards on private routes.\n  if (!profile.emailVerified) {
     return (
       <Frame>
         <h1 className="font-display text-2xl">Verify your email</h1>
