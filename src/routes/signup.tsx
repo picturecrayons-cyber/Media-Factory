@@ -27,7 +27,7 @@ function Signup() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [accountType, setAccountType] = useState<AccountChoice>(initialChoice);
+  const [accountType, setAccountType] = useState<AccountChoice>(initialChoice);\n  const [organizationName, setOrganizationName] = useState("");
 
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
