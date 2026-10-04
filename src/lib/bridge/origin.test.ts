@@ -28,7 +28,6 @@ describe("Bridge canonical origin", () => {
     for (const origin of [
       "https://bridge.streamvista.in",
       "https://foo.streamvista.in",
-      "https://bridge.crayonspictures.com",
       "https://preview.example.com",
       "javascript:alert(1)",
     ]) assert.equal(resolveBridgeCanonicalOrigin(origin), BRIDGE_CANONICAL_ORIGIN);

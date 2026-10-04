@@ -2,7 +2,7 @@
 
 Title record, rights, and licensing OS. Legal owner: **StreamVista OPC Pvt Ltd**.
 
-Production domain: `bridge.crayonspictures.com` · Vercel project `bridge` · GitHub `picturecrayons-cyber/Media-Factory`.
+Production domain: `www.crayonspictures.in` · Vercel project `bridge` · GitHub `picturecrayons-cyber/Media-Factory`.
 
 Crayons Bridge is the B2B control plane for title records, rights, licensing, delivery authorization, and operational workflows. CRAYONS LOOP remains the consumer streaming frontend.
 

@@ -3,7 +3,7 @@
 Use these in Supabase Dashboard → Authentication → Email Templates for the canonical shared project only.
 
 Brand: Crayons Bridge
-Site: https://bridge.crayonspictures.com
+Site: https://www.crayonspictures.in
 Brand mark: text-only "Crayons Bridge" until a replacement canonical image asset is approved.
 Legal owner: StreamVista OPC Pvt Ltd
 
