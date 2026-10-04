@@ -96,9 +96,9 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
         <div className="grid gap-5 md:grid-cols-[180px_1fr]">
           <div className="aspect-[2/3] overflow-hidden rounded-xl border border-line bg-elevated">
             <div className="grid h-full place-items-center px-4 text-center text-xs text-muted">
-              {assets.some((asset) => asset.kind === "poster")
-                ? "Artwork added"
-                : "Artwork not added yet"}
+              {assets.some((asset) => ["poster_vertical", "poster"].includes(asset.kind))
+                ? "Vertical poster ready"
+                : "Add vertical poster"}
             </div>
           </div>
           <div className="min-w-0">
@@ -174,16 +174,29 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
 
       {activeTab === "Overview" ? (
         <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Overview</p>
-          <h2 className="mt-1 font-display text-xl font-semibold">Ready for market</h2>
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Metadata</p>
+              <h2 className="mt-1 font-display text-xl font-semibold">OTT title details</h2>
+            </div>
+            <span className="rounded-full border border-line px-3 py-1 text-xs font-semibold">{title.status}</span>
+          </div>
           <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <Metric label="Files" value={assets.length ? "ADDED" : "ADD FILES"} />
+            <Metric label="Original title" value={title.nameMl || "—"} />
+            <Metric label="Language" value={title.language || "—"} />
+            <Metric label="Year" value={title.year ? String(title.year) : "—"} />
+            <Metric label="Runtime" value={title.runtimeMinutes ? `${title.runtimeMinutes} min` : "—"} />
+            <Metric label="Country" value={title.countryOfOrigin || "—"} />
+            <Metric label="Release date" value={title.releaseDate || "—"} />
+            <Metric label="Director" value={title.credits?.filter((c) => c.role === "Director").map((c) => c.name).join(", ") || "—"} />
+            <Metric label="Producer" value={title.credits?.filter((c) => c.role === "Producer").map((c) => c.name).join(", ") || "—"} />
+          </div>
+          {title.synopsis ? <p className="mt-4 text-sm leading-6 text-muted">{title.synopsis}</p> : null}
+          <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <Metric label="QC" value={qcReady ? "READY" : "PENDING"} />
             <Metric label="Rights" value={rightsReady ? "READY" : "PENDING"} />
-            <Metric
-              label="Delivery"
-              value={distributionReady ? "AUTHORIZED" : packageReady ? "READY" : "PENDING"}
-            />
-            <Metric label="Revenue" value="—" />
+            <Metric label="Licensing" value={legalReady ? "READY" : "PENDING"} />
+            <Metric label="Publish" value={distributionReady ? "LIVE" : packageReady ? "READY" : "PENDING"} />
           </div>
         </section>
       ) : activeTab === "Files" ? (
@@ -209,7 +222,7 @@ function Metric({ label, value }: { label: string; value: string }) {
   );
 }
 
-type SimpleAssetKind = "master" | "poster" | "subtitle" | "screener" | "technical" | "censor_certificate";
+type SimpleAssetKind = "master" | "poster_vertical" | "poster_horizontal" | "thumbnail" | "subtitle" | "screener" | "censor_certificate";
 function FilesPanel({
   titleId,
   assets,
@@ -275,28 +288,30 @@ function FilesPanel({
     window.location.assign(signed.url);
   }
   const cards: [SimpleAssetKind, string, string][] = [
-    ["master", "Master Video", "Required"],
-    ["poster", "Artwork", "Add"],
+    ["master", "Main Film", "Required"],
+    ["screener", "Trailer", "Add"],
+    ["poster_vertical", "Vertical Poster", "Add"],
+    ["poster_horizontal", "Horizontal Artwork", "Add"],
+    ["thumbnail", "Thumbnail", "Add"],
     ["subtitle", "Subtitle", "Optional"],
-    ["screener", "Trailer / Screener", "Optional"],
     ["censor_certificate", "Censor Certificate", "Optional"],
-    ["technical", "Technical / Camera Package", "Optional"],
   ];
   return (
     <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
-      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Files</p>
-      <h2 className="mt-1 font-display text-xl font-semibold">Upload OTT files</h2>
-      <p className="mt-2 text-sm text-muted">
-        Choose the correct delivery format for each asset. Unsupported file types are blocked before
-        upload.
-      </p>
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Media</p>
+          <h2 className="mt-1 font-display text-xl font-semibold">OTT package</h2>
+        </div>
+        <span className="text-xs text-muted">Ready / Missing</span>
+      </div>
       <div className="mt-5 grid gap-3 sm:grid-cols-2">
         {cards.map(([kind, label, empty]) => (
           <FileTypeCard
             key={kind}
             kind={kind}
             label={label}
-            status={assets.some((a) => a.kind === kind && a.verified) ? "Ready" : empty}
+            status={assets.some((a) => (a.kind === kind || (kind === "poster_vertical" && a.kind === "poster")) && a.verified) ? "Ready" : empty}
             busy={uploading === kind}
             canUpload={canUpload}
             onFile={(file) => void uploadFile(kind, file)}
