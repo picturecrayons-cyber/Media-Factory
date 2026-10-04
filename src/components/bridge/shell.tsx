@@ -7,10 +7,37 @@ import type { BridgeActor } from "@/lib/bridge/session";
 type NavItem = { to: string; label: string };
 
 function navFor(actor: BridgeActor): NavItem[] {
+  if (actor.internalRole === "qc_reviewer") {
+    return [
+      { to: "/internal", label: "QC Desk" },
+      { to: "/deliveries", label: "Deliveries" },
+      { to: "/account", label: "Account" },
+    ];
+  }
+  if (actor.internalRole === "legal_reviewer") {
+    return [
+      { to: "/internal", label: "Legal Desk" },
+      { to: "/deliveries", label: "Deliveries" },
+      { to: "/account", label: "Account" },
+    ];
+  }
+  if (actor.internalRole === "finance") {
+    return [
+      { to: "/deliveries", label: "Finance Desk" },
+      { to: "/account", label: "Account" },
+    ];
+  }
+  if (actor.internalRole === "viewer") {
+    return [
+      { to: "/internal", label: "Operations" },
+      { to: "/account", label: "Account" },
+    ];
+  }
   if (actor.internalRole === "admin" || actor.internalRole === "super_admin") {
     return [
       { to: "/admin", label: "Bridge Admin" },
       { to: "/cms", label: "Bridge CMS" },
+      { to: "/deliveries", label: "Distribution" },
       { to: "/account", label: "Account" },
     ];
   }
