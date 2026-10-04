@@ -31,7 +31,7 @@ export const listAdminWorkstations = createServerFn({ method: "GET" })
       sql`select user_id, email, display_name, account_type, organization_name, internal_role, email_verified, created_at, updated_at from bridge_profiles order by updated_at desc limit 200`,
       sql`select id, actor_user_id, action, entity_type, entity_id, metadata, created_at from bridge_audit_logs order by created_at desc limit 200`,
     ]);
-    return { titles, assets, assetVersions, qc, legal, rights, packages, publications, profiles, audit };
+    return JSON.parse(JSON.stringify({ titles, assets, assetVersions, qc, legal, rights, packages, publications, profiles, audit }, (_, value) => typeof value === "bigint" ? value.toString() : value));
   });
 
 const reviewInput = z.object({
