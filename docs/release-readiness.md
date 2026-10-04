@@ -86,14 +86,14 @@ Bridge transactional mail also requires:
 
 Canonical domains:
 
-- Bridge: `bridge.crayonspictures.com`
+- Bridge: `www.crayonspictures.in`
 - LOOP: `crayonsloop.com`
 
 Before release certification, both must resolve to their canonical Vercel projects and return the intended Production deployment.
 
 ### Bridge DNS expectation
 
-The `bridge` host must not be served by Hostinger's parking/Under Construction origin. Remove conflicting A/AAAA/CNAME records and keep only the Vercel-required record shown in the Vercel domain configuration.
+The retired `bridge.crayonspictures.com` host must not be used. The canonical Bridge host is `www.crayonspictures.in`, with `crayonspictures.in` redirecting to it.
 
 ### LOOP domain expectation
 
