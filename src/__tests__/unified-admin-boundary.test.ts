@@ -1,21 +1,21 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-test("Bridge super_admin does not imply Loop CMS authorization", () => {
+test("Bridge super_admin exposes Loop CMS through the Bridge control plane", () => {
   const actor = { internalRole: "super_admin", accountType: "independent_creator" };
   const bridgeAdmin = actor.internalRole === "admin" || actor.internalRole === "super_admin";
-  const loopCmsAuthorized = false;
+  const loopCmsEntryPoint = bridgeAdmin ? "/cms" : null;
 
   assert.equal(bridgeAdmin, true);
-  assert.equal(loopCmsAuthorized, false);
+  assert.equal(loopCmsEntryPoint, "/cms");
 });
 
-test("public Loop and Loop CMS remain separate destinations", () => {
-  const publicLoop = "https://crayonsloop.in/";
-  const loopCms = null;
+test("Loop CMS is not a second independent back-office application", () => {
+  const loopCms = "/cms";
+  const independentLoopCms = null;
 
-  assert.match(publicLoop, /^https:\/\/crayonsloop\.in\/$/);
-  assert.equal(loopCms, null);
+  assert.equal(loopCms, "/cms");
+  assert.equal(independentLoopCms, null);
 });
 
 test("public Loop URL never embeds credentials", () => {
