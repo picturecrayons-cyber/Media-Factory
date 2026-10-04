@@ -87,17 +87,12 @@ Bridge transactional mail also requires:
 Canonical domains:
 
 - Bridge: `www.crayonspictures.in`
-- LOOP: `crayonsloop.com`
 
 Before release certification, both must resolve to their canonical Vercel projects and return the intended Production deployment.
 
 ### Bridge DNS expectation
 
 The retired `bridge.crayonspictures.com` host must not be used. The canonical Bridge host is `www.crayonspictures.in`, with `crayonspictures.in` redirecting to it.
-
-### LOOP domain expectation
-
-`crayonsloop.com` must be assigned to the `crayonsloop` Vercel project and resolve to its current Production deployment.
 
 ## 5. Release rule
 
