@@ -209,7 +209,7 @@ function Metric({ label, value }: { label: string; value: string }) {
   );
 }
 
-type SimpleAssetKind = "master" | "poster" | "subtitle" | "screener" | "technical";
+type SimpleAssetKind = "master" | "poster" | "subtitle" | "screener" | "technical" | "censor_certificate";
 function FilesPanel({
   titleId,
   assets,
@@ -279,6 +279,7 @@ function FilesPanel({
     ["poster", "Artwork", "Add"],
     ["subtitle", "Subtitle", "Optional"],
     ["screener", "Trailer / Screener", "Optional"],
+    ["censor_certificate", "Censor Certificate", "Optional"],
     ["technical", "Technical / Camera Package", "Optional"],
   ];
   return (
