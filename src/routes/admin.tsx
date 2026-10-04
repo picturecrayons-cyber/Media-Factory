@@ -5,8 +5,8 @@ import { BridgeShell } from "@/components/bridge/shell";
 import { Button } from "@/components/ui/button";
 import { listTitles, listAuditLogs } from "@/lib/bridge/titles";
 import { listLoopPublicationReadiness } from "@/lib/bridge/loop-publication";
-import { hasPermission } from "@/lib/bridge/rbac";
 import { listAdminProfiles } from "@/lib/bridge/profiles";
+import { hasPermission } from "@/lib/bridge/rbac";
 
 export const Route = createFileRoute("/admin")({ component: AdminControlPlane });
 
@@ -70,7 +70,7 @@ function AdminBody({ actor }: { actor: any }) {
           </div>
           <div className="flex flex-wrap gap-2">
             <Link to="/cms"><Button>Open Bridge CMS</Button></Link>
-            <Button type="button" variant="outline" disabled title="Loop CMS requires independent server-authoritative authorization">Loop CMS unavailable</Button>
+            <Link to="/cms"><Button type="button" variant="outline">Open Loop CMS in Bridge</Button></Link>
             <a href="https://crayonsloop.in/" target="_blank" rel="noreferrer"><Button variant="outline">Open Crayons Loop ↗</Button></a>
           </div>
         </div>
