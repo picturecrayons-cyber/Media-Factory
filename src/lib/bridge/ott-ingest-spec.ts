@@ -1,4 +1,4 @@
-export type OttIngestKind = "master" | "poster" | "subtitle" | "screener" | "technical";
+export type OttIngestKind = "master" | "poster" | "subtitle" | "screener" | "technical" | "censor_certificate";
 
 type OttIngestRule = {
   label: string;
@@ -55,6 +55,17 @@ export const OTT_INGEST_SPEC: Record<OttIngestKind, OttIngestRule> = {
       ".mp4": ["video/mp4"],
       ".mov": ["video/quicktime"],
       ".mxf": ["application/mxf", "video/mxf"],
+    },
+  },
+  censor_certificate: {
+    label: "Censor Certificate",
+    extensions: [".pdf", ".png", ".jpg", ".jpeg"],
+    mimeTypes: ["application/pdf", "image/png", "image/jpeg"],
+    mimeByExtension: {
+      ".pdf": ["application/pdf"],
+      ".png": ["image/png"],
+      ".jpg": ["image/jpeg"],
+      ".jpeg": ["image/jpeg"],
     },
   },
   technical: {
