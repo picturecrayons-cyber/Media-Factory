@@ -98,19 +98,9 @@ export function RequireBridge({
   ))) {
     return <Navigate to={sessionQ.data?.home ?? "/"} />;
   }
-  if (!isPrivateBridgeOperator(profile)) {
-    return (
-      <Frame>
-        <h1 className="font-display text-2xl">Private Bridge workspace</h1>
-        <p role="alert" className="text-sm leading-relaxed text-muted">
-          This workspace is restricted to authorized Crayons Bridge operators.
-        </p>
-        <Link to="/account" className="block text-sm text-accent underline-offset-4 hover:underline">
-          Account
-        </Link>
-      </Frame>
-    );
-  }
+  // Public Bridge account workspaces (Creator / Studio / Buyer) are intentionally
+  // separate from the private internal operator control plane. The `allow` guard
+  // above enforces the account type; do not apply the internal-operator gate here.
   if (!profile.emailVerified) {
     return (
       <Frame>
