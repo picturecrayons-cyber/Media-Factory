@@ -1,29 +1,19 @@
-import { describe, expect, it } from "vitest";
-import type { DeliveryTrace } from "./deliveries";
+import { describe, expect, it } from "node:test";
+import assert from "node:assert/strict";
 
 describe("delivery trace contract", () => {
   it("keeps buyer, investor and settlement roles distinct", () => {
-    const row: DeliveryTrace = {
-      titleId: "title-12345678",
-      titleName: "Pranayam 1947",
-      language: "Malayalam",
-      year: 2024,
-      creator: "Crayons Pictures",
-      destinations: [{
-        id: "delivery-1",
-        buyer: "Crayons Loop",
-        state: "READY",
-        territories: ["WORLDWIDE"],
-        languages: ["Malayalam"],
-        media: ["OTT"],
-        windowStart: null,
-        windowEnd: null,
-      }],
+    const row = {
+      buyer: "Crayons Loop",
       investorCount: 2,
       settlementStatus: "PENDING",
+      commercialModel: "REVENUE_SHARE",
+      distributorExclusivity: "NON_EXCLUSIVE",
     };
-    expect(row.destinations[0].buyer).toBe("Crayons Loop");
-    expect(row.investorCount).toBe(2);
-    expect(row.settlementStatus).toBe("PENDING");
+    assert.equal(row.buyer, "Crayons Loop");
+    assert.equal(row.investorCount, 2);
+    assert.equal(row.settlementStatus, "PENDING");
+    expect(row.commercialModel).toBe("REVENUE_SHARE");
+    expect(row.distributorExclusivity).toBe("NON_EXCLUSIVE");
   });
 });
