@@ -66,7 +66,7 @@ const ACCOUNT_PERMISSIONS: Record<AccountType, readonly Permission[]> = {
     "delivery.read",
     "delivery.read_finance",
   ],
-  buyer: ["title.read_catalog", "payment.create_order", "entitlement.read_own", "asset.sign_download", "delivery.read"],
+  buyer: ["title.read_catalog", "payment.create_order", "entitlement.read_own", "asset.sign_download"],
 };
 
 export type Actor = {
