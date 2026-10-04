@@ -49,6 +49,7 @@ export const listDeliveryTraces = createServerFn({ method: "GET" })
     const isInternal = Boolean(actor.internalRole);
     const isFinanceViewer = isInternal && hasPermission(actor, "finance.read");
 
+    assertPermission(actor, "delivery.read");
     if (isInternal) assertPermission(actor, "title.read_catalog");
     else if (actor.accountType === "buyer") assertPermission(actor, "title.read_catalog");
     else assertPermission(actor, "title.read_own");
