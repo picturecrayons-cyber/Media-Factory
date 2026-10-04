@@ -11,16 +11,16 @@ import { listAdminProfiles } from "@/lib/bridge/profiles";
 export const Route = createFileRoute("/admin")({ component: AdminControlPlane });
 
 const modules = [
-  ["Incoming Submissions", "Persisted title intake queue with audited acceptance into QC.", "/admin/workstations#submissions"],
-  ["Operational CMS", "Bridge-authoritative operations and Loop publication controls.", "/admin/workstations#loop"],
-  ["Titles & Assets", "Canonical titles, base assets and versioned masters.", "/admin/workstations#assets"],
-  ["Assets & QC", "Persisted QC cases with reviewer decisions and audit events.", "/admin/workstations#qc"],
-  ["Legal & Rights", "Persisted legal cases and rights grants with clearance decisions.", "/admin/workstations#rights"],
-  ["Licensing", "Persisted commercial pipeline and destination package readiness.", "/admin/workstations#licensing"],
-  ["Deliveries", "Persisted destination packages, authorization and delivery state.", "/admin/workstations#deliveries"],
-  ["Users & Studios", "Authoritative Bridge identities and organizations.", "/admin/workstations#users"],
-  ["Audit History", "Persisted operator activity and lifecycle decisions.", "/admin/workstations#audit"],
-  ["Website CMS", "Edit the minimal public Bridge homepage copy.", "/admin/workstations#website"],
+  ["Incoming Submissions", "Persisted title intake queue with audited acceptance into QC.", "/admin/workstations"],
+  ["Operational CMS", "Bridge-authoritative operations and Loop publication controls.", "/admin/workstations"],
+  ["Titles & Assets", "Canonical titles, base assets and versioned masters.", "/admin/workstations"],
+  ["Assets & QC", "Persisted QC cases with reviewer decisions and audit events.", "/admin/workstations"],
+  ["Legal & Rights", "Persisted legal cases and rights grants with clearance decisions.", "/admin/workstations"],
+  ["Licensing", "Persisted commercial pipeline and destination package readiness.", "/admin/workstations"],
+  ["Deliveries", "Persisted destination packages, authorization and delivery state.", "/admin/workstations"],
+  ["Users & Studios", "Authoritative Bridge identities and organizations.", "/admin/workstations"],
+  ["Audit History", "Persisted operator activity and lifecycle decisions.", "/admin/workstations"],
+  ["Website CMS", "Edit the minimal public Bridge homepage copy.", "/admin/workstations"],
 ] as const;
 
 function AdminControlPlane() {
