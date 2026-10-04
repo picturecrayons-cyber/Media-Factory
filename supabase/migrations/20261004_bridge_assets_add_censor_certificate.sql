@@ -7,6 +7,9 @@ alter table public.bridge_assets
     kind = any (
       array[
         'poster'::text,
+        'poster_vertical'::text,
+        'poster_horizontal'::text,
+        'thumbnail'::text,
         'screener'::text,
         'master'::text,
         'subtitle'::text,
