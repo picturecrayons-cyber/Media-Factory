@@ -20,6 +20,16 @@ export const DESTINATION_TYPES = [
 export type DestinationType = (typeof DESTINATION_TYPES)[number];
 export type DestinationOwnership = "FIRST_PARTY" | "PARTNER";
 
+// JSONB values must remain serializable across the server-function boundary.
+type JsonValue =
+  | string
+  | number
+  | boolean
+  | null
+  | JsonValue[]
+  | { [key: string]: JsonValue };
+type JsonObject = { [key: string]: JsonValue };
+
 export type BridgeDestination = {
   id: string;
   code: string;
@@ -29,8 +39,8 @@ export type BridgeDestination = {
   monetizationModels: string[];
   territories: string[];
   languages: string[];
-  deliveryRequirements: Record<string, unknown>;
-  technicalSpecs: Record<string, unknown>;
+  deliveryRequirements: JsonObject;
+  technicalSpecs: JsonObject;
   status: string;
 };
 
@@ -43,8 +53,8 @@ type DestinationRow = {
   monetization_models: string[];
   territories: string[];
   languages: string[];
-  delivery_requirements: Record<string, unknown>;
-  technical_specs: Record<string, unknown>;
+  delivery_requirements: JsonObject;
+  technical_specs: JsonObject;
   status: string;
 };
 
