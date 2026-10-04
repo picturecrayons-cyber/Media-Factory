@@ -30,7 +30,7 @@ function WorkstationBody() {
   const ReviewRow = ({ title, actions }: { title: any; actions: Array<["ACCEPT"|"PASS"|"FAIL"|"APPROVE"|"REJECT", string]> }) => (
     <div className="flex flex-col gap-3 rounded-2xl border border-line bg-elevated p-4 md:flex-row md:items-center md:justify-between">
       <div><p className="font-medium">{title.name}</p><p className="text-xs text-muted">{title.status} · {title.language} · updated {new Date(title.updated_at).toLocaleString()}</p></div>
-      <div className="flex flex-wrap gap-2">{actions.map(([decision,label]) => <Button key={decision} size="sm" variant={decision==="FAIL"||decision==="REJECT" ? "outline" : "default"} disabled={mutation.isPending} onClick={() => mutation.mutate({ data: { titleId: title.id, decision } })}>{label}</Button>)}</div>
+      <div className="flex flex-wrap gap-2">{actions.map(([decision,label]) => <Button key={decision} size="sm" variant={decision==="FAIL"||decision==="REJECT" ? "outline" : undefined} disabled={mutation.isPending} onClick={() => mutation.mutate({ data: { titleId: title.id, decision } })}>{label}</Button>)}</div>
     </div>
   );
 
