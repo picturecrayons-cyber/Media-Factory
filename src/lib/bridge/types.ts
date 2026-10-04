@@ -77,6 +77,8 @@ export const PERMISSIONS = [
   "payment.create_order",
   "entitlement.read_own",
   "finance.read",
+  "delivery.read",
+  "delivery.read_finance",
   "users.invite_internal",
   "audit.read",
   "loop.publish",

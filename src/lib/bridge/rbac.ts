@@ -3,9 +3,9 @@ import { isBuyerVisible } from "./lifecycle.ts";
 
 const INTERNAL_PERMISSIONS: Record<InternalRole, readonly Permission[]> = {
   viewer: ["title.read_catalog", "audit.read"],
-  qc_reviewer: ["title.read_catalog", "title.qc_review", "asset.sign_download", "audit.read"],
-  legal_reviewer: ["title.read_catalog", "title.rights_review", "asset.sign_download", "audit.read"],
-  finance: ["title.read_catalog", "finance.read", "entitlement.read_own", "audit.read"],
+  qc_reviewer: ["title.read_catalog", "title.qc_review", "asset.sign_download", "audit.read", "delivery.read"],
+  legal_reviewer: ["title.read_catalog", "title.rights_review", "asset.sign_download", "audit.read", "delivery.read"],
+  finance: ["title.read_catalog", "finance.read", "delivery.read", "delivery.read_finance", "entitlement.read_own", "audit.read"],
   admin: [
     "title.read_catalog",
     "title.qc_review",
@@ -13,6 +13,8 @@ const INTERNAL_PERMISSIONS: Record<InternalRole, readonly Permission[]> = {
     "title.license",
     "title.negotiate",
     "title.deliver",
+    "delivery.read",
+    "delivery.read_finance",
     "asset.sign_download",
     "finance.read",
     "users.invite_internal",
@@ -28,6 +30,8 @@ const INTERNAL_PERMISSIONS: Record<InternalRole, readonly Permission[]> = {
     "title.license",
     "title.negotiate",
     "title.deliver",
+    "delivery.read",
+    "delivery.read_finance",
     "asset.sign_download",
     "entitlement.read_own",
     "finance.read",
@@ -48,6 +52,8 @@ const ACCOUNT_PERMISSIONS: Record<AccountType, readonly Permission[]> = {
     "asset.sign_upload",
     "asset.sign_download",
     "entitlement.read_own",
+    "delivery.read",
+    "delivery.read_finance",
   ],
   studio: [
     "title.create",
@@ -57,6 +63,8 @@ const ACCOUNT_PERMISSIONS: Record<AccountType, readonly Permission[]> = {
     "asset.sign_upload",
     "asset.sign_download",
     "entitlement.read_own",
+    "delivery.read",
+    "delivery.read_finance",
   ],
   buyer: ["title.read_catalog", "payment.create_order", "entitlement.read_own", "asset.sign_download"],
 };
@@ -152,6 +160,9 @@ export function canGrantInternalRole(actor: Actor, role: InternalRole): boolean 
 
 export function workspaceHome(actor: Actor): string {
   if (actor.internalRole === "super_admin") return "/dashboard";
+  if (actor.internalRole === "qc_reviewer") return "/internal?desk=qc";
+  if (actor.internalRole === "legal_reviewer") return "/internal?desk=legal";
+  if (actor.internalRole === "finance") return "/deliveries";
   if (actor.internalRole) return "/internal";
   if (actor.accountType === "independent_creator") return "/creator";
   if (actor.accountType === "studio") return "/studio";
