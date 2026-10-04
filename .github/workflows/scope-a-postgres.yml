@@ -36,6 +36,7 @@ jobs:
       POSTGRES_URL: postgresql://postgres:postgres@127.0.0.1:5432/bridge_scope_a
       POSTGRES_URL_NON_POOLING: postgresql://postgres:postgres@127.0.0.1:5432/bridge_scope_a
       DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/bridge_scope_a
+      PGSSLMODE: disable
       NODE_ENV: test
 
     steps:
