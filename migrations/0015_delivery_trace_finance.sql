@@ -50,7 +50,7 @@ create table if not exists public.bridge_title_settlements (
   created_at timestamptz not null default now(),
   foreign key (destination_package_id, title_id)
     references public.bridge_destination_packages(id, title_id)
-    on delete set null,
+    on delete set null (destination_package_id),
   check (revenue_received_paise >= 0),
   check (creator_payable_paise >= 0),
   check (investor_payable_paise >= 0),
