@@ -42,6 +42,7 @@ export async function signUpWithEmail(input: {
   password: string;
   name: string;
   accountType?: "independent_creator" | "studio" | "buyer";
+  organizationName?: string;
 }) {
   const callbackUrl = bridgeCallbackUrl(typeof window !== "undefined" ? window.location.origin : undefined);
 
@@ -53,6 +54,7 @@ export async function signUpWithEmail(input: {
         name: input.name,
         full_name: input.name,
         account_type: input.accountType || "independent_creator",
+        organization_name: input.organizationName?.trim() || undefined,
       },
       emailRedirectTo: callbackUrl,
     },
@@ -89,21 +91,14 @@ export async function signInWithEmail(email: string, password: string) {
 
 export async function resetPasswordForEmail(email: string) {
   const redirectTo = getPasswordRecoveryRedirectUrl();
-
-  const { data, error } = await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo,
-  });
-
+  const { data, error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
   if (error) throw error;
   return data;
 }
 
 export async function updatePassword(password: string) {
   if (!(await hasSupabaseRecoverySession())) throw new Error("Reset link is invalid or expired. Request a new one.");
-  const { data, error } = await supabase.auth.updateUser({
-    password,
-  });
-
+  const { data, error } = await supabase.auth.updateUser({ password });
   if (error) throw error;
   if (typeof window !== "undefined") window.sessionStorage.removeItem(RECOVERY_MARKER_KEY);
   return data.user;
@@ -123,12 +118,8 @@ export async function signOut(redirectTo = "/login"): Promise<void> {
 }
 
 export function subscribeAuthChange(listener: (event: string, session: Session | null) => void) {
-  const { data } = supabase.auth.onAuthStateChange((event, session) => {
-    listener(event, session);
-  });
-  return () => {
-    data.subscription.unsubscribe();
-  };
+  const { data } = supabase.auth.onAuthStateChange((event, session) => { listener(event, session); });
+  return () => { data.subscription.unsubscribe(); };
 }
 
 export function getStoredSupabaseUser(): User | null {
