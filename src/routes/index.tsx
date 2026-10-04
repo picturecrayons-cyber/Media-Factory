@@ -6,7 +6,6 @@ import { SignedOut } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { getBridgeSession } from "@/lib/bridge/session";
 
-const CRAYONS_LOOP_URL = "https://crayonsloop.com/";
 
 export const Route = createFileRoute("/")({ component: Home });
 
@@ -234,17 +233,7 @@ function Home() {
                 </p>
               </div>
 
-              <div className="shrink-0">
-                <a
-                  href={CRAYONS_LOOP_URL}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 rounded-full border border-line bg-elevated px-5 py-2.5 text-xs font-semibold text-fg hover:border-line-strong hover:bg-accent-soft hover:text-accent transition-all"
-                >
-                  <span>Explore Crayons Loop</span>
-                  <span className="text-xs">↗</span>
-                </a>
-              </div>
+
             </div>
           </div>
         </section>
@@ -296,15 +285,6 @@ function Home() {
             <Link to="/contact" className="hover:text-fg transition-colors">
               Contact
             </Link>
-            <a
-              href={CRAYONS_LOOP_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-fg hover:text-accent font-semibold transition-colors flex items-center gap-0.5"
-            >
-              <span>Crayons Loop</span>
-              <span className="text-[10px]">↗</span>
-            </a>
           </nav>
         </div>
       </footer>
