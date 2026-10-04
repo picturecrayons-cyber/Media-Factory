@@ -292,15 +292,9 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
               <div>Active Authorized Titles: <strong className="text-fg">{allTitles.filter((t) => t.publication?.authorizationStatus?.toLowerCase() === "live" || t.publication?.authorizationStatus?.toLowerCase() === "authorized").length}</strong></div>
             </div>
             <div className="pt-2">
-              <a
-                href="https://crayonsloop.com/"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 text-xs font-semibold text-accent hover:underline"
-              >
-                <span>Open Crayons Loop Consumer OTT</span>
-                <span>↗</span>
-              </a>
+              <span className="inline-flex items-center rounded-full border border-line bg-elevated px-3.5 py-1.5 text-xs font-semibold text-muted">
+                Crayons Loop Consumer OTT
+              </span>
             </div>
           </div>
 
