@@ -1,4 +1,4 @@
-export type OttIngestKind = "master" | "poster" | "subtitle" | "screener" | "technical" | "censor_certificate";
+export type OttIngestKind = "master" | "poster" | "poster_vertical" | "poster_horizontal" | "thumbnail" | "subtitle" | "screener" | "technical" | "censor_certificate";
 
 type OttIngestRule = {
   label: string;
@@ -20,6 +20,39 @@ export const OTT_INGEST_SPEC: Record<OttIngestKind, OttIngestRule> = {
   },
   poster: {
     label: "Artwork",
+    extensions: [".png", ".jpg", ".jpeg", ".webp"],
+    mimeTypes: ["image/png", "image/jpeg", "image/webp"],
+    mimeByExtension: {
+      ".png": ["image/png"],
+      ".jpg": ["image/jpeg"],
+      ".jpeg": ["image/jpeg"],
+      ".webp": ["image/webp"],
+    },
+  },
+  poster_vertical: {
+    label: "Vertical Poster",
+    extensions: [".png", ".jpg", ".jpeg", ".webp"],
+    mimeTypes: ["image/png", "image/jpeg", "image/webp"],
+    mimeByExtension: {
+      ".png": ["image/png"],
+      ".jpg": ["image/jpeg"],
+      ".jpeg": ["image/jpeg"],
+      ".webp": ["image/webp"],
+    },
+  },
+  poster_horizontal: {
+    label: "Horizontal Artwork",
+    extensions: [".png", ".jpg", ".jpeg", ".webp"],
+    mimeTypes: ["image/png", "image/jpeg", "image/webp"],
+    mimeByExtension: {
+      ".png": ["image/png"],
+      ".jpg": ["image/jpeg"],
+      ".jpeg": ["image/jpeg"],
+      ".webp": ["image/webp"],
+    },
+  },
+  thumbnail: {
+    label: "Thumbnail",
     extensions: [".png", ".jpg", ".jpeg", ".webp"],
     mimeTypes: ["image/png", "image/jpeg", "image/webp"],
     mimeByExtension: {
