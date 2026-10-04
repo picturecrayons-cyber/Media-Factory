@@ -119,6 +119,6 @@ describe("PRD authorization matrix", () => {
     assert.equal(workspaceHome(buyer()), "/buyer");
     assert.equal(workspaceHome(superAdmin()), "/dashboard");
     assert.equal(workspaceHome(admin()), "/internal");
-    assert.equal(workspaceHome(qc), "/internal");
+    assert.equal(workspaceHome(qc), "/internal?desk=qc");
   });
 });
