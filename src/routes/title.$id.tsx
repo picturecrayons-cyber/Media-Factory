@@ -4,10 +4,9 @@ import { useState } from "react";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { getTitle } from "@/lib/bridge/titles";
-import { confirmAssetUpload, listTitleAssets, requestAssetDownload, requestAssetUpload } from "@/lib/bridge/assets";
+import { listTitleAssets, requestAssetDownload } from "@/lib/bridge/assets";
 import { getLoopPublication } from "@/lib/bridge/loop-publication";
 import type { BridgeActor } from "@/lib/bridge/session";
-import { OTT_INGEST_SPEC, getOttIngestAccept, validateOttIngestFile } from "@/lib/bridge/ott-ingest-spec";
 
 export const Route = createFileRoute("/title/$id")({ component: TitlePage });
 
@@ -64,7 +63,7 @@ function TitleBody({ id, actor: _actor }: { id: string; actor: BridgeActor }) {
               {title.credits?.some((c) => c.role === "Director") ? <span><span className="text-muted">Director</span> · {title.credits.filter((c) => c.role === "Director").map((c) => c.name).join(", ")}</span> : null}
               {title.credits?.some((c) => c.role === "Cast") ? <span><span className="text-muted">Cast</span> · {title.credits.filter((c) => c.role === "Cast").map((c) => c.name).join(", ")}</span> : null}
             </div>
-            <div className="mt-5"><button type="button" onClick={() => setActiveTab("Files")} className="rounded-full bg-fg px-5 py-2.5 text-sm font-semibold text-bg">Upload Files</button></div>
+            <div className="mt-5"><button type="button" onClick={() => setActiveTab("Files")} className="rounded-full border border-line px-5 py-2.5 text-sm font-semibold">View Files</button></div>
           </div>
         </div>
       </section>
@@ -85,7 +84,7 @@ function TitleBody({ id, actor: _actor }: { id: string; actor: BridgeActor }) {
           </div>
         </section>
       ) : activeTab === "Files" ? (
-        <FilesPanel titleId={id} assets={assets} onAssetsChanged={() => assetsQ.refetch()} />
+        <FilesPanel assets={assets} />
       ) : (
         <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Business</p>
@@ -106,12 +105,7 @@ function BusinessCard({ title, status, copy }: { title:string; status:string; co
   return <div className="rounded-xl border border-line p-4"><div className="flex items-center justify-between gap-3"><h3 className="font-semibold">{title}</h3><span className="rounded-full border border-line px-3 py-1 text-[10px] font-semibold">{status}</span></div><p className="mt-2 text-sm leading-6 text-muted">{copy}</p></div>;
 }
 
-type SimpleAssetKind = "master" | "poster" | "subtitle" | "screener" | "technical";
-function FilesPanel({ titleId, assets, onAssetsChanged }: { titleId:string; assets:Array<{id:string;kind:string;contentType:string|null;byteSize:number|null;verified:boolean}>; onAssetsChanged:()=>Promise<unknown>|unknown }) {
- const [uploading,setUploading]=useState<SimpleAssetKind|null>(null); const [message,setMessage]=useState<string|null>(null);
- async function uploadFile(kind:SimpleAssetKind,file:File){const validation=validateOttIngestFile({kind,filename:file.name,contentType:file.type||"application/octet-stream"});if(!validation.ok){setMessage(validation.message);return;}setUploading(kind);setMessage(`Preparing ${kind} upload…`);try{const signed=await requestAssetUpload({data:{titleId,kind,filename:file.name,contentType:file.type||"application/octet-stream"}});const put=await fetch(signed.url,{method:signed.method,body:file,headers:{"content-type":file.type||"application/octet-stream"}});if(!put.ok)throw new Error(`Upload failed (${put.status})`);await confirmAssetUpload({data:{assetId:signed.assetId,expectedByteSize:file.size}});await onAssetsChanged();setMessage(`${kind[0].toUpperCase()+kind.slice(1)} is ready.`);}catch(error){const raw=error instanceof Error?error.message:"Upload failed";setMessage(raw.includes("STORAGE_UNAVAILABLE")?"Storage service is currently unavailable. Please try again later.":raw);}finally{setUploading(null);}}
- async function download(id:string){const signed=await requestAssetDownload({data:{assetId:id}});window.location.assign(signed.url);}
- const cards:[SimpleAssetKind,string,string][]=[["master","Master Video","Required"],["poster","Artwork","Add"],["subtitle","Subtitle","Optional"],["screener","Trailer / Screener","Optional"],["technical","Technical / Camera Package","Optional"]];
- return <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6"><p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Files</p><h2 className="mt-1 font-display text-xl font-semibold">Upload OTT files</h2><p className="mt-2 text-sm text-muted">Choose the correct delivery format for each asset. Unsupported file types are blocked before upload.</p><div className="mt-5 grid gap-3 sm:grid-cols-2">{cards.map(([kind,label,empty])=><FileTypeCard key={kind} kind={kind} label={label} status={assets.some(a=>a.kind===kind)?"Ready":empty} busy={uploading===kind} onFile={(file)=>void uploadFile(kind,file)} />)}</div>{message?<p className="mt-3 text-xs text-muted">{message}</p>:null}<div className="mt-5 space-y-2">{assets.map(a=><div key={a.id} className="flex items-center justify-between gap-3 rounded-xl border border-line p-4"><div><p className="text-sm font-semibold">{a.kind}</p><p className="text-xs text-muted">{a.verified?"Ready":"Processing"}</p></div>{a.verified?<button onClick={()=>void download(a.id)} className="rounded-full border border-line px-4 py-2 text-xs font-semibold">Download</button>:null}</div>)}</div></section>;
+function FilesPanel({ assets }: { assets:Array<{id:string;kind:string;contentType:string|null;byteSize:number|null;verified:boolean}> }) {
+  async function download(id:string){const signed=await requestAssetDownload({data:{assetId:id}});window.location.assign(signed.url);}
+  return <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6"><p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Files</p><h2 className="mt-1 font-display text-xl font-semibold">Verified assets</h2><p className="mt-2 text-sm text-muted">Bridge is read-only for title assets. Upload and replacement are disabled here.</p><div className="mt-5 space-y-2">{assets.length?assets.map(a=><div key={a.id} className="flex items-center justify-between gap-3 rounded-xl border border-line p-4"><div><p className="text-sm font-semibold">{a.kind}</p><p className="text-xs text-muted">{a.verified?"Ready":"Processing"}</p></div>{a.verified?<button onClick={()=>void download(a.id)} className="rounded-full border border-line px-4 py-2 text-xs font-semibold">Download</button>:null}</div>):<p className="text-sm text-muted">No verified assets are attached to this title.</p>}</div></section>;
 }
-function FileTypeCard({ kind, label, status, busy, onFile }: { kind:SimpleAssetKind; label:string; status:string; busy:boolean; onFile:(file:File)=>void }) { const spec=OTT_INGEST_SPEC[kind]; return <div className="rounded-xl border border-line p-4"><div className="flex items-start justify-between gap-3"><div><p className="text-sm font-semibold">{label}</p><p className="mt-1 text-xs text-muted">{status}</p><p className="mt-2 text-[11px] leading-5 text-muted">Allowed: {spec.extensions.map((ext)=>ext.replace(".","").toUpperCase()).join(", ")}</p></div><label className="cursor-pointer rounded-full border border-line px-3 py-1.5 text-xs font-semibold">{busy?"Uploading…":status==="Ready"?"Replace":"Upload"}<input className="sr-only" type="file" accept={getOttIngestAccept(kind)} disabled={busy} onChange={(e)=>{const file=e.currentTarget.files?.[0];if(file)onFile(file);e.currentTarget.value="";}} /></label></div></div>; }
