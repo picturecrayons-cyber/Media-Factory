@@ -17,3 +17,4 @@ describe("delivery trace contract", () => {
     assert.equal(row.distributorExclusivity, "NON_EXCLUSIVE");
   });
 });
+// Vercel preview retrigger after Git reconnect.
