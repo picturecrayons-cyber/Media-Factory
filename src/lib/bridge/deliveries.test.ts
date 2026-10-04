@@ -18,3 +18,5 @@ describe("delivery trace contract", () => {
   });
 });
 // Vercel preview retrigger after Git reconnect.
+
+// Git integration repair verification trigger.
