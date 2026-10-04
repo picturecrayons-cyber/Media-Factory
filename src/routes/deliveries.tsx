@@ -7,10 +7,10 @@ import { listDeliveryTraces } from "@/lib/bridge/deliveries";
 export const Route = createFileRoute("/deliveries")({ component: Deliveries });
 
 function Deliveries() {
-  return <RequireBridge>{(actor)=><BridgeShell actor={actor} title="Deliveries"><DeliveryList /></BridgeShell>}</RequireBridge>;
+  return <RequireBridge>{(actor)=><BridgeShell actor={actor} title={actor.internalRole === "finance" ? "Finance & settlements" : "Deliveries"}><DeliveryList canSeeFinance={actor.internalRole === "finance" || actor.internalRole === "admin" || actor.internalRole === "super_admin" || !actor.internalRole} /></BridgeShell>}</RequireBridge>;
 }
 
-function DeliveryList(){
+function DeliveryList({ canSeeFinance }: { canSeeFinance: boolean }){
  const q=useQuery({queryKey:["bridge-delivery-traces"],queryFn:()=>listDeliveryTraces()});
  const rows=q.data?.deliveries??[];
  if(q.isPending)return <p className="text-sm text-muted">Loading deliveries…</p>;
@@ -24,10 +24,10 @@ function DeliveryList(){
            <p className="truncate text-xs text-muted">{row.creator} · {row.language}{row.year?` · ${row.year}`:""}</p>
          </div>
          <p className="truncate text-xs text-muted">
-           Buyer: {first?.buyer ?? "—"} · Investors: {row.investorCount} · Delivery: {first?.state ?? "HOLD"}
+           Buyer: {first?.buyer ?? "—"} · Investors: {row.investorCount} · Delivery: {first?.state ?? "HOLD"} · {first?.distributorExclusivity ?? "NON_EXCLUSIVE"} · {first?.commercialModel ?? "REVENUE_SHARE"}
          </p>
          <span className="justify-self-start rounded-full border border-line px-3 py-1 text-[10px] font-semibold sm:justify-self-end">
-           {row.settlementStatus}
+           {canSeeFinance ? (row.settlementStatus ?? "—") : "Restricted"}
          </span>
        </Link>;
      })}
