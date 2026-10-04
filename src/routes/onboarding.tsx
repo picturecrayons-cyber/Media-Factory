@@ -125,8 +125,9 @@ function Onboarding() {
       inviteToken = undefined;
     }
 
-    const metadata = user.user_metadata ?? {};
-    const displayName = String(metadata.full_name || metadata.name || user.email?.split("@")[0] || "").trim();
+    const authUser = (await supabase.auth.getUser()).data.user;
+    const metadata = authUser?.user_metadata ?? {};
+    const displayName = String(metadata.full_name || metadata.name || user.displayName || user.primaryEmail?.split("@")[0] || "").trim();
     const savedAccountType = String(metadata.account_type || "independent_creator");
     const accountType = ACCOUNT_TYPES.includes(savedAccountType as (typeof ACCOUNT_TYPES)[number])
       ? (savedAccountType as (typeof ACCOUNT_TYPES)[number])
@@ -156,7 +157,7 @@ function Onboarding() {
     }
   }
 
-  const metadata = user.user_metadata ?? {};
+  const metadata = {} as Record<string, unknown>;
   const savedAccountType = String(metadata.account_type || "independent_creator");
   const accountType = ACCOUNT_TYPES.includes(savedAccountType as (typeof ACCOUNT_TYPES)[number])
     ? savedAccountType
