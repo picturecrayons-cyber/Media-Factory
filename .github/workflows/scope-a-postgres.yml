@@ -1,0 +1,58 @@
+name: Scope A PostgreSQL Onboarding Verification
+
+on:
+  pull_request:
+    branches: ["main"]
+    paths:
+      - ".github/workflows/scope-a-postgres.yml"
+      - "migrations/**"
+      - "src/lib/bridge/**"
+      - "src/lib/db.ts"
+      - "package.json"
+      - "package-lock.json"
+  workflow_dispatch:
+
+jobs:
+  scope-a:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: bridge_scope_a
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d bridge_scope_a"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    env:
+      POSTGRES_URL: postgresql://postgres:postgres@127.0.0.1:5432/bridge_scope_a
+      POSTGRES_URL_NON_POOLING: postgresql://postgres:postgres@127.0.0.1:5432/bridge_scope_a
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/bridge_scope_a
+      NODE_ENV: test
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - run: npm ci
+
+      - name: Replay repository migrations into disposable PostgreSQL
+        run: npm run db:migrate
+
+      - name: Run onboarding static regression tests
+        run: node --experimental-strip-types --test src/lib/bridge/onboarding-atomicity.test.ts
+
+      - name: Run real onboarding DB assertions
+        run: node scripts/scope-a-onboarding-db.mjs
