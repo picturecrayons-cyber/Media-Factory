@@ -60,6 +60,9 @@ export type BridgeTitle = {
 
 export const ASSET_KINDS = [
   "poster",
+  "poster_vertical",
+  "poster_horizontal",
+  "thumbnail",
   "screener",
   "master",
   "subtitle",
