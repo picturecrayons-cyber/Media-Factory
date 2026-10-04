@@ -14,12 +14,6 @@ import { Button } from "@/components/ui/button";
 
 export const Route = createFileRoute("/onboarding")({ component: Onboarding });
 
-const LABELS: Record<(typeof ACCOUNT_TYPES)[number], string> = {
-  independent_creator: "Independent creator",
-  studio: "Studio",
-  buyer: "Buyer",
-};
-
 const SESSION_TIMEOUT_MS = 12_000;
 
 async function getBridgeSessionWithTimeout() {
@@ -51,9 +45,6 @@ function Onboarding() {
     retry: 1,
     retryDelay: 500,
   });
-  const [displayName, setDisplayName] = useState("");
-  const [accountType, setAccountType] = useState<(typeof ACCOUNT_TYPES)[number]>("independent_creator");
-  const [organizationName, setOrganizationName] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const submitInFlight = useRef(false);
@@ -126,18 +117,28 @@ function Onboarding() {
     submitInFlight.current = true;
     setBusy(true);
     setError(null);
+
     let inviteToken: string | undefined;
     try {
       inviteToken = sessionStorage.getItem("bridge-invite") ?? undefined;
     } catch {
       inviteToken = undefined;
     }
+
+    const metadata = user.user_metadata ?? {};
+    const displayName = String(metadata.full_name || metadata.name || user.email?.split("@")[0] || "").trim();
+    const savedAccountType = String(metadata.account_type || "independent_creator");
+    const accountType = ACCOUNT_TYPES.includes(savedAccountType as (typeof ACCOUNT_TYPES)[number])
+      ? (savedAccountType as (typeof ACCOUNT_TYPES)[number])
+      : "independent_creator";
+    const organizationName = String(metadata.organization_name || "").trim() || undefined;
+
     try {
       const res = await completeOnboarding({
         data: {
           displayName,
           accountType,
-          organizationName: organizationName || undefined,
+          organizationName,
           inviteToken,
         },
       });
@@ -155,54 +156,30 @@ function Onboarding() {
     }
   }
 
+  const metadata = user.user_metadata ?? {};
+  const savedAccountType = String(metadata.account_type || "independent_creator");
+  const accountType = ACCOUNT_TYPES.includes(savedAccountType as (typeof ACCOUNT_TYPES)[number])
+    ? savedAccountType
+    : "independent_creator";
+  const accountLabel =
+    accountType === "studio" ? "Studio / Production" :
+    accountType === "buyer" ? "Buyer / Platform" :
+    "Creator / Filmmaker";
+
   return (
     <main className="grid min-h-screen place-items-center bg-bg p-6">
       <form
         onSubmit={(e) => void onSubmit(e)}
-        className="w-full max-w-md space-y-5 rounded-md border border-line bg-surface p-6"
+        className="w-full max-w-sm space-y-5 rounded-2xl border border-line bg-surface p-7 text-center shadow-sm"
       >
         <BrandMark />
-        <h1 className="font-display text-2xl">Set up your Bridge account</h1>
-        <p className="text-sm leading-relaxed text-muted">
-          This becomes your account type. Internal roles only attach when the invite mailbox matches.
-        </p>
-        <label className="block text-sm">
-          Display name
-          <input
-            required
-            value={displayName}
-            onChange={(e) => setDisplayName(e.target.value)}
-            className="mt-1 h-11 w-full rounded-sm border border-line-strong bg-elevated px-3"
-          />
-        </label>
-        <fieldset className="space-y-2">
-          <legend className="text-sm">Account type</legend>
-          {ACCOUNT_TYPES.map((t) => (
-            <label key={t} className="flex min-h-11 items-center gap-3 rounded-sm border border-line px-3">
-              <input
-                type="radio"
-                name="accountType"
-                checked={accountType === t}
-                onChange={() => setAccountType(t)}
-              />
-              <span>{LABELS[t]}</span>
-            </label>
-          ))}
-        </fieldset>
-        {accountType !== "independent_creator" ? (
-          <label className="block text-sm">
-            Organization
-            <input
-              required
-              value={organizationName}
-              onChange={(e) => setOrganizationName(e.target.value)}
-              className="mt-1 h-11 w-full rounded-sm border border-line-strong bg-elevated px-3"
-            />
-          </label>
-        ) : null}
-        {error ? <p className="text-sm text-accent">{error}</p> : null}
-        <Button type="submit" disabled={busy} className="w-full">
-          {busy ? "Saving…" : "Enter Bridge"}
+        <div>
+          <h1 className="font-display text-2xl font-semibold">You’re ready</h1>
+          <p className="mt-2 text-sm text-muted">{accountLabel}</p>
+        </div>
+        {error ? <p role="alert" className="text-sm text-accent">{error}</p> : null}
+        <Button type="submit" disabled={busy} className="h-11 w-full rounded-full font-semibold">
+          {busy ? "Opening Bridge…" : "Enter Bridge"}
         </Button>
       </form>
     </main>
