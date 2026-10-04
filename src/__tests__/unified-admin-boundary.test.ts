@@ -3,11 +3,17 @@ import assert from "node:assert/strict";
 
 test("Bridge super_admin exposes Loop CMS through the Bridge control plane", () => {
   const actor = { internalRole: "super_admin", accountType: "independent_creator" };
-  const bridgeAdmin = actor.internalRole === "admin" || actor.internalRole === "super_admin";
-  const loopCmsEntryPoint = bridgeAdmin ? "/cms" : null;
+  const superAdmin = actor.internalRole === "super_admin";
+  const loopCmsEntryPoint = superAdmin ? "/cms" : null;
 
-  assert.equal(bridgeAdmin, true);
+  assert.equal(superAdmin, true);
   assert.equal(loopCmsEntryPoint, "/cms");
+});
+
+test("Bridge admin does not receive a Loop CMS entry point when /cms is super-admin gated", () => {
+  const actor = { internalRole: "admin" };
+  const superAdmin = actor.internalRole === "super_admin";
+  assert.equal(superAdmin ? "/cms" : null, null);
 });
 
 test("Loop CMS is not a second independent back-office application", () => {
