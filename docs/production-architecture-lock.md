@@ -6,7 +6,7 @@ This file is the owner-approved production architecture contract. Changes to any
 
 - Bridge source: `picturecrayons-cyber/Media-Factory`, branch `main`
 - Bridge Vercel project: `bridge` (`prj_fT7VTrZMcgP9NutDhPvMhDAPtXNo`)
-- Bridge canonical domain: `https://bridge.crayonspictures.com`
+- Bridge canonical domain: `https://www.crayonspictures.in`
 - Loop source: `picturecrayons-cyber/crayons-loop-streaming-platform`, branch `main`
 - Loop Vercel project: `crayonsloop` (`prj_3plh37Oe141udF7V2LUPbB5cFNHH`)
 - Shared Supabase: `mlmgugivsyoxzdgwkbpu`

@@ -4,8 +4,19 @@ import { isBuyerVisible } from "./lifecycle.ts";
 const INTERNAL_PERMISSIONS: Record<InternalRole, readonly Permission[]> = {
   viewer: ["title.read_catalog", "audit.read"],
   qc_reviewer: ["title.read_catalog", "title.qc_review", "asset.sign_download", "audit.read"],
-  legal_reviewer: ["title.read_catalog", "title.rights_review", "asset.sign_download", "audit.read"],
-  finance: ["title.read_catalog", "finance.read", "entitlement.read_own", "audit.read"],
+  legal_reviewer: [
+    "title.read_catalog",
+    "title.rights_review",
+    "asset.sign_download",
+    "audit.read",
+  ],
+  finance: [
+    "title.read_catalog",
+    "finance.read",
+    "finance.record_settlement",
+    "entitlement.read_own",
+    "audit.read",
+  ],
   admin: [
     "title.read_catalog",
     "title.qc_review",
@@ -15,6 +26,7 @@ const INTERNAL_PERMISSIONS: Record<InternalRole, readonly Permission[]> = {
     "title.deliver",
     "asset.sign_download",
     "finance.read",
+    "finance.record_settlement",
     "users.invite_internal",
     "audit.read",
     "loop.publish",
@@ -22,6 +34,7 @@ const INTERNAL_PERMISSIONS: Record<InternalRole, readonly Permission[]> = {
     "loop.certify_playback",
   ],
   super_admin: [
+    "title.ingest_internal",
     "title.read_catalog",
     "title.qc_review",
     "title.rights_review",
@@ -31,6 +44,7 @@ const INTERNAL_PERMISSIONS: Record<InternalRole, readonly Permission[]> = {
     "asset.sign_download",
     "entitlement.read_own",
     "finance.read",
+    "finance.record_settlement",
     "users.invite_internal",
     "audit.read",
     "loop.publish",
@@ -58,7 +72,12 @@ const ACCOUNT_PERMISSIONS: Record<AccountType, readonly Permission[]> = {
     "asset.sign_download",
     "entitlement.read_own",
   ],
-  buyer: ["title.read_catalog", "payment.create_order", "entitlement.read_own", "asset.sign_download"],
+  buyer: [
+    "title.read_catalog",
+    "payment.create_order",
+    "entitlement.read_own",
+    "asset.sign_download",
+  ],
 };
 
 export type Actor = {
@@ -110,7 +129,8 @@ export function canReadTitle(
   title: { ownerUserId: string; status: TitleStatus },
 ): boolean {
   if (!actor.emailVerified) return false;
-  if (title.ownerUserId === actor.userId && !actor.internalRole) return hasPermission(actor, "title.read_own");
+  if (title.ownerUserId === actor.userId && !actor.internalRole)
+    return hasPermission(actor, "title.read_own");
   if (actor.internalRole) return hasPermission(actor, "title.read_catalog");
   if (actor.accountType === "buyer") {
     return hasPermission(actor, "title.read_catalog") && isBuyerVisible(title.status);

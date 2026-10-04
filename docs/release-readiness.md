@@ -86,7 +86,7 @@ Bridge transactional mail also requires:
 
 Canonical domains:
 
-- Bridge: `bridge.crayonspictures.com`
+- Bridge: `www.crayonspictures.in`
 - LOOP: `crayonsloop.com`
 
 Before release certification, both must resolve to their canonical Vercel projects and return the intended Production deployment.

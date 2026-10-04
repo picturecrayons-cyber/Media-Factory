@@ -13,18 +13,24 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AccountRouteImport } from './routes/account'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as AdminCmsRouteImport } from './routes/admin-cms'
+import { Route as AppRouteImport } from './routes/app'
 import { Route as BuyerRouteImport } from './routes/buyer'
+import { Route as CmsRouteImport } from './routes/cms'
+import { Route as ContactRouteImport } from './routes/contact'
 import { Route as CreatorRouteImport } from './routes/creator'
 import { Route as DashboardRouteImport } from './routes/dashboard'
+import { Route as DeliveriesRouteImport } from './routes/deliveries'
 import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
 import { Route as InternalRouteImport } from './routes/internal'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as LoopCmsRouteImport } from './routes/loop-cms'
 import { Route as OnboardingRouteImport } from './routes/onboarding'
+import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as SignupRouteImport } from './routes/signup'
 import { Route as StudioRouteImport } from './routes/studio'
 import { Route as SubmitFilmRouteImport } from './routes/submit-film'
+import { Route as TermsRouteImport } from './routes/terms'
 import { Route as VerifyEmailRouteImport } from './routes/verify-email'
 import { Route as WorkspaceRouteImport } from './routes/workspace'
 import { Route as AuthCallbackRouteImport } from './routes/auth/callback'
@@ -53,9 +59,24 @@ const AdminCmsRoute = AdminCmsRouteImport.update({
   path: '/admin-cms',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AppRoute = AppRouteImport.update({
+  id: '/app',
+  path: '/app',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const BuyerRoute = BuyerRouteImport.update({
   id: '/buyer',
   path: '/buyer',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CmsRoute = CmsRouteImport.update({
+  id: '/cms',
+  path: '/cms',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ContactRoute = ContactRouteImport.update({
+  id: '/contact',
+  path: '/contact',
   getParentRoute: () => rootRouteImport,
 } as any)
 const CreatorRoute = CreatorRouteImport.update({
@@ -66,6 +87,11 @@ const CreatorRoute = CreatorRouteImport.update({
 const DashboardRoute = DashboardRouteImport.update({
   id: '/dashboard',
   path: '/dashboard',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DeliveriesRoute = DeliveriesRouteImport.update({
+  id: '/deliveries',
+  path: '/deliveries',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ForgotPasswordRoute = ForgotPasswordRouteImport.update({
@@ -93,6 +119,11 @@ const OnboardingRoute = OnboardingRouteImport.update({
   path: '/onboarding',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PrivacyRoute = PrivacyRouteImport.update({
+  id: '/privacy',
+  path: '/privacy',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ResetPasswordRoute = ResetPasswordRouteImport.update({
   id: '/reset-password',
   path: '/reset-password',
@@ -111,6 +142,11 @@ const StudioRoute = StudioRouteImport.update({
 const SubmitFilmRoute = SubmitFilmRouteImport.update({
   id: '/submit-film',
   path: '/submit-film',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TermsRoute = TermsRouteImport.update({
+  id: '/terms',
+  path: '/terms',
   getParentRoute: () => rootRouteImport,
 } as any)
 const VerifyEmailRoute = VerifyEmailRouteImport.update({
@@ -154,18 +190,24 @@ export interface FileRoutesByFullPath {
   '/account': typeof AccountRoute
   '/admin': typeof AdminRoute
   '/admin-cms': typeof AdminCmsRoute
+  '/app': typeof AppRoute
   '/buyer': typeof BuyerRoute
+  '/cms': typeof CmsRoute
+  '/contact': typeof ContactRoute
   '/creator': typeof CreatorRoute
   '/dashboard': typeof DashboardRoute
+  '/deliveries': typeof DeliveriesRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/internal': typeof InternalRoute
   '/login': typeof LoginRoute
   '/loop-cms': typeof LoopCmsRoute
   '/onboarding': typeof OnboardingRoute
+  '/privacy': typeof PrivacyRoute
   '/reset-password': typeof ResetPasswordRoute
   '/signup': typeof SignupRoute
   '/studio': typeof StudioRoute
   '/submit-film': typeof SubmitFilmRoute
+  '/terms': typeof TermsRoute
   '/verify-email': typeof VerifyEmailRoute
   '/workspace': typeof WorkspaceRoute
   '/auth/callback': typeof AuthCallbackRoute
@@ -179,18 +221,24 @@ export interface FileRoutesByTo {
   '/account': typeof AccountRoute
   '/admin': typeof AdminRoute
   '/admin-cms': typeof AdminCmsRoute
+  '/app': typeof AppRoute
   '/buyer': typeof BuyerRoute
+  '/cms': typeof CmsRoute
+  '/contact': typeof ContactRoute
   '/creator': typeof CreatorRoute
   '/dashboard': typeof DashboardRoute
+  '/deliveries': typeof DeliveriesRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/internal': typeof InternalRoute
   '/login': typeof LoginRoute
   '/loop-cms': typeof LoopCmsRoute
   '/onboarding': typeof OnboardingRoute
+  '/privacy': typeof PrivacyRoute
   '/reset-password': typeof ResetPasswordRoute
   '/signup': typeof SignupRoute
   '/studio': typeof StudioRoute
   '/submit-film': typeof SubmitFilmRoute
+  '/terms': typeof TermsRoute
   '/verify-email': typeof VerifyEmailRoute
   '/workspace': typeof WorkspaceRoute
   '/auth/callback': typeof AuthCallbackRoute
@@ -205,18 +253,24 @@ export interface FileRoutesById {
   '/account': typeof AccountRoute
   '/admin': typeof AdminRoute
   '/admin-cms': typeof AdminCmsRoute
+  '/app': typeof AppRoute
   '/buyer': typeof BuyerRoute
+  '/cms': typeof CmsRoute
+  '/contact': typeof ContactRoute
   '/creator': typeof CreatorRoute
   '/dashboard': typeof DashboardRoute
+  '/deliveries': typeof DeliveriesRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/internal': typeof InternalRoute
   '/login': typeof LoginRoute
   '/loop-cms': typeof LoopCmsRoute
   '/onboarding': typeof OnboardingRoute
+  '/privacy': typeof PrivacyRoute
   '/reset-password': typeof ResetPasswordRoute
   '/signup': typeof SignupRoute
   '/studio': typeof StudioRoute
   '/submit-film': typeof SubmitFilmRoute
+  '/terms': typeof TermsRoute
   '/verify-email': typeof VerifyEmailRoute
   '/workspace': typeof WorkspaceRoute
   '/auth/callback': typeof AuthCallbackRoute
@@ -232,18 +286,24 @@ export interface FileRouteTypes {
     | '/account'
     | '/admin'
     | '/admin-cms'
+    | '/app'
     | '/buyer'
+    | '/cms'
+    | '/contact'
     | '/creator'
     | '/dashboard'
+    | '/deliveries'
     | '/forgot-password'
     | '/internal'
     | '/login'
     | '/loop-cms'
     | '/onboarding'
+    | '/privacy'
     | '/reset-password'
     | '/signup'
     | '/studio'
     | '/submit-film'
+    | '/terms'
     | '/verify-email'
     | '/workspace'
     | '/auth/callback'
@@ -257,18 +317,24 @@ export interface FileRouteTypes {
     | '/account'
     | '/admin'
     | '/admin-cms'
+    | '/app'
     | '/buyer'
+    | '/cms'
+    | '/contact'
     | '/creator'
     | '/dashboard'
+    | '/deliveries'
     | '/forgot-password'
     | '/internal'
     | '/login'
     | '/loop-cms'
     | '/onboarding'
+    | '/privacy'
     | '/reset-password'
     | '/signup'
     | '/studio'
     | '/submit-film'
+    | '/terms'
     | '/verify-email'
     | '/workspace'
     | '/auth/callback'
@@ -282,18 +348,24 @@ export interface FileRouteTypes {
     | '/account'
     | '/admin'
     | '/admin-cms'
+    | '/app'
     | '/buyer'
+    | '/cms'
+    | '/contact'
     | '/creator'
     | '/dashboard'
+    | '/deliveries'
     | '/forgot-password'
     | '/internal'
     | '/login'
     | '/loop-cms'
     | '/onboarding'
+    | '/privacy'
     | '/reset-password'
     | '/signup'
     | '/studio'
     | '/submit-film'
+    | '/terms'
     | '/verify-email'
     | '/workspace'
     | '/auth/callback'
@@ -308,18 +380,24 @@ export interface RootRouteChildren {
   AccountRoute: typeof AccountRoute
   AdminRoute: typeof AdminRoute
   AdminCmsRoute: typeof AdminCmsRoute
+  AppRoute: typeof AppRoute
   BuyerRoute: typeof BuyerRoute
+  CmsRoute: typeof CmsRoute
+  ContactRoute: typeof ContactRoute
   CreatorRoute: typeof CreatorRoute
   DashboardRoute: typeof DashboardRoute
+  DeliveriesRoute: typeof DeliveriesRoute
   ForgotPasswordRoute: typeof ForgotPasswordRoute
   InternalRoute: typeof InternalRoute
   LoginRoute: typeof LoginRoute
   LoopCmsRoute: typeof LoopCmsRoute
   OnboardingRoute: typeof OnboardingRoute
+  PrivacyRoute: typeof PrivacyRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
   SignupRoute: typeof SignupRoute
   StudioRoute: typeof StudioRoute
   SubmitFilmRoute: typeof SubmitFilmRoute
+  TermsRoute: typeof TermsRoute
   VerifyEmailRoute: typeof VerifyEmailRoute
   WorkspaceRoute: typeof WorkspaceRoute
   AuthCallbackRoute: typeof AuthCallbackRoute
@@ -359,11 +437,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminCmsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/app': {
+      id: '/app'
+      path: '/app'
+      fullPath: '/app'
+      preLoaderRoute: typeof AppRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/buyer': {
       id: '/buyer'
       path: '/buyer'
       fullPath: '/buyer'
       preLoaderRoute: typeof BuyerRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/cms': {
+      id: '/cms'
+      path: '/cms'
+      fullPath: '/cms'
+      preLoaderRoute: typeof CmsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/contact': {
+      id: '/contact'
+      path: '/contact'
+      fullPath: '/contact'
+      preLoaderRoute: typeof ContactRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/creator': {
@@ -378,6 +477,13 @@ declare module '@tanstack/react-router' {
       path: '/dashboard'
       fullPath: '/dashboard'
       preLoaderRoute: typeof DashboardRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/deliveries': {
+      id: '/deliveries'
+      path: '/deliveries'
+      fullPath: '/deliveries'
+      preLoaderRoute: typeof DeliveriesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/forgot-password': {
@@ -415,6 +521,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OnboardingRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/privacy': {
+      id: '/privacy'
+      path: '/privacy'
+      fullPath: '/privacy'
+      preLoaderRoute: typeof PrivacyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/reset-password': {
       id: '/reset-password'
       path: '/reset-password'
@@ -441,6 +554,13 @@ declare module '@tanstack/react-router' {
       path: '/submit-film'
       fullPath: '/submit-film'
       preLoaderRoute: typeof SubmitFilmRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/terms': {
+      id: '/terms'
+      path: '/terms'
+      fullPath: '/terms'
+      preLoaderRoute: typeof TermsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/verify-email': {
@@ -500,18 +620,24 @@ const rootRouteChildren: RootRouteChildren = {
   AccountRoute: AccountRoute,
   AdminRoute: AdminRoute,
   AdminCmsRoute: AdminCmsRoute,
+  AppRoute: AppRoute,
   BuyerRoute: BuyerRoute,
+  CmsRoute: CmsRoute,
+  ContactRoute: ContactRoute,
   CreatorRoute: CreatorRoute,
   DashboardRoute: DashboardRoute,
+  DeliveriesRoute: DeliveriesRoute,
   ForgotPasswordRoute: ForgotPasswordRoute,
   InternalRoute: InternalRoute,
   LoginRoute: LoginRoute,
   LoopCmsRoute: LoopCmsRoute,
   OnboardingRoute: OnboardingRoute,
+  PrivacyRoute: PrivacyRoute,
   ResetPasswordRoute: ResetPasswordRoute,
   SignupRoute: SignupRoute,
   StudioRoute: StudioRoute,
   SubmitFilmRoute: SubmitFilmRoute,
+  TermsRoute: TermsRoute,
   VerifyEmailRoute: VerifyEmailRoute,
   WorkspaceRoute: WorkspaceRoute,
   AuthCallbackRoute: AuthCallbackRoute,
