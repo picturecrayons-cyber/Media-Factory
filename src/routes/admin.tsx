@@ -56,7 +56,7 @@ function AdminBody({ actor }: { actor: any }) {
   const qcQueue = titles.filter((t) => t.status === "PREPARING" || t.status === "QC_REVIEW").length;
   const rightsQueue = titles.filter((t) => t.status === "RIGHTS_REVIEW").length;
   const buyerReady = titles.filter((t) => ["LICENSING_READY","LIVE_FOR_BUYERS","IN_NEGOTIATION","LICENSED"].includes(t.status)).length;
-  const loopReady = distribution.filter((t) => t.ready && !t.publication?.published).length;
+  const loopReadyTitles = distribution.filter((t) => t.ready && !t.publication?.published);\n  const loopReady = loopReadyTitles.length;\n  const attentionTitleIds = new Set([\n    ...titles.filter((t) => t.status === "PREPARING" || t.status === "QC_REVIEW" || t.status === "RIGHTS_REVIEW").map((t) => t.id),\n    ...loopReadyTitles.map((t) => t.id),\n  ]);\n  const attentionTitles = titles.filter((t) => attentionTitleIds.has(t.id));
   const live = distribution.filter((t) => t.publication?.published).length;
 
   return (
@@ -82,7 +82,7 @@ function AdminBody({ actor }: { actor: any }) {
           ["QC Queue", qcQueue, "Prepare / QC review"],
           ["Rights Queue", rightsQueue, "Legal clearance"],
           ["Buyer Ready", buyerReady, "Licensing pipeline"],
-          ["Loop Live", live, "Authorized publications"],
+          ["Loop Live", live, "Published Loop records"],
           ["Users", profiles.length, "Bridge profiles"],
           ["Organizations", organizations.size, "Studio / buyer organizations"],
         ].map(([label, value, caption]) => (
@@ -157,7 +157,7 @@ function AdminBody({ actor }: { actor: any }) {
             <span className="rounded-full bg-accent-soft px-3 py-1 text-xs font-semibold text-accent">{qcQueue + rightsQueue + loopReady} queued</span>
           </div>
           <div className="mt-5 space-y-3">
-            {titles.filter((t) => t.status !== "DELIVERED").slice(0,8).map((t) => (
+            {attentionTitles.slice(0,8).map((t) => (
               <Link key={t.id} to="/title/$id" params={{ id: t.id }} className="flex items-center justify-between gap-4 rounded-2xl border border-line bg-elevated p-4 hover:border-line-strong">
                 <div>
                   <p className="font-medium">{t.name}</p>
@@ -166,7 +166,7 @@ function AdminBody({ actor }: { actor: any }) {
                 <span className="text-sm text-accent">Open →</span>
               </Link>
             ))}
-            {!titles.length ? <p className="py-8 text-center text-sm text-muted">No titles in the pipeline yet.</p> : null}
+            {!attentionTitles.length ? <p className="py-8 text-center text-sm text-muted">No titles currently require admin attention.</p> : null}
           </div>
         </div>
 
