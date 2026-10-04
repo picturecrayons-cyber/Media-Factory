@@ -43,7 +43,7 @@ export const requestAssetUpload = createServerFn({ method: "POST" })
     if (!canOperateOnTitle(actor, title, "asset.sign_upload", "title.ingest_internal"))
       throw new Error("Forbidden");
     if (!UPLOADABLE.has(title.status)) throw new Error("Uploads are closed for this status");
-    if (!["master", "poster", "subtitle", "screener", "technical", "censor_certificate"].includes(data.kind))
+    if (!["master", "poster", "poster_vertical", "poster_horizontal", "thumbnail", "subtitle", "screener", "technical", "censor_certificate"].includes(data.kind))
       throw new Error("This asset kind is not supported by the OTT ingest uploader");
     const ingestValidation = validateOttIngestFile({
       kind: data.kind as OttIngestKind,
