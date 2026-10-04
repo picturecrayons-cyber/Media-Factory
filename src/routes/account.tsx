@@ -32,11 +32,11 @@ function Account() {
                 <dl className="mt-4 grid gap-4 text-sm">
                   <div><dt className="text-muted">Bridge internal role</dt><dd className="mt-1">{actor.internalRole?.replaceAll("_", " ") ?? "Not authorized"}</dd></div>
                   <div><dt className="text-muted">Bridge Admin</dt><dd className="mt-1">{bridgeAdmin ? "Authorized" : "Not authorized"}</dd></div>
-                  <div><dt className="text-muted">Loop CMS</dt><dd className="mt-1">Not authorized — independent Loop CMS authorization is not implemented in this Bridge runtime.</dd></div>
+                  <div><dt className="text-muted">Loop CMS</dt><dd className="mt-1">{bridgeAdmin ? "Available through Bridge CMS" : "Managed by Bridge administrators"}</dd></div>
                 </dl>
                 <div className="mt-5 flex flex-wrap gap-3">
                   {bridgeAdmin ? <Link to="/admin"><Button>Open Bridge Admin</Button></Link> : null}
-                  <Button type="button" variant="outline" disabled title="Requires independent server-authoritative Loop CMS permission">Loop CMS unavailable</Button>
+                  {bridgeAdmin ? <Link to="/cms"><Button variant="outline">Open Loop CMS in Bridge</Button></Link> : null}
                 </div>
               </div>
             </section>
