@@ -25,6 +25,7 @@ const INTERNAL_PERMISSIONS: Record<InternalRole, readonly Permission[]> = {
     "loop.certify_playback",
   ],
   super_admin: [
+    "title.create",
     "title.read_catalog",
     "title.advance_upload",
     "title.qc_review",
