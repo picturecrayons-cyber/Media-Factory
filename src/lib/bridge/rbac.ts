@@ -8,6 +8,7 @@ const INTERNAL_PERMISSIONS: Record<InternalRole, readonly Permission[]> = {
   finance: ["title.read_catalog", "finance.read", "delivery.read", "delivery.read_finance", "entitlement.read_own", "audit.read"],
   admin: [
     "title.read_catalog",
+    "title.advance_upload",
     "title.qc_review",
     "title.rights_review",
     "title.license",
@@ -25,6 +26,7 @@ const INTERNAL_PERMISSIONS: Record<InternalRole, readonly Permission[]> = {
   ],
   super_admin: [
     "title.read_catalog",
+    "title.advance_upload",
     "title.qc_review",
     "title.rights_review",
     "title.license",
