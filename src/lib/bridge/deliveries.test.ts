@@ -1,4 +1,4 @@
-import { describe, expect, it } from "node:test";
+import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
 describe("delivery trace contract", () => {
@@ -13,7 +13,7 @@ describe("delivery trace contract", () => {
     assert.equal(row.buyer, "Crayons Loop");
     assert.equal(row.investorCount, 2);
     assert.equal(row.settlementStatus, "PENDING");
-    expect(row.commercialModel).toBe("REVENUE_SHARE");
-    expect(row.distributorExclusivity).toBe("NON_EXCLUSIVE");
+    assert.equal(row.commercialModel, "REVENUE_SHARE");
+    assert.equal(row.distributorExclusivity, "NON_EXCLUSIVE");
   });
 });
