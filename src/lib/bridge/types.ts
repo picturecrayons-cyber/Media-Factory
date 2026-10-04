@@ -58,7 +58,14 @@ export type BridgeTitle = {
   updatedAt: string;
 };
 
-export const ASSET_KINDS = ["poster", "screener", "master", "subtitle", "technical"] as const;
+export const ASSET_KINDS = [
+  "poster",
+  "screener",
+  "master",
+  "subtitle",
+  "technical",
+  "censor_certificate",
+] as const;
 export type AssetKind = (typeof ASSET_KINDS)[number];
 
 export const PERMISSIONS = [
