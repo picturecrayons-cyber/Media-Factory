@@ -1,6 +1,20 @@
 -- Delivery trace: additive investor participation + settlement evidence.
 -- Production apply is intentionally gated behind exact-head CI/Preview verification.
 
+alter table public.bridge_destination_packages
+  add column if not exists commercial_model text not null default 'REVENUE_SHARE',
+  add column if not exists distributor_exclusivity text not null default 'NON_EXCLUSIVE',
+  add column if not exists revenue_share_percent numeric(7,4),
+  add constraint bridge_destination_packages_commercial_model_check
+    check (commercial_model in ('REVENUE_SHARE','FIXED_FEE','MINIMUM_GUARANTEE','HYBRID')),
+  add constraint bridge_destination_packages_distributor_exclusivity_check
+    check (distributor_exclusivity in ('NON_EXCLUSIVE','EXCLUSIVE')),
+  add constraint bridge_destination_packages_revenue_share_percent_check
+    check (revenue_share_percent is null or (revenue_share_percent >= 0 and revenue_share_percent <= 100));
+
+create unique index if not exists bridge_destination_packages_id_title_uidx
+  on public.bridge_destination_packages(id, title_id);
+
 create table if not exists public.bridge_title_investors (
   id uuid primary key default gen_random_uuid(),
   title_id text not null references public.bridge_titles(id) on delete cascade,
@@ -23,7 +37,7 @@ create index if not exists bridge_title_investors_title_idx
 create table if not exists public.bridge_title_settlements (
   id uuid primary key default gen_random_uuid(),
   title_id text not null references public.bridge_titles(id) on delete cascade,
-  destination_package_id uuid references public.bridge_destination_packages(id) on delete set null,
+  destination_package_id uuid,
   revenue_received_paise bigint not null default 0,
   creator_payable_paise bigint not null default 0,
   investor_payable_paise bigint not null default 0,
@@ -34,6 +48,9 @@ create table if not exists public.bridge_title_settlements (
   settled_at timestamptz,
   created_by text not null,
   created_at timestamptz not null default now(),
+  foreign key (destination_package_id, title_id)
+    references public.bridge_destination_packages(id, title_id)
+    on delete set null,
   check (revenue_received_paise >= 0),
   check (creator_payable_paise >= 0),
   check (investor_payable_paise >= 0),
