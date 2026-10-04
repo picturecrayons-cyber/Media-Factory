@@ -1,19 +1,13 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { randomBytes, randomUUID } from "node:crypto";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
-import { ASSET_KINDS } from "./types";
-import { assertPermission, canOperateOnTitle, canReadTitle } from "./rbac";
+import { assertPermission, canReadTitle } from "./rbac";
 import { requireVerifiedActor } from "./session";
 import { loadTitle } from "./titles";
 import { writeAudit } from "./audit";
 import { assertNotDevUser } from "./guards";
-import { persistVerifiedAsset } from "./asset-confirmation";
 import { downloadDecision } from "./delivery-policy";
-import { validateOttIngestFile, type OttIngestKind } from "./ott-ingest-spec";
-
-const UPLOADABLE: ReadonlySet<string> = new Set(["DRAFT", "UPLOADING", "PREPARING"]);
 
 async function hasLicenseEntitlement(userId: string, titleId: string): Promise<boolean> {
   const sql = await getSql();
@@ -26,106 +20,25 @@ async function hasLicenseEntitlement(userId: string, titleId: string): Promise<b
 
 export const requestAssetUpload = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .validator(
-    z.object({
-      titleId: z.string().min(8),
-      kind: z.enum(ASSET_KINDS),
-      filename: z.string().min(1).max(120),
-      contentType: z.string().min(3).max(120),
-    }),
-  )
-  .handler(async ({ context, data }) => {
+  .validator(z.object({
+    titleId: z.string().min(8),
+    kind: z.string().min(1),
+    filename: z.string().min(1).max(120),
+    contentType: z.string().min(3).max(120),
+  }))
+  .handler(async ({ context }) => {
     assertNotDevUser(context.userId);
-    const actor = await requireVerifiedActor(context.userId);
-    assertPermission(actor, "asset.sign_upload");
-    const title = await loadTitle(data.titleId);
-    if (!title) throw new Error("Not found");
-    if (!canOperateOnTitle(actor, title, "asset.sign_upload")) throw new Error("Forbidden");
-    if (!UPLOADABLE.has(title.status)) throw new Error("Uploads are closed for this status");
-    if (!["master","poster","subtitle","screener","technical"].includes(data.kind)) throw new Error("This asset kind is not supported by the OTT ingest uploader");
-    const ingestValidation = validateOttIngestFile({ kind: data.kind as OttIngestKind, filename: data.filename, contentType: data.contentType });
-    if (!ingestValidation.ok) throw new Error(ingestValidation.message);
-    const { signUpload, titleAssetKey } = await import("./aws-object-storage.server");
-    const key = titleAssetKey({
-      ownerUserId: title.ownerUserId,
-      titleId: title.id,
-      kind: data.kind,
-      filename: data.filename,
-    });
-    const signed = await signUpload({ key, contentType: data.contentType });
-    const id = randomBytes(16).toString("hex");
-    const sql = await getSql();
-    await sql`
-      insert into bridge_assets (id, title_id, kind, s3_key, content_type, created_by)
-      values (${id}, ${title.id}, ${data.kind}, ${key}, ${data.contentType}, ${actor.userId})
-    `;
-    await writeAudit({
-      actorUserId: actor.userId,
-      action: "asset.upload_signed",
-      entityType: "bridge_asset",
-      entityId: id,
-      metadata: { titleId: title.id, kind: data.kind },
-    });
-    return { assetId: id, ...signed };
+    await requireVerifiedActor(context.userId);
+    throw new Error("Forbidden: Bridge title asset uploads are disabled");
   });
 
 export const confirmAssetUpload = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(z.object({ assetId: z.string().min(8), expectedByteSize: z.number().int().positive().optional() }))
-  .handler(async ({ context, data }) => {
+  .handler(async ({ context }) => {
     assertNotDevUser(context.userId);
-    const actor = await requireVerifiedActor(context.userId);
-    assertPermission(actor, "asset.sign_upload");
-    const sql = await getSql();
-    const rows = await sql<{
-      id: string; title_id: string; kind: string; s3_key: string;
-      created_by: string; byte_size: number | null;
-    }>`
-      select id, title_id, kind, s3_key, created_by, byte_size
-      from bridge_assets where id = ${data.assetId} limit 1
-    `;
-    const asset = rows[0];
-    if (!asset) throw new Error("Asset not found");
-    const title = await loadTitle(asset.title_id);
-    if (
-      !title ||
-      !canOperateOnTitle(actor, title, "asset.sign_upload") ||
-      (!actor.internalRole && asset.created_by !== actor.userId) ||
-      !UPLOADABLE.has(title.status)
-    ) {
-      throw new Error("Upload confirmation is closed for this title");
-    }
-    if (asset.byte_size != null) return { assetId: asset.id, byteSize: Number(asset.byte_size), verified: true };
-
-    const { verifyObject, sealVerifiedObject } = await import("./aws-object-storage.server");
-    const object = await verifyObject(asset.s3_key);
-    if (data.expectedByteSize != null && object.byteSize !== data.expectedByteSize) {
-      throw new Error("Uploaded object size does not match the file that was sent");
-    }
-    if (!object.etag) throw new Error("Object ETag is required for immutable verification");
-    const sealedKey = `${asset.s3_key}.verified/${randomUUID()}`;
-    const sealed = await sealVerifiedObject(asset.s3_key, sealedKey, object.etag);
-    if (sealed.byteSize !== object.byteSize || !sealed.etag) {
-      throw new Error("Verified copy differs from the uploaded object");
-    }
-    const confirmed = await persistVerifiedAsset(sql, {
-      assetId: asset.id,
-      actorUserId: actor.userId,
-      internalActor: Boolean(actor.internalRole),
-      titleId: title.id,
-      kind: asset.kind,
-      byteSize: sealed.byteSize,
-      contentType: sealed.contentType,
-      checksum: sealed.etag,
-      sourceKey: asset.s3_key,
-      sealedKey,
-    });
-    if (!confirmed) {
-      const current = await sql<{ byte_size: number | null }>`select byte_size from bridge_assets where id = ${asset.id}`;
-      if (current[0]?.byte_size != null) return { assetId: asset.id, byteSize: Number(current[0].byte_size), verified: true };
-      throw new Error("Asset confirmation changed; retry after refreshing the title");
-    }
-    return { assetId: asset.id, byteSize: sealed.byteSize, verified: true };
+    await requireVerifiedActor(context.userId);
+    throw new Error("Forbidden: Bridge title asset upload confirmation is disabled");
   });
 
 export const requestAssetDownload = createServerFn({ method: "POST" })
