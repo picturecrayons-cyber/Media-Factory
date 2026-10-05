@@ -33,7 +33,13 @@ export const bridgeEnv = {
 };
 
 export function integrationStatus() {
-  const s3 = Boolean(bridgeEnv.awsRegion() && bridgeEnv.awsBucket());
+  const oci = Boolean(
+    bridgeEnv.ociTenancyOcid() &&
+      bridgeEnv.ociUserOcid() &&
+      bridgeEnv.ociPrivateKey() &&
+      bridgeEnv.ociRegion() &&
+      bridgeEnv.ociBucket(),
+  );
   return {
     postgres: Boolean(bridgeEnv.databaseUrl()),
     supabase: Boolean(
@@ -41,7 +47,7 @@ export function integrationStatus() {
     ),
     razorpay: Boolean(bridgeEnv.razorpayKeyId() && bridgeEnv.razorpayKeySecret()),
     razorpayWebhook: Boolean(bridgeEnv.razorpayWebhookSecret()),
-    s3,
+    oci,
     mail: Boolean(bridgeEnv.smtpHost() && bridgeEnv.smtpUser() && bridgeEnv.smtpPass()),
   };
 }

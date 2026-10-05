@@ -45,7 +45,7 @@ export const requestAssetUpload = createServerFn({ method: "POST" })
     if (!["master","poster","subtitle","screener","technical"].includes(data.kind)) throw new Error("This asset kind is not supported by the OTT ingest uploader");
     const ingestValidation = validateOttIngestFile({ kind: data.kind as OttIngestKind, filename: data.filename, contentType: data.contentType });
     if (!ingestValidation.ok) throw new Error(ingestValidation.message);
-    const { signUpload, titleAssetKey } = await import("./aws-object-storage.server");
+    const { signUpload, titleAssetKey } = await import("./oci-object-storage.server");
     const key = titleAssetKey({
       ownerUserId: title.ownerUserId,
       titleId: title.id,
@@ -97,7 +97,7 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
     }
     if (asset.byte_size != null) return { assetId: asset.id, byteSize: Number(asset.byte_size), verified: true };
 
-    const { verifyObject, sealVerifiedObject } = await import("./aws-object-storage.server");
+    const { verifyObject, sealVerifiedObject } = await import("./oci-object-storage.server");
     const object = await verifyObject(asset.s3_key);
     if (data.expectedByteSize != null && object.byteSize !== data.expectedByteSize) {
       throw new Error("Uploaded object size does not match the file that was sent");
@@ -167,7 +167,7 @@ export const requestAssetDownload = createServerFn({ method: "POST" })
       });
       throw new Error(decision.reason);
     }
-    const { signDownload } = await import("./aws-object-storage.server");
+    const { signDownload } = await import("./oci-object-storage.server");
     const signed = await signDownload({ key: asset.s3_key });
     await writeAudit({
       actorUserId: actor.userId,
