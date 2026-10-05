@@ -30,11 +30,12 @@ export async function getSessionUser(bearerToken?: string): Promise<VerifiedUser
   if (!bearerToken) return null;
 
   try {
+    const headers = new Headers();
+    headers.set("apikey", supabasePublishableKey);
+    headers.set("Authorization", `Bearer ${bearerToken}`);
+
     const response = await fetch(`${supabaseUrl}/auth/v1/user`, {
-      headers: {
-        apikey: supabasePublishableKey,
-        Authorization: `Bearer ${bearerToken}`,
-      },
+      headers,
     });
 
     if (!response.ok) {
