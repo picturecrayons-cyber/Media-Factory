@@ -18,6 +18,12 @@ export const bridgeEnv = {
   ociRegion: () => read("OCI_REGION"),
   ociNamespace: () => read("OCI_NAMESPACE"),
   ociBucket: () => read("OCI_BUCKET_NAME"),
+  // Legacy AWS/S3 compatibility adapter only; never used by production readiness.
+  awsRegion: () => read("AWS_REGION"),
+  awsBucket: () => read("AWS_S3_MEDIA_BUCKET") || read("S3_MEDIA_BUCKET") || read("AWS_S3_BUCKET"),
+  awsAccessKeyId: () => read("AWS_ACCESS_KEY_ID"),
+  awsSecretAccessKey: () => read("AWS_SECRET_ACCESS_KEY"),
+  awsSessionToken: () => read("AWS_SESSION_TOKEN"),
   smtpHost: () => read("SMTP_HOST") || read("HOSTINGER_SMTP_HOST"),
   smtpPort: () => read("SMTP_PORT") || "587",
   smtpUser: () => read("SMTP_USER") || read("HOSTINGER_SMTP_USER"),
