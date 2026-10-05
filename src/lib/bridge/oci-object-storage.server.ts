@@ -173,17 +173,21 @@ export async function signDownload(opts: { key: string; expiresIn?: number }) {
   return { url: signed.url, key: opts.key, bucket: signed.bucket, method: "GET" as const };
 }
 
-export async function verifyObject(key: string) {
+export async function verifyObject(key: string, expectedContentType?: string | null) {
   const cfg = config();
   const namespace = await resolveNamespace(cfg);
   const path = `/n/${encodeURIComponent(namespace)}/b/${encodeURIComponent(cfg.bucket)}/o/${encodedObjectName(key)}`;
   const res = await signedFetch({ cfg, method: "HEAD", path });
   if (!res.ok) throw new Error(`OCI object verification failed (${res.status})`);
   const contentLength = Number(res.headers.get("content-length") || 0);
+  const contentType = res.headers.get("content-type");
+  if (expectedContentType && contentType !== expectedContentType) {
+    throw new Error(`OCI object content type mismatch: expected ${expectedContentType}, received ${contentType || "missing"}`);
+  }
   if (!Number.isSafeInteger(contentLength) || contentLength <= 0) throw new Error("Uploaded object is empty");
   return {
     byteSize: contentLength,
-    contentType: res.headers.get("content-type"),
+    contentType,
     etag: res.headers.get("etag")?.replaceAll('"', "") ?? null,
   };
 }
