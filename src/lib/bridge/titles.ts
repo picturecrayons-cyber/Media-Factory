@@ -190,8 +190,15 @@ export const getTitle = createServerFn({ method: "GET" })
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
     const title = await loadTitle(data.id);
-    if (!title || !canReadTitle(actor, title)) throw new Error("Not found");
+    if (!title) throw new Error("Not found");
     const sql = await getSql();
+    if (actor.accountType === "investor" && !actor.internalRole) {
+      const assigned = await sql<{ id: string }>
+        `select id from bridge_title_investors where title_id = ${title.id} and investor_user_id = ${actor.userId} limit 1`;
+      if (!assigned[0]) throw new Error("Not found");
+    } else if (!canReadTitle(actor, title)) {
+      throw new Error("Not found");
+    }
     const events = await sql<{
       from_status: string | null;
       to_status: string;
