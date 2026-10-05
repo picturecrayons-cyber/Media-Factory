@@ -40,7 +40,7 @@ Configuration presence alone is not connectivity certification.
 
 ## 3. Supabase Auth → Hostinger SMTP
 
-Expected sender: `abijithokan@crayonspictures.com`.
+Expected sender: `abijithasokan@crayonspictures.com`.
 
 Trigger a brand-new signup or password-recovery message in the canonical Supabase project and verify sender, canonical callback, successful callback completion, and absence of fallback Supabase sender.
 
