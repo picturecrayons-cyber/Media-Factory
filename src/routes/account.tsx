@@ -12,38 +12,58 @@ function Account() {
   return (
     <RequireBridge>
       {(actor) => {
-        const bridgeAdmin = actor.internalRole === "admin" || actor.internalRole === "super_admin";
-        const superAdmin = actor.internalRole === "super_admin";
+        const isInternal = Boolean(actor.internalRole);
         return (
-          <BridgeShell actor={actor} title="Account & Settings">
-            <section className="grid gap-6 lg:grid-cols-2">
-              <div className="rounded-3xl border border-line bg-surface p-6">
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">Personal profile</p>
-                <dl className="mt-4 grid gap-4 text-sm">
-                  <div><dt className="text-muted">Mailbox</dt><dd className="mt-1">{actor.email}</dd></div>
-                  <div><dt className="text-muted">Account type</dt><dd className="mt-1">{actor.accountType.replaceAll("_", " ")}</dd></div>
-                  <div><dt className="text-muted">Organization</dt><dd className="mt-1">{actor.organizationName ?? "—"}</dd></div>
-                  <div><dt className="text-muted">Verification</dt><dd className="mt-1">{actor.emailVerified ? "Verified" : "Verification required"}</dd></div>
-                </dl>
-                {!actor.emailVerified ? <div className="mt-5"><ResendVerify /></div> : null}
-              </div>
-
-              <div className="rounded-3xl border border-line bg-surface p-6">
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">Administrative access</p>
-                <dl className="mt-4 grid gap-4 text-sm">
-                  <div><dt className="text-muted">Bridge internal role</dt><dd className="mt-1">{actor.internalRole?.replaceAll("_", " ") ?? "Not authorized"}</dd></div>
-                  <div><dt className="text-muted">Bridge Admin</dt><dd className="mt-1">{bridgeAdmin ? "Authorized" : "Not authorized"}</dd></div>
-                  <div><dt className="text-muted">Loop CMS</dt><dd className="mt-1">{superAdmin ? "Available through Bridge CMS" : "Managed by Bridge administrators"}</dd></div>
-                </dl>
-                <div className="mt-5 flex flex-wrap gap-3">
-                  {bridgeAdmin ? <Link to="/admin"><Button>Open Bridge Admin</Button></Link> : null}
-                  {superAdmin ? <Link to="/cms"><Button variant="outline">Open Loop CMS in Bridge</Button></Link> : null}
+          <BridgeShell actor={actor} title="Account">
+            <div className="max-w-2xl space-y-8">
+              <section>
+                <p className="text-xs font-medium uppercase tracking-[0.16em] text-muted">Profile</p>
+                <div className="mt-4 divide-y divide-line border-y border-line">
+                  <div className="grid gap-1 py-4 sm:grid-cols-[140px_1fr]">
+                    <span className="text-sm text-muted">Email</span>
+                    <span className="text-sm font-medium">{actor.email}</span>
+                  </div>
+                  <div className="grid gap-1 py-4 sm:grid-cols-[140px_1fr]">
+                    <span className="text-sm text-muted">Account</span>
+                    <span className="text-sm font-medium">{actor.accountType.replaceAll("_", " ")}</span>
+                  </div>
+                  <div className="grid gap-1 py-4 sm:grid-cols-[140px_1fr]">
+                    <span className="text-sm text-muted">Organization</span>
+                    <span className="text-sm font-medium">{actor.organizationName ?? "—"}</span>
+                  </div>
+                  <div className="grid gap-1 py-4 sm:grid-cols-[140px_1fr]">
+                    <span className="text-sm text-muted">Verification</span>
+                    <span className="text-sm font-medium">{actor.emailVerified ? "Verified" : "Verification required"}</span>
+                  </div>
                 </div>
-              </div>
-            </section>
 
-            <div className="mt-6">
-              <Link to="/" className="text-sm text-accent underline-offset-4 hover:underline">Public landing</Link>
+                {!actor.emailVerified ? (
+                  <div className="mt-5">
+                    <ResendVerify />
+                  </div>
+                ) : null}
+              </section>
+
+              {isInternal ? (
+                <section className="border-t border-line pt-8">
+                  <p className="text-xs font-medium uppercase tracking-[0.16em] text-muted">Internal access</p>
+                  <p className="mt-2 text-sm text-muted">
+                    {actor.internalRole?.replaceAll("_", " ")}
+                  </p>
+                  <div className="mt-4 flex flex-wrap gap-3">
+                    {actor.internalRole === "admin" || actor.internalRole === "super_admin" ? (
+                      <Link to="/admin"><Button>Open Admin</Button></Link>
+                    ) : null}
+                    {actor.internalRole === "super_admin" ? (
+                      <Link to="/cms"><Button variant="outline">Open CMS</Button></Link>
+                    ) : null}
+                  </div>
+                </section>
+              ) : null}
+
+              <Link to="/" className="inline-block text-sm font-medium text-accent hover:text-accent-strong">
+                Back to Bridge
+              </Link>
             </div>
           </BridgeShell>
         );
@@ -58,9 +78,10 @@ function ResendVerify() {
     onSuccess: () => toast("Verification mail requested"),
     onError: (err) => toast(err instanceof Error ? err.message : "Mail is not configured"),
   });
+
   return (
     <Button type="button" variant="outline" disabled={mut.isPending} onClick={() => mut.mutate()}>
-      Send verification mail
+      {mut.isPending ? "Sending…" : "Send verification mail"}
     </Button>
   );
 }
