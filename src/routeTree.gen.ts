@@ -166,7 +166,6 @@ export interface FileRoutesByFullPath {
   '/forgot-password': typeof ForgotPasswordRoute
   '/internal': typeof InternalRoute
   '/investor': typeof InvestorRoute
-  '/investor': typeof InvestorRoute
   '/login': typeof LoginRoute
   '/loop-cms': typeof LoopCmsRoute
   '/onboarding': typeof OnboardingRoute
