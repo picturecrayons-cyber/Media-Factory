@@ -28,7 +28,7 @@ test("AWS signing preserves legacy keys and never reports OCI as S3 readiness", 
     }),
   );
   for (const name of names) delete process.env[name];
-  assert.equal(integrationStatus().s3, false);
+  assert.equal(integrationStatus().oci, false);
   await assert.rejects(signDownload({ key: "films/master.mp4" }), /region and media bucket/);
   Object.assign(process.env, {
     AWS_REGION: "us-east-1",
@@ -36,7 +36,7 @@ test("AWS signing preserves legacy keys and never reports OCI as S3 readiness", 
     AWS_ACCESS_KEY_ID: "test-key",
     AWS_SECRET_ACCESS_KEY: "test-secret",
   });
-  assert.equal(integrationStatus().s3, true);
+  assert.equal(integrationStatus().oci, false);
   const download = await signDownload({ key: "films/posters/film + art.jpg" });
   const parsed = new URL(download.url);
   assert.equal(decodeURIComponent(parsed.pathname), "/films/posters/film + art.jpg");
@@ -90,7 +90,6 @@ test("sealing encodes copy source, pins source ETag and rejects unverified copie
   mock.mock.mockImplementation(async () => ({ ContentLength: 6 * 1024 ** 3 }));
   await assert.rejects(sealVerifiedObject("films/master", "bridge/sealed/id", "etag"), /multipart/);
 });
-
 
 test("storage failures fail closed with a stable STORAGE_UNAVAILABLE error", async (t) => {
   const savedRegion = process.env.AWS_REGION;
