@@ -70,7 +70,7 @@ function AdminBody({ actor }: { actor: any }) {
           </div>
           <div className="flex flex-wrap gap-2">
             <Link to="/cms"><Button>Open Bridge CMS</Button></Link>
-            <Button type="button" variant="outline" disabled title="Loop CMS requires independent server-authoritative authorization">Loop CMS unavailable</Button>
+            {actor.internalRole === "super_admin" ? <Link to="/cms"><Button type="button" variant="outline">Open Loop CMS in Bridge</Button></Link> : null}
             <a href="https://crayonsloop.in/" target="_blank" rel="noreferrer"><Button variant="outline">Open Crayons Loop ↗</Button></a>
           </div>
         </div>
