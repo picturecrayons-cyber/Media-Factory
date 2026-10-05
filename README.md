@@ -12,7 +12,7 @@ Crayons Bridge is the B2B control plane for title records, rights, licensing, de
 |---|---|
 | Supabase | `mlmgugivsyoxzdgwkbpu` |
 | Media storage | Oracle OCI Object Storage · Mumbai |
-| Mail from | `abijithokan@crayonspictures.com` |
+| Mail from | `abijithasokan@crayonspictures.com` |
 | Vercel | project `bridge` · production from `main` |
 
 Any non-canonical Supabase project is rejected in `src/lib/bridge/canonical.ts`.
