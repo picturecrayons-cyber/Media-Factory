@@ -41,7 +41,7 @@ export async function signUpWithEmail(input: {
   email: string;
   password: string;
   name: string;
-  accountType?: "independent_creator" | "studio" | "buyer";
+  accountType?: "independent_creator" | "studio" | "buyer" | "investor";
 }) {
   const callbackUrl = bridgeCallbackUrl(typeof window !== "undefined" ? window.location.origin : undefined);
 
