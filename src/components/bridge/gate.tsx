@@ -26,7 +26,7 @@ export function RequireBridge({
   allow,
 }: {
   children: (actor: BridgeActor) => ReactNode;
-  allow?: "creator" | "studio" | "buyer" | "internal" | "super_admin";
+  allow?: "creator" | "studio" | "buyer" | "investor" | "internal" | "super_admin";
 }) {
   const qc = useQueryClient();
   const [retrying, setRetrying] = useState(false);
@@ -94,7 +94,7 @@ export function RequireBridge({
   if (!profile) return <Navigate to="/onboarding" />;
 
   // Role gates are authoritative for role-specific workspaces:
-  // buyer/creator/studio accounts are valid Bridge users and must not be
+  // creator/studio/buyer/investor accounts are valid Bridge users and must not be
   // blocked by the internal-operator gate. Internal surfaces remain protected
   // by the explicit "internal"/"super_admin" allow checks above.
   if (allow === "super_admin" && profile.internalRole !== "super_admin") return <Navigate to={sessionQ.data?.home ?? "/"} />;

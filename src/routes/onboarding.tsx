@@ -18,6 +18,7 @@ const LABELS: Record<(typeof ACCOUNT_TYPES)[number], string> = {
   independent_creator: "Independent creator",
   studio: "Studio",
   buyer: "Buyer",
+  investor: "Investor",
 };
 
 const SESSION_TIMEOUT_MS = 12_000;

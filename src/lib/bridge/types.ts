@@ -1,4 +1,4 @@
-export const ACCOUNT_TYPES = ["independent_creator", "studio", "buyer"] as const;
+export const ACCOUNT_TYPES = ["independent_creator", "studio", "buyer", "investor"] as const;
 export type AccountType = (typeof ACCOUNT_TYPES)[number];
 
 export const INTERNAL_ROLES = [

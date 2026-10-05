@@ -61,6 +61,12 @@ function navFor(actor: BridgeActor): NavItem[] {
       { to: "/account", label: "Account" },
     ];
   }
+  if (actor.accountType === "investor") {
+    return [
+      { to: "/investor", label: "Investor Desk" },
+      { to: "/account", label: "Account" },
+    ];
+  }
   return [{ to: "/account", label: "Account" }];
 }
 

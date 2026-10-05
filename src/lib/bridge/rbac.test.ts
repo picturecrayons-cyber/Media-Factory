@@ -8,6 +8,7 @@ const actor = (userId: string, accountType: Actor["accountType"], internalRole: 
 const creator = (verified = true) => actor("creator-a", "independent_creator", null, verified);
 const studio = () => actor("studio-a", "studio");
 const buyer = () => actor("buyer-a", "buyer");
+const investor = () => actor("investor-a", "investor");
 const admin = () => actor("admin-a", "independent_creator", "admin");
 const superAdmin = () => actor("super-a", "independent_creator", "super_admin");
 const viewer = () => actor("viewer-a", "independent_creator", "viewer");
@@ -41,6 +42,18 @@ describe("PRD authorization matrix", () => {
       assert.equal(hasPermission(b, permission), false);
     }
     assert.equal(hasPermission(b, "payment.create_order"), true);
+  });
+
+  it("investor has a separate workspace and read-only investment-oriented permissions", () => {
+    const i = investor();
+    assert.equal(workspaceHome(i), "/investor");
+    assert.equal(hasPermission(i, "title.read_catalog"), true);
+    assert.equal(hasPermission(i, "delivery.read_finance"), true);
+    assert.equal(hasPermission(i, "payment.create_order"), false);
+    assert.equal(hasPermission(i, "title.create"), false);
+    assert.equal(hasPermission(i, "asset.sign_upload"), false);
+    assert.equal(canReadTitle(i, { ownerUserId: "creator-a", status: "DRAFT" }), false);
+    assert.equal(canReadTitle(i, { ownerUserId: "creator-a", status: "LIVE_FOR_BUYERS" }), false);
   });
 
   it("all internal roles stay within explicit staff permissions even with mixed account types", () => {
@@ -117,6 +130,7 @@ describe("PRD authorization matrix", () => {
     assert.equal(workspaceHome(creator()), "/creator");
     assert.equal(workspaceHome(studio()), "/studio");
     assert.equal(workspaceHome(buyer()), "/buyer");
+    assert.equal(workspaceHome(investor()), "/investor");
     assert.equal(workspaceHome(superAdmin()), "/dashboard");
     assert.equal(workspaceHome(admin()), "/internal");
     assert.equal(workspaceHome(qc), "/internal?desk=qc");
