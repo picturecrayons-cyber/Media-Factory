@@ -79,9 +79,9 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
     const sql = await getSql();
     const rows = await sql<{
       id: string; title_id: string; kind: string; s3_key: string;
-      created_by: string; byte_size: number | null;
+      created_by: string; content_type: string | null; byte_size: number | null;
     }>`
-      select id, title_id, kind, s3_key, created_by, byte_size
+      select id, title_id, kind, s3_key, created_by, content_type, byte_size
       from bridge_assets where id = ${data.assetId} limit 1
     `;
     const asset = rows[0];
@@ -98,7 +98,7 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
     if (asset.byte_size != null) return { assetId: asset.id, byteSize: Number(asset.byte_size), verified: true };
 
     const { verifyObject, sealVerifiedObject } = await import("./oci-object-storage.server");
-    const object = await verifyObject(asset.s3_key);
+    const object = await verifyObject(asset.s3_key, asset.content_type);
     if (data.expectedByteSize != null && object.byteSize !== data.expectedByteSize) {
       throw new Error("Uploaded object size does not match the file that was sent");
     }
