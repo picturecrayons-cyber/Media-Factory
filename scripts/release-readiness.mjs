@@ -1,6 +1,5 @@
 const required = {
-  aws: ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_REGION", "S3_BUCKET"],
-  mail: ["MAIL_FROM"],
+  oci: ["OCI_TENANCY_OCID", "OCI_USER_OCID", "OCI_FINGERPRINT", "OCI_PRIVATE_KEY", "OCI_REGION", "OCI_NAMESPACE", "OCI_BUCKET_NAME"],
   supabase: ["VITE_SUPABASE_URL", "VITE_SUPABASE_PUBLISHABLE_KEY"],
   razorpay: ["RAZORPAY_KEY_ID", "RAZORPAY_KEY_SECRET", "RAZORPAY_WEBHOOK_SECRET"],
 };
@@ -14,7 +13,7 @@ function oneOf(...names) {
 }
 
 const results = {
-  aws: required.aws.every(present),
+  oci: required.oci.every(present),
   supabase: required.supabase.every(present),
   razorpay: required.razorpay.every(present),
   hostingerMail:
@@ -26,7 +25,7 @@ const results = {
 };
 
 const details = {
-  aws: required.aws.filter((k) => !present(k)),
+  oci: required.oci.filter((k) => !present(k)),
   supabase: required.supabase.filter((k) => !present(k)),
   razorpay: required.razorpay.filter((k) => !present(k)),
   hostingerMail: [

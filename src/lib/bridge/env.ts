@@ -11,11 +11,6 @@ export const bridgeEnv = {
   razorpayKeyId: () => read("RAZORPAY_KEY_ID"),
   razorpayKeySecret: () => read("RAZORPAY_KEY_SECRET"),
   razorpayWebhookSecret: () => read("RAZORPAY_WEBHOOK_SECRET"),
-  awsRegion: () => read("AWS_REGION"),
-  awsBucket: () => read("AWS_S3_MEDIA_BUCKET") || read("S3_MEDIA_BUCKET") || read("AWS_S3_BUCKET"),
-  awsAccessKeyId: () => read("AWS_ACCESS_KEY_ID"),
-  awsSecretAccessKey: () => read("AWS_SECRET_ACCESS_KEY"),
-  awsSessionToken: () => read("AWS_SESSION_TOKEN"),
   ociTenancyOcid: () => read("OCI_TENANCY_OCID"),
   ociUserOcid: () => read("OCI_USER_OCID"),
   ociFingerprint: () => read("OCI_FINGERPRINT"),
@@ -33,21 +28,19 @@ export const bridgeEnv = {
 };
 
 export function integrationStatus() {
-  const oci = Boolean(
-    bridgeEnv.ociTenancyOcid() &&
-      bridgeEnv.ociUserOcid() &&
-      bridgeEnv.ociPrivateKey() &&
-      bridgeEnv.ociRegion() &&
-      bridgeEnv.ociBucket(),
-  );
   return {
     postgres: Boolean(bridgeEnv.databaseUrl()),
-    supabase: Boolean(
-      bridgeEnv.supabaseUrl() && (bridgeEnv.supabaseAnon() || bridgeEnv.supabaseService()),
-    ),
+    supabase: Boolean(bridgeEnv.supabaseUrl() && (bridgeEnv.supabaseAnon() || bridgeEnv.supabaseService())),
     razorpay: Boolean(bridgeEnv.razorpayKeyId() && bridgeEnv.razorpayKeySecret()),
     razorpayWebhook: Boolean(bridgeEnv.razorpayWebhookSecret()),
-    oci,
+    oci: Boolean(
+      bridgeEnv.ociTenancyOcid() &&
+        bridgeEnv.ociUserOcid() &&
+        bridgeEnv.ociPrivateKey() &&
+        bridgeEnv.ociRegion() &&
+        bridgeEnv.ociNamespace() &&
+        bridgeEnv.ociBucket(),
+    ),
     mail: Boolean(bridgeEnv.smtpHost() && bridgeEnv.smtpUser() && bridgeEnv.smtpPass()),
   };
 }
