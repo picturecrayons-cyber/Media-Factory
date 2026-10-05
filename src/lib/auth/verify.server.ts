@@ -4,7 +4,8 @@ const supabaseUrl =
 
 const supabasePublishableKey =
   process.env.SUPABASE_PUBLISHABLE_KEY ||
-  process.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+  process.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
+  "";
 
 if (!supabaseUrl || !supabasePublishableKey) {
   throw new Error("Supabase authentication configuration is missing.");
@@ -30,10 +31,10 @@ export async function getSessionUser(bearerToken?: string): Promise<VerifiedUser
 
   try {
     const response = await fetch(`${supabaseUrl}/auth/v1/user`, {
-      headers: new Headers({
+      headers: {
         apikey: supabasePublishableKey,
         Authorization: `Bearer ${bearerToken}`,
-      }),
+      },
     });
 
     if (!response.ok) {
