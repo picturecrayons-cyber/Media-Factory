@@ -1,7 +1,10 @@
 import { redirect } from "@tanstack/react-router";
-import { getBridgeSession, type BridgeActor } from "@/lib/bridge/session";
+import { getBridgeSession } from "@/lib/bridge/session";
 
 export type ProtectedBridgeSession = Awaited<ReturnType<typeof getBridgeSession>>;
+export type AuthenticatedBridgeSession = ProtectedBridgeSession & {
+  profile: NonNullable<ProtectedBridgeSession["profile"]>;
+};
 
 async function getProtectedSession(): Promise<ProtectedBridgeSession> {
   try {
@@ -11,7 +14,7 @@ async function getProtectedSession(): Promise<ProtectedBridgeSession> {
   }
 }
 
-export async function requireBridgeRoute(): Promise<ProtectedBridgeSession> {
+export async function requireBridgeRoute(): Promise<AuthenticatedBridgeSession> {
   const session = await getProtectedSession();
 
   if (!session.profile) {
@@ -21,23 +24,21 @@ export async function requireBridgeRoute(): Promise<ProtectedBridgeSession> {
   return session;
 }
 
-export async function requireBuyerRoute(): Promise<ProtectedBridgeSession> {
+export async function requireBuyerRoute(): Promise<AuthenticatedBridgeSession> {
   const session = await requireBridgeRoute();
-  const actor = session.profile as BridgeActor;
 
-  if (actor.internalRole || actor.accountType !== "buyer") {
-    throw redirect({ to: (session.home || "/workspace") as any, replace: true });
+  if (session.profile.internalRole || session.profile.accountType !== "buyer") {
+    throw redirect({ to: "/workspace", replace: true });
   }
 
   return session;
 }
 
-export async function requireInternalRoute(): Promise<ProtectedBridgeSession> {
+export async function requireInternalRoute(): Promise<AuthenticatedBridgeSession> {
   const session = await requireBridgeRoute();
-  const actor = session.profile as BridgeActor;
 
-  if (!actor.internalRole) {
-    throw redirect({ to: (session.home || "/workspace") as any, replace: true });
+  if (!session.profile.internalRole) {
+    throw redirect({ to: "/workspace", replace: true });
   }
 
   return session;
