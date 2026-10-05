@@ -4,8 +4,12 @@ import { BridgeShell } from "@/components/bridge/shell";
 import { CreateTitleForm, TitleList } from "@/components/bridge/title-desk";
 import { hasPermission } from "@/lib/bridge/rbac";
 import { StreamVistaOrders } from "@/components/bridge/streamvista-orders";
+import { requireBridgeRoute } from "@/lib/auth/route-guard";
 
-export const Route = createFileRoute("/workspace")({ component: Workspace });
+export const Route = createFileRoute("/workspace")({
+  beforeLoad: requireBridgeRoute,
+  component: Workspace,
+});
 
 const MODULES = [
   ["Titles", "One canonical title record from ingest to market."],
