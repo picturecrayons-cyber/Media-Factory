@@ -22,7 +22,7 @@ export const bridgeEnv = {
   smtpPort: () => read("SMTP_PORT") || "587",
   smtpUser: () => read("SMTP_USER") || read("HOSTINGER_SMTP_USER"),
   smtpPass: () => read("SMTP_PASS") || read("HOSTINGER_SMTP_PASS"),
-  mailFrom: () => read("MAIL_FROM") || "abijithokan@crayonspictures.com",
+  mailFrom: () => read("MAIL_FROM") || "abijithasokan@crayonspictures.com",
   appUrl: () => resolveBridgeConfiguredOrigin(read("APP_URL"), read("SITE_URL")),
   databaseUrl: () => read("DATABASE_URL") || read("POSTGRES_URL"),
 };
