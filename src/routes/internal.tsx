@@ -8,6 +8,7 @@ import { StatusChip } from "@/components/bridge/status-rail";
 import { Button } from "@/components/ui/button";
 import { inviteInternalRole } from "@/lib/bridge/profiles";
 import { listAuditLogs, listTitles } from "@/lib/bridge/titles";
+import { requireInternalRoute } from "@/lib/auth/route-guard";
 import {
   authorizeLoopPublication,
   listLoopPublicationReadiness,
@@ -19,7 +20,10 @@ import {
 import { INTERNAL_ROLES } from "@/lib/bridge/types";
 import { hasPermission } from "@/lib/bridge/rbac";
 
-export const Route = createFileRoute("/internal")({ component: Internal });
+export const Route = createFileRoute("/internal")({
+  beforeLoad: requireInternalRoute,
+  component: Internal,
+});
 
 function Internal() {
   return (
