@@ -30,10 +30,10 @@ export async function getSessionUser(bearerToken?: string): Promise<VerifiedUser
 
   try {
     const response = await fetch(`${supabaseUrl}/auth/v1/user`, {
-      headers: {
+      headers: new Headers({
         apikey: supabasePublishableKey,
         Authorization: `Bearer ${bearerToken}`,
-      },
+      }),
     });
 
     if (!response.ok) {
