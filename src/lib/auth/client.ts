@@ -109,7 +109,7 @@ export async function updatePassword(password: string) {
   return data.user;
 }
 
-export async function signOut(redirectTo = "/login"): Promise<void> {
+export async function signOut(redirectTo = "/"): Promise<void> {
   if (typeof window !== "undefined") window.sessionStorage.removeItem(RECOVERY_MARKER_KEY);
   try {
     await supabase.auth.signOut();
