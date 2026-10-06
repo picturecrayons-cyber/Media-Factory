@@ -173,6 +173,7 @@ export const createLicenseOrder = createServerFn({ method: "POST" })
     const title = await loadTitle(data.titleId);
     if (!title || !canReadTitle(actor, title)) throw new Error("Not found");
     await assertBuyerPublishable(title.id);
+    const sql = await getSql();
     if (title.status !== "LIVE_FOR_BUYERS" && title.status !== "IN_NEGOTIATION" && title.status !== "LICENSED" && title.status !== "DELIVERED") {
       throw new Error("Title is not open for a new license order");
     }
@@ -189,7 +190,6 @@ export const createLicenseOrder = createServerFn({ method: "POST" })
     }
     if (amountPaise <= 0) throw new Error("Licensing price is not set");
     const { keyId } = requireRazorpayKeys();
-    const sql = await getSql();
     const existing = await sql<{
       id: string;
       provider_order_id: string | null;
@@ -238,7 +238,7 @@ export const createLicenseOrder = createServerFn({ method: "POST" })
       returning id
     `;
     if (!inserted[0]) {
-      const winner = await sql<{ id: string; title_id: string | null; provider_order_id: string | null; amount_paise: number }>`
+      const winner = await sql<{ id: string; title_id: string | null; package_id: string | null; provider_order_id: string | null; amount_paise: number }>`
         select id, title_id, package_id, provider_order_id, amount_paise from bridge_payments
         where user_id = ${actor.userId} and purpose = ${"title_license"} and idempotency_key = ${data.idempotencyKey}
         limit 1
