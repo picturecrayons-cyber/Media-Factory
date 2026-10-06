@@ -255,3 +255,69 @@ export const listLicensePackages = createServerFn({ method: "GET" })
       status: r.status, deliveryStatus: r.delivery_status,
     })) };
   });
+
+
+export const authorizeLanguagePackage = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({ packageId: z.string().uuid() }))
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    assertPermission(actor, "title.deliver");
+    const sql = await getSql();
+    const packages = await sql<{
+      id: string; title_id: string; language_right_ids: unknown; status: string;
+    }>`
+      select id, title_id, language_right_ids, status
+      from bridge_license_packages where id = ${data.packageId} limit 1
+    `;
+    const pkg = packages[0];
+    if (!pkg || pkg.status !== "LICENSED") throw new Error("Only paid language packages can be authorized");
+    const title = await loadTitle(pkg.title_id);
+    if (!title) throw new Error("Title not found");
+
+    const rightIds = Array.isArray(pkg.language_right_ids) ? pkg.language_right_ids.map(String) : [];
+    if (!rightIds.length) throw new Error("Package has no language rights");
+    const rights = await sql<{ id: string; language: string; right_type: string; status: string }>`
+      select id, language, right_type, status
+      from bridge_language_rights
+      where id = any(${rightIds}::uuid[]) and title_id = ${pkg.title_id}
+    `;
+    if (rights.length !== rightIds.length || rights.some((r) => r.status !== "VALID")) {
+      throw new Error("Package contains invalid language rights");
+    }
+
+    const assets = await sql<{
+      id: string; asset_group: string; language: string | null; processing_state: string;
+    }>`
+      select id, asset_group, language, processing_state
+      from bridge_asset_versions
+      where title_id = ${pkg.title_id} and processing_state = 'PASSED'
+    `;
+    const master = assets.find((a) => a.asset_group === "VIDEO");
+    if (!master) throw new Error("LOOP_DELIVERY_HOLD: a passed video master is required");
+    const selectedAssetIds = [master.id];
+
+    for (const right of rights) {
+      const group = right.right_type === "SUBTITLING" ? "SUBTITLE" : right.right_type === "DUBBING" ? "AUDIO" : "VIDEO";
+      const match = assets.find((a) => a.asset_group === group && a.language?.trim().toUpperCase() === right.language.trim().toUpperCase());
+      if (!match) throw new Error("LOOP_DELIVERY_HOLD: passed " + right.right_type.toLowerCase() + " asset missing for " + right.language);
+      selectedAssetIds.push(match.id);
+    }
+
+    await sql`
+      update bridge_license_packages
+      set delivery_status = 'AUTHORIZED',
+          asset_version_ids = ${JSON.stringify([...new Set(selectedAssetIds)])},
+          updated_at = now()
+      where id = ${pkg.id}
+    `;
+    await writeAudit({
+      actorUserId: actor.userId,
+      action: "delivery.language_package_authorized",
+      entityType: "bridge_license_package",
+      entityId: pkg.id,
+      metadata: { titleId: pkg.title_id, assetVersionIds: [...new Set(selectedAssetIds)], destination: "CRAYONS_LOOP" },
+    });
+    return { packageId: pkg.id, titleId: pkg.title_id, deliveryStatus: "AUTHORIZED", assetVersionIds: [...new Set(selectedAssetIds)] };
+  });
