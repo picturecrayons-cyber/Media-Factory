@@ -39,6 +39,7 @@ export function detectRequiredWork(input: {
     }
     if (destination.kind === "BUYER") requiredWork.push({ serviceCode: "BUYER_DELIVERY", reason: "Secure buyer delivery.", quantity: 1, destination: destination.name });
     if (destination.kind === "BROADCASTER") requiredWork.push({ serviceCode: "BROADCAST_DELIVERY", reason: "Broadcaster delivery.", quantity: 1, destination: destination.name });
+    if (destination.kind === "DIGITAL_THEATRICAL") requiredWork.push({ serviceCode: "DIGITAL_THEATRICAL_DELIVERY", reason: "Digital / theatrical package delivery.", quantity: 1, destination: destination.name });
     if (destination.kind === "STORE") {
       requiredWork.push({ serviceCode: "STORE_PACKAGE", reason: "Store-specific package.", quantity: 1, destination: destination.name });
       requiredWork.push({ serviceCode: "STORE_DELIVERY", reason: "Store delivery.", quantity: 1, destination: destination.name });
