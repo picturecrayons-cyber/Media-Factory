@@ -57,17 +57,20 @@ describe("PRD authorization matrix", () => {
   });
 
   it("all internal roles stay within explicit staff permissions even with mixed account types", () => {
-    for (const roleActor of [viewer(), qc, legal, finance, admin()]) {
+    for (const roleActor of [viewer(), qc, legal, finance()]) {
       assert.equal(hasPermission(roleActor, "title.create"), false);
       assert.equal(hasPermission(roleActor, "asset.sign_upload"), false);
       assert.equal(hasPermission(roleActor, "payment.create_order"), false);
     }
+    assert.equal(hasPermission(admin(), "title.create"), false);
+    assert.equal(hasPermission(admin(), "asset.sign_upload"), true);
+    assert.equal(hasPermission(admin(), "payment.create_order"), false);
     const a = admin();
     assert.equal(hasPermission(a, "title.read_catalog"), true);
     assert.equal(hasPermission(a, "title.qc_review"), true);
     assert.equal(hasPermission(a, "users.invite_internal"), true);
     assert.equal(hasPermission(a, "title.create"), false);
-    assert.equal(hasPermission(a, "asset.sign_upload"), false);
+    assert.equal(hasPermission(a, "asset.sign_upload"), true);
     assert.equal(canReadTitle(a, { ownerUserId: "other-org-user", status: "DRAFT" }), true);
     assert.equal(hasPermission(viewer(), "asset.sign_download"), false);
   });
@@ -88,7 +91,7 @@ describe("PRD authorization matrix", () => {
     assert.equal(canMutateTitle(viewer(), foreign, "title.update_own", "title.qc_review"), false);
   });
 
-  it("super admin can create canonical Bridge titles but does not inherit creator upload powers", () => {
+  it("super admin can create canonical Bridge titles and use explicit internal upload powers", () => {
     const a = superAdmin();
     assert.equal(hasPermission(a, "title.create"), true);
     assert.equal(hasPermission(a, "asset.sign_upload"), false);
