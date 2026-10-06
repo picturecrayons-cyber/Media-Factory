@@ -7,12 +7,8 @@ import { CreateTitleForm, TitleList } from "@/components/bridge/title-desk";
 import { Button } from "@/components/ui/button";
 import { listTitles } from "@/lib/bridge/titles";
 import { hasPermission } from "@/lib/bridge/rbac";
-import { requireBridgeRoute } from "@/lib/auth/route-guard";
 
-export const Route = createFileRoute("/dashboard")({
-  beforeLoad: requireBridgeRoute,
-  component: Dashboard,
-});
+export const Route = createFileRoute("/dashboard")({ component: Dashboard });
 
 function Dashboard() {
   const [showCreate, setShowCreate] = useState(false);
