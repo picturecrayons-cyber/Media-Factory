@@ -30,7 +30,6 @@ const INTERNAL_PERMISSIONS: Record<InternalRole, readonly Permission[]> = {
     "loop.publish",
     "loop.revoke",
     "loop.certify_playback",
-    "asset.sign_upload",
   ],
   super_admin: [
     "title.create",
