@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { listAdminWorkstations, reviewAdminTitle, setBuyerPublicationGate } from "@/lib/bridge/admin-workstations";
+import { listDuplicateReviews, openDuplicateReview, decideDuplicateReview } from "@/lib/bridge/duplicate-reconciliation";
 
 export const Route = createFileRoute("/admin/workstations")({ component: AdminWorkstations });
 
@@ -72,6 +73,7 @@ function WorkstationBody() {
       </div>
     </section>
     <section id="loop" className="space-y-3"><h3 className="font-display text-2xl font-semibold">10 · Operational CMS / Loop Publishing</h3><p className="text-sm text-muted">{data.publications.length} persisted Bridge publication records. Authorization is server-side and requires rights, QC/master and presentation assets.</p><RecordTable rows={data.publications} titleName={titleName} fields={["authorization_status","territories","languages","exploitation_models","approved_at","revoked_at"]}/></section>
+    <DuplicateReviewSection />
     {mutation.isError ? <p className="rounded-xl border border-line p-4 text-sm">Action failed: {String(mutation.error)}</p> : null}
   </div>;
 }
