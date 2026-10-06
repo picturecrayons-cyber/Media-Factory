@@ -23,6 +23,7 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "check:release-readiness": "node scripts/release-readiness.mjs",
+    "test:oci-production-e2e": "node --experimental-strip-types scripts/oci-production-e2e.mjs",
     "check:bridge-app-url": "node scripts/check-bridge-app-url.mjs",
     "test:cra101": "node --test scripts/cra-101-auth-flow.test.mjs"
   },
