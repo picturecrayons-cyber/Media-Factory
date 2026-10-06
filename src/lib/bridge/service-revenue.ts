@@ -10,7 +10,7 @@ import { writeAudit } from "./audit";
 import { assertNotDevUser } from "./guards";
 import { bridgeEnv } from "./env";
 import { paymentVerifyBody, verifyRazorpaySignature } from "./razorpay-crypto";
-import { destinationSchema, detectRequiredWork, type DetectedAsset } from "./service-pricing";
+import { destinationSchema, detectRequiredWork, type DetectedAsset, type RequiredWork } from "./service-pricing";
 
 const quoteInputSchema = z.object({
   titleId: z.string().min(8),
@@ -55,7 +55,7 @@ export const createServiceQuote = createServerFn({ method: "POST" }).middleware(
   if (!title || !canOperateOnTitle(actor,title,"title.read_own","title.read_catalog")) throw new Error("Not found");
   const assets = await loadAssetEvidence(title.id);
   const plan = detectRequiredWork({ runtimeMinutes:title.runtimeMinutes, destinations:data.destinations, assets, subtitleLanguages:data.subtitleLanguages, requestedDubbingLanguages:data.requestedDubbingLanguages });
-  const lines: Array<{ serviceCode:string; rateId:string; rateVersion:number; classification:string; pricingMethod:string; unitLabel:string; quantity:number; unitPricePaise:number; lineTotalPaise:number; evidence:unknown }> = [];
+  const lines: Array<{ serviceCode:string; rateId:string; rateVersion:number; classification:string; pricingMethod:string; unitLabel:string; quantity:number; unitPricePaise:number; lineTotalPaise:number; evidence:RequiredWork }> = [];
   for (const work of plan.requiredWork) {
     const [rate,catalog] = await Promise.all([getActiveRate(work.serviceCode),getCatalog(work.serviceCode)]);
     const quantity = ["PER_FINISHED_MINUTE","PER_DESTINATION","PER_LANGUAGE","PER_REVISION","PER_GB"].includes(catalog.pricing_method) ? work.quantity : 1;
