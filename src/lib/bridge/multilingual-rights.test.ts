@@ -19,3 +19,8 @@ test("language rights overlap only when language, right type and commercial scop
     false,
   );
 });
+
+
+test("adjacent rights windows do not overlap at the boundary", () => {
+  assert.equal(overlaps(new Date("2026-01-01"), new Date("2026-06-01"), new Date("2026-06-01"), null), false);
+});
