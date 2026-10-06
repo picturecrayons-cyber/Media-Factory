@@ -15,8 +15,8 @@ const rights = (overrides: Partial<any> = {}) => ({
 const base = () => ({
   identityCertain: true, canonical: title("canonical"), retiring: title("retiring"),
   canonicalRights: [rights()], retiringRights: [rights()],
-  canonicalBuyers: [], retiringBuyers: [], canonicalAssets: [], retiringAssets: [],
-  canonicalDeliveries: [], retiringDeliveries: [], canonicalLoopPublications: [], retiringLoopPublications: [],
+  canonicalBuyers: [] as unknown[], retiringBuyers: [] as unknown[], canonicalAssets: [] as unknown[], retiringAssets: [] as unknown[],
+  canonicalDeliveries: [] as unknown[], retiringDeliveries: [] as unknown[], canonicalLoopPublications: [] as unknown[], retiringLoopPublications: [] as unknown[],
 });
 
 test("safe exact duplicate", () => {
