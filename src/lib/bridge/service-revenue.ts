@@ -123,6 +123,63 @@ function safeAmount(value: unknown) {
   return Math.round(amount);
 }
 
+export function calculateServiceLine(input: {
+  unitPricePaise: number;
+  minimumPricePaise: number;
+  quantity: number;
+  costBasisPaise: number;
+}) {
+  const unitPrice = safeAmount(input.unitPricePaise);
+  const minimum = safeAmount(input.minimumPricePaise);
+  const quantity = Number(input.quantity);
+  if (!Number.isFinite(quantity) || quantity < 0) throw new Error("Invalid quantity");
+  const lineTotalPaise = Math.max(Math.round(unitPrice * quantity), minimum);
+  const costPaise = Math.round(Math.max(0, input.costBasisPaise) * quantity);
+  return {
+    lineTotalPaise,
+    costPaise,
+    estimatedMarginPaise: lineTotalPaise - costPaise,
+  };
+}
+
+export function calculateRefundSplit(input: {
+  refundTotalPaise: number;
+  invoiceSubtotalPaise: number;
+  invoiceTaxPaise: number;
+  invoiceTotalPaise: number;
+}) {
+  const refundTotalPaise = safeAmount(input.refundTotalPaise);
+  if (refundTotalPaise === 0 || input.invoiceTotalPaise <= 0) {
+    return { refundRevenuePaise: 0, refundTaxPaise: 0 };
+  }
+  const refundTaxPaise = Math.min(
+    input.invoiceTaxPaise,
+    Math.max(0, Math.round(refundTotalPaise * input.invoiceTaxPaise / input.invoiceTotalPaise)),
+  );
+  return {
+    refundRevenuePaise: Math.max(0, refundTotalPaise - refundTaxPaise),
+    refundTaxPaise,
+  };
+}
+
+export function calculateNetProfit(input: {
+  revenuePaise: number;
+  refundsPaise: number;
+  taxPaise: number;
+  paymentFeesPaise: number;
+  operatingCostsPaise: number;
+  passThroughCostsPaise: number;
+  settlementsPaise: number;
+}) {
+  return input.revenuePaise -
+    input.refundsPaise -
+    input.taxPaise -
+    input.paymentFeesPaise -
+    input.operatingCostsPaise -
+    input.passThroughCostsPaise -
+    input.settlementsPaise;
+}
+
 function ledgerKey(parts: string[]) {
   return parts.join(":").slice(0, 240);
 }
@@ -280,11 +337,15 @@ export const createServiceQuote = createServerFn({ method: "POST" })
       ]);
 
       const quantity = quantityFor(catalog.pricing_method, work.quantity);
+      const lineFinancials = calculateServiceLine({
+        unitPricePaise: safeAmount(rate.base_price_paise),
+        minimumPricePaise: safeAmount(rate.minimum_price_paise ?? 0),
+        quantity,
+        costBasisPaise: safeAmount(rate.cost_basis_paise ?? 0),
+      });
       const unitPrice = safeAmount(rate.base_price_paise);
-      const costBasis = Math.max(0, safeAmount(rate.cost_basis_paise ?? 0));
-      const calculated = Math.round(unitPrice * quantity);
-      const lineTotal = Math.max(calculated, safeAmount(rate.minimum_price_paise ?? 0));
-      const estimatedCost = Math.round(costBasis * quantity);
+      const lineTotal = lineFinancials.lineTotalPaise;
+      const estimatedCost = lineFinancials.costPaise;
       lines.push({
         serviceCode: work.serviceCode,
         rateId: rate.id,
@@ -296,7 +357,7 @@ export const createServiceQuote = createServerFn({ method: "POST" })
         unitPricePaise: unitPrice,
         lineTotalPaise: lineTotal,
         costBasisPaise: estimatedCost,
-        estimatedMarginPaise: lineTotal - estimatedCost,
+        estimatedMarginPaise: lineFinancials.estimatedMarginPaise,
         evidence: work,
       });
     }
@@ -830,11 +891,14 @@ export async function processServiceRefund(opts: {
 
     const totalRefunded = Number(payment.refunded_amount_paise ?? 0) + requested;
     const ratio = Number(quote.total_paise) > 0 ? requested / Number(quote.total_paise) : 0;
-    const refundTax = Math.min(
-      Number(quote.tax_paise) - Math.round(Number(quote.tax_paise) * Number(quote.refunded_amount_paise ?? 0) / Math.max(1, Number(quote.total_paise))),
-      Math.max(0, Math.round(requested * Number(quote.tax_paise) / Math.max(1, Number(quote.total_paise)))),
-    );
-    const refundRevenue = Math.max(0, requested - refundTax);
+    const refundSplit = calculateRefundSplit({
+      refundTotalPaise: requested,
+      invoiceSubtotalPaise: Number(quote.subtotal_paise),
+      invoiceTaxPaise: Number(quote.tax_paise),
+      invoiceTotalPaise: Number(quote.total_paise),
+    });
+    const refundTax = refundSplit.refundTaxPaise;
+    const refundRevenue = refundSplit.refundRevenuePaise;
 
     await tx.query(
       "update public.bridge_payments set refunded_amount_paise=$1,status=case when $1>=amount_paise then 'refunded' else status end where id=$2",
@@ -1117,8 +1181,24 @@ export const getCommercialFinancialSummary = createServerFn({ method: "GET" })
       bridgeSharePaise: bridgeShare,
       chargebacksPaise: chargebacks,
       chargebackReversalsPaise: chargebackReversals,
-      netProfitBeforeBridgeSharePaise: revenue - refunds - tax - paymentFees - operatingCosts - passThroughCosts - (chargebacks - chargebackReversals) - Math.max(0, settlements - bridgeShare),
-      netProfitAfterBridgeSharePaise: revenue - refunds - tax - paymentFees - operatingCosts - passThroughCosts - (chargebacks - chargebackReversals) - settlements,
+      netProfitBeforeBridgeSharePaise: calculateNetProfit({
+        revenuePaise: revenue,
+        refundsPaise: refunds,
+        taxPaise: tax,
+        paymentFeesPaise: paymentFees,
+        operatingCostsPaise: operatingCosts,
+        passThroughCostsPaise: passThroughCosts,
+        settlementsPaise: (chargebacks - chargebackReversals) + Math.max(0, settlements - bridgeShare),
+      }),
+      netProfitAfterBridgeSharePaise: calculateNetProfit({
+        revenuePaise: revenue,
+        refundsPaise: refunds,
+        taxPaise: tax,
+        paymentFeesPaise: paymentFees,
+        operatingCostsPaise: operatingCosts,
+        passThroughCostsPaise: passThroughCosts,
+        settlementsPaise: (chargebacks - chargebackReversals) + settlements,
+      }),
     };
   });
 
