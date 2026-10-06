@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
-import { listAdminWorkstations, reviewAdminTitle } from "@/lib/bridge/admin-workstations";
+import { listAdminWorkstations, reviewAdminTitle, setBuyerPublicationGate } from "@/lib/bridge/admin-workstations";
 
 export const Route = createFileRoute("/admin/workstations")({ component: AdminWorkstations });
 
@@ -34,6 +34,11 @@ function WorkstationBody() {
     </div>
   );
 
+  const gateMutation = useMutation({
+    mutationFn: setBuyerPublicationGate,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-workstations"] }),
+  });
+
   return <div className="space-y-8">
     <section className="rounded-3xl border border-line bg-surface p-6 sm:p-8"><p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">Authoritative operations</p><h2 className="mt-2 font-display text-3xl font-semibold">Real Bridge workstations</h2><p className="mt-3 max-w-3xl text-sm leading-relaxed text-muted">Every queue below reads persisted Bridge records. Review decisions write lifecycle events and audit records; there are no UI-only approvals.</p></section>
     <section id="submissions" className="space-y-3"><div><h3 className="font-display text-2xl font-semibold">1 · Incoming Submissions</h3><p className="text-sm text-muted">Canonical title records awaiting operational acceptance.</p></div>{submissions.length ? submissions.map((t:any)=><ReviewRow key={t.id} title={t} actions={t.status==="PREPARING" ? [["ACCEPT","Accept → QC"]] : []}/>) : <Empty text="No incoming submissions."/>}</section>
@@ -45,6 +50,27 @@ function WorkstationBody() {
     <section id="users" className="space-y-3"><h3 className="font-display text-2xl font-semibold">7 · Users & Studios</h3><p className="text-sm text-muted">{data.profiles.length} Bridge profiles from the authoritative profile table. Role mutation remains controlled by the audited invite workflow.</p><RecordTable rows={data.profiles} titleName={new Map()} fields={["display_name","email","account_type","organization_name","internal_role","email_verified"]}/></section>
     <section id="audit" className="space-y-3"><h3 className="font-display text-2xl font-semibold">8 · Audit History</h3><p className="text-sm text-muted">Immutable operational events currently stored by Bridge.</p><RecordTable rows={data.audit} titleName={new Map()} fields={["action","entity_type","entity_id","actor_user_id","created_at"]}/></section>
     <section id="website" className="space-y-3"><h3 className="font-display text-2xl font-semibold">9 · Website CMS</h3><p className="text-sm text-muted">Public Bridge copy remains isolated in the existing Website CMS route.</p><a className="text-sm text-accent underline" href="/admin-cms">Open Website CMS →</a></section>
+    <section id="buyer-publication" className="space-y-4">
+      <div><h3 className="font-display text-2xl font-semibold">Buyer Publication · Six Gates</h3><p className="text-sm text-muted">Buyer visibility is fail-closed. Admin can certify OTT preparation, packaging, curation and delivery; QC and Legal remain separate reviewer gates.</p></div>
+      <div className="overflow-x-auto rounded-2xl border border-line">
+        <table className="w-full min-w-[900px] text-left text-sm">
+          <thead className="border-b border-line text-xs uppercase tracking-wider text-muted"><tr><th className="px-3 py-3">Title</th><th className="px-3 py-3">QC</th><th className="px-3 py-3">Legal</th><th className="px-3 py-3">Operational gates</th><th className="px-3 py-3">Actions</th></tr></thead>
+          <tbody className="divide-y divide-line">
+            {data.titles.map((t:any) => (
+              <tr key={t.id}>
+                <td className="px-3 py-3 font-medium">{t.name}</td>
+                <td className="px-3 py-3">{data.qc.some((q:any)=>q.title_id===t.id&&q.status==="PASSED")?"PASSED":"HOLD"}</td>
+                <td className="px-3 py-3">{data.legal.some((l:any)=>l.title_id===t.id&&l.status==="APPROVED")?"APPROVED":"HOLD"}</td>
+                <td className="px-3 py-3 text-xs">OTT / Packaging / Curation / Delivery are persisted certification gates.</td>
+                <td className="px-3 py-3"><div className="flex flex-wrap gap-2">
+                  {(["OTT","PACKAGING","CURATION","DELIVERY"] as const).map((gate)=><Button key={gate} size="sm" variant="outline" disabled={gateMutation.isPending} onClick={()=>gateMutation.mutate({data:{titleId:t.id,gate,decision:"PASS"}})}>{gate} PASS</Button>)}
+                </div></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
     <section id="loop" className="space-y-3"><h3 className="font-display text-2xl font-semibold">10 · Operational CMS / Loop Publishing</h3><p className="text-sm text-muted">{data.publications.length} persisted Bridge publication records. Authorization is server-side and requires rights, QC/master and presentation assets.</p><RecordTable rows={data.publications} titleName={titleName} fields={["authorization_status","territories","languages","exploitation_models","approved_at","revoked_at"]}/></section>
     {mutation.isError ? <p className="rounded-xl border border-line p-4 text-sm">Action failed: {String(mutation.error)}</p> : null}
   </div>;
