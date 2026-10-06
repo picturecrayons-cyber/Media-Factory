@@ -8,12 +8,8 @@ import { getTitle } from "@/lib/bridge/titles";
 import { listTitleAssets } from "@/lib/bridge/assets";
 import { getLoopPublication } from "@/lib/bridge/loop-publication";
 import type { BridgeActor } from "@/lib/bridge/session";
-import { requireBridgeRoute } from "@/lib/auth/route-guard";
 
-export const Route = createFileRoute("/title/$id")({
-  beforeLoad: requireBridgeRoute,
-  component: TitlePage,
-});
+export const Route = createFileRoute("/title/$id")({ component: TitlePage });
 
 const WORKSPACE_TABS = [
   "Overview", "Metadata", "Video", "Audio & Dubs", "Subtitles & Accessibility",
