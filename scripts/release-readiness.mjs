@@ -1,5 +1,5 @@
 const required = {
-  oci: ["OCI_TENANCY_OCID", "OCI_USER_OCID", "OCI_FINGERPRINT", "OCI_PRIVATE_KEY", "OCI_REGION", "OCI_NAMESPACE", "OCI_BUCKET_NAME"],
+  oci: ["OCI_TENANCY_OCID", "OCI_USER_OCID", "OCI_PRIVATE_KEY", "OCI_REGION", "OCI_NAMESPACE", "OCI_BUCKET_NAME"],
   supabase: ["VITE_SUPABASE_URL", "VITE_SUPABASE_PUBLISHABLE_KEY"],
   razorpay: ["RAZORPAY_KEY_ID", "RAZORPAY_KEY_SECRET", "RAZORPAY_WEBHOOK_SECRET"],
 };
@@ -38,6 +38,7 @@ const details = {
 };
 
 console.log("Crayons Bridge release-readiness environment audit");
+console.log("OCI_FINGERPRINT is optional: production runtime derives it from OCI_PRIVATE_KEY when absent.");
 for (const [name, ok] of Object.entries(results)) {
   console.log(`${ok ? "PASS" : "BLOCKED"}  ${name}`);
   if (!ok) console.log(`  missing: ${details[name].join(", ")}`);
