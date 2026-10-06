@@ -12,7 +12,7 @@ create table if not exists public.bridge_service_catalog (
   classification text not null check (classification in ('BILLABLE','INCLUDED','INTERNAL','PASS_THROUGH')),
   pricing_method text not null check (pricing_method in (
     'FIXED','PER_FINISHED_MINUTE','PER_LANGUAGE','PER_DESTINATION','PER_ASSET',
-    'PER_GB','PER_HOUR','PER_REVISION','PER_TRANSACTION','PASS_THROUGH','CUSTOM_QUOTE'
+    'PER_GB','PER_HOUR','PER_MONTH','PER_REVISION','PER_TRANSACTION','PASS_THROUGH','CUSTOM_QUOTE'
   )),
   unit_label text not null default 'title',
   customer_visible boolean not null default false,
