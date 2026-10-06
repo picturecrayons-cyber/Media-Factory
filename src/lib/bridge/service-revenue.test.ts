@@ -25,14 +25,14 @@ test("service line respects quantity and minimum", () => {
 test("refund split proportionally separates tax from customer refund", () => {
   assert.deepEqual(
     calculateRefundSplit({
-      refundTotalPaise: 6000,
+      refundTotalPaise: 2950,
       invoiceSubtotalPaise: 5000,
       invoiceTaxPaise: 900,
       invoiceTotalPaise: 5900,
     }),
     {
-      refundRevenuePaise: 5086,
-      refundTaxPaise: 914,
+      refundRevenuePaise: 2500,
+      refundTaxPaise: 450,
     },
   );
 });
