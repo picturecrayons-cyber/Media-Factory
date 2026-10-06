@@ -238,9 +238,15 @@ export const listLicensePackages = createServerFn({ method: "GET" })
       where title_id = ${data.titleId}
       order by created_at desc
     `;
+    const rightIds = [...new Set(rows.flatMap((r) => Array.isArray(r.language_right_ids) ? r.language_right_ids.map(String) : []))];
+    const rightRows = rightIds.length ? await sql<{ id: string; language: string }>`
+      select id, language from bridge_language_rights where id = any(${rightIds}::uuid[])
+    ` : [];
+    const languageById = new Map(rightRows.map((r) => [r.id, r.language]));
     return { packages: rows.map((r) => ({
       id: r.id, titleId: r.title_id, name: r.name,
       languageRightIds: Array.isArray(r.language_right_ids) ? r.language_right_ids : [],
+      languages: (Array.isArray(r.language_right_ids) ? r.language_right_ids.map(String) : []).map((id) => languageById.get(id)).filter(Boolean),
       territories: Array.isArray(r.territories) ? r.territories : [],
       media: Array.isArray(r.media) ? r.media : [],
       windowStart: r.window_start ? String(r.window_start) : null,
