@@ -32,12 +32,12 @@ function loadRazorpay(): Promise<RzCtor> {
 
 export function MultilingualRightsPanel({ titleId, actor }: Props) {
   const qc = useQueryClient();
-  const rightsQ = useQuery({ queryKey: ["bridge-language-rights", titleId], queryFn: () => listLanguageRights({ data: { titleId } }) });
+  const canManage = hasPermission(actor, "title.rights_review") && Boolean(actor.internalRole);
+  const canPackage = hasPermission(actor, "title.license") && Boolean(actor.internalRole);
+  const rightsQ = useQuery({ enabled: canManage, queryKey: ["bridge-language-rights", titleId], queryFn: () => listLanguageRights({ data: { titleId } }) });
   const packagesQ = useQuery({ queryKey: ["bridge-language-packages", titleId], queryFn: () => listLicensePackages({ data: { titleId } }) });
   const rights = rightsQ.data?.rights ?? [];
   const packages = packagesQ.data?.packages ?? [];
-  const canManage = hasPermission(actor, "title.rights_review") && Boolean(actor.internalRole);
-  const canPackage = hasPermission(actor, "title.license") && Boolean(actor.internalRole);
 
   const [language, setLanguage] = useState("");
   const [rightType, setRightType] = useState<"DUBBING" | "SUBTITLING">("DUBBING");
