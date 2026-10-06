@@ -43,7 +43,7 @@ export async function signUpWithEmail(input: {
   name: string;
   accountType?: "independent_creator" | "studio" | "buyer" | "investor";
 }) {
-  const callbackUrl = bridgeCallbackUrl(typeof window !== "undefined" ? window.location.origin : undefined);
+  const callbackUrl = bridgeCallbackUrl(undefined);
 
   const { data, error } = await supabase.auth.signUp({
     email: input.email,
@@ -63,7 +63,7 @@ export async function signUpWithEmail(input: {
 }
 
 export async function resendConfirmationEmail(email: string) {
-  const callbackUrl = bridgeCallbackUrl(typeof window !== "undefined" ? window.location.origin : undefined);
+  const callbackUrl = bridgeCallbackUrl(undefined);
 
   const { data, error } = await supabase.auth.resend({
     type: "signup",
