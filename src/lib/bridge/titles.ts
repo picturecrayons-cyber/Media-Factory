@@ -10,6 +10,7 @@ import { assertPermission, canMutateTitle, canOperateOnTitle, canReadTitle, perm
 import { requireVerifiedActor } from "./session";
 import { writeAudit } from "./audit";
 import { assertNotDevUser } from "./guards";
+import { getBuyerGateStatus } from "./buyer-visibility";
 
 type TitleRow = {
   id: string;
@@ -169,9 +170,10 @@ export const listTitles = createServerFn({ method: "GET" })
     } else if (actor.accountType === "buyer") {
       assertPermission(actor, "title.read_catalog");
       rows = await sql<TitleRow>`
-        select * from bridge_titles
-        where status in ('LIVE_FOR_BUYERS','IN_NEGOTIATION','LICENSED','DELIVERED')
-        order by updated_at desc limit 200
+        select t.* from bridge_titles t
+        where t.status in ('LIVE_FOR_BUYERS','IN_NEGOTIATION','LICENSED','DELIVERED')
+          and public.bridge_title_buyer_visibility(t.id)
+        order by t.updated_at desc limit 200
       `;
     } else {
       assertPermission(actor, "title.read_own");
