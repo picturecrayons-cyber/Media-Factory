@@ -1,11 +1,33 @@
+function trimUrl(value: string | undefined): string | undefined {
+  const trimmed = value?.trim().replace(/\/$/, "");
+  return trimmed || undefined;
+}
+
+function trimKey(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed || undefined;
+}
+
+// Production client builds already bake the canonical public Supabase project.
+// Server verification must use that same project when Vercel only attached the
+// Supabase integration env to a configuration that is not injected at runtime.
+const CANONICAL_SUPABASE_URL = "https://mlmgugivsyoxzdgwkbpu.supabase.co";
+const CANONICAL_SUPABASE_PUBLISHABLE_KEY = "sb_publishable_8XCMcaqHvYMWANqxqnS0mw_f_asubxB";
+
 const supabaseUrl =
-  process.env.SUPABASE_URL?.replace(/\/$/, "") ||
-  process.env.VITE_SUPABASE_URL?.replace(/\/$/, "");
+  trimUrl(process.env.SUPABASE_URL) ||
+  trimUrl(process.env.VITE_SUPABASE_URL) ||
+  trimUrl(process.env.NEXT_PUBLIC_SUPABASE_URL) ||
+  CANONICAL_SUPABASE_URL;
 
 const supabasePublishableKey =
-  process.env.SUPABASE_PUBLISHABLE_KEY ||
-  process.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
-  "";
+  trimKey(process.env.SUPABASE_PUBLISHABLE_KEY) ||
+  trimKey(process.env.VITE_SUPABASE_PUBLISHABLE_KEY) ||
+  trimKey(process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY) ||
+  trimKey(process.env.SUPABASE_ANON_KEY) ||
+  trimKey(process.env.VITE_SUPABASE_ANON_KEY) ||
+  trimKey(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) ||
+  CANONICAL_SUPABASE_PUBLISHABLE_KEY;
 
 if (!supabaseUrl || !supabasePublishableKey) {
   throw new Error("Supabase authentication configuration is missing.");
