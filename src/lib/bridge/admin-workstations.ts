@@ -84,3 +84,48 @@ export const reviewAdminTitle = createServerFn({ method: "POST" })
     await writeAudit({ actorUserId: actor.userId, action, entityType: "bridge_title", entityId: title.id, metadata: { from: title.status, to: next, notes: data.notes ?? null } });
     return { ok: true, status: next };
   });
+
+const gateInput = z.object({
+  titleId: z.string().min(1),
+  gate: z.enum(["OTT","PACKAGING","CURATION","DELIVERY"]),
+  decision: z.enum(["PASS","HOLD","FAIL","REVOKE"]),
+  notes: z.string().max(4000).optional(),
+});
+
+export const setBuyerPublicationGate = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(gateInput)
+  .handler(async ({ context, data }) => {
+    const actor = await actorFor(context.userId);
+    if (!actor.internalRole) throw new Error("Forbidden");
+    assertPermission(actor, "title.license");
+    const sql = await getSql();
+    const rows = await sql<{ id: string }>`select id from bridge_titles where id = ${data.titleId} limit 1`;
+    if (!rows[0]) throw new Error("Title not found");
+
+    const column = {
+      OTT: "ott_preparation_status",
+      PACKAGING: "packaging_status",
+      CURATION: "curation_status",
+      DELIVERY: "delivery_status",
+    }[data.gate];
+    const value = data.decision === "PASS"
+      ? ({OTT:"READY",PACKAGING:"COMPLETE",CURATION:"APPROVED",DELIVERY:"READY"} as const)[data.gate]
+      : data.decision === "REVOKE" && data.gate === "DELIVERY" ? "REVOKED"
+      : "HOLD";
+
+    await sql`
+      insert into bridge_title_gate_certifications (title_id, ott_preparation_status, packaging_status, curation_status, delivery_status, updated_by, evidence, updated_at)
+      values (${data.titleId}, 'HOLD', 'HOLD', 'HOLD', 'HOLD', ${actor.userId}, ${JSON.stringify({[data.gate]:{decision:data.decision,notes:data.notes??null,actor:actor.userId,at:new Date().toISOString()}})}::jsonb, now())
+      on conflict (title_id) do nothing
+    `;
+    await sql`update bridge_title_gate_certifications
+      set ${sql(column)}=${value},
+          updated_by=${actor.userId},
+          evidence=evidence || ${JSON.stringify({[data.gate]:{decision:data.decision,notes:data.notes??null,actor:actor.userId,at:new Date().toISOString()}})}::jsonb,
+          updated_at=now()
+      where title_id=${data.titleId}`;
+    await writeAudit({actorUserId:actor.userId,action:`buyer_gate.${data.gate.toLowerCase()}.${data.decision.toLowerCase()}`,entityType:"bridge_title",entityId:data.titleId,metadata:{gate:data.gate,decision:data.decision,notes:data.notes??null}});
+    const result=await sql<{ok:boolean}>`select public.bridge_title_buyer_visibility(${data.titleId}) as ok`;
+    return {ok:true,gate:data.gate,decision:data.decision,publishable:result[0]?.ok===true};
+  });

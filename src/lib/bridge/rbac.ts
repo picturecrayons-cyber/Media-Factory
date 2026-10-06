@@ -1,5 +1,4 @@
 import type { AccountType, InternalRole, Permission, TitleStatus } from "./types.ts";
-import { isBuyerVisible } from "./lifecycle.ts";
 
 const INTERNAL_PERMISSIONS: Record<InternalRole, readonly Permission[]> = {
   viewer: ["title.read_catalog", "audit.read"],
@@ -86,7 +85,6 @@ const TRANSITION_PERMISSION: Record<string, Permission> = {
   "PREPARING->QC_REVIEW": "title.advance_upload",
   "QC_REVIEW->RIGHTS_REVIEW": "title.qc_review",
   "RIGHTS_REVIEW->LICENSING_READY": "title.rights_review",
-  "LICENSING_READY->LIVE_FOR_BUYERS": "title.license",
   "LIVE_FOR_BUYERS->IN_NEGOTIATION": "title.negotiate",
   "LICENSED->DELIVERED": "title.deliver",
 };
@@ -124,9 +122,7 @@ export function canReadTitle(
   if (!actor.emailVerified) return false;
   if (title.ownerUserId === actor.userId && !actor.internalRole) return hasPermission(actor, "title.read_own");
   if (actor.internalRole) return hasPermission(actor, "title.read_catalog");
-  if (actor.accountType === "buyer") {
-    return hasPermission(actor, "title.read_catalog") && isBuyerVisible(title.status);
-  }
+  if (actor.accountType === "buyer") return false;
   return false;
 }
 
