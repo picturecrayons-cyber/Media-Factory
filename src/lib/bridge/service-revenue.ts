@@ -124,6 +124,10 @@ function safeAmount(value: unknown) {
   return Math.round(amount);
 }
 
+function ledgerKey(parts: string[]) {
+  return parts.join(":").slice(0, 240);
+}
+
 async function insertLedger(
   sql: Awaited<ReturnType<typeof getSql>>,
   row: {
@@ -131,7 +135,7 @@ async function insertLedger(
     orderId: string | null;
     paymentId: string | null;
     serviceCode?: string | null;
-    entryType: "REVENUE" | "INTERNAL_COST" | "PASS_THROUGH" | "TAX" | "PAYMENT_FEE" | "REFUND" | "CHARGEBACK" | "SETTLEMENT";
+    entryType: "REVENUE" | "INTERNAL_COST" | "PASS_THROUGH" | "TAX" | "PAYMENT_FEE" | "REFUND" | "CHARGEBACK" | "CHARGEBACK_REVERSAL" | "SETTLEMENT";
     classification: "BILLABLE" | "INCLUDED" | "INTERNAL" | "PASS_THROUGH";
     amountPaise: number;
     reference?: string | null;
