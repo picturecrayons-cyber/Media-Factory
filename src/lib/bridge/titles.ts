@@ -10,7 +10,7 @@ import { assertPermission, canMutateTitle, canOperateOnTitle, canReadTitle, perm
 import { requireVerifiedActor } from "./session";
 import { writeAudit } from "./audit";
 import { assertNotDevUser } from "./guards";
-import { getBuyerGateStatus } from "./buyer-visibility";
+import { assertBuyerPublishable, getBuyerGateStatus } from "./buyer-visibility";
 
 type TitleRow = {
   id: string;
@@ -199,7 +199,8 @@ export const getTitle = createServerFn({ method: "GET" })
         `select id from bridge_title_investors where title_id = ${title.id} and investor_user_id = ${actor.userId} limit 1`;
       if (!assigned[0]) throw new Error("Not found");
     } else if (!canReadTitle(actor, title)) {
-      throw new Error("Not found");
+      if (actor.accountType !== "buyer") throw new Error("Not found");
+      await assertBuyerPublishable(title.id);
     }
     const events = await sql<{
       from_status: string | null;
