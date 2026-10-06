@@ -71,11 +71,25 @@ test("holds on delivery reference conflict", () => {
   assert.equal(evaluateDuplicateTitleMerge(input).decision, "HOLD");
 });
 
-test("blocks when both sides have Loop publications", () => {
+test("blocks when either side has a Loop publication", () => {
   const input = base();
   input.canonicalLoopPublications = [{ id: "p1", loop_title_id: "l1" }];
   input.retiringLoopPublications = [{ id: "p2", loop_title_id: "l2" }];
   assert.equal(evaluateDuplicateTitleMerge(input).decision, "BLOCK");
+});
+
+test("blocks Loop publication even when only the retiring title is published", () => {
+  const input = base();
+  input.retiringLoopPublications = [{ id: "p2", loop_title_id: "l2" }];
+  assert.equal(evaluateDuplicateTitleMerge(input).decision, "BLOCK");
+});
+
+test("holds when title-level language differs", () => {
+  const input = base();
+  input.retiring = { ...input.retiring, language: "Telugu" };
+  const result = evaluateDuplicateTitleMerge(input);
+  assert.equal(result.decision, "HOLD");
+  assert.ok(result.reasons.includes("LANGUAGE_CONFLICT"));
 });
 
 test("safe when only one side has a non-conflicting reference", () => {
