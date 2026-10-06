@@ -15,7 +15,7 @@ test("existing accepted subtitle is not charged", () => {
     subtitleLanguages: ["English"],
     requestedDubbingLanguages: [],
   });
-  assert.equal(result.requiredWork.some((x) => x.serviceCode === "SUBTITLE_CREATE"), false);
+  assert.equal(result.requiredWork.some((x) => x.serviceCode === "LOC_SUBTITLE_TRANSLATION"), false);
 });
 
 test("missing requested subtitle creates a minute-based work item", () => {
@@ -44,10 +44,10 @@ test("app and OTT delivery are separate commercial work", () => {
     subtitleLanguages: [],
     requestedDubbingLanguages: [],
   });
-  assert.equal(result.requiredWork.filter((x) => x.serviceCode === "OTT_DELIVERY").length, 1);
-  assert.equal(result.requiredWork.filter((x) => x.serviceCode === "APP_DELIVERY").length, 1);
-  assert.equal(result.requiredWork.filter((x) => x.serviceCode === "OTT_PACKAGE").length, 1);
-  assert.equal(result.requiredWork.filter((x) => x.serviceCode === "APP_PACKAGE").length, 1);
+  assert.equal(result.requiredWork.filter((x) => x.serviceCode === "DELIVERY_OTT").length, 1);
+  assert.equal(result.requiredWork.filter((x) => x.serviceCode === "DELIVERY_APP").length, 1);
+  assert.equal(result.requiredWork.filter((x) => x.serviceCode === "PKG_OTT").length, 1);
+  assert.equal(result.requiredWork.filter((x) => x.serviceCode === "PKG_APP").length, 1);
 });
 
 test("digital/theatrical is explicit even when no generic handling fee is invented", () => {
@@ -58,5 +58,5 @@ test("digital/theatrical is explicit even when no generic handling fee is invent
     subtitleLanguages: [],
     requestedDubbingLanguages: [],
   });
-  assert.equal(result.requiredWork.some((x) => x.serviceCode === "DIGITAL_THEATRICAL_DELIVERY" && x.destination === "Theatrical Partner"), true);
+  assert.equal(result.requiredWork.some((x) => x.serviceCode === "DELIVERY_THEATRICAL" && x.destination === "Theatrical Partner"), true);
 });
