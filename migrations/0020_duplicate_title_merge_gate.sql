@@ -28,6 +28,10 @@ create table if not exists public.bridge_title_merge_aliases (
   merged_at timestamptz not null default now()
 );
 
+alter table public.bridge_titles add column if not exists merged_into_title_id text references public.bridge_titles(id) on delete restrict;
+alter table public.bridge_titles add column if not exists merged_at timestamptz;
+create index if not exists bridge_titles_merged_into_idx on public.bridge_titles(merged_into_title_id);
+
 alter table public.bridge_title_merge_audits enable row level security;
 alter table public.bridge_title_merge_aliases enable row level security;
 
