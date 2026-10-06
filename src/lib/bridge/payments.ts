@@ -11,6 +11,7 @@ import { loadTitle, recordTransition } from "./titles";
 import { writeAudit } from "./audit";
 import { assertBuyerPublishable } from "./buyer-visibility";
 import { assertNotDevUser } from "./guards";
+import { captureServicePayment } from "./service-revenue";
 
 function requireRazorpayKeys() {
   const keyId = bridgeEnv.razorpayKeyId();
@@ -63,8 +64,9 @@ export async function grantFromCapturedPayment(opts: {
     status: string;
     currency: string;
     provider_payment_id: string | null;
+    purpose: string;
   }>`
-    select id, user_id, title_id, amount_paise, status, currency, provider_payment_id
+    select id, user_id, title_id, amount_paise, status, currency, provider_payment_id, purpose
     from bridge_payments where provider_order_id = ${opts.orderId} limit 1
   `;
   const payment = rows[0];
@@ -77,6 +79,10 @@ export async function grantFromCapturedPayment(opts: {
   }
   if (opts.actorUserId && opts.actorUserId !== payment.user_id) {
     throw new Error("Payment does not belong to this account");
+  }
+
+  if (payment.purpose === "service_order") {
+    return captureServicePayment({ orderId: opts.orderId, paymentId: opts.paymentId, actorUserId: opts.actorUserId });
   }
 
   await sql`

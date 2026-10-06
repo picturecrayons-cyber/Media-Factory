@@ -7,12 +7,18 @@ const INTERNAL_PERMISSIONS: Record<InternalRole, readonly Permission[]> = {
   finance: ["title.read_catalog", "finance.read", "delivery.read", "delivery.read_finance", "entitlement.read_own", "audit.read"],
   admin: [
     "title.read_catalog",
+    "service.quote_create",
+    "service.order_create",
+    "service.fulfill",
     "title.advance_upload",
     "title.qc_review",
     "title.rights_review",
     "title.license",
     "title.negotiate",
     "title.deliver",
+    "service.quote_create",
+    "service.order_create",
+    "service.fulfill",
     "delivery.read",
     "delivery.read_finance",
     "asset.sign_download",
@@ -51,6 +57,8 @@ const ACCOUNT_PERMISSIONS: Record<AccountType, readonly Permission[]> = {
     "title.read_own",
     "title.update_own",
     "title.advance_upload",
+    "service.quote_create",
+    "service.order_create",
     "asset.sign_upload",
     "asset.sign_download",
     "entitlement.read_own",
@@ -62,6 +70,8 @@ const ACCOUNT_PERMISSIONS: Record<AccountType, readonly Permission[]> = {
     "title.read_own",
     "title.update_own",
     "title.advance_upload",
+    "service.quote_create",
+    "service.order_create",
     "asset.sign_upload",
     "asset.sign_download",
     "entitlement.read_own",
@@ -122,7 +132,7 @@ export function canReadTitle(
   if (!actor.emailVerified) return false;
   if (title.ownerUserId === actor.userId && !actor.internalRole) return hasPermission(actor, "title.read_own");
   if (actor.internalRole) return hasPermission(actor, "title.read_catalog");
-  if (actor.accountType === "buyer") return false;
+  if (actor.accountType === "buyer") return ["LIVE_FOR_BUYERS","IN_NEGOTIATION","LICENSED","DELIVERED"].includes(title.status) && hasPermission(actor, "title.read_catalog");
   return false;
 }
 
