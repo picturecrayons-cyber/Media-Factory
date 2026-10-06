@@ -94,7 +94,7 @@ describe("PRD authorization matrix", () => {
   it("super admin can create canonical Bridge titles and use explicit internal upload powers", () => {
     const a = superAdmin();
     assert.equal(hasPermission(a, "title.create"), true);
-    assert.equal(hasPermission(a, "asset.sign_upload"), false);
+    assert.equal(hasPermission(a, "asset.sign_upload"), true);
     assert.equal(hasPermission(a, "users.invite_internal"), true);
     assert.equal(hasPermission(a, "title.license"), true);
   });
