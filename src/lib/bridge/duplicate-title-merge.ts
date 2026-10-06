@@ -102,7 +102,7 @@ function rightsConflict(a: MergeRights, b: MergeRights) {
   const territoryConflict = !equalSet(a.territories, b.territories);
   const exclusivityConflict =
     Boolean(a.exclusivity && b.exclusivity) &&
-    a.exclusivity.toUpperCase() !== b.exclusivity.toUpperCase();
+    a.exclusivity!.toUpperCase() !== b.exclusivity!.toUpperCase();
   const windowConflict = windowsConflict(a, b);
   return { languageConflict, territoryConflict, exclusivityConflict, windowConflict };
 }
@@ -147,7 +147,7 @@ export function evaluateDuplicateTitleMerge(input: MergeEvaluationInput): {
 
   const titleLanguageConflict =
     Boolean(input.canonical.language && input.retiring.language) &&
-    input.canonical.language.trim().toUpperCase() !== input.retiring.language.trim().toUpperCase();
+    input.canonical.language!.trim().toUpperCase() !== input.retiring.language!.trim().toUpperCase();
 
   const collisions = hasRightsCollision(input.canonicalRights, input.retiringRights);
   collisions.language ||= titleLanguageConflict;
