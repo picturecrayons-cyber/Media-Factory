@@ -283,7 +283,6 @@ values
 
 ('DELIVERY_PRIORITY','DELIVERY_HANDLING','Priority Delivery','Priority turnaround handling.','Offer a faster controlled delivery path.','BILLABLE','FIXED','delivery',true,true),
 ('DELIVERY_MONITOR','DELIVERY_HANDLING','Delivery Monitoring','Delivery monitoring and status handling.','Give visibility through delivery.','BILLABLE','PER_DESTINATION','destination',true,true),
-('DELIVERY_FAILED','DELIVERY_HANDLING','Failed-delivery Handling','Recovery from failed delivery.','Recover a failed operational handoff.','BILLABLE','PER_TRANSACTION','delivery',true,true),
 ('DELIVERY_SUPPORT','DELIVERY_HANDLING','Delivery Support','Operational delivery support.','Resolve delivery-stage support needs.','BILLABLE','PER_HOUR','support hour',true,true),
 
 ('PLATFORM_LOOP','PLATFORM_APP','LOOP Platform Fee','Contractually applicable LOOP platform fee.','Record platform economics when applicable.','PASS_THROUGH','CUSTOM_QUOTE','deal',false,true),
