@@ -66,6 +66,18 @@ function equalSet(a: unknown, b: unknown) {
   return aa.size === bb.size && [...aa].every((v) => bb.has(v));
 }
 
+function normalized(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(normalized);
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([key, entry]) => [key, normalized(entry)]),
+    );
+  }
+  return value;
+}
+
 function time(v: string | Date | null | undefined) {
   if (!v) return null;
   const n = new Date(v).getTime();
@@ -115,7 +127,7 @@ function hasRightsCollision(a: MergeRights[], b: MergeRights[]) {
 }
 
 function stableJson(value: unknown) {
-  return JSON.stringify(value, Object.keys(value as object).sort());
+  return JSON.stringify(normalized(value));
 }
 
 function identicalReferenceSets(a: unknown[], b: unknown[]) {
@@ -133,7 +145,12 @@ export function evaluateDuplicateTitleMerge(input: MergeEvaluationInput): {
     return { decision: "BLOCK", reasons: ["TITLE_IDENTITY_UNCERTAIN"], collisions: {} };
   }
 
+  const titleLanguageConflict =
+    Boolean(input.canonical.language && input.retiring.language) &&
+    input.canonical.language.trim().toUpperCase() !== input.retiring.language.trim().toUpperCase();
+
   const collisions = hasRightsCollision(input.canonicalRights, input.retiringRights);
+  collisions.language ||= titleLanguageConflict;
   if (collisions.language) reasons.push("LANGUAGE_CONFLICT");
   if (collisions.territory) reasons.push("TERRITORY_CONFLICT");
   if (collisions.window) reasons.push("WINDOW_CONFLICT");
@@ -149,7 +166,7 @@ export function evaluateDuplicateTitleMerge(input: MergeEvaluationInput): {
     reasons.push("DELIVERY_REFERENCE_CONFLICT");
   }
 
-  if (input.canonicalLoopPublications.length && input.retiringLoopPublications.length) {
+  if (input.canonicalLoopPublications.length || input.retiringLoopPublications.length) {
     reasons.push("LOOP_PUBLICATION_CONFLICT");
   }
 
@@ -262,7 +279,7 @@ export const mergeDuplicateTitle = createServerFn({ method: "POST" })
       if (decision.decision !== "SAFE") throw new Error(`DUPLICATE_MERGE_${decision.decision}: ${decision.reasons.join(",")}`);
 
       if (canonical.publications.length || retiring.publications.length) {
-        throw new Error("LOOP_PUBLICATION_REBIND_REQUIRES_EXPLICIT_REVIEW");
+        throw new Error("LOOP_PUBLICATION_CONFLICT: merge is blocked while a Loop publication exists.");
       }
 
       const mergeId = randomUUID();
@@ -287,7 +304,6 @@ export const mergeDuplicateTitle = createServerFn({ method: "POST" })
         "bridge_payments",
         "bridge_service_orders",
         "bridge_service_quotes",
-        "bridge_deals",
       ];
 
       for (const table of refTables) {
@@ -299,16 +315,6 @@ export const mergeDuplicateTitle = createServerFn({ method: "POST" })
         }
       }
 
-      await tx.query(
-        "update public.loop_titles set bridge_title_id=$1 where bridge_title_id=$2",
-        [data.canonicalTitleId, data.retiringTitleId],
-      );
-
-      await tx.query(
-        "update public.bridge_loop_publications set bridge_title_id=$1 where bridge_title_id=$2",
-        [data.canonicalTitleId, data.retiringTitleId],
-      );
-
       await tx`
         insert into public.bridge_title_merge_aliases(retiring_title_id,canonical_title_id,merge_id)
         values (${data.retiringTitleId},${data.canonicalTitleId},${mergeId})
@@ -317,7 +323,7 @@ export const mergeDuplicateTitle = createServerFn({ method: "POST" })
 
       await tx`
         update public.bridge_titles
-        set status='DRAFT', updated_at=now()
+        set status='DRAFT', merged_into_title_id=${data.canonicalTitleId}, merged_at=now(), updated_at=now()
         where id=${data.retiringTitleId}
       `;
 
