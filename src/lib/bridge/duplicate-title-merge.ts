@@ -116,6 +116,8 @@ function hasRightsCollision(a: MergeRights[], b: MergeRights[]) {
   };
   for (const left of a) {
     for (const right of b) {
+      // Identical grants are the same rights evidence, not a collision.
+      if (stableJson(left) === stableJson(right)) continue;
       const c = rightsConflict(left, right);
       conflicts.language ||= c.languageConflict;
       conflicts.territory ||= c.territoryConflict;
