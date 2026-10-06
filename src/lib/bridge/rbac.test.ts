@@ -57,7 +57,7 @@ describe("PRD authorization matrix", () => {
   });
 
   it("all internal roles stay within explicit staff permissions even with mixed account types", () => {
-    for (const roleActor of [viewer(), qc, legal, finance()]) {
+    for (const roleActor of [viewer(), qc, legal, finance]) {
       assert.equal(hasPermission(roleActor, "title.create"), false);
       assert.equal(hasPermission(roleActor, "asset.sign_upload"), false);
       assert.equal(hasPermission(roleActor, "payment.create_order"), false);
