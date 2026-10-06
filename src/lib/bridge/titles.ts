@@ -102,8 +102,10 @@ export const createTitle = createServerFn({ method: "POST" })
     z.object({
       name: z.string().min(1).max(160),
       nameMl: z.string().max(160).optional(),
-      synopsis: z.string().max(4000).optional(),
+      originalTitle: z.string().max(160).optional(),
+      synopsis: z.string().min(20).max(4000).optional(),
       language: z.string().min(2).max(40).optional(),
+      additionalLanguages: z.array(z.string().min(2).max(40)).max(20).optional(),
       year: z.number().int().min(1895).max(2100).optional(),
       runtimeMinutes: z.number().int().min(1).max(600).optional(),
       licensingFeePaise: z.number().int().min(0).max(2_000_000_000).optional(),
@@ -113,48 +115,143 @@ export const createTitle = createServerFn({ method: "POST" })
       director: z.string().max(160).optional(),
       producer: z.string().max(200).optional(),
       cast: z.array(z.string().min(1).max(160)).max(100).optional(),
+      territories: z.array(z.string().min(2).max(80)).min(1).max(250).optional(),
+      rightsLanguages: z.array(z.string().min(2).max(40)).min(1).max(20).optional(),
+      media: z.array(z.string().min(2).max(40)).min(1).max(20).optional(),
+      windowStart: z.string().max(40).optional(),
+      windowEnd: z.string().max(40).optional(),
+      exclusivity: z.enum(["EXCLUSIVE", "NON_EXCLUSIVE"]).optional(),
+      holdbacks: z.array(z.string().min(1).max(120)).max(50).optional(),
+      sublicensingAllowed: z.boolean().optional(),
+      promotionalRights: z.boolean().optional(),
+      rightsBasis: z.enum(["OWNER", "EXCLUSIVE_LICENSEE", "AUTHORIZED_DISTRIBUTOR", "PRODUCER_AUTHORITY"]).optional(),
+      authorizationAttested: z.boolean().optional(),
+      screenerAccess: z.enum(["BRIDGE_PRIVATE_SCREENER", "SCREENER_PENDING"]).optional(),
+      intendedDestinations: z.array(z.string().min(2).max(80)).min(1).max(20).optional(),
     }),
   )
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
     assertPermission(actor, "title.create");
+
+    const isPublicSubmission = Boolean(
+      data.territories?.length || data.rightsLanguages?.length || data.authorizationAttested,
+    );
+
+    if (isPublicSubmission) {
+      if (actor.accountType === "buyer") throw new Error("Buyer accounts cannot submit rights packages");
+      if (!data.synopsis || data.synopsis.trim().length < 20) throw new Error("A synopsis is required");
+      if (!data.territories?.length) throw new Error("At least one territory is required");
+      if (!data.rightsLanguages?.length) throw new Error("At least one rights language is required");
+      if (!data.media?.length) throw new Error("At least one exploitation type is required");
+      if (!data.windowStart || !data.windowEnd) throw new Error("A rights window is required");
+      if (new Date(data.windowEnd) <= new Date(data.windowStart)) {
+        throw new Error("Rights window end must be after start");
+      }
+      if (!data.exclusivity) throw new Error("Exclusivity is required");
+      if (data.sublicensingAllowed === undefined) throw new Error("Sublicensing selection is required");
+      if (data.promotionalRights === undefined) throw new Error("Promotional-rights selection is required");
+      if (!data.rightsBasis) throw new Error("Rights basis is required");
+      if (!data.authorizationAttested) throw new Error("Authorization attestation is required");
+      if (!data.screenerAccess) throw new Error("Screener access selection is required");
+      if (!data.intendedDestinations?.length) throw new Error("At least one destination is required");
+    }
+
     const id = randomBytes(16).toString("hex");
     const slug = slugify(data.name, id);
     const sql = await getSql();
-    await sql`
-      insert into bridge_titles (
-        id, slug, name, name_ml, owner_user_id, owner_account_type, status,
-        synopsis, language, year, runtime_minutes, licensing_fee_paise,
-        content_type, country_of_origin, release_date, credits
-      ) values (
-        ${id}, ${slug}, ${data.name}, ${data.nameMl ?? null}, ${actor.userId}, ${actor.accountType},
-        ${"DRAFT"}, ${data.synopsis ?? ""}, ${data.language ?? "Malayalam"},
-        ${data.year ?? null}, ${data.runtimeMinutes ?? null}, ${data.licensingFeePaise ?? 0},
-        ${data.contentType ?? "FEATURE"}, ${data.countryOfOrigin ?? null},
-        ${data.releaseDate ?? null}, ${JSON.stringify([
-          ...(data.director ? [{ role: "Director", name: data.director }] : []),
-          ...(data.producer ? [{ role: "Producer", name: data.producer }] : []),
-          ...((data.cast ?? []).map((name) => ({ role: "Cast", name }))),
-        ])}::jsonb
-      )
-    `;
+
+    await sql.transaction(async (tx) => {
+      await tx`
+        insert into bridge_titles (
+          id, slug, name, name_ml, original_title, owner_user_id, owner_account_type, status,
+          synopsis, long_synopsis, language, original_language, year, runtime_minutes, licensing_fee_paise,
+          content_type, country_of_origin, release_date, credits, genres, rights_submission_status
+        ) values (
+          ${id}, ${slug}, ${data.name}, ${data.nameMl ?? null}, ${data.originalTitle ?? null},
+          ${actor.userId}, ${actor.accountType}, 'DRAFT',
+          ${data.synopsis ?? ""}, ${data.synopsis ?? ""}, ${data.language ?? "Malayalam"},
+          ${data.language ?? "Malayalam"}, ${data.year ?? null}, ${data.runtimeMinutes ?? null},
+          ${data.licensingFeePaise ?? 0}, ${data.contentType ?? "FEATURE"}, ${data.countryOfOrigin ?? null},
+          ${data.releaseDate ?? null},
+          ${JSON.stringify([
+            ...(data.director ? [{ role: "Director", name: data.director }] : []),
+            ...(data.producer ? [{ role: "Producer", name: data.producer }] : []),
+            ...((data.cast ?? []).map((name) => ({ role: "Cast", name }))),
+          ])}::jsonb,
+          ${JSON.stringify(data.additionalLanguages ?? [])}::jsonb,
+          'INTAKE'
+        )
+      `;
+
+      if (!isPublicSubmission) return;
+
+      const rightsRows = await tx<{ id: string }>`
+        insert into bridge_rights_grants (
+          title_id, grant_type, territories, languages, media, window_start, window_end,
+          exclusivity, holdbacks, sublicensing_allowed, promotional_rights, restrictions, evidence,
+          status, created_by
+        ) values (
+          ${id}, 'DISTRIBUTION', ${JSON.stringify(data.territories)}::jsonb,
+          ${JSON.stringify(data.rightsLanguages)}::jsonb, ${JSON.stringify(data.media)}::jsonb,
+          ${data.windowStart}, ${data.windowEnd}, ${data.exclusivity},
+          ${JSON.stringify(data.holdbacks ?? [])}::jsonb, ${data.sublicensingAllowed},
+          ${data.promotionalRights}, '[]'::jsonb,
+          ${JSON.stringify([{ type: "RIGHTS_BASIS", value: data.rightsBasis, attested: true }])}::jsonb,
+          'DRAFT', ${actor.userId}
+        )
+        returning id
+      `;
+
+      await tx`
+        insert into bridge_legal_cases (title_id, status, classification, evidence, restrictions)
+        values (
+          ${id}, 'PENDING', null,
+          ${JSON.stringify([{
+            type: "AUTHORIZATION_ATTESTATION",
+            rightsBasis: data.rightsBasis,
+            attested: true,
+            evidenceRequired: true,
+          }])}::jsonb,
+          '[]'::jsonb
+        )
+      `;
+
+      await tx`
+        insert into bridge_destination_packages (
+          title_id, destination, rights_grant_id, asset_version_ids, consumer_metadata, monetization, readiness_state
+        ) values (
+          ${id}, 'BUYER_MARKETPLACE', ${rightsRows[0]?.id ?? null}, '[]'::jsonb,
+          ${JSON.stringify({ intendedDestinations: data.intendedDestinations })}::jsonb,
+          '{}'::jsonb, 'HOLD'
+        )
+      `;
+
+      await tx`
+        update bridge_titles
+        set rights_submission_status = 'UNDER_REVIEW', updated_at = now()
+        where id = ${id}
+      `;
+    });
+
     await recordTransition({
       titleId: id,
       from: null,
       to: "DRAFT",
       actorUserId: actor.userId,
-      note: "created",
+      note: isPublicSubmission ? "public rights-ready submission received" : "created",
     });
     await writeAudit({
       actorUserId: actor.userId,
-      action: "title.create",
+      action: isPublicSubmission ? "title.public_submission" : "title.create",
       entityType: "bridge_title",
       entityId: id,
+      metadata: { publicSubmission: isPublicSubmission },
     });
     const title = await loadTitle(id);
     if (!title) throw new Error("Title create failed");
-    return { title };
+    return { title, submission: isPublicSubmission };
   });
 
 export const listTitles = createServerFn({ method: "GET" })
