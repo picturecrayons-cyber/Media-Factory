@@ -7,6 +7,7 @@ import { assertPermission, canReadTitle } from "./rbac";
 import { loadTitle } from "./titles";
 import { writeAudit } from "./audit";
 import { assertNotDevUser } from "./guards";
+import { assertBuyerPublishable } from "./buyer-visibility";
 
 const languageRightInput = z.object({
   titleId: z.string().min(8),
@@ -220,7 +221,11 @@ export const listLicensePackages = createServerFn({ method: "GET" })
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
     const title = await loadTitle(data.titleId);
-    if (!title || !canReadTitle(actor, title)) throw new Error("Not found");
+    if (!title) throw new Error("Not found");
+    if (!canReadTitle(actor, title)) {
+      if (actor.accountType !== "buyer") throw new Error("Not found");
+      await assertBuyerPublishable(title.id);
+    }
     const sql = await getSql();
     const rows = await sql<{
       id: string; title_id: string; name: string; language_right_ids: unknown; territories: unknown;
