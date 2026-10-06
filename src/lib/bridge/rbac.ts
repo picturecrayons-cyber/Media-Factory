@@ -15,6 +15,7 @@ const INTERNAL_PERMISSIONS: Record<InternalRole, readonly Permission[]> = {
     "title.deliver",
     "service.quote_create",
     "service.order_create",
+    "service.fulfill",
     "delivery.read",
     "delivery.read_finance",
     "asset.sign_download",
