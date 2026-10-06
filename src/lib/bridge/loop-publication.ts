@@ -8,6 +8,7 @@ import { requireActor } from "./session";
 import { assertNotDevUser } from "./guards";
 import { writeAudit } from "./audit";
 import { assertPublicationCanExtend, findCoveringRightsGrant, type BridgeRightsGrant } from "./rights-coverage";
+import { assertBuyerPublishable } from "./buyer-visibility";
 
 export type DistributionAuthorizationStatus =
   | "DRAFT"
@@ -292,6 +293,7 @@ export const authorizeLoopPublication = createServerFn({ method: "POST" })
       throw new Error("Consumer access tier must be covered by the requested exploitation models.");
     }
     const sql = await getSql();
+    await assertBuyerPublishable(data.bridgeTitleId);
     const preflight = await verifyDistributionPreflight(sql, data.bridgeTitleId, {
       destination: data.destination,
       territories: data.territories,
