@@ -14,6 +14,7 @@ const INTERNAL_PERMISSIONS: Record<InternalRole, readonly Permission[]> = {
     "title.qc_review",
     "title.rights_review",
     "title.license",
+    "title.merge_duplicate",
     "title.negotiate",
     "title.deliver",
     "service.quote_create",
