@@ -124,12 +124,6 @@ function safeAmount(value: unknown) {
   return Math.round(amount);
 }
 
-function safeAmount(value: unknown) {
-  const amount = Number(value);
-  if (!Number.isFinite(amount) || amount < 0) throw new Error("Invalid money amount");
-  return Math.round(amount);
-}
-
 async function insertLedger(
   sql: Awaited<ReturnType<typeof getSql>>,
   row: {
