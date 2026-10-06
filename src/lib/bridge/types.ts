@@ -75,6 +75,8 @@ export const PERMISSIONS = [
   "asset.sign_upload",
   "asset.sign_download",
   "payment.create_order",
+  "service.quote_create",
+  "service.order_create",
   "entitlement.read_own",
   "finance.read",
   "delivery.read",
