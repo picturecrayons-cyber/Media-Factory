@@ -62,6 +62,8 @@ type ReviewRow = {
   approval_id: string | null;
   created_at: string | Date;
   updated_at: string | Date;
+  candidate_name?: string | null;
+  canonical_name?: string | null;
 };
 
 function iso(value: string | Date | null) {
