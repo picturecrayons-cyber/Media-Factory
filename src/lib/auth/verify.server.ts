@@ -17,11 +17,11 @@ const supabaseUrl =
   trimUrl(process.env.NEXT_PUBLIC_SUPABASE_URL);
 
 const supabasePublishableKey =
-  trimKey(process.env.SUPABASE_PUBLISHABLE_KEY) ||
-  trimKey(process.env.VITE_SUPABASE_PUBLISHABLE_KEY) ||
-  trimKey(process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY) ||
-  trimKey(process.env.SUPABASE_ANON_KEY) ||
-  trimKey(process.env.VITE_SUPABASE_ANON_KEY) ||
+  trimKey(process.env.SUPABASE_PUBLISHABLE_KEY) ??
+  trimKey(process.env.VITE_SUPABASE_PUBLISHABLE_KEY) ??
+  trimKey(process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY) ??
+  trimKey(process.env.SUPABASE_ANON_KEY) ??
+  trimKey(process.env.VITE_SUPABASE_ANON_KEY) ??
   trimKey(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
 
 export class UnauthorizedError extends Error {
