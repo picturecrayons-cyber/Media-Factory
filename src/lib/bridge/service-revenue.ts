@@ -177,7 +177,7 @@ async function applySettlementRules(
     percentage_bps: number | null;
     fixed_amount_paise: number | null;
   }>(
-    "select id,beneficiary_type,beneficiary_user_id,basis,percentage_bps,fixed_amount_paise from public.bridge_service_settlement_rules where (title_id=$1 or title_id is null) and active=true and effective_from<=now() and (effective_to is null or effective_to>now()) order by title_id nulls last,version desc,id",
+    "select distinct on (beneficiary_type, beneficiary_user_id) id,beneficiary_type,beneficiary_user_id,basis,percentage_bps,fixed_amount_paise from public.bridge_service_settlement_rules where (title_id=$1 or title_id is null) and active=true and effective_from<=now() and (effective_to is null or effective_to>now()) order by beneficiary_type,beneficiary_user_id,(title_id is null),effective_from desc,version desc,id",
     [titleId],
   );
 
@@ -944,7 +944,7 @@ export async function processServiceChargeback(opts: {
       titleId: payment.title_id,
       orderId: order.id,
       paymentId: payment.id,
-      entryType: "REVENUE",
+      entryType: "CHARGEBACK_REVERSAL",
       classification: "INTERNAL",
       amountPaise: amount,
       reference: "RAZORPAY_DISPUTE_REVERSAL:" + opts.chargebackId,
@@ -1036,7 +1036,7 @@ export const recordServiceActualCost = createServerFn({ method: "POST" })
     const costKey = "cost:" + data.idempotencyKey;
     const result = await sql.transaction(async (tx) => {
       const inserted = await tx.query<{ id: string }>(
-        "insert into public.bridge_service_costs(order_id,service_code,cost_type,amount_paise,currency,source,vendor_reference,evidence,created_by) values($1,$2,$3,$4,'INR','ACTUAL',$5,$6::jsonb,$7) on conflict do nothing returning id",
+        "insert into public.bridge_service_costs(order_id,service_code,cost_type,amount_paise,currency,source,vendor_reference,evidence,created_by,idempotency_key) values($1,$2,$3,$4,'INR','ACTUAL',$5,$6::jsonb,$7,$8) on conflict(idempotency_key) do nothing returning id",
         [
           data.orderId,
           data.serviceCode ?? null,
@@ -1045,6 +1045,7 @@ export const recordServiceActualCost = createServerFn({ method: "POST" })
           data.vendorReference ?? null,
           JSON.stringify(data.evidence),
           actor.userId,
+          costKey,
         ],
       );
       if (!inserted[0]) return { costId: null, duplicate: true };
@@ -1096,6 +1097,8 @@ export const getCommercialFinancialSummary = createServerFn({ method: "GET" })
     const operatingCosts = totals.get("INTERNAL_COST") ?? 0;
     const passThroughCosts = totals.get("PASS_THROUGH") ?? 0;
     const settlements = totals.get("SETTLEMENT") ?? 0;
+    const chargebacks = totals.get("CHARGEBACK") ?? 0;
+    const chargebackReversals = totals.get("CHARGEBACK_REVERSAL") ?? 0;
     const bridgeShareRows = await sql.query<{ amount_paise: number }>(
       "select coalesce(sum(amount_paise),0) as amount_paise from public.bridge_service_settlement_lines where beneficiary_type='BRIDGE' and status<>'CANCELLED'",
       [],
@@ -1112,8 +1115,10 @@ export const getCommercialFinancialSummary = createServerFn({ method: "GET" })
       passThroughCostsPaise: passThroughCosts,
       contractualSettlementsPaise: Math.max(0, settlements - bridgeShare),
       bridgeSharePaise: bridgeShare,
-      netProfitBeforeBridgeSharePaise: revenue - refunds - tax - paymentFees - operatingCosts - passThroughCosts - Math.max(0, settlements - bridgeShare),
-      netProfitAfterBridgeSharePaise: revenue - refunds - tax - paymentFees - operatingCosts - passThroughCosts - settlements,
+      chargebacksPaise: chargebacks,
+      chargebackReversalsPaise: chargebackReversals,
+      netProfitBeforeBridgeSharePaise: revenue - refunds - tax - paymentFees - operatingCosts - passThroughCosts - (chargebacks - chargebackReversals) - Math.max(0, settlements - bridgeShare),
+      netProfitAfterBridgeSharePaise: revenue - refunds - tax - paymentFees - operatingCosts - passThroughCosts - (chargebacks - chargebackReversals) - settlements,
     };
   });
 
