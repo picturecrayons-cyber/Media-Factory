@@ -9,8 +9,8 @@ function trimKey(value: string | undefined): string | undefined {
 }
 
 const supabaseUrl =
-  trimUrl(process.env.SUPABASE_URL) ||
-  trimUrl(process.env.VITE_SUPABASE_URL) ||
+  trimUrl(process.env.SUPABASE_URL) ??
+  trimUrl(process.env.VITE_SUPABASE_URL) ??
   trimUrl(process.env.NEXT_PUBLIC_SUPABASE_URL);
 
 const supabasePublishableKey =
