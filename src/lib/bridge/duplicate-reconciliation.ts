@@ -129,7 +129,7 @@ export const listDuplicateReviews = createServerFn({ method: "GET" })
         canonicalName: row.canonical_name ?? row.canonical_title_id,
         status: row.status,
         identityConfidence: row.identity_confidence,
-        identityEvidence: row.identity_evidence,
+        identityEvidence: row.identity_evidence == null ? null : JSON.stringify(row.identity_evidence),
         rightsConflictStatus: row.rights_conflict_status,
         territoryConflictStatus: row.territory_conflict_status,
         windowConflictStatus: row.window_conflict_status,
