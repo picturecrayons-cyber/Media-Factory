@@ -40,13 +40,6 @@ export const KNOWN_DUPLICATE_CANDIDATES = [
     identity: "UNCERTAIN" as const,
     proposedAction: "HOLD_FOR_RIGHTS" as const,
   },
-  {
-    candidateTitleId: "8dd00000000000000000000000000000",
-    canonicalTitleId: "legacy-film-36",
-    label: "Telugu Pranayam 1947",
-    identity: "UNCERTAIN" as const,
-    proposedAction: "HOLD_FOR_RIGHTS" as const,
-  },
 ] as const;
 
 type ReviewRow = {
