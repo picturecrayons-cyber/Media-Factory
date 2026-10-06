@@ -1,6 +1,4 @@
-import type { Sql } from "postgres";
-
-export async function assertDuplicateTitleLoopReleaseAllowed(sql: Sql<any>, titleId: string) {
+export async function assertDuplicateTitleLoopReleaseAllowed(sql: any, titleId: string) {
   const rows = await sql<{ blocked: boolean }>`
     select not public.bridge_duplicate_title_loop_release_allowed(${titleId}) as blocked
   `;
