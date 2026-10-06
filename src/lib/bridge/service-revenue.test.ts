@@ -4,7 +4,7 @@ import {
   calculateServiceLine,
   calculateRefundSplit,
   calculateNetProfit,
-} from "./service-revenue.ts";
+} from "./commercial-math.ts";
 
 test("service line respects quantity and minimum", () => {
   assert.deepEqual(
