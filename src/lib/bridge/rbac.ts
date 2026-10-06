@@ -7,6 +7,9 @@ const INTERNAL_PERMISSIONS: Record<InternalRole, readonly Permission[]> = {
   finance: ["title.read_catalog", "finance.read", "delivery.read", "delivery.read_finance", "entitlement.read_own", "audit.read"],
   admin: [
     "title.read_catalog",
+    "service.quote_create",
+    "service.order_create",
+    "service.fulfill",
     "title.advance_upload",
     "title.qc_review",
     "title.rights_review",
@@ -67,6 +70,8 @@ const ACCOUNT_PERMISSIONS: Record<AccountType, readonly Permission[]> = {
     "title.read_own",
     "title.update_own",
     "title.advance_upload",
+    "service.quote_create",
+    "service.order_create",
     "asset.sign_upload",
     "asset.sign_download",
     "entitlement.read_own",
