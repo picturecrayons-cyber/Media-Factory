@@ -19,8 +19,8 @@ const supabasePublishableKey =
   trimKey(process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY) ??
   trimKey(process.env.SUPABASE_ANON_KEY) ??
   trimKey(process.env.VITE_SUPABASE_ANON_KEY) ??
-  trimKey(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
-
+  trimKey(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) ??
+  "";
 if (!supabaseUrl || !supabasePublishableKey) {
   throw new Error("Supabase authentication configuration is missing.");
 }
