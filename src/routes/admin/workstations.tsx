@@ -18,6 +18,11 @@ function WorkstationBody() {
     mutationFn: reviewAdminTitle,
     onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-workstations"] }),
   });
+  const gateMutation = useMutation({
+    mutationFn: setBuyerPublicationGate,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-workstations"] }),
+  });
+
   const data = query.data;
   if (query.isLoading) return <div className="p-8 text-sm text-muted">Loading authoritative Bridge workstations…</div>;
   if (query.isError || !data) return <div className="rounded-2xl border border-line bg-surface p-8 text-sm">Unable to load the Bridge operational backend.</div>;
@@ -34,10 +39,6 @@ function WorkstationBody() {
     </div>
   );
 
-  const gateMutation = useMutation({
-    mutationFn: setBuyerPublicationGate,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-workstations"] }),
-  });
 
   return <div className="space-y-8">
     <section className="rounded-3xl border border-line bg-surface p-6 sm:p-8"><p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">Authoritative operations</p><h2 className="mt-2 font-display text-3xl font-semibold">Real Bridge workstations</h2><p className="mt-3 max-w-3xl text-sm leading-relaxed text-muted">Every queue below reads persisted Bridge records. Review decisions write lifecycle events and audit records; there are no UI-only approvals.</p></section>
