@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { createLanguageRight, createLicensePackage, listLanguageRights, listLicensePackages } from "@/lib/bridge/multilingual-rights";
+import { authorizeLanguagePackage, createLanguageRight, createLicensePackage, listLanguageRights, listLicensePackages } from "@/lib/bridge/multilingual-rights";
 import { createLicenseOrder, verifyLicensePayment } from "@/lib/bridge/payments";
 import { hasPermission } from "@/lib/bridge/rbac";
 import type { BridgeActor } from "@/lib/bridge/session";
@@ -68,6 +68,12 @@ export function MultilingualRightsPanel({ titleId, actor }: Props) {
     }),
     onSuccess: () => { toast("Language right added"); setLanguage(""); setEvidence(""); void qc.invalidateQueries({ queryKey: ["bridge-language-rights", titleId] }); },
     onError: (e) => toast(e instanceof Error ? e.message : "Could not add language right"),
+  });
+
+  const authorizePackage = useMutation({
+    mutationFn: (packageId: string) => authorizeLanguagePackage({ data: { packageId } }),
+    onSuccess: () => { toast("Loop delivery authorized from Bridge"); void qc.invalidateQueries({ queryKey: ["bridge-language-packages", titleId] }); },
+    onError: (e) => toast(e instanceof Error ? e.message : "Delivery authorization blocked"),
   });
 
   const addPackage = useMutation({
@@ -159,7 +165,7 @@ export function MultilingualRightsPanel({ titleId, actor }: Props) {
       {packages.length ? (
         <div className="space-y-2">
           <h3 className="font-semibold">Buyer packages</h3>
-          {packages.map((p) => <div key={p.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line p-4"><div><p className="font-medium">{p.name}</p><p className="text-sm text-muted">{p.territories.join(", ")} · {p.media.join(", ")} · {p.exclusivity}</p></div><div className="flex items-center gap-3"><span className="text-sm font-semibold">₹{(p.pricePaise / 100).toLocaleString("en-IN")}</span>{actor.accountType === "buyer" && p.status === "READY" ? <Button type="button" onClick={() => void buyPackage(p.id)}>License package</Button> : <span className="text-xs text-muted">{p.status} · delivery {p.deliveryStatus}</span>}</div></div>)}
+          {packages.map((p) => <div key={p.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line p-4"><div><p className="font-medium">{p.name}</p><p className="text-sm text-muted">{p.languages.join(", ")} · {p.territories.join(", ")} · {p.media.join(", ")} · {p.exclusivity}</p></div><div className="flex items-center gap-3"><span className="text-sm font-semibold">₹{(p.pricePaise / 100).toLocaleString("en-IN")}</span>{actor.accountType === "buyer" && p.status === "READY" ? <Button type="button" onClick={() => void buyPackage(p.id)}>License package</Button> : canPackage && p.status === "LICENSED" && p.deliveryStatus !== "AUTHORIZED" ? <Button type="button" disabled={authorizePackage.isPending} onClick={() => authorizePackage.mutate(p.id)}>Authorize Loop delivery</Button> : <span className="text-xs text-muted">{p.status} · delivery {p.deliveryStatus}</span>}</div></div>)}
         </div>
       ) : null}
     </section>
