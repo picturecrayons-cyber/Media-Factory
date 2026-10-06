@@ -7,7 +7,7 @@ import { writeAudit } from "./audit";
 import { loadActor, requireVerifiedActor } from "./session";
 import { verificationProfileId } from "./verification-profile-id";
 import { assertPermission, canGrantInternalRole, workspaceHome } from "./rbac";
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { bridgeEnv } from "./env";
 import { assertNotDevUser } from "./guards";
 import { ONBOARDING_EMAIL_CONFLICT_MESSAGE, isBridgeProfileEmailConflict } from "./onboarding-errors";
@@ -54,9 +54,6 @@ export const syncSupabaseSessionUser = createServerFn({ method: "POST" })
     if (!context.emailConfirmedAt) throw new Error("Confirm your email before entering Bridge.");
 
     if (existing) {
-      // Backfill/repair the shared Bridge↔Loop identity mapping for every
-      // confirmed Bridge profile, including accounts created before the
-      // identity-link table was introduced. This is idempotent.
       await persistSupabaseIdentityLink(sql, existing.userId, context.userId);
       if (!existing.emailVerified) {
         await sql`update bridge_profiles set email_verified = true, updated_at = now() where user_id = ${existing.userId}`;
@@ -98,13 +95,37 @@ export const completeOnboarding = createServerFn({ method: "POST" })
     }
 
     let internalRole: string | null = null;
+    let bridgeUserId: string | null = null;
     try {
-      internalRole = await sql.transaction(async (tx) => {
+      const onboardingResult = await sql.transaction(async (tx) => {
         const emailOwner = await tx<{ user_id: string }>`
           select user_id from bridge_profiles where lower(email) = lower(${email}) limit 1
         `;
         if (emailOwner[0]?.user_id && emailOwner[0].user_id !== context.userId) {
           throw new Error(ONBOARDING_EMAIL_CONFLICT_MESSAGE);
+        }
+
+        const bridgeUsers = await tx<{ id: string }>`
+          select id
+          from public."user"
+          where lower(email) = lower(${email})
+          limit 1
+          for update
+        `;
+        const existingBridgeUser = bridgeUsers[0];
+        const resolvedBridgeUserId = existingBridgeUser?.id ?? randomUUID();
+
+        if (!existingBridgeUser) {
+          await tx`
+            insert into public."user" (id, name, email, "emailVerified")
+            values (${resolvedBridgeUserId}, ${data.displayName}, ${email}, true)
+          `;
+        } else {
+          await tx`
+            update public."user"
+            set name = ${data.displayName}, email = ${email}, "emailVerified" = true, "updatedAt" = current_timestamp
+            where id = ${resolvedBridgeUserId}
+          `;
         }
 
         let invitedRole: string | null = null;
@@ -142,7 +163,7 @@ export const completeOnboarding = createServerFn({ method: "POST" })
           insert into bridge_profiles (
             user_id, email, display_name, account_type, organization_name, internal_role, email_verified, invited_by
           ) values (
-            ${context.userId}, ${email}, ${data.displayName}, ${data.accountType}, ${org},
+            ${resolvedBridgeUserId}, ${email}, ${data.displayName}, ${data.accountType}, ${org},
             ${invitedRole}, true, ${invitedBy}
           )
           on conflict (user_id) do update set
@@ -153,7 +174,7 @@ export const completeOnboarding = createServerFn({ method: "POST" })
             updated_at = now()
         `;
 
-        await persistSupabaseIdentityLink(tx, context.userId, context.userId);
+        await persistSupabaseIdentityLink(tx, resolvedBridgeUserId, context.userId);
 
         if (inviteId) {
           const consumed = await tx<{ id: string }>`
@@ -164,8 +185,10 @@ export const completeOnboarding = createServerFn({ method: "POST" })
           `;
           if (consumed.length !== 1) throw new Error("Invite is invalid or expired");
         }
-        return invitedRole;
+        return { internalRole: invitedRole, bridgeUserId: resolvedBridgeUserId };
       });
+      internalRole = onboardingResult.internalRole;
+      bridgeUserId = onboardingResult.bridgeUserId;
     } catch (error) {
       if (isBridgeProfileEmailConflict(error)) {
         throw new Error(ONBOARDING_EMAIL_CONFLICT_MESSAGE);
@@ -174,10 +197,10 @@ export const completeOnboarding = createServerFn({ method: "POST" })
     }
 
     await writeAudit({
-      actorUserId: context.userId,
+      actorUserId: bridgeUserId!,
       action: "profile.onboard",
       entityType: "bridge_profile",
-      entityId: context.userId,
+      entityId: bridgeUserId,
       metadata: { accountType: data.accountType, internalRole },
     });
     const actor = await loadActor(context.userId);
@@ -186,7 +209,7 @@ export const completeOnboarding = createServerFn({ method: "POST" })
     const welcomeClaim = await sql<{ user_id: string }>`
       update bridge_profiles
       set welcome_email_sent_at = now(), updated_at = now()
-      where user_id = ${context.userId} and welcome_email_sent_at is null
+      where user_id = ${bridgeUserId} and welcome_email_sent_at is null
       returning user_id
     `;
     if (welcomeClaim.length > 0) {
@@ -194,16 +217,16 @@ export const completeOnboarding = createServerFn({ method: "POST" })
         const { sendWelcomeEmail } = await import("./mail.server");
         await sendWelcomeEmail({ to: email, name: data.displayName });
         await writeAudit({
-          actorUserId: context.userId,
+          actorUserId: bridgeUserId!,
           action: "email.welcome_sent",
           entityType: "bridge_profile",
-          entityId: context.userId,
+          entityId: bridgeUserId,
         });
       } catch (error) {
         await sql`
           update bridge_profiles
           set welcome_email_sent_at = null, updated_at = now()
-          where user_id = ${context.userId}
+          where user_id = ${bridgeUserId}
         `;
         console.error("[bridge] Welcome email failed", error);
       }
