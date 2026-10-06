@@ -11,6 +11,7 @@ import { assertNotDevUser } from "./guards";
 import { bridgeEnv } from "./env";
 import { paymentVerifyBody, verifyRazorpaySignature } from "./razorpay-crypto";
 import { destinationSchema, detectRequiredWork, type DetectedAsset, type RequiredWork } from "./service-pricing";
+import { calculateServiceLine, calculateRefundSplit, calculateNetProfit } from "./commercial-math";
 
 const quoteInputSchema = z.object({
   titleId: z.string().min(8),
@@ -123,65 +124,10 @@ function safeAmount(value: unknown) {
   return Math.round(amount);
 }
 
-export function calculateServiceLine(input: {
-  unitPricePaise: number;
-  minimumPricePaise: number;
-  quantity: number;
-  costBasisPaise: number;
-}) {
-  const unitPrice = safeAmount(input.unitPricePaise);
-  const minimum = safeAmount(input.minimumPricePaise);
-  const quantity = Number(input.quantity);
-  if (!Number.isFinite(quantity) || quantity < 0) throw new Error("Invalid quantity");
-  const lineTotalPaise = Math.max(Math.round(unitPrice * quantity), minimum);
-  const costPaise = Math.round(Math.max(0, input.costBasisPaise) * quantity);
-  return {
-    lineTotalPaise,
-    costPaise,
-    estimatedMarginPaise: lineTotalPaise - costPaise,
-  };
-}
-
-export function calculateRefundSplit(input: {
-  refundTotalPaise: number;
-  invoiceSubtotalPaise: number;
-  invoiceTaxPaise: number;
-  invoiceTotalPaise: number;
-}) {
-  const refundTotalPaise = safeAmount(input.refundTotalPaise);
-  if (refundTotalPaise === 0 || input.invoiceTotalPaise <= 0) {
-    return { refundRevenuePaise: 0, refundTaxPaise: 0 };
-  }
-  const refundTaxPaise = Math.min(
-    input.invoiceTaxPaise,
-    Math.max(0, Math.round(refundTotalPaise * input.invoiceTaxPaise / input.invoiceTotalPaise)),
-  );
-  return {
-    refundRevenuePaise: Math.max(0, refundTotalPaise - refundTaxPaise),
-    refundTaxPaise,
-  };
-}
-
-export function calculateNetProfit(input: {
-  revenuePaise: number;
-  refundsPaise: number;
-  taxPaise: number;
-  paymentFeesPaise: number;
-  operatingCostsPaise: number;
-  passThroughCostsPaise: number;
-  settlementsPaise: number;
-}) {
-  return input.revenuePaise -
-    input.refundsPaise -
-    input.taxPaise -
-    input.paymentFeesPaise -
-    input.operatingCostsPaise -
-    input.passThroughCostsPaise -
-    input.settlementsPaise;
-}
-
-function ledgerKey(parts: string[]) {
-  return parts.join(":").slice(0, 240);
+async function safeAmount(value: unknown) {
+  const amount = Number(value);
+  if (!Number.isFinite(amount) || amount < 0) throw new Error("Invalid money amount");
+  return Math.round(amount);
 }
 
 async function insertLedger(
