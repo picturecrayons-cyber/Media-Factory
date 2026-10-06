@@ -21,8 +21,24 @@ const quoteInputSchema = z.object({
 
 async function loadAssetEvidence(titleId: string) {
   const sql = await getSql();
-  return sql.query<{ kind: string; ready: boolean; source: DetectedAsset["source"] }>(
-    "select kind, true as ready, 'legacy_asset'::text as source from public.bridge_assets where title_id=$1 union all select case when asset_group='VIDEO' then 'master' when asset_group='AUDIO' then 'audio' when asset_group='SUBTITLE' then 'subtitle' when asset_group='ARTWORK' then 'poster' else lower(asset_group) end as kind, (processing_state='PASSED') as ready, 'asset_version'::text as source from public.bridge_asset_versions where title_id=$1", [titleId]);
+  return sql.query<{
+    kind: string;
+    ready: boolean;
+    source: DetectedAsset["source"];
+    language: string | null;
+  }>(
+    "select kind, true as ready, 'legacy_asset'::text as source, null::text as language from public.bridge_assets where title_id=$1 union all select case when asset_group='VIDEO' then 'master' when asset_group='AUDIO' then 'audio' when asset_group='SUBTITLE' then 'subtitle' when asset_group='ARTWORK' then 'poster' else lower(asset_group) end as kind, (processing_state='PASSED') as ready, 'asset_version'::text as source, language from public.bridge_asset_versions where title_id=$1",
+    [titleId],
+  );
+}
+
+async function loadQcPassed(titleId: string) {
+  const sql = await getSql();
+  const rows = await sql.query<{ passed: boolean }>(
+    "select exists (select 1 from public.bridge_qc_cases where title_id=$1 and status='PASSED') as passed",
+    [titleId],
+  );
+  return rows[0]?.passed === true;
 }
 
 async function getActiveRate(serviceCode: string) {
@@ -54,11 +70,19 @@ export const createServiceQuote = createServerFn({ method: "POST" }).middleware(
   const title = await loadTitle(data.titleId);
   if (!title || !canOperateOnTitle(actor,title,"title.read_own","title.read_catalog")) throw new Error("Not found");
   const assets = await loadAssetEvidence(title.id);
-  const plan = detectRequiredWork({ runtimeMinutes:title.runtimeMinutes, destinations:data.destinations, assets, subtitleLanguages:data.subtitleLanguages, requestedDubbingLanguages:data.requestedDubbingLanguages });
+  const qcPassed = await loadQcPassed(title.id);
+  const plan = detectRequiredWork({
+    runtimeMinutes: title.runtimeMinutes,
+    destinations: data.destinations,
+    assets,
+    subtitleLanguages: data.subtitleLanguages,
+    requestedDubbingLanguages: data.requestedDubbingLanguages,
+    qcPassed,
+  });
   const lines: Array<{ serviceCode:string; rateId:string; rateVersion:number; classification:string; pricingMethod:string; unitLabel:string; quantity:number; unitPricePaise:number; lineTotalPaise:number; evidence:RequiredWork }> = [];
   for (const work of plan.requiredWork) {
     const [rate,catalog] = await Promise.all([getActiveRate(work.serviceCode),getCatalog(work.serviceCode)]);
-    const quantity = ["PER_FINISHED_MINUTE","PER_DESTINATION","PER_LANGUAGE","PER_REVISION","PER_GB"].includes(catalog.pricing_method) ? work.quantity : 1;
+    const quantity = ["PER_FINISHED_MINUTE","PER_DESTINATION","PER_LANGUAGE","PER_REVISION","PER_GB","PER_HOUR","PER_MONTH","PER_TRANSACTION","PER_ASSET"].includes(catalog.pricing_method) ? work.quantity : 1;
     if (rate.base_price_paise === null) throw new Error("RATE_CONFIGURATION_REQUIRED:" + work.serviceCode);
     const lineTotal = Math.max(Math.round(rate.base_price_paise * quantity), rate.minimum_price_paise ?? 0);
     lines.push({ serviceCode:work.serviceCode,rateId:rate.id,rateVersion:rate.version,classification:catalog.classification,pricingMethod:catalog.pricing_method,unitLabel:catalog.unit_label,quantity,unitPricePaise:rate.base_price_paise,lineTotalPaise:lineTotal,evidence:work });
@@ -83,6 +107,7 @@ export const acceptServiceQuote = createServerFn({ method:"POST" }).middleware([
   const order=await sql.query<{id:string}>("insert into public.bridge_service_orders(quote_id,user_id,title_id,status,amount_paise,currency) values($1,$2,$3,'PAYMENT_PENDING',$4,$5) on conflict(quote_id) do nothing returning id",[quote.id,actor.userId,quote.title_id,quote.total_paise,quote.currency]);
   if(!order[0]) throw new Error("Service order already exists");
   await sql.query("insert into public.bridge_service_order_events(order_id,to_status,actor_user_id,note) values($1,'PAYMENT_PENDING',$2,'service quote accepted')",[order[0].id,actor.userId]);
+  await writeAudit({actorUserId:actor.userId,action:"service.quote_accepted",entityType:"bridge_service_order",entityId:order[0].id,metadata:{quoteId:quote.id,amountPaise:quote.total_paise}});
   return {orderId:order[0].id,amountPaise:quote.total_paise,currency:quote.currency};
 });
 
@@ -101,12 +126,24 @@ export async function createServicePaymentOrder(opts:{orderId:string;actorUserId
 }
 
 export async function captureServicePayment(opts:{orderId:string;paymentId:string;actorUserId?:string|null}){
-  const captured=await razorpayFetch<{id:string;order_id:string;status:string;amount:number;currency:string}>("/payments/"+opts.paymentId); if(captured.status!=="captured"||captured.order_id!==opts.orderId) throw new Error("Payment is not captured or does not match order");
+  const captured=await razorpayFetch<{id:string;order_id:string;status:string;amount:number;currency:string;fee?:number|null;tax?:number|null}>("/payments/"+opts.paymentId); if(captured.status!=="captured"||captured.order_id!==opts.orderId) throw new Error("Payment is not captured or does not match order");
   const sql=await getSql(); const rows=await sql.query<{id:string;user_id:string;amount_paise:number;currency:string;provider_payment_id:string|null;purpose:string}>("select id,user_id,amount_paise,currency,provider_payment_id,purpose from public.bridge_payments where provider_order_id=$1 limit 1",[opts.orderId]);
   const payment=rows[0]; if(!payment||payment.purpose!=="service_order") throw new Error("Unknown service payment order"); if(captured.amount!==payment.amount_paise||captured.currency!==payment.currency||payment.currency!=="INR") throw new Error("Amount or currency mismatch"); if(payment.provider_payment_id&&payment.provider_payment_id!==opts.paymentId) throw new Error("Order already linked to another payment"); if(opts.actorUserId&&opts.actorUserId!==payment.user_id) throw new Error("Payment does not belong to this account");
   await sql.query("update public.bridge_payments set status='captured',provider_payment_id=$1,verified_at=now() where id=$2 and status<>'captured'",[opts.paymentId,payment.id]);
   const order=await sql.query<{id:string;quote_id:string;status:string}>("select id,quote_id,status from public.bridge_service_orders where payment_id=$1 limit 1",[payment.id]); if(!order[0]) throw new Error("Service order is missing");
-  if(order[0].status==="PAYMENT_PENDING"){ await sql.query("update public.bridge_service_orders set status='PAID',updated_at=now() where id=$1 and status='PAYMENT_PENDING'",[order[0].id]); await sql.query("update public.bridge_service_quotes set status='PAID',paid_at=now(),updated_at=now() where id=$1",[order[0].quote_id]); await sql.query("insert into public.bridge_service_order_events(order_id,from_status,to_status,actor_user_id,note) values($1,'PAYMENT_PENDING','PAID',$2,'service payment captured')",[order[0].id,opts.actorUserId??payment.user_id]); const q=await sql.query<{invoice_number:string;subtotal_paise:number;tax_paise:number;total_paise:number}>("select quote_number,subtotal_paise,tax_paise,total_paise from public.bridge_service_quotes where id=$1",[order[0].quote_id]); if(q[0]){const invoiceNumber="CRI-"+q[0].invoice_number; await sql.query("insert into public.bridge_service_invoices(order_id,invoice_number,status,subtotal_paise,tax_paise,total_paise,currency,paid_at) values($1,$2,'PAID',$3,$4,$5,'INR',now()) on conflict(order_id) do update set status='PAID',paid_at=now()",[order[0].id,invoiceNumber,q[0].subtotal_paise,q[0].tax_paise,q[0].total_paise]); }}
+  if(order[0].status==="PAYMENT_PENDING"){
+    await sql.query("update public.bridge_service_orders set status='PAID',updated_at=now() where id=$1 and status='PAYMENT_PENDING'",[order[0].id]);
+    await sql.query("update public.bridge_service_quotes set status='PAID',paid_at=now(),updated_at=now() where id=$1",[order[0].quote_id]);
+    await sql.query("insert into public.bridge_service_order_events(order_id,from_status,to_status,actor_user_id,note) values($1,'PAYMENT_PENDING','PAID',$2,'service payment captured')",[order[0].id,opts.actorUserId??payment.user_id]);
+    const q=await sql.query<{invoice_number:string;subtotal_paise:number;tax_paise:number;total_paise:number}>("select quote_number as invoice_number,subtotal_paise,tax_paise,total_paise from public.bridge_service_quotes where id=$1",[order[0].quote_id]);
+    if(q[0]){
+      const invoiceNumber="CRI-"+q[0].invoice_number;
+      await sql.query("insert into public.bridge_service_invoices(order_id,invoice_number,status,subtotal_paise,tax_paise,total_paise,currency,paid_at) values($1,$2,'PAID',$3,$4,$5,'INR',now()) on conflict(order_id) do update set status='PAID',paid_at=now()",[order[0].id,invoiceNumber,q[0].subtotal_paise,q[0].tax_paise,q[0].total_paise]);
+      await sql.query("insert into public.bridge_financial_ledger(title_id,service_order_id,payment_id,entry_type,classification,amount_paise,currency,reference,metadata) values($1,$2,$3,'REVENUE','BILLABLE',$4,'INR',$5,$6::jsonb)",[payment.title_id ?? null,order[0].id,payment.id,q[0].subtotal_paise,invoiceNumber,JSON.stringify({source:"service_order",quoteId:order[0].quote_id})]);
+      if(q[0].tax_paise > 0) await sql.query("insert into public.bridge_financial_ledger(title_id,service_order_id,payment_id,entry_type,classification,amount_paise,currency,reference,metadata) values($1,$2,$3,'TAX','INTERNAL',$4,'INR',$5,$6::jsonb)",[payment.title_id ?? null,order[0].id,payment.id,q[0].tax_paise,invoiceNumber,JSON.stringify({source:"service_order"} )]);
+      if((captured.fee ?? 0) > 0) await sql.query("insert into public.bridge_financial_ledger(title_id,service_order_id,payment_id,entry_type,classification,amount_paise,currency,reference,metadata) values($1,$2,$3,'PAYMENT_FEE','PASS_THROUGH',$4,'INR',$5,$6::jsonb)",[payment.title_id ?? null,order[0].id,payment.id,captured.fee!,invoiceNumber,JSON.stringify({provider:"razorpay"})]);
+    }
+  }
   await writeAudit({actorUserId:opts.actorUserId??payment.user_id,action:"service.payment.captured",entityType:"bridge_service_order",entityId:order[0].id,metadata:{paymentId:payment.id}}); return {paymentId:payment.id,orderId:order[0].id,paid:true};
 }
 
@@ -114,4 +151,4 @@ export const createServicePaymentOrderFn=createServerFn({method:"POST"}).middlew
 export const verifyServicePayment=createServerFn({method:"POST"}).middleware([authMiddleware]).validator(z.object({orderId:z.string().min(4),paymentId:z.string().min(4),signature:z.string().min(8)})).handler(async({context,data})=>{assertNotDevUser(context.userId);const actor=await requireVerifiedActor(context.userId);const secret=bridgeEnv.razorpayKeySecret();if(!secret)throw new Error("Razorpay is not configured");if(!verifyRazorpaySignature({secret,body:paymentVerifyBody(data.orderId,data.paymentId),signature:data.signature}))throw new Error("Invalid payment signature");return captureServicePayment({orderId:data.orderId,paymentId:data.paymentId,actorUserId:actor.userId});});
 
 
-export const fulfillServiceOrder=createServerFn({method:"POST"}).middleware([authMiddleware]).validator(z.object({orderId:z.string().uuid(),status:z.enum(["IN_PROGRESS","COMPLETED"]),note:z.string().max(500).optional()})).handler(async({context,data})=>{assertNotDevUser(context.userId);const actor=await requireVerifiedActor(context.userId);assertPermission(actor,"service.fulfill");const sql=await getSql();const rows=await sql.query<{id:string;status:string;user_id:string}>("select id,status,user_id from public.bridge_service_orders where id=$1 limit 1",[data.orderId]);const order=rows[0];if(!order)throw new Error("Service order not found");if(data.status==="IN_PROGRESS"&&order.status!=="PAID")throw new Error("Service order must be paid before work starts");if(data.status==="COMPLETED"&&order.status!=="IN_PROGRESS")throw new Error("Service order must be in progress before completion");await sql.query("update public.bridge_service_orders set status=$1,completed_at=case when $1='COMPLETED' then now() else completed_at end,updated_at=now() where id=$2",[data.status,data.orderId]);await sql.query("update public.bridge_service_quotes set status=$1,updated_at=now() where id=(select quote_id from public.bridge_service_orders where id=$2)",[data.status,data.orderId]);await sql.query("insert into public.bridge_service_order_events(order_id,from_status,to_status,actor_user_id,note) values($1,$2,$3,$4,$5)",[data.orderId,order.status,data.status,actor.userId,data.note??"service order status updated"]);await writeAudit({actorUserId:actor.userId,action:"service.order_status_changed",entityType:"bridge_service_order",entityId:data.orderId,metadata:{from:order.status,to:data.status}});return {orderId:data.orderId,status:data.status};});
+export const fulfillServiceOrder=createServerFn({method:"POST"}).middleware([authMiddleware]).validator(z.object({orderId:z.string().uuid(),status:z.enum(["IN_PROGRESS","COMPLETED"]),note:z.string().max(500).optional()})).handler(async({context,data})=>{assertNotDevUser(context.userId);const actor=await requireVerifiedActor(context.userId);assertPermission(actor,"service.fulfill");const sql=await getSql();const rows=await sql.query<{id:string;status:string;user_id:string}>("select id,status,user_id from public.bridge_service_orders where id=$1 limit 1",[data.orderId]);const order=rows[0];if(!order)throw new Error("Service order not found");if(data.status==="IN_PROGRESS"&&order.status!=="PAID")throw new Error("Service order must be paid before work starts");if(data.status==="COMPLETED"&&order.status!=="IN_PROGRESS")throw new Error("Service order must be in progress before completion");await sql.query("update public.bridge_service_orders set status=$1,started_at=case when $1='IN_PROGRESS' and started_at is null then now() else started_at end,completed_at=case when $1='COMPLETED' then now() else completed_at end,updated_at=now() where id=$2",[data.status,data.orderId]);await sql.query("update public.bridge_service_quotes set status=$1,updated_at=now() where id=(select quote_id from public.bridge_service_orders where id=$2)",[data.status,data.orderId]);await sql.query("insert into public.bridge_service_order_events(order_id,from_status,to_status,actor_user_id,note) values($1,$2,$3,$4,$5)",[data.orderId,order.status,data.status,actor.userId,data.note??"service order status updated"]);await writeAudit({actorUserId:actor.userId,action:"service.order_status_changed",entityType:"bridge_service_order",entityId:data.orderId,metadata:{from:order.status,to:data.status}});return {orderId:data.orderId,status:data.status};});
