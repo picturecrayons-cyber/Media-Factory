@@ -58,5 +58,5 @@ test("digital/theatrical is explicit even when no generic handling fee is invent
     subtitleLanguages: [],
     requestedDubbingLanguages: [],
   });
-  assert.equal(result.requiredWork.some((x) => x.destination === "Theatrical Partner"), false);
+  assert.equal(result.requiredWork.some((x) => x.serviceCode === "DIGITAL_THEATRICAL_DELIVERY" && x.destination === "Theatrical Partner"), true);
 });
