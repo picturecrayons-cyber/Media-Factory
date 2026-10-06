@@ -83,9 +83,11 @@ export const listDuplicateReviews = createServerFn({ method: "GET" })
     const actor = await actorFor(context.userId);
     const sql = await getSql();
     const rows = await sql<ReviewRow>`
-      select *
-      from bridge_title_duplicate_reviews
-      order by updated_at desc
+      select r.*, c.name as candidate_name, k.name as canonical_name
+      from bridge_title_duplicate_reviews r
+      join bridge_titles c on c.id = r.candidate_title_id
+      left join bridge_titles k on k.id = r.canonical_title_id
+      order by r.updated_at desc
       limit 200
     `;
 
@@ -121,6 +123,8 @@ export const listDuplicateReviews = createServerFn({ method: "GET" })
         id: row.id,
         candidateTitleId: row.candidate_title_id,
         canonicalTitleId: row.canonical_title_id,
+        candidateName: row.candidate_name ?? row.candidate_title_id,
+        canonicalName: row.canonical_name ?? row.canonical_title_id,
         status: row.status,
         identityConfidence: row.identity_confidence,
         identityEvidence: row.identity_evidence,
