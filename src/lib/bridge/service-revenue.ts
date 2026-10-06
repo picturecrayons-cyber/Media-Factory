@@ -59,7 +59,8 @@ export const createServiceQuote = createServerFn({ method: "POST" }).middleware(
   for (const work of plan.requiredWork) {
     const [rate,catalog] = await Promise.all([getActiveRate(work.serviceCode),getCatalog(work.serviceCode)]);
     const quantity = ["PER_FINISHED_MINUTE","PER_DESTINATION","PER_LANGUAGE","PER_REVISION","PER_GB"].includes(catalog.pricing_method) ? work.quantity : 1;
-    if (rate.base_price_paise === null) throw new Error("RATE_CONFIGURATION_REQUIRED:" + work.serviceCode);\n    const lineTotal = Math.max(Math.round(rate.base_price_paise * quantity), rate.minimum_price_paise ?? 0);
+    if (rate.base_price_paise === null) throw new Error("RATE_CONFIGURATION_REQUIRED:" + work.serviceCode);
+    const lineTotal = Math.max(Math.round(rate.base_price_paise * quantity), rate.minimum_price_paise ?? 0);
     lines.push({ serviceCode:work.serviceCode,rateId:rate.id,rateVersion:rate.version,classification:catalog.classification,pricingMethod:catalog.pricing_method,unitLabel:catalog.unit_label,quantity,unitPricePaise:rate.base_price_paise,lineTotalPaise:lineTotal,evidence:work });
   }
   const subtotal = lines.filter((x) => x.classification==="BILLABLE" || x.classification==="PASS_THROUGH").reduce((s,x)=>s+Number(x.lineTotalPaise),0);
