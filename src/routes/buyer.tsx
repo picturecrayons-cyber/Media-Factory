@@ -7,12 +7,8 @@ import { StatusChip } from "@/components/bridge/status-rail";
 import { Button } from "@/components/ui/button";
 import { listTitles } from "@/lib/bridge/titles";
 import { createLicenseOrder, listOwnEntitlements, verifyLicensePayment } from "@/lib/bridge/payments";
-import { requireBuyerRoute } from "@/lib/auth/route-guard";
 
-export const Route = createFileRoute("/buyer")({
-  beforeLoad: requireBuyerRoute,
-  component: Buyer,
-});
+export const Route = createFileRoute("/buyer")({ component: Buyer });
 
 type RzCtor = new (opts: {
   key: string;
