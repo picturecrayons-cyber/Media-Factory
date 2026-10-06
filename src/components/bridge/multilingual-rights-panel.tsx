@@ -8,6 +8,7 @@ import { hasPermission } from "@/lib/bridge/rbac";
 import type { BridgeActor } from "@/lib/bridge/session";
 
 type Props = { titleId: string; actor: BridgeActor };
+type RzCtor = new (opts: { key: string; amount: number; currency: string; order_id: string; handler: (res: { razorpay_order_id: string; razorpay_payment_id: string; razorpay_signature: string }) => void }) => { open: () => void };
 
 function csv(value: string) {
   return value.split(",").map((v) => v.trim()).filter(Boolean);
@@ -17,9 +18,9 @@ function toIso(value: string) {
   return value ? new Date(value).toISOString() : null;
 }
 
-function loadRazorpay(): Promise<any> {
+function loadRazorpay(): Promise<RzCtor> {
   return new Promise((resolve, reject) => {
-    const w = window as any;
+    const w = window as unknown as { Razorpay?: RzCtor };
     if (w.Razorpay) return resolve(w.Razorpay);
     const s = document.createElement("script");
     s.src = "https://checkout.razorpay.com/v1/checkout.js";
@@ -97,7 +98,7 @@ export function MultilingualRightsPanel({ titleId, actor }: Props) {
       await new Promise<void>((resolve, reject) => {
         const checkout = new Razorpay({
           key: created.keyId, amount: created.amountPaise, currency: created.currency, order_id: created.orderId,
-          handler: (res: any) => void verifyLicensePayment({ data: {
+          handler: (res) => void verifyLicensePayment({ data: {
             orderId: res.razorpay_order_id, paymentId: res.razorpay_payment_id, signature: res.razorpay_signature,
           }}).then(() => resolve()).catch(reject),
         });
