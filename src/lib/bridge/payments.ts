@@ -9,7 +9,7 @@ import { requireVerifiedActor } from "./session";
 import { assertPermission, canReadTitle } from "./rbac";
 import { loadTitle, recordTransition } from "./titles";
 import { writeAudit } from "./audit";
-import { isBuyerVisible } from "./lifecycle";
+import { assertBuyerPublishable } from "./buyer-visibility";
 import { assertNotDevUser } from "./guards";
 
 function requireRazorpayKeys() {
@@ -142,10 +142,8 @@ export const createLicenseOrder = createServerFn({ method: "POST" })
     assertPermission(actor, "payment.create_order");
     const title = await loadTitle(data.titleId);
     if (!title || !canReadTitle(actor, title)) throw new Error("Not found");
-    if (!isBuyerVisible(title.status) && title.status !== "LIVE_FOR_BUYERS") {
-      throw new Error("Title is not available for licensing");
-    }
-    if (title.status !== "LIVE_FOR_BUYERS" && title.status !== "IN_NEGOTIATION") {
+    await assertBuyerPublishable(title.id);
+    if (title.status !== "LIVE_FOR_BUYERS" && title.status !== "IN_NEGOTIATION" && title.status !== "LICENSED" && title.status !== "DELIVERED") {
       throw new Error("Title is not open for a new license order");
     }
     if (title.licensingFeePaise <= 0) {
