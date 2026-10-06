@@ -345,3 +345,85 @@ export const mergeDuplicateTitle = createServerFn({ method: "POST" })
       return { ok: true, mergeId, canonicalTitleId: data.canonicalTitleId };
     });
   });
+
+
+export const rollbackDuplicateTitleMerge = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({ mergeId: z.string().min(8) }))
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    assertPermission(actor, "title.merge_duplicate");
+    const sql = await getSql();
+
+    return sql.transaction(async (tx) => {
+      const rows = await tx.query<{
+        merge_id: string;
+        canonical_title_id: string;
+        retiring_title_id: string;
+        decision: string;
+        pre_merge_state: { retiring?: { title?: { id?: string } } };
+      }>(
+        "select merge_id,canonical_title_id,retiring_title_id,decision,pre_merge_state from public.bridge_title_merge_audits where merge_id=$1 for update",
+        [data.mergeId],
+      );
+      const audit = rows[0];
+      if (!audit || audit.decision !== "MERGED") throw new Error("MERGE_ROLLBACK_UNAVAILABLE");
+
+      const retiring = audit.pre_merge_state?.retiring;
+      if (!retiring?.title?.id) throw new Error("MERGE_ROLLBACK_SNAPSHOT_INVALID");
+
+      const restoreIds = (rows: unknown[]) =>
+        rows
+          .map((row) => (row && typeof row === "object" ? (row as Record<string, unknown>).id : null))
+          .filter((id): id is string => typeof id === "string" && id.length > 0);
+
+      const state = audit.pre_merge_state as Record<string, unknown>;
+      const retiringState = (state.retiring ?? {}) as Record<string, unknown>;
+      const tableKeys: Array<[string, string]> = [
+        ["bridge_assets", "assets"],
+        ["bridge_asset_versions", "assets"],
+        ["bridge_qc_cases", "qcCases"],
+        ["bridge_legal_cases", "legalCases"],
+        ["bridge_rights_grants", "rights"],
+        ["bridge_destination_packages", "deliveries"],
+        ["bridge_buyer_title_access", "buyers"],
+        ["bridge_title_events", "events"],
+        ["bridge_payments", "payments"],
+        ["bridge_service_orders", "serviceOrders"],
+        ["bridge_service_quotes", "serviceQuotes"],
+      ];
+
+      for (const [table, key] of tableKeys) {
+        const ids = restoreIds(Array.isArray(retiringState[key]) ? retiringState[key] as unknown[] : []);
+        for (const id of ids) {
+          await tx.query(`update public.${table} set title_id=$1 where id=$2`, [audit.retiring_title_id, id]);
+        }
+      }
+
+      await tx.query(
+        "update public.bridge_titles set merged_into_title_id=null, merged_at=null, updated_at=now() where id=$1",
+        [audit.retiring_title_id],
+      );
+
+      await tx.query(
+        "update public.bridge_title_merge_aliases set retiring_title_id=retiring_title_id where retiring_title_id=$1",
+        [audit.retiring_title_id],
+      );
+
+      await tx.query(
+        "update public.bridge_title_merge_audits set decision='ROLLED_BACK', rollback_state=$1::jsonb, completed_at=now() where merge_id=$2",
+        [JSON.stringify({ restoredTitleId: audit.retiring_title_id, actorUserId: actor.userId }), data.mergeId],
+      );
+
+      await writeAudit({
+        actorUserId: actor.userId,
+        action: "duplicate_title.rollback",
+        entityType: "bridge_title",
+        entityId: audit.canonical_title_id,
+        metadata: { mergeId: data.mergeId, retiringTitleId: audit.retiring_title_id },
+      });
+
+      return { ok: true, mergeId: data.mergeId, restoredTitleId: audit.retiring_title_id };
+    });
+  });
