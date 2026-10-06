@@ -4,7 +4,7 @@ const INTERNAL_PERMISSIONS: Record<InternalRole, readonly Permission[]> = {
   viewer: ["title.read_catalog", "audit.read"],
   qc_reviewer: ["title.read_catalog", "title.qc_review", "asset.sign_download", "audit.read", "delivery.read"],
   legal_reviewer: ["title.read_catalog", "title.rights_review", "asset.sign_download", "audit.read", "delivery.read"],
-  finance: ["title.read_catalog", "finance.read", "delivery.read", "delivery.read_finance", "entitlement.read_own", "audit.read"],
+  finance: ["title.read_catalog", "finance.read", "finance.configure", "delivery.read", "delivery.read_finance", "entitlement.read_own", "audit.read"],
   admin: [
     "title.read_catalog",
     "service.quote_create",
@@ -23,6 +23,7 @@ const INTERNAL_PERMISSIONS: Record<InternalRole, readonly Permission[]> = {
     "delivery.read_finance",
     "asset.sign_download",
     "finance.read",
+    "finance.configure",
     "users.invite_internal",
     "audit.read",
     "loop.publish",

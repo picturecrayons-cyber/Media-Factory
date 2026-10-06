@@ -80,6 +80,7 @@ export const PERMISSIONS = [
   "service.fulfill",
   "entitlement.read_own",
   "finance.read",
+  "finance.configure",
   "delivery.read",
   "delivery.read_finance",
   "users.invite_internal",
