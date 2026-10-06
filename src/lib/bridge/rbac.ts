@@ -132,7 +132,7 @@ export function canReadTitle(
   if (!actor.emailVerified) return false;
   if (title.ownerUserId === actor.userId && !actor.internalRole) return hasPermission(actor, "title.read_own");
   if (actor.internalRole) return hasPermission(actor, "title.read_catalog");
-  if (actor.accountType === "buyer") return false;
+  if (actor.accountType === "buyer") return ["LIVE_FOR_BUYERS","IN_NEGOTIATION","LICENSED","DELIVERED"].includes(title.status) && hasPermission(actor, "title.read_catalog");
   return false;
 }
 
