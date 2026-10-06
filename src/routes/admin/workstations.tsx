@@ -40,7 +40,51 @@ function WorkstationBody() {
   );
 
 
+  const pipelineAction = (title: any) => {
+    if (title.status === "PREPARING") return { label: "Approve", decision: "ACCEPT" as const };
+    if (title.status === "QC_REVIEW") return { label: "Approve", decision: "PASS" as const };
+    if (title.status === "RIGHTS_REVIEW") return { label: "Approve", decision: "APPROVE" as const };
+    return null;
+  };
+
   return <div className="space-y-8">
+    <section className="space-y-4">
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">Titles</p>
+        <h2 className="font-display text-2xl font-semibold">Simple title controls</h2>
+        <p className="text-sm text-muted">Internal workflow only. Buyer-facing pages remain free of operational controls and technical details.</p>
+      </div>
+      <div className="overflow-x-auto rounded-2xl border border-line bg-surface">
+        <table className="w-full min-w-[980px] text-left text-sm">
+          <thead className="border-b border-line text-xs uppercase tracking-wider text-muted">
+            <tr><th className="px-4 py-3">Title</th><th className="px-4 py-3">Status</th><th className="px-4 py-3">Workflow</th><th className="px-4 py-3">Controls</th></tr>
+          </thead>
+          <tbody className="divide-y divide-line">
+            {data.titles.map((title: any) => {
+              const approve = pipelineAction(title);
+              return (
+                <tr key={title.id}>
+                  <td className="px-4 py-4 font-medium">{title.name}</td>
+                  <td className="px-4 py-4"><span className="rounded-full border border-line px-3 py-1 text-xs font-semibold">{title.status.replaceAll("_", " ")}</span></td>
+                  <td className="px-4 py-4 text-xs text-muted">Review → Approve → Publish → License → Deliver</td>
+                  <td className="px-4 py-4">
+                    <div className="flex flex-wrap gap-2">
+                      <a href={`/title/${title.id}`} className="rounded-full border border-line px-3 py-1.5 text-xs font-semibold">Review</a>
+                      {approve ? <Button size="sm" disabled={mutation.isPending} onClick={() => mutation.mutate({ data: { titleId: title.id, decision: approve.decision } })}>{approve.label}</Button> : null}
+                      <a href="#buyer-publication" className="rounded-full border border-line px-3 py-1.5 text-xs font-semibold">Publish</a>
+                      <a href="#licensing" className="rounded-full border border-line px-3 py-1.5 text-xs font-semibold">License</a>
+                      <a href="#deliveries" className="rounded-full border border-line px-3 py-1.5 text-xs font-semibold">Deliver</a>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+            {!data.titles.length ? <tr><td colSpan={4} className="px-4 py-8 text-center text-sm text-muted">No titles in the pipeline.</td></tr> : null}
+          </tbody>
+        </table>
+      </div>
+    </section>
+
     <section className="rounded-3xl border border-line bg-surface p-6 sm:p-8"><p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">Authoritative operations</p><h2 className="mt-2 font-display text-3xl font-semibold">Real Bridge workstations</h2><p className="mt-3 max-w-3xl text-sm leading-relaxed text-muted">Every queue below reads persisted Bridge records. Review decisions write lifecycle events and audit records; there are no UI-only approvals.</p></section>
     <section id="submissions" className="space-y-3"><div><h3 className="font-display text-2xl font-semibold">1 · Incoming Submissions</h3><p className="text-sm text-muted">Canonical title records awaiting operational acceptance.</p></div>{submissions.length ? submissions.map((t:any)=><ReviewRow key={t.id} title={t} actions={t.status==="PREPARING" ? [["ACCEPT","Accept → QC"]] : []}/>) : <Empty text="No incoming submissions."/>}</section>
     <section id="assets" className="space-y-3"><h3 className="font-display text-2xl font-semibold">2 · Titles & Assets</h3><p className="text-sm text-muted">{data.titles.length} canonical titles · {data.assets.length} base assets · {data.assetVersions.length} versioned assets.</p><RecordTable rows={data.assets.slice(0,30)} titleName={titleName} fields={["kind","s3_key","content_type","byte_size"]}/></section>
