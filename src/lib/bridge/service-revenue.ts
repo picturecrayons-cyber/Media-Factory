@@ -1209,7 +1209,7 @@ export async function ingestRazorpayWebhook(rawBody: string, signature: string |
   try {
     if ((eventName === "payment.captured" || eventName === "order.paid")) {
       let capturePayment = payment;
-      let captureOrderId = payment?.order_id ?? order?.id ?? null;
+      const captureOrderId = payment?.order_id ?? order?.id ?? null;
       if (!capturePayment && captureOrderId) {
         capturePayment = await findCapturedPayment(captureOrderId);
       }
