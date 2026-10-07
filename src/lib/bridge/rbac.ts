@@ -21,7 +21,6 @@ const INTERNAL_PERMISSIONS: Record<InternalRole, readonly Permission[]> = {
     "service.quote_create",
     "service.order_create",
     "service.fulfill",
-    "title.advance_upload",
     "title.qc_review",
     "title.rights_review",
     "title.license",
@@ -44,6 +43,7 @@ const INTERNAL_PERMISSIONS: Record<InternalRole, readonly Permission[]> = {
   ],
   super_admin: [
     "title.ingest_internal",
+    "title.create",
     "title.read_catalog",
     "title.advance_upload",
     "title.qc_review",
@@ -134,7 +134,7 @@ export function permissionsFor(actor: Actor): Set<Permission> {
 }
 
 export function canAccessDashboard(actor: Actor): boolean {
-  return actor.emailVerified && Boolean(actor.internalRole);
+  return actor.emailVerified && actor.internalRole === "super_admin";
 }
 
 const ROLE_GRANTS: Record<InternalRole, readonly InternalRole[]> = {
@@ -212,6 +212,11 @@ export function workspaceHome(actor: Actor): string {
   // Resolve the post-auth destination from the server-backed Bridge profile.
   // Signup query parameters are intent only and never grant privileges.
   if (canAccessDashboard(actor)) return "/dashboard";
+  if (actor.internalRole === "admin") return "/internal";
+  if (actor.internalRole === "qc_reviewer") return "/internal?desk=qc";
+  if (actor.internalRole === "legal_reviewer") return "/internal?desk=legal";
+  if (actor.internalRole === "finance") return "/internal?desk=finance";
+  if (actor.internalRole === "viewer") return "/internal?desk=viewer";
   if (actor.accountType === "independent_creator") return "/creator";
   if (actor.accountType === "studio") return "/studio";
   if (actor.accountType === "buyer") return "/buyer";
