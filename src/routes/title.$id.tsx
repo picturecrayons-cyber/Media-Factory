@@ -15,6 +15,7 @@ import {
   requestAssetUpload,
 } from "@/lib/bridge/assets";
 import { getLoopPublication } from "@/lib/bridge/loop-publication";
+import { getBuyerRightsSummary } from "@/lib/bridge/buyer-rights-summary";
 import type { BridgeActor } from "@/lib/bridge/session";
 import {
   OTT_INGEST_SPEC,
@@ -56,6 +57,12 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
     queryFn: () => getLoopPublication({ data: { bridgeTitleId: id } }),
   });
 
+  const buyerSummaryQ = useQuery({
+    queryKey: ["buyer-rights-summary", id],
+    queryFn: () => getBuyerRightsSummary({ data: { titleId: id } }),
+    enabled: actor.accountType === "buyer" && !actor.internalRole,
+  });
+
   const reviewQ = useQuery({
     queryKey: ["title-workflow", id],
     queryFn: () => getTitleWorkflow({ data: { titleId: id } }),
@@ -91,6 +98,9 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
   return (
     <div className="space-y-5">
       <WorkflowDesk title={title} actor={actor} />
+      {actor.accountType === "buyer" && !actor.internalRole && buyerSummaryQ.data ? (
+        <BuyerRightsSummary summary={buyerSummaryQ.data} />
+      ) : null}
       {assetsQ.isError ? <p role="alert">Assets unavailable: {assetsQ.error.message}</p> : null}
       <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
         <div className="grid gap-5 md:grid-cols-[180px_1fr]">
@@ -213,6 +223,41 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
     </div>
   );
 }
+function BuyerRightsSummary({ summary }: { summary: Awaited<ReturnType<typeof getBuyerRightsSummary>> }) {
+  const { title, rights, packages, readiness } = summary;
+  const languages = rights.languages.join(", ");
+  const territories = rights.territories.join(", ");
+  const media = rights.media.join(", ");
+  return (
+    <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Buyer Rights Packet</p>
+          <h2 className="mt-1 font-display text-xl font-semibold">One-page licensing summary</h2>
+        </div>
+        <span className="rounded-full border border-line px-3 py-1 text-xs font-semibold">LICENSING READY</span>
+      </div>
+      <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <Metric label="Content" value={title.content_type} />
+        <Metric label="Language package" value={languages} />
+        <Metric label="Territory" value={territories} />
+        <Metric label="Media" value={media} />
+        <Metric label="Rights window" value={`${new Date(rights.windowStart).toLocaleDateString()} → ${new Date(rights.windowEnd).toLocaleDateString()}`} />
+        <Metric label="Exclusivity" value={rights.exclusivity} />
+        <Metric label="Master" value={readiness.master ? "Ready" : "Unavailable"} />
+        <Metric label="Screener" value={readiness.screener ? "Ready" : "Unavailable"} />
+      </div>
+      <div className="mt-4 grid gap-3 sm:grid-cols-3">
+        <Metric label="Artwork" value={readiness.artwork ? "Ready" : "Unavailable"} />
+        <Metric label="Subtitles" value={readiness.subtitles ? "Ready" : "Not supplied"} />
+        <Metric label="Destinations" value={packages.map((p) => p.destination).join(", ") || "—"} />
+      </div>
+      {title.synopsis ? <p className="mt-5 max-w-4xl text-sm leading-6 text-muted">{title.synopsis}</p> : null}
+      <p className="mt-4 text-xs text-muted">Rights evidence, legal records and source masters remain private to Bridge.</p>
+    </section>
+  );
+}
+
 function Metric({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-xl border border-line bg-elevated/40 p-4">
