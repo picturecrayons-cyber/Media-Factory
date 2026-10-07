@@ -243,7 +243,7 @@ function Signup() {
 
           <div className="space-y-1.5">
             <span className="block text-sm font-medium text-fg">I am a:</span>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
               {[
                 { id: "independent_creator", label: "Creator / Filmmaker" },
                 { id: "studio", label: "Studio / Production" },

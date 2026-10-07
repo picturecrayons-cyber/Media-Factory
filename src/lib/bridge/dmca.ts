@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
-import { requireActor } from "@/lib/bridge/session";
+import { requireVerifiedActor } from "@/lib/bridge/session";
 
 const dmcaRegistrationSchema = z.object({
   firstName: z.string().trim().min(1).max(100),
@@ -34,7 +34,7 @@ export const registerDmcaAccount = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .inputValidator(dmcaRegistrationSchema)
   .handler(async ({ data, context }) => {
-    const actor = await requireActor(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
 
     // The DMCA account is created for the authenticated Bridge identity.
     // Do not trust a browser-supplied email for the external registration.

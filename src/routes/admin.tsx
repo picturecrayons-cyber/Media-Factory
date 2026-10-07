@@ -11,15 +11,16 @@ import { listAdminProfiles } from "@/lib/bridge/profiles";
 export const Route = createFileRoute("/admin")({ component: AdminControlPlane });
 
 const modules = [
-  ["Intake", "Creator and studio submissions, title opening, ownership intake.", "/workspace"],
-  ["Assets & QC", "Masters, artwork, subtitles, audio, technical review and preparation.", "/workspace"],
-  ["Legal & Rights", "Ownership, territories, languages, windows and clearance gates.", "/workspace"],
-  ["Licensing", "Buyer discovery, screeners, negotiation and commercial controls.", "/buyer"],
-  ["Distribution", "Authorize approved titles to Crayons Loop and manage destination windows.", "/internal"],
-  ["Delivery", "Secure delivery, C2C handoff, package readiness and operational audit.", "/internal"],
-  ["Revenue", "Verified payments, entitlements and settlement-facing records.", "/buyer"],
-  ["Team & RBAC", "Invite internal reviewers and keep server-enforced operational roles.", "/account"],
-  ["Website CMS", "Edit the minimal public Bridge homepage copy.", "/admin-cms"],
+  ["Incoming Submissions", "Persisted title intake queue with audited acceptance into QC.", "/admin/workstations"],
+  ["Operational CMS", "Bridge-authoritative operations and Loop publication controls.", "/admin/workstations"],
+  ["Titles & Assets", "Canonical titles, base assets and versioned masters.", "/admin/workstations"],
+  ["Assets & QC", "Persisted QC cases with reviewer decisions and audit events.", "/admin/workstations"],
+  ["Legal & Rights", "Persisted legal cases and rights grants with clearance decisions.", "/admin/workstations"],
+  ["Licensing", "Persisted commercial pipeline and destination package readiness.", "/admin/workstations"],
+  ["Deliveries", "Persisted destination packages, authorization and delivery state.", "/admin/workstations"],
+  ["Users & Studios", "Authoritative Bridge identities and organizations.", "/admin/workstations"],
+  ["Audit History", "Persisted operator activity and lifecycle decisions.", "/admin/workstations"],
+  ["Website CMS", "Edit the minimal public Bridge homepage copy.", "/admin/workstations"],
 ] as const;
 
 function AdminControlPlane() {
@@ -68,8 +69,9 @@ function AdminBody({ actor }: { actor: any }) {
             <p className="mt-3 max-w-3xl text-sm leading-relaxed text-muted">Accept creator and studio submissions, move titles through QC and legal clearance, prepare buyer discovery, authorize licensing, package delivery, and publish only approved destinations.</p>
           </div>
           <div className="flex flex-wrap gap-2">
-            {hasPermission(actor, "title.create") ? <Link to="/workspace"><Button>+ Open title</Button></Link> : null}
-            <Link to="/internal"><Button variant="outline">Distribution desk</Button></Link>
+            <Link to="/cms"><Button>Open Bridge CMS</Button></Link>
+            {actor.internalRole === "super_admin" ? <Link to="/cms"><Button type="button" variant="outline">Open Loop CMS in Bridge</Button></Link> : null}
+            <a href="https://crayonsloop.in/" target="_blank" rel="noreferrer"><Button variant="outline">Open Crayons Loop ↗</Button></a>
           </div>
         </div>
       </section>
@@ -98,7 +100,7 @@ function AdminBody({ actor }: { actor: any }) {
           <h3 className="mt-1 font-display text-2xl font-semibold">Admin workstations</h3>
         </div>
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          {modules.map(([name, description, to]) => (
+          {modules.map(([name, description, to]) => to ? (
             <Link key={name} to={to} className="group rounded-2xl border border-line bg-surface p-5 transition hover:-translate-y-0.5 hover:shadow-lift">
               <div className="flex items-start justify-between gap-3">
                 <h4 className="font-display text-lg font-semibold">{name}</h4>
@@ -106,6 +108,11 @@ function AdminBody({ actor }: { actor: any }) {
               </div>
               <p className="mt-2 text-sm leading-relaxed text-muted">{description}</p>
             </Link>
+          ) : (
+            <article key={name} className="rounded-2xl border border-line bg-surface p-5 opacity-75">
+              <div className="flex items-start justify-between gap-3"><h4 className="font-display text-lg font-semibold">{name}</h4><span className="rounded-full border border-line px-2 py-1 text-[10px] uppercase text-muted">Unavailable</span></div>
+              <p className="mt-2 text-sm leading-relaxed text-muted">{description}</p>
+            </article>
           ))}
         </div>
       </section>

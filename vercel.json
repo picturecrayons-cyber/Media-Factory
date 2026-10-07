@@ -2,6 +2,12 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "tanstack-start",
   "git": {
-    "deploymentEnabled": false
-  }
+    "deploymentEnabled": true
+  },
+  "rewrites": [
+    {
+      "source": "/api/webhooks/razorpay",
+      "destination": "/api/razorpay/webhook"
+    }
+  ]
 }

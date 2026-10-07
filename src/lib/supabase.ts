@@ -1,15 +1,14 @@
 import { createClient } from "@supabase/supabase-js";
 
-const supabaseUrl =
-  (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.replace(/\/$/, "") ||
-  "https://mlmgugivsyoxzdgwkbpu.supabase.co";
+const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.replace(/\/$/, "");
+const supabasePublishableKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined;
 
-const supabasePublishableKey =
-  (import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined) ||
-  "sb_publishable_8XCMcaqHvYMWANqxqnS0mw_f_asubxB";
+if (!supabaseUrl) {
+  throw new Error("[Crayons Bridge] Supabase URL configuration is missing.");
+}
 
-if (!supabaseUrl || !supabasePublishableKey) {
-  console.error("[Crayons Bridge] Supabase configuration is missing");
+if (!supabasePublishableKey) {
+  throw new Error("[Crayons Bridge] Supabase publishable key configuration is missing.");
 }
 
 export const supabase = createClient(supabaseUrl, supabasePublishableKey, {

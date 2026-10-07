@@ -1,10 +1,9 @@
 import { supabase } from "@/lib/supabase";
 import type { Session, User } from "@supabase/supabase-js";
-import { GROK_PROVIDERS } from "./providers";
 import { restoreSupabaseSession } from "./session-restoration";
+import { bridgeCallbackUrl } from "../bridge/origin";
 
 export const authEnabled = import.meta.env.VITE_AUTH_ENABLED !== "false";
-export { GROK_PROVIDERS };
 
 export type SupabaseUser = User;
 export type SupabaseSession = Session;
@@ -25,8 +24,6 @@ export async function hasSupabaseRecoverySession(): Promise<boolean> {
 export async function getSupabaseSession(
   opts: { forceRefresh?: boolean } = {},
 ): Promise<Session | null> {
-  // The SDK waits for URL/session restoration and owns refresh-token rotation.
-  // A separate cache can return expired tokens after a reload or failed refresh.
   try {
     return await restoreSupabaseSession(supabase.auth, opts);
   } catch (err) {
@@ -44,10 +41,9 @@ export async function signUpWithEmail(input: {
   email: string;
   password: string;
   name: string;
-  accountType?: "independent_creator" | "studio" | "buyer";
+  accountType?: "independent_creator" | "studio" | "buyer" | "investor";
 }) {
-  const origin = typeof window !== "undefined" ? window.location.origin : "https://bridge.crayonspictures.com";
-  const callbackUrl = `${origin}/auth/callback`;
+  const callbackUrl = bridgeCallbackUrl(undefined);
 
   const { data, error } = await supabase.auth.signUp({
     email: input.email,
@@ -67,8 +63,7 @@ export async function signUpWithEmail(input: {
 }
 
 export async function resendConfirmationEmail(email: string) {
-  const origin = typeof window !== "undefined" ? window.location.origin : "https://bridge.crayonspictures.com";
-  const callbackUrl = `${origin}/auth/callback`;
+  const callbackUrl = bridgeCallbackUrl(undefined);
 
   const { data, error } = await supabase.auth.resend({
     type: "signup",
@@ -114,7 +109,7 @@ export async function updatePassword(password: string) {
   return data.user;
 }
 
-export async function signOut(redirectTo = "/login"): Promise<void> {
+export async function signOut(redirectTo = "/"): Promise<void> {
   if (typeof window !== "undefined") window.sessionStorage.removeItem(RECOVERY_MARKER_KEY);
   try {
     await supabase.auth.signOut();
@@ -125,10 +120,6 @@ export async function signOut(redirectTo = "/login"): Promise<void> {
     window.localStorage.removeItem("crayons-bridge.sb-auth-token");
     window.location.assign(redirectTo);
   }
-}
-
-export async function signIn(_providerId: string): Promise<void> {
-  throw new Error("Social sign-in is temporarily unavailable. Use email and password.");
 }
 
 export function subscribeAuthChange(listener: (event: string, session: Session | null) => void) {
