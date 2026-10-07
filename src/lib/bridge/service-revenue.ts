@@ -118,19 +118,289 @@ function quantityFor(method: string, requestedQuantity: number) {
     : 1;
 }
 
-export async function captureServicePayment(opts:{orderId:string;paymentId:string;actorUserId?:string|null}){
-  const captured=await razorpayFetch<{id:string;order_id:string;status:string;amount:number;currency:string;fee?:number|null;tax?:number|null}>("/payments/"+opts.paymentId); if(captured.status!=="captured"||captured.order_id!==opts.orderId) throw new Error("Payment is not captured or does not match order");
-  const sql=await getSql(); const rows=await sql.query<{id:string;user_id:string;title_id:string|null;amount_paise:number;currency:string;provider_payment_id:string|null;purpose:string}>("select id,user_id,title_id,amount_paise,currency,provider_payment_id,purpose from public.bridge_payments where provider_order_id=$1 limit 1",[opts.orderId]);
-  const payment=rows[0]; if(!payment||payment.purpose!=="service_order") throw new Error("Unknown service payment order"); if(captured.amount!==payment.amount_paise||captured.currency!==payment.currency||payment.currency!=="INR") throw new Error("Amount or currency mismatch"); if(payment.provider_payment_id&&payment.provider_payment_id!==opts.paymentId) throw new Error("Order already linked to another payment"); if(opts.actorUserId&&opts.actorUserId!==payment.user_id) throw new Error("Payment does not belong to this account");
-  await sql.query("update public.bridge_payments set status='captured',provider_payment_id=$1,verified_at=now() where id=$2 and status<>'captured'",[opts.paymentId,payment.id]);
-  const order=await sql.query<{id:string;quote_id:string;status:string}>("select id,quote_id,status from public.bridge_service_orders where payment_id=$1 limit 1",[payment.id]); if(!order[0]) throw new Error("Service order is missing");
-  if(order[0].status==="PAYMENT_PENDING"){
-    await sql.query("update public.bridge_service_orders set status='PAID',updated_at=now() where id=$1 and status='PAYMENT_PENDING'",[order[0].id]);
-    await sql.query("update public.bridge_service_quotes set status='PAID',paid_at=now(),updated_at=now() where id=$1",[order[0].quote_id]);
-    await sql.query("insert into public.bridge_service_order_events(order_id,from_status,to_status,actor_user_id,note) values($1,'PAYMENT_PENDING','PAID',$2,'service payment captured')",[order[0].id,opts.actorUserId??payment.user_id]);
-  }
-  return { orderId: order[0].id, paymentId: opts.paymentId };
+function safeAmount(value: unknown) {
+  const amount = Number(value);
+  if (!Number.isFinite(amount) || amount < 0) throw new Error("Invalid money amount");
+  return Math.round(amount);
 }
+
+function ledgerKey(parts: string[]) {
+  return parts.join(":").slice(0, 240);
+}
+
+async function insertLedger(
+  sql: Awaited<ReturnType<typeof getSql>>,
+  row: {
+    titleId: string | null;
+    orderId: string | null;
+    paymentId: string | null;
+    serviceCode?: string | null;
+    entryType: "REVENUE" | "INTERNAL_COST" | "PASS_THROUGH" | "TAX" | "PAYMENT_FEE" | "REFUND" | "CHARGEBACK" | "CHARGEBACK_REVERSAL" | "SETTLEMENT";
+    classification: "BILLABLE" | "INCLUDED" | "INTERNAL" | "PASS_THROUGH";
+    amountPaise: number;
+    reference?: string | null;
+    idempotencyKey: string;
+    sourceEventId?: string | null;
+    metadata?: Record<string, unknown>;
+  },
+) {
+  await sql.query(
+    "insert into public.bridge_financial_ledger(title_id,service_order_id,payment_id,service_code,entry_type,classification,amount_paise,currency,reference,metadata,idempotency_key,source_event_id) values($1,$2,$3,$4,$5,$6,$7,'INR',$8,$9::jsonb,$10,$11) on conflict(idempotency_key) do nothing",
+    [
+      row.titleId,
+      row.orderId,
+      row.paymentId,
+      row.serviceCode ?? null,
+      row.entryType,
+      row.classification,
+      safeAmount(row.amountPaise),
+      row.reference ?? null,
+      JSON.stringify(row.metadata ?? {}),
+      row.idempotencyKey,
+      row.sourceEventId ?? null,
+    ],
+  );
+}
+
+async function applySettlementRules(
+  sql: Awaited<ReturnType<typeof getSql>>,
+  orderId: string,
+  titleId: string,
+  subtotalPaise: number,
+  taxPaise: number,
+  sourceEventId?: string | null,
+) {
+  const rules = await sql.query<{
+    id: string;
+    beneficiary_type: string;
+    beneficiary_user_id: string | null;
+    basis: "REVENUE" | "NET_AFTER_TAX" | "NET_AFTER_COSTS";
+    percentage_bps: number | null;
+    fixed_amount_paise: number | null;
+  }>(
+    "select distinct on (beneficiary_type, beneficiary_user_id) id,beneficiary_type,beneficiary_user_id,basis,percentage_bps,fixed_amount_paise from public.bridge_service_settlement_rules where (title_id=$1 or title_id is null) and active=true and effective_from<=now() and (effective_to is null or effective_to>now()) order by beneficiary_type,beneficiary_user_id,(title_id is null),effective_from desc,version desc,id",
+    [titleId],
+  );
+
+  const actualCosts = await sql.query<{ amount_paise: number }>(
+    "select coalesce(sum(amount_paise),0) as amount_paise from public.bridge_service_costs where order_id=$1 and cost_type='INTERNAL_COST'",
+    [orderId],
+  );
+  const internalCosts = Number(actualCosts[0]?.amount_paise ?? 0);
+
+  for (const rule of rules) {
+    const basisAmount =
+      rule.basis === "REVENUE"
+        ? subtotalPaise
+        : rule.basis === "NET_AFTER_TAX"
+          ? Math.max(0, subtotalPaise - taxPaise)
+          : Math.max(0, subtotalPaise - taxPaise - internalCosts);
+
+    const amount = rule.fixed_amount_paise != null
+      ? Number(rule.fixed_amount_paise)
+      : Math.round(basisAmount * Number(rule.percentage_bps ?? 0) / 10000);
+
+    if (amount <= 0) continue;
+
+    await sql.query(
+      "insert into public.bridge_service_settlement_lines(order_id,rule_id,beneficiary_type,beneficiary_user_id,basis,percentage_bps,amount_paise,status) values($1,$2,$3,$4,$5,$6,$7,'PENDING') on conflict(order_id,beneficiary_type,beneficiary_user_id) do nothing",
+      [
+        orderId,
+        rule.id,
+        rule.beneficiary_type,
+        rule.beneficiary_user_id,
+        rule.basis,
+        rule.percentage_bps,
+        amount,
+      ],
+    );
+
+    await insertLedger(sql, {
+      titleId,
+      orderId,
+      paymentId: null,
+      entryType: "SETTLEMENT",
+      classification: "INTERNAL",
+      amountPaise: amount,
+      reference: "settlement:" + rule.beneficiary_type,
+      idempotencyKey: ledgerKey(["settlement", orderId, rule.id]),
+      sourceEventId,
+      metadata: {
+        beneficiaryType: rule.beneficiary_type,
+        beneficiaryUserId: rule.beneficiary_user_id,
+        basis: rule.basis,
+        percentageBps: rule.percentage_bps,
+      },
+    });
+  }
+}
+
+export const createServiceQuote = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(quoteInputSchema)
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    assertPermission(actor, "service.quote_create");
+
+    const title = await loadTitle(data.titleId);
+    if (!title || !canOperateOnTitle(actor, title, "title.read_own", "title.read_catalog")) {
+      throw new Error("Not found");
+    }
+
+    const assets = await loadAssetEvidence(title.id);
+    const qcPassed = await loadQcPassed(title.id);
+    const plan = detectRequiredWork({
+      runtimeMinutes: title.runtimeMinutes,
+      destinations: data.destinations,
+      assets,
+      subtitleLanguages: data.subtitleLanguages,
+      requestedDubbingLanguages: data.requestedDubbingLanguages,
+      qcPassed,
+    });
+
+    const lines: Array<{
+      serviceCode: string;
+      rateId: string;
+      rateVersion: number;
+      classification: CatalogRow["classification"];
+      pricingMethod: string;
+      unitLabel: string;
+      quantity: number;
+      unitPricePaise: number;
+      lineTotalPaise: number;
+      costBasisPaise: number;
+      estimatedMarginPaise: number;
+      evidence: RequiredWork;
+    }> = [];
+
+    for (const work of plan.requiredWork) {
+      const [rate, catalog] = await Promise.all([
+        getActiveRate(work.serviceCode),
+        getCatalog(work.serviceCode),
+      ]);
+
+      const quantity = quantityFor(catalog.pricing_method, work.quantity);
+      const lineFinancials = calculateServiceLine({
+        unitPricePaise: safeAmount(rate.base_price_paise),
+        minimumPricePaise: safeAmount(rate.minimum_price_paise ?? 0),
+        quantity,
+        costBasisPaise: safeAmount(rate.cost_basis_paise ?? 0),
+      });
+      const unitPrice = safeAmount(rate.base_price_paise);
+      const lineTotal = lineFinancials.lineTotalPaise;
+      const estimatedCost = lineFinancials.costPaise;
+      lines.push({
+        serviceCode: work.serviceCode,
+        rateId: rate.id,
+        rateVersion: rate.version,
+        classification: catalog.classification,
+        pricingMethod: catalog.pricing_method,
+        unitLabel: catalog.unit_label,
+        quantity,
+        unitPricePaise: unitPrice,
+        lineTotalPaise: lineTotal,
+        costBasisPaise: estimatedCost,
+        estimatedMarginPaise: lineFinancials.estimatedMarginPaise,
+        evidence: work,
+      });
+    }
+
+    const subtotal = lines
+      .filter((x) => x.classification === "BILLABLE" || x.classification === "PASS_THROUGH")
+      .reduce((sum, x) => sum + x.lineTotalPaise, 0);
+
+    const estimatedCost = lines.reduce((sum, x) => sum + x.costBasisPaise, 0);
+    const estimatedMargin = subtotal - estimatedCost;
+    const tax = await getTaxRate();
+    const taxPaise = Math.round(subtotal * Number(tax.rate_percent) / 100);
+    const total = subtotal + taxPaise;
+
+    const sql = await getSql();
+    const quoteNumber =
+      "CRQ-" +
+      new Date().toISOString().slice(0, 10).replaceAll("-", "") +
+      "-" +
+      randomBytes(4).toString("hex").toUpperCase();
+
+    const quote = await sql.query<{ id: string }>(
+      "insert into public.bridge_service_quotes(quote_number,user_id,title_id,status,runtime_minutes,selected_destinations,detected_assets,required_work,pricing_snapshot,subtotal_paise,tax_paise,total_paise,estimated_cost_paise,estimated_margin_paise) values($1,$2,$3,'QUOTED',$4,$5::jsonb,$6::jsonb,$7::jsonb,$8::jsonb,$9,$10,$11,$12,$13) returning id",
+      [
+        quoteNumber,
+        actor.userId,
+        title.id,
+        title.runtimeMinutes,
+        JSON.stringify(data.destinations),
+        JSON.stringify(plan.detectedAssets),
+        JSON.stringify(plan.requiredWork),
+        JSON.stringify({
+          taxRateId: tax.id,
+          taxRatePercent: Number(tax.rate_percent),
+          rates: lines.map((x) => ({
+            serviceCode: x.serviceCode,
+            rateId: x.rateId,
+            version: x.rateVersion,
+            unitPricePaise: x.unitPricePaise,
+            costBasisPaise: x.costBasisPaise,
+          })),
+        }),
+        subtotal,
+        taxPaise,
+        total,
+        estimatedCost,
+        estimatedMargin,
+      ],
+    );
+
+    for (const line of lines) {
+      await sql.query(
+        "insert into public.bridge_service_quote_lines(quote_id,service_code,rate_id,classification,pricing_method,unit_label,quantity,unit_price_paise,line_total_paise,cost_basis_paise,estimated_margin_paise,evidence,pricing_snapshot) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::jsonb,$13::jsonb)",
+        [
+          quote[0].id,
+          line.serviceCode,
+          line.rateId,
+          line.classification,
+          line.pricingMethod,
+          line.unitLabel,
+          line.quantity,
+          line.unitPricePaise,
+          line.lineTotalPaise,
+          line.costBasisPaise,
+          line.estimatedMarginPaise,
+          JSON.stringify(line.evidence),
+          JSON.stringify({
+            rateVersion: line.rateVersion,
+            rateId: line.rateId,
+            unitPricePaise: line.unitPricePaise,
+            costBasisPaise: line.costBasisPaise,
+          }),
+        ],
+      );
+    }
+
+    await writeAudit({
+      actorUserId: actor.userId,
+      action: "service.quote_created",
+      entityType: "bridge_service_quote",
+      entityId: quote[0].id,
+      metadata: { titleId: title.id, quoteNumber, subtotal, taxPaise, total, estimatedCost },
+    });
+
+    return {
+      quoteId: quote[0].id,
+      quoteNumber,
+      status: "QUOTED",
+      currency: "INR",
+      subtotalPaise: subtotal,
+      taxPaise,
+      totalPaise: total,
+      estimatedCostPaise: estimatedCost,
+      estimatedMarginPaise: estimatedMargin,
+      detectedAssets: plan.detectedAssets,
+      requiredWork: plan.requiredWork,
+      lines,
+    };
+  });
 
 export const acceptServiceQuote = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
