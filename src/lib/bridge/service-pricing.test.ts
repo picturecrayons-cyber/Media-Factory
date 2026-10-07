@@ -15,7 +15,7 @@ test("existing accepted subtitle is not charged", () => {
     subtitleLanguages: ["English"],
     requestedDubbingLanguages: [],
   });
-  assert.equal(result.requiredWork.some((x) => x.serviceCode === "SUBTITLE_CREATE"), false);
+  assert.equal(result.requiredWork.some((x) => x.serviceCode === "LOC_SUBTITLE_TRANSLATION"), false);
 });
 
 test("missing requested subtitle creates a minute-based work item", () => {

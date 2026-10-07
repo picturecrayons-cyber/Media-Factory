@@ -7,7 +7,7 @@ import { writeAudit } from "./audit";
 import { loadActor, requireVerifiedActor } from "./session";
 import { verificationProfileId } from "./verification-profile-id";
 import { assertPermission, canGrantInternalRole, workspaceHome } from "./rbac";
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { bridgeEnv } from "./env";
 import { assertNotDevUser } from "./guards";
 import { ONBOARDING_EMAIL_CONFLICT_MESSAGE, isBridgeProfileEmailConflict } from "./onboarding-errors";
@@ -77,10 +77,6 @@ export const syncSupabaseSessionUser = createServerFn({ method: "POST" })
     if (!context.emailConfirmedAt) throw new Error("Confirm your email before entering Bridge.");
 
     if (existing) {
-      await claimLegacyCreatorIntake(sql, existing.email, existing.userId);
-      // Backfill/repair the shared Bridge↔Loop identity mapping for every
-      // confirmed Bridge profile, including accounts created before the
-      // identity-link table was introduced. This is idempotent.
       await persistSupabaseIdentityLink(sql, existing.userId, context.userId);
       if (!existing.emailVerified) {
         await sql`update bridge_profiles set email_verified = true, updated_at = now() where user_id = ${existing.userId}`;
@@ -224,10 +220,10 @@ export const completeOnboarding = createServerFn({ method: "POST" })
     }
 
     await writeAudit({
-      actorUserId: context.userId,
+      actorUserId: bridgeUserId!,
       action: "profile.onboard",
       entityType: "bridge_profile",
-      entityId: context.userId,
+      entityId: bridgeUserId,
       metadata: { accountType: data.accountType, internalRole },
     });
     const actor = await loadActor(context.userId);
@@ -236,7 +232,7 @@ export const completeOnboarding = createServerFn({ method: "POST" })
     const welcomeClaim = await sql<{ user_id: string }>`
       update bridge_profiles
       set welcome_email_sent_at = now(), updated_at = now()
-      where user_id = ${context.userId} and welcome_email_sent_at is null
+      where user_id = ${bridgeUserId} and welcome_email_sent_at is null
       returning user_id
     `;
     if (welcomeClaim.length > 0) {
@@ -244,16 +240,16 @@ export const completeOnboarding = createServerFn({ method: "POST" })
         const { sendWelcomeEmail } = await import("./mail.server");
         await sendWelcomeEmail({ to: email, name: data.displayName });
         await writeAudit({
-          actorUserId: context.userId,
+          actorUserId: bridgeUserId!,
           action: "email.welcome_sent",
           entityType: "bridge_profile",
-          entityId: context.userId,
+          entityId: bridgeUserId,
         });
       } catch (error) {
         await sql`
           update bridge_profiles
           set welcome_email_sent_at = null, updated_at = now()
-          where user_id = ${context.userId}
+          where user_id = ${bridgeUserId}
         `;
         console.error("[bridge] Welcome email failed", error);
       }

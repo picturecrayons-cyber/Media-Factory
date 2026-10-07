@@ -6,130 +6,46 @@ import { cn } from "@/lib/cn";
 
 type NavItem = { to: string; label: string };
 
-function navFor(actor: BridgeActor): NavItem[] {
-  if (actor.internalRole === "qc_reviewer") {
-    return [
-      { to: "/internal", label: "QC" },
-      { to: "/deliveries", label: "Deliveries" },
-      { to: "/account", label: "Account" },
-    ];
-  }
-  if (actor.internalRole === "legal_reviewer") {
-    return [
-      { to: "/internal", label: "Legal" },
-      { to: "/deliveries", label: "Deliveries" },
-      { to: "/account", label: "Account" },
-    ];
-  }
-  if (actor.internalRole === "finance") {
-    return [
-      { to: "/deliveries", label: "Finance" },
-      { to: "/account", label: "Account" },
-    ];
-  }
-  if (actor.internalRole === "viewer") {
-    return [
-      { to: "/internal", label: "Operations" },
-      { to: "/account", label: "Account" },
-    ];
-  }
-  if (actor.internalRole === "admin" || actor.internalRole === "super_admin") {
-    return [
-      { to: "/admin", label: "Admin" },
-      { to: "/cms", label: "CMS" },
-      { to: "/deliveries", label: "Deliveries" },
-      { to: "/account", label: "Account" },
-    ];
-  }
-  if (actor.accountType === "independent_creator") {
-    return [
-      { to: "/creator", label: "Titles" },
-      { to: "/deliveries", label: "Deliveries" },
-      { to: "/account", label: "Account" },
-    ];
-  }
-  if (actor.accountType === "studio") {
-    return [
-      { to: "/studio", label: "Studio" },
-      { to: "/deliveries", label: "Deliveries" },
-      { to: "/account", label: "Account" },
-    ];
-  }
-  if (actor.accountType === "buyer") {
-    return [
-      { to: "/buyer", label: "Buyer" },
-      { to: "/account", label: "Account" },
-    ];
-  }
-  if (actor.accountType === "investor") {
-    return [
-      { to: "/investor", label: "Investor" },
-      { to: "/account", label: "Account" },
-    ];
-  }
-  return [{ to: "/account", label: "Account" }];
-}
+const NAV: NavItem[] = [
+  { to: "/dashboard", label: "Dashboard" },
+  { to: "/workspace", label: "Titles" },
+  { to: "/deliveries", label: "Deliveries" },
+  { to: "/account", label: "Account" },
+];
 
 function NavLink({ item }: { item: NavItem }) {
-  return (
-    <Link
-      to={item.to}
-      className="bridge-nav-item"
-      activeProps={{ className: "bridge-nav-item bridge-nav-active" }}
-    >
-      {item.label}
-    </Link>
-  );
+  return <Link to={item.to} className="bridge-nav-item" activeProps={{ className: "bridge-nav-item bridge-nav-active" }}>{item.label}</Link>;
 }
 
 export function BrandMark({ className }: { className?: string }) {
   return (
-    <Link
-      to="/"
-      className={cn(
-        "inline-flex shrink-0 items-baseline gap-1 font-display text-xl font-semibold tracking-tight text-fg sm:text-2xl",
-        className,
-      )}
-      aria-label="Crayons Bridge home"
-    >
-      <span>Crayons</span>
-      <span className="text-accent">Bridge</span>
+    <Link to="/" className={cn("inline-flex items-center shrink-0", className)} aria-label="Crayons Bridge home">
+      <img src="/brand/logo.png" alt="Crayons Bridge" className="bridge-logo block h-auto w-[168px] object-contain sm:w-[196px] lg:w-[220px]" />
     </Link>
   );
 }
 
-export function BridgeShell({
-  actor,
-  title,
-  children,
-}: {
-  actor: BridgeActor;
-  title: string;
-  children: ReactNode;
-}) {
-  const nav = navFor(actor);
-
+export function BridgeShell({ actor, title, children }: { actor: BridgeActor; title: string; children: ReactNode }) {
   return (
     <div className="min-h-screen bg-bg text-fg">
-      <header className="sticky top-0 z-50 border-b border-line bg-white/95 backdrop-blur">
-        <div className="mx-auto flex max-w-[1200px] items-center gap-6 px-5 py-4 sm:px-6">
+      <header className="sticky top-0 z-50 border-b border-line bg-surface/88 backdrop-blur-xl">
+        <div className="mx-auto flex max-w-[1440px] items-center gap-6 px-4 py-3.5 sm:px-6 lg:px-8">
           <BrandMark />
-          <nav className="hidden flex-1 items-center gap-1 md:flex">
-            {nav.map((item) => <NavLink key={item.label} item={item} />)}
-          </nav>
-          <div className="ml-auto flex items-center">
+          <nav className="hidden flex-1 items-center gap-1 md:flex">{NAV.map((item) => <NavLink key={item.label} item={item} />)}</nav>
+          <a href="https://crayonsloop.in/" target="_blank" rel="noreferrer" className="hidden text-sm font-semibold text-muted transition hover:text-fg lg:inline">Open Crayons Loop ↗</a>
+          <div className="ml-auto flex items-center gap-3">
+            {actor.internalRole ? <span className="hidden rounded-full border border-line px-3 py-1 text-xs text-muted sm:inline">{actor.internalRole.replaceAll("_", " ")}</span> : null}
             <UserButton />
           </div>
         </div>
       </header>
-
-      <main className="mx-auto max-w-[1200px] px-5 py-8 sm:px-6 sm:py-10">
-        <div className="mb-8">
-          <p className="text-xs font-medium uppercase tracking-[0.16em] text-accent">Crayons Bridge</p>
-          <div className="mt-2 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
-            <h1 className="font-display text-3xl font-semibold tracking-tight sm:text-4xl">{title}</h1>
-            {actor.organizationName ? <p className="text-sm text-muted">{actor.organizationName}</p> : null}
+      <main className="mx-auto max-w-[1440px] px-4 py-6 sm:px-6 lg:px-8">
+        <div className="mb-5 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-accent">Crayons Bridge</p>
+            <h1 className="mt-1 font-display text-2xl font-semibold tracking-tight sm:text-3xl">{title}</h1>
           </div>
+          <p className="text-xs text-muted">{actor.organizationName || actor.displayName}</p>
         </div>
         {children}
       </main>
