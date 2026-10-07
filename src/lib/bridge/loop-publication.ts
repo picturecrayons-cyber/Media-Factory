@@ -340,7 +340,7 @@ export const authorizeLoopPublication = createServerFn({ method: "POST" })
         id, bridge_title_id, loop_title_id, authorization_status, territories, languages,
         exploitation_models, window_start, window_end, approved_by, approved_at, metadata, updated_at
       ) values (
-        ${randomUUID()}, ${title.id}, ${loopTitleId}, ${"live"}, ${data.territories}, ${data.languages},
+        ${randomUUID()}, ${title.id}, ${loopTitleId}, ${"authorized"}, ${data.territories}, ${data.languages},
         ${data.exploitationModels}, ${data.windowStart ?? null}, ${data.windowEnd ?? null},
         ${actor.userId}, now(),
         ${JSON.stringify({
@@ -352,7 +352,7 @@ export const authorizeLoopPublication = createServerFn({ method: "POST" })
         now()
       )
       on conflict (bridge_title_id) do update set
-        loop_title_id = excluded.loop_title_id, authorization_status = 'live',
+        loop_title_id = excluded.loop_title_id, authorization_status = 'authorized',
         territories = excluded.territories, languages = excluded.languages,
         exploitation_models = excluded.exploitation_models, window_start = excluded.window_start,
         window_end = excluded.window_end, approved_by = excluded.approved_by, approved_at = now(),
@@ -378,7 +378,7 @@ export const authorizeLoopPublication = createServerFn({ method: "POST" })
       },
     });
 
-    return { ok: true, loopTitleId, status: "LIVE" as const };
+    return { ok: true, loopTitleId, status: "AUTHORIZED" as const };
   });
 
 export const suspendLoopPublication = createServerFn({ method: "POST" })
