@@ -9,6 +9,7 @@ import { verificationProfileId } from "./verification-profile-id";
 import { assertPermission, canGrantInternalRole, workspaceHome } from "./rbac";
 import { createHash, randomBytes } from "node:crypto";
 import { bridgeEnv } from "./env";
+import { bridgeInvitationUrl, bridgeVerificationUrl } from "./origin";
 import { assertNotDevUser } from "./guards";
 import { ONBOARDING_EMAIL_CONFLICT_MESSAGE, isBridgeProfileEmailConflict } from "./onboarding-errors";
 
@@ -157,7 +158,7 @@ export const completeOnboarding = createServerFn({ method: "POST" })
       inviteId = inv.id;
     }
 
-    const profileId = context.userId;
+    const bridgeUserId = context.userId;
     try {
       if (inviteId) {
         // Consume the invite and create the profile in one statement. If profile
@@ -173,7 +174,7 @@ export const completeOnboarding = createServerFn({ method: "POST" })
             user_id, email, display_name, account_type, organization_name, internal_role, email_verified, invited_by
           )
           select
-            ${profileId}, ${email}, ${data.displayName}, ${data.accountType}, ${org},
+            ${bridgeUserId}, ${email}, ${data.displayName}, ${data.accountType}, ${org},
             ${internalRole}, ${verified}, ${invitedBy}
           from consumed_invite
           on conflict (user_id) do update set
@@ -199,7 +200,7 @@ export const completeOnboarding = createServerFn({ method: "POST" })
           insert into bridge_profiles (
             user_id, email, display_name, account_type, organization_name, internal_role, email_verified, invited_by
           ) values (
-            ${profileId}, ${email}, ${data.displayName}, ${data.accountType}, ${org},
+            ${bridgeUserId}, ${email}, ${data.displayName}, ${data.accountType}, ${org},
             ${internalRole}, ${verified}, ${invitedBy}
           )
           on conflict (user_id) do update set
@@ -263,7 +264,7 @@ export const requestEmailVerification = createServerFn({ method: "POST" })
   .handler(async ({ context }) => {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
-    const profileId = verificationProfileId(actor);
+    const bridgeUserId = verificationProfileId(actor);
     const email = actor!.email;
     if (!email) throw new Error("No email on account");
     const { token, hash } = tokenPair();
@@ -271,7 +272,7 @@ export const requestEmailVerification = createServerFn({ method: "POST" })
     const sql = await getSql();
     await sql`
       insert into bridge_email_challenges (id, user_id, email, purpose, token_hash, expires_at)
-      values (${id}, ${profileId}, ${email}, ${"verify"}, ${hash}, ${new Date(Date.now() + 24 * 3600 * 1000).toISOString()})
+      values (${id}, ${bridgeUserId}, ${email}, ${"verify"}, ${hash}, ${new Date(Date.now() + 24 * 3600 * 1000).toISOString()})
     `;
     const url = bridgeVerificationUrl(token, bridgeEnv.appUrl());
     await mail({
@@ -283,7 +284,7 @@ export const requestEmailVerification = createServerFn({ method: "POST" })
       actorUserId: context.userId,
       action: "email.verification_requested",
       entityType: "bridge_profile",
-      entityId: profileId,
+      entityId: bridgeUserId,
     });
     return { sent: true };
   });

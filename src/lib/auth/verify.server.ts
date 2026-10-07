@@ -44,6 +44,7 @@ export async function getSessionUser(bearerToken?: string): Promise<VerifiedUser
 
   try {
     const headers = new Headers();
+    if (!supabaseUrl || !supabasePublishableKey) return null;
     headers.set("apikey", supabasePublishableKey);
     headers.set("Authorization", `Bearer ${bearerToken}`);
 

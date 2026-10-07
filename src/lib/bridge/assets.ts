@@ -100,6 +100,7 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
       kind: string;
       s3_key: string;
       created_by: string;
+      content_type: string | null;
       byte_size: number | null;
     }>`
       select id, title_id, kind, s3_key, created_by, content_type, byte_size
