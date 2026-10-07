@@ -232,6 +232,15 @@ export async function sealVerifiedObject(sourceKey: string, destinationKey: stri
   return verifyObject(destinationKey);
 }
 
+export async function deleteObject(key: string) {
+  const cfg = config();
+  const namespace = await resolveNamespace(cfg);
+  const path = `/n/${encodeURIComponent(namespace)}/b/${encodeURIComponent(cfg.bucket)}/o/${encodedObjectName(key)}`;
+  const res = await signedFetch({ cfg, method: "DELETE", path });
+  if (!res.ok && res.status !== 404) throw new Error(`OCI object deletion failed (${res.status})`);
+  return { deleted: res.status !== 404, key };
+}
+
 export function titleAssetKey(opts: { ownerUserId: string; titleId: string; kind: string; filename: string }) {
   const safe = opts.filename.replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 80);
   return `bridge/${opts.ownerUserId}/${opts.titleId}/${opts.kind}/${Date.now()}-${safe}`;

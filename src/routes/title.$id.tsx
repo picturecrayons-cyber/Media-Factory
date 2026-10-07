@@ -8,6 +8,7 @@ import { confirmAssetUpload, listTitleAssets, requestAssetDownload, requestAsset
 import { getLoopPublication } from "@/lib/bridge/loop-publication";
 import type { BridgeActor } from "@/lib/bridge/session";
 import { OTT_INGEST_SPEC, getOttIngestAccept, validateOttIngestFile } from "@/lib/bridge/ott-ingest-spec";
+import { MultilingualRightsPanel } from "@/components/bridge/multilingual-rights-panel";
 
 export const Route = createFileRoute("/title/$id")({ component: TitlePage });
 
@@ -87,7 +88,9 @@ function TitleBody({ id, actor: _actor }: { id: string; actor: BridgeActor }) {
       ) : activeTab === "Files" ? (
         <FilesPanel titleId={id} assets={assets} onAssetsChanged={() => assetsQ.refetch()} />
       ) : (
-        <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
+        <div className="space-y-5">
+          <MultilingualRightsPanel titleId={id} actor={_actor} />
+          <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Business</p>
           <div className="mt-4 grid gap-3 md:grid-cols-2">
             <BusinessCard title="Rights" status={rightsReady ? "Ready" : "Pending"} copy="Ownership, territory, language and window checks remain enforced by Bridge." />
@@ -96,7 +99,8 @@ function TitleBody({ id, actor: _actor }: { id: string; actor: BridgeActor }) {
             <BusinessCard title="Delivery" status={distributionReady ? "Authorized" : "Pending"} copy={distributionReady ? "Approved for delivery." : "Delivery stays blocked until files, rights and commercial gates are clear."} />
             <BusinessCard title="Revenue" status="—" copy="Payment, ledger and settlement logic remains unchanged." />
           </div>
-        </section>
+          </section>
+        </div>
       )}
     </div>
   );
