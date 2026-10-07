@@ -38,7 +38,7 @@ function Deliveries() {
 }
 
 function VendorJobs({ actor }: { actor: Actor }) {
-  const canRequest = hasPermission(actor, "title:write") || hasPermission(actor, "delivery:write");
+  const canRequest = hasPermission(actor, "title.deliver") || hasPermission(actor, "title.create");
   const [jobs, setJobs] = useState<VendorJob[]>([]);
   const [type, setType] = useState<VendorJobType>("human_qc");
   const [titleId, setTitleId] = useState("");
