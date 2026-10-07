@@ -125,86 +125,66 @@ function TitleQueue({ titles, review }: { titles: any[]; review: any }) {
   );
 }
 
-function ReviewQueue({ title, description, titles, actions, mutation }: { title: string; description: string; titles: any[]; actions: Array<[string, string]>; mutation: any }) {
-  return (
-    <section className="space-y-3">
-      <SectionHeader title={title} description={description} />
-      {titles.length ? titles.map((t) => (
-        <div key={t.id} className="flex flex-col gap-3 rounded-2xl border border-line bg-surface p-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="font-medium">{t.name}</p>
-            <p className="mt-1 text-xs text-muted">{t.language} · updated {new Date(t.updated_at).toLocaleString()}</p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {actions.map(([decision, label]) => <ActionButton key={decision} label={label} disabled={mutation.isPending}
-              secondary={decision === "FAIL" || decision === "REJECT"} onClick={() => mutation.mutate({ data: { titleId: t.id, decision } })} />)}
-            <Link to="/title/$id" params={{ id: t.id }} className="rounded-full border border-line px-3.5 py-1.5 text-xs text-muted hover:text-fg">Open</Link>
-          </div>
-        </div>
-      )) : <Empty text={title + " is clear."} />}
-    </section>
-  );
-}
+  const pipelineAction = (title: any) => {
+    if (title.status === "PREPARING") return { label: "Approve", decision: "ACCEPT" as const };
+    if (title.status === "QC_REVIEW") return { label: "Approve", decision: "PASS" as const };
+    if (title.status === "RIGHTS_REVIEW") return { label: "Approve", decision: "APPROVE" as const };
+    return null;
+  };
 
-function BuyerRelease({ titles, qc, legal, gate, onGate }: { titles: any[]; qc: any[]; legal: any[]; gate: any; onGate: (titleId: string, gateName: "OTT" | "PACKAGING" | "CURATION" | "DELIVERY") => void }) {
-  return (
+  return <div className="space-y-8">
     <section className="space-y-4">
-      <SectionHeader title="Buyer Release" description="Certification controls stay inside Admin. Buyer catalog remains clean and fail-closed." />
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        {["OTT preparation", "OTT packaging", "Buyer curation", "Delivery readiness"].map((label) => (
-          <div key={label} className="rounded-2xl border border-line bg-surface p-4">
-            <p className="font-medium">{label}</p><p className="mt-1 text-xs text-muted">Admin certification gate</p>
-          </div>
-        ))}
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">Titles</p>
+        <h2 className="font-display text-2xl font-semibold">Simple title controls</h2>
+        <p className="text-sm text-muted">Internal workflow only. Buyer-facing pages remain free of operational controls and technical details.</p>
       </div>
-      <div className="overflow-hidden rounded-2xl border border-line bg-surface">
-        {titles.map((t) => {
-          const qcPassed = qc.some((q) => q.title_id === t.id && q.status === "PASSED");
-          const rightsApproved = legal.some((l) => l.title_id === t.id && l.status === "APPROVED");
-          return (
-            <div key={t.id} className="border-b border-line p-4 last:border-b-0">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <p className="font-medium">{t.name}</p>
-                  <p className="mt-1 text-xs text-muted">QC {qcPassed ? "cleared" : "hold"} · Rights {rightsApproved ? "cleared" : "hold"} · {STATUS_LABELS[t.status] ?? t.status}</p>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {(["OTT", "PACKAGING", "CURATION", "DELIVERY"] as const).map((gateName) =>
-                    <ActionButton key={gateName} label={gateName + " pass"} disabled={gate.isPending} secondary onClick={() => onGate(t.id, gateName)} />
-                  )}
-                </div>
-              </div>
-            </div>
-          );
-        })}
-        {!titles.length ? <Empty text="No titles available for buyer release review." /> : null}
+      <div className="overflow-x-auto rounded-2xl border border-line bg-surface">
+        <table className="w-full min-w-[980px] text-left text-sm">
+          <thead className="border-b border-line text-xs uppercase tracking-wider text-muted">
+            <tr><th className="px-4 py-3">Title</th><th className="px-4 py-3">Status</th><th className="px-4 py-3">Workflow</th><th className="px-4 py-3">Controls</th></tr>
+          </thead>
+          <tbody className="divide-y divide-line">
+            {data.titles.map((title: any) => {
+              const approve = pipelineAction(title);
+              return (
+                <tr key={title.id}>
+                  <td className="px-4 py-4 font-medium">{title.name}</td>
+                  <td className="px-4 py-4"><span className="rounded-full border border-line px-3 py-1 text-xs font-semibold">{title.status.replaceAll("_", " ")}</span></td>
+                  <td className="px-4 py-4 text-xs text-muted">Review → Approve → Publish → License → Deliver</td>
+                  <td className="px-4 py-4">
+                    <div className="flex flex-wrap gap-2">
+                      <a href={`/title/${title.id}`} className="rounded-full border border-line px-3 py-1.5 text-xs font-semibold">Review</a>
+                      {approve ? <Button size="sm" disabled={mutation.isPending} onClick={() => mutation.mutate({ data: { titleId: title.id, decision: approve.decision } })}>{approve.label}</Button> : null}
+                      <a href="#buyer-publication" className="rounded-full border border-line px-3 py-1.5 text-xs font-semibold">Publish</a>
+                      <a href="#licensing" className="rounded-full border border-line px-3 py-1.5 text-xs font-semibold">License</a>
+                      <a href="#deliveries" className="rounded-full border border-line px-3 py-1.5 text-xs font-semibold">Deliver</a>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+            {!data.titles.length ? <tr><td colSpan={4} className="px-4 py-8 text-center text-sm text-muted">No titles in the pipeline.</td></tr> : null}
+          </tbody>
+        </table>
       </div>
     </section>
-  );
-}
 
-function SectionHeader({ title, description }: { title: string; description: string }) {
-  return <div><h3 className="font-display text-2xl font-semibold">{title}</h3><p className="mt-1 text-sm text-muted">{description}</p></div>;
-}
-
-function ActionButton({ label, onClick, disabled, secondary = false }: { label: string; onClick: () => void; disabled?: boolean; secondary?: boolean }) {
-  return <Button size="sm" variant={secondary ? "outline" : undefined} disabled={disabled} onClick={onClick}>{label}</Button>;
-}
-
-function Empty({ text }: { text: string }) {
-  return <div className="rounded-2xl border border-dashed border-line p-7 text-sm text-muted">{text}</div>;
-}
-
-function SimpleTable({ title, description, rows, fields, titleName = new Map<any, any>() }: { title: string; description: string; rows: any[]; fields: string[]; titleName?: Map<any, any> }) {
-  if (!rows.length) return <section className="space-y-3"><SectionHeader title={title} description={description} /><Empty text="No persisted records." /></section>;
-  return (
-    <section className="space-y-3">
-      <SectionHeader title={title} description={description} />
-      <div className="overflow-x-auto rounded-2xl border border-line bg-surface">
-        <table className="w-full min-w-[700px] text-left text-sm">
-          <thead className="border-b border-line text-xs uppercase tracking-wider text-muted">
-            <tr>{fields.map((f) => <th key={f} className="px-3 py-3">{f.replaceAll("_", " ")}</th>)}</tr>
-          </thead>
+    <section className="rounded-3xl border border-line bg-surface p-6 sm:p-8"><p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">Authoritative operations</p><h2 className="mt-2 font-display text-3xl font-semibold">Real Bridge workstations</h2><p className="mt-3 max-w-3xl text-sm leading-relaxed text-muted">Every queue below reads persisted Bridge records. Review decisions write lifecycle events and audit records; there are no UI-only approvals.</p></section>
+    <section id="submissions" className="space-y-3"><div><h3 className="font-display text-2xl font-semibold">1 · Incoming Submissions</h3><p className="text-sm text-muted">Canonical title records awaiting operational acceptance.</p></div>{submissions.length ? submissions.map((t:any)=><ReviewRow key={t.id} title={t} actions={t.status==="PREPARING" ? [["ACCEPT","Accept → QC"]] : []}/>) : <Empty text="No incoming submissions."/>}</section>
+    <section id="assets" className="space-y-3"><h3 className="font-display text-2xl font-semibold">2 · Titles & Assets</h3><p className="text-sm text-muted">{data.titles.length} canonical titles · {data.assets.length} base assets · {data.assetVersions.length} versioned assets.</p><RecordTable rows={data.assets.slice(0,30)} titleName={titleName} fields={["kind","s3_key","content_type","byte_size"]}/></section>
+    <section id="qc" className="space-y-3"><h3 className="font-display text-2xl font-semibold">3 · Assets & QC</h3><p className="text-sm text-muted">{qcQueue.length} titles in QC review.</p>{qcQueue.length ? qcQueue.map((t:any)=><ReviewRow key={t.id} title={t} actions={[["PASS","Pass → Rights"],["FAIL","Fail QC"]]}/>) : <Empty text="QC queue is clear."/>}</section>
+    <section id="rights" className="space-y-3"><h3 className="font-display text-2xl font-semibold">4 · Legal & Rights</h3><p className="text-sm text-muted">{rightsQueue.length} titles in rights review · {data.legal.length} legal cases · {data.rights.length} rights grants.</p>{rightsQueue.length ? rightsQueue.map((t:any)=><ReviewRow key={t.id} title={t} actions={[["APPROVE","Approve → Licensing"],["REJECT","Reject"]]}/>) : <Empty text="Rights queue is clear."/>}</section>
+    <section id="licensing" className="space-y-3"><h3 className="font-display text-2xl font-semibold">5 · Licensing</h3><p className="text-sm text-muted">{ready.length} titles in commercial pipeline · {data.packages.length} destination packages.</p><RecordTable rows={ready} titleName={titleName} fields={["status","licensing_fee_paise","language","updated_at"]}/></section>
+    <section id="deliveries" className="space-y-3"><h3 className="font-display text-2xl font-semibold">6 · Deliveries</h3><p className="text-sm text-muted">Persisted destination packages and authorization state.</p><RecordTable rows={data.packages} titleName={titleName} fields={["destination","package_version","readiness_state","commercial_model","authorized_at"]}/></section>
+    <section id="users" className="space-y-3"><h3 className="font-display text-2xl font-semibold">7 · Users & Studios</h3><p className="text-sm text-muted">{data.profiles.length} Bridge profiles from the authoritative profile table. Role mutation remains controlled by the audited invite workflow.</p><RecordTable rows={data.profiles} titleName={new Map()} fields={["display_name","email","account_type","organization_name","internal_role","email_verified"]}/></section>
+    <section id="audit" className="space-y-3"><h3 className="font-display text-2xl font-semibold">8 · Audit History</h3><p className="text-sm text-muted">Immutable operational events currently stored by Bridge.</p><RecordTable rows={data.audit} titleName={new Map()} fields={["action","entity_type","entity_id","actor_user_id","created_at"]}/></section>
+    <section id="website" className="space-y-3"><h3 className="font-display text-2xl font-semibold">9 · Website CMS</h3><p className="text-sm text-muted">Public Bridge copy remains isolated in the existing Website CMS route.</p><a className="text-sm text-accent underline" href="/admin-cms">Open Website CMS →</a></section>
+    <section id="buyer-publication" className="space-y-4">
+      <div><h3 className="font-display text-2xl font-semibold">Buyer Publication · Six Gates</h3><p className="text-sm text-muted">Buyer visibility is fail-closed. Admin can certify OTT preparation, packaging, curation and delivery; QC and Legal remain separate reviewer gates.</p></div>
+      <div className="overflow-x-auto rounded-2xl border border-line">
+        <table className="w-full min-w-[900px] text-left text-sm">
+          <thead className="border-b border-line text-xs uppercase tracking-wider text-muted"><tr><th className="px-3 py-3">Title</th><th className="px-3 py-3">QC</th><th className="px-3 py-3">Legal</th><th className="px-3 py-3">Operational gates</th><th className="px-3 py-3">Actions</th></tr></thead>
           <tbody className="divide-y divide-line">
             {rows.slice(0, 50).map((row, i) => (
               <tr key={String(row.id ?? row.user_id ?? i)}>
