@@ -1,0 +1,16 @@
+{
+  "name": "Crayons Bridge Business Intelligence",
+  "description": "Business sales, marketing, market, partnership and revenue intelligence for Crayons Bridge.",
+  "version": "1.0.0",
+  "url": "https://www.crayonspictures.in/api/a2a",
+  "capabilities": {"streaming": false, "pushNotifications": false},
+  "skills": [
+    {"id":"lead_qualification","name":"Lead Qualification"},
+    {"id":"account_prioritisation","name":"Account Prioritisation"},
+    {"id":"campaign_intelligence","name":"Campaign Intelligence"},
+    {"id":"market_opportunity","name":"Market Opportunity"},
+    {"id":"partner_discovery","name":"Partner Discovery"},
+    {"id":"revenue_summary","name":"Revenue Summary"},
+    {"id":"executive_brief","name":"Executive Brief"}
+  ]
+}

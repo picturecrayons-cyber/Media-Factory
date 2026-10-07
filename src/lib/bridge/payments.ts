@@ -5,11 +5,11 @@ import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import { bridgeEnv } from "./env";
 import { paymentVerifyBody, verifyRazorpaySignature } from "./razorpay-crypto";
-import { loadActor, requireActor } from "./session";
+import { requireVerifiedActor } from "./session";
 import { assertPermission, canReadTitle } from "./rbac";
 import { loadTitle, recordTransition } from "./titles";
 import { writeAudit } from "./audit";
-import { isBuyerVisible } from "./lifecycle";
+import { assertBuyerPublishable } from "./buyer-visibility";
 import { assertNotDevUser } from "./guards";
 
 function requireRazorpayKeys() {
@@ -63,8 +63,9 @@ export async function grantFromCapturedPayment(opts: {
     status: string;
     currency: string;
     provider_payment_id: string | null;
+    package_id: string | null;
   }>`
-    select id, user_id, title_id, amount_paise, status, currency, provider_payment_id
+    select id, user_id, title_id, package_id, amount_paise, status, currency, provider_payment_id
     from bridge_payments where provider_order_id = ${opts.orderId} limit 1
   `;
   const payment = rows[0];
@@ -89,6 +90,34 @@ export async function grantFromCapturedPayment(opts: {
 
   if (!payment.title_id) {
     return { paymentId: payment.id, entitled: false };
+  }
+
+  if (payment.package_id) {
+    const pkg = await sql<{ id: string; title_id: string; status: string; delivery_status: string }>`
+      select id, title_id, status, delivery_status
+      from bridge_license_packages
+      where id = ${payment.package_id} and title_id = ${payment.title_id}
+      limit 1
+    `;
+    if (!pkg[0]) throw new Error("License package not found");
+    await sql`
+      insert into bridge_package_entitlements (package_id, title_id, buyer_user_id, payment_id)
+      values (${pkg[0].id}, ${payment.title_id}, ${payment.user_id}, ${payment.id})
+      on conflict (package_id, buyer_user_id) do nothing
+    `;
+    await sql`
+      update bridge_license_packages
+      set status = 'LICENSED', buyer_user_id = ${payment.user_id}, payment_id = ${payment.id}, updated_at = now()
+      where id = ${pkg[0].id}
+    `;
+    await writeAudit({
+      actorUserId: opts.actorUserId ?? payment.user_id,
+      action: "licensing.language_package_licensed",
+      entityType: "bridge_license_package",
+      entityId: pkg[0].id,
+      metadata: { titleId: payment.title_id, paymentId: payment.id },
+    });
+    return { paymentId: payment.id, entitled: true, titleId: payment.title_id, packageId: pkg[0].id };
   }
 
   await sql`
@@ -123,6 +152,7 @@ export const getCheckoutConfig = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
     assertNotDevUser(context.userId);
+    await requireVerifiedActor(context.userId);
     const { keyId } = requireRazorpayKeys();
     return { keyId };
   });
@@ -132,40 +162,49 @@ export const createLicenseOrder = createServerFn({ method: "POST" })
   .validator(
     z.object({
       titleId: z.string().min(8),
+      packageId: z.string().uuid().optional(),
       idempotencyKey: z.string().min(8).max(80),
     }),
   )
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
-    const actor = await requireActor(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
     assertPermission(actor, "payment.create_order");
     const title = await loadTitle(data.titleId);
-    if (!title || !canReadTitle(actor, title)) throw new Error("Not found");
-    if (!isBuyerVisible(title.status) && title.status !== "LIVE_FOR_BUYERS") {
-      throw new Error("Title is not available for licensing");
-    }
-    if (title.status !== "LIVE_FOR_BUYERS" && title.status !== "IN_NEGOTIATION") {
+    if (!title || (!canReadTitle(actor, title) && actor.accountType !== "buyer")) throw new Error("Not found");
+    await assertBuyerPublishable(title.id);
+    const sql = await getSql();
+    if (title.status !== "LIVE_FOR_BUYERS" && title.status !== "IN_NEGOTIATION" && title.status !== "LICENSED" && title.status !== "DELIVERED") {
       throw new Error("Title is not open for a new license order");
     }
-    if (title.licensingFeePaise <= 0) {
-      throw new Error("Licensing fee is not set");
+    let amountPaise = title.licensingFeePaise;
+    if (data.packageId) {
+      const pkg = await sql<{ id: string; title_id: string; price_paise: number; status: string }>`
+        select id, title_id, price_paise, status
+        from bridge_license_packages
+        where id = ${data.packageId} and title_id = ${title.id}
+        limit 1
+      `;
+      if (!pkg[0] || !["READY", "IN_NEGOTIATION"].includes(pkg[0].status)) throw new Error("License package is not available");
+      amountPaise = Number(pkg[0].price_paise);
     }
+    if (amountPaise <= 0) throw new Error("Licensing price is not set");
     const { keyId } = requireRazorpayKeys();
-    const sql = await getSql();
     const existing = await sql<{
       id: string;
       provider_order_id: string | null;
       amount_paise: number;
       title_id: string | null;
       status: string;
+      package_id: string | null;
     }>`
-      select id, provider_order_id, amount_paise, title_id, status
+      select id, provider_order_id, amount_paise, title_id, package_id, status
       from bridge_payments
       where user_id = ${actor.userId} and purpose = ${"title_license"} and idempotency_key = ${data.idempotencyKey}
       limit 1
     `;
-    if (existing[0] && existing[0].title_id !== title.id) {
-      throw new Error("Idempotency key belongs to another title");
+    if (existing[0] && (existing[0].title_id !== title.id || (existing[0].package_id ?? null) !== (data.packageId ?? null))) {
+      throw new Error("Idempotency key belongs to another title or package");
     }
     if (existing[0]?.provider_order_id) {
       return {
@@ -180,32 +219,32 @@ export const createLicenseOrder = createServerFn({ method: "POST" })
     const rz = await razorpayFetch<{ id: string; amount: number; currency: string }>("/orders", {
       method: "POST",
       body: JSON.stringify({
-        amount: title.licensingFeePaise,
+        amount: amountPaise,
         currency: "INR",
         receipt: data.idempotencyKey.slice(0, 40),
-        notes: { titleId: title.id, userId: actor.userId },
+        notes: { titleId: title.id, packageId: data.packageId ?? "", userId: actor.userId },
       }),
     });
 
     const id = randomBytes(16).toString("hex");
     const inserted = await sql<{ id: string }>`
       insert into bridge_payments (
-        id, user_id, title_id, purpose, provider_order_id, amount_paise, currency, status, idempotency_key
+        id, user_id, title_id, package_id, purpose, provider_order_id, amount_paise, currency, status, idempotency_key
       ) values (
-        ${id}, ${actor.userId}, ${title.id}, ${"title_license"}, ${rz.id},
-        ${title.licensingFeePaise}, ${"INR"}, ${"created"}, ${data.idempotencyKey}
+        ${id}, ${actor.userId}, ${title.id}, ${data.packageId ?? null}, ${"title_license"}, ${rz.id},
+        ${amountPaise}, ${"INR"}, ${"created"}, ${data.idempotencyKey}
       )
       on conflict (user_id, purpose, idempotency_key) do nothing
       returning id
     `;
     if (!inserted[0]) {
-      const winner = await sql<{ id: string; title_id: string | null; provider_order_id: string | null; amount_paise: number }>`
-        select id, title_id, provider_order_id, amount_paise from bridge_payments
+      const winner = await sql<{ id: string; title_id: string | null; package_id: string | null; provider_order_id: string | null; amount_paise: number }>`
+        select id, title_id, package_id, provider_order_id, amount_paise from bridge_payments
         where user_id = ${actor.userId} and purpose = ${"title_license"} and idempotency_key = ${data.idempotencyKey}
         limit 1
       `;
-      if (!winner[0]?.provider_order_id || winner[0].title_id !== title.id) {
-        throw new Error("Idempotency key belongs to another title or order is unavailable");
+      if (!winner[0]?.provider_order_id || winner[0].title_id !== title.id || (winner[0].package_id ?? null) !== (data.packageId ?? null)) {
+        throw new Error("Idempotency key belongs to another title/package or order is unavailable");
       }
       return {
         orderId: winner[0].provider_order_id,
@@ -216,7 +255,13 @@ export const createLicenseOrder = createServerFn({ method: "POST" })
       };
     }
 
-    if (title.status === "LIVE_FOR_BUYERS") {
+    if (data.packageId) {
+      await sql`
+        update bridge_license_packages
+        set status = 'IN_NEGOTIATION', buyer_user_id = ${actor.userId}, updated_at = now()
+        where id = ${data.packageId} and title_id = ${title.id}
+      `;
+    } else if (title.status === "LIVE_FOR_BUYERS") {
       await recordTransition({
         titleId: title.id,
         from: "LIVE_FOR_BUYERS",
@@ -231,12 +276,12 @@ export const createLicenseOrder = createServerFn({ method: "POST" })
       action: "payment.order_created",
       entityType: "bridge_payment",
       entityId: id,
-      metadata: { titleId: title.id },
+      metadata: { titleId: title.id, packageId: data.packageId ?? null },
     });
 
     return {
       orderId: rz.id,
-      amountPaise: title.licensingFeePaise,
+      amountPaise,
       currency: "INR",
       keyId,
       paymentRecordId: id,
@@ -254,8 +299,7 @@ export const verifyLicensePayment = createServerFn({ method: "POST" })
   )
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
-    const actor = await loadActor(context.userId);
-    if (!actor) throw new Error("Profile required");
+    const actor = await requireVerifiedActor(context.userId);
     const { keySecret } = requireRazorpayKeys();
     const ok = verifyRazorpaySignature({
       secret: keySecret,
@@ -273,7 +317,7 @@ export const verifyLicensePayment = createServerFn({ method: "POST" })
 export const listOwnEntitlements = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
-    const actor = await requireActor(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
     assertPermission(actor, "entitlement.read_own");
     const sql = await getSql();
     const rows = await sql<{

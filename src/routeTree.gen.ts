@@ -12,11 +12,13 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AccountRouteImport } from './routes/account'
 import { Route as AdminRouteImport } from './routes/admin'
+import { Route as AdminCmsRouteImport } from './routes/admin-cms'
 import { Route as BuyerRouteImport } from './routes/buyer'
 import { Route as CreatorRouteImport } from './routes/creator'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
 import { Route as InternalRouteImport } from './routes/internal'
+import { Route as InvestorRouteImport } from './routes/investor'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as LoopCmsRouteImport } from './routes/loop-cms'
 import { Route as OnboardingRouteImport } from './routes/onboarding'
@@ -47,6 +49,11 @@ const AdminRoute = AdminRouteImport.update({
   path: '/admin',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminCmsRoute = AdminCmsRouteImport.update({
+  id: '/admin-cms',
+  path: '/admin-cms',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const BuyerRoute = BuyerRouteImport.update({
   id: '/buyer',
   path: '/buyer',
@@ -70,6 +77,11 @@ const ForgotPasswordRoute = ForgotPasswordRouteImport.update({
 const InternalRoute = InternalRouteImport.update({
   id: '/internal',
   path: '/internal',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const InvestorRoute = InvestorRouteImport.update({
+  id: '/investor',
+  path: '/investor',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LoginRoute = LoginRouteImport.update({
@@ -147,11 +159,13 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/account': typeof AccountRoute
   '/admin': typeof AdminRoute
+  '/admin-cms': typeof AdminCmsRoute
   '/buyer': typeof BuyerRoute
   '/creator': typeof CreatorRoute
   '/dashboard': typeof DashboardRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/internal': typeof InternalRoute
+  '/investor': typeof InvestorRoute
   '/login': typeof LoginRoute
   '/loop-cms': typeof LoopCmsRoute
   '/onboarding': typeof OnboardingRoute
@@ -171,11 +185,13 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/account': typeof AccountRoute
   '/admin': typeof AdminRoute
+  '/admin-cms': typeof AdminCmsRoute
   '/buyer': typeof BuyerRoute
   '/creator': typeof CreatorRoute
   '/dashboard': typeof DashboardRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/internal': typeof InternalRoute
+  '/investor': typeof InvestorRoute
   '/login': typeof LoginRoute
   '/loop-cms': typeof LoopCmsRoute
   '/onboarding': typeof OnboardingRoute
@@ -196,6 +212,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/account': typeof AccountRoute
   '/admin': typeof AdminRoute
+  '/admin-cms': typeof AdminCmsRoute
   '/buyer': typeof BuyerRoute
   '/creator': typeof CreatorRoute
   '/dashboard': typeof DashboardRoute
@@ -222,6 +239,7 @@ export interface FileRouteTypes {
     | '/'
     | '/account'
     | '/admin'
+    | '/admin-cms'
     | '/buyer'
     | '/creator'
     | '/dashboard'
@@ -246,6 +264,7 @@ export interface FileRouteTypes {
     | '/'
     | '/account'
     | '/admin'
+    | '/admin-cms'
     | '/buyer'
     | '/creator'
     | '/dashboard'
@@ -270,6 +289,7 @@ export interface FileRouteTypes {
     | '/'
     | '/account'
     | '/admin'
+    | '/admin-cms'
     | '/buyer'
     | '/creator'
     | '/dashboard'
@@ -295,11 +315,13 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AccountRoute: typeof AccountRoute
   AdminRoute: typeof AdminRoute
+  AdminCmsRoute: typeof AdminCmsRoute
   BuyerRoute: typeof BuyerRoute
   CreatorRoute: typeof CreatorRoute
   DashboardRoute: typeof DashboardRoute
   ForgotPasswordRoute: typeof ForgotPasswordRoute
   InternalRoute: typeof InternalRoute
+  InvestorRoute: typeof InvestorRoute
   LoginRoute: typeof LoginRoute
   LoopCmsRoute: typeof LoopCmsRoute
   OnboardingRoute: typeof OnboardingRoute
@@ -339,6 +361,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin-cms': {
+      id: '/admin-cms'
+      path: '/admin-cms'
+      fullPath: '/admin-cms'
+      preLoaderRoute: typeof AdminCmsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/buyer': {
       id: '/buyer'
       path: '/buyer'
@@ -372,6 +401,13 @@ declare module '@tanstack/react-router' {
       path: '/internal'
       fullPath: '/internal'
       preLoaderRoute: typeof InternalRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/investor': {
+      id: '/investor'
+      path: '/investor'
+      fullPath: '/investor'
+      preLoaderRoute: typeof InvestorRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/login': {
@@ -479,11 +515,13 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AccountRoute: AccountRoute,
   AdminRoute: AdminRoute,
+  AdminCmsRoute: AdminCmsRoute,
   BuyerRoute: BuyerRoute,
   CreatorRoute: CreatorRoute,
   DashboardRoute: DashboardRoute,
   ForgotPasswordRoute: ForgotPasswordRoute,
   InternalRoute: InternalRoute,
+  InvestorRoute: InvestorRoute,
   LoginRoute: LoginRoute,
   LoopCmsRoute: LoopCmsRoute,
   OnboardingRoute: OnboardingRoute,

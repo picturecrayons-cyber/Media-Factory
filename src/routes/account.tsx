@@ -5,46 +5,69 @@ import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { Button } from "@/components/ui/button";
 import { requestEmailVerification } from "@/lib/bridge/profiles";
-import { UserButton } from "@/lib/auth/gates";
 
 export const Route = createFileRoute("/account")({ component: Account });
 
 function Account() {
   return (
     <RequireBridge>
-      {(actor) => (
-        <BridgeShell actor={actor} title="Account">
-          <dl className="grid gap-4 text-sm sm:grid-cols-2">
-            <div className="rounded-sm border border-line p-4">
-              <dt className="text-muted">Mailbox</dt>
-              <dd className="mt-1">{actor.email}</dd>
+      {(actor) => {
+        const isInternal = Boolean(actor.internalRole);
+        return (
+          <BridgeShell actor={actor} title="Account">
+            <div className="max-w-2xl space-y-8">
+              <section>
+                <p className="text-xs font-medium uppercase tracking-[0.16em] text-muted">Profile</p>
+                <div className="mt-4 divide-y divide-line border-y border-line">
+                  <div className="grid gap-1 py-4 sm:grid-cols-[140px_1fr]">
+                    <span className="text-sm text-muted">Email</span>
+                    <span className="text-sm font-medium">{actor.email}</span>
+                  </div>
+                  <div className="grid gap-1 py-4 sm:grid-cols-[140px_1fr]">
+                    <span className="text-sm text-muted">Account</span>
+                    <span className="text-sm font-medium">{actor.accountType.replaceAll("_", " ")}</span>
+                  </div>
+                  <div className="grid gap-1 py-4 sm:grid-cols-[140px_1fr]">
+                    <span className="text-sm text-muted">Organization</span>
+                    <span className="text-sm font-medium">{actor.organizationName ?? "—"}</span>
+                  </div>
+                  <div className="grid gap-1 py-4 sm:grid-cols-[140px_1fr]">
+                    <span className="text-sm text-muted">Verification</span>
+                    <span className="text-sm font-medium">{actor.emailVerified ? "Verified" : "Verification required"}</span>
+                  </div>
+                </div>
+
+                {!actor.emailVerified ? (
+                  <div className="mt-5">
+                    <ResendVerify />
+                  </div>
+                ) : null}
+              </section>
+
+              {isInternal ? (
+                <section className="border-t border-line pt-8">
+                  <p className="text-xs font-medium uppercase tracking-[0.16em] text-muted">Internal access</p>
+                  <p className="mt-2 text-sm text-muted">
+                    {actor.internalRole?.replaceAll("_", " ")}
+                  </p>
+                  <div className="mt-4 flex flex-wrap gap-3">
+                    {actor.internalRole === "admin" || actor.internalRole === "super_admin" ? (
+                      <Link to="/admin"><Button>Open Admin</Button></Link>
+                    ) : null}
+                    {actor.internalRole === "super_admin" ? (
+                      <Link to="/cms"><Button variant="outline">Open CMS</Button></Link>
+                    ) : null}
+                  </div>
+                </section>
+              ) : null}
+
+              <Link to="/" className="inline-block text-sm font-medium text-accent hover:text-accent-strong">
+                Back to Bridge
+              </Link>
             </div>
-            <div className="rounded-sm border border-line p-4">
-              <dt className="text-muted">Type</dt>
-              <dd className="mt-1">{actor.accountType.replaceAll("_", " ")}</dd>
-            </div>
-            <div className="rounded-sm border border-line p-4">
-              <dt className="text-muted">Organization</dt>
-              <dd className="mt-1">{actor.organizationName ?? "—"}</dd>
-            </div>
-            <div className="rounded-sm border border-line p-4">
-              <dt className="text-muted">Internal role</dt>
-              <dd className="mt-1">{actor.internalRole?.replaceAll("_", " ") ?? "none"}</dd>
-            </div>
-            <div className="rounded-sm border border-line p-4">
-              <dt className="text-muted">Email verified</dt>
-              <dd className="mt-1">{actor.emailVerified ? "yes" : "no"}</dd>
-            </div>
-          </dl>
-          <div className="mt-6 flex flex-wrap items-center gap-3">
-            <ResendVerify />
-            <UserButton />
-            <Link to="/" className="text-sm text-accent underline-offset-4 hover:underline">
-              Public landing
-            </Link>
-          </div>
-        </BridgeShell>
-      )}
+          </BridgeShell>
+        );
+      }}
     </RequireBridge>
   );
 }
@@ -55,9 +78,10 @@ function ResendVerify() {
     onSuccess: () => toast("Verification mail requested"),
     onError: (err) => toast(err instanceof Error ? err.message : "Mail is not configured"),
   });
+
   return (
     <Button type="button" variant="outline" disabled={mut.isPending} onClick={() => mut.mutate()}>
-      Send verification mail
+      {mut.isPending ? "Sending…" : "Send verification mail"}
     </Button>
   );
 }

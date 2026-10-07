@@ -4,7 +4,8 @@
   "sideEffects": false,
   "type": "module",
   "overrides": {
-    "nf3": "0.3.17"
+    "nf3": "0.3.17",
+    "@tanstack/start-server-core": "1.169.39"
   },
   "scripts": {
     "dev": "node scripts/with-app-env.mjs vite dev --host 0.0.0.0 --port 3000",
@@ -21,7 +22,11 @@
     "secret-scan": "node scripts/secret-scan.mjs",
     "lint": "eslint .",
     "format": "prettier --write .",
-    "check:release-readiness": "node scripts/release-readiness.mjs"
+    "check:release-readiness": "node scripts/release-readiness.mjs",
+    "test:oci-production-e2e": "node --experimental-strip-types scripts/oci-production-e2e.mjs",
+    "check:bridge-app-url": "node scripts/check-bridge-app-url.mjs",
+    "test:cra101": "node --test scripts/cra-101-auth-flow.test.mjs",
+    "test:storage-e2e": "node scripts/oci-storage-e2e.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.864.0",
@@ -53,7 +58,7 @@
     "@tailwindcss/vite": "^4.3.0",
     "@tanstack/react-query": "^5.101.0",
     "@tanstack/react-router": "^1.170.0",
-    "@tanstack/react-start": "^1.168.0",
+    "@tanstack/react-start": "1.168.60",
     "@tanstack/react-table": "^8.21.0",
     "@tanstack/router-plugin": "^1.168.0",
     "better-auth": "~1.6.30",

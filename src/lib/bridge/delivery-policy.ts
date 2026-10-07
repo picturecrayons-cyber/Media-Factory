@@ -21,6 +21,15 @@ export function downloadDecision(opts: {
     }
     return { allow: true, reason: "Master download is limited to the title owner or an internal reviewer" };
   }
+  if (opts.kind === "technical") {
+    if (!opts.actorIsOwner && !opts.actorIsInternal) {
+      return {
+        allow: false,
+        reason: "A screener or catalog grant does not authorize technical package downloads",
+      };
+    }
+    return { allow: true, reason: "Technical package downloads are limited to the title owner or an internal reviewer" };
+  }
   if (opts.actorIsOwner || opts.actorIsInternal) {
     return { allow: true, reason: "Owner or internal reviewer" };
   }

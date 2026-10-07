@@ -292,6 +292,8 @@ export const authorizeLoopPublication = createServerFn({ method: "POST" })
       throw new Error("Consumer access tier must be covered by the requested exploitation models.");
     }
     const sql = await getSql();
+    await assertDuplicateTitleLoopReleaseAllowed(sql, data.bridgeTitleId);
+    await assertBuyerPublishable(data.bridgeTitleId);
     const preflight = await verifyDistributionPreflight(sql, data.bridgeTitleId, {
       destination: data.destination,
       territories: data.territories,

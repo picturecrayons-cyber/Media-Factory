@@ -1,3 +1,4 @@
+import { resolveBridgeConfiguredOrigin } from "./origin.ts";
 function read(key: string): string | undefined {
   const v = typeof process === "undefined" ? undefined : process.env[key]?.trim();
   return v || undefined;
@@ -17,31 +18,35 @@ export const bridgeEnv = {
   ociRegion: () => read("OCI_REGION"),
   ociNamespace: () => read("OCI_NAMESPACE"),
   ociBucket: () => read("OCI_BUCKET_NAME"),
+  // Legacy AWS/S3 compatibility adapter only; never used by production readiness.
+  awsRegion: () => read("AWS_REGION"),
+  awsBucket: () => read("AWS_S3_MEDIA_BUCKET") || read("S3_MEDIA_BUCKET") || read("AWS_S3_BUCKET"),
+  awsAccessKeyId: () => read("AWS_ACCESS_KEY_ID"),
+  awsSecretAccessKey: () => read("AWS_SECRET_ACCESS_KEY"),
+  awsSessionToken: () => read("AWS_SESSION_TOKEN"),
   smtpHost: () => read("SMTP_HOST") || read("HOSTINGER_SMTP_HOST"),
   smtpPort: () => read("SMTP_PORT") || "587",
   smtpUser: () => read("SMTP_USER") || read("HOSTINGER_SMTP_USER"),
   smtpPass: () => read("SMTP_PASS") || read("HOSTINGER_SMTP_PASS"),
   mailFrom: () => read("MAIL_FROM") || "abijithasokan@crayonspictures.com",
-  appUrl: () => read("APP_URL") || read("SITE_URL") || "https://bridge.crayonspictures.com",
+  appUrl: () => resolveBridgeConfiguredOrigin(read("APP_URL"), read("SITE_URL")),
   databaseUrl: () => read("DATABASE_URL") || read("POSTGRES_URL"),
 };
 
 export function integrationStatus() {
-  const ociStorage = Boolean(
-    bridgeEnv.ociTenancyOcid() &&
-    bridgeEnv.ociUserOcid() &&
-    bridgeEnv.ociPrivateKey() &&
-    bridgeEnv.ociRegion() &&
-    bridgeEnv.ociBucket(),
-  );
   return {
     postgres: Boolean(bridgeEnv.databaseUrl()),
     supabase: Boolean(bridgeEnv.supabaseUrl() && (bridgeEnv.supabaseAnon() || bridgeEnv.supabaseService())),
     razorpay: Boolean(bridgeEnv.razorpayKeyId() && bridgeEnv.razorpayKeySecret()),
     razorpayWebhook: Boolean(bridgeEnv.razorpayWebhookSecret()),
-    // Keep the legacy key temporarily so existing admin UI does not break while storage moves from AWS to OCI.
-    s3: ociStorage,
-    ociStorage,
+    oci: Boolean(
+      bridgeEnv.ociTenancyOcid() &&
+        bridgeEnv.ociUserOcid() &&
+        bridgeEnv.ociPrivateKey() &&
+        bridgeEnv.ociRegion() &&
+        bridgeEnv.ociNamespace() &&
+        bridgeEnv.ociBucket(),
+    ),
     mail: Boolean(bridgeEnv.smtpHost() && bridgeEnv.smtpUser() && bridgeEnv.smtpPass()),
   };
 }
