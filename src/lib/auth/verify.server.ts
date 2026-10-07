@@ -47,9 +47,7 @@ export async function getSessionUser(bearerToken?: string): Promise<VerifiedUser
     headers.set("apikey", supabasePublishableKey);
     headers.set("Authorization", `Bearer ${bearerToken}`);
 
-    const response = await fetch(`${supabaseUrl}/auth/v1/user`, {
-      headers,
-    });
+    const response = await fetch(`${supabaseUrl}/auth/v1/user`, { headers });
 
     if (!response.ok) {
       if (response.status === 401 || response.status === 403) {
