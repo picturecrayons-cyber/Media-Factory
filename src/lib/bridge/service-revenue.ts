@@ -118,134 +118,23 @@ function quantityFor(method: string, requestedQuantity: number) {
     : 1;
 }
 
-function safeAmount(value: unknown) {
-  const amount = Number(value);
-  if (!Number.isFinite(amount) || amount < 0) throw new Error("Invalid money amount");
-  return Math.round(amount);
-}
-
-function ledgerKey(parts: string[]) {
-  return parts.join(":").slice(0, 240);
-}
-
-async function insertLedger(
-  sql: Awaited<ReturnType<typeof getSql>>,
-  row: {
-    titleId: string | null;
-    orderId: string | null;
-    paymentId: string | null;
-    serviceCode?: string | null;
-    entryType: "REVENUE" | "INTERNAL_COST" | "PASS_THROUGH" | "TAX" | "PAYMENT_FEE" | "REFUND" | "CHARGEBACK" | "CHARGEBACK_REVERSAL" | "SETTLEMENT";
-    classification: "BILLABLE" | "INCLUDED" | "INTERNAL" | "PASS_THROUGH";
-    amountPaise: number;
-    reference?: string | null;
-    idempotencyKey: string;
-    sourceEventId?: string | null;
-    metadata?: Record<string, unknown>;
-  },
-) {
-  await sql.query(
-    "insert into public.bridge_financial_ledger(title_id,service_order_id,payment_id,service_code,entry_type,classification,amount_paise,currency,reference,metadata,idempotency_key,source_event_id) values($1,$2,$3,$4,$5,$6,$7,'INR',$8,$9::jsonb,$10,$11) on conflict(idempotency_key) do nothing",
-    [
-      row.titleId,
-      row.orderId,
-      row.paymentId,
-      row.serviceCode ?? null,
-      row.entryType,
-      row.classification,
-      safeAmount(row.amountPaise),
-      row.reference ?? null,
-      JSON.stringify(row.metadata ?? {}),
-      row.idempotencyKey,
-      row.sourceEventId ?? null,
-    ],
-  );
-}
-
-async function applySettlementRules(
-  sql: Awaited<ReturnType<typeof getSql>>,
-  orderId: string,
-  titleId: string,
-  subtotalPaise: number,
-  taxPaise: number,
-  sourceEventId?: string | null,
-) {
-  const rules = await sql.query<{
-    id: string;
-    beneficiary_type: string;
-    beneficiary_user_id: string | null;
-    basis: "REVENUE" | "NET_AFTER_TAX" | "NET_AFTER_COSTS";
-    percentage_bps: number | null;
-    fixed_amount_paise: number | null;
-  }>(
-    "select distinct on (beneficiary_type, beneficiary_user_id) id,beneficiary_type,beneficiary_user_id,basis,percentage_bps,fixed_amount_paise from public.bridge_service_settlement_rules where (title_id=$1 or title_id is null) and active=true and effective_from<=now() and (effective_to is null or effective_to>now()) order by beneficiary_type,beneficiary_user_id,(title_id is null),effective_from desc,version desc,id",
-    [titleId],
-  );
-
-  const actualCosts = await sql.query<{ amount_paise: number }>(
-    "select coalesce(sum(amount_paise),0) as amount_paise from public.bridge_service_costs where order_id=$1 and cost_type='INTERNAL_COST'",
-    [orderId],
-  );
-  const internalCosts = Number(actualCosts[0]?.amount_paise ?? 0);
-
-  for (const rule of rules) {
-    const basisAmount =
-      rule.basis === "REVENUE"
-        ? subtotalPaise
-        : rule.basis === "NET_AFTER_TAX"
-          ? Math.max(0, subtotalPaise - taxPaise)
-          : Math.max(0, subtotalPaise - taxPaise - internalCosts);
-
-    const amount = rule.fixed_amount_paise != null
-      ? Number(rule.fixed_amount_paise)
-      : Math.round(basisAmount * Number(rule.percentage_bps ?? 0) / 10000);
-
-    if (amount <= 0) continue;
-
-    await sql.query(
-      "insert into public.bridge_service_settlement_lines(order_id,rule_id,beneficiary_type,beneficiary_user_id,basis,percentage_bps,amount_paise,status) values($1,$2,$3,$4,$5,$6,$7,'PENDING') on conflict(order_id,beneficiary_type,beneficiary_user_id) do nothing",
-      [
-        orderId,
-        rule.id,
-        rule.beneficiary_type,
-        rule.beneficiary_user_id,
-        rule.basis,
-        rule.percentage_bps,
-        amount,
-      ],
-    );
-
-    await insertLedger(sql, {
-      titleId,
-      orderId,
-      paymentId: null,
-      entryType: "SETTLEMENT",
-      classification: "INTERNAL",
-      amountPaise: amount,
-      reference: "settlement:" + rule.beneficiary_type,
-      idempotencyKey: ledgerKey(["settlement", orderId, rule.id]),
-      sourceEventId,
-      metadata: {
-        beneficiaryType: rule.beneficiary_type,
-        beneficiaryUserId: rule.beneficiary_user_id,
-        basis: rule.basis,
-        percentageBps: rule.percentage_bps,
-      },
-    });
-  }
-}
-
-export const createServiceQuote = createServerFn({ method: "POST" })
-  .middleware([authMiddleware])
-  .validator(quoteInputSchema)
-  .handler(async ({ context, data }) => {
-    assertNotDevUser(context.userId);
-    const actor = await requireVerifiedActor(context.userId);
-    assertPermission(actor, "service.quote_create");
-
-    const title = await loadTitle(data.titleId);
-    if (!title || !canOperateOnTitle(actor, title, "title.read_own", "title.read_catalog")) {
-      throw new Error("Not found");
+export async function captureServicePayment(opts:{orderId:string;paymentId:string;actorUserId?:string|null}){
+  const captured=await razorpayFetch<{id:string;order_id:string;status:string;amount:number;currency:string;fee?:number|null;tax?:number|null}>("/payments/"+opts.paymentId); if(captured.status!=="captured"||captured.order_id!==opts.orderId) throw new Error("Payment is not captured or does not match order");
+  const sql=await getSql(); const rows=await sql.query<{id:string;user_id:string;title_id:string|null;amount_paise:number;currency:string;provider_payment_id:string|null;purpose:string}>("select id,user_id,title_id,amount_paise,currency,provider_payment_id,purpose from public.bridge_payments where provider_order_id=$1 limit 1",[opts.orderId]);
+  const payment=rows[0]; if(!payment||payment.purpose!=="service_order") throw new Error("Unknown service payment order"); if(captured.amount!==payment.amount_paise||captured.currency!==payment.currency||payment.currency!=="INR") throw new Error("Amount or currency mismatch"); if(payment.provider_payment_id&&payment.provider_payment_id!==opts.paymentId) throw new Error("Order already linked to another payment"); if(opts.actorUserId&&opts.actorUserId!==payment.user_id) throw new Error("Payment does not belong to this account");
+  await sql.query("update public.bridge_payments set status='captured',provider_payment_id=$1,verified_at=now() where id=$2 and status<>'captured'",[opts.paymentId,payment.id]);
+  const order=await sql.query<{id:string;quote_id:string;status:string}>("select id,quote_id,status from public.bridge_service_orders where payment_id=$1 limit 1",[payment.id]); if(!order[0]) throw new Error("Service order is missing");
+  if(order[0].status==="PAYMENT_PENDING"){
+    await sql.query("update public.bridge_service_orders set status='PAID',updated_at=now() where id=$1 and status='PAYMENT_PENDING'",[order[0].id]);
+    await sql.query("update public.bridge_service_quotes set status='PAID',paid_at=now(),updated_at=now() where id=$1",[order[0].quote_id]);
+    await sql.query("insert into public.bridge_service_order_events(order_id,from_status,to_status,actor_user_id,note) values($1,'PAYMENT_PENDING','PAID',$2,'service payment captured')",[order[0].id,opts.actorUserId??payment.user_id]);
+    const q=await sql.query<{invoice_number:string;subtotal_paise:number;tax_paise:number;total_paise:number}>("select quote_number as invoice_number,subtotal_paise,tax_paise,total_paise from public.bridge_service_quotes where id=$1",[order[0].quote_id]);
+    if(q[0]){
+      const invoiceNumber="CRI-"+q[0].invoice_number;
+      await sql.query("insert into public.bridge_service_invoices(order_id,invoice_number,status,subtotal_paise,tax_paise,total_paise,currency,paid_at) values($1,$2,'PAID',$3,$4,$5,'INR',now()) on conflict(order_id) do update set status='PAID',paid_at=now()",[order[0].id,invoiceNumber,q[0].subtotal_paise,q[0].tax_paise,q[0].total_paise]);
+      await sql.query("insert into public.bridge_financial_ledger(title_id,service_order_id,payment_id,entry_type,classification,amount_paise,currency,reference,metadata) values($1,$2,$3,'REVENUE','BILLABLE',$4,'INR',$5,$6::jsonb)",[payment.title_id ?? null,order[0].id,payment.id,q[0].subtotal_paise,invoiceNumber,JSON.stringify({source:"service_order",quoteId:order[0].quote_id})]);
+      if(q[0].tax_paise > 0) await sql.query("insert into public.bridge_financial_ledger(title_id,service_order_id,payment_id,entry_type,classification,amount_paise,currency,reference,metadata) values($1,$2,$3,'TAX','INTERNAL',$4,'INR',$5,$6::jsonb)",[payment.title_id ?? null,order[0].id,payment.id,q[0].tax_paise,invoiceNumber,JSON.stringify({source:"service_order"} )]);
+      if((captured.fee ?? 0) > 0) await sql.query("insert into public.bridge_financial_ledger(title_id,service_order_id,payment_id,entry_type,classification,amount_paise,currency,reference,metadata) values($1,$2,$3,'PAYMENT_FEE','PASS_THROUGH',$4,'INR',$5,$6::jsonb)",[payment.title_id ?? null,order[0].id,payment.id,captured.fee!,invoiceNumber,JSON.stringify({provider:"razorpay"})]);
     }
 
     const assets = await loadAssetEvidence(title.id);
