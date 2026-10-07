@@ -103,12 +103,6 @@ export const setBuyerPublicationGate = createServerFn({ method: "POST" })
     const rows = await sql<{ id: string }>`select id from bridge_titles where id = ${data.titleId} limit 1`;
     if (!rows[0]) throw new Error("Title not found");
 
-    const column = {
-      OTT: "ott_preparation_status",
-      PACKAGING: "packaging_status",
-      CURATION: "curation_status",
-      DELIVERY: "delivery_status",
-    }[data.gate];
     const value = data.decision === "PASS"
       ? ({OTT:"READY",PACKAGING:"COMPLETE",CURATION:"APPROVED",DELIVERY:"READY"} as const)[data.gate]
       : data.decision === "REVOKE" && data.gate === "DELIVERY" ? "REVOKED"
@@ -119,15 +113,34 @@ export const setBuyerPublicationGate = createServerFn({ method: "POST" })
       values (${data.titleId}, 'HOLD', 'HOLD', 'HOLD', 'HOLD', ${actor.userId}, ${JSON.stringify({[data.gate]:{decision:data.decision,notes:data.notes??null,actor:actor.userId,at:new Date().toISOString()}})}::jsonb, now())
       on conflict (title_id) do nothing
     `;
-    const evidenceJson = JSON.stringify({[data.gate]:{decision:data.decision,notes:data.notes??null,actor:actor.userId,at:new Date().toISOString()}});
-    if (column === "ott_preparation_status") {
-      await sql`update bridge_title_gate_certifications set ott_preparation_status=${value}, updated_by=${actor.userId}, evidence=evidence || ${evidenceJson}::jsonb, updated_at=now() where title_id=${data.titleId}`;
-    } else if (column === "packaging_status") {
-      await sql`update bridge_title_gate_certifications set packaging_status=${value}, updated_by=${actor.userId}, evidence=evidence || ${evidenceJson}::jsonb, updated_at=now() where title_id=${data.titleId}`;
-    } else if (column === "curation_status") {
-      await sql`update bridge_title_gate_certifications set curation_status=${value}, updated_by=${actor.userId}, evidence=evidence || ${evidenceJson}::jsonb, updated_at=now() where title_id=${data.titleId}`;
+    const gateEvidence = JSON.stringify({
+      [data.gate]: {
+        decision: data.decision,
+        notes: data.notes ?? null,
+        actor: actor.userId,
+        at: new Date().toISOString(),
+      },
+    });
+    if (data.gate === "OTT") {
+      await sql`update bridge_title_gate_certifications
+        set ott_preparation_status=${value}, updated_by=${actor.userId},
+            evidence=evidence || ${gateEvidence}::jsonb, updated_at=now()
+        where title_id=${data.titleId}`;
+    } else if (data.gate === "PACKAGING") {
+      await sql`update bridge_title_gate_certifications
+        set packaging_status=${value}, updated_by=${actor.userId},
+            evidence=evidence || ${gateEvidence}::jsonb, updated_at=now()
+        where title_id=${data.titleId}`;
+    } else if (data.gate === "CURATION") {
+      await sql`update bridge_title_gate_certifications
+        set curation_status=${value}, updated_by=${actor.userId},
+            evidence=evidence || ${gateEvidence}::jsonb, updated_at=now()
+        where title_id=${data.titleId}`;
     } else {
-      await sql`update bridge_title_gate_certifications set delivery_status=${value}, updated_by=${actor.userId}, evidence=evidence || ${evidenceJson}::jsonb, updated_at=now() where title_id=${data.titleId}`;
+      await sql`update bridge_title_gate_certifications
+        set delivery_status=${value}, updated_by=${actor.userId},
+            evidence=evidence || ${gateEvidence}::jsonb, updated_at=now()
+        where title_id=${data.titleId}`;
     }
     await writeAudit({actorUserId:actor.userId,action:`buyer_gate.${data.gate.toLowerCase()}.${data.decision.toLowerCase()}`,entityType:"bridge_title",entityId:data.titleId,metadata:{gate:data.gate,decision:data.decision,notes:data.notes??null}});
     const result=await sql<{ok:boolean}>`select public.bridge_title_buyer_visibility(${data.titleId}) as ok`;

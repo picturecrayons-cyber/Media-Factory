@@ -8,9 +8,12 @@ function trimKey(value: string | undefined): string | undefined {
   return trimmed || undefined;
 }
 
+// Production client builds already bake the canonical public Supabase project.
+// Server verification must use that same project when Vercel only attached the
+// Supabase integration env to a configuration that is not injected at runtime.
 const supabaseUrl =
-  trimUrl(process.env.SUPABASE_URL) ??
-  trimUrl(process.env.VITE_SUPABASE_URL) ??
+  trimUrl(process.env.SUPABASE_URL) ||
+  trimUrl(process.env.VITE_SUPABASE_URL) ||
   trimUrl(process.env.NEXT_PUBLIC_SUPABASE_URL);
 
 const supabasePublishableKey =
@@ -19,11 +22,7 @@ const supabasePublishableKey =
   trimKey(process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY) ??
   trimKey(process.env.SUPABASE_ANON_KEY) ??
   trimKey(process.env.VITE_SUPABASE_ANON_KEY) ??
-  trimKey(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) ??
-  "";
-if (!supabaseUrl || !supabasePublishableKey) {
-  throw new Error("Supabase authentication configuration is missing.");
-}
+  trimKey(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
 
 export class UnauthorizedError extends Error {
   readonly status = 401;
@@ -48,9 +47,7 @@ export async function getSessionUser(bearerToken?: string): Promise<VerifiedUser
     headers.set("apikey", supabasePublishableKey);
     headers.set("Authorization", `Bearer ${bearerToken}`);
 
-    const response = await fetch(`${supabaseUrl}/auth/v1/user`, {
-      headers,
-    });
+    const response = await fetch(`${supabaseUrl}/auth/v1/user`, { headers });
 
     if (!response.ok) {
       if (response.status === 401 || response.status === 403) {

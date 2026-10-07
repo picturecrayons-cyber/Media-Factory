@@ -61,8 +61,9 @@ export async function resolveBridgeUserId(authUserId: string): Promise<string> {
   `;
   if (linked[0]?.bridge_user_id) return linked[0].bridge_user_id;
 
-  // Recover legacy Bridge profiles only for an authenticated Supabase user
-  // whose verified email exactly matches the existing Bridge profile email.
+  // Legacy Bridge profiles may predate the Supabase identity-link table.
+  // Recover the mapping only when the authenticated Supabase user's verified
+  // email exactly matches the existing Bridge profile email.
   const byEmail = await sql<{ bridge_user_id: string }>`
     select bp.user_id as bridge_user_id
     from bridge_profiles bp
