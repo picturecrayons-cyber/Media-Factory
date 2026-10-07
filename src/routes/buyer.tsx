@@ -164,7 +164,7 @@ function TitleList({ titles, entitled, order, empty }: { titles: Array<{ id: str
             <p className="text-sm text-muted">{t.language}{t.licensingFeePaise > 0 ? ` · ₹${(t.licensingFeePaise / 100).toFixed(0)}` : " · fee unset"}</p>
           </div>
           <div className="flex items-center gap-3">
-            <StatusChip status={t.status} />
+            <StatusChip status={t.status as never} />
             {entitled.has(t.id) ? <span className="text-sm text-accent">Licensed</span> : <Button disabled={order.isPending || t.licensingFeePaise <= 0} onClick={() => order.mutate(t.id)}>License</Button>}
           </div>
         </li>
