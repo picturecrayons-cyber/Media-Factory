@@ -37,13 +37,19 @@ export const requestAssetUpload = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
-    assertPermission(actor, "asset.sign_upload");
+    assertPermission(actor, actor.internalRole ? "title.ingest_internal" : "asset.sign_upload");
     const title = await loadTitle(data.titleId);
     if (!title) throw new Error("Not found");
-    if (!canOperateOnTitle(actor, title, "asset.sign_upload", "asset.sign_upload")) throw new Error("Forbidden");
+    if (!canOperateOnTitle(actor, title, "asset.sign_upload", "title.ingest_internal"))
+      throw new Error("Forbidden");
     if (!UPLOADABLE.has(title.status)) throw new Error("Uploads are closed for this status");
-    if (!["master","poster","subtitle","screener","technical"].includes(data.kind)) throw new Error("This asset kind is not supported by the OTT ingest uploader");
-    const ingestValidation = validateOttIngestFile({ kind: data.kind as OttIngestKind, filename: data.filename, contentType: data.contentType });
+    if (!["master", "poster", "poster_vertical", "poster_horizontal", "thumbnail", "subtitle", "screener", "technical", "censor_certificate"].includes(data.kind))
+      throw new Error("This asset kind is not supported by the OTT ingest uploader");
+    const ingestValidation = validateOttIngestFile({
+      kind: data.kind as OttIngestKind,
+      filename: data.filename,
+      contentType: data.contentType,
+    });
     if (!ingestValidation.ok) throw new Error(ingestValidation.message);
     const { signUpload, titleAssetKey } = await import("./oci-object-storage.server");
     const key = titleAssetKey({
@@ -78,15 +84,24 @@ export const requestAssetUpload = createServerFn({ method: "POST" })
 
 export const confirmAssetUpload = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .validator(z.object({ assetId: z.string().min(8), expectedByteSize: z.number().int().positive().optional() }))
+  .validator(
+    z.object({
+      assetId: z.string().min(8),
+      expectedByteSize: z.number().int().positive().optional(),
+    }),
+  )
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
-    assertPermission(actor, "asset.sign_upload");
+    assertPermission(actor, actor.internalRole ? "title.ingest_internal" : "asset.sign_upload");
     const sql = await getSql();
     const rows = await sql<{
-      id: string; title_id: string; kind: string; s3_key: string;
-      created_by: string; content_type: string | null; byte_size: number | null;
+      id: string;
+      title_id: string;
+      kind: string;
+      s3_key: string;
+      created_by: string;
+      byte_size: number | null;
     }>`
       select id, title_id, kind, s3_key, created_by, content_type, byte_size
       from bridge_assets where id = ${data.assetId} limit 1
@@ -96,13 +111,14 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
     const title = await loadTitle(asset.title_id);
     if (
       !title ||
-      !canOperateOnTitle(actor, title, "asset.sign_upload") ||
+      !canOperateOnTitle(actor, title, "asset.sign_upload", "title.ingest_internal") ||
       (!actor.internalRole && asset.created_by !== actor.userId) ||
       !UPLOADABLE.has(title.status)
     ) {
       throw new Error("Upload confirmation is closed for this title");
     }
-    if (asset.byte_size != null) return { assetId: asset.id, byteSize: Number(asset.byte_size), verified: true };
+    if (asset.byte_size != null)
+      return { assetId: asset.id, byteSize: Number(asset.byte_size), verified: true };
 
     const { verifyObject, sealVerifiedObject } = await import("./oci-object-storage.server");
     const object = await verifyObject(asset.s3_key, asset.content_type);
@@ -137,8 +153,11 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
       `;
     }
     if (!confirmed) {
-      const current = await sql<{ byte_size: number | null }>`select byte_size from bridge_assets where id = ${asset.id}`;
-      if (current[0]?.byte_size != null) return { assetId: asset.id, byteSize: Number(current[0].byte_size), verified: true };
+      const current = await sql<{
+        byte_size: number | null;
+      }>`select byte_size from bridge_assets where id = ${asset.id}`;
+      if (current[0]?.byte_size != null)
+        return { assetId: asset.id, byteSize: Number(current[0].byte_size), verified: true };
       throw new Error("Asset confirmation changed; retry after refreshing the title");
     }
     return { assetId: asset.id, byteSize: sealed.byteSize, verified: true };
@@ -216,7 +235,7 @@ export const listTitleAssets = createServerFn({ method: "GET" })
     `;
     return {
       assets: rows
-        .filter((r) => !buyer || !["master", "technical"].includes(r.kind))
+        .filter((r) => !buyer || !["master", "technical", "censor_certificate"].includes(r.kind))
         .map((r) => ({
           id: r.id,
           kind: r.kind,
@@ -224,7 +243,8 @@ export const listTitleAssets = createServerFn({ method: "GET" })
           contentType: r.content_type,
           byteSize: r.byte_size,
           verified: Number(r.byte_size) > 0,
-          createdAt: r.created_at instanceof Date ? r.created_at.toISOString() : String(r.created_at),
+          createdAt:
+            r.created_at instanceof Date ? r.created_at.toISOString() : String(r.created_at),
         })),
     };
   });

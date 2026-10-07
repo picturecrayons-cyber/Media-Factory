@@ -2,14 +2,16 @@ import { randomUUID } from "node:crypto";
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { authMiddleware } from "@/lib/auth/middleware";
-import { getSql } from "@/lib/db";
+import { getSql, type Sql } from "@/lib/db";
 import { assertPermission } from "./rbac";
 import { requireActor } from "./session";
 import { assertNotDevUser } from "./guards";
 import { writeAudit } from "./audit";
-import { assertPublicationCanExtend, findCoveringRightsGrant, type BridgeRightsGrant } from "./rights-coverage";
-import { assertBuyerPublishable } from "./buyer-visibility";
-import { assertDuplicateTitleLoopReleaseAllowed } from "./duplicate-reconciliation-gate";
+import {
+  assertPublicationCanExtend,
+  findCoveringRightsGrant,
+  type BridgeRightsGrant,
+} from "./rights-coverage";
 
 export type DistributionAuthorizationStatus =
   | "DRAFT"
@@ -55,7 +57,10 @@ const publishInput = z.object({
   destination: z.literal("CRAYONS_LOOP").default("CRAYONS_LOOP"),
   territories: z.array(z.string().min(2).max(32)).min(1).max(50),
   languages: z.array(z.string().min(2).max(40)).min(1).max(20),
-  exploitationModels: z.array(z.enum(["SVOD", "TVOD", "AVOD", "FREE", "PROMOTIONAL"])).min(1).max(5),
+  exploitationModels: z
+    .array(z.enum(["SVOD", "TVOD", "AVOD", "FREE", "PROMOTIONAL"]))
+    .min(1)
+    .max(5),
   windowStart: z.string().datetime().nullable().optional(),
   windowEnd: z.string().datetime().nullable().optional(),
   accessTier: z.enum(["FREE", "SVOD", "TVOD"]),
@@ -76,7 +81,7 @@ function iso(v: string | Date | null) {
 
 /** Pre-flight verification checking rights, assets, QC and operator authority */
 export async function verifyDistributionPreflight(
-  sql: any,
+  sql: Sql,
   titleId: string,
   rightsRequest?: {
     destination: "CRAYONS_LOOP";
@@ -85,7 +90,7 @@ export async function verifyDistributionPreflight(
     exploitationModels: string[];
     windowStart?: string | null;
     windowEnd?: string | null;
-  }
+  },
 ) {
   const titles = await sql<{
     id: string;
@@ -110,6 +115,11 @@ export async function verifyDistributionPreflight(
   }
 
   const reasons: string[] = [];
+  if (!rightsRequest || !rightsRequest.windowStart || !rightsRequest.windowEnd ||
+      rightsRequest.territories.length!==1 || rightsRequest.territories[0]!=="WORLDWIDE" ||
+      rightsRequest.exploitationModels.length!==1 || rightsRequest.exploitationModels[0]!=="TVOD")
+    reasons.push("Loop requires WORLDWIDE TVOD with explicit start and end dates.");
+
 
   // 1. QC & Master verification
   if (!title.master_key) {
@@ -117,15 +127,22 @@ export async function verifyDistributionPreflight(
   }
 
   // 2. Rights readiness verification
-  const validRightsStatuses = ["LICENSING_READY", "LIVE_FOR_BUYERS", "IN_NEGOTIATION", "LICENSED", "DELIVERED"];
+  const validRightsStatuses = [
+    "LICENSING_READY",
+    "LIVE_FOR_BUYERS",
+    "IN_NEGOTIATION",
+    "LICENSED",
+    "DELIVERED",
+  ];
   if (!validRightsStatuses.includes(title.status)) {
     reasons.push(
-      `Underlying rights clearance and lifecycle status (${title.status}) is not distribution-ready. Must reach at least LICENSING_READY.`
+      `Underlying rights clearance and lifecycle status (${title.status}) is not distribution-ready. Must reach at least LICENSING_READY.`,
     );
   }
 
   let rightsGrantId: string | null = null;
-  if (!rightsRequest) reasons.push("Publication rights dimensions are required for distribution preflight.");
+  if (!rightsRequest)
+    reasons.push("Publication rights dimensions are required for distribution preflight.");
   if (rightsRequest) {
     const grants = await sql<BridgeRightsGrant>`
       select id, status, territories, languages, media, window_start, window_end, exclusivity
@@ -139,10 +156,33 @@ export async function verifyDistributionPreflight(
     rightsGrantId = coveringGrant?.id ?? null;
     if (!coveringGrant) {
       reasons.push(
-        "No active Bridge rights grant covers the requested Loop destination, territory, language, exploitation model, and window."
+        "No active Bridge rights grant covers the requested Loop destination, territory, language, exploitation model, and window.",
       );
     }
   }
+
+  const reviews = await sql<{ qc_ok: boolean; legal_ok: boolean }>`
+    select exists(select 1 from bridge_qc_cases q where q.title_id=${titleId} and q.status='PASSED'
+      and q.reviewer_findings->0->>'masterKey'=${title.master_key}
+      and q.reviewer_findings->0->>'posterKey'=${title.poster_key}) as qc_ok,
+    exists(select 1 from bridge_legal_cases l where l.title_id=${titleId} and l.status='APPROVED'
+      and l.evidence->0->>'grantId'=${rightsGrantId}) as legal_ok
+  `;
+  if (!reviews[0]?.qc_ok) reasons.push("Recorded QC approval for the current assets is required.");
+  if (!reviews[0]?.legal_ok) reasons.push("Recorded legal approval for this license is required.");
+  const licenses = rightsGrantId
+    ? await sql<{ evidence: Array<{ commercialTerms?: CommercialTermsSummary }> }>`
+    select evidence from bridge_rights_grants where id=${rightsGrantId}
+  `
+    : [];
+  const commercialTerms = licenses[0]?.evidence?.[0]?.commercialTerms;
+  if (
+    !commercialTerms ||
+    !Number.isInteger(commercialTerms.rightsOwnerSharePct) ||
+    !Number.isInteger(commercialTerms.distributorSharePct) ||
+    (commercialTerms.rightsOwnerSharePct ?? 0) + (commercialTerms.distributorSharePct ?? 0) !== 100
+  )
+    reasons.push("Approved license revenue shares are required.");
 
   // 3. Required presentation assets
   if (!title.poster_key) {
@@ -154,6 +194,7 @@ export async function verifyDistributionPreflight(
     reasons,
     title,
     rightsGrantId,
+    commercialTerms,
   };
 }
 
@@ -222,26 +263,43 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
 
     return {
       titles: rows.map((r) => {
-        const coveringGrant = r.loop_title_id ? findCoveringRightsGrant(
-          grants.filter((grant) => grant.title_id === r.id),
-          {
-            destination: "CRAYONS_LOOP",
-            territories: r.territories || [],
-            languages: r.languages || [],
-            exploitationModels: r.exploitation_models || [],
-            windowStart: iso(r.window_start),
-            windowEnd: iso(r.window_end),
-          }
-        ) : null;
+        const coveringGrant = r.loop_title_id
+          ? findCoveringRightsGrant(
+              grants.filter((grant) => grant.title_id === r.id),
+              {
+                destination: "CRAYONS_LOOP",
+                territories: r.territories || [],
+                languages: r.languages || [],
+                exploitationModels: r.exploitation_models || [],
+                windowStart: iso(r.window_start),
+                windowEnd: iso(r.window_end),
+              },
+            )
+          : null;
         const isReady =
           Boolean(coveringGrant) &&
-          ["LICENSING_READY", "LIVE_FOR_BUYERS", "IN_NEGOTIATION", "LICENSED", "DELIVERED"].includes(r.status) &&
+          [
+            "LICENSING_READY",
+            "LIVE_FOR_BUYERS",
+            "IN_NEGOTIATION",
+            "LICENSED",
+            "DELIVERED",
+          ].includes(r.status) &&
           Boolean(r.master_key) &&
           Boolean(r.poster_key);
 
         const blockers: string[] = [];
-        if (!coveringGrant) blockers.push("A matching rights grant and explicit publication dimensions are required");
-        if (!["LICENSING_READY", "LIVE_FOR_BUYERS", "IN_NEGOTIATION", "LICENSED", "DELIVERED"].includes(r.status)) {
+        if (!coveringGrant)
+          blockers.push("A matching rights grant and explicit publication dimensions are required");
+        if (
+          ![
+            "LICENSING_READY",
+            "LIVE_FOR_BUYERS",
+            "IN_NEGOTIATION",
+            "LICENSED",
+            "DELIVERED",
+          ].includes(r.status)
+        ) {
           blockers.push(`Rights status (${r.status}) is not cleared for distribution`);
         }
         if (!r.master_key) blockers.push("QC master video is missing");
@@ -261,7 +319,8 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
             ? {
                 destination: "CRAYONS_LOOP" as const,
                 loopTitleId: r.loop_title_id,
-                authorizationStatus: (r.authorization_status?.toUpperCase() || "PENDING") as DistributionAuthorizationStatus,
+                authorizationStatus: (r.authorization_status?.toUpperCase() ||
+                  "PENDING") as DistributionAuthorizationStatus,
                 territories: r.territories || ["IN"],
                 languages: r.languages || [r.language],
                 exploitationModels: r.exploitation_models || ["SVOD"],
@@ -286,34 +345,39 @@ export const authorizeLoopPublication = createServerFn({ method: "POST" })
     const actor = await requireActor(context.userId);
     assertPermission(actor, "loop.publish");
 
-    if (data.windowStart && data.windowEnd && new Date(data.windowEnd) <= new Date(data.windowStart)) {
+    if (
+      data.windowStart &&
+      data.windowEnd &&
+      new Date(data.windowEnd) <= new Date(data.windowStart)
+    ) {
       throw new Error("Distribution window end date must be strictly after window start date.");
     }
 
     if (!data.exploitationModels.includes(data.accessTier)) {
       throw new Error("Consumer access tier must be covered by the requested exploitation models.");
     }
-    const sql = await getSql();
-    await assertDuplicateTitleLoopReleaseAllowed(sql, data.bridgeTitleId);
-    await assertBuyerPublishable(data.bridgeTitleId);
-    const preflight = await verifyDistributionPreflight(sql, data.bridgeTitleId, {
-      destination: data.destination,
-      territories: data.territories,
-      languages: data.languages,
-      exploitationModels: data.exploitationModels,
-      windowStart: data.windowStart,
-      windowEnd: data.windowEnd,
-    });
-    if (!preflight.eligible || !preflight.title) {
-      throw new Error(`Distribution Authorization Blocked: ${preflight.reasons.join(" · ")}`);
-    }
+    return (await getSql()).transaction(async (sql) => {
+      await sql`select id from bridge_titles where id=${data.bridgeTitleId} for update`;
+      const preflight = await verifyDistributionPreflight(sql, data.bridgeTitleId, {
+        destination: data.destination,
+        territories: data.territories,
+        languages: data.languages,
+        exploitationModels: data.exploitationModels,
+        windowStart: data.windowStart,
+        windowEnd: data.windowEnd,
+      });
+      if (!preflight.eligible || !preflight.title) {
+        throw new Error(`Distribution Authorization Blocked: ${preflight.reasons.join(" · ")}`);
+      }
 
-    const title = preflight.title;
-    const existing = await sql<{ id: string }>`select id from loop_titles where bridge_title_id = ${title.id} limit 1`;
-    const loopTitleId = existing[0]?.id ?? randomUUID();
+      const title = preflight.title;
+      const existing = await sql<{
+        id: string;
+      }>`select id from loop_titles where bridge_title_id = ${title.id} limit 1`;
+      const loopTitleId = existing[0]?.id ?? randomUUID();
 
-    // 1. Synchronize master publication record in Crayons Loop
-    await sql`
+      // 1. Synchronize master publication record in Crayons Loop
+      await sql`
       insert into loop_titles (
         id, bridge_title_id, slug, title, synopsis, content_type, language, year,
         duration_minutes, poster_path, playback_path, metadata, status, listed,
@@ -325,7 +389,7 @@ export const authorizeLoopPublication = createServerFn({ method: "POST" })
           source: "crayons-bridge-master-distribution",
           rightsGrantId: preflight.rightsGrantId,
           authorizedBy: actor.userId,
-          commercialTerms: data.commercialTerms || null,
+          commercialTerms: preflight.commercialTerms || null,
         })}::jsonb,
         ${"approved"}, true, true, false,
         ${data.accessTier}, now()
@@ -338,8 +402,8 @@ export const authorizeLoopPublication = createServerFn({ method: "POST" })
         metadata = excluded.metadata, updated_at = now()
     `;
 
-    // 2. Authorize distribution record in Bridge control plane
-    await sql`
+      // 2. Authorize distribution record in Bridge control plane
+      await sql`
       insert into bridge_loop_publications (
         id, bridge_title_id, loop_title_id, authorization_status, territories, languages,
         exploitation_models, window_start, window_end, approved_by, approved_at, metadata, updated_at
@@ -349,7 +413,7 @@ export const authorizeLoopPublication = createServerFn({ method: "POST" })
         ${actor.userId}, now(),
         ${JSON.stringify({
           destination: "CRAYONS_LOOP",
-          commercialTerms: data.commercialTerms || null,
+          commercialTerms: preflight.commercialTerms || null,
           authorizedOperator: actor.userId,
           rightsGrantId: preflight.rightsGrantId,
         })}::jsonb,
@@ -363,26 +427,30 @@ export const authorizeLoopPublication = createServerFn({ method: "POST" })
         revoked_at = null, metadata = excluded.metadata, updated_at = now()
     `;
 
-    // 3. Write immutable audit log
-    await writeAudit({
-      actorUserId: actor.userId,
-      action: "distribution.authorize_loop",
-      entityType: "bridge_title",
-      entityId: title.id,
-      metadata: {
-        destination: "CRAYONS_LOOP",
-        loopTitleId,
-        rightsGrantId: preflight.rightsGrantId,
-        territories: data.territories,
-        languages: data.languages,
-        exploitationModels: data.exploitationModels,
-        windowStart: data.windowStart,
-        windowEnd: data.windowEnd,
-        commercialTerms: data.commercialTerms,
-      },
-    });
+      // 3. Write immutable audit log
+      await writeAudit(
+        {
+          actorUserId: actor.userId,
+          action: "distribution.authorize_loop",
+          entityType: "bridge_title",
+          entityId: title.id,
+          metadata: {
+            destination: "CRAYONS_LOOP",
+            loopTitleId,
+            rightsGrantId: preflight.rightsGrantId,
+            territories: data.territories,
+            languages: data.languages,
+            exploitationModels: data.exploitationModels,
+            windowStart: data.windowStart,
+            windowEnd: data.windowEnd,
+            commercialTerms: preflight.commercialTerms,
+          },
+        },
+        sql,
+      );
 
-    return { ok: true, loopTitleId, status: "AUTHORIZED" as const };
+      return { ok: true, loopTitleId, status: "AUTHORIZED" as const };
+    });
   });
 
 export const suspendLoopPublication = createServerFn({ method: "POST" })
@@ -392,34 +460,37 @@ export const suspendLoopPublication = createServerFn({ method: "POST" })
     assertNotDevUser(context.userId);
     const actor = await requireActor(context.userId);
     assertPermission(actor, "loop.revoke");
-    const sql = await getSql();
-
-    const pubs = await sql<{ loop_title_id: string }>`
+    return (await getSql()).transaction(async (sql) => {
+      const pubs = await sql<{ loop_title_id: string }>`
       select loop_title_id from bridge_loop_publications where bridge_title_id = ${data.bridgeTitleId} limit 1
     `;
-    if (!pubs[0]) throw new Error("Distribution record not found");
+      if (!pubs[0]) throw new Error("Distribution record not found");
 
-    await sql`
+      await sql`
       update bridge_loop_publications
       set authorization_status = 'suspended', updated_at = now()
       where bridge_title_id = ${data.bridgeTitleId}
     `;
 
-    await sql`
+      await sql`
       update loop_titles
       set status = 'suspended', listed = false, published = false, updated_at = now()
       where id = ${pubs[0].loop_title_id}
     `;
 
-    await writeAudit({
-      actorUserId: actor.userId,
-      action: "distribution.suspend_loop",
-      entityType: "bridge_title",
-      entityId: data.bridgeTitleId,
-      metadata: { reason: data.reason || "Operational suspension" },
-    });
+      await writeAudit(
+        {
+          actorUserId: actor.userId,
+          action: "distribution.suspend_loop",
+          entityType: "bridge_title",
+          entityId: data.bridgeTitleId,
+          metadata: { reason: data.reason || "Operational suspension" },
+        },
+        sql,
+      );
 
-    return { ok: true, status: "SUSPENDED" as const };
+      return { ok: true, status: "SUSPENDED" as const };
+    });
   });
 
 export const revokeLoopPublication = createServerFn({ method: "POST" })
@@ -429,33 +500,36 @@ export const revokeLoopPublication = createServerFn({ method: "POST" })
     assertNotDevUser(context.userId);
     const actor = await requireActor(context.userId);
     assertPermission(actor, "loop.revoke");
-    const sql = await getSql();
-
-    const pubs = await sql<{ loop_title_id: string }>`
+    return (await getSql()).transaction(async (sql) => {
+      const pubs = await sql<{ loop_title_id: string }>`
       select loop_title_id from bridge_loop_publications where bridge_title_id = ${data.bridgeTitleId} limit 1
     `;
-    if (!pubs[0]) throw new Error("Distribution record not found");
+      if (!pubs[0]) throw new Error("Distribution record not found");
 
-    await sql`
+      await sql`
       update bridge_loop_publications
       set authorization_status = 'revoked', revoked_at = now(), updated_at = now()
       where bridge_title_id = ${data.bridgeTitleId}
     `;
 
-    await sql`
+      await sql`
       update loop_titles
       set status = 'revoked', listed = false, published = false, updated_at = now()
       where id = ${pubs[0].loop_title_id}
     `;
 
-    await writeAudit({
-      actorUserId: actor.userId,
-      action: "distribution.revoke_loop",
-      entityType: "bridge_title",
-      entityId: data.bridgeTitleId,
-    });
+      await writeAudit(
+        {
+          actorUserId: actor.userId,
+          action: "distribution.revoke_loop",
+          entityType: "bridge_title",
+          entityId: data.bridgeTitleId,
+        },
+        sql,
+      );
 
-    return { ok: true, status: "REVOKED" as const };
+      return { ok: true, status: "REVOKED" as const };
+    });
   });
 
 export const extendDistributionWindow = createServerFn({ method: "POST" })
@@ -464,45 +538,44 @@ export const extendDistributionWindow = createServerFn({ method: "POST" })
     z.object({
       bridgeTitleId: z.string().min(1),
       newWindowEnd: z.string().datetime(),
-    })
+    }),
   )
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
     const actor = await requireActor(context.userId);
     assertPermission(actor, "loop.publish");
-    const sql = await getSql();
-
-    const pubs = await sql<{
-      loop_title_id: string;
-      window_start: string | Date | null;
-      authorization_status: string;
-      revoked_at: string | Date | null;
-      territories: string[];
-      languages: string[];
-      exploitation_models: string[];
-    }>`
+    return (await getSql()).transaction(async (sql) => {
+      const pubs = await sql<{
+        loop_title_id: string;
+        window_start: string | Date | null;
+        authorization_status: string;
+        revoked_at: string | Date | null;
+        territories: string[];
+        languages: string[];
+        exploitation_models: string[];
+      }>`
       select loop_title_id, window_start, authorization_status, revoked_at,
              territories, languages, exploitation_models
       from bridge_loop_publications where bridge_title_id = ${data.bridgeTitleId} limit 1
     `;
-    const publication = pubs[0];
-    if (!publication) throw new Error("Distribution record not found");
-    assertPublicationCanExtend(publication.authorization_status, publication.revoked_at);
+      const publication = pubs[0];
+      if (!publication) throw new Error("Distribution record not found");
+      assertPublicationCanExtend(publication.authorization_status, publication.revoked_at);
 
-    const preflight = await verifyDistributionPreflight(sql, data.bridgeTitleId, {
-      destination: "CRAYONS_LOOP",
-      territories: publication.territories,
-      languages: publication.languages,
-      exploitationModels: publication.exploitation_models,
-      windowStart: iso(publication.window_start),
-      windowEnd: data.newWindowEnd,
-    });
-    if (!preflight.eligible) {
-      throw new Error(`Distribution Extension Blocked: ${preflight.reasons.join(" · ")}`);
-    }
+      const preflight = await verifyDistributionPreflight(sql, data.bridgeTitleId, {
+        destination: "CRAYONS_LOOP",
+        territories: publication.territories,
+        languages: publication.languages,
+        exploitationModels: publication.exploitation_models,
+        windowStart: iso(publication.window_start),
+        windowEnd: data.newWindowEnd,
+      });
+      if (!preflight.eligible) {
+        throw new Error(`Distribution Extension Blocked: ${preflight.reasons.join(" · ")}`);
+      }
 
-    // Extending a window never restores revoked/suspended visibility or status.
-    const updated = await sql<{ id: string }>`
+      // Extending a window never restores revoked/suspended visibility or status.
+      const updated = await sql<{ id: string }>`
       update bridge_loop_publications
       set window_end = ${data.newWindowEnd},
           metadata = metadata || ${JSON.stringify({ rightsGrantId: preflight.rightsGrantId })}::jsonb,
@@ -512,17 +585,22 @@ export const extendDistributionWindow = createServerFn({ method: "POST" })
         and revoked_at is null
       returning id
     `;
-    if (!updated[0]) throw new Error("Publication is no longer active; refresh before extending.");
+      if (!updated[0])
+        throw new Error("Publication is no longer active; refresh before extending.");
 
-    await writeAudit({
-      actorUserId: actor.userId,
-      action: "distribution.extend_window",
-      entityType: "bridge_title",
-      entityId: data.bridgeTitleId,
-      metadata: { newWindowEnd: data.newWindowEnd, rightsGrantId: preflight.rightsGrantId },
+      await writeAudit(
+        {
+          actorUserId: actor.userId,
+          action: "distribution.extend_window",
+          entityType: "bridge_title",
+          entityId: data.bridgeTitleId,
+          metadata: { newWindowEnd: data.newWindowEnd, rightsGrantId: preflight.rightsGrantId },
+        },
+        sql,
+      );
+
+      return { ok: true, status: "EXTENDED" as const };
     });
-
-    return { ok: true, status: "EXTENDED" as const };
   });
 
 export const getLoopPublication = createServerFn({ method: "GET" })

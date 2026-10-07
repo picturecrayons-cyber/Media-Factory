@@ -52,6 +52,8 @@ function InternalBody({
   const titlesQ = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles() });
   const logsQ = useQuery({ queryKey: ["bridge-audit"], queryFn: () => listAuditLogs() });
   const titles = titlesQ.data?.titles ?? [];
+  if (titlesQ.isError || logsQ.isError)
+    return <p role="alert">Operations data could not be loaded. Refresh to retry.</p>;
 
   return (
     <div className="grid gap-12">
@@ -68,7 +70,9 @@ function InternalBody({
             <h2 className="font-display text-2xl font-semibold text-fg">Catalog Titles</h2>
             <p className="text-xs text-muted">Master titles currently recorded in Crayons Bridge</p>
           </div>
-          <span className="text-xs font-mono text-muted">{titles.length} title{titles.length === 1 ? "" : "s"}</span>
+          <span className="text-xs font-mono text-muted">
+            {titles.length} title{titles.length === 1 ? "" : "s"}
+          </span>
         </div>
 
         <ul className="divide-y divide-line rounded-2xl border border-line bg-surface">
@@ -103,9 +107,16 @@ function InternalBody({
         <div className="rounded-2xl border border-line bg-surface p-4">
           <ul className="max-h-80 overflow-y-auto space-y-2 font-mono text-xs text-muted">
             {(logsQ.data?.logs ?? []).map((l) => (
-              <li key={l.id} className="rounded-lg border border-line/60 bg-elevated/40 px-3 py-2 flex flex-wrap items-center justify-between gap-2">
-                <span>{l.createdAt} · <strong>{l.action}</strong></span>
-                <span className="text-faint">{l.entityType}:{l.entityId}</span>
+              <li
+                key={l.id}
+                className="rounded-lg border border-line/60 bg-elevated/40 px-3 py-2 flex flex-wrap items-center justify-between gap-2"
+              >
+                <span>
+                  {l.createdAt} · <strong>{l.action}</strong>
+                </span>
+                <span className="text-faint">
+                  {l.entityType}:{l.entityId}
+                </span>
               </li>
             ))}
           </ul>
@@ -155,8 +166,14 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
         data: {
           bridgeTitleId,
           destination: "CRAYONS_LOOP",
-          territories: territories.split(",").map((v) => v.trim()).filter(Boolean),
-          languages: languages.split(",").map((v) => v.trim()).filter(Boolean),
+          territories: territories
+            .split(",")
+            .map((v) => v.trim())
+            .filter(Boolean),
+          languages: languages
+            .split(",")
+            .map((v) => v.trim())
+            .filter(Boolean),
           exploitationModels: [model],
           accessTier: "TVOD",
           windowStart: windowStart ? new Date(windowStart).toISOString() : null,
@@ -173,11 +190,13 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
       void qc.invalidateQueries({ queryKey: ["loop-publication-readiness"] });
       void qc.invalidateQueries({ queryKey: ["bridge-audit"] });
     },
-    onError: (err) => toast.error(err instanceof Error ? err.message : "Distribution authorization failed"),
+    onError: (err) =>
+      toast.error(err instanceof Error ? err.message : "Distribution authorization failed"),
   });
 
   const suspendMut = useMutation({
-    mutationFn: (bridgeTitleId: string) => suspendLoopPublication({ data: { bridgeTitleId, reason: "Operator suspension" } }),
+    mutationFn: (bridgeTitleId: string) =>
+      suspendLoopPublication({ data: { bridgeTitleId, reason: "Operator suspension" } }),
     onSuccess: () => {
       toast.success("Publication suspended");
       void qc.invalidateQueries({ queryKey: ["loop-publication-readiness"] });
@@ -197,8 +216,16 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
   });
 
   const extendMut = useMutation({
-    mutationFn: ({ bridgeTitleId, newWindowEnd }: { bridgeTitleId: string; newWindowEnd: string }) =>
-      extendDistributionWindow({ data: { bridgeTitleId, newWindowEnd: new Date(newWindowEnd).toISOString() } }),
+    mutationFn: ({
+      bridgeTitleId,
+      newWindowEnd,
+    }: {
+      bridgeTitleId: string;
+      newWindowEnd: string;
+    }) =>
+      extendDistributionWindow({
+        data: { bridgeTitleId, newWindowEnd: new Date(newWindowEnd).toISOString() },
+      }),
     onSuccess: () => {
       toast.success("Distribution window extended");
       setExtendTitleId(null);
@@ -209,6 +236,9 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
   });
 
   const allTitles = q.data?.titles ?? [];
+  if (q.isPending) return <p>Loading distribution readiness…</p>;
+  if (q.isError)
+    return <p role="alert">Distribution readiness is unavailable. Refresh to retry.</p>;
 
   // Filter based on active tab
   const filteredTitles = allTitles.filter((t) => {
@@ -247,7 +277,8 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
             Distribution Desk
           </h2>
           <p className="mt-1 text-xs text-muted">
-            Bridge authorizes master titles for consumer destinations and external distribution licenses.
+            Bridge authorizes master titles for consumer destinations and external distribution
+            licenses.
           </p>
         </div>
       </div>
@@ -284,29 +315,54 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
               </span>
             </div>
             <p className="text-xs text-muted leading-relaxed">
-              Consumer streaming OTT destination. Receives authorized titles via Bridge control plane.
+              Consumer streaming OTT destination. Receives authorized titles via Bridge control
+              plane.
             </p>
             <div className="text-xs text-muted space-y-1">
-              <div>Destination: <strong className="text-fg">Crayons Loop</strong></div>
-              <div>Supported Model: <strong className="text-fg">TVOD rental only</strong></div>
-              <div>Active Authorized Titles: <strong className="text-fg">{allTitles.filter((t) => t.publication?.authorizationStatus?.toLowerCase() === "live" || t.publication?.authorizationStatus?.toLowerCase() === "authorized").length}</strong></div>
+              <div>
+                Destination URL: <strong className="text-fg">https://crayonsloop.in/</strong>
+              </div>
+              <div>
+                Supported Model: <strong className="text-fg">TVOD rental only</strong>
+              </div>
+              <div>
+                Active Authorized Titles:{" "}
+                <strong className="text-fg">
+                  {
+                    allTitles.filter(
+                      (t) =>
+                        t.publication?.authorizationStatus?.toLowerCase() === "live" ||
+                        t.publication?.authorizationStatus?.toLowerCase() === "authorized",
+                    ).length
+                  }
+                </strong>
+              </div>
             </div>
             <div className="pt-2">
-              <span className="inline-flex items-center rounded-full border border-line bg-elevated px-3.5 py-1.5 text-xs font-semibold text-muted">
-                Crayons Loop Consumer OTT
-              </span>
+              <a
+                href="https://crayonsloop.in/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-xs font-semibold text-accent hover:underline"
+              >
+                <span>Open Crayons Loop Consumer OTT</span>
+                <span>↗</span>
+              </a>
             </div>
           </div>
 
           <div className="rounded-2xl border border-line/60 bg-surface/50 p-6 space-y-3 opacity-60">
             <div className="flex items-center justify-between">
-              <span className="font-display text-lg font-semibold text-fg">External Buyers / Television</span>
+              <span className="font-display text-lg font-semibold text-fg">
+                External Buyers / Television
+              </span>
               <span className="rounded-full bg-faint/20 px-2.5 py-0.5 text-[11px] font-semibold text-muted">
                 PLANNED
               </span>
             </div>
             <p className="text-xs text-muted leading-relaxed">
-              Secondary OTT and broadcast partner delivery desks will activate as commercial contracts are executed.
+              Secondary OTT and broadcast partner delivery desks will activate as commercial
+              contracts are executed.
             </p>
           </div>
         </div>
@@ -329,8 +385,6 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 text-xs">
-            
-
             <label className="block space-y-1">
               <span className="font-semibold text-muted">Territories (comma-separated)</span>
               <input
@@ -403,7 +457,9 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
               onClick={() => publishMut.mutate(selectedTitleId)}
               className="rounded-full px-5 text-xs font-semibold"
             >
-              {publishMut.isPending ? "Validating & Authorizing…" : "Authorize & Publish to Crayons Loop"}
+              {publishMut.isPending
+                ? "Validating & Authorizing…"
+                : "Authorize & Publish to Crayons Loop"}
             </Button>
             <Button
               type="button"
@@ -421,7 +477,9 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
       {extendTitleId ? (
         <div className="rounded-2xl border border-line bg-surface p-5 space-y-3">
           <h4 className="font-semibold text-sm text-fg">Extend Distribution Window</h4>
-          <p className="text-xs text-muted">Specify the new window end date for distribution entitlement.</p>
+          <p className="text-xs text-muted">
+            Specify the new window end date for distribution entitlement.
+          </p>
           <div className="flex items-center gap-3">
             <input
               type="datetime-local"
@@ -432,7 +490,9 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
             <Button
               type="button"
               disabled={!newExtendEnd || extendMut.isPending}
-              onClick={() => extendMut.mutate({ bridgeTitleId: extendTitleId, newWindowEnd: newExtendEnd })}
+              onClick={() =>
+                extendMut.mutate({ bridgeTitleId: extendTitleId, newWindowEnd: newExtendEnd })
+              }
               className="rounded-full text-xs font-semibold px-4"
             >
               Save Extended Window
@@ -466,10 +526,12 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
                     <span className="text-xs font-mono text-muted">{t.language}</span>
                   </div>
                   <p className="mt-1 text-xs text-muted">
-                    Bridge Status: <strong className="text-fg">{t.bridgeStatus}</strong> · QC Master:{" "}
+                    Bridge Status: <strong className="text-fg">{t.bridgeStatus}</strong> · QC
+                    Master:{" "}
                     <strong className={t.hasMaster ? "text-emerald-400" : "text-amber-400"}>
                       {t.hasMaster ? "VERIFIED" : "MISSING"}
-                    </strong> · Artwork:{" "}
+                    </strong>{" "}
+                    · Artwork:{" "}
                     <strong className={t.hasPoster ? "text-emerald-400" : "text-amber-400"}>
                       {t.hasPoster ? "READY" : "MISSING"}
                     </strong>
@@ -482,10 +544,10 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
                       statusDisplay === "LIVE" || statusDisplay === "AUTHORIZED"
                         ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
                         : statusDisplay === "SUSPENDED"
-                        ? "bg-amber-500/10 text-amber-400 border border-amber-500/20"
-                        : statusDisplay === "REVOKED" || statusDisplay === "EXPIRED"
-                        ? "bg-red-500/10 text-red-400 border border-red-500/20"
-                        : "bg-elevated text-muted border border-line"
+                          ? "bg-amber-500/10 text-amber-400 border border-amber-500/20"
+                          : statusDisplay === "REVOKED" || statusDisplay === "EXPIRED"
+                            ? "bg-red-500/10 text-red-400 border border-red-500/20"
+                            : "bg-elevated text-muted border border-line"
                     }`}
                   >
                     {statusDisplay}
@@ -507,13 +569,21 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
               {/* Distribution Details if exists */}
               {pub ? (
                 <div className="grid gap-2 sm:grid-cols-4 rounded-xl border border-line bg-elevated/40 p-3 text-xs text-muted">
-                  <div>Destination: <strong className="text-fg">Crayons Loop</strong></div>
-                  <div>Territories: <strong className="text-fg">{pub.territories.join(", ")}</strong></div>
-                  <div>Models: <strong className="text-fg">{pub.exploitationModels.join(", ")}</strong></div>
+                  <div>
+                    Destination: <strong className="text-fg">Crayons Loop</strong>
+                  </div>
+                  <div>
+                    Territories: <strong className="text-fg">{pub.territories.join(", ")}</strong>
+                  </div>
+                  <div>
+                    Models: <strong className="text-fg">{pub.exploitationModels.join(", ")}</strong>
+                  </div>
                   <div>
                     Window:{" "}
                     <strong className="text-fg">
-                      {pub.windowEnd ? `until ${new Date(pub.windowEnd).toLocaleDateString()}` : "Perpetual / Open"}
+                      {pub.windowEnd
+                        ? `until ${new Date(pub.windowEnd).toLocaleDateString()}`
+                        : "Perpetual / Open"}
                     </strong>
                   </div>
                 </div>
@@ -521,7 +591,11 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
 
               {/* Action Buttons */}
               <div className="flex flex-wrap items-center gap-2.5 pt-1">
-                {canPublish && (!pub || pub.authorizationStatus === "SUSPENDED" || pub.authorizationStatus === "EXPIRED" || pub.authorizationStatus === "DRAFT") ? (
+                {canPublish &&
+                (!pub ||
+                  pub.authorizationStatus === "SUSPENDED" ||
+                  pub.authorizationStatus === "EXPIRED" ||
+                  pub.authorizationStatus === "DRAFT") ? (
                   <Button
                     type="button"
                     disabled={!t.ready}
@@ -532,7 +606,9 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
                   </Button>
                 ) : null}
 
-                {canRevoke && pub && (pub.authorizationStatus === "LIVE" || pub.authorizationStatus === "AUTHORIZED") ? (
+                {canRevoke &&
+                pub &&
+                (pub.authorizationStatus === "LIVE" || pub.authorizationStatus === "AUTHORIZED") ? (
                   <>
                     <Button
                       type="button"
@@ -557,7 +633,9 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
                       variant="outline"
                       onClick={() => {
                         setExtendTitleId(t.id);
-                        setNewExtendEnd(pub.windowEnd ? new Date(pub.windowEnd).toISOString().slice(0, 16) : "");
+                        setNewExtendEnd(
+                          pub.windowEnd ? new Date(pub.windowEnd).toISOString().slice(0, 16) : "",
+                        );
                       }}
                       className="rounded-full border-line text-xs font-semibold h-9"
                     >
@@ -567,7 +645,15 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
                 ) : null}
 
                 {pub?.published ? (
-                  <span className="inline-flex items-center rounded-full border border-line bg-elevated px-3.5 py-1.5 text-xs font-semibold text-muted">\n                  Crayons Loop\n                </span>
+                  <a
+                    href="https://crayonsloop.in/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 rounded-full border border-line bg-elevated px-3.5 py-1.5 text-xs font-semibold text-muted hover:text-accent transition-colors"
+                  >
+                    <span>View on Crayons Loop</span>
+                    <span>↗</span>
+                  </a>
                 ) : null}
 
                 <Link
@@ -619,7 +705,9 @@ function InviteForm() {
     >
       <div className="sm:col-span-3">
         <h3 className="font-display text-lg font-semibold text-fg">Team & Permissions</h3>
-        <p className="text-xs text-muted">Invite internal team reviewers for QC, Legal, Licensing or Operations.</p>
+        <p className="text-xs text-muted">
+          Invite internal team reviewers for QC, Legal, Licensing or Operations.
+        </p>
       </div>
 
       <label className="text-xs font-semibold text-muted sm:col-span-2">
@@ -650,7 +738,11 @@ function InviteForm() {
       </label>
 
       <div className="sm:col-span-3">
-        <Button type="submit" disabled={mut.isPending} className="rounded-full px-5 text-xs font-semibold">
+        <Button
+          type="submit"
+          disabled={mut.isPending}
+          className="rounded-full px-5 text-xs font-semibold"
+        >
           {mut.isPending ? "Sending invite…" : "Send internal invitation"}
         </Button>
       </div>
