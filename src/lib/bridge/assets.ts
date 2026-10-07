@@ -40,7 +40,7 @@ export const requestAssetUpload = createServerFn({ method: "POST" })
     assertPermission(actor, "asset.sign_upload");
     const title = await loadTitle(data.titleId);
     if (!title) throw new Error("Not found");
-    if (!canOperateOnTitle(actor, title, "asset.sign_upload")) throw new Error("Forbidden");
+    if (!canOperateOnTitle(actor, title, "asset.sign_upload", "asset.sign_upload")) throw new Error("Forbidden");
     if (!UPLOADABLE.has(title.status)) throw new Error("Uploads are closed for this status");
     if (!["master","poster","subtitle","screener","technical"].includes(data.kind)) throw new Error("This asset kind is not supported by the OTT ingest uploader");
     const ingestValidation = validateOttIngestFile({ kind: data.kind as OttIngestKind, filename: data.filename, contentType: data.contentType });
@@ -58,6 +58,13 @@ export const requestAssetUpload = createServerFn({ method: "POST" })
     await sql`
       insert into bridge_assets (id, title_id, kind, s3_key, content_type, created_by)
       values (${id}, ${title.id}, ${data.kind}, ${key}, ${data.contentType}, ${actor.userId})
+    `;
+    await sql`
+      update loop_media_migration_queue
+      set status = 'UPLOADED', target_path = ${key}, updated_at = now()
+      where title_id = ${title.id}
+        and asset_kind = case when ${data.kind} = 'screener' then 'TRAILER' else upper(${data.kind}) end
+        and status in ('PENDING_REUPLOAD', 'UPLOADED')
     `;
     await writeAudit({
       actorUserId: actor.userId,
@@ -120,6 +127,15 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
       sourceKey: asset.s3_key,
       sealedKey,
     });
+    if (confirmed) {
+      await sql`
+        update loop_media_migration_queue
+        set status = 'VERIFIED', target_path = ${sealedKey}, updated_at = now()
+        where title_id = ${title.id}
+          and asset_kind = case when ${asset.kind} = 'screener' then 'TRAILER' else upper(${asset.kind}) end
+          and status in ('UPLOADED', 'PENDING_REUPLOAD')
+      `;
+    }
     if (!confirmed) {
       const current = await sql<{ byte_size: number | null }>`select byte_size from bridge_assets where id = ${asset.id}`;
       if (current[0]?.byte_size != null) return { assetId: asset.id, byteSize: Number(current[0].byte_size), verified: true };

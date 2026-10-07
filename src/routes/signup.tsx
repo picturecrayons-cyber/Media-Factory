@@ -12,7 +12,7 @@ export const Route = createFileRoute("/signup")({
   component: Signup,
 });
 
-type AccountChoice = "independent_creator" | "studio" | "buyer" | "investor";
+type AccountChoice = "independent_creator" | "studio" | "buyer";
 
 function Signup() {
   const search = Route.useSearch();
@@ -243,12 +243,11 @@ function Signup() {
 
           <div className="space-y-1.5">
             <span className="block text-sm font-medium text-fg">I am a:</span>
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
               {[
                 { id: "independent_creator", label: "Creator / Filmmaker" },
                 { id: "studio", label: "Studio / Production" },
                 { id: "buyer", label: "Buyer / Platform" },
-                { id: "investor", label: "Investor" },
               ].map((opt) => (
                 <button
                   type="button"

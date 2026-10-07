@@ -24,6 +24,30 @@ async function mail(opts: { to: string; subject: string; text: string }) {
   return sendBridgeMail(opts);
 }
 
+
+
+async function claimLegacyCreatorIntake(sql: Sql, email: string, authUserId: string) {
+  const rows = await sql<{ legacy_user_id: number }>`
+    select legacy_user_id
+    from legacy_creator_intake
+    where lower(email) = lower(${email})
+    limit 1
+  `;
+  const legacy = rows[0];
+  if (!legacy) return { claimed: false, titleCount: 0 };
+
+  const legacyOwner = `legacy-user-${legacy.legacy_user_id}`;
+  const updated = await sql<{ id: string }>`
+    update bridge_titles
+    set owner_user_id = ${authUserId},
+        owner_account_type = 'independent_creator',
+        updated_at = now()
+    where owner_user_id = ${legacyOwner}
+    returning id
+  `;
+  return { claimed: true, titleCount: updated.length };
+}
+
 async function persistSupabaseIdentityLink(sql: Sql, bridgeUserId: string, authUserId: string) {
   await sql`
     insert into bridge_loop_identity_links (
@@ -54,6 +78,7 @@ export const syncSupabaseSessionUser = createServerFn({ method: "POST" })
     if (!context.emailConfirmedAt) throw new Error("Confirm your email before entering Bridge.");
 
     if (existing) {
+      await claimLegacyCreatorIntake(sql, existing.email, existing.userId);
       // Backfill/repair the shared Bridge↔Loop identity mapping for every
       // confirmed Bridge profile, including accounts created before the
       // identity-link table was introduced. This is idempotent.
@@ -172,6 +197,8 @@ export const completeOnboarding = createServerFn({ method: "POST" })
       }
       throw error;
     }
+
+    await claimLegacyCreatorIntake(sql, email, context.userId);
 
     await writeAudit({
       actorUserId: context.userId,
