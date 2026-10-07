@@ -3,6 +3,7 @@ import { useState, type FormEvent } from "react";
 import { RedirectToSignIn } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { createRightsReadySubmission } from "@/lib/bridge/submissions";
+import { BRIDGE_LOOP_LANES, type BridgeLoopLane } from "@/lib/bridge/loop-lanes";
 import { BrandMark } from "@/components/bridge/shell";
 import { Button } from "@/components/ui/button";
 
@@ -18,7 +19,7 @@ function RightsReadySubmission() {
   const navigate = useNavigate();
   const [name, setName] = useState("");
   const [synopsis, setSynopsis] = useState("");
-  const [contentType, setContentType] = useState<"FEATURE" | "SERIES" | "SHORT" | "DOCUMENTARY" | "OTHER">("FEATURE");
+  const [contentType, setContentType] = useState<BridgeLoopLane>("Film");
   const [originalLanguage, setOriginalLanguage] = useState("Malayalam");
   const [rightsLanguages, setRightsLanguages] = useState<string[]>(["Malayalam"]);
   const [country, setCountry] = useState("India");
@@ -102,7 +103,7 @@ function RightsReadySubmission() {
           <h2 className="font-display text-xl">01 · Title</h2>
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="text-sm sm:col-span-2">Title<input required value={name} onChange={(e) => setName(e.target.value)} className="mt-1 h-11 w-full rounded-lg border border-line-strong bg-elevated px-3" /></label>
-            <label className="text-sm">Content type<select value={contentType} onChange={(e) => setContentType(e.target.value as typeof contentType)} className="mt-1 h-11 w-full rounded-lg border border-line-strong bg-elevated px-3"><option value="FEATURE">Feature film</option><option value="SERIES">Series</option><option value="SHORT">Short</option><option value="DOCUMENTARY">Documentary</option><option value="OTHER">Other</option></select></label>
+            <label className="text-sm">Loop lane<select value={contentType} onChange={(e) => setContentType(e.target.value as BridgeLoopLane)} className="mt-1 h-11 w-full rounded-lg border border-line-strong bg-elevated px-3">{BRIDGE_LOOP_LANES.map((lane) => <option key={lane.id} value={lane.loopType}>{lane.label}</option>)}</select></label>
             <label className="text-sm">Original language<select value={originalLanguage} onChange={(e) => setOriginalLanguage(e.target.value)} className="mt-1 h-11 w-full rounded-lg border border-line-strong bg-elevated px-3">{LANGUAGES.map((x) => <option key={x}>{x}</option>)}</select></label>
             <label className="text-sm">Country<select value={country} onChange={(e) => setCountry(e.target.value)} className="mt-1 h-11 w-full rounded-lg border border-line-strong bg-elevated px-3"><option>India</option><option>United Arab Emirates</option><option>United States</option><option>United Kingdom</option><option>Other</option></select></label>
             <label className="text-sm">Release year<input required type="number" min="1895" max="2100" value={year} onChange={(e) => setYear(e.target.value)} className="mt-1 h-11 w-full rounded-lg border border-line-strong bg-elevated px-3" /></label>

@@ -9,6 +9,7 @@ import { getBridgeSession } from "@/lib/bridge/session";
 import { retryWorkspaceSession } from "@/lib/auth/workspace-session-retry";
 import { supabase } from "@/lib/supabase";
 import { ACCOUNT_TYPES } from "@/lib/bridge/types";
+import { BRIDGE_LOOP_LANES } from "@/lib/bridge/loop-lanes";
 import { publicOnboardingError } from "@/lib/bridge/onboarding-errors";
 import { BrandMark } from "@/components/bridge/shell";
 import { Button } from "@/components/ui/button";
@@ -100,7 +101,7 @@ function Onboarding() {
 
   const [titleName, setTitleName] = useState("");
   const [originalTitle, setOriginalTitle] = useState("");
-  const [contentType, setContentType] = useState("FEATURE");
+  const [contentType, setContentType] = useState("Film");
   const [language, setLanguage] = useState("Malayalam");
   const [additionalLanguages, setAdditionalLanguages] = useState<string[]>([]);
   const [year, setYear] = useState("");
@@ -329,7 +330,7 @@ function Onboarding() {
                 </label>
                 <label className="text-sm font-medium">Content type *
                   <select value={contentType} onChange={(e) => setContentType(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5">
-                    <option value="FEATURE">Feature film</option><option value="SERIES">Series</option><option value="DOCUMENTARY">Documentary</option><option value="SHORT">Short film</option><option value="SPECIAL">Special</option>
+                    {BRIDGE_LOOP_LANES.map((lane) => <option key={lane.id} value={lane.loopType}>{lane.label}</option>)}
                   </select>
                 </label>
                 <label className="text-sm font-medium">Original language *

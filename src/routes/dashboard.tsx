@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { listTitles } from "@/lib/bridge/titles";
+import { BRIDGE_LOOP_LANES, loopStageType } from "@/lib/bridge/loop-lanes";
 import { getDashboardSession } from "@/lib/bridge/session";
 
 export const Route = createFileRoute("/dashboard")({ component: Dashboard });
@@ -42,6 +43,15 @@ function DashboardBody() {
           <Link to="/buyer" className="rounded-sm border border-line px-4 py-2 text-sm font-semibold">Buyer desk</Link>
           <Link to="/deliveries" className="rounded-sm border border-line px-4 py-2 text-sm font-semibold">Deliveries</Link>
         </div>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {BRIDGE_LOOP_LANES.map((lane) => (
+          <div key={lane.id} className="rounded-sm border border-line px-4 py-3">
+            <p className="text-xs uppercase tracking-widest text-muted">{lane.label}</p>
+            <p className="mt-1 text-2xl font-semibold">{titles.filter((title) => loopStageType(title.contentType) === lane.loopType).length}</p>
+            <p className="text-xs text-muted">Set here. Public on Loop only after TVOD delivery.</p>
+          </div>
+        ))}
       </div>
       <div className="grid gap-3 sm:grid-cols-4">
         <Stat label="Licensed value" value={`₹${(revenue / 100).toLocaleString("en-IN")}`} />

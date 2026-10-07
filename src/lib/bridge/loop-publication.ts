@@ -3,6 +3,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql, type Sql } from "@/lib/db";
+import { loopStageType } from "@/lib/bridge/loop-lanes";
 import { assertPermission } from "./rbac";
 import { requireVerifiedActor } from "./session";
 import { assertNotDevUser } from "./guards";
@@ -99,8 +100,9 @@ export async function verifyDistributionPreflight(
     synopsis: string;
     year: number | null;
     runtime_minutes: number | null;
+    content_type: string | null;
   }>`
-    select id, slug, name, status, language, master_key, poster_key, synopsis, year, runtime_minutes
+    select id, slug, name, status, language, master_key, poster_key, synopsis, year, runtime_minutes, content_type
     from bridge_titles
     where id = ${titleId}
     limit 1
@@ -379,7 +381,7 @@ export const authorizeLoopPublication = createServerFn({ method: "POST" })
         duration_minutes, poster_path, playback_path, metadata, status, listed,
         published, featured, access_tier, updated_at
       ) values (
-        ${loopTitleId}, ${title.id}, ${title.slug}, ${title.name}, ${title.synopsis}, ${"movie"},
+        ${loopTitleId}, ${title.id}, ${title.slug}, ${title.name}, ${title.synopsis}, ${loopStageType(title.content_type)},
         ${title.language}, ${title.year}, ${title.runtime_minutes}, ${title.poster_key}, ${title.master_key},
         ${JSON.stringify({
           source: "crayons-bridge-master-distribution",
@@ -392,6 +394,7 @@ export const authorizeLoopPublication = createServerFn({ method: "POST" })
       )
       on conflict (bridge_title_id) do update set
         slug = excluded.slug, title = excluded.title, synopsis = excluded.synopsis,
+        content_type = excluded.content_type,
         language = excluded.language, year = excluded.year, duration_minutes = excluded.duration_minutes,
         poster_path = excluded.poster_path, playback_path = excluded.playback_path,
         status = 'approved', listed = true, published = true, access_tier = excluded.access_tier,

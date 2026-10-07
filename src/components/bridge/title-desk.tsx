@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { StatusChip } from "@/components/bridge/status-rail";
 import { createTitle, listTitles } from "@/lib/bridge/titles";
+import { BRIDGE_LOOP_LANES } from "@/lib/bridge/loop-lanes";
 
 export function TitleList({ empty, query = "" }: { empty: string; query?: string }) {
   const titlesQ = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles() });
@@ -31,6 +32,7 @@ export function TitleList({ empty, query = "" }: { empty: string; query?: string
             <div>
               <p className="font-medium">{t.name}</p>
               <p className="text-sm text-muted">
+                {t.contentType ? `${t.contentType} · ` : ""}
                 {t.language}
                 {t.year ? ` · ${t.year}` : ""}
               </p>
@@ -50,7 +52,7 @@ export function CreateTitleForm({ concise = false }: { concise?: boolean } = {})
   const [nameMl, setNameMl] = useState("");
   const [synopsis, setSynopsis] = useState("");
   const [language, setLanguage] = useState("Malayalam");
-  const [contentType, setContentType] = useState("Feature Film");
+  const [contentType, setContentType] = useState("Film");
   const [country, setCountry] = useState("India");
   const [releaseDate, setReleaseDate] = useState("");
   const [runtimeMinutes, setRuntimeMinutes] = useState("");
@@ -100,7 +102,11 @@ export function CreateTitleForm({ concise = false }: { concise?: boolean } = {})
     <form onSubmit={onSubmit} className="grid gap-3 rounded-xl border border-line bg-surface p-4 sm:grid-cols-2">
       <label className="text-sm sm:col-span-2">Title<input required value={name} onChange={(e) => setName(e.target.value)} className="mt-1 h-11 w-full rounded-lg border border-line-strong bg-elevated px-3" /></label>
       <label className="text-sm">Language<input value={language} onChange={(e) => setLanguage(e.target.value)} className="mt-1 h-11 w-full rounded-lg border border-line-strong bg-elevated px-3" /></label>
-      <label className="text-sm">Content type<input value={contentType} onChange={(e) => setContentType(e.target.value)} className="mt-1 h-11 w-full rounded-lg border border-line-strong bg-elevated px-3" /></label>
+      <label className="text-sm">Loop lane
+        <select value={contentType} onChange={(e) => setContentType(e.target.value)} className="mt-1 h-11 w-full rounded-lg border border-line-strong bg-elevated px-3">
+          {BRIDGE_LOOP_LANES.map((lane) => <option key={lane.id} value={lane.loopType}>{lane.label}</option>)}
+        </select>
+      </label>
       {!concise && <>
         <label className="text-sm">Malayalam title<input value={nameMl} onChange={(e) => setNameMl(e.target.value)} className="mt-1 h-11 w-full rounded-lg border border-line-strong bg-elevated px-3" /></label>
         <label className="text-sm">Year<input inputMode="numeric" value={year} onChange={(e) => setYear(e.target.value)} className="mt-1 h-11 w-full rounded-lg border border-line-strong bg-elevated px-3" /></label>
