@@ -15,7 +15,9 @@ const SAFE_ONBOARDING_MESSAGES = new Set([
 export function isBridgeProfileEmailConflict(error: unknown): boolean {
   if (!error || typeof error !== "object") return false;
   const candidate = error as { code?: unknown; constraint?: unknown };
-  return candidate.code === "23505" && candidate.constraint === "bridge_profiles_email_idx";
+  if (candidate.code !== "23505") return false;
+  const constraint = typeof candidate.constraint === "string" ? candidate.constraint : "";
+  return constraint === "bridge_profiles_email_idx";
 }
 
 export function publicOnboardingError(error: unknown): string {
