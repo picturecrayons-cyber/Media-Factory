@@ -18,6 +18,7 @@ import { Route as CreatorRouteImport } from './routes/creator'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
 import { Route as InternalRouteImport } from './routes/internal'
+import { Route as InvestorRouteImport } from './routes/investor'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as LoopCmsRouteImport } from './routes/loop-cms'
 import { Route as OnboardingRouteImport } from './routes/onboarding'
@@ -76,6 +77,11 @@ const ForgotPasswordRoute = ForgotPasswordRouteImport.update({
 const InternalRoute = InternalRouteImport.update({
   id: '/internal',
   path: '/internal',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const InvestorRoute = InvestorRouteImport.update({
+  id: '/investor',
+  path: '/investor',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LoginRoute = LoginRouteImport.update({
@@ -159,6 +165,7 @@ export interface FileRoutesByFullPath {
   '/dashboard': typeof DashboardRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/internal': typeof InternalRoute
+  '/investor': typeof InvestorRoute
   '/login': typeof LoginRoute
   '/loop-cms': typeof LoopCmsRoute
   '/onboarding': typeof OnboardingRoute
@@ -184,6 +191,7 @@ export interface FileRoutesByTo {
   '/dashboard': typeof DashboardRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/internal': typeof InternalRoute
+  '/investor': typeof InvestorRoute
   '/login': typeof LoginRoute
   '/loop-cms': typeof LoopCmsRoute
   '/onboarding': typeof OnboardingRoute
@@ -313,6 +321,7 @@ export interface RootRouteChildren {
   DashboardRoute: typeof DashboardRoute
   ForgotPasswordRoute: typeof ForgotPasswordRoute
   InternalRoute: typeof InternalRoute
+  InvestorRoute: typeof InvestorRoute
   LoginRoute: typeof LoginRoute
   LoopCmsRoute: typeof LoopCmsRoute
   OnboardingRoute: typeof OnboardingRoute
@@ -392,6 +401,13 @@ declare module '@tanstack/react-router' {
       path: '/internal'
       fullPath: '/internal'
       preLoaderRoute: typeof InternalRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/investor': {
+      id: '/investor'
+      path: '/investor'
+      fullPath: '/investor'
+      preLoaderRoute: typeof InvestorRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/login': {
@@ -505,6 +521,7 @@ const rootRouteChildren: RootRouteChildren = {
   DashboardRoute: DashboardRoute,
   ForgotPasswordRoute: ForgotPasswordRoute,
   InternalRoute: InternalRoute,
+  InvestorRoute: InvestorRoute,
   LoginRoute: LoginRoute,
   LoopCmsRoute: LoopCmsRoute,
   OnboardingRoute: OnboardingRoute,

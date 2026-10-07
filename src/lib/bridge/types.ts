@@ -1,4 +1,4 @@
-export const ACCOUNT_TYPES = ["independent_creator", "studio", "buyer"] as const;
+export const ACCOUNT_TYPES = ["independent_creator", "studio", "buyer", "investor"] as const;
 export type AccountType = (typeof ACCOUNT_TYPES)[number];
 
 export const INTERNAL_ROLES = [
@@ -58,7 +58,7 @@ export type BridgeTitle = {
   updatedAt: string;
 };
 
-export const ASSET_KINDS = ["poster", "screener", "master", "subtitle"] as const;
+export const ASSET_KINDS = ["poster", "screener", "master", "subtitle", "technical"] as const;
 export type AssetKind = (typeof ASSET_KINDS)[number];
 
 export const PERMISSIONS = [
@@ -66,6 +66,7 @@ export const PERMISSIONS = [
   "title.read_own",
   "title.read_catalog",
   "title.update_own",
+  "title.merge_duplicate",
   "title.advance_upload",
   "title.qc_review",
   "title.rights_review",
@@ -75,8 +76,14 @@ export const PERMISSIONS = [
   "asset.sign_upload",
   "asset.sign_download",
   "payment.create_order",
+  "service.quote_create",
+  "service.order_create",
+  "service.fulfill",
   "entitlement.read_own",
   "finance.read",
+  "finance.configure",
+  "delivery.read",
+  "delivery.read_finance",
   "users.invite_internal",
   "audit.read",
   "loop.publish",

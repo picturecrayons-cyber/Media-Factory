@@ -11,6 +11,7 @@ import { writeAudit } from "./audit";
 import { assertNotDevUser } from "./guards";
 import { persistVerifiedAsset } from "./asset-confirmation";
 import { downloadDecision } from "./delivery-policy";
+import { validateOttIngestFile, type OttIngestKind } from "./ott-ingest-spec";
 
 const UPLOADABLE: ReadonlySet<string> = new Set(["DRAFT", "UPLOADING", "PREPARING"]);
 
@@ -41,7 +42,10 @@ export const requestAssetUpload = createServerFn({ method: "POST" })
     if (!title) throw new Error("Not found");
     if (title.ownerUserId !== actor.userId && !hasStaffPermission(actor, "asset.sign_upload")) throw new Error("Forbidden");
     if (!UPLOADABLE.has(title.status)) throw new Error("Uploads are closed for this status");
-    const { signUpload, titleAssetKey } = await import("./aws-object-storage.server");
+    if (!["master","poster","subtitle","screener","technical"].includes(data.kind)) throw new Error("This asset kind is not supported by the OTT ingest uploader");
+    const ingestValidation = validateOttIngestFile({ kind: data.kind as OttIngestKind, filename: data.filename, contentType: data.contentType });
+    if (!ingestValidation.ok) throw new Error(ingestValidation.message);
+    const { signUpload, titleAssetKey } = await import("./oci-object-storage.server");
     const key = titleAssetKey({
       ownerUserId: title.ownerUserId,
       titleId: title.id,
@@ -54,6 +58,13 @@ export const requestAssetUpload = createServerFn({ method: "POST" })
     await sql`
       insert into bridge_assets (id, title_id, kind, s3_key, content_type, created_by)
       values (${id}, ${title.id}, ${data.kind}, ${key}, ${data.contentType}, ${actor.userId})
+    `;
+    await sql`
+      update loop_media_migration_queue
+      set status = 'UPLOADED', target_path = ${key}, updated_at = now()
+      where title_id = ${title.id}
+        and asset_kind = case when ${data.kind} = 'screener' then 'TRAILER' else upper(${data.kind}) end
+        and status in ('PENDING_REUPLOAD', 'UPLOADED')
     `;
     await writeAudit({
       actorUserId: actor.userId,
@@ -75,9 +86,9 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
     const sql = await getSql();
     const rows = await sql<{
       id: string; title_id: string; kind: string; s3_key: string;
-      created_by: string; byte_size: number | null;
+      created_by: string; content_type: string | null; byte_size: number | null;
     }>`
-      select id, title_id, kind, s3_key, created_by, byte_size
+      select id, title_id, kind, s3_key, created_by, content_type, byte_size
       from bridge_assets where id = ${data.assetId} limit 1
     `;
     const asset = rows[0];
@@ -88,8 +99,8 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
     }
     if (asset.byte_size != null) return { assetId: asset.id, byteSize: Number(asset.byte_size), verified: true };
 
-    const { verifyObject, sealVerifiedObject } = await import("./aws-object-storage.server");
-    const object = await verifyObject(asset.s3_key);
+    const { verifyObject, sealVerifiedObject } = await import("./oci-object-storage.server");
+    const object = await verifyObject(asset.s3_key, asset.content_type);
     if (data.expectedByteSize != null && object.byteSize !== data.expectedByteSize) {
       throw new Error("Uploaded object size does not match the file that was sent");
     }
@@ -111,6 +122,15 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
       sourceKey: asset.s3_key,
       sealedKey,
     });
+    if (confirmed) {
+      await sql`
+        update loop_media_migration_queue
+        set status = 'VERIFIED', target_path = ${sealedKey}, updated_at = now()
+        where title_id = ${title.id}
+          and asset_kind = case when ${asset.kind} = 'screener' then 'TRAILER' else upper(${asset.kind}) end
+          and status in ('UPLOADED', 'PENDING_REUPLOAD')
+      `;
+    }
     if (!confirmed) {
       const current = await sql<{ byte_size: number | null }>`select byte_size from bridge_assets where id = ${asset.id}`;
       if (current[0]?.byte_size != null) return { assetId: asset.id, byteSize: Number(current[0].byte_size), verified: true };
@@ -158,7 +178,7 @@ export const requestAssetDownload = createServerFn({ method: "POST" })
       });
       throw new Error(decision.reason);
     }
-    const { signDownload } = await import("./aws-object-storage.server");
+    const { signDownload } = await import("./oci-object-storage.server");
     const signed = await signDownload({ key: asset.s3_key });
     await writeAudit({
       actorUserId: actor.userId,
@@ -191,7 +211,7 @@ export const listTitleAssets = createServerFn({ method: "GET" })
     `;
     return {
       assets: rows
-        .filter((r) => !buyer || r.kind !== "master")
+        .filter((r) => !buyer || !["master", "technical"].includes(r.kind))
         .map((r) => ({
           id: r.id,
           kind: r.kind,

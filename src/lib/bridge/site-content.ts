@@ -4,6 +4,8 @@ import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import { requireVerifiedActor } from "./session";
 import { writeAudit } from "./audit";
+import { assertPermission } from "./rbac";
+import { assertNotDevUser } from "./guards";
 
 export const DEFAULT_BRIDGE_SITE_CONTENT = {
   heroTitle: "One bridge from content to market.",

@@ -59,7 +59,20 @@ export async function resolveBridgeUserId(authUserId: string): Promise<string> {
     where auth_user_id = ${authUserId}::uuid
     limit 1
   `;
-  return linked[0]?.bridge_user_id ?? authUserId;
+  if (linked[0]?.bridge_user_id) return linked[0].bridge_user_id;
+
+  // Legacy Bridge profiles may predate the Supabase identity-link table.
+  // Recover the mapping only when the authenticated Supabase user's verified
+  // email exactly matches the existing Bridge profile email.
+  const byEmail = await sql<{ bridge_user_id: string }>`
+    select bp.user_id as bridge_user_id
+    from bridge_profiles bp
+    join auth.users au on lower(au.email) = lower(bp.email)
+    where au.id = ${authUserId}::uuid
+      and au.email_confirmed_at is not null
+    limit 1
+  `;
+  return byEmail[0]?.bridge_user_id ?? authUserId;
 }
 
 export async function loadActor(authUserId: string): Promise<BridgeActor | null> {
@@ -112,6 +125,15 @@ export const getBridgeSession = createServerFn({ method: "GET" })
       if (!actor) throw new Error("Bridge profile could not be loaded");
     }
     return { userId: context.userId, profile: actor, home: workspaceHome(actor) };
+  });
+
+export const getDashboardSession = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    if (!canAccessDashboard(actor)) throw new Error("Super admin access required");
+    return { profile: actor };
   });
 
 export const getBridgePublicStatus = createServerFn({ method: "GET" }).handler(async () => {

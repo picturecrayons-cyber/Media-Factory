@@ -1,9 +1,11 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, Navigate } from "@tanstack/react-router";
+import { useQuery } from "@tanstack/react-query";
 import { BrandMark } from "@/components/bridge/shell";
 import { Button } from "@/components/ui/button";
-import { SignedIn, SignedOut, UserButton } from "@/lib/auth/gates";
+import { SignedOut } from "@/lib/auth/gates";
+import { useCurrentUserState } from "@/lib/auth/use-current-user";
+import { getBridgeSession } from "@/lib/bridge/session";
 
-const CRAYONS_LOOP_URL = "https://crayonsloop.com/";
 
 export const Route = createFileRoute("/")({ component: Home });
 
@@ -41,14 +43,34 @@ const WORKFLOW_STEPS = [
 ];
 
 function Home() {
+  const { user, isPending } = useCurrentUserState();
+  const sessionQ = useQuery({
+    queryKey: ["bridge-session", user?.id],
+    queryFn: () => getBridgeSession(),
+    enabled: !isPending && Boolean(user),
+    retry: false,
+  });
+
+  if (isPending || (user && sessionQ.isPending)) {
+    return (
+      <main className="grid min-h-screen place-items-center bg-bg p-6">
+        <p className="text-sm text-muted">Opening workspace…</p>
+      </main>
+    );
+  }
+
+  if (user) {
+    if (sessionQ.data?.home) return <Navigate to={sessionQ.data.home as any} replace />;
+    if (!sessionQ.data?.profile) return <Navigate to="/onboarding" replace />;
+  }
+
   return (
     <div className="min-h-screen bg-white text-fg antialiased selection:bg-accent/20 selection:text-fg">
-      {/* 1. Header */}
       <header className="sticky top-0 z-50 border-b border-line bg-white/95 backdrop-blur-md">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-5 px-5 py-3.5 sm:px-6 lg:px-8">
           <div className="flex min-w-0 items-center gap-6 lg:gap-8">
             <BrandMark />
-            </div>
+          </div>
 
           <div className="flex items-center gap-3 text-sm">
             <SignedOut>
@@ -58,22 +80,11 @@ function Home() {
                 </Button>
               </Link>
             </SignedOut>
-
-            <SignedIn>
-              <Link
-                to="/dashboard"
-                className="rounded-full bg-accent-soft px-3.5 py-1.5 text-xs font-semibold text-accent hover:opacity-90 transition-opacity"
-              >
-                Open workspace
-              </Link>
-              <UserButton />
-            </SignedIn>
           </div>
         </div>
       </header>
 
       <main>
-        {/* 2. Hero */}
         <section className="bridge-home-hero border-b border-line bg-white">
           <div className="mx-auto max-w-7xl px-5 py-14 text-center sm:px-6 sm:py-16 lg:py-20">
             <div className="mx-auto max-w-5xl">
@@ -95,12 +106,10 @@ function Home() {
                 </Link>
                 <Link to="/login" className="px-2 text-sm font-semibold text-muted hover:text-fg transition-colors">Sign in</Link>
               </div>
-
             </div>
           </div>
         </section>
 
-        {/* 3. How It Works */}
         <section id="how-it-works" className="border-b border-line bg-surface/50 py-10 sm:py-12">
           <div className="mx-auto max-w-7xl px-4 sm:px-6">
             <div className="max-w-2xl">
@@ -133,7 +142,6 @@ function Home() {
           </div>
         </section>
 
-        {/* 4. Audiences: Creators, Studios, Buyers */}
         <section id="creators" className="border-b border-line bg-surface py-14 sm:py-20">
           <div className="mx-auto max-w-7xl px-4 sm:px-6">
             <div className="max-w-2xl">
@@ -142,8 +150,7 @@ function Home() {
               </h2>
             </div>
 
-            <div className="mt-10 grid gap-6 lg:grid-cols-3">
-              {/* Creators Card */}
+            <div className="mt-10 grid gap-6 lg:grid-cols-2 xl:grid-cols-4">
               <div className="flex flex-col justify-between rounded-3xl border border-line bg-elevated p-7 sm:p-8">
                 <div>
                   <h3 className="font-display text-2xl font-semibold text-fg">
@@ -164,7 +171,6 @@ function Home() {
                 </div>
               </div>
 
-              {/* Studios Card */}
               <div
                 id="studios"
                 className="flex flex-col justify-between rounded-3xl border border-line bg-elevated p-7 sm:p-8"
@@ -188,7 +194,27 @@ function Home() {
                 </div>
               </div>
 
-              {/* Buyers Card */}
+              <div
+                id="investors"
+                className="flex flex-col justify-between rounded-3xl border border-line bg-elevated p-7 sm:p-8"
+              >
+                <div>
+                  <h3 className="font-display text-2xl font-semibold text-fg">Investors</h3>
+                  <p className="mt-3 text-sm leading-relaxed text-muted">
+                    Track approved title participation and investment records.
+                  </p>
+                </div>
+                <div className="mt-8 pt-5 border-t border-line">
+                  <Link
+                    to="/signup"
+                    search={{ role: "investor" }}
+                    className="inline-flex items-center text-xs font-semibold text-accent hover:underline"
+                  >
+                    Create Investor Access →
+                  </Link>
+                </div>
+              </div>
+
               <div
                 id="buyers"
                 className="flex flex-col justify-between rounded-3xl border border-line bg-elevated p-7 sm:p-8"
@@ -215,7 +241,6 @@ function Home() {
           </div>
         </section>
 
-        {/* 5. Bridge + Loop (Compact Strip) */}
         <section className="border-b border-line bg-surface/50 py-12 sm:py-16">
           <div className="mx-auto max-w-7xl px-4 sm:px-6">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 rounded-2xl border border-line bg-surface p-6 sm:p-8">
@@ -229,22 +254,11 @@ function Home() {
                 </p>
               </div>
 
-              <div className="shrink-0">
-                <a
-                  href={CRAYONS_LOOP_URL}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 rounded-full border border-line bg-elevated px-5 py-2.5 text-xs font-semibold text-fg hover:border-line-strong hover:bg-accent-soft hover:text-accent transition-all"
-                >
-                  <span>Explore Crayons Loop</span>
-                  <span className="text-xs">↗</span>
-                </a>
-              </div>
+
             </div>
           </div>
         </section>
 
-        {/* 6. Final CTA */}
         <section className="border-b border-line bg-surface py-14 sm:py-20">
           <div className="mx-auto max-w-7xl px-4 sm:px-6">
             <div className="mx-auto max-w-2xl text-center">
@@ -271,7 +285,6 @@ function Home() {
         </section>
       </main>
 
-      {/* 7. Footer */}
       <footer className="bg-surface py-10 px-4 sm:px-6 text-xs text-muted">
         <div className="mx-auto max-w-7xl flex flex-col sm:flex-row items-center justify-between gap-4">
           <div>
@@ -284,18 +297,15 @@ function Home() {
             aria-label="Footer Legal and External Links"
             className="flex flex-wrap items-center gap-5 text-xs text-muted"
           >
-            <Link to="/privacy" className="hover:text-fg transition-colors">\n              Privacy\n            </Link>
-            <Link to="/terms" className="hover:text-fg transition-colors">\n              Terms\n            </Link>
-            <Link to="/contact" className="hover:text-fg transition-colors">\n              Contact\n            </Link>
-            <a
-              href={CRAYONS_LOOP_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-fg hover:text-accent font-semibold transition-colors flex items-center gap-0.5"
-            >
-              <span>Crayons Loop</span>
-              <span className="text-[10px]">↗</span>
-            </a>
+            <Link to="/privacy" className="hover:text-fg transition-colors">
+              Privacy
+            </Link>
+            <Link to="/terms" className="hover:text-fg transition-colors">
+              Terms
+            </Link>
+            <Link to="/contact" className="hover:text-fg transition-colors">
+              Contact
+            </Link>
           </nav>
         </div>
       </footer>

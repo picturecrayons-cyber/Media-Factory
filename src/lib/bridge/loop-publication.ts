@@ -8,6 +8,8 @@ import { requireVerifiedActor } from "./session";
 import { assertNotDevUser } from "./guards";
 import { writeAudit } from "./audit";
 import { assertPublicationCanExtend, findCoveringRightsGrant, type BridgeRightsGrant } from "./rights-coverage";
+import { assertBuyerPublishable } from "./buyer-visibility";
+import { assertDuplicateTitleLoopReleaseAllowed } from "./duplicate-reconciliation-gate";
 
 export type DistributionAuthorizationStatus =
   | "DRAFT"
@@ -220,20 +222,17 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
 
     return {
       titles: rows.map((r) => {
-        const proposedTerritories = r.territories?.length ? r.territories : ["IN"];
-        const proposedLanguages = r.languages?.length ? r.languages : [r.language];
-        const proposedModels = r.exploitation_models?.length ? r.exploitation_models : ["TVOD"];
-        const coveringGrant = findCoveringRightsGrant(
+        const coveringGrant = r.loop_title_id ? findCoveringRightsGrant(
           grants.filter((grant) => grant.title_id === r.id),
           {
             destination: "CRAYONS_LOOP",
-            territories: proposedTerritories,
-            languages: proposedLanguages,
-            exploitationModels: proposedModels,
+            territories: r.territories || [],
+            languages: r.languages || [],
+            exploitationModels: r.exploitation_models || [],
             windowStart: iso(r.window_start),
             windowEnd: iso(r.window_end),
           }
-        );
+        ) : null;
         const isReady =
           Boolean(coveringGrant) &&
           ["LICENSING_READY", "LIVE_FOR_BUYERS", "IN_NEGOTIATION", "LICENSED", "DELIVERED"].includes(r.status) &&
@@ -295,6 +294,8 @@ export const authorizeLoopPublication = createServerFn({ method: "POST" })
       throw new Error("Consumer access tier must be covered by the requested exploitation models.");
     }
     const sql = await getSql();
+    await assertDuplicateTitleLoopReleaseAllowed(sql, data.bridgeTitleId);
+    await assertBuyerPublishable(data.bridgeTitleId);
     const preflight = await verifyDistributionPreflight(sql, data.bridgeTitleId, {
       destination: data.destination,
       territories: data.territories,
@@ -474,23 +475,19 @@ export const extendDistributionWindow = createServerFn({ method: "POST" })
     const pubs = await sql<{
       loop_title_id: string;
       window_start: string | Date | null;
-      window_end: string | Date | null;
       authorization_status: string;
       revoked_at: string | Date | null;
       territories: string[];
       languages: string[];
       exploitation_models: string[];
     }>`
-      select loop_title_id, window_start, window_end, authorization_status, revoked_at,
+      select loop_title_id, window_start, authorization_status, revoked_at,
              territories, languages, exploitation_models
       from bridge_loop_publications where bridge_title_id = ${data.bridgeTitleId} limit 1
     `;
     const publication = pubs[0];
     if (!publication) throw new Error("Distribution record not found");
     assertPublicationCanExtend(publication.authorization_status, publication.revoked_at);
-    if (publication.window_end && new Date(publication.window_end) <= new Date()) {
-      throw new Error("Distribution window has expired; authorize a fresh publication window.");
-    }
 
     const preflight = await verifyDistributionPreflight(sql, data.bridgeTitleId, {
       destination: "CRAYONS_LOOP",
