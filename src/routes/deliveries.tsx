@@ -2,16 +2,75 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
-import { listTitles } from "@/lib/bridge/titles";
+import { listDeliveryTraces } from "@/lib/bridge/deliveries";
+import { hasPermission } from "@/lib/bridge/rbac";
+import type { Actor } from "@/lib/bridge/rbac";
 
 export const Route = createFileRoute("/deliveries")({ component: Deliveries });
 
 function Deliveries() {
-  return <RequireBridge>{(actor)=><BridgeShell actor={actor} title="Deliveries"><DeliveryList /></BridgeShell>}</RequireBridge>;
+  return (
+    <RequireBridge>
+      {(actor) => (
+        <BridgeShell
+          actor={actor}
+          title={actor.internalRole === "finance" ? "Finance & settlements" : "Deliveries"}
+        >
+          {hasPermission(actor, "delivery.read") &&
+          (actor.internalRole || actor.accountType !== "buyer") ? (
+            <DeliveryList
+              actor={actor}
+              canSeeFinance={hasPermission(actor, "delivery.read_finance")}
+            />
+          ) : (
+            <p className="text-sm text-muted">Delivery access restricted.</p>
+          )}
+        </BridgeShell>
+      )}
+    </RequireBridge>
+  );
 }
-function DeliveryList(){
- const q=useQuery({queryKey:["bridge-titles"],queryFn:()=>listTitles()});
- const titles=q.data?.titles??[];
- if(q.isPending)return <p className="text-sm text-muted">Loading deliveries…</p>;
- return <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6"><h2 className="font-display text-xl font-semibold">Delivery desk</h2><p className="mt-1 text-sm text-muted">Open a title to review its canonical Delivery workspace. No rights or fulfilment rules are changed here.</p><div className="mt-5 divide-y divide-line rounded-xl border border-line">{titles.map(t=><Link key={t.id} to="/title/$id" params={{id:t.id}} className="flex items-center justify-between gap-3 p-4 hover:bg-fg/5"><div><p className="text-sm font-semibold">{t.name}</p><p className="text-xs text-muted">{t.language}{t.year?` · ${t.year}`:""}</p></div><span className="rounded-full border border-line px-3 py-1 text-[10px] font-semibold">{t.status==="DELIVERED"?"DELIVERED":"OPEN TITLE"}</span></Link>)}</div>{!titles.length?<p className="mt-5 text-sm text-muted">No titles available.</p>:null}</section>;
+
+function DeliveryList({ actor, canSeeFinance }: { actor: Actor; canSeeFinance: boolean }) {
+  const q = useQuery({
+    queryKey: ["bridge-delivery-traces", actor.userId, actor.internalRole, actor.accountType],
+    queryFn: () => listDeliveryTraces(),
+  });
+  if (q.isError) return <p className="text-sm text-muted">Delivery data unavailable.</p>;
+  const rows = q.data?.deliveries ?? [];
+  if (q.isPending) return <p className="text-sm text-muted">Loading deliveries…</p>;
+  return (
+    <section className="rounded-2xl border border-line bg-surface p-4 sm:p-5">
+      <div className="divide-y divide-line rounded-xl border border-line">
+        {rows.map((row) => {
+          const first = row.destinations[0];
+          return (
+            <Link
+              key={row.titleId}
+              to="/title/$id"
+              params={{ id: row.titleId }}
+              className="grid gap-2 p-4 hover:bg-fg/5 sm:grid-cols-[minmax(0,1.5fr)_minmax(0,2fr)_auto] sm:items-center"
+            >
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold">{row.titleName}</p>
+                <p className="truncate text-xs text-muted">
+                  {row.creator} · {row.language}
+                  {row.year ? ` · ${row.year}` : ""}
+                </p>
+              </div>
+              <p className="truncate text-xs text-muted">
+                Buyer: {first?.buyer ?? "—"} · Investors: {row.investorCount} · Delivery:{" "}
+                {first?.state ?? "HOLD"} · {first?.distributorExclusivity ?? "NON_EXCLUSIVE"} ·{" "}
+                {first?.commercialModel ?? "REVENUE_SHARE"}
+              </p>
+              <span className="justify-self-start rounded-full border border-line px-3 py-1 text-[10px] font-semibold sm:justify-self-end">
+                {canSeeFinance ? (row.settlementStatus ?? "—") : "Restricted"}
+              </span>
+            </Link>
+          );
+        })}
+      </div>
+      {!rows.length ? <p className="p-5 text-sm text-muted">No deliveries available.</p> : null}
+    </section>
+  );
 }

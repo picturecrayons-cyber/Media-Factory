@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { CreateTitleForm, TitleList } from "@/components/bridge/title-desk";
@@ -6,62 +6,65 @@ import { StreamVistaOrders } from "@/components/bridge/streamvista-orders";
 
 export const Route = createFileRoute("/studio")({ component: Studio });
 
-const modules = [
-  ["Slate", "All studio titles with lifecycle, readiness and delivery state."],
-  ["Assets & QC", "Master, audio, subtitles, artwork and document validation."],
-  ["Rights & Legal", "Ownership, territories, languages, windows, documents and approvals."],
-  ["Licensing", "Buyer access, offers, negotiations, contracts and delivery authorization."],
-  ["Distribution", "Buyer deliveries and explicit Bridge → LOOP publication controls."],
-  ["Revenue", "Verified licensing, payment and distribution revenue by title."],
-  ["Statements", "Settlement, invoice and reconciliation records for finance teams."],
-  ["Team", "Owner, manager, producer, QC, legal, licensing, finance and viewer access."],
-] as const;
-
 function Studio() {
   return (
     <RequireBridge allow="studio">
       {(actor) => (
-        <BridgeShell actor={actor} title={actor.organizationName ?? "Studio workspace"}>
-          <section className="rounded-3xl border border-border bg-card p-6 md:p-8">
-            <div className="flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
+        <BridgeShell actor={actor} title="Studio">
+          <div className="space-y-10">
+            <section className="flex flex-col gap-5 border-b border-line pb-8 sm:flex-row sm:items-end sm:justify-between">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted">Studio operations</p>
-                <h2 className="mt-2 font-display text-3xl md:text-4xl">One slate. One rights record. One route to market.</h2>
-                <p className="mt-3 max-w-3xl text-sm leading-relaxed text-muted">
-                  Manage title preparation, rights, buyer licensing, secure delivery, distribution authorization and verified commercial records without creating a second content system.
+                <p className="text-sm text-muted">Your studio workspace</p>
+                <h2 className="mt-2 font-display text-3xl font-semibold tracking-tight sm:text-4xl">
+                  Manage your titles.
+                </h2>
+                <p className="mt-3 max-w-xl text-sm leading-6 text-muted">
+                  Prepare titles, manage rights and move approved content to delivery.
                 </p>
               </div>
-              <Link to="/account" className="rounded-full border border-border px-4 py-2 text-sm font-semibold">Studio account</Link>
-            </div>
-          </section>
+              <a
+                href="#add-title"
+                className="inline-flex h-11 shrink-0 items-center justify-center rounded-full bg-accent px-5 text-sm font-semibold text-white transition hover:bg-accent-strong"
+              >
+                + Add title
+              </a>
+            </section>
 
-          <section className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {modules.map(([name, description]) => (
-              <article key={name} className="rounded-2xl border border-border bg-card p-5">
-                <h3 className="font-display text-lg">{name}</h3>
-                <p className="mt-2 text-sm leading-relaxed text-muted">{description}</p>
-              </article>
-            ))}
-          </section>
+            <section id="add-title" className="scroll-mt-24">
+              <div className="mb-4">
+                <p className="text-xs font-medium uppercase tracking-[0.16em] text-muted">New title</p>
+                <h2 className="mt-1 font-display text-2xl font-semibold">Start with the basics</h2>
+                <p className="mt-1 text-sm text-muted">
+                  You can complete the remaining details inside the title workspace.
+                </p>
+              </div>
+              <CreateTitleForm concise />
+            </section>
 
-          <section className="mt-8 rounded-3xl border border-border bg-card p-6 md:p-8">
-            <div className="mb-6">
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted">Ingest</p>
-              <h2 className="mt-1 font-display text-2xl">Add title to slate</h2>
-              <p className="mt-2 max-w-2xl text-sm text-muted">The studio uses the same canonical title and lifecycle as independent creators. Private AWS assets are never made public by upload alone.</p>
-            </div>
-            <CreateTitleForm />
-          </section>
+            <section>
+              <div className="flex items-end justify-between gap-4">
+                <div>
+                  <p className="text-xs font-medium uppercase tracking-[0.16em] text-muted">Library</p>
+                  <h2 className="mt-1 font-display text-2xl font-semibold">Your titles</h2>
+                </div>
+              </div>
+              <div className="mt-4">
+                <TitleList empty="No titles yet. Add your first title above." />
+              </div>
+            </section>
 
-          <StreamVistaOrders />
-
-          <section className="mt-8">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted">Portfolio</p>
-            <h2 className="mt-1 font-display text-2xl">Studio Slate</h2>
-            <div className="mt-4">
-              <TitleList empty="No titles on this slate yet. Add the first title to begin the supply chain." />
-            </div>
-          </section>
+            <section className="border-t border-line pt-8">
+              <details className="group">
+                <summary className="cursor-pointer list-none text-sm font-semibold text-fg">
+                  Production services
+                  <span className="ml-2 text-muted transition group-open:rotate-90">›</span>
+                </summary>
+                <div className="mt-5">
+                  <StreamVistaOrders />
+                </div>
+              </details>
+            </section>
+          </div>
         </BridgeShell>
       )}
     </RequireBridge>

@@ -6,17 +6,17 @@ This file is the owner-approved production architecture contract. Changes to any
 
 - Bridge source: `picturecrayons-cyber/Media-Factory`, branch `main`
 - Bridge Vercel project: `bridge` (`prj_fT7VTrZMcgP9NutDhPvMhDAPtXNo`)
-- Bridge canonical domain: `https://bridge.crayonspictures.com`
+- Bridge canonical domain: `https://www.crayonspictures.in`
 - Loop source: `picturecrayons-cyber/crayons-loop-streaming-platform`, branch `main`
 - Loop Vercel project: `crayonsloop` (`prj_3plh37Oe141udF7V2LUPbB5cFNHH`)
 - Shared Supabase: `mlmgugivsyoxzdgwkbpu`
 - Payments: Razorpay
 - Transactional sender: `abijithasokan@crayonspictures.com`
-- AWS media account/bucket: canonical Bridge AWS account and `crayons-bridge-prod`
+- Bridge media storage: OCI Object Storage (Mumbai); legacy AWS adapter remains only for compatibility/tests
 
 ## Product boundary
 
-Bridge owns ingest, master assets, metadata, QC, rights, ownership, territories, languages, licensing, buyer/deal controls, publication authorization, B2B payments, settlements, audit and operations.
+Bridge owns ingest, master assets, metadata, QC, rights, ownership, territories, languages, licensing, buyer/deal controls, investor participation records, publication authorization, B2B payments, settlements, audit and operations.
 
 Bridge is also the canonical CMS, admin workspace and control panel for Crayons Loop. All staff/operator controls for Loop catalog management, title publication, artwork/metadata curation, homepage rails, visibility scheduling, distribution status and operational review live in Bridge. Loop is not a second back-office application.
 
@@ -26,7 +26,11 @@ Direct ingest of masters/assets happens in Bridge only. Loop receives only Bridg
 
 `bridge_titles -> bridge_loop_publications -> loop_titles -> Loop UI`
 
-No second Supabase project. No Bridge domain binding to non-canonical Vercel projects. No privileged browser-side service-role/AWS/payment secrets.
+External Bridge workspaces are role-specific: Creator, Studio, Buyer and Investor. Bridge Business/Distribution and Admin remain separate operational control planes.
+
+Analytics uses one shared data foundation with role-specific views: Bridge Analytics for supply/rights/licensing, Loop Analytics for audience/runtime, StreamVista Intelligence for cross-platform reporting, and Admin Analytics for operations. Do not create separate duplicate analytics data stores.
+
+No second Supabase project. No duplicate Vercel project. No privileged browser-side service-role/OCI/payment secrets.
 
 ## Release blockers that must fail closed
 
@@ -37,7 +41,7 @@ A release is blocked when any of these are true:
 3. Supabase `razorpay-webhook` deployed source does not match repository source or JWT verification is enabled at the gateway.
 4. Captured payment is acknowledged before durable payment state + entitlement/publication-side effects finish.
 5. Supabase Auth mail is not proven to use the configured Crayons sender/canonical callback.
-6. AWS source object existence, Bridge asset path, and signed read/write flow are not all verified.
+6. OCI source object existence, Bridge asset path, and signed read/write flow are not all verified.
 7. Legacy JSON rows are promoted directly to customer-facing access without staging/reconciliation.
 8. Any release relies on fabricated transactions, titles, entitlements, audit rows or success evidence.
 
@@ -50,5 +54,5 @@ A release is blocked when any of these are true:
 - Supabase project healthy and migrations reconciled
 - Razorpay signed webhook persistence proven from a real captured payment
 - Hostinger/Supabase Auth mail sender and callback proven with a new message
-- AWS object -> Bridge asset -> admin visibility chain proven
+- OCI object -> Bridge asset -> admin visibility chain proven
 - Bridge -> Loop publication record -> Loop browse visibility proven

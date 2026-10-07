@@ -1,8 +1,8 @@
 import { Link } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 import { UserButton } from "@/lib/auth/gates";
-import { cn } from "@/lib/cn";
 import type { BridgeActor } from "@/lib/bridge/session";
+import { cn } from "@/lib/cn";
 
 type NavItem = { to: string; label: string };
 

@@ -1,0 +1,38 @@
+name: Bridge OCI Storage E2E
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/bridge-oci-storage-e2e.yml"
+      - "scripts/oci-storage-e2e.mjs"
+      - "src/lib/bridge/**"
+      - "src/routes/title.$id.tsx"
+      - "package.json"
+      - "package-lock.json"
+
+jobs:
+  storage-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+      - run: npm ci
+      - name: Run production OCI → Bridge persistence round-trip
+        env:
+          OCI_TENANCY_OCID: ${{ secrets.OCI_TENANCY_OCID }}
+          OCI_USER_OCID: ${{ secrets.OCI_USER_OCID }}
+          OCI_FINGERPRINT: ${{ secrets.OCI_FINGERPRINT }}
+          OCI_PRIVATE_KEY: ${{ secrets.OCI_PRIVATE_KEY }}
+          OCI_REGION: ${{ secrets.OCI_REGION }}
+          OCI_NAMESPACE: ${{ secrets.OCI_NAMESPACE }}
+          OCI_BUCKET_NAME: ${{ secrets.OCI_BUCKET_NAME }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          BRIDGE_E2E_ASSET_ID: ${{ secrets.BRIDGE_E2E_ASSET_ID }}
+        run: node scripts/oci-storage-e2e.mjs

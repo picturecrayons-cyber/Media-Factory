@@ -5,7 +5,7 @@ export const FORBIDDEN_SUPABASE_REFS = ["tqzimuwozhipqgyerdff", "uakpqqardziifcw
 export const CANONICAL_SUPABASE_URL = `https://${CANONICAL_SUPABASE_REF}.supabase.co`;
 export const PRODUCT_NAME = "Crayons Bridge";
 export const LEGAL_OWNER = "StreamVista OPC Pvt Ltd";
-export const PRODUCTION_DOMAIN = "bridge.crayonspictures.com";
+export const PRODUCTION_DOMAIN = "www.crayonspictures.in";
 export const TRANSACTIONAL_FROM = "abijithasokan@crayonspictures.com";
 export const VERCEL_PROJECT = "bridge";
 

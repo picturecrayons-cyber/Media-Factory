@@ -1,14 +1,14 @@
 @import "tailwindcss";
 
 @theme {
-  --color-bg: #f8fafc;
+  --color-bg: #ffffff;
   --color-surface: #ffffff;
-  --color-elevated: #f4f7f9;
-  --color-fg: #1f2937;
+  --color-elevated: #f7fafc;
+  --color-fg: #172033;
   --color-muted: #6b7280;
   --color-faint: #9ca3af;
-  --color-line: #e6edf2;
-  --color-line-strong: #cdd9e1;
+  --color-line: #e7edf2;
+  --color-line-strong: #cbd5df;
   --color-accent: #08b8e8;
   --color-accent-strong: #009fcb;
   --color-accent-soft: #eaf9fd;
@@ -22,45 +22,79 @@
   --radius-sm: 10px;
   --radius-md: 14px;
   --radius-lg: 20px;
-  --shadow-lift: 0 12px 36px rgba(16, 24, 40, .08);
 }
 
 @layer base {
-  html, body, #app { min-height:100%; background:var(--color-bg); color:var(--color-fg); }
-  html { -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
-  body { font-family:var(--font-sans); }
-  button:not(:disabled), [role="button"]:not(:disabled) { cursor:pointer; }
-  ::selection { background:#bcefff; color:#123; }
+  html, body, #app {
+    min-height: 100%;
+    background: #fff;
+    color: var(--color-fg);
+  }
+
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    font-family: var(--font-sans);
+  }
+
+  button:not(:disabled), [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+
+  ::selection {
+    background: #bcefff;
+    color: #123;
+  }
 }
 
 @layer components {
   .bridge-nav-item {
-    display:inline-flex;
-    align-items:center;
-    border-radius:999px;
-    padding:.55rem .8rem;
-    color:var(--color-muted);
-    font-size:.875rem;
-    font-weight:600;
-    transition:background-color .15s ease,color .15s ease,border-color .15s ease;
+    display: inline-flex;
+    align-items: center;
+    padding: .35rem .65rem;
+    color: var(--color-muted);
+    font-size: .9rem;
+    font-weight: 600;
+    transition: color .15s ease;
   }
-  .bridge-nav-item:hover { background:var(--color-elevated); color:var(--color-fg); }
-  .bridge-nav-active { background:var(--color-accent-soft); color:var(--color-accent-strong); }
+
+  .bridge-nav-item:hover {
+    color: var(--color-fg);
+  }
+
+  .bridge-nav-active {
+    color: var(--color-accent-strong);
+  }
+
+  .bridge-nav-active::after {
+    content: "";
+    width: 4px;
+    height: 4px;
+    margin-left: .45rem;
+    border-radius: 999px;
+    background: var(--color-accent);
+  }
+}
+
+.font-display {
+  font-family: var(--font-display);
+}
+
+@media (max-width: 767px) {
+  .bridge-nav-item {
+    padding: .5rem .7rem;
+    font-size: .82rem;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { animation-duration:.01ms !important; transition-duration:.01ms !important; }
-}
-
-.font-display { font-family:var(--font-display); }
-
-
-@media (max-width: 767px) {
-  .bridge-nav-item { padding:.5rem .7rem; font-size:.82rem; }
-}
-
-@media (max-width: 639px) {
-  header .bridge-brand-lockup img { max-width:116px; }
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    transition-duration: .01ms !important;
+  }
 }
 
 

@@ -5,14 +5,14 @@ import { getPasswordRecoveryRedirectUrl, RECOVERY_MARKER_KEY } from "./recovery-
 
 describe("password recovery flow and callback bypass prevention", () => {
   it("routes password recovery to the recovery callback and never directly to reset-password", () => {
-    const url = getPasswordRecoveryRedirectUrl("https://bridge.crayonspictures.com");
-    assert.equal(url, "https://bridge.crayonspictures.com/auth/callback?type=recovery");
-    assert.doesNotMatch(url, /^https:\/\/bridge\.crayonspictures\.com\/reset-password$/);
+    const url = getPasswordRecoveryRedirectUrl("https://www.crayonspictures.in");
+    assert.equal(url, "https://www.crayonspictures.in/auth/callback?type=recovery");
+    assert.doesNotMatch(url, /^https:\/\/www\.crayonspictures\.in\/reset-password$/);
   });
 
-  it("preserves dynamic origin when provided", () => {
+  it("rejects an unapproved origin and falls back to canonical Production", () => {
     const url = getPasswordRecoveryRedirectUrl("http://localhost:3000");
-    assert.equal(url, "http://localhost:3000/auth/callback?type=recovery");
+    assert.equal(url, "https://www.crayonspictures.in/auth/callback?type=recovery");
   });
 
   it("defines the canonical recovery session marker key", () => {
@@ -21,7 +21,7 @@ describe("password recovery flow and callback bypass prevention", () => {
 
   it("proves the chain: forgot password -> recovery callback -> markRecoverySession -> reset-password", () => {
     // 1. Forgot password determines redirect target to callback
-    const callbackTarget = getPasswordRecoveryRedirectUrl("https://bridge.crayonspictures.com");
+    const callbackTarget = getPasswordRecoveryRedirectUrl("https://www.crayonspictures.in");
     const targetUrl = new URL(callbackTarget);
     assert.equal(targetUrl.pathname, "/auth/callback");
     assert.equal(targetUrl.searchParams.get("type"), "recovery");
