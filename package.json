@@ -26,7 +26,7 @@
     "test:oci-production-e2e": "node --experimental-strip-types scripts/oci-production-e2e.mjs",
     "check:bridge-app-url": "node scripts/check-bridge-app-url.mjs",
     "test:cra101": "node --test scripts/cra-101-auth-flow.test.mjs",
-    "test:storage-e2e": "node scripts/oci-storage-e2e.mjs"
+    "test:workflow": "node --experimental-strip-types --test src/lib/bridge/workflow.test.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.864.0",

@@ -11,7 +11,7 @@ const modules = [
   ["Rights", "Ownership, territory, language and exploitation windows remain the source of truth."],
   ["Distribution", "Track buyer delivery and Bridge-authorized Crayons LOOP publication."],
   ["Revenue", "Licensing and distribution revenue appears only from verified transaction records."],
-  ["Statements", "Settlement, invoice and statement history will live with the title record."],
+  ["Statements", "View captured receipts, statement exports and recorded settlement evidence in each Title Workspace."],
   ["Updates", "QC, rights, licensing, payment and delivery events in one operational feed."],
   ["Team", "Invite collaborators with server-enforced role permissions."],
 ] as const;

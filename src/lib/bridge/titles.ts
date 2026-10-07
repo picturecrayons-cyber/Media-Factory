@@ -2,11 +2,17 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { randomBytes } from "node:crypto";
 import { authMiddleware } from "@/lib/auth/middleware";
-import { getSql } from "@/lib/db";
+import { getSql, type Sql } from "@/lib/db";
 import type { AccountType, TitleStatus } from "./types";
 import { TITLE_STATUSES, type BridgeTitle } from "./types";
 import { assertTransition, nextStatus } from "./lifecycle";
-import { assertPermission, canMutateTitle, canOperateOnTitle, canReadTitle, permissionForTransition } from "./rbac";
+import {
+  assertPermission,
+  canMutateTitle,
+  canOperateOnTitle,
+  canReadTitle,
+  permissionForTransition,
+} from "./rbac";
 import { requireVerifiedActor } from "./session";
 import { writeAudit } from "./audit";
 import { assertNotDevUser } from "./guards";
@@ -79,14 +85,17 @@ export async function loadTitle(id: string): Promise<BridgeTitle | null> {
   return rows[0] ? mapTitle(rows[0]) : null;
 }
 
-export async function recordTransition(opts: {
-  titleId: string;
-  from: TitleStatus | null;
-  to: TitleStatus;
-  actorUserId: string;
-  note?: string;
-}) {
-  const sql = await getSql();
+export async function recordTransition(
+  opts: {
+    titleId: string;
+    from: TitleStatus | null;
+    to: TitleStatus;
+    actorUserId: string;
+    note?: string;
+  },
+  transaction?: Sql,
+) {
+  const sql = transaction ?? (await getSql());
   await sql`
     update bridge_titles set status = ${opts.to}, updated_at = now() where id = ${opts.titleId}
   `;
@@ -133,108 +142,27 @@ export const createTitle = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
-    assertPermission(actor, "title.create");
-
-    const isPublicSubmission = Boolean(
-      data.territories?.length || data.rightsLanguages?.length || data.authorizationAttested,
-    );
-
-    if (isPublicSubmission) {
-      if (actor.accountType === "buyer") throw new Error("Buyer accounts cannot submit rights packages");
-      if (!data.synopsis || data.synopsis.trim().length < 20) throw new Error("A synopsis is required");
-      if (!data.territories?.length) throw new Error("At least one territory is required");
-      if (!data.rightsLanguages?.length) throw new Error("At least one rights language is required");
-      if (!data.media?.length) throw new Error("At least one exploitation type is required");
-      if (!data.windowStart || !data.windowEnd) throw new Error("A rights window is required");
-      if (new Date(data.windowEnd) <= new Date(data.windowStart)) {
-        throw new Error("Rights window end must be after start");
-      }
-      if (!data.exclusivity) throw new Error("Exclusivity is required");
-      if (data.sublicensingAllowed === undefined) throw new Error("Sublicensing selection is required");
-      if (data.promotionalRights === undefined) throw new Error("Promotional-rights selection is required");
-      if (!data.rightsBasis) throw new Error("Rights basis is required");
-      if (!data.authorizationAttested) throw new Error("Authorization attestation is required");
-      if (!data.screenerAccess) throw new Error("Screener access selection is required");
-      if (!data.intendedDestinations?.length) throw new Error("At least one destination is required");
-    }
-
+    assertPermission(actor, actor.internalRole ? "title.ingest_internal" : "title.create");
     const id = randomBytes(16).toString("hex");
     const slug = slugify(data.name, id);
     const sql = await getSql();
-
-    await sql.transaction(async (tx) => {
-      await tx`
-        insert into bridge_titles (
-          id, slug, name, name_ml, original_title, owner_user_id, owner_account_type, status,
-          synopsis, long_synopsis, language, original_language, year, runtime_minutes, licensing_fee_paise,
-          content_type, country_of_origin, release_date, credits, genres, rights_submission_status
-        ) values (
-          ${id}, ${slug}, ${data.name}, ${data.nameMl ?? null}, ${data.originalTitle ?? null},
-          ${actor.userId}, ${actor.accountType}, 'DRAFT',
-          ${data.synopsis ?? ""}, ${data.synopsis ?? ""}, ${data.language ?? "Malayalam"},
-          ${data.language ?? "Malayalam"}, ${data.year ?? null}, ${data.runtimeMinutes ?? null},
-          ${data.licensingFeePaise ?? 0}, ${data.contentType ?? "FEATURE"}, ${data.countryOfOrigin ?? null},
-          ${data.releaseDate ?? null},
-          ${JSON.stringify([
-            ...(data.director ? [{ role: "Director", name: data.director }] : []),
-            ...(data.producer ? [{ role: "Producer", name: data.producer }] : []),
-            ...((data.cast ?? []).map((name) => ({ role: "Cast", name }))),
-          ])}::jsonb,
-          ${JSON.stringify(data.additionalLanguages ?? [])}::jsonb,
-          'INTAKE'
-        )
-      `;
-
-      if (!isPublicSubmission) return;
-
-      const rightsRows = await tx<{ id: string }>`
-        insert into bridge_rights_grants (
-          title_id, grant_type, territories, languages, media, window_start, window_end,
-          exclusivity, holdbacks, sublicensing_allowed, promotional_rights, restrictions, evidence,
-          status, created_by
-        ) values (
-          ${id}, 'DISTRIBUTION', ${JSON.stringify(data.territories)}::jsonb,
-          ${JSON.stringify(data.rightsLanguages)}::jsonb, ${JSON.stringify(data.media)}::jsonb,
-          ${data.windowStart}, ${data.windowEnd}, ${data.exclusivity},
-          ${JSON.stringify(data.holdbacks ?? [])}::jsonb, ${data.sublicensingAllowed},
-          ${data.promotionalRights}, '[]'::jsonb,
-          ${JSON.stringify([{ type: "RIGHTS_BASIS", value: data.rightsBasis, attested: true }])}::jsonb,
-          'DRAFT', ${actor.userId}
-        )
-        returning id
-      `;
-
-      await tx`
-        insert into bridge_legal_cases (title_id, status, classification, evidence, restrictions)
-        values (
-          ${id}, 'PENDING', null,
-          ${JSON.stringify([{
-            type: "AUTHORIZATION_ATTESTATION",
-            rightsBasis: data.rightsBasis,
-            attested: true,
-            evidenceRequired: true,
-          }])}::jsonb,
-          '[]'::jsonb
-        )
-      `;
-
-      await tx`
-        insert into bridge_destination_packages (
-          title_id, destination, rights_grant_id, asset_version_ids, consumer_metadata, monetization, readiness_state
-        ) values (
-          ${id}, 'BUYER_MARKETPLACE', ${rightsRows[0]?.id ?? null}, '[]'::jsonb,
-          ${JSON.stringify({ intendedDestinations: data.intendedDestinations })}::jsonb,
-          '{}'::jsonb, 'HOLD'
-        )
-      `;
-
-      await tx`
-        update bridge_titles
-        set rights_submission_status = 'UNDER_REVIEW', updated_at = now()
-        where id = ${id}
-      `;
-    });
-
+    await sql`
+      insert into bridge_titles (
+        id, slug, name, name_ml, owner_user_id, owner_account_type, status,
+        synopsis, language, year, runtime_minutes, licensing_fee_paise,
+        content_type, country_of_origin, release_date, credits
+      ) values (
+        ${id}, ${slug}, ${data.name}, ${data.nameMl ?? null}, ${actor.userId}, ${actor.accountType},
+        ${"DRAFT"}, ${data.synopsis ?? ""}, ${data.language ?? "Malayalam"},
+        ${data.year ?? null}, ${data.runtimeMinutes ?? null}, ${data.licensingFeePaise ?? 0},
+        ${data.contentType ?? "FEATURE"}, ${data.countryOfOrigin ?? null},
+        ${data.releaseDate ?? null}, ${JSON.stringify([
+          ...(data.director ? [{ role: "Director", name: data.director }] : []),
+          ...(data.producer ? [{ role: "Producer", name: data.producer }] : []),
+          ...(data.cast ?? []).map((name) => ({ role: "Cast", name })),
+        ])}::jsonb
+      )
+    `;
     await recordTransition({
       titleId: id,
       from: null,
@@ -342,8 +270,14 @@ export const updateTitle = createServerFn({ method: "POST" })
     const title = await loadTitle(data.id);
     if (!title) throw new Error("Not found");
     const owns = title.ownerUserId === actor.userId && !actor.internalRole;
-    if (!canMutateTitle(actor, title, "title.update_own", "title.license")) throw new Error("Forbidden");
-    if (owns && title.status !== "DRAFT" && title.status !== "UPLOADING" && title.status !== "PREPARING") {
+    if (!canMutateTitle(actor, title, "title.update_own", "title.license"))
+      throw new Error("Forbidden");
+    if (
+      owns &&
+      title.status !== "DRAFT" &&
+      title.status !== "UPLOADING" &&
+      title.status !== "PREPARING"
+    ) {
       throw new Error("Title is locked after prepare");
     }
     const sql = await getSql();
@@ -488,30 +422,62 @@ export const advanceTitle = createServerFn({ method: "POST" })
     if (data.to === "LICENSED") {
       throw new Error("LICENSED is granted only after a captured Razorpay payment");
     }
+    if (["RIGHTS_REVIEW", "LICENSING_READY"].includes(data.to))
+      throw new Error("Use the recorded QC or legal review action");
+    if (data.to === "QC_REVIEW") {
+      const verified = await (await getSql())<{
+        kind: string;
+        s3_key: string;
+      }>`select kind,s3_key from bridge_assets where title_id=${title.id} and byte_size>0`;
+      if (
+        !verified.some((a) => a.kind === "master" && a.s3_key === title.masterKey) ||
+        !verified.some((a) => a.kind === "poster" && a.s3_key === title.posterKey)
+      )
+        throw new Error("Verified master and artwork required before QC");
+    }
     assertTransition(title.status, data.to);
     const perm = permissionForTransition(title.status, data.to);
     if (!perm) throw new Error("Transition is not available");
-    assertPermission(actor, perm);
-    if (perm === "title.advance_upload" && !canOperateOnTitle(actor, title, "title.advance_upload")) {
+    assertPermission(
+      actor,
+      perm === "title.advance_upload" && actor.internalRole ? "title.ingest_internal" : perm,
+    );
+    if (
+      perm === "title.advance_upload" &&
+      !canOperateOnTitle(actor, title, "title.advance_upload", "title.ingest_internal")
+    ) {
       throw new Error("Forbidden");
     }
     const expected = nextStatus(title.status);
     if (expected !== data.to) throw new Error("Illegal title transition");
-    await recordTransition({
-      titleId: title.id,
-      from: title.status,
-      to: data.to,
-      actorUserId: actor.userId,
-      note: data.note,
+    return (await getSql()).transaction(async (tx) => {
+      const [locked] = await tx<{
+        status: string;
+      }>`select status from bridge_titles where id=${title.id} for update`;
+      if (!locked || locked.status !== title.status)
+        throw new Error("Title changed; refresh before retrying");
+      await recordTransition(
+        {
+          titleId: title.id,
+          from: title.status,
+          to: data.to,
+          actorUserId: actor.userId,
+          note: data.note,
+        },
+        tx,
+      );
+      await writeAudit(
+        {
+          actorUserId: actor.userId,
+          action: "title.advance",
+          entityType: "bridge_title",
+          entityId: title.id,
+          metadata: { from: title.status, to: data.to },
+        },
+        tx,
+      );
+      return { title: { ...title, status: data.to } };
     });
-    await writeAudit({
-      actorUserId: actor.userId,
-      action: "title.advance",
-      entityType: "bridge_title",
-      entityId: title.id,
-      metadata: { from: title.status, to: data.to },
-    });
-    return { title: await loadTitle(title.id) };
   });
 
 export const listAuditLogs = createServerFn({ method: "GET" })

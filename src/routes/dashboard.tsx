@@ -17,6 +17,7 @@ function DashboardBody() {
   if (dashboardQ.isPending) return <p className="text-sm text-muted">Checking dashboard access…</p>;
   if (dashboardQ.isError) return <p role="alert" className="text-sm text-accent">Super admin access required.</p>;
   const titles = titlesQ.data?.titles ?? [];
+  const draft = titles.filter((t)=>t.status==="DRAFT").length;
   const review = titles.filter((t)=>["PREPARING","QC_REVIEW","RIGHTS_REVIEW"].includes(t.status)).length;
   const deals = titles.filter((t)=>["IN_NEGOTIATION","LICENSED"].includes(t.status)).length;
   const delivered = titles.filter((t)=>t.status==="DELIVERED").length;
@@ -27,7 +28,7 @@ function DashboardBody() {
       <div className="mt-5 flex gap-2"><Link to="/workspace" className="rounded-full bg-accent px-5 py-2.5 text-sm font-semibold text-[#041018] shadow-[0_10px_30px_rgba(25,199,255,.18)] hover:bg-accent-strong">Open Titles</Link><Link to="/deliveries" className="rounded-full border border-line px-5 py-2.5 text-sm font-semibold">Deliveries</Link></div>
     </section>
     <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-      {[["Titles",titles.length],["In review",review],["Active deals",deals],["Delivered",delivered]].map(([label,value])=><div key={String(label)} className="bridge-stat rounded-2xl p-4 sm:p-5"><p className="text-xs uppercase tracking-wider text-muted">{label}</p><p className="mt-1 font-display text-2xl font-semibold">{value}</p></div>)}
+      {[["Draft",draft],["In review",review],["Active deals",deals],["Delivered",delivered]].map(([label,value])=><div key={String(label)} className="bridge-stat rounded-2xl p-4 sm:p-5"><p className="text-xs uppercase tracking-wider text-muted">{label}</p><p className="mt-1 font-display text-2xl font-semibold">{value}</p></div>)}
     </section>
   </div>;
 }
