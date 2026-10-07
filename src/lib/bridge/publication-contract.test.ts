@@ -59,6 +59,7 @@ function harness(grants: unknown[], allowed = true, existing = false) {
     "./guards": { assertNotDevUser: () => {} },
     "./audit": { writeAudit: async () => {} },
     "./rights-coverage": rights,
+    "./buyer-visibility": { assertBuyerPublishable: async () => {} },
   };
   const source = readFileSync(new URL("./loop-publication.ts", import.meta.url), "utf8");
   const output = transpileModule(source, {

@@ -4,7 +4,8 @@
   "sideEffects": false,
   "type": "module",
   "overrides": {
-    "nf3": "0.3.17"
+    "nf3": "0.3.17",
+    "@tanstack/start-server-core": "1.169.39"
   },
   "scripts": {
     "dev": "node scripts/with-app-env.mjs vite dev --host 0.0.0.0 --port 3000",
@@ -22,6 +23,7 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "check:release-readiness": "node scripts/release-readiness.mjs",
+    "test:oci-production-e2e": "node --experimental-strip-types scripts/oci-production-e2e.mjs",
     "check:bridge-app-url": "node scripts/check-bridge-app-url.mjs",
     "test:cra101": "node --test scripts/cra-101-auth-flow.test.mjs",
     "test:workflow": "node --experimental-strip-types --test src/lib/bridge/workflow.test.ts"
@@ -56,9 +58,10 @@
     "@tailwindcss/vite": "^4.3.0",
     "@tanstack/react-query": "^5.101.0",
     "@tanstack/react-router": "^1.170.0",
-    "@tanstack/react-start": "^1.168.60",
+    "@tanstack/react-start": "1.168.60",
     "@tanstack/react-table": "^8.21.0",
     "@tanstack/router-plugin": "^1.168.0",
+    "better-auth": "~1.6.30",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",

@@ -1,4 +1,4 @@
-export const ACCOUNT_TYPES = ["independent_creator", "studio", "buyer"] as const;
+export const ACCOUNT_TYPES = ["independent_creator", "studio", "buyer", "investor"] as const;
 export type AccountType = (typeof ACCOUNT_TYPES)[number];
 
 export const INTERNAL_ROLES = [
@@ -77,6 +77,7 @@ export const PERMISSIONS = [
   "title.read_own",
   "title.read_catalog",
   "title.update_own",
+  "title.merge_duplicate",
   "title.advance_upload",
   "title.qc_review",
   "title.rights_review",
@@ -86,6 +87,9 @@ export const PERMISSIONS = [
   "asset.sign_upload",
   "asset.sign_download",
   "payment.create_order",
+  "service.quote_create",
+  "service.order_create",
+  "service.fulfill",
   "entitlement.read_own",
   "finance.read",
   "finance.record_settlement",

@@ -6,7 +6,6 @@ import { SignedOut } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { getBridgeSession } from "@/lib/bridge/session";
 
-const CRAYONS_LOOP_URL = "https://crayonsloop.com/";
 
 export const Route = createFileRoute("/")({ component: Home });
 
@@ -151,7 +150,7 @@ function Home() {
               </h2>
             </div>
 
-            <div className="mt-10 grid gap-6 lg:grid-cols-3">
+            <div className="mt-10 grid gap-6 lg:grid-cols-2 xl:grid-cols-4">
               <div className="flex flex-col justify-between rounded-3xl border border-line bg-elevated p-7 sm:p-8">
                 <div>
                   <h3 className="font-display text-2xl font-semibold text-fg">
@@ -196,6 +195,27 @@ function Home() {
               </div>
 
               <div
+                id="investors"
+                className="flex flex-col justify-between rounded-3xl border border-line bg-elevated p-7 sm:p-8"
+              >
+                <div>
+                  <h3 className="font-display text-2xl font-semibold text-fg">Investors</h3>
+                  <p className="mt-3 text-sm leading-relaxed text-muted">
+                    Track approved title participation and investment records.
+                  </p>
+                </div>
+                <div className="mt-8 pt-5 border-t border-line">
+                  <Link
+                    to="/signup"
+                    search={{ role: "investor" }}
+                    className="inline-flex items-center text-xs font-semibold text-accent hover:underline"
+                  >
+                    Create Investor Access →
+                  </Link>
+                </div>
+              </div>
+
+              <div
                 id="buyers"
                 className="flex flex-col justify-between rounded-3xl border border-line bg-elevated p-7 sm:p-8"
               >
@@ -234,17 +254,7 @@ function Home() {
                 </p>
               </div>
 
-              <div className="shrink-0">
-                <a
-                  href={CRAYONS_LOOP_URL}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 rounded-full border border-line bg-elevated px-5 py-2.5 text-xs font-semibold text-fg hover:border-line-strong hover:bg-accent-soft hover:text-accent transition-all"
-                >
-                  <span>Explore Crayons Loop</span>
-                  <span className="text-xs">↗</span>
-                </a>
-              </div>
+
             </div>
           </div>
         </section>
@@ -296,15 +306,6 @@ function Home() {
             <Link to="/contact" className="hover:text-fg transition-colors">
               Contact
             </Link>
-            <a
-              href={CRAYONS_LOOP_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-fg hover:text-accent font-semibold transition-colors flex items-center gap-0.5"
-            >
-              <span>Crayons Loop</span>
-              <span className="text-[10px]">↗</span>
-            </a>
           </nav>
         </div>
       </footer>

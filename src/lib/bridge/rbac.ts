@@ -1,5 +1,4 @@
 import type { AccountType, InternalRole, Permission, TitleStatus } from "./types.ts";
-import { isBuyerVisible } from "./lifecycle.ts";
 
 const INTERNAL_PERMISSIONS: Record<InternalRole, readonly Permission[]> = {
   viewer: ["title.read_catalog", "audit.read"],
@@ -19,11 +18,21 @@ const INTERNAL_PERMISSIONS: Record<InternalRole, readonly Permission[]> = {
   ],
   admin: [
     "title.read_catalog",
+    "service.quote_create",
+    "service.order_create",
+    "service.fulfill",
+    "title.advance_upload",
     "title.qc_review",
     "title.rights_review",
     "title.license",
+    "title.merge_duplicate",
     "title.negotiate",
     "title.deliver",
+    "service.quote_create",
+    "service.order_create",
+    "service.fulfill",
+    "delivery.read",
+    "delivery.read_finance",
     "asset.sign_download",
     "finance.read",
     "finance.record_settlement",
@@ -36,11 +45,14 @@ const INTERNAL_PERMISSIONS: Record<InternalRole, readonly Permission[]> = {
   super_admin: [
     "title.ingest_internal",
     "title.read_catalog",
+    "title.advance_upload",
     "title.qc_review",
     "title.rights_review",
     "title.license",
     "title.negotiate",
     "title.deliver",
+    "delivery.read",
+    "delivery.read_finance",
     "asset.sign_download",
     "entitlement.read_own",
     "finance.read",
@@ -50,6 +62,7 @@ const INTERNAL_PERMISSIONS: Record<InternalRole, readonly Permission[]> = {
     "loop.publish",
     "loop.revoke",
     "loop.certify_playback",
+    "asset.sign_upload",
   ],
 };
 
@@ -59,18 +72,26 @@ const ACCOUNT_PERMISSIONS: Record<AccountType, readonly Permission[]> = {
     "title.read_own",
     "title.update_own",
     "title.advance_upload",
+    "service.quote_create",
+    "service.order_create",
     "asset.sign_upload",
     "asset.sign_download",
     "entitlement.read_own",
+    "delivery.read",
+    "delivery.read_finance",
   ],
   studio: [
     "title.create",
     "title.read_own",
     "title.update_own",
     "title.advance_upload",
+    "service.quote_create",
+    "service.order_create",
     "asset.sign_upload",
     "asset.sign_download",
     "entitlement.read_own",
+    "delivery.read",
+    "delivery.read_finance",
   ],
   buyer: [
     "title.read_catalog",
@@ -93,7 +114,6 @@ const TRANSITION_PERMISSION: Record<string, Permission> = {
   "PREPARING->QC_REVIEW": "title.advance_upload",
   "QC_REVIEW->RIGHTS_REVIEW": "title.qc_review",
   "RIGHTS_REVIEW->LICENSING_READY": "title.rights_review",
-  "LICENSING_READY->LIVE_FOR_BUYERS": "title.license",
   "LIVE_FOR_BUYERS->IN_NEGOTIATION": "title.negotiate",
   "LICENSED->DELIVERED": "title.deliver",
 };
@@ -132,9 +152,7 @@ export function canReadTitle(
   if (title.ownerUserId === actor.userId && !actor.internalRole)
     return hasPermission(actor, "title.read_own");
   if (actor.internalRole) return hasPermission(actor, "title.read_catalog");
-  if (actor.accountType === "buyer") {
-    return hasPermission(actor, "title.read_catalog") && isBuyerVisible(title.status);
-  }
+  if (actor.accountType === "buyer") return ["LIVE_FOR_BUYERS","IN_NEGOTIATION","LICENSED","DELIVERED"].includes(title.status) && hasPermission(actor, "title.read_catalog");
   return false;
 }
 
@@ -172,9 +190,13 @@ export function canGrantInternalRole(actor: Actor, role: InternalRole): boolean 
 
 export function workspaceHome(actor: Actor): string {
   if (actor.internalRole === "super_admin") return "/dashboard";
+  if (actor.internalRole === "qc_reviewer") return "/internal?desk=qc";
+  if (actor.internalRole === "legal_reviewer") return "/internal?desk=legal";
+  if (actor.internalRole === "finance") return "/deliveries";
   if (actor.internalRole) return "/internal";
   if (actor.accountType === "independent_creator") return "/creator";
   if (actor.accountType === "studio") return "/studio";
   if (actor.accountType === "buyer") return "/buyer";
+  if (actor.accountType === "investor") return "/investor";
   return "/";
 }

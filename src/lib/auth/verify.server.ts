@@ -1,12 +1,28 @@
+function trimUrl(value: string | undefined): string | undefined {
+  const trimmed = value?.trim().replace(/\/$/, "");
+  return trimmed || undefined;
+}
+
+function trimKey(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed || undefined;
+}
+
+// Production client builds already bake the canonical public Supabase project.
+// Server verification must use that same project when Vercel only attached the
+// Supabase integration env to a configuration that is not injected at runtime.
 const supabaseUrl =
-  process.env.SUPABASE_URL?.replace(/\/$/, "") ||
-  process.env.VITE_SUPABASE_URL?.replace(/\/$/, "") ||
-  "https://mlmgugivsyoxzdgwkbpu.supabase.co";
+  trimUrl(process.env.SUPABASE_URL) ||
+  trimUrl(process.env.VITE_SUPABASE_URL) ||
+  trimUrl(process.env.NEXT_PUBLIC_SUPABASE_URL);
 
 const supabasePublishableKey =
-  process.env.SUPABASE_PUBLISHABLE_KEY ||
-  process.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
-  "sb_publishable_8XCMcaqHvYMWANqxqnS0mw_f_asubxB";
+  trimKey(process.env.SUPABASE_PUBLISHABLE_KEY) ??
+  trimKey(process.env.VITE_SUPABASE_PUBLISHABLE_KEY) ??
+  trimKey(process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY) ??
+  trimKey(process.env.SUPABASE_ANON_KEY) ??
+  trimKey(process.env.VITE_SUPABASE_ANON_KEY) ??
+  trimKey(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
 
 export class UnauthorizedError extends Error {
   readonly status = 401;
@@ -24,15 +40,14 @@ export type VerifiedUser = {
 };
 
 export async function getSessionUser(bearerToken?: string): Promise<VerifiedUser | null> {
-  if (!bearerToken || !supabaseUrl || !supabasePublishableKey) return null;
+  if (!bearerToken) return null;
 
   try {
-    const response = await fetch(`${supabaseUrl}/auth/v1/user`, {
-      headers: {
-        apikey: supabasePublishableKey,
-        Authorization: `Bearer ${bearerToken}`,
-      },
-    });
+    const headers = new Headers();
+    headers.set("apikey", supabasePublishableKey);
+    headers.set("Authorization", `Bearer ${bearerToken}`);
+
+    const response = await fetch(`${supabaseUrl}/auth/v1/user`, { headers });
 
     if (!response.ok) {
       if (response.status === 401 || response.status === 403) {

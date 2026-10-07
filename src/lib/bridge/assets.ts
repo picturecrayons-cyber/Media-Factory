@@ -51,7 +51,7 @@ export const requestAssetUpload = createServerFn({ method: "POST" })
       contentType: data.contentType,
     });
     if (!ingestValidation.ok) throw new Error(ingestValidation.message);
-    const { signUpload, titleAssetKey } = await import("./aws-object-storage.server");
+    const { signUpload, titleAssetKey } = await import("./oci-object-storage.server");
     const key = titleAssetKey({
       ownerUserId: title.ownerUserId,
       titleId: title.id,
@@ -64,6 +64,13 @@ export const requestAssetUpload = createServerFn({ method: "POST" })
     await sql`
       insert into bridge_assets (id, title_id, kind, s3_key, content_type, created_by)
       values (${id}, ${title.id}, ${data.kind}, ${key}, ${data.contentType}, ${actor.userId})
+    `;
+    await sql`
+      update loop_media_migration_queue
+      set status = 'UPLOADED', target_path = ${key}, updated_at = now()
+      where title_id = ${title.id}
+        and asset_kind = case when ${data.kind} = 'screener' then 'TRAILER' else upper(${data.kind}) end
+        and status in ('PENDING_REUPLOAD', 'UPLOADED')
     `;
     await writeAudit({
       actorUserId: actor.userId,
@@ -96,7 +103,7 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
       created_by: string;
       byte_size: number | null;
     }>`
-      select id, title_id, kind, s3_key, created_by, byte_size
+      select id, title_id, kind, s3_key, created_by, content_type, byte_size
       from bridge_assets where id = ${data.assetId} limit 1
     `;
     const asset = rows[0];
@@ -113,8 +120,8 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
     if (asset.byte_size != null)
       return { assetId: asset.id, byteSize: Number(asset.byte_size), verified: true };
 
-    const { verifyObject, sealVerifiedObject } = await import("./aws-object-storage.server");
-    const object = await verifyObject(asset.s3_key);
+    const { verifyObject, sealVerifiedObject } = await import("./oci-object-storage.server");
+    const object = await verifyObject(asset.s3_key, asset.content_type);
     if (data.expectedByteSize != null && object.byteSize !== data.expectedByteSize) {
       throw new Error("Uploaded object size does not match the file that was sent");
     }
@@ -136,6 +143,15 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
       sourceKey: asset.s3_key,
       sealedKey,
     });
+    if (confirmed) {
+      await sql`
+        update loop_media_migration_queue
+        set status = 'VERIFIED', target_path = ${sealedKey}, updated_at = now()
+        where title_id = ${title.id}
+          and asset_kind = case when ${asset.kind} = 'screener' then 'TRAILER' else upper(${asset.kind}) end
+          and status in ('UPLOADED', 'PENDING_REUPLOAD')
+      `;
+    }
     if (!confirmed) {
       const current = await sql<{
         byte_size: number | null;
@@ -186,7 +202,7 @@ export const requestAssetDownload = createServerFn({ method: "POST" })
       });
       throw new Error(decision.reason);
     }
-    const { signDownload } = await import("./aws-object-storage.server");
+    const { signDownload } = await import("./oci-object-storage.server");
     const signed = await signDownload({ key: asset.s3_key });
     await writeAudit({
       actorUserId: actor.userId,

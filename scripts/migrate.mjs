@@ -55,7 +55,9 @@ async function main() {
     return;
   }
 
-  const pool = new pg.Pool({ connectionString: databaseUrl, max: 1, ssl: { rejectUnauthorized: false } });
+  const ssl =
+    process.env.PGSSLMODE === "disable" ? false : { rejectUnauthorized: false };
+  const pool = new pg.Pool({ connectionString: databaseUrl, max: 1, ssl });
   const client = await pool.connect();
   try {
     await client.query(

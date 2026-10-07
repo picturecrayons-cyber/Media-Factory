@@ -69,7 +69,7 @@ export const requestStreamVistaUpload = createServerFn({ method: "POST" })
     assertPermission(actor, "asset.sign_upload");
     const order = await ownedOrder(data.orderId, actor.userId);
     if (order.status !== "requested" || order.source_s3_key) throw new Error("Upload is closed");
-    const { signUpload } = await import("./aws-object-storage.server");
+    const { signUpload } = await import("./oci-object-storage.server");
     const safe = data.filename.replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 80);
     const key = `streamvista/${order.id}/source/${randomUUID()}-${safe}`;
     const signed = await signUpload({ key, contentType: data.contentType });
@@ -85,7 +85,7 @@ export const confirmStreamVistaUpload = createServerFn({ method: "POST" })
     assertPermission(actor, "asset.sign_upload");
     await ownedOrder(data.orderId, actor.userId);
     if (!data.key.startsWith(`streamvista/${data.orderId}/source/`)) throw new Error("Invalid asset key");
-    const { verifyObject } = await import("./aws-object-storage.server");
+    const { verifyObject } = await import("./oci-object-storage.server");
     await verifyObject(data.key);
     const sql = await getSql();
     const jobId = randomUUID();

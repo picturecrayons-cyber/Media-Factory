@@ -173,17 +173,21 @@ export async function signDownload(opts: { key: string; expiresIn?: number }) {
   return { url: signed.url, key: opts.key, bucket: signed.bucket, method: "GET" as const };
 }
 
-export async function verifyObject(key: string) {
+export async function verifyObject(key: string, expectedContentType?: string | null) {
   const cfg = config();
   const namespace = await resolveNamespace(cfg);
   const path = `/n/${encodeURIComponent(namespace)}/b/${encodeURIComponent(cfg.bucket)}/o/${encodedObjectName(key)}`;
   const res = await signedFetch({ cfg, method: "HEAD", path });
   if (!res.ok) throw new Error(`OCI object verification failed (${res.status})`);
   const contentLength = Number(res.headers.get("content-length") || 0);
+  const contentType = res.headers.get("content-type");
+  if (expectedContentType && contentType !== expectedContentType) {
+    throw new Error(`OCI object content type mismatch: expected ${expectedContentType}, received ${contentType || "missing"}`);
+  }
   if (!Number.isSafeInteger(contentLength) || contentLength <= 0) throw new Error("Uploaded object is empty");
   return {
     byteSize: contentLength,
-    contentType: res.headers.get("content-type"),
+    contentType,
     etag: res.headers.get("etag")?.replaceAll('"', "") ?? null,
   };
 }
@@ -226,6 +230,15 @@ export async function sealVerifiedObject(sourceKey: string, destinationKey: stri
   const workRequestId = res.headers.get("opc-work-request-id");
   if (workRequestId) await pollWorkRequest(cfg, workRequestId);
   return verifyObject(destinationKey);
+}
+
+export async function deleteObject(key: string) {
+  const cfg = config();
+  const namespace = await resolveNamespace(cfg);
+  const path = `/n/${encodeURIComponent(namespace)}/b/${encodeURIComponent(cfg.bucket)}/o/${encodedObjectName(key)}`;
+  const res = await signedFetch({ cfg, method: "DELETE", path });
+  if (!res.ok && res.status !== 404) throw new Error(`OCI object deletion failed (${res.status})`);
+  return { deleted: res.status !== 404, key };
 }
 
 export function titleAssetKey(opts: { ownerUserId: string; titleId: string; kind: string; filename: string }) {

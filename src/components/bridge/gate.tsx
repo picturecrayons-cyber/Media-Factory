@@ -5,7 +5,7 @@ import { RedirectToSignIn } from "@/lib/auth/gates";
 import { retryWorkspaceSession } from "@/lib/auth/workspace-session-retry";
 import { supabase } from "@/lib/supabase";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
-import { getBridgeSession, isPrivateBridgeOperator, type BridgeActor } from "@/lib/bridge/session";
+import { getBridgeSession, type BridgeActor } from "@/lib/bridge/session";
 import { requestEmailVerification } from "@/lib/bridge/profiles";
 import { Button } from "@/components/ui/button";
 import { BrandMark } from "./shell";
@@ -26,7 +26,7 @@ export function RequireBridge({
   allow,
 }: {
   children: (actor: BridgeActor) => ReactNode;
-  allow?: "creator" | "studio" | "buyer" | "internal" | "super_admin";
+  allow?: "creator" | "studio" | "buyer" | "investor" | "internal" | "super_admin";
 }) {
   const qc = useQueryClient();
   const [retrying, setRetrying] = useState(false);
@@ -89,8 +89,14 @@ export function RequireBridge({
       </Frame>
     );
   }
+
   const profile = sessionQ.data?.profile ?? null;
   if (!profile) return <Navigate to="/onboarding" />;
+
+  // Role gates are authoritative for role-specific workspaces:
+  // creator/studio/buyer/investor accounts are valid Bridge users and must not be
+  // blocked by the internal-operator gate. Internal surfaces remain protected
+  // by the explicit "internal"/"super_admin" allow checks above.
   if (allow === "super_admin" && profile.internalRole !== "super_admin") return <Navigate to={sessionQ.data?.home ?? "/"} />;
   if (allow === "internal" && !profile.internalRole) return <Navigate to={sessionQ.data?.home ?? "/"} />;
   if (allow && allow !== "internal" && allow !== "super_admin" && (profile.internalRole || profile.accountType !== (
@@ -98,19 +104,7 @@ export function RequireBridge({
   ))) {
     return <Navigate to={sessionQ.data?.home ?? "/"} />;
   }
-  if (!isPrivateBridgeOperator(profile)) {
-    return (
-      <Frame>
-        <h1 className="font-display text-2xl">Private Bridge workspace</h1>
-        <p role="alert" className="text-sm leading-relaxed text-muted">
-          This workspace is restricted to authorized Crayons Bridge operators.
-        </p>
-        <Link to="/account" className="block text-sm text-accent underline-offset-4 hover:underline">
-          Account
-        </Link>
-      </Frame>
-    );
-  }
+
   if (!profile.emailVerified) {
     return (
       <Frame>
@@ -139,5 +133,6 @@ export function RequireBridge({
       </Frame>
     );
   }
+
   return <>{children(profile)}</>;
 }

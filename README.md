@@ -11,6 +11,7 @@ Crayons Bridge is the B2B control plane for title records, rights, licensing, de
 | Thing | Value |
 |---|---|
 | Supabase | `mlmgugivsyoxzdgwkbpu` |
+| Media storage | Oracle OCI Object Storage · Mumbai |
 | Mail from | `abijithasokan@crayonspictures.com` |
 | Vercel | project `bridge` · production from `main` |
 
@@ -21,25 +22,15 @@ Any non-canonical Supabase project is rejected in `src/lib/bridge/canonical.ts`.
 - TanStack Start + React 19
 - Supabase Auth for production email/password authentication
 - Postgres via `getSql()`
-- Private AWS S3 signed URLs (fail closed)
-- Razorpay order + signature verify + idempotent webhook (entitlement **only** after capture)
-- Hostinger SMTP (fail closed)
+- **Oracle OCI Object Storage (Mumbai)** for Bridge media; signed upload/download and verification fail closed
+- Razorpay order + signature verification + idempotent webhook; entitlement only after capture
+- Hostinger SMTP for transactional mail; fail closed
 
-## Desks
+AWS S3 code is **legacy compatibility/test code only**. It is not the Bridge production media backend and must not be used as production readiness evidence.
 
-| Path | Who |
-|---|---|
-| `/` | Public landing |
-| `/login` `/signup` `/forgot-password` `/reset-password` `/verify-email` | Auth |
-| `/onboarding` | Account type: independent creator / studio / buyer |
-| `/creator` `/studio` | Title create + upload |
-| `/buyer` | Live catalog + license checkout |
-| `/internal` | Invite-only QC / legal / finance / admin |
-| `/title/$id` | One title record |
+## Release rule
 
-Lifecycle: `DRAFT → UPLOADING → PREPARING → QC_REVIEW → RIGHTS_REVIEW → LICENSING_READY → LIVE_FOR_BUYERS → IN_NEGOTIATION → LICENSED → DELIVERED`.
-
-`LICENSED` is not a manual advance. It is granted after a captured Razorpay payment.
+Production releases are cut from `main` only after exact-head CI, Vercel deployment, Supabase migrations, OCI media E2E, Razorpay webhook/entitlement E2E, and mail E2E evidence are verified.
 
 ## Scripts
 
@@ -50,14 +41,10 @@ npm run typecheck
 npm test
 npm run build
 node scripts/secret-scan.mjs
-node --experimental-strip-types scripts/legacy-migrate.mjs --file /private/titles.json
+node scripts/release-readiness.mjs
 ```
 
-Legacy import is dry-run only. See [docs/legacy-mapping.md](docs/legacy-mapping.md).
-
-Authentication architecture: [docs/authentication-architecture.md](docs/authentication-architecture.md).
-
-Production releases are cut from `main` only after preview/build verification.
+Legacy import is dry-run only. See `docs/legacy-mapping.md`.
 
 ## License
 

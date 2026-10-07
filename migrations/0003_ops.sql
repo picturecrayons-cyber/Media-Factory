@@ -54,7 +54,6 @@ on conflict (code) do nothing;
 insert into platform_meta (key, value) values
   ('fail_closed', '1'),
   ('s3_bucket', 's3://loop-media'),
-  ('edge', 'stream.crayonsloop.com'),
   ('connected_at', ''),
   ('mapped', '1')
 on conflict (key) do nothing;
