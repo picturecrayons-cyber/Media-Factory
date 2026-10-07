@@ -6,7 +6,7 @@ import { getSql, type Sql } from "@/lib/db";
 import type { AccountType, TitleStatus } from "./types";
 import { TITLE_STATUSES, type BridgeTitle } from "./types";
 import { assertTransition, nextStatus } from "./lifecycle";
-import { assertPermission, canMutateTitle, canReadTitle, hasStaffPermission, permissionForTransition } from "./rbac";
+import { assertPermission, canMutateTitle, canReadTitle, hasPermission, hasStaffPermission, permissionForTransition } from "./rbac";
 import { requireVerifiedActor } from "./session";
 import { writeAudit } from "./audit";
 import { assertNotDevUser } from "./guards";
@@ -36,7 +36,8 @@ type TitleRow = {
   updated_at: string | Date;
 };
 
-function asIso(v: string | Date): string {
+function asIso(v: string | Date | null | undefined): string {
+  if (v == null) return "";
   return v instanceof Date ? v.toISOString() : String(v);
 }
 
@@ -63,6 +64,54 @@ export function mapTitle(r: TitleRow): BridgeTitle {
     createdAt: asIso(r.created_at),
     updatedAt: asIso(r.updated_at),
   };
+}
+
+async function listCatalog(sql: Sql): Promise<TitleRow[]> {
+  try {
+    return await sql<TitleRow>`select * from bridge_titles where merged_into_title_id is null order by updated_at desc limit 200`;
+  } catch (error) {
+    console.error("[bridge] catalog list fallback", error);
+    return sql<TitleRow>`select * from bridge_titles order by updated_at desc limit 200`;
+  }
+}
+
+async function listOwned(sql: Sql, userId: string, organizationName: string | null): Promise<TitleRow[]> {
+  const org = organizationName?.trim() || null;
+  try {
+    if (!org) {
+      return await sql<TitleRow>`
+        select * from bridge_titles
+        where owner_user_id = ${userId} and merged_into_title_id is null
+        order by updated_at desc limit 200
+      `;
+    }
+    return await sql<TitleRow>`
+      select t.* from bridge_titles t
+      where t.merged_into_title_id is null
+        and (
+          t.owner_user_id = ${userId}
+          or t.owner_user_id in (
+            select user_id from bridge_profiles
+            where organization_name is not null and lower(organization_name) = lower(${org})
+          )
+        )
+      order by t.updated_at desc limit 200
+    `;
+  } catch (error) {
+    console.error("[bridge] owned title list fallback", error);
+    if (!org) {
+      return sql<TitleRow>`select * from bridge_titles where owner_user_id = ${userId} order by updated_at desc limit 200`;
+    }
+    return sql<TitleRow>`
+      select t.* from bridge_titles t
+      where t.owner_user_id = ${userId}
+        or t.owner_user_id in (
+          select user_id from bridge_profiles
+          where organization_name is not null and lower(organization_name) = lower(${org})
+        )
+      order by t.updated_at desc limit 200
+    `;
+  }
 }
 
 function slugify(name: string, id: string): string {
@@ -185,9 +234,8 @@ export const listTitles = createServerFn({ method: "GET" })
     const actor = await requireVerifiedActor(context.userId);
     const sql = await getSql();
     let rows: TitleRow[] = [];
-    if (actor.internalRole) {
-      assertPermission(actor, "title.read_catalog");
-      rows = await sql<TitleRow>`select * from bridge_titles where merged_into_title_id is null order by updated_at desc limit 200`;
+    if (actor.internalRole && hasPermission(actor, "title.read_catalog")) {
+      rows = await listCatalog(sql);
     } else if (actor.accountType === "buyer") {
       assertPermission(actor, "title.read_catalog");
       try {
@@ -204,12 +252,16 @@ export const listTitles = createServerFn({ method: "GET" })
       }
     } else {
       assertPermission(actor, "title.read_own");
-      rows = await sql<TitleRow>`
-        select * from bridge_titles where owner_user_id = ${actor.userId} and merged_into_title_id is null
-        order by updated_at desc limit 200
-      `;
+      rows = await listOwned(sql, actor.userId, actor.accountType === "studio" ? actor.organizationName : null);
     }
-    return { titles: rows.map(mapTitle) };
+    return { titles: rows.flatMap((row) => {
+      try {
+        return [mapTitle(row)];
+      } catch (error) {
+        console.error("[bridge] skipped unreadable title", row?.id, error);
+        return [];
+      }
+    }) };
   });
 
 export const getTitle = createServerFn({ method: "GET" })
