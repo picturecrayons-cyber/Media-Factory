@@ -129,8 +129,9 @@ export function permissionsFor(actor: Actor): Set<Permission> {
   // Internal staff identities are governed by their explicit staff role.
   // Account-type powers must never silently widen a staff role (for example,
   // a viewer profile whose account_type happens to be independent_creator).
-  if (actor.internalRole) return new Set<Permission>(INTERNAL_PERMISSIONS[actor.internalRole]);
-  return new Set<Permission>(ACCOUNT_PERMISSIONS[actor.accountType]);
+  const staff = actor.internalRole ? INTERNAL_PERMISSIONS[actor.internalRole] : undefined;
+  if (staff) return new Set<Permission>(staff);
+  return new Set<Permission>(ACCOUNT_PERMISSIONS[actor.accountType] ?? []);
 }
 
 export function canAccessDashboard(actor: Actor): boolean {
@@ -156,8 +157,8 @@ export function hasAccountPermission(actor: Actor, permission: Permission): bool
 }
 
 export function hasStaffPermission(actor: Actor, permission: Permission): boolean {
-  return actor.emailVerified && Boolean(actor.internalRole) &&
-    INTERNAL_PERMISSIONS[actor.internalRole!].includes(permission);
+  const staff = actor.internalRole ? INTERNAL_PERMISSIONS[actor.internalRole] : undefined;
+  return actor.emailVerified && Boolean(staff) && staff!.includes(permission);
 }
 
 export function hasPermission(actor: Actor, permission: Permission): boolean {
