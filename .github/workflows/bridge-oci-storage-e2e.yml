@@ -2,6 +2,16 @@ name: Bridge OCI Storage E2E
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/bridge-oci-storage-e2e.yml"
+      - "scripts/oci-storage-e2e.mjs"
+      - "src/lib/bridge/**"
+      - "src/routes/title.$id.tsx"
+      - "package.json"
+      - "package-lock.json"
 
 jobs:
   storage-e2e:
