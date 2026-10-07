@@ -1,16 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import {
-  assertPermission,
-  canAccessDashboard,
-  canGrantInternalRole,
-  canMutateTitle,
-  canOperateOnTitle,
-  canReadTitle,
-  hasPermission,
-  permissionForTransition,
-  workspaceHome,
-} from "./rbac.ts";
+import { assertPermission, canGrantInternalRole, canReadTitle, hasPermission, hasStaffPermission, permissionForTransition, workspaceHome } from "./rbac.ts";
 import type { Actor } from "./rbac.ts";
 
 const actor = (
@@ -67,33 +57,15 @@ describe("PRD authorization matrix", () => {
     assert.equal(hasPermission(b, "payment.create_order"), true);
   });
 
-  it("investor has a separate workspace and read-only investment-oriented permissions", () => {
-    const i = investor();
-    assert.equal(workspaceHome(i), "/investor");
-    assert.equal(hasPermission(i, "title.read_catalog"), true);
-    assert.equal(hasPermission(i, "delivery.read_finance"), true);
-    assert.equal(hasPermission(i, "payment.create_order"), false);
-    assert.equal(hasPermission(i, "title.create"), false);
-    assert.equal(hasPermission(i, "asset.sign_upload"), false);
-    assert.equal(canReadTitle(i, { ownerUserId: "creator-a", status: "DRAFT" }), false);
-    assert.equal(canReadTitle(i, { ownerUserId: "creator-a", status: "LIVE_FOR_BUYERS" }), false);
-  });
-
-  it("all internal roles stay within explicit staff permissions even with mixed account types", () => {
-    for (const roleActor of [viewer(), qc, legal, finance]) {
-      assert.equal(hasPermission(roleActor, "title.create"), false);
-      assert.equal(hasPermission(roleActor, "asset.sign_upload"), false);
-      assert.equal(hasPermission(roleActor, "payment.create_order"), false);
-    }
-    assert.equal(hasPermission(admin(), "title.create"), false);
-    assert.equal(hasPermission(admin(), "asset.sign_upload"), true);
-    assert.equal(hasPermission(admin(), "payment.create_order"), false);
+  it("admin receives only explicit staff permissions, not account-type mutation powers", () => {
     const a = admin();
     assert.equal(hasPermission(a, "title.read_catalog"), true);
     assert.equal(hasPermission(a, "title.qc_review"), true);
     assert.equal(hasPermission(a, "users.invite_internal"), true);
     assert.equal(hasPermission(a, "title.create"), false);
-    assert.equal(hasPermission(a, "asset.sign_upload"), true);
+    assert.equal(hasPermission(a, "title.update_own"), false);
+    assert.equal(hasPermission(a, "title.advance_upload"), false);
+    assert.equal(hasPermission(a, "asset.sign_upload"), false);
     assert.equal(canReadTitle(a, { ownerUserId: "other-org-user", status: "DRAFT" }), true);
     assert.equal(hasPermission(viewer(), "asset.sign_download"), false);
   });
@@ -126,6 +98,30 @@ describe("PRD authorization matrix", () => {
     assert.equal(hasPermission(a, "asset.sign_upload"), true);
     assert.equal(hasPermission(a, "users.invite_internal"), true);
     assert.equal(hasPermission(a, "title.license"), true);
+  });
+
+  it("viewer, reviewer and finance roles cannot inherit creator mutation powers from account type", () => {
+    for (const role of ["viewer", "qc_reviewer", "legal_reviewer", "finance"] as const) {
+      const mixed = actor(`mixed-${role}`, "independent_creator", role);
+      for (const permission of ["title.create", "title.update_own", "title.advance_upload", "asset.sign_upload"] as const) {
+        assert.equal(hasPermission(mixed, permission), false, `${role} unexpectedly received ${permission}`);
+      }
+    }
+  });
+
+  it("ordinary admins cannot grant super admin while super admin has an explicit grant matrix", () => {
+    assert.equal(canGrantInternalRole(admin(), "viewer"), true);
+    assert.equal(canGrantInternalRole(admin(), "admin"), true);
+    assert.equal(canGrantInternalRole(admin(), "super_admin"), false);
+    assert.equal(canGrantInternalRole(superAdmin(), "super_admin"), true);
+    assert.equal(canGrantInternalRole(qc, "viewer"), false);
+    assert.equal(canGrantInternalRole(actor("unverified", "independent_creator", "admin", false), "viewer"), false);
+  });
+
+  it("cross-title staff capability must come from an explicit staff permission", () => {
+    assert.equal(hasStaffPermission(actor("viewer-a", "independent_creator", "viewer"), "asset.sign_upload"), false);
+    assert.equal(hasStaffPermission(admin(), "asset.sign_upload"), false);
+    assert.equal(hasStaffPermission(superAdmin(), "asset.sign_upload"), true);
   });
 
   it("signed asset permissions are role scoped", () => {

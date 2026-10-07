@@ -4,7 +4,7 @@ import { z } from "zod";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql, type Sql } from "@/lib/db";
 import { assertPermission } from "./rbac";
-import { requireActor } from "./session";
+import { requireVerifiedActor } from "./session";
 import { assertNotDevUser } from "./guards";
 import { writeAudit } from "./audit";
 import { assertPublicationCanExtend, findCoveringRightsGrant, type BridgeRightsGrant } from "./rights-coverage";
@@ -198,7 +198,7 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
     assertNotDevUser(context.userId);
-    const actor = await requireActor(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
     assertPermission(actor, "title.read_catalog");
     const sql = await getSql();
 
@@ -338,7 +338,7 @@ export const authorizeLoopPublication = createServerFn({ method: "POST" })
   .validator(publishInput)
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
-    const actor = await requireActor(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
     assertPermission(actor, "loop.publish");
 
     if (
@@ -454,7 +454,7 @@ export const suspendLoopPublication = createServerFn({ method: "POST" })
   .validator(z.object({ bridgeTitleId: z.string().min(1), reason: z.string().optional() }))
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
-    const actor = await requireActor(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
     assertPermission(actor, "loop.revoke");
     return (await getSql()).transaction(async (sql) => {
       const pubs = await sql<{ loop_title_id: string }>`
@@ -494,7 +494,7 @@ export const revokeLoopPublication = createServerFn({ method: "POST" })
   .validator(z.object({ bridgeTitleId: z.string().min(1) }))
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
-    const actor = await requireActor(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
     assertPermission(actor, "loop.revoke");
     return (await getSql()).transaction(async (sql) => {
       const pubs = await sql<{ loop_title_id: string }>`
@@ -538,7 +538,7 @@ export const extendDistributionWindow = createServerFn({ method: "POST" })
   )
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
-    const actor = await requireActor(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
     assertPermission(actor, "loop.publish");
     return (await getSql()).transaction(async (sql) => {
       const pubs = await sql<{
@@ -604,7 +604,7 @@ export const getLoopPublication = createServerFn({ method: "GET" })
   .validator(z.object({ bridgeTitleId: z.string().min(1) }))
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
-    const actor = await requireActor(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
     assertPermission(actor, "title.read_catalog");
     const sql = await getSql();
 

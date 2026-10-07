@@ -59,9 +59,10 @@ export const updateHomepageContent = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(contentSchema)
   .handler(async ({ context, data }) => {
-    assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
-    assertPermission(actor, "users.invite_internal");
+    if (actor.internalRole !== "admin" && actor.internalRole !== "super_admin") {
+      throw new Error("Admin access required");
+    }
     const sql = await getSql();
     const rows = await sql<SiteRow>`
       insert into bridge_site_content (

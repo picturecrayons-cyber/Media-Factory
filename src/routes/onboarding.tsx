@@ -8,6 +8,8 @@ import { createTitle } from "@/lib/bridge/titles";
 import { getBridgeSession } from "@/lib/bridge/session";
 import { retryWorkspaceSession } from "@/lib/auth/workspace-session-retry";
 import { supabase } from "@/lib/supabase";
+import { ACCOUNT_TYPES } from "@/lib/bridge/types";
+import { publicOnboardingError } from "@/lib/bridge/onboarding-errors";
 import { BrandMark } from "@/components/bridge/shell";
 import { Button } from "@/components/ui/button";
 
@@ -124,7 +126,6 @@ function Onboarding() {
 
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [submittedTitleId, setSubmittedTitleId] = useState<string | null>(null);
   const submitInFlight = useRef(false);
   const [retrying, setRetrying] = useState(false);
 
@@ -266,7 +267,7 @@ function Onboarding() {
       setSubmittedTitleId(result.title.id);
       try { sessionStorage.removeItem("bridge-invite"); } catch { /* ignore */ }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not submit the title. Please review the required fields.");
+      setError(publicOnboardingError(err));
     } finally {
       submitInFlight.current = false;
       setBusy(false);

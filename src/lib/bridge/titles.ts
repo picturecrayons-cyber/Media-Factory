@@ -6,13 +6,7 @@ import { getSql, type Sql } from "@/lib/db";
 import type { AccountType, TitleStatus } from "./types";
 import { TITLE_STATUSES, type BridgeTitle } from "./types";
 import { assertTransition, nextStatus } from "./lifecycle";
-import {
-  assertPermission,
-  canMutateTitle,
-  canOperateOnTitle,
-  canReadTitle,
-  permissionForTransition,
-} from "./rbac";
+import { assertPermission, canReadTitle, hasStaffPermission, permissionForTransition } from "./rbac";
 import { requireVerifiedActor } from "./session";
 import { writeAudit } from "./audit";
 import { assertNotDevUser } from "./guards";
@@ -438,14 +432,8 @@ export const advanceTitle = createServerFn({ method: "POST" })
     assertTransition(title.status, data.to);
     const perm = permissionForTransition(title.status, data.to);
     if (!perm) throw new Error("Transition is not available");
-    assertPermission(
-      actor,
-      perm === "title.advance_upload" && actor.internalRole ? "title.ingest_internal" : perm,
-    );
-    if (
-      perm === "title.advance_upload" &&
-      !canOperateOnTitle(actor, title, "title.advance_upload", "title.ingest_internal")
-    ) {
+    assertPermission(actor, perm);
+    if (perm === "title.advance_upload" && title.ownerUserId !== actor.userId && !hasStaffPermission(actor, perm)) {
       throw new Error("Forbidden");
     }
     const expected = nextStatus(title.status);
