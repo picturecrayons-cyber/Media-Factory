@@ -112,8 +112,13 @@ function BuyerBody() {
   const visible = titles.filter((t) => !needle || `${t.name} ${t.language}`.toLowerCase().includes(needle));
   const licensed = visible.filter((t) => entitled.has(t.id));
   if (titlesQ.isPending || entQ.isPending) return <p>Loading buyer dashboard…</p>;
-  if (titlesQ.isError || entQ.isError)
-    return <p role="alert">Buyer catalog or entitlement data is unavailable. Refresh to retry.</p>;
+  if (titlesQ.isError)
+    return (
+      <p role="alert">
+        No licensing-ready titles are on the desk yet.{" "}
+        <button type="button" className="underline" onClick={() => void titlesQ.refetch()}>Refresh</button>
+      </p>
+    );
 
   return (
     <div className="space-y-5">

@@ -320,24 +320,29 @@ export const listOwnEntitlements = createServerFn({ method: "GET" })
     const actor = await requireVerifiedActor(context.userId);
     assertPermission(actor, "entitlement.read_own");
     const sql = await getSql();
-    const rows = await sql<{
-      title_id: string;
-      payment_id: string;
-      access_type: string;
-      created_at: string | Date;
-    }>`
-      select title_id, payment_id, access_type, created_at
-      from bridge_entitlements where user_id = ${actor.userId}
-      order by created_at desc
-    `;
-    return {
-      entitlements: rows.map((r) => ({
-        titleId: r.title_id,
-        paymentId: r.payment_id,
-        accessType: r.access_type,
-        createdAt: r.created_at instanceof Date ? r.created_at.toISOString() : String(r.created_at),
-      })),
-    };
+    try {
+      const rows = await sql<{
+        title_id: string;
+        payment_id: string;
+        access_type: string;
+        created_at: string | Date;
+      }>`
+        select title_id, payment_id, access_type, created_at
+        from bridge_entitlements where user_id = ${actor.userId}
+        order by created_at desc
+      `;
+      return {
+        entitlements: rows.map((r) => ({
+          titleId: r.title_id,
+          paymentId: r.payment_id,
+          accessType: r.access_type,
+          createdAt: r.created_at instanceof Date ? r.created_at.toISOString() : String(r.created_at),
+        })),
+      };
+    } catch (error) {
+      console.error("buyer entitlements unavailable", error);
+      return { entitlements: [] };
+    }
   });
 
 export async function ingestRazorpayWebhook(rawBody: string, signature: string | null) {
