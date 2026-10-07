@@ -124,6 +124,7 @@ function Onboarding() {
   const [screenerAccess, setScreenerAccess] = useState<"BRIDGE_PRIVATE_SCREENER" | "SCREENER_PENDING">("SCREENER_PENDING");
   const [destinations, setDestinations] = useState<string[]>(["Buyer delivery"]);
 
+  const [submittedTitleId, setSubmittedTitleId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const submitInFlight = useRef(false);

@@ -6,7 +6,7 @@ import { getSql, type Sql } from "@/lib/db";
 import type { AccountType, TitleStatus } from "./types";
 import { TITLE_STATUSES, type BridgeTitle } from "./types";
 import { assertTransition, nextStatus } from "./lifecycle";
-import { assertPermission, canReadTitle, hasStaffPermission, permissionForTransition } from "./rbac";
+import { assertPermission, canMutateTitle, canReadTitle, hasStaffPermission, permissionForTransition } from "./rbac";
 import { requireVerifiedActor } from "./session";
 import { writeAudit } from "./audit";
 import { assertNotDevUser } from "./guards";
@@ -157,6 +157,7 @@ export const createTitle = createServerFn({ method: "POST" })
         ])}::jsonb
       )
     `;
+    const isPublicSubmission = Boolean((data as { publicSubmission?: boolean }).publicSubmission);
     await recordTransition({
       titleId: id,
       from: null,
