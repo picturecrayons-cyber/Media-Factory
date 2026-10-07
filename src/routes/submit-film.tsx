@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useState, type FormEvent } from "react";
+import { useState, useEffect, type FormEvent } from "react";
 import { RedirectToSignIn } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { createRightsReadySubmission } from "@/lib/bridge/submissions";
@@ -20,6 +20,11 @@ function RightsReadySubmission() {
   const [name, setName] = useState("");
   const [synopsis, setSynopsis] = useState("");
   const [contentType, setContentType] = useState<BridgeLoopLane>("Film");
+  useEffect(() => {
+    const requested = new URLSearchParams(window.location.search).get("lane");
+    const match = BRIDGE_LOOP_LANES.find((lane) => lane.loopType === requested || lane.label === requested);
+    if (match) setContentType(match.loopType);
+  }, []);
   const [originalLanguage, setOriginalLanguage] = useState("Malayalam");
   const [rightsLanguages, setRightsLanguages] = useState<string[]>(["Malayalam"]);
   const [country, setCountry] = useState("India");
@@ -96,7 +101,7 @@ function RightsReadySubmission() {
         <header>
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted">Crayons Bridge</p>
           <h1 className="mt-2 font-display text-3xl">Submit a title for buyer review</h1>
-          <p className="mt-2 text-sm leading-relaxed text-muted">Prepare the rights scope once. Bridge verifies the evidence before a title can become Licensing Ready.</p>
+          <p className="mt-2 text-sm leading-relaxed text-muted">Loop submissions are filed here. Bridge stores the lane. A title reaches the public Loop stage only after it is licensed and published as TVOD.</p>
         </header>
 
         <section className="space-y-4">
