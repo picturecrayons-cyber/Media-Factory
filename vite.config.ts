@@ -81,14 +81,6 @@ export default defineConfig(({ command, isPreview }) => ({
       },
     },
   },
-  define: {
-    "import.meta.env.VITE_SUPABASE_URL": JSON.stringify(
-      process.env.VITE_SUPABASE_URL || "https://mlmgugivsyoxzdgwkbpu.supabase.co"
-    ),
-    "import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY": JSON.stringify(
-      process.env.VITE_SUPABASE_PUBLISHABLE_KEY || "sb_publishable_8XCMcaqHvYMWANqxqnS0mw_f_asubxB"
-    ),
-  },
   resolve: {
     tsconfigPaths: true,
     alias: {
