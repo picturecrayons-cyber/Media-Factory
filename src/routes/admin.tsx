@@ -10,17 +10,25 @@ import { listAdminProfiles } from "@/lib/bridge/profiles";
 
 export const Route = createFileRoute("/admin")({ component: AdminControlPlane });
 
-const modules = [
-  ["Incoming Submissions", "Persisted title intake queue with audited acceptance into QC.", "/admin/workstations"],
-  ["Operational CMS", "Bridge-authoritative operations and Loop publication controls.", "/admin/workstations"],
-  ["Titles & Assets", "Canonical titles, base assets and versioned masters.", "/admin/workstations"],
-  ["Assets & QC", "Persisted QC cases with reviewer decisions and audit events.", "/admin/workstations"],
-  ["Legal & Rights", "Persisted legal cases and rights grants with clearance decisions.", "/admin/workstations"],
-  ["Licensing", "Persisted commercial pipeline and destination package readiness.", "/admin/workstations"],
-  ["Deliveries", "Persisted destination packages, authorization and delivery state.", "/admin/workstations"],
-  ["Users & Studios", "Authoritative Bridge identities and organizations.", "/admin/workstations"],
-  ["Audit History", "Persisted operator activity and lifecycle decisions.", "/admin/workstations"],
-  ["Website CMS", "Edit the minimal public Bridge homepage copy.", "/admin/workstations"],
+const groups = [
+  ["Intake", [
+    ["Incoming Submissions", "Title intake into QC.", "/admin/workstations"],
+    ["Titles & Assets", "Canonical titles and masters.", "/admin/workstations"],
+  ]],
+  ["Clearance", [
+    ["Assets & QC", "QC cases and reviewer decisions.", "/admin/workstations"],
+    ["Legal & Rights", "Rights grants and clearance.", "/admin/workstations"],
+  ]],
+  ["Commercial", [
+    ["Licensing", "Buyer pipeline and packages.", "/admin/workstations"],
+    ["Deliveries", "Destination delivery state.", "/admin/workstations"],
+    ["Operational CMS", "Loop publication controls.", "/admin/workstations"],
+  ]],
+  ["House", [
+    ["Users & Studios", "Identities and organizations.", "/admin/workstations"],
+    ["Audit History", "Operator activity.", "/admin/workstations"],
+    ["Website CMS", "Public homepage copy.", "/admin/workstations"],
+  ]],
 ] as const;
 
 function AdminControlPlane() {
@@ -76,45 +84,48 @@ function AdminBody({ actor }: { actor: any }) {
         </div>
       </section>
 
-      <section className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-7">
+      <section className="mt-6 grid gap-3 sm:grid-cols-4">
         {[
-          ["Total Titles", titles.length, "Canonical catalog"],
-          ["QC Queue", qcQueue, "Prepare / QC review"],
-          ["Rights Queue", rightsQueue, "Legal clearance"],
-          ["Buyer Ready", buyerReady, "Licensing pipeline"],
-          ["Loop Live", live, "Authorized publications"],
-          ["Users", profiles.length, "Bridge profiles"],
-          ["Organizations", organizations.size, "Studio / buyer organizations"],
+          ["Titles", titles.length, "Catalog"],
+          ["QC", qcQueue, "Queue"],
+          ["Rights", rightsQueue, "Queue"],
+          ["Buyer ready", buyerReady, "Pipeline"],
         ].map(([label, value, caption]) => (
-          <article key={String(label)} className="rounded-2xl border border-line bg-surface p-5">
-            <p className="text-xs font-semibold uppercase tracking-wider text-muted">{label}</p>
-            <p className="mt-2 font-display text-3xl font-semibold">{value}</p>
-            <p className="mt-1 text-xs text-muted">{caption}</p>
+          <article key={String(label)} className="rounded-sm border border-line p-4">
+            <p className="text-xs uppercase tracking-widest text-muted">{label}</p>
+            <p className="mt-1 text-2xl font-semibold">{value}</p>
+            <p className="text-xs text-muted">{caption}</p>
+          </article>
+        ))}
+      </section>
+      <section className="mt-3 grid gap-3 sm:grid-cols-3">
+        {[
+          ["Loop live", live, "Publications"],
+          ["Users", profiles.length, "Profiles"],
+          ["Organizations", organizations.size, "Studios and buyers"],
+        ].map(([label, value, caption]) => (
+          <article key={String(label)} className="rounded-sm border border-line p-4">
+            <p className="text-xs uppercase tracking-widest text-muted">{label}</p>
+            <p className="mt-1 text-2xl font-semibold">{value}</p>
+            <p className="text-xs text-muted">{caption}</p>
           </article>
         ))}
       </section>
 
-      <section className="mt-8">
-        <div className="mb-4">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">Operations map</p>
-          <h3 className="mt-1 font-display text-2xl font-semibold">Admin workstations</h3>
-        </div>
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          {modules.map(([name, description, to]) => to ? (
-            <Link key={name} to={to} className="group rounded-2xl border border-line bg-surface p-5 transition hover:-translate-y-0.5 hover:shadow-lift">
-              <div className="flex items-start justify-between gap-3">
-                <h4 className="font-display text-lg font-semibold">{name}</h4>
-                <span className="text-accent transition group-hover:translate-x-1">→</span>
-              </div>
-              <p className="mt-2 text-sm leading-relaxed text-muted">{description}</p>
-            </Link>
-          ) : (
-            <article key={name} className="rounded-2xl border border-line bg-surface p-5 opacity-75">
-              <div className="flex items-start justify-between gap-3"><h4 className="font-display text-lg font-semibold">{name}</h4><span className="rounded-full border border-line px-2 py-1 text-[10px] uppercase text-muted">Unavailable</span></div>
-              <p className="mt-2 text-sm leading-relaxed text-muted">{description}</p>
-            </article>
-          ))}
-        </div>
+      <section className="mt-8 space-y-6">
+        {groups.map(([group, items]) => (
+          <div key={group}>
+            <h3 className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">{group}</h3>
+            <div className="mt-2 grid gap-3 md:grid-cols-3">
+              {items.map(([name, description, to]) => (
+                <Link key={name} to={to} className="rounded-sm border border-line p-4 hover:border-accent">
+                  <div className="flex items-center justify-between"><h4 className="font-semibold">{name}</h4><span className="text-accent">→</span></div>
+                  <p className="mt-1 text-sm text-muted">{description}</p>
+                </Link>
+              ))}
+            </div>
+          </div>
+        ))}
       </section>
 
       <section className="mt-8 rounded-3xl border border-line bg-surface p-6">
