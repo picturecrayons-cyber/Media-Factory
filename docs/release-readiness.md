@@ -65,6 +65,7 @@ Migration `0011_bridge_dmca.sql` must be applied to canonical Supabase and `brid
 
 Canonical Bridge domain: `www.crayonspictures.in`. `crayonspictures.in` redirects to it. The retired `bridge.crayonspictures.com` host must not be used.
 
-## 7. Release rule
+- Bridge: `www.crayonspictures.in`
+- LOOP: `crayonsloop.com`
 
 Do not certify or promote based on a green build alone. Production requires real E2E evidence for LOOP publication, OCI storage, Supabase Auth → Hostinger SMTP, Razorpay capture → entitlement, DMCA migration, and canonical domain.

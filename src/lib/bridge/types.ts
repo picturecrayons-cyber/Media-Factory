@@ -58,10 +58,21 @@ export type BridgeTitle = {
   updatedAt: string;
 };
 
-export const ASSET_KINDS = ["poster", "screener", "master", "subtitle", "technical"] as const;
+export const ASSET_KINDS = [
+  "poster",
+  "poster_vertical",
+  "poster_horizontal",
+  "thumbnail",
+  "screener",
+  "master",
+  "subtitle",
+  "technical",
+  "censor_certificate",
+] as const;
 export type AssetKind = (typeof ASSET_KINDS)[number];
 
 export const PERMISSIONS = [
+  "title.ingest_internal",
   "title.create",
   "title.read_own",
   "title.read_catalog",
@@ -81,9 +92,7 @@ export const PERMISSIONS = [
   "service.fulfill",
   "entitlement.read_own",
   "finance.read",
-  "finance.configure",
-  "delivery.read",
-  "delivery.read_finance",
+  "finance.record_settlement",
   "users.invite_internal",
   "audit.read",
   "loop.publish",
