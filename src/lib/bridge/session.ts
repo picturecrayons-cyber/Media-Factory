@@ -105,7 +105,7 @@ export function requireActorPermission(actor: Actor, permission: Permission) {
  * but they cannot enter the private owner workspace while this lock is enabled.
  */
 export function isPrivateBridgeOperator(actor: Actor): boolean {
-  return actor.emailVerified && Boolean(actor.internalRole);
+  return canAccessDashboard(actor);
 }
 
 export const getBridgeSession = createServerFn({ method: "GET" })

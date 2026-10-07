@@ -4,7 +4,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import { ASSET_KINDS } from "./types";
-import { assertPermission, canOperateOnTitle, canReadTitle } from "./rbac";
+import { assertPermission, canReadTitle, hasStaffPermission } from "./rbac";
 import { requireVerifiedActor } from "./session";
 import { loadTitle } from "./titles";
 import { writeAudit } from "./audit";
@@ -40,8 +40,7 @@ export const requestAssetUpload = createServerFn({ method: "POST" })
     assertPermission(actor, actor.internalRole ? "title.ingest_internal" : "asset.sign_upload");
     const title = await loadTitle(data.titleId);
     if (!title) throw new Error("Not found");
-    if (!canOperateOnTitle(actor, title, "asset.sign_upload", "title.ingest_internal"))
-      throw new Error("Forbidden");
+    if (title.ownerUserId !== actor.userId && !hasStaffPermission(actor, "asset.sign_upload")) throw new Error("Forbidden");
     if (!UPLOADABLE.has(title.status)) throw new Error("Uploads are closed for this status");
     if (!["master", "poster", "poster_vertical", "poster_horizontal", "thumbnail", "subtitle", "screener", "technical", "censor_certificate"].includes(data.kind))
       throw new Error("This asset kind is not supported by the OTT ingest uploader");
@@ -107,14 +106,9 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
       from bridge_assets where id = ${data.assetId} limit 1
     `;
     const asset = rows[0];
-    if (!asset) throw new Error("Asset not found");
+    if (!asset || (asset.created_by !== actor.userId && !hasStaffPermission(actor, "asset.sign_upload"))) throw new Error("Asset not found");
     const title = await loadTitle(asset.title_id);
-    if (
-      !title ||
-      !canOperateOnTitle(actor, title, "asset.sign_upload", "title.ingest_internal") ||
-      (!actor.internalRole && asset.created_by !== actor.userId) ||
-      !UPLOADABLE.has(title.status)
-    ) {
+    if (!title || (title.ownerUserId !== actor.userId && !hasStaffPermission(actor, "asset.sign_upload")) || !UPLOADABLE.has(title.status)) {
       throw new Error("Upload confirmation is closed for this title");
     }
     if (asset.byte_size != null)

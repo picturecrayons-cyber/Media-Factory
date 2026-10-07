@@ -7,7 +7,7 @@ import { writeAudit } from "./audit";
 import { loadActor, requireVerifiedActor } from "./session";
 import { verificationProfileId } from "./verification-profile-id";
 import { assertPermission, canGrantInternalRole, workspaceHome } from "./rbac";
-import { createHash, randomBytes, randomUUID } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { bridgeEnv } from "./env";
 import { assertNotDevUser } from "./guards";
 import { ONBOARDING_EMAIL_CONFLICT_MESSAGE, isBridgeProfileEmailConflict } from "./onboarding-errors";
@@ -320,7 +320,9 @@ export const listAdminProfiles = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
-    assertPermission(actor, "users.invite_internal");
+    if (actor.internalRole !== "admin" && actor.internalRole !== "super_admin") {
+      throw new Error("Admin access required");
+    }
     const sql = await getSql();
     const rows = await sql<{
       user_id: string;
@@ -356,10 +358,11 @@ export const inviteInternalRole = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(z.object({ email: z.string().email(), role: z.enum(INTERNAL_ROLES) }))
   .handler(async ({ context, data }) => {
-    assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
     assertPermission(actor, "users.invite_internal");
-    if (!canGrantInternalRole(actor, data.role)) throw new Error("Forbidden role grant");
+    if (!canGrantInternalRole(actor, data.role)) {
+      throw new Error("Role grant is not permitted");
+    }
     const sql = await getSql();
     const { token, hash } = tokenPair();
     const id = randomBytes(16).toString("hex");
