@@ -22,22 +22,22 @@ function normalize(user: ReturnType<typeof getStoredSupabaseUser>): AppUser | nu
 
 export function useCurrentUserState(): CurrentUserState {
   const [state, setState] = useState<CurrentUserState>(() => ({
-    user: normalize(getStoredSupabaseUser()),
+    user: null,
     isPending: true,
   }));
 
   useEffect(() => {
     let alive = true;
-    const resolve = () => {
-      void getSupabaseSession().then((session) => {
-        if (alive) {
-          setState({ user: normalize(session?.user ?? null), isPending: false });
-        }
-      });
-    };
-    resolve();
+    let authChanged = false;
     const unsubscribe = subscribeAuthChange((_event, session) => {
+      authChanged = true;
       if (alive) {
+        setState({ user: normalize(session?.user ?? null), isPending: false });
+      }
+    });
+    void getSupabaseSession().then((session) => {
+      // A newer confirmation/refresh/sign-out event wins over this initial read.
+      if (alive && !authChanged) {
         setState({ user: normalize(session?.user ?? null), isPending: false });
       }
     });

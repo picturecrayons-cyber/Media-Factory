@@ -9,8 +9,6 @@ export interface TransactionalEmailOptions {
   category?: string;
 }
 
-const BRIDGE_LOGO_URL = "https://bridge.crayonspictures.com/brand/logo.png";
-
 export function formatBrandedEmailHtml(title: string, bodyHtml: string, cta?: { label: string; url: string }) {
   return `<!DOCTYPE html>
 <html lang="en">
@@ -24,7 +22,7 @@ export function formatBrandedEmailHtml(title: string, bodyHtml: string, cta?: { 
     <tr><td align="center">
       <table width="100%" cellspacing="0" cellpadding="0" style="max-width:600px;background:#ffffff;border:1px solid #dce3e8;border-radius:18px;overflow:hidden;">
         <tr><td style="padding:28px 32px 18px;border-bottom:1px solid #e7edf1;">
-          <img src="${BRIDGE_LOGO_URL}" alt="Crayons Bridge" width="190" style="display:block;max-width:190px;height:auto;border:0;">
+          <div style="font-size:22px;line-height:1.2;font-weight:700;color:#172033;">Crayons <span style="color:#10b5ea;">Bridge</span></div>
         </td></tr>
         <tr><td style="padding:30px 32px;">
           <h1 style="margin:0 0 14px;font-size:24px;line-height:1.3;color:#111827;">${title}</h1>
@@ -80,8 +78,8 @@ export async function sendWelcomeEmail(opts: { to: string; name: string }) {
   return sendTransactionalEmail({
     to: opts.to,
     subject,
-    text: "Welcome to Crayons Bridge. Open your workspace at https://bridge.crayonspictures.com/dashboard",
-    html: formatBrandedEmailHtml(subject, body, { label: "Open Crayons Bridge", url: "https://bridge.crayonspictures.com/dashboard" }),
+    text: "Welcome to Crayons Bridge. Open your workspace at https://www.crayonspictures.in/dashboard",
+    html: formatBrandedEmailHtml(subject, body, { label: "Open Crayons Bridge", url: "https://www.crayonspictures.in/dashboard" }),
     category: "welcome",
   });
 }
@@ -89,13 +87,13 @@ export async function sendWelcomeEmail(opts: { to: string; name: string }) {
 export async function sendSignInAlertEmail(opts: { to: string }) {
   const subject = "New sign-in to Crayons Bridge";
   const body = "<p>A new sign-in to your Crayons Bridge account was detected.</p><p>If this was not you, reset your password immediately and contact support.</p>";
-  return sendTransactionalEmail({ to: opts.to, subject, text: body.replace(/<[^>]+>/g, " "), html: formatBrandedEmailHtml(subject, body, { label: "Review account", url: "https://bridge.crayonspictures.com/account" }), category: "security_sign_in" });
+  return sendTransactionalEmail({ to: opts.to, subject, text: body.replace(/<[^>]+>/g, " "), html: formatBrandedEmailHtml(subject, body, { label: "Review account", url: "https://www.crayonspictures.in/account" }), category: "security_sign_in" });
 }
 
 export async function sendAdminUpdatedEmail(opts: { to: string; summary: string }) {
   const subject = "Your Crayons Bridge account was updated";
   const body = `<p>An administrator updated your Crayons Bridge account.</p><p><strong>Change:</strong> ${opts.summary}</p><p>If this does not look right, contact support.</p>`;
-  return sendTransactionalEmail({ to: opts.to, subject, text: `Crayons Bridge admin update: ${opts.summary}`, html: formatBrandedEmailHtml(subject, body, { label: "Open account", url: "https://bridge.crayonspictures.com/account" }), category: "admin_update" });
+  return sendTransactionalEmail({ to: opts.to, subject, text: `Crayons Bridge admin update: ${opts.summary}`, html: formatBrandedEmailHtml(subject, body, { label: "Open account", url: "https://www.crayonspictures.in/account" }), category: "admin_update" });
 }
 
 export async function sendDistributionAuthorizedEmail(opts: { to: string; titleName: string; destination: string }) {
@@ -105,7 +103,7 @@ export async function sendDistributionAuthorizedEmail(opts: { to: string; titleN
     to: opts.to,
     subject,
     text: `Distribution has been authorized for ${opts.titleName} to ${opts.destination}.`,
-    html: formatBrandedEmailHtml(subject, body, { label: "View in Workspace", url: "https://bridge.crayonspictures.com/dashboard" }),
+    html: formatBrandedEmailHtml(subject, body, { label: "View in Workspace", url: "https://www.crayonspictures.in/dashboard" }),
     category: "distribution_authorized",
   });
 }

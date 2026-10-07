@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { generateKeyPairSync, verify } from "node:crypto";
-import { sealVerifiedObject } from "./oci-object-storage.server.ts";
+import { sealVerifiedObject, verifyObject } from "./oci-object-storage.server.ts";
 
 test("OCI copy polling uses Object Storage and only verifies successful copies", async (t) => {
   const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
@@ -61,6 +61,31 @@ test("OCI copy polling uses Object Storage and only verifies successful copies",
     for (const [key, value] of Object.entries(saved)) {
       if (value === undefined) delete process.env[key];
       else process.env[key] = value;
+    }
+  }
+});
+
+
+test("OCI object verification rejects an unexpected content type", async () => {
+  const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  const values = {
+    OCI_TENANCY_OCID: "test-tenancy", OCI_USER_OCID: "test-user",
+    OCI_PRIVATE_KEY: privateKey.export({ type: "pkcs8", format: "pem" }).toString(),
+    OCI_FINGERPRINT: "test-fingerprint", OCI_REGION: "ap-mumbai-1",
+    OCI_NAMESPACE: "test-namespace", OCI_BUCKET_NAME: "test-bucket",
+  };
+  const saved = Object.fromEntries(Object.keys(values).map((key) => [key, process.env[key]]));
+  const originalFetch = globalThis.fetch;
+  Object.assign(process.env, values);
+  globalThis.fetch = async () => new Response(null, { status: 200,
+    headers: { "content-length": "12", "content-type": "image/png", etag: '"test-etag"' } });
+  try {
+    await assert.rejects(verifyObject("asset-key", "video/mp4"), /content type mismatch/);
+    assert.equal((await verifyObject("asset-key", "image/png")).contentType, "image/png");
+  } finally {
+    globalThis.fetch = originalFetch;
+    for (const [key, value] of Object.entries(saved)) {
+      if (value === undefined) delete process.env[key]; else process.env[key] = value;
     }
   }
 });
