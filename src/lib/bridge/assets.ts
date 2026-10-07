@@ -40,7 +40,7 @@ export const requestAssetUpload = createServerFn({ method: "POST" })
     assertPermission(actor, "asset.sign_upload");
     const title = await loadTitle(data.titleId);
     if (!title) throw new Error("Not found");
-    if (!canOperateOnTitle(actor, title, "asset.sign_upload")) throw new Error("Forbidden");
+    if (!canOperateOnTitle(actor, title, "asset.sign_upload", "asset.sign_upload")) throw new Error("Forbidden");
     if (!UPLOADABLE.has(title.status)) throw new Error("Uploads are closed for this status");
     if (!["master","poster","subtitle","screener","technical"].includes(data.kind)) throw new Error("This asset kind is not supported by the OTT ingest uploader");
     const ingestValidation = validateOttIngestFile({ kind: data.kind as OttIngestKind, filename: data.filename, contentType: data.contentType });
