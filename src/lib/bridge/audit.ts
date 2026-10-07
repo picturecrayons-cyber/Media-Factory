@@ -1,13 +1,16 @@
-import { getSql } from "@/lib/db";
+import { getSql, type Sql } from "@/lib/db";
 
-export async function writeAudit(opts: {
-  actorUserId: string;
-  action: string;
-  entityType: string;
-  entityId?: string | null;
-  metadata?: Record<string, unknown>;
-}) {
-  const sql = await getSql();
+export async function writeAudit(
+  opts: {
+    actorUserId: string;
+    action: string;
+    entityType: string;
+    entityId?: string | null;
+    metadata?: Record<string, unknown>;
+  },
+  transaction?: Sql,
+) {
+  const sql = transaction ?? (await getSql());
   await sql`
     insert into bridge_audit_logs (actor_user_id, action, entity_type, entity_id, metadata)
     values (

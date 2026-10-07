@@ -6,7 +6,11 @@ import { BridgeShell } from "@/components/bridge/shell";
 import { StatusChip } from "@/components/bridge/status-rail";
 import { Button } from "@/components/ui/button";
 import { listTitles } from "@/lib/bridge/titles";
-import { createLicenseOrder, listOwnEntitlements, verifyLicensePayment } from "@/lib/bridge/payments";
+import {
+  createLicenseOrder,
+  listOwnEntitlements,
+  verifyLicensePayment,
+} from "@/lib/bridge/payments";
 
 export const Route = createFileRoute("/buyer")({ component: Buyer });
 
@@ -15,7 +19,11 @@ type RzCtor = new (opts: {
   amount: number;
   currency: string;
   order_id: string;
-  handler: (res: { razorpay_order_id: string; razorpay_payment_id: string; razorpay_signature: string }) => void;
+  handler: (res: {
+    razorpay_order_id: string;
+    razorpay_payment_id: string;
+    razorpay_signature: string;
+  }) => void;
 }) => { open: () => void };
 
 function loadRazorpay(): Promise<RzCtor> {
@@ -43,7 +51,8 @@ function Buyer() {
       {(actor) => (
         <BridgeShell actor={actor} title="Buyer catalog">
           <p className="mb-6 max-w-2xl text-sm leading-relaxed text-muted">
-            Only titles at live-for-buyers or later appear here. A license is an entitlement after captured payment.
+            Only titles at live-for-buyers or later appear here. A license is an entitlement after
+            captured payment.
           </p>
           <BuyerBody />
         </BridgeShell>
@@ -55,7 +64,10 @@ function Buyer() {
 function BuyerBody() {
   const qc = useQueryClient();
   const titlesQ = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles() });
-  const entQ = useQuery({ queryKey: ["bridge-entitlements"], queryFn: () => listOwnEntitlements() });
+  const entQ = useQuery({
+    queryKey: ["bridge-entitlements"],
+    queryFn: () => listOwnEntitlements(),
+  });
   const entitled = new Set(entQ.data?.entitlements.map((e) => e.titleId));
   const order = useMutation({
     mutationFn: async (titleId: string) => {
@@ -93,21 +105,32 @@ function BuyerBody() {
   });
 
   const titles = titlesQ.data?.titles ?? [];
+  if (titlesQ.isPending || entQ.isPending) return <p>Loading buyer catalog…</p>;
+  if (titlesQ.isError || entQ.isError)
+    return <p role="alert">Buyer catalog or entitlement data is unavailable. Refresh to retry.</p>;
   return (
     <div className="space-y-4">
       {!titles.length ? (
-        <p className="text-sm text-muted">No live titles yet. Nothing is for sale until licensing-ready clears.</p>
+        <p className="text-sm text-muted">
+          No live titles yet. Nothing is for sale until licensing-ready clears.
+        </p>
       ) : (
         <ul className="divide-y divide-line rounded-sm border border-line">
           {titles.map((t) => (
             <li key={t.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-4">
               <div>
-                <Link to="/title/$id" params={{ id: t.id }} className="font-medium hover:text-accent">
+                <Link
+                  to="/title/$id"
+                  params={{ id: t.id }}
+                  className="font-medium hover:text-accent"
+                >
                   {t.name}
                 </Link>
                 <p className="text-sm text-muted">
                   {t.language}
-                  {t.licensingFeePaise > 0 ? ` · ₹${(t.licensingFeePaise / 100).toFixed(0)}` : " · fee unset"}
+                  {t.licensingFeePaise > 0
+                    ? ` · ₹${(t.licensingFeePaise / 100).toFixed(0)}`
+                    : " · fee unset"}
                 </p>
               </div>
               <div className="flex items-center gap-3">

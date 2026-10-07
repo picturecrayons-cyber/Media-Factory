@@ -2,9 +2,20 @@ import type { AccountType, InternalRole, Permission, TitleStatus } from "./types
 
 const INTERNAL_PERMISSIONS: Record<InternalRole, readonly Permission[]> = {
   viewer: ["title.read_catalog", "audit.read"],
-  qc_reviewer: ["title.read_catalog", "title.qc_review", "asset.sign_download", "audit.read", "delivery.read"],
-  legal_reviewer: ["title.read_catalog", "title.rights_review", "asset.sign_download", "audit.read", "delivery.read"],
-  finance: ["title.read_catalog", "finance.read", "finance.configure", "delivery.read", "delivery.read_finance", "entitlement.read_own", "audit.read"],
+  qc_reviewer: ["title.read_catalog", "title.qc_review", "asset.sign_download", "audit.read"],
+  legal_reviewer: [
+    "title.read_catalog",
+    "title.rights_review",
+    "asset.sign_download",
+    "audit.read",
+  ],
+  finance: [
+    "title.read_catalog",
+    "finance.read",
+    "finance.record_settlement",
+    "entitlement.read_own",
+    "audit.read",
+  ],
   admin: [
     "title.read_catalog",
     "service.quote_create",
@@ -24,7 +35,7 @@ const INTERNAL_PERMISSIONS: Record<InternalRole, readonly Permission[]> = {
     "delivery.read_finance",
     "asset.sign_download",
     "finance.read",
-    "finance.configure",
+    "finance.record_settlement",
     "users.invite_internal",
     "audit.read",
     "loop.publish",
@@ -32,7 +43,7 @@ const INTERNAL_PERMISSIONS: Record<InternalRole, readonly Permission[]> = {
     "loop.certify_playback",
   ],
   super_admin: [
-    "title.create",
+    "title.ingest_internal",
     "title.read_catalog",
     "title.advance_upload",
     "title.qc_review",
@@ -45,6 +56,7 @@ const INTERNAL_PERMISSIONS: Record<InternalRole, readonly Permission[]> = {
     "asset.sign_download",
     "entitlement.read_own",
     "finance.read",
+    "finance.record_settlement",
     "users.invite_internal",
     "audit.read",
     "loop.publish",
@@ -81,8 +93,12 @@ const ACCOUNT_PERMISSIONS: Record<AccountType, readonly Permission[]> = {
     "delivery.read",
     "delivery.read_finance",
   ],
-  buyer: ["title.read_catalog", "payment.create_order", "entitlement.read_own", "asset.sign_download"],
-  investor: ["title.read_catalog", "entitlement.read_own", "delivery.read_finance"],
+  buyer: [
+    "title.read_catalog",
+    "payment.create_order",
+    "entitlement.read_own",
+    "asset.sign_download",
+  ],
 };
 
 export type Actor = {
@@ -160,7 +176,8 @@ export function canReadTitle(
   title: { ownerUserId: string; status: TitleStatus },
 ): boolean {
   if (!actor.emailVerified) return false;
-  if (title.ownerUserId === actor.userId && !actor.internalRole) return hasPermission(actor, "title.read_own");
+  if (title.ownerUserId === actor.userId && !actor.internalRole)
+    return hasPermission(actor, "title.read_own");
   if (actor.internalRole) return hasPermission(actor, "title.read_catalog");
   if (actor.accountType === "buyer") return ["LIVE_FOR_BUYERS","IN_NEGOTIATION","LICENSED","DELIVERED"].includes(title.status) && hasPermission(actor, "title.read_catalog");
   return false;
