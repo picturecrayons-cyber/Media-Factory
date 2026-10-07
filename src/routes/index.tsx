@@ -1,9 +1,11 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, Navigate } from "@tanstack/react-router";
+import { useQuery } from "@tanstack/react-query";
 import { BrandMark } from "@/components/bridge/shell";
 import { Button } from "@/components/ui/button";
-import { SignedIn, SignedOut, UserButton } from "@/lib/auth/gates";
+import { SignedOut } from "@/lib/auth/gates";
+import { useCurrentUserState } from "@/lib/auth/use-current-user";
+import { getBridgeSession } from "@/lib/bridge/session";
 
-const CRAYONS_LOOP_URL = "https://crayonsloop.com/";
 
 export const Route = createFileRoute("/")({ component: Home });
 
@@ -40,120 +42,75 @@ const WORKFLOW_STEPS = [
   },
 ];
 
-const TRUST_PILLARS = [
-  "Secure Storage",
-  "QC",
-  "Rights",
-  "Licensing",
-  "Delivery",
-];
-
 function Home() {
+  const { user, isPending } = useCurrentUserState();
+  const sessionQ = useQuery({
+    queryKey: ["bridge-session", user?.id],
+    queryFn: () => getBridgeSession(),
+    enabled: !isPending && Boolean(user),
+    retry: false,
+  });
+
+  if (isPending || (user && sessionQ.isPending)) {
+    return (
+      <main className="grid min-h-screen place-items-center bg-bg p-6">
+        <p className="text-sm text-muted">Opening workspace…</p>
+      </main>
+    );
+  }
+
+  if (user) {
+    if (sessionQ.data?.home) return <Navigate to={sessionQ.data.home as any} replace />;
+    if (!sessionQ.data?.profile) return <Navigate to="/onboarding" replace />;
+  }
+
   return (
-    <div className="min-h-screen bg-bg text-fg antialiased selection:bg-accent/20 selection:text-fg">
-      {/* 1. Header */}
-      <header className="sticky top-0 z-50 border-b border-line bg-surface/90 backdrop-blur-md">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3.5 sm:px-6">
-          <div className="flex items-center gap-8">
+    <div className="min-h-screen bg-white text-fg antialiased selection:bg-accent/20 selection:text-fg">
+      <header className="sticky top-0 z-50 border-b border-line bg-white/95 backdrop-blur-md">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-5 px-5 py-3.5 sm:px-6 lg:px-8">
+          <div className="flex min-w-0 items-center gap-6 lg:gap-8">
             <BrandMark />
-            <nav
-              aria-label="Primary Navigation"
-              className="hidden md:flex items-center gap-7 text-xs font-semibold uppercase tracking-wider text-muted"
-            >
-              <a href="#how-it-works" className="hover:text-fg transition-colors">
-                How it works
-              </a>
-              <a href="#creators" className="hover:text-fg transition-colors">
-                Creators
-              </a>
-              <a href="#studios" className="hover:text-fg transition-colors">
-                Studios
-              </a>
-              <a href="#buyers" className="hover:text-fg transition-colors">
-                Buyers
-              </a>
-            </nav>
           </div>
 
           <div className="flex items-center gap-3 text-sm">
-            <a
-              href={CRAYONS_LOOP_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 text-xs font-semibold text-muted hover:text-accent transition-colors px-2 py-1"
-              title="Open Crayons Loop Consumer Streaming"
-            >
-              <span>Crayons Loop</span>
-              <span className="text-[11px] leading-none">↗</span>
-            </a>
-
             <SignedOut>
-              <Link
-                to="/login"
-                className="hidden sm:inline-flex rounded-full px-4 py-1.5 text-xs font-semibold text-muted hover:bg-accent-soft hover:text-fg transition-colors"
-              >
-                Sign in
-              </Link>
               <Link to="/signup">
                 <Button size="sm" className="rounded-full px-4 py-1.5 text-xs font-semibold shadow-xs">
                   Create account
                 </Button>
               </Link>
             </SignedOut>
-
-            <SignedIn>
-              <Link
-                to="/dashboard"
-                className="rounded-full bg-accent-soft px-3.5 py-1.5 text-xs font-semibold text-accent hover:opacity-90 transition-opacity"
-              >
-                Open workspace
-              </Link>
-              <UserButton />
-            </SignedIn>
           </div>
         </div>
       </header>
 
       <main>
-        {/* 2. Hero */}
-        <section className="border-b border-line bg-surface">
-          <div className="mx-auto max-w-7xl px-4 py-20 sm:px-6 sm:py-28 lg:py-36">
-            <div className="max-w-3xl">
-              <h1 className="font-display text-4xl font-semibold leading-[1.08] tracking-tight text-fg sm:text-6xl sm:leading-[1.06]">
+        <section className="bridge-home-hero border-b border-line bg-white">
+          <div className="mx-auto max-w-7xl px-5 py-14 text-center sm:px-6 sm:py-16 lg:py-20">
+            <div className="mx-auto max-w-5xl">
+              <div className="mx-auto flex justify-center">
+                <BrandMark className="text-3xl sm:text-4xl lg:text-5xl" />
+              </div>
+              <h1 className="bridge-hero-copy mx-auto mt-8 max-w-4xl font-display text-[2.45rem] font-semibold leading-[1.02] tracking-[-0.04em] text-fg sm:text-5xl lg:text-[3.9rem]">
                 One bridge from content to market.
               </h1>
-              <p className="mt-5 max-w-2xl text-base leading-relaxed text-muted sm:text-lg">
-                Upload, manage rights, license and deliver from one professional workspace.
+              <p className="bridge-hero-subcopy mx-auto mt-4 max-w-2xl text-base leading-7 text-muted sm:text-lg">
+                Prepare. Protect. License. Deliver.
               </p>
 
-              <div className="mt-8 flex flex-wrap items-center gap-3">
+              <div className="bridge-hero-actions mt-7 flex flex-wrap items-center justify-center gap-3 sm:mt-8">
                 <Link to="/signup">
                   <Button className="h-11 rounded-full px-6 text-sm font-semibold shadow-xs">
                     Create account
                   </Button>
                 </Link>
-                <Link to="/login">
-                  <Button
-                    variant="outline"
-                    className="h-11 rounded-full border-line px-6 text-sm font-semibold hover:border-line-strong"
-                  >
-                    Sign in
-                  </Button>
-                </Link>
-              </div>
-
-              {/* Trust Indicators */}
-              <div className="mt-14 border-t border-line pt-6">
-                <p className="text-xs font-medium text-muted">
-                  {TRUST_PILLARS.join(" · ")}
-                </p>
+                <Link to="/login" className="px-2 text-sm font-semibold text-muted hover:text-fg transition-colors">Sign in</Link>
               </div>
             </div>
           </div>
         </section>
 
-        {/* 3. How It Works */}
-        <section id="how-it-works" className="border-b border-line bg-surface/50 py-16 sm:py-24">
+        <section id="how-it-works" className="border-b border-line bg-surface/50 py-10 sm:py-12">
           <div className="mx-auto max-w-7xl px-4 sm:px-6">
             <div className="max-w-2xl">
               <h2 className="font-display text-3xl font-semibold tracking-tight text-fg sm:text-4xl">
@@ -161,17 +118,17 @@ function Home() {
               </h2>
             </div>
 
-            <div className="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-6">
+            <div className="mt-8 grid gap-px overflow-hidden rounded-2xl border border-line bg-line sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
               {WORKFLOW_STEPS.map((step, idx) => (
                 <div
                   key={step.step}
-                  className="flex flex-col justify-between rounded-2xl border border-line bg-surface p-5 transition hover:border-line-strong"
+                  className="bridge-workflow-card flex min-h-40 flex-col justify-between bg-surface p-5"
                 >
                   <div>
                     <div className="flex items-center justify-between">
                       <span className="font-mono text-xs font-bold text-accent">{step.step}</span>
                       {idx < WORKFLOW_STEPS.length - 1 ? (
-                        <span className="hidden lg:inline text-muted/30 text-xs">→</span>
+                        <span className="hidden lg:inline text-faint text-xs">→</span>
                       ) : null}
                     </div>
                     <h3 className="mt-3 font-display text-lg font-semibold text-fg">
@@ -185,8 +142,7 @@ function Home() {
           </div>
         </section>
 
-        {/* 4. Audiences: Creators, Studios, Buyers */}
-        <section id="creators" className="border-b border-line bg-surface py-16 sm:py-24">
+        <section id="creators" className="border-b border-line bg-surface py-14 sm:py-20">
           <div className="mx-auto max-w-7xl px-4 sm:px-6">
             <div className="max-w-2xl">
               <h2 className="font-display text-3xl font-semibold tracking-tight text-fg sm:text-4xl">
@@ -194,8 +150,7 @@ function Home() {
               </h2>
             </div>
 
-            <div className="mt-12 grid gap-8 lg:grid-cols-3">
-              {/* Creators Card */}
+            <div className="mt-10 grid gap-6 lg:grid-cols-2 xl:grid-cols-4">
               <div className="flex flex-col justify-between rounded-3xl border border-line bg-elevated p-7 sm:p-8">
                 <div>
                   <h3 className="font-display text-2xl font-semibold text-fg">
@@ -216,7 +171,6 @@ function Home() {
                 </div>
               </div>
 
-              {/* Studios Card */}
               <div
                 id="studios"
                 className="flex flex-col justify-between rounded-3xl border border-line bg-elevated p-7 sm:p-8"
@@ -240,7 +194,27 @@ function Home() {
                 </div>
               </div>
 
-              {/* Buyers Card */}
+              <div
+                id="investors"
+                className="flex flex-col justify-between rounded-3xl border border-line bg-elevated p-7 sm:p-8"
+              >
+                <div>
+                  <h3 className="font-display text-2xl font-semibold text-fg">Investors</h3>
+                  <p className="mt-3 text-sm leading-relaxed text-muted">
+                    Track approved title participation and investment records.
+                  </p>
+                </div>
+                <div className="mt-8 pt-5 border-t border-line">
+                  <Link
+                    to="/signup"
+                    search={{ role: "investor" }}
+                    className="inline-flex items-center text-xs font-semibold text-accent hover:underline"
+                  >
+                    Create Investor Access →
+                  </Link>
+                </div>
+              </div>
+
               <div
                 id="buyers"
                 className="flex flex-col justify-between rounded-3xl border border-line bg-elevated p-7 sm:p-8"
@@ -267,7 +241,6 @@ function Home() {
           </div>
         </section>
 
-        {/* 5. Bridge + Loop (Compact Strip) */}
         <section className="border-b border-line bg-surface/50 py-12 sm:py-16">
           <div className="mx-auto max-w-7xl px-4 sm:px-6">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 rounded-2xl border border-line bg-surface p-6 sm:p-8">
@@ -281,23 +254,12 @@ function Home() {
                 </p>
               </div>
 
-              <div className="shrink-0">
-                <a
-                  href={CRAYONS_LOOP_URL}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 rounded-full border border-line bg-elevated px-5 py-2.5 text-xs font-semibold text-fg hover:border-line-strong hover:bg-accent-soft hover:text-accent transition-all"
-                >
-                  <span>Explore Crayons Loop</span>
-                  <span className="text-xs">↗</span>
-                </a>
-              </div>
+
             </div>
           </div>
         </section>
 
-        {/* 6. Final CTA */}
-        <section className="border-b border-line bg-surface py-16 sm:py-24">
+        <section className="border-b border-line bg-surface py-14 sm:py-20">
           <div className="mx-auto max-w-7xl px-4 sm:px-6">
             <div className="mx-auto max-w-2xl text-center">
               <h2 className="font-display text-3xl font-semibold tracking-tight text-fg sm:text-4xl">
@@ -323,7 +285,6 @@ function Home() {
         </section>
       </main>
 
-      {/* 7. Footer */}
       <footer className="bg-surface py-10 px-4 sm:px-6 text-xs text-muted">
         <div className="mx-auto max-w-7xl flex flex-col sm:flex-row items-center justify-between gap-4">
           <div>
@@ -336,24 +297,15 @@ function Home() {
             aria-label="Footer Legal and External Links"
             className="flex flex-wrap items-center gap-5 text-xs text-muted"
           >
-            <a href="mailto:privacy@streamvista.com" className="hover:text-fg transition-colors">
+            <Link to="/privacy" className="hover:text-fg transition-colors">
               Privacy
-            </a>
-            <a href="mailto:legal@streamvista.com" className="hover:text-fg transition-colors">
+            </Link>
+            <Link to="/terms" className="hover:text-fg transition-colors">
               Terms
-            </a>
-            <a href="mailto:contact@streamvista.com" className="hover:text-fg transition-colors">
+            </Link>
+            <Link to="/contact" className="hover:text-fg transition-colors">
               Contact
-            </a>
-            <a
-              href={CRAYONS_LOOP_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-fg hover:text-accent font-semibold transition-colors flex items-center gap-0.5"
-            >
-              <span>Crayons Loop</span>
-              <span className="text-[10px]">↗</span>
-            </a>
+            </Link>
           </nav>
         </div>
       </footer>

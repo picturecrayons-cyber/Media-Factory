@@ -3,7 +3,7 @@ import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import type { AccountType, InternalRole, Permission } from "./types";
 import type { Actor } from "./rbac";
-import { assertPermission, workspaceHome } from "./rbac";
+import { assertPermission, canAccessDashboard, workspaceHome } from "./rbac";
 import { PRODUCT_NAME, LEGAL_OWNER, PRODUCTION_DOMAIN } from "./canonical";
 import { integrationStatus } from "./env";
 import { assertNotDevUser } from "./guards";
@@ -86,8 +86,26 @@ export async function requireActor(userId: string): Promise<BridgeActor> {
   return actor;
 }
 
+export async function requireVerifiedActor(userId: string): Promise<BridgeActor> {
+  const actor = await requireActor(userId);
+  if (!actor.emailVerified) throw new Error("Email verification required");
+  return actor;
+}
+
 export function requireActorPermission(actor: Actor, permission: Permission) {
   assertPermission(actor, permission);
+}
+
+/**
+ * Private Bridge owner/control-plane gate.
+ *
+ * Operational and admin surfaces must not rely on client-side navigation hiding.
+ * A verified internal role is required before protected Bridge routes render.
+ * Creator/studio/buyer account permissions remain available for data-level policy,
+ * but they cannot enter the private owner workspace while this lock is enabled.
+ */
+export function isPrivateBridgeOperator(actor: Actor): boolean {
+  return actor.emailVerified && Boolean(actor.internalRole);
 }
 
 export const getBridgeSession = createServerFn({ method: "GET" })
@@ -107,6 +125,15 @@ export const getBridgeSession = createServerFn({ method: "GET" })
       if (!actor) throw new Error("Bridge profile could not be loaded");
     }
     return { userId: context.userId, profile: actor, home: workspaceHome(actor) };
+  });
+
+export const getDashboardSession = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    if (!canAccessDashboard(actor)) throw new Error("Super admin access required");
+    return { profile: actor };
   });
 
 export const getBridgePublicStatus = createServerFn({ method: "GET" }).handler(async () => {

@@ -3,19 +3,16 @@ import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
-import { StatusRail } from "@/components/bridge/status-rail";
 import { getTitle } from "@/lib/bridge/titles";
-import { listTitleAssets } from "@/lib/bridge/assets";
+import { confirmAssetUpload, listTitleAssets, requestAssetDownload, requestAssetUpload } from "@/lib/bridge/assets";
 import { getLoopPublication } from "@/lib/bridge/loop-publication";
 import type { BridgeActor } from "@/lib/bridge/session";
+import { OTT_INGEST_SPEC, getOttIngestAccept, validateOttIngestFile } from "@/lib/bridge/ott-ingest-spec";
+import { MultilingualRightsPanel } from "@/components/bridge/multilingual-rights-panel";
 
 export const Route = createFileRoute("/title/$id")({ component: TitlePage });
 
-const WORKSPACE_TABS = [
-  "Overview", "Metadata", "Video", "Audio & Dubs", "Subtitles & Accessibility",
-  "Artwork", "Documents", "QC", "Legal", "Rights", "Licensing", "Distribution",
-  "Loop", "Revenue", "Audit",
-] as const;
+const WORKSPACE_TABS = ["Overview", "Files", "Business"] as const;
 type WorkspaceTab = (typeof WORKSPACE_TABS)[number];
 
 function TitlePage() {
@@ -27,11 +24,13 @@ function TitlePage() {
   );
 }
 
-function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
+function TitleBody({ id, actor: _actor }: { id: string; actor: BridgeActor }) {
   const [activeTab, setActiveTab] = useState<WorkspaceTab>("Overview");
+
   const titleQ = useQuery({ queryKey: ["bridge-title", id], queryFn: () => getTitle({ data: { id } }) });
   const assetsQ = useQuery({ queryKey: ["bridge-assets", id], queryFn: () => listTitleAssets({ data: { titleId: id } }) });
   const pubQ = useQuery({ queryKey: ["loop-pub", id], queryFn: () => getLoopPublication({ data: { bridgeTitleId: id } }) });
+
   const title = titleQ.data?.title;
   const assets = assetsQ.data?.assets ?? [];
   const pub = pubQ.data?.publication;
@@ -39,7 +38,6 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
   if (titleQ.isPending) return <p className="text-sm text-muted">Loading title workspace…</p>;
   if (!title) return <p className="text-sm text-muted">Title not found.</p>;
 
-  const ingestReady = assets.length > 0;
   const qcReady = Boolean(title.masterKey);
   const legalReady = ["LICENSING_READY", "LIVE_FOR_BUYERS", "IN_NEGOTIATION", "LICENSED", "DELIVERED"].includes(title.status);
   const rightsReady = legalReady;
@@ -47,86 +45,77 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
   const distributionReady = Boolean(pub?.authorizationStatus);
 
   return (
-    <div className="space-y-7">
-      <section className="rounded-3xl border border-line bg-surface p-6 sm:p-8">
-        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-accent">Crayons Bridge · Canonical Title</p>
-        <div className="mt-3 flex flex-wrap items-end justify-between gap-4">
-          <div>
-            <h1 className="font-display text-3xl font-semibold text-fg sm:text-4xl">{title.name}</h1>
-            <p className="mt-2 text-xs text-muted">{title.language}{title.year ? ` · ${title.year}` : ""} · <span className="font-mono">{title.id}</span></p>
+    <div className="space-y-5">
+      <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
+        <div className="grid gap-5 md:grid-cols-[180px_1fr]">
+          <div className="aspect-[2/3] overflow-hidden rounded-xl border border-line bg-elevated">
+            <div className="grid h-full place-items-center px-4 text-center text-xs text-muted">{assets.some((asset) => asset.kind === "poster") ? "Artwork added" : "Artwork not added yet"}</div>
           </div>
-          <p className="rounded-full border border-line bg-elevated px-4 py-2 text-xs text-muted">Signed in · {actor.internalRole || actor.accountType}</p>
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-accent">Title</p>
+                <h1 className="mt-1 font-display text-2xl font-semibold text-fg sm:text-3xl">{title.name}</h1>
+                <p className="mt-1 text-sm text-muted">{title.language}{title.year ? ` · ${title.year}` : ""}{title.runtimeMinutes ? ` · ${title.runtimeMinutes} min` : ""}</p>
+              </div>
+              <span className="rounded-full border border-line bg-elevated px-3 py-1.5 text-xs font-semibold">{title.status}</span>
+            </div>
+            {title.synopsis ? <p className="mt-4 max-w-3xl text-sm leading-6 text-muted">{title.synopsis}</p> : null}
+            <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-sm">
+              {title.credits?.some((c) => c.role === "Director") ? <span><span className="text-muted">Director</span> · {title.credits.filter((c) => c.role === "Director").map((c) => c.name).join(", ")}</span> : null}
+              {title.credits?.some((c) => c.role === "Cast") ? <span><span className="text-muted">Cast</span> · {title.credits.filter((c) => c.role === "Cast").map((c) => c.name).join(", ")}</span> : null}
+            </div>
+            <div className="mt-5"><button type="button" onClick={() => setActiveTab("Files")} className="rounded-full bg-fg px-5 py-2.5 text-sm font-semibold text-bg">Upload Files</button></div>
+          </div>
         </div>
-        <div className="mt-6"><StatusRail status={title.status} /></div>
       </section>
 
-      <section aria-label="Distribution readiness" className="grid gap-2 sm:grid-cols-3 lg:grid-cols-6">
-        <Gate label="INGEST" ready={ingestReady} />
-        <Gate label="QC" ready={qcReady} />
-        <Gate label="LEGAL" ready={legalReady} />
-        <Gate label="RIGHTS" ready={rightsReady} />
-        <Gate label="PACKAGE" ready={packageReady} />
-        <Gate label="AUTHORIZED" ready={distributionReady} />
-      </section>
-
-      <nav aria-label="Title Workspace Sections" className="flex gap-2 overflow-x-auto border-b border-line pb-3">
-        {WORKSPACE_TABS.map((tab) => (
-          <button key={tab} type="button" onClick={() => setActiveTab(tab)} className={`whitespace-nowrap rounded-full px-4 py-2 text-xs ${activeTab === tab ? "bg-fg text-bg font-semibold" : "border border-line bg-surface text-muted hover:text-fg"}`}>
-            {tab}
-          </button>
-        ))}
+      <nav aria-label="Title Workspace Sections" className="flex gap-1 overflow-x-auto border-b border-line pb-3">
+        {WORKSPACE_TABS.map((tab) => <button key={tab} type="button" onClick={() => setActiveTab(tab)} className={`whitespace-nowrap rounded-full px-4 py-2 text-xs ${activeTab === tab ? "bg-fg text-bg font-semibold" : "text-muted hover:bg-surface hover:text-fg"}`}>{tab}</button>)}
       </nav>
 
-      <section className="rounded-2xl border border-line bg-surface p-6">
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">{activeTab}</p>
-        <h2 className="mt-2 font-display text-2xl font-semibold text-fg">{workspaceHeading(activeTab)}</h2>
-        <p className="mt-2 max-w-3xl text-sm leading-6 text-muted">{workspaceCopy(activeTab)}</p>
-        <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <Metric label="Private assets" value={String(assets.length)} />
-          <Metric label="Bridge lifecycle" value={title.status} />
-          <Metric label="Master" value={title.masterKey ? "VERIFIED" : "REQUIRED"} />
-          <Metric label="Crayons Loop" value={pub?.authorizationStatus?.toUpperCase() || "HOLD"} />
+      {activeTab === "Overview" ? (
+        <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Overview</p>
+          <h2 className="mt-1 font-display text-xl font-semibold">Ready for market</h2>
+          <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <Metric label="Files" value={assets.length ? "ADDED" : "ADD FILES"} />
+            <Metric label="Rights" value={rightsReady ? "READY" : "PENDING"} />
+            <Metric label="Delivery" value={distributionReady ? "AUTHORIZED" : packageReady ? "READY" : "PENDING"} />
+            <Metric label="Revenue" value="—" />
+          </div>
+        </section>
+      ) : activeTab === "Files" ? (
+        <FilesPanel titleId={id} assets={assets} onAssetsChanged={() => assetsQ.refetch()} />
+      ) : (
+        <div className="space-y-5">
+          <MultilingualRightsPanel titleId={id} actor={_actor} />
+          <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Business</p>
+          <div className="mt-4 grid gap-3 md:grid-cols-2">
+            <BusinessCard title="Rights" status={rightsReady ? "Ready" : "Pending"} copy="Ownership, territory, language and window checks remain enforced by Bridge." />
+            <BusinessCard title="Agreement" status="Review" copy="Legal approvals stay admin-controlled and auditable." />
+            <BusinessCard title="Licensing" status={["IN_NEGOTIATION","LICENSED"].includes(title.status) ? title.status.replaceAll("_"," ") : "Not started"} copy="Commercial terms open only when required." />
+            <BusinessCard title="Delivery" status={distributionReady ? "Authorized" : "Pending"} copy={distributionReady ? "Approved for delivery." : "Delivery stays blocked until files, rights and commercial gates are clear."} />
+            <BusinessCard title="Revenue" status="—" copy="Payment, ledger and settlement logic remains unchanged." />
+          </div>
+          </section>
         </div>
-      </section>
-
-      <section className="grid gap-4 md:grid-cols-2">
-        <Destination name="Crayons Loop" state={distributionReady ? "AUTHORIZED" : packageReady ? "READY TO PUBLISH" : "HOLD"} detail="Consumer catalog, merchandising, playback and entitlements. Rights remain controlled by Bridge." />
-        <Destination name="External destinations" state="AGREEMENT REQUIRED" detail="OTT, broadcast, TVOD, SVOD, AVOD, FAST, airline, festival, educational and controlled buyer delivery activate only against recorded grants." />
-      </section>
+      )}
     </div>
   );
 }
+function Metric({ label, value }: { label:string; value:string }) { return <div className="rounded-xl border border-line bg-elevated/40 p-4"><p className="text-xs text-muted">{label}</p><p className="mt-1 text-sm font-semibold">{value}</p></div>; }
+function BusinessCard({ title, status, copy }: { title:string; status:string; copy:string }) {
+  return <div className="rounded-xl border border-line p-4"><div className="flex items-center justify-between gap-3"><h3 className="font-semibold">{title}</h3><span className="rounded-full border border-line px-3 py-1 text-[10px] font-semibold">{status}</span></div><p className="mt-2 text-sm leading-6 text-muted">{copy}</p></div>;
+}
 
-function Gate({ label, ready }: { label: string; ready: boolean }) {
-  return <div className="rounded-xl border border-line bg-surface p-3"><p className="text-[10px] font-semibold tracking-wider text-muted">{label}</p><p className="mt-1 text-xs font-semibold text-fg">{ready ? "PASS" : "PENDING"}</p></div>;
+type SimpleAssetKind = "master" | "poster" | "subtitle" | "screener" | "technical";
+function FilesPanel({ titleId, assets, onAssetsChanged }: { titleId:string; assets:Array<{id:string;kind:string;contentType:string|null;byteSize:number|null;verified:boolean}>; onAssetsChanged:()=>Promise<unknown>|unknown }) {
+ const [uploading,setUploading]=useState<SimpleAssetKind|null>(null); const [message,setMessage]=useState<string|null>(null);
+ async function uploadFile(kind:SimpleAssetKind,file:File){const validation=validateOttIngestFile({kind,filename:file.name,contentType:file.type||"application/octet-stream"});if(!validation.ok){setMessage(validation.message);return;}setUploading(kind);setMessage(`Preparing ${kind} upload…`);try{const signed=await requestAssetUpload({data:{titleId,kind,filename:file.name,contentType:file.type||"application/octet-stream"}});const put=await fetch(signed.url,{method:signed.method,body:file,headers:{"content-type":file.type||"application/octet-stream"}});if(!put.ok)throw new Error(`Upload failed (${put.status})`);await confirmAssetUpload({data:{assetId:signed.assetId,expectedByteSize:file.size}});await onAssetsChanged();setMessage(`${kind[0].toUpperCase()+kind.slice(1)} is ready.`);}catch(error){const raw=error instanceof Error?error.message:"Upload failed";setMessage(raw.includes("STORAGE_UNAVAILABLE")?"Storage service is currently unavailable. Please try again later.":raw);}finally{setUploading(null);}}
+ async function download(id:string){const signed=await requestAssetDownload({data:{assetId:id}});window.location.assign(signed.url);}
+ const cards:[SimpleAssetKind,string,string][]=[["master","Master Video","Required"],["poster","Artwork","Add"],["subtitle","Subtitle","Optional"],["screener","Trailer / Screener","Optional"],["technical","Technical / Camera Package","Optional"]];
+ return <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6"><p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Files</p><h2 className="mt-1 font-display text-xl font-semibold">Upload OTT files</h2><p className="mt-2 text-sm text-muted">Choose the correct delivery format for each asset. Unsupported file types are blocked before upload.</p><div className="mt-5 grid gap-3 sm:grid-cols-2">{cards.map(([kind,label,empty])=><FileTypeCard key={kind} kind={kind} label={label} status={assets.some(a=>a.kind===kind)?"Ready":empty} busy={uploading===kind} onFile={(file)=>void uploadFile(kind,file)} />)}</div>{message?<p className="mt-3 text-xs text-muted">{message}</p>:null}<div className="mt-5 space-y-2">{assets.map(a=><div key={a.id} className="flex items-center justify-between gap-3 rounded-xl border border-line p-4"><div><p className="text-sm font-semibold">{a.kind}</p><p className="text-xs text-muted">{a.verified?"Ready":"Processing"}</p></div>{a.verified?<button onClick={()=>void download(a.id)} className="rounded-full border border-line px-4 py-2 text-xs font-semibold">Download</button>:null}</div>)}</div></section>;
 }
-function Metric({ label, value }: { label: string; value: string }) {
-  return <div className="rounded-xl border border-line bg-elevated/40 p-4"><p className="text-xs text-muted">{label}</p><p className="mt-1 text-sm font-semibold text-fg">{value}</p></div>;
-}
-function Destination({ name, state, detail }: { name: string; state: string; detail: string }) {
-  return <article className="rounded-2xl border border-line bg-surface p-5"><div className="flex items-center justify-between gap-3"><h3 className="font-display text-lg font-semibold text-fg">{name}</h3><span className="rounded-full border border-line px-3 py-1 text-[10px] font-semibold text-muted">{state}</span></div><p className="mt-3 text-xs leading-5 text-muted">{detail}</p></article>;
-}
-function workspaceHeading(tab: WorkspaceTab) {
-  const map: Record<WorkspaceTab, string> = {
-    Overview: "Title supply-chain overview", Metadata: "Title & metadata", Video: "Video masters & versions", "Audio & Dubs": "Audio, M&E and dubbed versions", "Subtitles & Accessibility": "Subtitles, captions and accessibility", Artwork: "Artwork & promotional", Documents: "Certification & legal evidence", QC: "Technical QC desk", Legal: "Legal approval desk", Rights: "Rights & avails", Licensing: "Licensing & commercial grants", Distribution: "Destination packages", Loop: "Crayons Loop publication", Revenue: "Revenue & settlement", Audit: "Immutable activity trail",
-  }; return map[tab];
-}
-function workspaceCopy(tab: WorkspaceTab) {
-  const map: Record<WorkspaceTab, string> = {
-    Overview: "One immutable Bridge UUID connects ingest, assets, QC, legal, rights, licensing and every authorized delivery.",
-    Metadata: "Capture canonical consumer and business metadata without using display slugs as system identity.",
-    Video: "Manage original mezzanine, clean/textless, alternate/platform cuts and trailers as versioned private assets.",
-    "Audio & Dubs": "Track original mixes, stereo, 5.1, M&E, stems, audio description and dubbed languages independently.",
-    "Subtitles & Accessibility": "Keep subtitles, SDH/CC, forced narrative and translated accessibility tracks as separate records.",
-    Artwork: "Approve portrait, landscape/hero, square, title treatment, stills and promotional variants per destination.",
-    Documents: "Store classification, chain-of-title, producer authority, music/artwork rights, releases and distribution evidence privately.",
-    QC: "Technical QC is an independent gate with automated findings, reviewer findings and repair cycles.",
-    Legal: "Legal approval is separate from QC and must be explicitly cleared before distribution authorization.",
-    Rights: "Record territory, language, media, window, exclusivity, holdbacks, sublicensing, promotional rights and restrictions.",
-    Licensing: "Create contract-backed grants and commercial terms while preserving Bridge as the rights authority.",
-    Distribution: "Build destination-specific package versions only after QC, legal and rights gates pass.",
-    Loop: "Publish only the approved consumer projection to Loop; never expose masters, contracts or legal evidence to the consumer runtime.",
-    Revenue: "Reconcile destination usage, consumer revenue, shares and settlements back to the canonical Bridge title.",
-    Audit: "Record approvals, grants, package versions, publication, suspension and revocation against the immutable title UUID.",
-  }; return map[tab];
-}
+function FileTypeCard({ kind, label, status, busy, onFile }: { kind:SimpleAssetKind; label:string; status:string; busy:boolean; onFile:(file:File)=>void }) { const spec=OTT_INGEST_SPEC[kind]; return <div className="rounded-xl border border-line p-4"><div className="flex items-start justify-between gap-3"><div><p className="text-sm font-semibold">{label}</p><p className="mt-1 text-xs text-muted">{status}</p><p className="mt-2 text-[11px] leading-5 text-muted">Allowed: {spec.extensions.map((ext)=>ext.replace(".","").toUpperCase()).join(", ")}</p></div><label className="cursor-pointer rounded-full border border-line px-3 py-1.5 text-xs font-semibold">{busy?"Uploading…":status==="Ready"?"Replace":"Upload"}<input className="sr-only" type="file" accept={getOttIngestAccept(kind)} disabled={busy} onChange={(e)=>{const file=e.currentTarget.files?.[0];if(file)onFile(file);e.currentTarget.value="";}} /></label></div></div>; }

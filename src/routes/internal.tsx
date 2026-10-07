@@ -139,10 +139,9 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
 
   // Authorization Form State
   const [selectedTitleId, setSelectedTitleId] = useState<string>("");
-  const [destination] = useState("CRAYONS_LOOP");
   const [territories, setTerritories] = useState("IN");
   const [languages, setLanguages] = useState("Malayalam");
-  const [model, setModel] = useState<ExploitationModel>("SVOD");
+  const [model] = useState<ExploitationModel>("TVOD");
   const [windowStart, setWindowStart] = useState("");
   const [windowEnd, setWindowEnd] = useState("");
   const [rightsOwnerShare, setRightsOwnerShare] = useState<string>("80");
@@ -159,7 +158,7 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
           territories: territories.split(",").map((v) => v.trim()).filter(Boolean),
           languages: languages.split(",").map((v) => v.trim()).filter(Boolean),
           exploitationModels: [model],
-          accessTier: model === "FREE" ? "FREE" : model === "TVOD" ? "TVOD" : "SVOD",
+          accessTier: "TVOD",
           windowStart: windowStart ? new Date(windowStart).toISOString() : null,
           windowEnd: windowEnd ? new Date(windowEnd).toISOString() : null,
           commercialTerms: {
@@ -288,20 +287,14 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
               Consumer streaming OTT destination. Receives authorized titles via Bridge control plane.
             </p>
             <div className="text-xs text-muted space-y-1">
-              <div>Destination URL: <strong className="text-fg">https://crayonsloop.com/</strong></div>
-              <div>Supported Models: <strong className="text-fg">SVOD, TVOD, AVOD, FREE</strong></div>
+              <div>Destination: <strong className="text-fg">Crayons Loop</strong></div>
+              <div>Supported Model: <strong className="text-fg">TVOD rental only</strong></div>
               <div>Active Authorized Titles: <strong className="text-fg">{allTitles.filter((t) => t.publication?.authorizationStatus?.toLowerCase() === "live" || t.publication?.authorizationStatus?.toLowerCase() === "authorized").length}</strong></div>
             </div>
             <div className="pt-2">
-              <a
-                href="https://crayonsloop.com/"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 text-xs font-semibold text-accent hover:underline"
-              >
-                <span>Open Crayons Loop Consumer OTT</span>
-                <span>↗</span>
-              </a>
+              <span className="inline-flex items-center rounded-full border border-line bg-elevated px-3.5 py-1.5 text-xs font-semibold text-muted">
+                Crayons Loop Consumer OTT
+              </span>
             </div>
           </div>
 
@@ -336,28 +329,7 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 text-xs">
-            <label className="block space-y-1">
-              <span className="font-semibold text-muted">Destination</span>
-              <input
-                disabled
-                value="Crayons Loop (https://crayonsloop.com)"
-                className="h-9 w-full rounded-xl border border-line bg-elevated px-3 text-fg opacity-80"
-              />
-            </label>
-
-            <label className="block space-y-1">
-              <span className="font-semibold text-muted">Distribution Model</span>
-              <select
-                value={model}
-                onChange={(e) => setModel(e.target.value as ExploitationModel)}
-                className="h-9 w-full rounded-xl border border-line bg-elevated px-3 text-fg focus:outline-none"
-              >
-                <option value="SVOD">SVOD (Subscription OTT)</option>
-                <option value="TVOD">TVOD (Rental / Purchase)</option>
-                <option value="AVOD">AVOD (Ad-supported)</option>
-                <option value="FREE">Free / Promotional</option>
-              </select>
-            </label>
+            
 
             <label className="block space-y-1">
               <span className="font-semibold text-muted">Territories (comma-separated)</span>
@@ -595,15 +567,7 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
                 ) : null}
 
                 {pub?.published ? (
-                  <a
-                    href="https://crayonsloop.com/"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 rounded-full border border-line bg-elevated px-3.5 py-1.5 text-xs font-semibold text-muted hover:text-accent transition-colors"
-                  >
-                    <span>View on Crayons Loop</span>
-                    <span>↗</span>
-                  </a>
+                  <span className="inline-flex items-center rounded-full border border-line bg-elevated px-3.5 py-1.5 text-xs font-semibold text-muted">\n                  Crayons Loop\n                </span>
                 ) : null}
 
                 <Link

@@ -1,15 +1,17 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { authMiddleware } from "@/lib/auth/middleware";
-import { getSql } from "@/lib/db";
+import { getSql, type Sql } from "@/lib/db";
 import { ACCOUNT_TYPES, INTERNAL_ROLES } from "./types";
 import { writeAudit } from "./audit";
-import { loadActor } from "./session";
+import { loadActor, requireVerifiedActor } from "./session";
 import { verificationProfileId } from "./verification-profile-id";
-import { assertPermission, workspaceHome } from "./rbac";
+import { assertPermission, canGrantInternalRole, workspaceHome } from "./rbac";
 import { createHash, randomBytes } from "node:crypto";
 import { bridgeEnv } from "./env";
 import { assertNotDevUser } from "./guards";
+import { ONBOARDING_EMAIL_CONFLICT_MESSAGE, isBridgeProfileEmailConflict } from "./onboarding-errors";
+import { bridgeInvitationUrl, bridgeVerificationUrl } from "./origin";
 
 function tokenPair() {
   const token = randomBytes(32).toString("hex");
@@ -22,6 +24,50 @@ async function mail(opts: { to: string; subject: string; text: string }) {
   return sendBridgeMail(opts);
 }
 
+
+
+async function claimLegacyCreatorIntake(sql: Sql, email: string, authUserId: string) {
+  const rows = await sql<{ legacy_user_id: number }>`
+    select legacy_user_id
+    from legacy_creator_intake
+    where lower(email) = lower(${email})
+    limit 1
+  `;
+  const legacy = rows[0];
+  if (!legacy) return { claimed: false, titleCount: 0 };
+
+  const legacyOwner = `legacy-user-${legacy.legacy_user_id}`;
+  const updated = await sql<{ id: string }>`
+    update bridge_titles
+    set owner_user_id = ${authUserId},
+        owner_account_type = 'independent_creator',
+        updated_at = now()
+    where owner_user_id = ${legacyOwner}
+    returning id
+  `;
+  return { claimed: true, titleCount: updated.length };
+}
+
+async function persistSupabaseIdentityLink(sql: Sql, bridgeUserId: string, authUserId: string) {
+  await sql`
+    insert into bridge_loop_identity_links (
+      bridge_user_id, auth_user_id, verification_method, verified_at, verified_by
+    ) values (
+      ${bridgeUserId}, ${authUserId}::uuid, 'supabase_auth_onboarding', now(), ${bridgeUserId}
+    )
+    on conflict (auth_user_id) do nothing
+  `;
+  const links = await sql<{ bridge_user_id: string }>`
+    select bridge_user_id
+    from bridge_loop_identity_links
+    where auth_user_id = ${authUserId}::uuid
+    limit 1
+  `;
+  if (links[0]?.bridge_user_id !== bridgeUserId) {
+    throw new Error("Authenticated identity is already bound to another Bridge profile");
+  }
+}
+
 export const syncSupabaseSessionUser = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
@@ -32,6 +78,11 @@ export const syncSupabaseSessionUser = createServerFn({ method: "POST" })
     if (!context.emailConfirmedAt) throw new Error("Confirm your email before entering Bridge.");
 
     if (existing) {
+      await claimLegacyCreatorIntake(sql, existing.email, existing.userId);
+      // Backfill/repair the shared Bridge↔Loop identity mapping for every
+      // confirmed Bridge profile, including accounts created before the
+      // identity-link table was introduced. This is idempotent.
+      await persistSupabaseIdentityLink(sql, existing.userId, context.userId);
       if (!existing.emailVerified) {
         await sql`update bridge_profiles set email_verified = true, updated_at = now() where user_id = ${existing.userId}`;
         const updated = await loadActor(context.userId);
@@ -58,65 +109,103 @@ export const completeOnboarding = createServerFn({ method: "POST" })
     const sql = await getSql();
     const existing = await loadActor(context.userId);
     if (!context.emailConfirmedAt) throw new Error("Confirm your email before entering Bridge.");
-    if (existing) return { home: workspaceHome(existing), profile: existing };
+    if (existing) {
+      await persistSupabaseIdentityLink(sql, existing.userId, context.userId);
+      return { home: workspaceHome(existing), profile: existing };
+    }
 
     const email = context.userEmail;
     if (!email) throw new Error("Account email is required from Supabase session");
-    const verified = true;
-
-    let internalRole: string | null = null;
-    let invitedBy: string | null = null;
-    if (data.inviteToken) {
-      const hash = createHash("sha256").update(data.inviteToken).digest("hex");
-      const invites = await sql<{
-        id: string;
-        email: string;
-        internal_role: string;
-        invited_by: string;
-        expires_at: string;
-        accepted_at: string | null;
-      }>`
-        select id, email, internal_role, invited_by, expires_at, accepted_at
-        from bridge_invites where token_hash = ${hash} limit 1
-      `;
-      const inv = invites[0];
-      if (!inv || inv.accepted_at || new Date(inv.expires_at) < new Date()) {
-        throw new Error("Invite is invalid or expired");
-      }
-      if (inv.email.toLowerCase() !== email.toLowerCase()) {
-        throw new Error("Invite email does not match this account");
-      }
-      internalRole = inv.internal_role;
-      invitedBy = inv.invited_by;
-      await sql`update bridge_invites set accepted_at = now() where id = ${inv.id}`;
-    }
-
     const org =
       data.accountType === "independent_creator" ? null : (data.organizationName ?? "").trim() || null;
     if (data.accountType !== "independent_creator" && !org) {
       throw new Error("Organization name is required");
     }
 
-    await sql`
-      insert into bridge_profiles (
-        user_id, email, display_name, account_type, organization_name, internal_role, email_verified, invited_by
-      ) values (
-        ${context.userId}, ${email}, ${data.displayName}, ${data.accountType}, ${org},
-        ${internalRole}, ${verified}, ${invitedBy}
-      )
-      on conflict (user_id) do update set
-        display_name = excluded.display_name,
-        account_type = excluded.account_type,
-        organization_name = excluded.organization_name,
-        email_verified = true,
-        updated_at = now()
-    `;
+    let internalRole: string | null = null;
+    try {
+      internalRole = await sql.transaction(async (tx) => {
+        const emailOwner = await tx<{ user_id: string }>`
+          select user_id from bridge_profiles where lower(email) = lower(${email}) limit 1
+        `;
+        if (emailOwner[0]?.user_id && emailOwner[0].user_id !== context.userId) {
+          throw new Error(ONBOARDING_EMAIL_CONFLICT_MESSAGE);
+        }
+
+        let invitedRole: string | null = null;
+        let invitedBy: string | null = null;
+        let inviteId: string | null = null;
+        if (data.inviteToken) {
+          const hash = createHash("sha256").update(data.inviteToken).digest("hex");
+          const invites = await tx<{
+            id: string;
+            email: string;
+            internal_role: string;
+            invited_by: string;
+            expires_at: string;
+            accepted_at: string | null;
+          }>`
+            select id, email, internal_role, invited_by, expires_at, accepted_at
+            from bridge_invites
+            where token_hash = ${hash}
+            limit 1
+            for update
+          `;
+          const inv = invites[0];
+          if (!inv || inv.accepted_at || new Date(inv.expires_at) < new Date()) {
+            throw new Error("Invite is invalid or expired");
+          }
+          if (inv.email.toLowerCase() !== email.toLowerCase()) {
+            throw new Error("Invite email does not match this account");
+          }
+          invitedRole = inv.internal_role;
+          invitedBy = inv.invited_by;
+          inviteId = inv.id;
+        }
+
+        await tx`
+          insert into bridge_profiles (
+            user_id, email, display_name, account_type, organization_name, internal_role, email_verified, invited_by
+          ) values (
+            ${context.userId}, ${email}, ${data.displayName}, ${data.accountType}, ${org},
+            ${invitedRole}, true, ${invitedBy}
+          )
+          on conflict (user_id) do update set
+            display_name = excluded.display_name,
+            account_type = excluded.account_type,
+            organization_name = excluded.organization_name,
+            email_verified = true,
+            updated_at = now()
+        `;
+
+        await persistSupabaseIdentityLink(tx, context.userId, context.userId);
+
+        if (inviteId) {
+          const consumed = await tx<{ id: string }>`
+            update bridge_invites
+            set accepted_at = now()
+            where id = ${inviteId} and accepted_at is null
+            returning id
+          `;
+          if (consumed.length !== 1) throw new Error("Invite is invalid or expired");
+        }
+        return invitedRole;
+      });
+    } catch (error) {
+      if (isBridgeProfileEmailConflict(error)) {
+        throw new Error(ONBOARDING_EMAIL_CONFLICT_MESSAGE);
+      }
+      throw error;
+    }
+
+    await claimLegacyCreatorIntake(sql, email, context.userId);
+
     await writeAudit({
       actorUserId: context.userId,
       action: "profile.onboard",
       entityType: "bridge_profile",
       entityId: context.userId,
-      metadata: { accountType: data.accountType, internalRole: internalRole ?? null },
+      metadata: { accountType: data.accountType, internalRole },
     });
     const actor = await loadActor(context.userId);
     if (!actor) throw new Error("Profile create failed");
@@ -154,7 +243,7 @@ export const requestEmailVerification = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
     assertNotDevUser(context.userId);
-    const actor = await loadActor(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
     const profileId = verificationProfileId(actor);
     const email = actor!.email;
     if (!email) throw new Error("No email on account");
@@ -165,7 +254,7 @@ export const requestEmailVerification = createServerFn({ method: "POST" })
       insert into bridge_email_challenges (id, user_id, email, purpose, token_hash, expires_at)
       values (${id}, ${profileId}, ${email}, ${"verify"}, ${hash}, ${new Date(Date.now() + 24 * 3600 * 1000).toISOString()})
     `;
-    const url = `${bridgeEnv.appUrl()}/verify-email?token=${token}`;
+    const url = bridgeVerificationUrl(token, bridgeEnv.appUrl());
     await mail({
       to: email,
       subject: "Verify your Crayons Bridge email",
@@ -204,13 +293,51 @@ export const confirmEmailVerification = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+export const listAdminProfiles = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    assertPermission(actor, "users.invite_internal");
+    const sql = await getSql();
+    const rows = await sql<{
+      user_id: string;
+      email: string;
+      display_name: string;
+      account_type: string;
+      organization_name: string | null;
+      internal_role: string | null;
+      email_verified: boolean;
+      created_at: string | Date;
+    }>`
+      select user_id, email, display_name, account_type, organization_name,
+             internal_role, email_verified, created_at
+      from bridge_profiles
+      order by created_at desc
+      limit 200
+    `;
+    return {
+      profiles: rows.map((row) => ({
+        userId: row.user_id,
+        email: row.email,
+        displayName: row.display_name,
+        accountType: row.account_type,
+        organizationName: row.organization_name,
+        internalRole: row.internal_role,
+        emailVerified: Boolean(row.email_verified),
+        createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : String(row.created_at),
+      })),
+    };
+  });
+
 export const inviteInternalRole = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(z.object({ email: z.string().email(), role: z.enum(INTERNAL_ROLES) }))
   .handler(async ({ context, data }) => {
-    const actor = await loadActor(context.userId);
-    if (!actor) throw new Error("Profile required");
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
     assertPermission(actor, "users.invite_internal");
+    if (!canGrantInternalRole(actor, data.role)) throw new Error("Forbidden role grant");
     const sql = await getSql();
     const { token, hash } = tokenPair();
     const id = randomBytes(16).toString("hex");
@@ -218,7 +345,7 @@ export const inviteInternalRole = createServerFn({ method: "POST" })
       insert into bridge_invites (id, email, internal_role, invited_by, token_hash, expires_at)
       values (${id}, ${data.email.toLowerCase()}, ${data.role}, ${context.userId}, ${hash}, ${new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString()})
     `;
-    const url = `${bridgeEnv.appUrl()}/signup?invite=${token}`;
+    const url = bridgeInvitationUrl(token, bridgeEnv.appUrl());
     await mail({
       to: data.email,
       subject: "Crayons Bridge internal invite",

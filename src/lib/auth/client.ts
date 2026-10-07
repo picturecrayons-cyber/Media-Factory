@@ -1,13 +1,14 @@
 import { supabase } from "@/lib/supabase";
 import type { Session, User } from "@supabase/supabase-js";
-import { GROK_PROVIDERS } from "./providers";
+import { restoreSupabaseSession } from "./session-restoration";
+import { bridgeCallbackUrl } from "../bridge/origin";
 
 export const authEnabled = import.meta.env.VITE_AUTH_ENABLED !== "false";
-export { GROK_PROVIDERS };
 
 export type SupabaseUser = User;
 export type SupabaseSession = Session;
-const RECOVERY_MARKER_KEY = "crayons-bridge.supabase-recovery-session";
+export { getPasswordRecoveryRedirectUrl, RECOVERY_MARKER_KEY } from "./recovery-url";
+import { getPasswordRecoveryRedirectUrl, RECOVERY_MARKER_KEY } from "./recovery-url";
 
 export function markRecoverySession(accessToken: string): void {
   if (typeof window !== "undefined") window.sessionStorage.setItem(RECOVERY_MARKER_KEY, accessToken);
@@ -20,54 +21,29 @@ export async function hasSupabaseRecoverySession(): Promise<boolean> {
     window.sessionStorage.getItem(RECOVERY_MARKER_KEY) === data.session.access_token;
 }
 
-let cachedSession: Session | null = null;
-let sessionPromise: Promise<Session | null> | null = null;
-
-export async function getSupabaseSession(): Promise<Session | null> {
-  if (cachedSession) return cachedSession;
-  if (!sessionPromise) {
-    sessionPromise = supabase.auth.getSession().then(({ data, error }) => {
-      sessionPromise = null;
-      if (error) {
-        console.warn("[auth] Failed to retrieve session:", error.message);
-        return null;
-      }
-      cachedSession = data.session;
-      return data.session;
-    }).catch((err) => {
-      sessionPromise = null;
-      console.warn("[auth] getSession error:", err);
-      return null;
-    });
+export async function getSupabaseSession(
+  opts: { forceRefresh?: boolean } = {},
+): Promise<Session | null> {
+  try {
+    return await restoreSupabaseSession(supabase.auth, opts);
+  } catch (err) {
+    console.warn("[auth] Session restoration failed:", err);
+    return null;
   }
-  return sessionPromise;
 }
 
-export function getBearerToken(): string | null {
-  if (cachedSession?.access_token) return cachedSession.access_token;
-  if (typeof window !== "undefined") {
-    // Check Supabase's local storage key
-    try {
-      const stored = window.localStorage.getItem("crayons-bridge.sb-auth-token");
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (parsed?.access_token) return parsed.access_token;
-      }
-    } catch {
-      // ignore
-    }
-  }
-  return null;
+export async function getBearerToken(): Promise<string | null> {
+  const session = await getSupabaseSession();
+  return session?.access_token ?? null;
 }
 
 export async function signUpWithEmail(input: {
   email: string;
   password: string;
   name: string;
-  accountType?: "independent_creator" | "studio" | "buyer";
+  accountType?: "independent_creator" | "studio" | "buyer" | "investor";
 }) {
-  const origin = typeof window !== "undefined" ? window.location.origin : "https://bridge.crayonspictures.com";
-  const callbackUrl = `${origin}/auth/callback`;
+  const callbackUrl = bridgeCallbackUrl(undefined);
 
   const { data, error } = await supabase.auth.signUp({
     email: input.email,
@@ -83,13 +59,11 @@ export async function signUpWithEmail(input: {
   });
 
   if (error) throw error;
-  cachedSession = data.session;
   return { user: data.user, session: data.session };
 }
 
 export async function resendConfirmationEmail(email: string) {
-  const origin = typeof window !== "undefined" ? window.location.origin : "https://bridge.crayonspictures.com";
-  const callbackUrl = `${origin}/auth/callback`;
+  const callbackUrl = bridgeCallbackUrl(undefined);
 
   const { data, error } = await supabase.auth.resend({
     type: "signup",
@@ -110,13 +84,11 @@ export async function signInWithEmail(email: string, password: string) {
   });
 
   if (error) throw error;
-  cachedSession = data.session;
   return data.session;
 }
 
 export async function resetPasswordForEmail(email: string) {
-  const origin = typeof window !== "undefined" ? window.location.origin : "https://bridge.crayonspictures.com";
-  const redirectTo = `${origin}/reset-password`;
+  const redirectTo = getPasswordRecoveryRedirectUrl();
 
   const { data, error } = await supabase.auth.resetPasswordForEmail(email, {
     redirectTo,
@@ -137,8 +109,7 @@ export async function updatePassword(password: string) {
   return data.user;
 }
 
-export async function signOut(redirectTo = "/login"): Promise<void> {
-  cachedSession = null;
+export async function signOut(redirectTo = "/"): Promise<void> {
   if (typeof window !== "undefined") window.sessionStorage.removeItem(RECOVERY_MARKER_KEY);
   try {
     await supabase.auth.signOut();
@@ -151,13 +122,8 @@ export async function signOut(redirectTo = "/login"): Promise<void> {
   }
 }
 
-export async function signIn(_providerId: string): Promise<void> {
-  throw new Error("Social sign-in is temporarily unavailable. Use email and password.");
-}
-
 export function subscribeAuthChange(listener: (event: string, session: Session | null) => void) {
   const { data } = supabase.auth.onAuthStateChange((event, session) => {
-    cachedSession = session;
     listener(event, session);
   });
   return () => {
@@ -166,7 +132,6 @@ export function subscribeAuthChange(listener: (event: string, session: Session |
 }
 
 export function getStoredSupabaseUser(): User | null {
-  if (cachedSession?.user) return cachedSession.user;
   if (typeof window !== "undefined") {
     try {
       const stored = window.localStorage.getItem("crayons-bridge.sb-auth-token");

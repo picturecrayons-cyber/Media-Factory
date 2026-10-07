@@ -1,14 +1,17 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { randomBytes } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import { ASSET_KINDS } from "./types";
-import { assertPermission, canReadTitle } from "./rbac";
-import { requireActor } from "./session";
+import { assertPermission, canOperateOnTitle, canReadTitle } from "./rbac";
+import { requireVerifiedActor } from "./session";
 import { loadTitle } from "./titles";
 import { writeAudit } from "./audit";
 import { assertNotDevUser } from "./guards";
+import { persistVerifiedAsset } from "./asset-confirmation";
+import { downloadDecision } from "./delivery-policy";
+import { validateOttIngestFile, type OttIngestKind } from "./ott-ingest-spec";
 
 const UPLOADABLE: ReadonlySet<string> = new Set(["DRAFT", "UPLOADING", "PREPARING"]);
 
@@ -33,13 +36,16 @@ export const requestAssetUpload = createServerFn({ method: "POST" })
   )
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
-    const actor = await requireActor(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
     assertPermission(actor, "asset.sign_upload");
     const title = await loadTitle(data.titleId);
     if (!title) throw new Error("Not found");
-    if (title.ownerUserId !== actor.userId && !actor.internalRole) throw new Error("Forbidden");
+    if (!canOperateOnTitle(actor, title, "asset.sign_upload", "asset.sign_upload")) throw new Error("Forbidden");
     if (!UPLOADABLE.has(title.status)) throw new Error("Uploads are closed for this status");
-    const { signUpload, titleAssetKey } = await import("./s3.server");
+    if (!["master","poster","subtitle","screener","technical"].includes(data.kind)) throw new Error("This asset kind is not supported by the OTT ingest uploader");
+    const ingestValidation = validateOttIngestFile({ kind: data.kind as OttIngestKind, filename: data.filename, contentType: data.contentType });
+    if (!ingestValidation.ok) throw new Error(ingestValidation.message);
+    const { signUpload, titleAssetKey } = await import("./oci-object-storage.server");
     const key = titleAssetKey({
       ownerUserId: title.ownerUserId,
       titleId: title.id,
@@ -53,12 +59,13 @@ export const requestAssetUpload = createServerFn({ method: "POST" })
       insert into bridge_assets (id, title_id, kind, s3_key, content_type, created_by)
       values (${id}, ${title.id}, ${data.kind}, ${key}, ${data.contentType}, ${actor.userId})
     `;
-    if (data.kind === "poster") {
-      await sql`update bridge_titles set poster_key = ${key}, updated_at = now() where id = ${title.id}`;
-    }
-    if (data.kind === "master") {
-      await sql`update bridge_titles set master_key = ${key}, updated_at = now() where id = ${title.id}`;
-    }
+    await sql`
+      update loop_media_migration_queue
+      set status = 'UPLOADED', target_path = ${key}, updated_at = now()
+      where title_id = ${title.id}
+        and asset_kind = case when ${data.kind} = 'screener' then 'TRAILER' else upper(${data.kind}) end
+        and status in ('PENDING_REUPLOAD', 'UPLOADED')
+    `;
     await writeAudit({
       actorUserId: actor.userId,
       action: "asset.upload_signed",
@@ -71,58 +78,70 @@ export const requestAssetUpload = createServerFn({ method: "POST" })
 
 export const confirmAssetUpload = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .validator(z.object({ assetId: z.string().min(8) }))
+  .validator(z.object({ assetId: z.string().min(8), expectedByteSize: z.number().int().positive().optional() }))
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
-    const actor = await requireActor(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
     assertPermission(actor, "asset.sign_upload");
     const sql = await getSql();
     const rows = await sql<{
-      id: string;
-      title_id: string;
-      kind: string;
-      s3_key: string;
-      content_type: string | null;
-      byte_size: number | null;
-      created_by: string;
+      id: string; title_id: string; kind: string; s3_key: string;
+      created_by: string; content_type: string | null; byte_size: number | null;
     }>`
-      select id, title_id, kind, s3_key, content_type, byte_size, created_by
+      select id, title_id, kind, s3_key, created_by, content_type, byte_size
       from bridge_assets where id = ${data.assetId} limit 1
     `;
     const asset = rows[0];
-    if (!asset) throw new Error("Not found");
-    if (!asset.byte_size || asset.byte_size <= 0) throw new Error("Asset upload is not verified");
+    if (!asset) throw new Error("Asset not found");
     const title = await loadTitle(asset.title_id);
-    if (!title) throw new Error("Not found");
-    if (asset.created_by !== actor.userId && title.ownerUserId !== actor.userId && !actor.internalRole) {
-      throw new Error("Forbidden");
+    if (
+      !title ||
+      !canOperateOnTitle(actor, title, "asset.sign_upload") ||
+      (!actor.internalRole && asset.created_by !== actor.userId) ||
+      !UPLOADABLE.has(title.status)
+    ) {
+      throw new Error("Upload confirmation is closed for this title");
     }
-    const { verifyObject } = await import("./s3.server");
-    const verified = await verifyObject(asset.s3_key);
-    await sql`
-      update bridge_assets
-      set byte_size = ${verified.byteSize},
-          content_type = coalesce(${verified.contentType}, content_type)
-      where id = ${asset.id}
-    `;
-    await writeAudit({
-      actorUserId: actor.userId,
-      action: "asset.upload_verified",
-      entityType: "bridge_asset",
-      entityId: asset.id,
-      metadata: {
-        titleId: title.id,
-        kind: asset.kind,
-        byteSize: verified.byteSize,
-        contentType: verified.contentType,
-      },
-    });
-    return {
+    if (asset.byte_size != null) return { assetId: asset.id, byteSize: Number(asset.byte_size), verified: true };
+
+    const { verifyObject, sealVerifiedObject } = await import("./oci-object-storage.server");
+    const object = await verifyObject(asset.s3_key, asset.content_type);
+    if (data.expectedByteSize != null && object.byteSize !== data.expectedByteSize) {
+      throw new Error("Uploaded object size does not match the file that was sent");
+    }
+    if (!object.etag) throw new Error("Object ETag is required for immutable verification");
+    const sealedKey = `${asset.s3_key}.verified/${randomUUID()}`;
+    const sealed = await sealVerifiedObject(asset.s3_key, sealedKey, object.etag);
+    if (sealed.byteSize !== object.byteSize || !sealed.etag) {
+      throw new Error("Verified copy differs from the uploaded object");
+    }
+    const confirmed = await persistVerifiedAsset(sql, {
       assetId: asset.id,
-      verified: true,
-      byteSize: verified.byteSize,
-      contentType: verified.contentType,
-    };
+      actorUserId: actor.userId,
+      internalActor: Boolean(actor.internalRole),
+      titleId: title.id,
+      kind: asset.kind,
+      byteSize: sealed.byteSize,
+      contentType: sealed.contentType,
+      checksum: sealed.etag,
+      sourceKey: asset.s3_key,
+      sealedKey,
+    });
+    if (confirmed) {
+      await sql`
+        update loop_media_migration_queue
+        set status = 'VERIFIED', target_path = ${sealedKey}, updated_at = now()
+        where title_id = ${title.id}
+          and asset_kind = case when ${asset.kind} = 'screener' then 'TRAILER' else upper(${asset.kind}) end
+          and status in ('UPLOADED', 'PENDING_REUPLOAD')
+      `;
+    }
+    if (!confirmed) {
+      const current = await sql<{ byte_size: number | null }>`select byte_size from bridge_assets where id = ${asset.id}`;
+      if (current[0]?.byte_size != null) return { assetId: asset.id, byteSize: Number(current[0].byte_size), verified: true };
+      throw new Error("Asset confirmation changed; retry after refreshing the title");
+    }
+    return { assetId: asset.id, byteSize: sealed.byteSize, verified: true };
   });
 
 export const requestAssetDownload = createServerFn({ method: "POST" })
@@ -130,7 +149,7 @@ export const requestAssetDownload = createServerFn({ method: "POST" })
   .validator(z.object({ assetId: z.string().min(8) }))
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
-    const actor = await requireActor(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
     assertPermission(actor, "asset.sign_download");
     const sql = await getSql();
     const rows = await sql<{
@@ -140,21 +159,31 @@ export const requestAssetDownload = createServerFn({ method: "POST" })
       s3_key: string;
       byte_size: number | null;
     }>`
-      select id, title_id, kind, s3_key, byte_size from bridge_assets where id = ${data.assetId} limit 1
+      select id, title_id, kind, s3_key, byte_size from bridge_assets where id = ${data.assetId} and byte_size > 0 limit 1
     `;
     const asset = rows[0];
     if (!asset) throw new Error("Not found");
     const title = await loadTitle(asset.title_id);
     if (!title || !canReadTitle(actor, title)) throw new Error("Not found");
-    const isOwner = title.ownerUserId === actor.userId;
-    const isInternal = Boolean(actor.internalRole);
-    if (!isOwner && !isInternal) {
-      if (asset.kind !== "poster") {
-        const entitled = await hasLicenseEntitlement(actor.userId, title.id);
-        if (!entitled) throw new Error("License entitlement required");
-      }
+    const entitled = await hasLicenseEntitlement(actor.userId, title.id);
+    const decision = downloadDecision({
+      kind: asset.kind,
+      actorIsOwner: title.ownerUserId === actor.userId,
+      actorIsInternal: Boolean(actor.internalRole),
+      accountType: actor.accountType,
+      hasLicenseEntitlement: entitled,
+    });
+    if (!decision.allow) {
+      await writeAudit({
+        actorUserId: actor.userId,
+        action: "asset.download_denied",
+        entityType: "bridge_asset",
+        entityId: asset.id,
+        metadata: { reason: decision.reason, kind: asset.kind },
+      });
+      throw new Error(decision.reason);
     }
-    const { signDownload } = await import("./s3.server");
+    const { signDownload } = await import("./oci-object-storage.server");
     const signed = await signDownload({ key: asset.s3_key });
     await writeAudit({
       actorUserId: actor.userId,
@@ -169,27 +198,33 @@ export const listTitleAssets = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .validator(z.object({ titleId: z.string().min(8) }))
   .handler(async ({ context, data }) => {
-    const actor = await requireActor(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
     const title = await loadTitle(data.titleId);
     if (!title || !canReadTitle(actor, title)) throw new Error("Not found");
     const sql = await getSql();
+    const buyer = actor.accountType === "buyer" && !actor.internalRole;
     const rows = await sql<{
       id: string;
       kind: string;
       s3_key: string;
       content_type: string | null;
+      byte_size: number | null;
       created_at: string | Date;
     }>`
-      select id, kind, s3_key, content_type, created_at
-      from bridge_assets where title_id = ${title.id} order by created_at desc
+      select id, kind, s3_key, content_type, byte_size, created_at
+      from bridge_assets where title_id = ${title.id} and byte_size > 0 order by created_at desc
     `;
     return {
-      assets: rows.map((r) => ({
-        id: r.id,
-        kind: r.kind,
-        key: r.s3_key,
-        contentType: r.content_type,
-        createdAt: r.created_at instanceof Date ? r.created_at.toISOString() : String(r.created_at),
-      })),
+      assets: rows
+        .filter((r) => !buyer || !["master", "technical"].includes(r.kind))
+        .map((r) => ({
+          id: r.id,
+          kind: r.kind,
+          key: buyer ? null : r.s3_key,
+          contentType: r.content_type,
+          byteSize: r.byte_size,
+          verified: Number(r.byte_size) > 0,
+          createdAt: r.created_at instanceof Date ? r.created_at.toISOString() : String(r.created_at),
+        })),
     };
   });

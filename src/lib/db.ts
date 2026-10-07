@@ -8,12 +8,25 @@ export type DbSource = "postgres" | "pglite";
 // Empty/whitespace values are treated as unset to avoid a silent PGLite fallback.
 const rawDatabaseUrl =
   typeof process !== "undefined"
-    ? process.env.DATABASE_URL ?? process.env.POSTGRES_URL
+    ? (
+        process.env.DATABASE_URL ??
+        process.env.POSTGRES_URL ??
+        process.env.SUPABASE_DB_URL ??
+        process.env.SUPABASE_DATABASE_URL
+      )
     : undefined;
 function normalizePostgresUrl(value: string | undefined): string | undefined {
   if (!value) return undefined;
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
   try {
-    const url = new URL(value);
+    const url = new URL(trimmed);
+    if (!["postgres:", "postgresql:"].includes(url.protocol)) {
+      throw new Error("Database URL must use postgres:// or postgresql://");
+    }
+    if (!url.hostname || url.hostname === "base") {
+      throw new Error("Database URL host is invalid");
+    }
     // pg-connection-string can override the explicit ssl object when sslmode is
     // present in the URL. Remove SSL query params so node-postgres uses the
     // explicit runtime TLS configuration below.
@@ -21,8 +34,9 @@ function normalizePostgresUrl(value: string | undefined): string | undefined {
       url.searchParams.delete(key);
     }
     return url.toString();
-  } catch {
-    return value;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "invalid database URL";
+    throw new Error(`Invalid Bridge database binding: ${message}`);
   }
 }
 const databaseUrl = normalizePostgresUrl(
@@ -71,6 +85,7 @@ export interface Sql {
     text: string,
     params?: unknown[],
   ): Promise<T[]>;
+  transaction<T>(fn: (tx: Sql) => Promise<T>): Promise<T>;
 }
 
 /**
@@ -106,7 +121,7 @@ const identity = (v: string) => v;
 type Run = <T>(text: string, params: unknown[]) => Promise<T[]>;
 
 /** Wrap a query runner in the tagged-template + `.query()` `Sql` surface. */
-function toSql(run: Run): Sql {
+function toSql(run: Run, transaction?: <T>(fn: (tx: Sql) => Promise<T>) => Promise<T>): Sql {
   const sql = (async <T = Record<string, unknown>>(
     strings: TemplateStringsArray,
     ...values: unknown[]
@@ -118,6 +133,7 @@ function toSql(run: Run): Sql {
   }) as unknown as Sql;
   sql.query = <T = Record<string, unknown>>(text: string, params: unknown[] = []) =>
     run<T>(text, params);
+  sql.transaction = transaction ?? (async <T>(fn: (tx: Sql) => Promise<T>) => fn(sql));
   return sql;
 }
 
@@ -130,9 +146,27 @@ function createPostgresSql(): Promise<Sql> {
     types.setTypeParser(OID_DATE, identity);
     types.setTypeParser(OID_INTERVAL, identity);
     const pool = new Pool({ connectionString: databaseUrl, ssl: { rejectUnauthorized: false } });
-    return toSql(async <T>(text: string, params: unknown[]) => {
+    const runPool: Run = async <T>(text: string, params: unknown[]) => {
       const res = await pool.query(text, params);
       return res.rows as T[];
+    };
+    return toSql(runPool, async <T>(fn: (tx: Sql) => Promise<T>) => {
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+        const tx = toSql(async <R>(text: string, params: unknown[]) => {
+          const res = await client.query(text, params);
+          return res.rows as R[];
+        });
+        const result = await fn(tx);
+        await client.query("COMMIT");
+        return result;
+      } catch (error) {
+        await client.query("ROLLBACK");
+        throw error;
+      } finally {
+        client.release();
+      }
     });
   })().catch((err) => {
     globalRef.__pgSqlPromise__ = undefined;
@@ -198,10 +232,20 @@ async function createPgliteSql(): Promise<Sql> {
   globalRef.__pgliteMigrateChain__ = pass;
   await pass;
 
-  return toSql(async <T>(text: string, params: unknown[]) => {
-    const result = await pg.query<T>(text, params);
-    return result.rows;
-  });
+  return toSql(
+    async <T>(text: string, params: unknown[]) => {
+      const result = await pg.query<T>(text, params);
+      return result.rows;
+    },
+    async <T>(fn: (tx: Sql) => Promise<T>) =>
+      pg.transaction(async (pgtx) => {
+        const tx = toSql(async <R>(text: string, params: unknown[]) => {
+          const result = await pgtx.query<R>(text, params);
+          return result.rows;
+        });
+        return fn(tx);
+      }),
+  );
 }
 
 let sqlPromise: Promise<Sql> | null = null;

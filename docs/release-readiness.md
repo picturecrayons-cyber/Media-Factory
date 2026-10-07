@@ -1,8 +1,8 @@
 # Bridge release-readiness gates
 
-This document defines the production gates for Crayons Bridge integrations that must be proven before a release is promoted.
+**Canonical production media: Oracle OCI Object Storage (Mumbai). AWS S3 is legacy compatibility/test code and is not a production gate.**
 
-## 1. Bridge → Crayons LOOP publication
+## 1. Bridge → CRAYONS LOOP publication
 
 A title is only publishable when Bridge preflight passes:
 
@@ -13,127 +13,58 @@ A title is only publishable when Bridge preflight passes:
 - territories, languages and exploitation model are explicit
 - the distribution window is valid
 
-Successful authorization must create or update both:
+Successful authorization must create or update both `bridge_loop_publications` and `loop_titles`. Evidence must come from a real authenticated flow and a real visible LOOP catalog result.
 
-- `bridge_loop_publications`
-- `loop_titles`
-
-The LOOP application is a consumer delivery surface. Rights/licensing edits remain in Bridge.
-
-### Evidence
-
-Run a real authenticated Bridge admin flow and record:
-
-1. Bridge title ID.
-2. Preflight result.
-3. Authorization audit event.
-4. `bridge_loop_publications` row.
-5. `loop_titles` row with `published=true` and `listed=true`.
-6. The title visible in LOOP browse.
-
-Do not seed or fabricate catalog records to satisfy this gate.
-
-## 2. AWS private-media E2E
-
-Bridge signs private S3 PUT/GET requests. A release is not AWS-certified from source code presence alone.
-
-### Evidence
+## 2. OCI media E2E
 
 For a real authenticated title:
 
-1. Request a signed upload URL.
+1. Request a signed OCI upload URL.
 2. Upload a real source object.
-3. Confirm the S3 object exists.
+3. Confirm the OCI object exists.
 4. Confirm the Bridge asset/title record references the same object key.
-5. Request a signed download URL and retrieve the object.
-6. Record QC/job persistence when the processor is enabled.
+5. Request a signed OCI download URL and retrieve the object.
+6. Verify the object and persisted asset state.
 
-Required runtime variables:
+Required server-only variables:
 
-- `AWS_ACCESS_KEY_ID`
-- `AWS_SECRET_ACCESS_KEY`
-- `AWS_REGION`
-- `S3_BUCKET`
+- `OCI_TENANCY_OCID`
+- `OCI_USER_OCID`
+- `OCI_FINGERPRINT`
+- `OCI_PRIVATE_KEY`
+- `OCI_REGION`
+- `OCI_NAMESPACE`
+- `OCI_BUCKET_NAME`
 
-Never expose AWS secrets to browser-prefixed variables.
+Configuration presence alone is not connectivity certification.
 
 ## 3. Supabase Auth → Hostinger SMTP
 
-Hostinger mailbox availability does not prove Supabase Auth SMTP binding.
+Expected sender: `abijithasokan@crayonspictures.com`.
 
-Expected sender:
+Trigger a brand-new signup or password-recovery message in the canonical Supabase project and verify sender, canonical callback, successful callback completion, and absence of fallback Supabase sender.
 
-`abijithasokan@crayonspictures.com`
+Bridge transactional mail requires `SMTP_HOST`/ `HOSTINGER_SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`/ `HOSTINGER_SMTP_USER`, `SMTP_PASS`/ `HOSTINGER_SMTP_PASS`, and `MAIL_FROM`.
 
-### Evidence
+## 4. Razorpay
 
-After SMTP configuration is saved in the canonical Supabase project, trigger a brand-new signup or password-recovery message and verify:
+Required evidence:
 
-1. sender is the configured Crayons Pictures mailbox
-2. callback URL is the canonical Bridge domain
-3. callback completes successfully
-4. no new auth mail is sent by `noreply@mail.app.supabase.io`
+1. Real Bridge order.
+2. Real captured payment.
+3. Signature/webhook verification succeeds.
+4. `bridge_payments` persists durable payment state.
+5. Entitlement is created only after capture.
+6. Audit event is persisted.
 
-Bridge transactional mail also requires:
+## 5. DMCA
 
-- `SMTP_HOST` or `HOSTINGER_SMTP_HOST`
-- `SMTP_PORT`
-- `SMTP_USER` or `HOSTINGER_SMTP_USER`
-- `SMTP_PASS` or `HOSTINGER_SMTP_PASS`
-- `MAIL_FROM=abijithasokan@crayonspictures.com`
+Migration `0011_bridge_dmca.sql` must be applied to canonical Supabase and `bridge_dmca_registrations` must exist before DMCA is certified.
 
-## 4. Custom domains
+## 6. Custom domains
 
-Canonical domains:
+Canonical Bridge domain: `www.crayonspictures.in`. `crayonspictures.in` redirects to it. The retired `bridge.crayonspictures.com` host must not be used.
 
-- Bridge: `bridge.crayonspictures.com`
-- LOOP: `crayonsloop.com`
+## 7. Release rule
 
-Before release certification, both must resolve to their canonical Vercel projects and return the intended Production deployment.
-
-### Bridge DNS expectation
-
-The `bridge` host must not be served by Hostinger's parking/Under Construction origin. Remove conflicting A/AAAA/CNAME records and keep only the Vercel-required record shown in the Vercel domain configuration.
-
-### LOOP domain expectation
-
-`crayonsloop.com` must be assigned to the `crayonsloop` Vercel project and resolve to its current Production deployment.
-
-## 5. Release rule
-
-Do not mark the release certified or promote a staged integration based on a green build alone.
-
-All four integration gates above require real E2E evidence:
-
-- Bridge → LOOP publication PASS
-- AWS upload/download PASS
-- Supabase Auth → Hostinger SMTP PASS
-- custom domains PASS
-
-Production remains unchanged until those checks are recorded.
-
-
-## Product boundary: Bridge is the LOOP CMS and Admin control plane
-
-Crayons Bridge is the authoritative CMS/admin system for Crayons LOOP.
-
-Bridge owns:
-- title ingest and master assets
-- metadata and artwork
-- QC and technical readiness
-- rights, ownership, territories, languages and windows
-- licensing and commercial terms
-- LOOP publication authorization, suspension and revocation
-- buyer/deal controls, delivery authorization, payments, audit and operations
-
-Crayons LOOP owns:
-- consumer home/browse/search presentation
-- playback
-- profiles, watchlist and watch progress
-- subscriptions, TVOD consumer entitlements and account UX
-
-LOOP must not provide an independent rights/licensing editor. A LOOP title should enter the consumer catalog only through a Bridge-authorized publication record. The canonical relationship is:
-
-`bridge_titles → bridge_loop_publications → loop_titles → LOOP consumer UI`
-
-The Vercel project `bridge` remains the production deployment target for this CMS/admin control plane. The separate Vercel project `crayonsloop` remains the consumer streaming application.
+Do not certify or promote based on a green build alone. Production requires real E2E evidence for LOOP publication, OCI storage, Supabase Auth → Hostinger SMTP, Razorpay capture → entitlement, DMCA migration, and canonical domain.

@@ -18,11 +18,15 @@
     "preview:stop": "node scripts/preview.mjs stop",
     "typecheck": "tsc --noEmit",
     "check:auth": "node scripts/check-auth-invariant.mjs",
-    "test": "node --test scripts/assert-no-legacy-dump.test.mjs scripts/razorpay-edge-webhook.test.mjs && node --experimental-strip-types --test src/lib/app-data/app-data.test.ts src/lib/app-data/readiness-schedule.test.ts src/lib/auth/gate-identity.test.ts src/lib/auth/sign-in-gate.test.ts src/lib/auth/signup-classification.test.ts src/lib/bridge/lifecycle.test.ts src/lib/bridge/rbac.test.ts src/lib/bridge/canonical.test.ts src/lib/bridge/razorpay-crypto.test.ts src/lib/bridge/legacy-map.test.ts src/lib/bridge/verification-profile-id.test.ts",
+    "test": "node --test scripts/assert-no-legacy-dump.test.mjs scripts/auth-retirement.test.mjs scripts/razorpay-edge-webhook.test.mjs && node --experimental-strip-types --test src/lib/app-data/app-data.test.ts src/lib/app-data/readiness-schedule.test.ts src/lib/auth/gate-identity.test.ts src/lib/auth/sign-in-gate.test.ts src/lib/auth/signup-classification.test.ts src/lib/auth/bearer-token.test.ts src/lib/auth/session-restoration.test.ts src/lib/auth/workspace-session-retry.test.ts src/lib/auth/password-recovery.test.ts src/lib/bridge/origin.test.ts src/lib/bridge/lifecycle.test.ts src/lib/bridge/rbac.test.ts src/lib/bridge/canonical.test.ts src/lib/bridge/razorpay-crypto.test.ts src/lib/bridge/legacy-map.test.ts src/lib/bridge/verification-profile-id.test.ts src/lib/bridge/profile-auth-link.test.ts src/lib/bridge/onboarding-atomicity.test.ts src/lib/bridge/asset-confirmation.test.ts src/lib/bridge/delivery-policy.test.ts src/lib/bridge/deliveries.test.ts src/lib/bridge/rights-coverage.test.ts src/lib/bridge/oci-object-storage.test.ts src/lib/bridge/aws-object-storage.test.ts src/lib/bridge/publication-contract.test.ts src/lib/bridge/ott-ingest-spec.test.ts src/lib/bridge/service-pricing.test.ts src/lib/bridge/service-revenue.test.ts",
     "secret-scan": "node scripts/secret-scan.mjs",
     "lint": "eslint .",
     "format": "prettier --write .",
-    "check:release-readiness": "node scripts/release-readiness.mjs"
+    "check:release-readiness": "node scripts/release-readiness.mjs",
+    "test:oci-production-e2e": "node --experimental-strip-types scripts/oci-production-e2e.mjs",
+    "check:bridge-app-url": "node scripts/check-bridge-app-url.mjs",
+    "test:cra101": "node --test scripts/cra-101-auth-flow.test.mjs",
+    "test:storage-e2e": "node scripts/oci-storage-e2e.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.864.0",
