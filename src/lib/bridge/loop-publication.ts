@@ -385,6 +385,7 @@ export const authorizeLoopPublication = createServerFn({ method: "POST" })
         ${title.language}, ${title.year}, ${title.runtime_minutes}, ${title.poster_key}, ${title.master_key},
         ${JSON.stringify({
           source: "crayons-bridge-master-distribution",
+          lane: loopStageType(title.content_type),
           rightsGrantId: preflight.rightsGrantId,
           authorizedBy: actor.userId,
           commercialTerms: preflight.commercialTerms || null,

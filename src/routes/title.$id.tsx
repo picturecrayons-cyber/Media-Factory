@@ -3,11 +3,12 @@ import { getTitleWorkflow } from "@/lib/bridge/workflow";
 import { WorkflowDesk } from "@/components/bridge/workflow-desk";
 import { publicationIsActive } from "@/lib/bridge/workflow-policy";
 import { createFileRoute } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { useState } from "react";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
-import { getTitle } from "@/lib/bridge/titles";
+import { getTitle, updateTitle } from "@/lib/bridge/titles";
+import { BRIDGE_LOOP_LANES, loopStageType } from "@/lib/bridge/loop-lanes";
 import {
   confirmAssetUpload,
   listTitleAssets,
@@ -26,6 +27,38 @@ export const Route = createFileRoute("/title/$id")({ component: TitlePage });
 
 const WORKSPACE_TABS = ["Overview", "Files"] as const;
 type WorkspaceTab = (typeof WORKSPACE_TABS)[number];
+
+function LaneStore({ titleId, stored, locked }: { titleId: string; stored: string; locked: boolean }) {
+  const qc = useQueryClient();
+  const [value, setValue] = useState(stored);
+  const save = useMutation({
+    mutationFn: (contentType: string) => updateTitle({ data: { id: titleId, contentType } }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["bridge-title", titleId] }),
+  });
+  return (
+    <label className="mt-4 block text-sm">
+      Stored for Loop preview
+      <select
+        value={value}
+        disabled={locked || save.isPending}
+        onChange={(event) => {
+          const next = event.target.value;
+          setValue(next);
+          save.mutate(next);
+        }}
+        className="mt-1 h-11 w-full max-w-sm rounded-lg border border-line-strong bg-elevated px-3"
+      >
+        {BRIDGE_LOOP_LANES.map((lane) => (
+          <option key={lane.id} value={lane.loopType}>{lane.label}</option>
+        ))}
+      </select>
+      <span className="mt-1 block text-xs text-muted">
+        {locked ? "Locked after prepare. Staff can still correct it before publish." : "Saved on the Bridge title. Loop shows it only after TVOD publish."}
+        {save.isError ? ` ${save.error instanceof Error ? save.error.message : "Could not save."}` : ""}
+      </span>
+    </label>
+  );
+}
 
 function TitlePage() {
   const { id } = Route.useParams();
@@ -183,6 +216,7 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
           </div>
           <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <Metric label="Original title" value={title.nameMl || "—"} />
+            <Metric label="Content type" value={loopStageType(title.contentType)} />
             <Metric label="Language" value={title.language || "—"} />
             <Metric label="Year" value={title.year ? String(title.year) : "—"} />
             <Metric label="Runtime" value={title.runtimeMinutes ? `${title.runtimeMinutes} min` : "—"} />
@@ -191,6 +225,7 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
             <Metric label="Director" value={title.credits?.filter((c) => c.role === "Director").map((c) => c.name).join(", ") || "—"} />
             <Metric label="Producer" value={title.credits?.filter((c) => c.role === "Producer").map((c) => c.name).join(", ") || "—"} />
           </div>
+          <LaneStore key={title.contentType} titleId={title.id} stored={loopStageType(title.contentType)} locked={!actor.internalRole && !["DRAFT", "UPLOADING", "PREPARING"].includes(title.status)} />
           {title.synopsis ? <p className="mt-4 text-sm leading-6 text-muted">{title.synopsis}</p> : null}
           <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <Metric label="QC" value={qcReady ? "READY" : "PENDING"} />

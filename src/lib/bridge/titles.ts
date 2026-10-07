@@ -10,6 +10,7 @@ import { assertPermission, canMutateTitle, canReadTitle, hasStaffPermission, per
 import { requireVerifiedActor } from "./session";
 import { writeAudit } from "./audit";
 import { assertNotDevUser } from "./guards";
+import { loopStageType } from "./loop-lanes";
 import { assertBuyerPublishable, getBuyerGateStatus } from "./buyer-visibility";
 
 type TitleRow = {
@@ -149,7 +150,7 @@ export const createTitle = createServerFn({ method: "POST" })
         ${id}, ${slug}, ${data.name}, ${data.nameMl ?? null}, ${actor.userId}, ${actor.accountType},
         ${"DRAFT"}, ${data.synopsis ?? ""}, ${data.language ?? "Malayalam"},
         ${data.year ?? null}, ${data.runtimeMinutes ?? null}, ${data.licensingFeePaise ?? 0},
-        ${data.contentType ?? "FEATURE"}, ${data.countryOfOrigin ?? null},
+        ${loopStageType(data.contentType)}, ${data.countryOfOrigin ?? null},
         ${data.releaseDate ?? null}, ${JSON.stringify([
           ...(data.director ? [{ role: "Director", name: data.director }] : []),
           ...(data.producer ? [{ role: "Producer", name: data.producer }] : []),
@@ -257,6 +258,7 @@ export const updateTitle = createServerFn({ method: "POST" })
       year: z.number().int().min(1895).max(2100).nullable().optional(),
       runtimeMinutes: z.number().int().min(1).max(600).nullable().optional(),
       licensingFeePaise: z.number().int().min(0).max(2_000_000_000).optional(),
+      contentType: z.string().min(1).max(80).optional(),
     }),
   )
   .handler(async ({ context, data }) => {
@@ -285,6 +287,7 @@ export const updateTitle = createServerFn({ method: "POST" })
         year = ${data.year === undefined ? title.year : data.year},
         runtime_minutes = ${data.runtimeMinutes === undefined ? title.runtimeMinutes : data.runtimeMinutes},
         licensing_fee_paise = ${data.licensingFeePaise ?? title.licensingFeePaise},
+        content_type = ${data.contentType ? loopStageType(data.contentType) : title.contentType},
         updated_at = now()
       where id = ${title.id}
     `;
