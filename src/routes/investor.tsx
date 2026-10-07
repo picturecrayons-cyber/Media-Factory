@@ -11,7 +11,7 @@ function Investor() {
   return (
     <RequireBridge allow="investor">
       {(actor) => (
-        <BridgeShell actor={actor} title="Investor Dashboard">
+        <BridgeShell actor={actor} title="Investor desk">
           <InvestorBody userId={actor.userId} />
         </BridgeShell>
       )}
@@ -30,16 +30,10 @@ function InvestorBody({ userId }: { userId: string }) {
 
   return (
     <div className="space-y-6">
-      <section className="rounded-3xl border border-border bg-card p-6 md:p-8">
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted">Investment workspace</p>
-        <h2 className="mt-2 font-display text-3xl md:text-4xl">Your participation in Bridge titles.</h2>
-        <p className="mt-3 max-w-3xl text-sm leading-relaxed text-muted">Investment records assigned to your Bridge account are shown here. Supply-chain controls remain in Bridge and consumer publishing remains on Crayons Loop.</p>
-      </section>
-
-      <section className="grid gap-4 sm:grid-cols-3">
-        <article className="rounded-2xl border border-line bg-surface p-5"><p className="text-xs uppercase tracking-wider text-muted">Investments</p><p className="mt-2 font-display text-3xl font-semibold">{rows.length}</p></article>
-        <article className="rounded-2xl border border-line bg-surface p-5"><p className="text-xs uppercase tracking-wider text-muted">Recorded capital</p><p className="mt-2 font-display text-3xl font-semibold">₹{Math.round(totalCapital / 100).toLocaleString("en-IN")}</p></article>
-        <article className="rounded-2xl border border-line bg-surface p-5"><p className="text-xs uppercase tracking-wider text-muted">Participation</p><p className="mt-2 font-display text-3xl font-semibold">{totalParticipation.toFixed(2)}%</p></article>
+      <section className="grid gap-3 sm:grid-cols-3">
+        <article className="rounded-sm border border-line p-4"><p className="text-xs uppercase tracking-widest text-muted">Scope</p><p className="mt-2 text-sm">Assigned titles only. Read participation. No title edits.</p></article>
+        <article className="rounded-sm border border-line p-4"><p className="text-xs uppercase tracking-widest text-muted">Opportunity</p><p className="mt-2 text-sm">Capital is recorded by Bridge. You see only titles assigned to this account.</p></article>
+        <article className="rounded-sm border border-line p-4"><p className="text-xs uppercase tracking-widest text-muted">Recorded capital</p><p className="mt-2 text-2xl font-semibold">₹{Math.round(totalCapital / 100).toLocaleString("en-IN")}</p></article>
       </section>
 
       <section className="rounded-3xl border border-line bg-surface p-6">

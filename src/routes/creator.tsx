@@ -5,66 +5,52 @@ import { CreateTitleForm, TitleList } from "@/components/bridge/title-desk";
 
 export const Route = createFileRoute("/creator")({ component: Creator });
 
-const modules = [
-  ["My Titles", "Create, prepare and track every title through the Bridge lifecycle."],
-  ["Assets & QC", "Masters, artwork, audio, subtitles and documents stay private until approved."],
-  ["Rights", "Ownership, territory, language and exploitation windows remain the source of truth."],
-  ["Distribution", "Track buyer delivery and Bridge-authorized Crayons LOOP publication."],
-  ["Revenue", "Licensing and distribution revenue appears only from verified transaction records."],
-  ["Statements", "View captured receipts, statement exports and recorded settlement evidence in each Title Workspace."],
-  ["Updates", "QC, rights, licensing, payment and delivery events in one operational feed."],
-  ["Team", "Invite collaborators with server-enforced role permissions."],
-] as const;
-
 function Creator() {
   return (
     <RequireBridge allow="creator">
       {(actor) => (
-        <BridgeShell actor={actor} title="Creator workspace">
-          <section className="rounded-3xl border border-border bg-card p-6 md:p-8">
-            <div className="flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted">Crayons Bridge</p>
-                <h2 className="mt-2 font-display text-3xl md:text-4xl">Your content business, from master to market.</h2>
-                <p className="mt-3 max-w-3xl text-sm leading-relaxed text-muted">
-                  Upload once, prepare the title, clear rights, license to buyers, authorize distribution and follow verified revenue without exposing private masters.
-                </p>
-              </div>
-              <Link to="/account" className="rounded-full border border-border px-4 py-2 text-sm font-semibold">Account & billing</Link>
-            </div>
-          </section>
-
-          <section className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {modules.map(([name, description]) => (
-              <article key={name} className="rounded-2xl border border-border bg-card p-5">
-                <h3 className="font-display text-lg">{name}</h3>
-                <p className="mt-2 text-sm leading-relaxed text-muted">{description}</p>
-              </article>
-            ))}
-          </section>
-
-          <section className="mt-8 rounded-3xl border border-border bg-card p-6 md:p-8">
-            <div className="mb-6 flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted">Submission</p>
-                <h2 className="mt-1 font-display text-2xl">Create a title</h2>
-              </div>
-              <p className="max-w-xl text-sm text-muted">Each film is one durable title record. AWS assets remain private; buyer and LOOP visibility require explicit authorization.</p>
-            </div>
-            <CreateTitleForm />
-          </section>
-
+        <BridgeShell actor={actor} title="Creator desk">
+          <Desk
+            role="Creator"
+            scope="Own titles only. Upload, update drafts, and read your deliveries."
+            opportunity="Submit a title. Bridge clears QC and rights before any buyer can see it."
+            steps={["Create title", "Upload assets", "QC and rights", "License", "Delivery"]}
+          />
           <section className="mt-8">
-            <div className="mb-4 flex items-center justify-between">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted">Portfolio</p>
-                <h2 className="mt-1 font-display text-2xl">My Titles</h2>
-              </div>
+            <h2 className="text-lg font-semibold">New title</h2>
+            <div className="mt-3"><CreateTitleForm /></div>
+          </section>
+          <section className="mt-8">
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-lg font-semibold">Your titles</h2>
+              <Link to="/account" className="text-sm text-muted">Account</Link>
             </div>
-            <TitleList empty="No titles yet. Create a draft to begin Upload → QC → Rights → Licensing → Delivery." />
+            <TitleList empty="No titles yet. Create a draft to start." />
           </section>
         </BridgeShell>
       )}
     </RequireBridge>
+  );
+}
+
+export function Desk({ role, scope, opportunity, steps }: { role: string; scope: string; opportunity: string; steps: string[] }) {
+  return (
+    <div className="space-y-4">
+      <div className="grid gap-3 sm:grid-cols-2">
+        <article className="rounded-sm border border-line p-4">
+          <p className="text-xs uppercase tracking-widest text-muted">Scope · {role}</p>
+          <p className="mt-2 text-sm">{scope}</p>
+        </article>
+        <article className="rounded-sm border border-line p-4">
+          <p className="text-xs uppercase tracking-widest text-muted">Opportunity</p>
+          <p className="mt-2 text-sm">{opportunity}</p>
+        </article>
+      </div>
+      <ol className="flex flex-wrap gap-2 text-sm">
+        {steps.map((step, i) => (
+          <li key={step} className="rounded-sm border border-line px-3 py-1.5">{i + 1}. {step}</li>
+        ))}
+      </ol>
+    </div>
   );
 }
