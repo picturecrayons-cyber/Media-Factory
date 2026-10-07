@@ -133,7 +133,7 @@ export function permissionsFor(actor: Actor): Set<Permission> {
   return new Set<Permission>(ACCOUNT_PERMISSIONS[actor.accountType]);
 }
 
-export function canAccessDashboard(actor: Actor): boolean {
+// Staff routing is intentionally separate from the super-admin dashboard.\nexport function canAccessDashboard(actor: Actor): boolean {
   return actor.emailVerified && actor.internalRole === "super_admin";
 }
 
