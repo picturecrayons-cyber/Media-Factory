@@ -8,27 +8,65 @@ import { getDashboardSession } from "@/lib/bridge/session";
 export const Route = createFileRoute("/dashboard")({ component: Dashboard });
 
 function Dashboard() {
-  return <RequireBridge allow="super_admin">{(actor) => <BridgeShell actor={actor} title="Dashboard"><DashboardBody /></BridgeShell>}</RequireBridge>;
+  return (
+    <RequireBridge allow="super_admin">
+      {(actor) => (
+        <BridgeShell actor={actor} title="Revenue desk">
+          <DashboardBody />
+        </BridgeShell>
+      )}
+    </RequireBridge>
+  );
 }
 
 function DashboardBody() {
-  const dashboardQ = useQuery({ queryKey:["bridge-dashboard-session"], queryFn:()=>getDashboardSession(), retry:false });
-  const titlesQ = useQuery({ queryKey:["bridge-titles"], queryFn:()=>listTitles(), enabled: dashboardQ.isSuccess });
-  if (dashboardQ.isPending) return <p className="text-sm text-muted">Checking dashboard access…</p>;
+  const dashboardQ = useQuery({ queryKey: ["bridge-dashboard-session"], queryFn: () => getDashboardSession(), retry: false });
+  const titlesQ = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles(), enabled: dashboardQ.isSuccess });
+  if (dashboardQ.isPending) return <p className="text-sm text-muted">Checking access…</p>;
   if (dashboardQ.isError) return <p role="alert" className="text-sm text-accent">Super admin access required.</p>;
   const titles = titlesQ.data?.titles ?? [];
-  const draft = titles.filter((t)=>t.status==="DRAFT").length;
-  const review = titles.filter((t)=>["PREPARING","QC_REVIEW","RIGHTS_REVIEW"].includes(t.status)).length;
-  const deals = titles.filter((t)=>["IN_NEGOTIATION","LICENSED"].includes(t.status)).length;
-  const delivered = titles.filter((t)=>t.status==="DELIVERED").length;
-  return <div className="space-y-5">
-    <section className="bridge-panel rounded-3xl p-6 sm:p-8">
-      <h2 className="max-w-3xl font-display text-2xl font-semibold sm:text-3xl">One bridge from content to market.</h2>
-      <p className="mt-2 max-w-2xl text-sm leading-6 text-muted">Prepare assets, clear QC and rights, license, and deliver from one canonical title workspace.</p>
-      <div className="mt-5 flex gap-2"><Link to="/workspace" className="rounded-full bg-accent px-5 py-2.5 text-sm font-semibold text-[#041018] shadow-[0_10px_30px_rgba(25,199,255,.18)] hover:bg-accent-strong">Open Titles</Link><Link to="/deliveries" className="rounded-full border border-line px-5 py-2.5 text-sm font-semibold">Deliveries</Link></div>
-    </section>
-    <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-      {[["Draft",draft],["In review",review],["Active deals",deals],["Delivered",delivered]].map(([label,value])=><div key={String(label)} className="bridge-stat rounded-2xl p-4 sm:p-5"><p className="text-xs uppercase tracking-wider text-muted">{label}</p><p className="mt-1 font-display text-2xl font-semibold">{value}</p></div>)}
-    </section>
-  </div>;
+  const live = titles.filter((t) => ["LIVE_FOR_BUYERS", "IN_NEGOTIATION", "LICENSED", "DELIVERED"].includes(t.status));
+  const pipeline = titles.filter((t) => t.status === "LICENSING_READY").length;
+  const deals = titles.filter((t) => t.status === "LICENSED" || t.status === "IN_NEGOTIATION").length;
+  const revenue = live.reduce((sum, t) => sum + (t.status === "LICENSED" || t.status === "DELIVERED" ? t.licensingFeePaise : 0), 0);
+  const needsAction = titles.filter((t) => ["QC_REVIEW", "RIGHTS_REVIEW", "LICENSING_READY"].includes(t.status)).length;
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h2 className="font-display text-3xl font-semibold">Revenue</h2>
+          <p className="mt-1 text-sm text-muted">₹{(revenue / 100).toLocaleString("en-IN")} licensed. {needsAction} titles need a decision.</p>
+        </div>
+        <div className="flex gap-2">
+          <Link to="/workspace" className="rounded-sm bg-accent px-4 py-2 text-sm font-semibold text-[#041018]">Titles</Link>
+          <Link to="/buyer" className="rounded-sm border border-line px-4 py-2 text-sm font-semibold">Buyer desk</Link>
+          <Link to="/deliveries" className="rounded-sm border border-line px-4 py-2 text-sm font-semibold">Deliveries</Link>
+        </div>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-4">
+        <Stat label="Licensed value" value={`₹${(revenue / 100).toLocaleString("en-IN")}`} />
+        <Stat label="Live for buyers" value={String(live.length)} />
+        <Stat label="Ready to list" value={String(pipeline)} />
+        <Stat label="Active deals" value={String(deals)} />
+      </div>
+      <ul className="divide-y divide-line rounded-sm border border-line">
+        {titles.slice(0, 8).map((t) => (
+          <li key={t.id} className="flex items-center justify-between gap-3 px-4 py-3 text-sm">
+            <span className="font-medium">{t.name}</span>
+            <span className="text-muted">{t.status.replaceAll("_", " ").toLowerCase()}</span>
+          </li>
+        ))}
+        {!titles.length && <li className="px-4 py-6 text-sm text-muted">No titles yet.</li>}
+      </ul>
+    </div>
+  );
+}
+
+function Stat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-sm border border-line px-4 py-3">
+      <p className="text-xs uppercase tracking-widest text-muted">{label}</p>
+      <p className="mt-1 text-2xl font-semibold">{value}</p>
+    </div>
+  );
 }
