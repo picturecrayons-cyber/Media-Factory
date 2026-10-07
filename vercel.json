@@ -3,5 +3,11 @@
   "framework": "tanstack-start",
   "git": {
     "deploymentEnabled": true
-  }
+  },
+  "rewrites": [
+    {
+      "source": "/api/webhooks/razorpay",
+      "destination": "/api/razorpay/webhook"
+    }
+  ]
 }

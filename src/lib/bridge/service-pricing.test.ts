@@ -30,7 +30,7 @@ test("missing requested subtitle creates a minute-based work item", () => {
     subtitleLanguages: ["English"],
     requestedDubbingLanguages: [],
   });
-  assert.deepEqual(result.requiredWork.find((x) => x.serviceCode === "SUBTITLE_CREATE")?.quantity, 120);
+  assert.deepEqual(result.requiredWork.find((x) => x.serviceCode === "LOC_SUBTITLE_TRANSLATION")?.quantity, 120);
 });
 
 test("app and OTT delivery are separate commercial work", () => {
