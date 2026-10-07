@@ -7,11 +7,7 @@ import { assertPermission } from "./rbac";
 import { requireVerifiedActor } from "./session";
 import { assertNotDevUser } from "./guards";
 import { writeAudit } from "./audit";
-import {
-  assertPublicationCanExtend,
-  findCoveringRightsGrant,
-  type BridgeRightsGrant,
-} from "./rights-coverage";
+import { assertPublicationCanExtend, findCoveringRightsGrant, type BridgeRightsGrant } from "./rights-coverage";
 
 export type DistributionAuthorizationStatus =
   | "DRAFT"
