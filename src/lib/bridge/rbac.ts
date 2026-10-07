@@ -205,16 +205,6 @@ export function canOperateOnTitle(
   return title.ownerUserId === actor.userId && hasPermission(actor, ownerPermission);
 }
 
-export function canAccessDashboard(actor: Actor): boolean {
-  return actor.emailVerified && actor.internalRole === "super_admin";
-}
-
-export function canGrantInternalRole(actor: Actor, role: InternalRole): boolean {
-  if (!actor.emailVerified) return false;
-  if (role === "super_admin") return actor.internalRole === "super_admin";
-  return actor.internalRole === "admin" || actor.internalRole === "super_admin";
-}
-
 export function workspaceHome(actor: Actor): string {
   // Resolve the post-auth destination from the server-backed Bridge profile.
   // Signup query parameters are intent only and never grant privileges.
