@@ -6,7 +6,7 @@ test("onboarding persists verified auth-to-Bridge identity binding", () => {
   const src = readFileSync(new URL("./profiles.ts", import.meta.url), "utf8");
   assert.match(src, /insert into bridge_loop_identity_links/);
   assert.match(src, /if \(existing\) \{[\s\S]*?await persistSupabaseIdentityLink\(sql, existing\.userId, context\.userId\);[\s\S]*?return \{ home: workspaceHome\(existing\), profile: existing \};/);
-  assert.match(src, /insert into public\."user" \(id, name, email, "emailVerified"\)/);
+  assert.match(src, /insert into bridge_profiles \(/);
   assert.match(src, /const resolvedBridgeUserId = existingBridgeUser\?\.id \?\? randomUUID\(\);/);
   assert.match(src, /await persistSupabaseIdentityLink\(tx, resolvedBridgeUserId, context\.userId\);/);
   assert.match(src, /auth_user_id, verification_method, verified_at, verified_by/);
