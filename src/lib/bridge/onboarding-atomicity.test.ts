@@ -25,23 +25,24 @@ test("identity links fail closed and never reassign an auth identity", () => {
   assert.match(src, /links\[0\]\?\.bridge_user_id !== bridgeUserId/);
 });
 
-test("profile, identity link and invite consumption share one transaction", () => {
+test("profile creation and invite consumption share one database statement", () => {
   const src = readFileSync(new URL("./profiles.ts", import.meta.url), "utf8");
-  const txStart = src.indexOf("sql.transaction(async (tx)");
-  const profileInsert = src.indexOf("insert into bridge_profiles", txStart);
-  const link = src.indexOf("persistSupabaseIdentityLink(tx", txStart);
-  const inviteConsume = src.indexOf("update bridge_invites", link);
-  const txEnd = src.indexOf("return invitedRole;", inviteConsume);
-  assert.ok(txStart >= 0 && profileInsert > txStart && link > profileInsert && inviteConsume > link && txEnd > inviteConsume);
-  assert.match(src, /for update/);
+  const handlerStart = src.indexOf("export const completeOnboarding");
+  const inviteCte = src.indexOf("with consumed_invite as (", handlerStart);
+  const inviteUpdate = src.indexOf("update bridge_invites", inviteCte);
+  const profileInsert = src.indexOf("insert into bridge_profiles", inviteUpdate);
+  const returning = src.indexOf("returning user_id", profileInsert);
+  assert.ok(handlerStart >= 0 && inviteCte > handlerStart && inviteUpdate > inviteCte);
+  assert.ok(profileInsert > inviteUpdate && returning > profileInsert);
+  assert.match(src, /set accepted_at = now\(\)/);
 });
 
 test("same-email foreign identity fails before profile mutation", () => {
   const src = readFileSync(new URL("./profiles.ts", import.meta.url), "utf8");
-  const txStart = src.indexOf("sql.transaction(async (tx)");
-  const lookup = src.indexOf("select user_id from bridge_profiles where lower(email)", txStart);
-  const insert = src.indexOf("insert into bridge_profiles", txStart);
-  assert.ok(lookup > txStart && insert > lookup);
+  const handlerStart = src.indexOf("export const completeOnboarding");
+  const lookup = src.indexOf("select user_id from bridge_profiles where lower(email)", handlerStart);
+  const insert = src.indexOf("insert into bridge_profiles", handlerStart);
+  assert.ok(lookup > handlerStart && insert > lookup);
   assert.match(src, /emailOwner\[0\]\?\.user_id && emailOwner\[0\]\.user_id !== context\.userId/);
 });
 
