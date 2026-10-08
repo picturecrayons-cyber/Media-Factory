@@ -247,8 +247,18 @@ export const listTitles = createServerFn({ method: "GET" })
           order by t.updated_at desc limit 200
         `;
       } catch (error) {
-        console.error("buyer catalog unavailable", error);
-        rows = [];
+        console.error("[bridge] buyer catalog merge-column fallback", error);
+        try {
+          rows = await sql<TitleRow>`
+            select t.* from bridge_titles t
+            where t.status in ('LIVE_FOR_BUYERS','IN_NEGOTIATION','LICENSED','DELIVERED')
+              and public.bridge_title_buyer_visibility(t.id)
+            order by t.updated_at desc limit 200
+          `;
+        } catch (fallbackError) {
+          console.error("[bridge] buyer catalog unavailable", fallbackError);
+          rows = [];
+        }
       }
     } else {
       assertPermission(actor, "title.read_own");
