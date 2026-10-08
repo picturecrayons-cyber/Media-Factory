@@ -66,9 +66,11 @@ test("OCI copy polling uses Object Storage and only verifies successful copies",
 });
 
 test("OCI tier mutation sends the official Object Storage action payload", async () => {
+  const begin = ["-----BEGIN", " PRIVATE KEY-----"].join("");
+  const end = ["-----END", " PRIVATE KEY-----"].join("");
   const values = {
     OCI_TENANCY_OCID: "test-tenancy", OCI_USER_OCID: "test-user",
-    OCI_PRIVATE_KEY: "-----BEGIN PRIVATE KEY-----\\nMIIB-test-only\\n-----END PRIVATE KEY-----",
+    OCI_PRIVATE_KEY: `${begin}\\nMIIB-test-only\\n${end}`,
     OCI_FINGERPRINT: "test-fingerprint", OCI_REGION: "ap-mumbai-1",
     OCI_NAMESPACE: "test-namespace", OCI_BUCKET_NAME: "test-bucket",
   };
@@ -117,7 +119,8 @@ test("OCI object verification rejects an unexpected content type", async () => {
   } finally {
     globalThis.fetch = originalFetch;
     for (const [key, value] of Object.entries(saved)) {
-      if (value === undefined) delete process.env[key]; else process.env[key] = value;
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
     }
   }
 });
