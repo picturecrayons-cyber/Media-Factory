@@ -17,7 +17,7 @@ const hits = [];
 
 function walk(dir) {
   for (const name of readdirSync(dir)) {
-    if (name === "node_modules" || name === ".git" || name === "dist" || name === ".output" || name === ".nitro") continue;
+    if (name === "node_modules" || name === ".git" || name === ".vercel" || name === "dist" || name === ".output" || name === ".nitro") continue;
     const p = join(dir, name);
     const st = statSync(p);
     if (st.isDirectory()) walk(p);

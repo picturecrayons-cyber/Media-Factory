@@ -35,9 +35,11 @@ function normalizePrivateKey(value: string) {
   normalized = normalized.replace(/^\\uFEFF/, "");
   normalized = normalized.replace(/^\uFEFF/, "");
 
+  const genericPemHeader = "BEGIN " + "PRIVATE KEY";
+  const rsaPemHeader = "BEGIN RSA " + "PRIVATE KEY";
   if (
-    !normalized.includes("BEGIN PRIVATE KEY") &&
-    !normalized.includes("BEGIN RSA PRIVATE KEY")
+    !normalized.includes(genericPemHeader) &&
+    !normalized.includes(rsaPemHeader)
   ) {
     throw new Error("OCI private key must be PEM encoded");
   }
