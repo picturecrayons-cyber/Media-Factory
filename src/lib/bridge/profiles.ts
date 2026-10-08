@@ -117,13 +117,6 @@ export const completeOnboarding = createServerFn({ method: "POST" })
     // Email uniqueness is a safety boundary, not an ownership signal. If this
     // authenticated identity is not already directly/explicitly linked, never
     // adopt an existing profile merely because the mailbox matches.
-    const emailOwner = await sql<{ user_id: string }>`
-      select user_id from bridge_profiles where lower(email) = lower(${email}) limit 1
-    `;
-    if (emailOwner[0]?.user_id && emailOwner[0].user_id !== context.userId) {
-      throw new Error(ONBOARDING_EMAIL_CONFLICT_MESSAGE);
-    }
-
     const org =
       data.accountType === "independent_creator" ? null : (data.organizationName ?? "").trim() || null;
     if (data.accountType !== "independent_creator" && !org) {
@@ -161,6 +154,13 @@ export const completeOnboarding = createServerFn({ method: "POST" })
     const bridgeUserId = context.userId;
     try {
       const invitedRole = await sql.transaction(async (tx) => {
+        const emailOwner = await tx<{ user_id: string }>`
+          select user_id from bridge_profiles where lower(email) = lower(${email}) limit 1
+        `;
+        if (emailOwner[0]?.user_id && emailOwner[0].user_id !== context.userId) {
+          throw new Error(ONBOARDING_EMAIL_CONFLICT_MESSAGE);
+        }
+
         if (inviteId) {
           // Consume the invite and create the profile in one transaction. If any
           // part fails, PostgreSQL rolls the invite, profile, and identity link back.
@@ -207,7 +207,8 @@ export const completeOnboarding = createServerFn({ method: "POST" })
         }
 
         await persistSupabaseIdentityLink(tx, bridgeUserId, context.userId);
-        return invitedRole;
+        const roleForTransaction = internalRole;
+        return roleForTransaction;
       });
       void invitedRole;
     } catch (error) {
