@@ -66,52 +66,60 @@ export function mapTitle(r: TitleRow): BridgeTitle {
   };
 }
 
+async function hasTitleMergeColumn(sql: Sql): Promise<boolean> {
+  const rows = await sql<{ exists: boolean }>`
+    select exists (
+      select 1
+      from information_schema.columns
+      where table_schema = 'public'
+        and table_name = 'bridge_titles'
+        and column_name = 'merged_into_title_id'
+    ) as exists
+  `;
+  return Boolean(rows[0]?.exists);
+}
+
 async function listCatalog(sql: Sql): Promise<TitleRow[]> {
-  try {
-    return await sql<TitleRow>`select * from bridge_titles where merged_into_title_id is null order by updated_at desc limit 200`;
-  } catch (error) {
-    console.error("[bridge] catalog list fallback", error);
+  if (!(await hasTitleMergeColumn(sql))) {
     return sql<TitleRow>`select * from bridge_titles order by updated_at desc limit 200`;
   }
+  return sql<TitleRow>`select * from bridge_titles where merged_into_title_id is null order by updated_at desc limit 200`;
 }
 
 async function listOwned(sql: Sql, userId: string, organizationName: string | null): Promise<TitleRow[]> {
   const org = organizationName?.trim() || null;
-  try {
-    if (!org) {
-      return await sql<TitleRow>`
-        select * from bridge_titles
-        where owner_user_id = ${userId} and merged_into_title_id is null
-        order by updated_at desc limit 200
-      `;
-    }
-    return await sql<TitleRow>`
-      select t.* from bridge_titles t
-      where t.merged_into_title_id is null
-        and (
-          t.owner_user_id = ${userId}
+  const mergeColumnAvailable = await hasTitleMergeColumn(sql);
+  if (!org) {
+    return mergeColumnAvailable
+      ? sql<TitleRow>`
+          select * from bridge_titles
+          where owner_user_id = ${userId} and merged_into_title_id is null
+          order by updated_at desc limit 200
+        `
+      : sql<TitleRow>`select * from bridge_titles where owner_user_id = ${userId} order by updated_at desc limit 200`;
+  }
+  return mergeColumnAvailable
+    ? sql<TitleRow>`
+        select t.* from bridge_titles t
+        where t.merged_into_title_id is null
+          and (
+            t.owner_user_id = ${userId}
+            or t.owner_user_id in (
+              select user_id from bridge_profiles
+              where organization_name is not null and lower(organization_name) = lower(${org})
+            )
+          )
+        order by t.updated_at desc limit 200
+      `
+    : sql<TitleRow>`
+        select t.* from bridge_titles t
+        where t.owner_user_id = ${userId}
           or t.owner_user_id in (
             select user_id from bridge_profiles
             where organization_name is not null and lower(organization_name) = lower(${org})
           )
-        )
-      order by t.updated_at desc limit 200
-    `;
-  } catch (error) {
-    console.error("[bridge] owned title list fallback", error);
-    if (!org) {
-      return sql<TitleRow>`select * from bridge_titles where owner_user_id = ${userId} order by updated_at desc limit 200`;
-    }
-    return sql<TitleRow>`
-      select t.* from bridge_titles t
-      where t.owner_user_id = ${userId}
-        or t.owner_user_id in (
-          select user_id from bridge_profiles
-          where organization_name is not null and lower(organization_name) = lower(${org})
-        )
-      order by t.updated_at desc limit 200
-    `;
-  }
+        order by t.updated_at desc limit 200
+      `;
 }
 
 function slugify(name: string, id: string): string {
@@ -238,7 +246,7 @@ export const listTitles = createServerFn({ method: "GET" })
       rows = await listCatalog(sql);
     } else if (actor.accountType === "buyer") {
       assertPermission(actor, "title.read_catalog");
-      try {
+      if (await hasTitleMergeColumn(sql)) {
         rows = await sql<TitleRow>`
           select t.* from bridge_titles t
           where t.merged_into_title_id is null
@@ -246,19 +254,13 @@ export const listTitles = createServerFn({ method: "GET" })
             and public.bridge_title_buyer_visibility(t.id)
           order by t.updated_at desc limit 200
         `;
-      } catch (error) {
-        console.error("[bridge] buyer catalog merge-column fallback", error);
-        try {
-          rows = await sql<TitleRow>`
-            select t.* from bridge_titles t
-            where t.status in ('LIVE_FOR_BUYERS','IN_NEGOTIATION','LICENSED','DELIVERED')
-              and public.bridge_title_buyer_visibility(t.id)
-            order by t.updated_at desc limit 200
-          `;
-        } catch (fallbackError) {
-          console.error("[bridge] buyer catalog unavailable", fallbackError);
-          rows = [];
-        }
+      } else {
+        rows = await sql<TitleRow>`
+          select t.* from bridge_titles t
+          where t.status in ('LIVE_FOR_BUYERS','IN_NEGOTIATION','LICENSED','DELIVERED')
+            and public.bridge_title_buyer_visibility(t.id)
+          order by t.updated_at desc limit 200
+        `;
       }
     } else {
       assertPermission(actor, "title.read_own");
