@@ -34,9 +34,12 @@ import { Route as SubmitFilmRouteImport } from './routes/submit-film'
 import { Route as TermsRouteImport } from './routes/terms'
 import { Route as VerifyEmailRouteImport } from './routes/verify-email'
 import { Route as WorkspaceRouteImport } from './routes/workspace'
+import { Route as AdminWorkstationsRouteImport } from './routes/admin/workstations'
 import { Route as AuthCallbackRouteImport } from './routes/auth/callback'
 import { Route as AuthConfirmRouteImport } from './routes/auth/confirm'
 import { Route as TitleIdRouteImport } from './routes/title.$id'
+import { Route as ApiA2aIndexRouteImport } from './routes/api/a2a/index'
+import { Route as ApiA2aAgentCardRouteImport } from './routes/api/a2a/agent-card'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as ApiRazorpayWebhookRouteImport } from './routes/api/razorpay/webhook'
 
@@ -165,6 +168,11 @@ const WorkspaceRoute = WorkspaceRouteImport.update({
   path: '/workspace',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminWorkstationsRoute = AdminWorkstationsRouteImport.update({
+  id: '/workstations',
+  path: '/workstations',
+  getParentRoute: () => AdminRoute,
+} as any)
 const AuthCallbackRoute = AuthCallbackRouteImport.update({
   id: '/auth/callback',
   path: '/auth/callback',
@@ -178,6 +186,16 @@ const AuthConfirmRoute = AuthConfirmRouteImport.update({
 const TitleIdRoute = TitleIdRouteImport.update({
   id: '/title/$id',
   path: '/title/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiA2aIndexRoute = ApiA2aIndexRouteImport.update({
+  id: '/api/a2a/',
+  path: '/api/a2a/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiA2aAgentCardRoute = ApiA2aAgentCardRouteImport.update({
+  id: '/api/a2a/agent-card',
+  path: '/api/a2a/agent-card',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
@@ -194,7 +212,7 @@ const ApiRazorpayWebhookRoute = ApiRazorpayWebhookRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/account': typeof AccountRoute
-  '/admin': typeof AdminRoute
+  '/admin': typeof AdminRouteWithChildren
   '/admin-cms': typeof AdminCmsRoute
   '/app': typeof AppRoute
   '/buyer': typeof BuyerRoute
@@ -217,16 +235,19 @@ export interface FileRoutesByFullPath {
   '/terms': typeof TermsRoute
   '/verify-email': typeof VerifyEmailRoute
   '/workspace': typeof WorkspaceRoute
+  '/admin/workstations': typeof AdminWorkstationsRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/auth/confirm': typeof AuthConfirmRoute
   '/title/$id': typeof TitleIdRoute
+  '/api/a2a/agent-card': typeof ApiA2aAgentCardRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/razorpay/webhook': typeof ApiRazorpayWebhookRoute
+  '/api/a2a/': typeof ApiA2aIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/account': typeof AccountRoute
-  '/admin': typeof AdminRoute
+  '/admin': typeof AdminRouteWithChildren
   '/admin-cms': typeof AdminCmsRoute
   '/app': typeof AppRoute
   '/buyer': typeof BuyerRoute
@@ -249,17 +270,20 @@ export interface FileRoutesByTo {
   '/terms': typeof TermsRoute
   '/verify-email': typeof VerifyEmailRoute
   '/workspace': typeof WorkspaceRoute
+  '/admin/workstations': typeof AdminWorkstationsRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/auth/confirm': typeof AuthConfirmRoute
   '/title/$id': typeof TitleIdRoute
+  '/api/a2a/agent-card': typeof ApiA2aAgentCardRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/razorpay/webhook': typeof ApiRazorpayWebhookRoute
+  '/api/a2a': typeof ApiA2aIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/account': typeof AccountRoute
-  '/admin': typeof AdminRoute
+  '/admin': typeof AdminRouteWithChildren
   '/admin-cms': typeof AdminCmsRoute
   '/app': typeof AppRoute
   '/buyer': typeof BuyerRoute
@@ -270,6 +294,7 @@ export interface FileRoutesById {
   '/deliveries': typeof DeliveriesRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/internal': typeof InternalRoute
+  '/investor': typeof InvestorRoute
   '/login': typeof LoginRoute
   '/loop-cms': typeof LoopCmsRoute
   '/onboarding': typeof OnboardingRoute
@@ -281,11 +306,14 @@ export interface FileRoutesById {
   '/terms': typeof TermsRoute
   '/verify-email': typeof VerifyEmailRoute
   '/workspace': typeof WorkspaceRoute
+  '/admin/workstations': typeof AdminWorkstationsRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/auth/confirm': typeof AuthConfirmRoute
   '/title/$id': typeof TitleIdRoute
+  '/api/a2a/agent-card': typeof ApiA2aAgentCardRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/razorpay/webhook': typeof ApiRazorpayWebhookRoute
+  '/api/a2a/': typeof ApiA2aIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -303,6 +331,7 @@ export interface FileRouteTypes {
     | '/deliveries'
     | '/forgot-password'
     | '/internal'
+    | '/investor'
     | '/login'
     | '/loop-cms'
     | '/onboarding'
@@ -314,11 +343,14 @@ export interface FileRouteTypes {
     | '/terms'
     | '/verify-email'
     | '/workspace'
+    | '/admin/workstations'
     | '/auth/callback'
     | '/auth/confirm'
     | '/title/$id'
+    | '/api/a2a/agent-card'
     | '/api/auth/$'
     | '/api/razorpay/webhook'
+    | '/api/a2a/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -334,6 +366,7 @@ export interface FileRouteTypes {
     | '/deliveries'
     | '/forgot-password'
     | '/internal'
+    | '/investor'
     | '/login'
     | '/loop-cms'
     | '/onboarding'
@@ -345,11 +378,14 @@ export interface FileRouteTypes {
     | '/terms'
     | '/verify-email'
     | '/workspace'
+    | '/admin/workstations'
     | '/auth/callback'
     | '/auth/confirm'
     | '/title/$id'
+    | '/api/a2a/agent-card'
     | '/api/auth/$'
     | '/api/razorpay/webhook'
+    | '/api/a2a'
   id:
     | '__root__'
     | '/'
@@ -365,6 +401,7 @@ export interface FileRouteTypes {
     | '/deliveries'
     | '/forgot-password'
     | '/internal'
+    | '/investor'
     | '/login'
     | '/loop-cms'
     | '/onboarding'
@@ -376,17 +413,20 @@ export interface FileRouteTypes {
     | '/terms'
     | '/verify-email'
     | '/workspace'
+    | '/admin/workstations'
     | '/auth/callback'
     | '/auth/confirm'
     | '/title/$id'
+    | '/api/a2a/agent-card'
     | '/api/auth/$'
     | '/api/razorpay/webhook'
+    | '/api/a2a/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AccountRoute: typeof AccountRoute
-  AdminRoute: typeof AdminRoute
+  AdminRoute: typeof AdminRouteWithChildren
   AdminCmsRoute: typeof AdminCmsRoute
   AppRoute: typeof AppRoute
   BuyerRoute: typeof BuyerRoute
@@ -412,8 +452,10 @@ export interface RootRouteChildren {
   AuthCallbackRoute: typeof AuthCallbackRoute
   AuthConfirmRoute: typeof AuthConfirmRoute
   TitleIdRoute: typeof TitleIdRoute
+  ApiA2aAgentCardRoute: typeof ApiA2aAgentCardRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiRazorpayWebhookRoute: typeof ApiRazorpayWebhookRoute
+  ApiA2aIndexRoute: typeof ApiA2aIndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -593,6 +635,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof WorkspaceRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin/workstations': {
+      id: '/admin/workstations'
+      path: '/workstations'
+      fullPath: '/admin/workstations'
+      preLoaderRoute: typeof AdminWorkstationsRouteImport
+      parentRoute: typeof AdminRoute
+    }
     '/auth/callback': {
       id: '/auth/callback'
       path: '/auth/callback'
@@ -614,6 +663,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TitleIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/a2a/': {
+      id: '/api/a2a/'
+      path: '/api/a2a'
+      fullPath: '/api/a2a/'
+      preLoaderRoute: typeof ApiA2aIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/a2a/agent-card': {
+      id: '/api/a2a/agent-card'
+      path: '/api/a2a/agent-card'
+      fullPath: '/api/a2a/agent-card'
+      preLoaderRoute: typeof ApiA2aAgentCardRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/auth/$': {
       id: '/api/auth/$'
       path: '/api/auth/$'
@@ -631,10 +694,20 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface AdminRouteChildren {
+  AdminWorkstationsRoute: typeof AdminWorkstationsRoute
+}
+
+const AdminRouteChildren: AdminRouteChildren = {
+  AdminWorkstationsRoute: AdminWorkstationsRoute,
+}
+
+const AdminRouteWithChildren = AdminRoute._addFileChildren(AdminRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AccountRoute: AccountRoute,
-  AdminRoute: AdminRoute,
+  AdminRoute: AdminRouteWithChildren,
   AdminCmsRoute: AdminCmsRoute,
   AppRoute: AppRoute,
   BuyerRoute: BuyerRoute,
@@ -660,8 +733,10 @@ const rootRouteChildren: RootRouteChildren = {
   AuthCallbackRoute: AuthCallbackRoute,
   AuthConfirmRoute: AuthConfirmRoute,
   TitleIdRoute: TitleIdRoute,
+  ApiA2aAgentCardRoute: ApiA2aAgentCardRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiRazorpayWebhookRoute: ApiRazorpayWebhookRoute,
+  ApiA2aIndexRoute: ApiA2aIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
