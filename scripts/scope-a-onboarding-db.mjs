@@ -49,11 +49,6 @@ try {
 
   await client.query("begin");
   await client.query(
-    `insert into "user" ("id", "name", "email", "emailVerified")
-     values ($1, 'Scope A', $2, true)`,
-    [userId, email],
-  );
-  await client.query(
     `insert into bridge_profiles
       (user_id, email, display_name, account_type, organization_name, internal_role, email_verified)
      values ($1, $2, 'Scope A', 'independent_creator', null, null, true)`,
