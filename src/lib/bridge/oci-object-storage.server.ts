@@ -17,7 +17,32 @@ type OciConfig = {
 };
 
 function normalizePrivateKey(value: string) {
-  return value.includes("\n") ? value.replaceAll("\\n", "\n") : value;
+  let normalized = value.trim();
+
+  // Vercel/CI secrets can arrive as escaped newlines or as a JSON-quoted string.
+  // Accept both without relaxing the crypto parser or silently repairing arbitrary text.
+  if (normalized.startsWith('"') && normalized.endsWith('"')) {
+    try {
+      const parsed = JSON.parse(normalized);
+      if (typeof parsed === "string") normalized = parsed;
+    } catch {
+      // Leave the value untouched; createPrivateKey will fail closed below.
+    }
+  }
+
+  normalized = normalized.replaceAll("\\r\\n", "\n");
+  normalized = normalized.replaceAll("\\n", "\n");
+  normalized = normalized.replace(/^\\uFEFF/, "");
+  normalized = normalized.replace(/^\uFEFF/, "");
+
+  if (
+    !normalized.includes("BEGIN PRIVATE KEY") &&
+    !normalized.includes("BEGIN RSA PRIVATE KEY")
+  ) {
+    throw new Error("OCI private key must be PEM encoded");
+  }
+
+  return normalized;
 }
 
 function derivedFingerprint(privateKey: string) {
