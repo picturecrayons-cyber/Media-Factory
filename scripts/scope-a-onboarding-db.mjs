@@ -31,30 +31,16 @@ try {
   const userId = randomUUID();
   const email = "scope-a@example.test";
 
-  // The identity-link migration intentionally preserves the legacy Bridge user FK.
-  // Seed the disposable auth/user identities so the DB assertion exercises the real
-  // production relationship instead of failing on test-fixture setup.
+  await client.query("begin");
+  await client.query(
+    `insert into auth.users (id) values ($1::uuid)
+     on conflict (id) do nothing`,
+    [userId],
+  );
   await client.query(
     `insert into "user" ("id", "name", "email", "emailVerified")
      values ($1, 'Scope A', $2, true)
      on conflict ("id") do nothing`,
-    [userId, email],
-  );
-  await client.query(
-    `insert into auth.users (id)
-     values ($1::uuid)
-     on conflict (id) do nothing`,
-    [userId],
-  );
-
-  await client.query("begin");
-  await client.query(
-    `insert into auth.users (id) values ($1)`,
-    [userId],
-  );
-  await client.query(
-    `insert into \"user\" (\"id\", \"name\", \"email\", \"emailVerified\")
-     values ($1, 'Scope A', $2, true)`,
     [userId, email],
   );
   await client.query(
