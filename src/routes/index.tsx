@@ -150,7 +150,7 @@ function Home() {
               </h2>
             </div>
 
-            <div className="mt-10 grid gap-6 lg:grid-cols-2 xl:grid-cols-4">
+            <div className="mt-10 grid gap-6 lg:grid-cols-3">
               <div className="flex flex-col justify-between rounded-3xl border border-line bg-elevated p-7 sm:p-8">
                 <div>
                   <h3 className="font-display text-2xl font-semibold text-fg">
@@ -190,27 +190,6 @@ function Home() {
                     className="inline-flex items-center text-xs font-semibold text-accent hover:underline"
                   >
                     Create Studio Workspace →
-                  </Link>
-                </div>
-              </div>
-
-              <div
-                id="investors"
-                className="flex flex-col justify-between rounded-3xl border border-line bg-elevated p-7 sm:p-8"
-              >
-                <div>
-                  <h3 className="font-display text-2xl font-semibold text-fg">Investors</h3>
-                  <p className="mt-3 text-sm leading-relaxed text-muted">
-                    Track approved title participation and investment records.
-                  </p>
-                </div>
-                <div className="mt-8 pt-5 border-t border-line">
-                  <Link
-                    to="/signup"
-                    search={{ role: "investor" }}
-                    className="inline-flex items-center text-xs font-semibold text-accent hover:underline"
-                  >
-                    Create Investor Access →
                   </Link>
                 </div>
               </div>
