@@ -3,6 +3,56 @@ import assert from "node:assert/strict";
 import { generateKeyPairSync, verify } from "node:crypto";
 import { sealVerifiedObject, verifyObject } from "./oci-object-storage.server.ts";
 
+test("OCI private key normalization accepts escaped and quoted PEM secrets", async () => {
+  const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  const pem = privateKey.export({ type: "pkcs8", format: "pem" }).toString();
+  const variants = [
+    pem,
+    JSON.stringify(pem),
+    pem.replaceAll("\n", "\\n"),
+    JSON.stringify(pem.replaceAll("\n", "\\n")),
+  ];
+
+  const originalFetch = globalThis.fetch;
+  const keys = [
+    "OCI_TENANCY_OCID",
+    "OCI_USER_OCID",
+    "OCI_PRIVATE_KEY",
+    "OCI_FINGERPRINT",
+    "OCI_REGION",
+    "OCI_NAMESPACE",
+    "OCI_BUCKET_NAME",
+  ];
+  const saved = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+
+  try {
+    for (const variant of variants) {
+      Object.assign(process.env, {
+        OCI_TENANCY_OCID: "test-tenancy",
+        OCI_USER_OCID: "test-user",
+        OCI_PRIVATE_KEY: variant,
+        OCI_FINGERPRINT: "test-fingerprint",
+        OCI_REGION: "ap-mumbai-1",
+        OCI_NAMESPACE: "test-namespace",
+        OCI_BUCKET_NAME: "test-bucket",
+      });
+      globalThis.fetch = async () =>
+        new Response(null, {
+          status: 200,
+          headers: { "content-length": "1", etag: '"test-etag"' },
+        });
+
+      await assert.doesNotReject(verifyObject("asset-key"));
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
+    for (const [key, value] of Object.entries(saved)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+});
+
 test("OCI copy polling uses Object Storage and only verifies successful copies", async (t) => {
   const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
   const values = {
