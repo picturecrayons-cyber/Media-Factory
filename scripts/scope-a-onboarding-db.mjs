@@ -31,18 +31,20 @@ try {
   const userId = randomUUID();
   const email = "scope-a@example.test";
 
-  await client.query("begin");
-  await client.query(
-    `insert into auth.users (id) values ($1::uuid)
-     on conflict (id) do nothing`,
-    [userId],
-  );
+  // Seed the disposable Better Auth and Bridge user identities required by the
+  // identity-link foreign keys before exercising the transactional onboarding writes.
   await client.query(
     `insert into "user" ("id", "name", "email", "emailVerified")
      values ($1, 'Scope A', $2, true)
      on conflict ("id") do nothing`,
     [userId, email],
   );
+  await client.query(
+    `insert into auth.users (id) values ($1::uuid) on conflict (id) do nothing`,
+    [userId],
+  );
+
+  await client.query("begin");
   await client.query(
     `insert into bridge_profiles
       (user_id, email, display_name, account_type, organization_name, internal_role, email_verified)
