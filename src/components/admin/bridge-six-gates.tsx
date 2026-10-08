@@ -4,9 +4,6 @@ import { Button } from "@/components/ui/button";
 import { listAdminWorkstations } from "@/lib/bridge/admin-workstations";
 import { reviewTitleWorkflow, submitLoopLicense } from "@/lib/bridge/workflow";
 import { authorizeLoopPublication } from "@/lib/bridge/loop-publication";
-import type { TitleStatus } from "@/lib/bridge/types";
-
-type GateKey = "QC" | "LEGAL" | "RIGHTS" | "COMMERCIAL" | "OTT" | "PACKAGING" | "CURATION" | "DELIVERY";
 const STATUS: Record<string, string> = {
   PREPARING:"PREPARING", QC_REVIEW:"QC REVIEW", RIGHTS_REVIEW:"RIGHTS REVIEW",
   LICENSING_READY:"LICENSING READY", LIVE_FOR_BUYERS:"LIVE FOR BUYERS",
@@ -52,6 +49,7 @@ export function BridgeSixGates() {
 }
 
 function GateWorkspace({ title, onRefresh, onMessage }: { title:any; onRefresh:()=>void; onMessage:(m:string)=>void }) {
+  const [grantId, setGrantId] = useState<string | null>(null);
   const [draft, setDraft] = useState({
     note:"",
     territories:"WORLDWIDE",
@@ -68,7 +66,7 @@ function GateWorkspace({ title, onRefresh, onMessage }: { title:any; onRefresh:(
   });
 
   const review = useMutation({ mutationFn: reviewTitleWorkflow, onSuccess:(r)=>{onMessage(`Workflow advanced to ${String((r as any).status).replaceAll("_"," ")}.`);onRefresh();} });
-  const saveRights = useMutation({ mutationFn: submitLoopLicense, onSuccess:()=>{onMessage("Rights draft saved. A different legal reviewer must approve it.");onRefresh();} });
+  const saveRights = useMutation({ mutationFn: submitLoopLicense, onSuccess:(r)=>{setGrantId((r as any).grantId ?? null);onMessage("Rights draft saved. A different legal reviewer must approve it.");onRefresh();} });
   const publish = useMutation({ mutationFn: authorizeLoopPublication, onSuccess:(r)=>{onMessage(`Loop authorization completed: ${String((r as any).status)}.`);onRefresh();} });
 
   const qcReady = title.status === "QC_REVIEW";
@@ -90,7 +88,7 @@ function GateWorkspace({ title, onRefresh, onMessage }: { title:any; onRefresh:(
         <Field label="Ownership reference" value={draft.ownershipReference} onChange={v=>setDraft(x=>({...x,ownershipReference:v}))} placeholder="Ownership evidence reference" />
       </div>
       <label className="block text-sm">Legal note<textarea maxLength={2000} value={draft.note} onChange={e=>setDraft(v=>({...v,note:e.target.value}))} className={textAreaClass} rows={3}/></label>
-      {legalReady ? <ActionReview onClick={()=>{/* legal approval requires an existing DRAFT grant id; the rights step below creates it */ onMessage("Create the rights draft below, then approve it from the Rights step using the server workflow.")}} pending={false} label="LEGAL REVIEW ACTIVE" /> : null}
+      {legalReady && grantId ? <ActionReview onClick={()=>review.mutate({data:{titleId:title.id,stage:"LEGAL",decision:"APPROVE",note:draft.note || "Legal clearance completed",grantId}})} pending={review.isPending} label="APPROVE LEGAL → LICENSING" /> : legalReady ? <p className="text-xs text-muted">Create a rights draft below before legal approval.</p> : null}
     </GateCard>
 
     <GateCard number="03" title="Rights Grant" status={title.status === "LICENSING_READY" || title.status === "LIVE_FOR_BUYERS" || title.status === "IN_NEGOTIATION" || title.status === "LICENSED" || title.status === "DELIVERED" ? "CLEARED" : "ACTION"} description="Create a DRAFT rights grant with scoped territory, language, window and commercial split.">
