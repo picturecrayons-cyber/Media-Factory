@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { listAdminWorkstations } from "@/lib/bridge/admin-workstations";
 import { reviewTitleWorkflow, submitLoopLicense } from "@/lib/bridge/workflow";
 import { authorizeLoopPublication } from "@/lib/bridge/loop-publication";
+import { updateTitle } from "@/lib/bridge/titles";
 const STATUS: Record<string, string> = {
   PREPARING:"PREPARING", QC_REVIEW:"QC REVIEW", RIGHTS_REVIEW:"RIGHTS REVIEW",
   LICENSING_READY:"LICENSING READY", LIVE_FOR_BUYERS:"LIVE FOR BUYERS",
@@ -67,6 +68,7 @@ function GateWorkspace({ title, onRefresh, onMessage }: { title:any; onRefresh:(
 
   const review = useMutation({ mutationFn: reviewTitleWorkflow, onSuccess:(r)=>{onMessage(`Workflow advanced to ${String((r as any).status).replaceAll("_"," ")}.`);onRefresh();} });
   const saveRights = useMutation({ mutationFn: submitLoopLicense, onSuccess:(r)=>{setGrantId((r as any).grantId ?? null);onMessage("Rights draft saved. A different legal reviewer must approve it.");onRefresh();} });
+  const saveCommercial = useMutation({ mutationFn: updateTitle, onSuccess:()=>{onMessage("Commercial terms saved to the canonical Bridge title record.");onRefresh();}, onError:(error:any)=>onMessage(error?.message ?? "Unable to save commercial terms.") });
   const publish = useMutation({ mutationFn: authorizeLoopPublication, onSuccess:(r)=>{onMessage(`Loop authorization completed: ${String((r as any).status)}.`);onRefresh();} });
 
   const qcReady = title.status === "QC_REVIEW";
@@ -115,6 +117,7 @@ function GateWorkspace({ title, onRefresh, onMessage }: { title:any; onRefresh:(
         <Field label="Distributor %" value={draft.distributorSharePct} onChange={v=>setDraft(x=>({...x,distributorSharePct:v}))} type="number" />
       </div>
       <p className="text-xs text-muted">{commercialOk ? "Commercial terms are valid." : "Fee must be > ₹0 and shares must total 100%."}</p>
+      <Button disabled={saveCommercial.isPending || !commercialOk} onClick={()=>saveCommercial.mutate({data:{id:title.id,licensingFeePaise:feePaise}})}>{saveCommercial.isPending ? "Saving…" : "Save commercial terms"}</Button>
     </GateCard>
 
     <GateCard number="05" title="Buyer Publication" status={title.status === "LIVE_FOR_BUYERS" ? "CLEARED" : title.status === "LICENSING_READY" ? "NEXT" : "LOCKED"} description="Buyer visibility remains fail-closed until the canonical publication gates pass.">
