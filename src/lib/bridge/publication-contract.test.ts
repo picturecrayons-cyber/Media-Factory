@@ -18,6 +18,10 @@ function harness(grants: unknown[], allowed = true, existing = false) {
     language: "Malayalam",
     master_key: "sealed/master",
     poster_key: "sealed/poster",
+    content_type: "FEATURE",
+    synopsis: "Test",
+    year: 2026,
+    runtime_minutes: 120,
   };
   const sql = async (strings: TemplateStringsArray, ...values: unknown[]) => {
     const query = strings.join("?");
@@ -55,6 +59,15 @@ function harness(grants: unknown[], allowed = true, existing = false) {
     "./guards": { assertNotDevUser: () => {} },
     "./audit": { writeAudit: async () => {} },
     "./rights-coverage": rights,
+    "@/lib/bridge/loop-lanes": {
+      loopStageType: (raw: string | null | undefined) => {
+        const value = (raw || "").toLowerCase();
+        if (value.includes("vertical") || value.includes("9:16") || value.includes("9x16")) return "Vertical drama";
+        if (value.includes("series") || value.includes("episode") || value.includes("season")) return "Series";
+        if (value.includes("short")) return "Short";
+        return "Film";
+      },
+    },
   };
   const source = readFileSync(new URL("./loop-publication.ts", import.meta.url), "utf8");
   const output = transpileModule(source, {
