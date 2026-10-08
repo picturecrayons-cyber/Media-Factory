@@ -13,6 +13,17 @@
 -- future Supabase-Auth browser flow is introduced, add narrowly scoped policies
 -- only after identity/ownership mappings are explicit and tested.
 
+create table if not exists public.bridge_loop_identity_links (
+  bridge_user_id text primary key references public.bridge_profiles(user_id) on delete cascade,
+  auth_user_id uuid not null unique,
+  verification_method text not null,
+  verified_at timestamptz not null default now(),
+  verified_by text not null
+);
+
+create index if not exists bridge_loop_identity_links_auth_idx
+  on public.bridge_loop_identity_links(auth_user_id);
+
 revoke all privileges on table public.bridge_profiles from anon, authenticated;
 revoke all privileges on table public.bridge_titles from anon, authenticated;
 revoke all privileges on table public.bridge_title_events from anon, authenticated;
