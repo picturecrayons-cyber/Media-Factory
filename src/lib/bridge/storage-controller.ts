@@ -5,6 +5,12 @@ export type StorageControllerResult = {
   evaluated: number;
   changes: number;
   blocked: number;
+  gbByTier: Record<StorageTier, number>;
+  estimatedMonthlyCost: number;
+  estimatedMonthlySavingsVsStandard: number;
+  transitionedGbByTier: Record<StorageTier, number>;
+  transitionCount: number;
+  restoreCount: number;
   decisions: Array<{ assetId: string; from: StorageTier; to: StorageTier; reason: string }>;
 };
 
@@ -13,7 +19,7 @@ export async function evaluateStorageController(now = new Date()): Promise<Stora
   const rows = await sql`
     select a.id, a.kind, a.storage_tier, a.storage_business_state,
            a.storage_policy, a.last_accessed_at, a.legal_hold,
-           a.commercial_hold, a.restore_state, t.status as title_status
+           a.commercial_hold, a.restore_state, a.byte_size, t.status as title_status
       from bridge_assets a
       join bridge_titles t on t.id = a.title_id
      where a.restore_state in ('READY', 'AVAILABLE')
@@ -21,8 +27,24 @@ export async function evaluateStorageController(now = new Date()): Promise<Stora
      order by a.created_at asc
   `;
 
-  const result: StorageControllerResult = { evaluated: rows.length, changes: 0, blocked: 0, decisions: [] };
+  const gbByTier: Record<StorageTier, number> = { STANDARD: 0, INFREQUENT: 0, ARCHIVE: 0 };
+  const transitionedGbByTier: Record<StorageTier, number> = { STANDARD: 0, INFREQUENT: 0, ARCHIVE: 0 };
+  const result: StorageControllerResult = {
+    evaluated: rows.length,
+    changes: 0,
+    blocked: 0,
+    gbByTier,
+    estimatedMonthlyCost: 0,
+    estimatedMonthlySavingsVsStandard: 0,
+    transitionedGbByTier,
+    transitionCount: 0,
+    restoreCount: 0,
+    decisions: [],
+  };
   for (const asset of rows as Array<Record<string, unknown>>) {
+    const sizeGb = Number(asset.byte_size || 0) / (1024 ** 3);
+    const currentTier = String(asset.storage_tier) as StorageTier;
+    if (currentTier in gbByTier && Number.isFinite(sizeGb) && sizeGb > 0) gbByTier[currentTier] += sizeGb;
     const decision = evaluateStoragePolicy({
       assetKind: String(asset.kind),
       titleStatus: String(asset.title_status),
@@ -32,7 +54,7 @@ export async function evaluateStorageController(now = new Date()): Promise<Stora
       lastAccessedAt: asset.last_accessed_at ? new Date(String(asset.last_accessed_at)) : null,
       now,
     });
-    const current = String(asset.storage_tier) as StorageTier;
+    const current = currentTier;
     const target = decision.recommendedTier;
     if (!decision.allowedTiers.includes(current) && current !== target) {
       result.blocked += 1;
@@ -41,8 +63,15 @@ export async function evaluateStorageController(now = new Date()): Promise<Stora
     if (current !== target) {
       result.changes += 1;
       result.decisions.push({ assetId: String(asset.id), from: current, to: target, reason: decision.reason });
+      result.transitionCount += 1;
+      if (Number.isFinite(sizeGb) && sizeGb > 0) result.transitionedGbByTier[target] += sizeGb;
     }
   }
+  const monthlyRatePerGb: Record<StorageTier, number> = { STANDARD: 0.025, INFREQUENT: 0.01, ARCHIVE: 0.0025 };
+  result.estimatedMonthlyCost = Object.entries(gbByTier).reduce((sum, [tier, gb]) => sum + gb * monthlyRatePerGb[tier as StorageTier], 0);
+  const totalGb = Object.values(gbByTier).reduce((sum, gb) => sum + gb, 0);
+  result.estimatedMonthlySavingsVsStandard = Math.max(0, totalGb * monthlyRatePerGb.STANDARD - result.estimatedMonthlyCost);
+  result.restoreCount = rows.filter((asset) => String(asset.restore_state) === "RESTORING").length;
   return result;
 }
 
