@@ -41,8 +41,8 @@ try {
   await client.query(
     `insert into bridge_loop_identity_links
       (bridge_user_id, auth_user_id, verification_method, verified_at, verified_by)
-     values ($1::text, $2::uuid, 'scope_a_test', now(), $1::text)`,
-    [userId],
+     values ($1::text, $2::uuid, 'scope_a_test', now(), $2::text)`,
+    [userId, userId],
   );
   await client.query("commit");
 
