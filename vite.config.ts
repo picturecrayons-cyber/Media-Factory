@@ -68,6 +68,8 @@ export default defineConfig(({ command, isPreview }) => ({
   },
   build: {
     outDir: "dist",
+    // Keep the production build warning threshold explicit; this does not split chunks.
+    chunkSizeWarningLimit: 1000,
     rollupOptions: {
       onwarn(warning, defaultHandler) {
         if (
