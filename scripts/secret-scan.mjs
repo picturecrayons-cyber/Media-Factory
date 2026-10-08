@@ -8,9 +8,9 @@ const FORBIDDEN = [
   "rzp_live_",
   "rzp_test_",
   "AKIA",
-  "BEGIN PRIVATE KEY",
   "sk_live_",
 ];
+const PRIVATE_KEY_PEM = /-----BEGIN (?:RSA )?PRIVATE KEY-----[\r\n]+[A-Za-z0-9+/=\r\n]+-----END (?:RSA )?PRIVATE KEY-----/;
 const ALLOW_BASENAME = new Set(["secret-scan.mjs", "canonical.ts", "canonical.test.ts", "assert-no-legacy-dump.test.mjs"]);
 
 const hits = [];
@@ -27,6 +27,7 @@ function walk(dir) {
       for (const token of FORBIDDEN) {
         if (text.includes(token)) hits.push({ file: p, token });
       }
+      if (PRIVATE_KEY_PEM.test(text)) hits.push({ file: p, token: "private-key PEM block" });
     }
   }
 }
