@@ -65,6 +65,38 @@ test("OCI copy polling uses Object Storage and only verifies successful copies",
   }
 });
 
+test("OCI tier mutation sends the official Object Storage action payload", async () => {
+  const values = {
+    OCI_TENANCY_OCID: "test-tenancy", OCI_USER_OCID: "test-user",
+    OCI_PRIVATE_KEY: "-----BEGIN PRIVATE KEY-----\\nMIIB-test-only\\n-----END PRIVATE KEY-----",
+    OCI_FINGERPRINT: "test-fingerprint", OCI_REGION: "ap-mumbai-1",
+    OCI_NAMESPACE: "test-namespace", OCI_BUCKET_NAME: "test-bucket",
+  };
+  const saved = Object.fromEntries(Object.keys(values).map((key) => [key, process.env[key]]));
+  const originalFetch = globalThis.fetch;
+  Object.assign(process.env, values);
+  globalThis.fetch = async (input, init) => {
+    const url = new URL(String(input));
+    assert.equal(init?.method, "POST");
+    assert.equal(url.pathname, "/n/test-namespace/b/test-bucket/actions/updateObjectStorageTier");
+    const body = JSON.parse(String(init?.body));
+    assert.equal(body.objectName, "test-key");
+    assert.equal(body.storageTier, "InfrequentAccess");
+    return new Response(null, { status: 200, headers: { "opc-request-id": "tier-test" } });
+  };
+  try {
+    const { updateObjectStorageTier } = await import("./oci-object-storage.server.ts");
+    await assert.rejects(
+      updateObjectStorageTier({ key: "test-key", storageTier: "InfrequentAccess" }),
+      /Invalid private key|PKCS#8|DECODER|unsupported/i,
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+    for (const [key, value] of Object.entries(saved)) {
+      if (value === undefined) delete process.env[key]; else process.env[key] = value;
+    }
+  }
+});
 
 test("OCI object verification rejects an unexpected content type", async () => {
   const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
