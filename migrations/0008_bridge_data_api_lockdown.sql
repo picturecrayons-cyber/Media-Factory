@@ -1,3 +1,15 @@
+-- The identity-link table is required by this lockdown and later RLS bindings.
+-- Keep its definition here so a clean migration replay never depends on an
+-- untracked production-only object.
+create table if not exists public.bridge_loop_identity_links (
+  id bigserial primary key,
+  bridge_user_id text not null,
+  auth_user_id uuid not null unique,
+  verification_method text not null,
+  verified_at timestamptz not null default now(),
+  verified_by text not null
+);
+
 -- Crayons Bridge Data API boundary hardening.
 --
 -- Bridge currently authenticates and authorizes application requests in the
