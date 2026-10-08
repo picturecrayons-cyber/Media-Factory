@@ -63,7 +63,7 @@ Migration `0011_bridge_dmca.sql` must be applied to canonical Supabase and `brid
 
 ## 6. Custom domains
 
-Canonical Bridge domain: `www.crayonspictures.in`. `crayonspictures.in` redirects to it. The retired `bridge.crayonspictures.com` host must not be used.
+Canonical Bridge domain: `www.crayonspictures.in`. `crayonspictures.in` redirects to it.
 
 - Bridge: `www.crayonspictures.in`
 - LOOP: `crayonsloop.com`
