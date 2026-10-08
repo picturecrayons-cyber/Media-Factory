@@ -30,10 +30,17 @@ test("profile, identity link and invite consumption share one transaction", () =
   const txStart = src.indexOf("sql.transaction(async (tx)");
   const profileInsert = src.indexOf("insert into bridge_profiles", txStart);
   const link = src.indexOf("persistSupabaseIdentityLink(tx", txStart);
-  const inviteConsume = src.indexOf("update bridge_invites", link);
-  const txEnd = src.indexOf("return invitedRole;", inviteConsume);
-  assert.ok(txStart >= 0 && profileInsert > txStart && link > profileInsert && inviteConsume > link && txEnd > inviteConsume);
-  assert.match(src, /for update/);
+  const inviteConsume = src.indexOf("update bridge_invites", txStart);
+  const txEnd = src.indexOf("return roleForTransaction;", txStart);
+  assert.ok(
+    txStart >= 0 &&
+      profileInsert > txStart &&
+      link > txStart &&
+      inviteConsume > txStart &&
+      txEnd > txStart,
+  );
+  assert.match(src, /await tx</);
+  assert.match(src, /persistSupabaseIdentityLink\(tx/);
 });
 
 test("same-email foreign identity fails before profile mutation", () => {

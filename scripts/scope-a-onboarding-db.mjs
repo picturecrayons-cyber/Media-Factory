@@ -31,6 +31,19 @@ try {
   const userId = randomUUID();
   const email = "scope-a@example.test";
 
+  // Seed the disposable Better Auth and Bridge user identities required by the
+  // identity-link foreign keys before exercising the transactional onboarding writes.
+  await client.query(
+    `insert into "user" ("id", "name", "email", "emailVerified")
+     values ($1, 'Scope A', $2, true)
+     on conflict ("id") do nothing`,
+    [userId, email],
+  );
+  await client.query(
+    `insert into auth.users (id) values ($1::uuid) on conflict (id) do nothing`,
+    [userId],
+  );
+
   await client.query("begin");
   await client.query(
     `insert into bridge_profiles
@@ -41,13 +54,14 @@ try {
   await client.query(
     `insert into bridge_loop_identity_links
       (bridge_user_id, auth_user_id, verification_method, verified_at, verified_by)
-     values ($1, $1::uuid, 'scope_a_test', now(), $1)`,
-    [userId],
+     values ($1, $2::uuid, 'supabase_auth_onboarding', now(), $1)`,
+    [userId, userId],
   );
   await client.query("commit");
 
   const afterProfiles = await scalar("select count(*)::int as value from bridge_profiles");
   const afterLinks = await scalar("select count(*)::int as value from bridge_loop_identity_links");
+  console.log(JSON.stringify({ stage: "identity_setup", beforeProfiles, beforeLinks, afterProfiles, afterLinks }));
 
   await assert(afterProfiles === beforeProfiles + 1, "profile insert assertion failed");
   await assert(afterLinks === beforeLinks + 1, "identity link insert assertion failed");
@@ -79,6 +93,7 @@ try {
     "select count(*)::int as value from bridge_profiles where user_id = $1",
     [rollbackId],
   );
+  console.log(JSON.stringify({ stage: "rollback", rollbackRows }));
   await assert(rollbackRows === 0, "transaction rollback assertion failed");
 
   const finalInvites = await scalar("select count(*)::int as value from bridge_invites");
@@ -106,6 +121,17 @@ try {
       },
     }),
   );
+} catch (error) {
+  console.error(JSON.stringify({
+    stage: "db_assertion_failure",
+    name: error?.name,
+    message: error?.message,
+    code: error?.code,
+    constraint: error?.constraint,
+    detail: error?.detail,
+    hint: error?.hint,
+  }));
+  throw error;
 } finally {
   await client.end();
 }

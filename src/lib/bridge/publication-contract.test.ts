@@ -55,6 +55,10 @@ function harness(grants: unknown[], allowed = true, existing = false) {
     "./guards": { assertNotDevUser: () => {} },
     "./audit": { writeAudit: async () => {} },
     "./rights-coverage": rights,
+    "@/lib/bridge/loop-lanes": {
+      loopStageType: (raw: string | null | undefined) =>
+        (raw || "").toLowerCase().includes("series") ? "Series" : "Film",
+    },
   };
   const source = readFileSync(new URL("./loop-publication.ts", import.meta.url), "utf8");
   const output = transpileModule(source, {
