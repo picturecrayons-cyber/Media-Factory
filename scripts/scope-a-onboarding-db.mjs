@@ -64,6 +64,7 @@ try {
 
   const afterProfiles = await scalar("select count(*)::int as value from bridge_profiles");
   const afterLinks = await scalar("select count(*)::int as value from bridge_loop_identity_links");
+  console.log(JSON.stringify({ stage: "identity_setup", beforeProfiles, beforeLinks, afterProfiles, afterLinks }));
 
   await assert(afterProfiles === beforeProfiles + 1, "profile insert assertion failed");
   await assert(afterLinks === beforeLinks + 1, "identity link insert assertion failed");
@@ -95,6 +96,7 @@ try {
     "select count(*)::int as value from bridge_profiles where user_id = $1",
     [rollbackId],
   );
+  console.log(JSON.stringify({ stage: "rollback", rollbackRows }));
   await assert(rollbackRows === 0, "transaction rollback assertion failed");
 
   const finalInvites = await scalar("select count(*)::int as value from bridge_invites");
@@ -122,6 +124,17 @@ try {
       },
     }),
   );
+} catch (error) {
+  console.error(JSON.stringify({
+    stage: "db_assertion_failure",
+    name: error?.name,
+    message: error?.message,
+    code: error?.code,
+    constraint: error?.constraint,
+    detail: error?.detail,
+    hint: error?.hint,
+  }));
+  throw error;
 } finally {
   await client.end();
 }
