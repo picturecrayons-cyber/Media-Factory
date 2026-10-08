@@ -1,6 +1,15 @@
 name: Scope A PostgreSQL Onboarding Verification
 
 on:
+  push:
+    branches: ["fix/bridge-publication-contract-test-loop-lanes-20261008"]
+    paths:
+      - ".github/workflows/scope-a-postgres.yml"
+      - "migrations/**"
+      - "src/lib/bridge/**"
+      - "src/lib/db.ts"
+      - "package.json"
+      - "package-lock.json"
   pull_request:
     branches: ["main"]
     paths:
