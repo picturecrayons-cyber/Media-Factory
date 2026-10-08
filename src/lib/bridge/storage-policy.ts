@@ -53,7 +53,7 @@ export function evaluateStoragePolicy(input: StoragePolicyInput): StoragePolicyD
       ? Number.POSITIVE_INFINITY
       : Math.max(0, (now.getTime() - lastAccess) / 86_400_000);
 
-  if (input.legalHold || input.commercialHold || input.deliveryActive) {
+  if (input.legalHold || input.commercialHold || input.deliveryActive || input.licenseActive || input.titleStatus === "LICENSED" || input.titleStatus === "DELIVERED") {
     return {
       recommendedTier: "STANDARD",
       allowedTiers: ["STANDARD", "INFREQUENT"],
@@ -62,7 +62,7 @@ export function evaluateStoragePolicy(input: StoragePolicyInput): StoragePolicyD
     };
   }
 
-  if (input.loopPlaybackActive || input.loopPublished) {
+  if (input.loopPlaybackActive || input.loopPublished || input.titleStatus === "LIVE_FOR_BUYERS") {
     return {
       recommendedTier: "STANDARD",
       allowedTiers: ["STANDARD", "INFREQUENT"],
