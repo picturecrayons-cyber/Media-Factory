@@ -39,12 +39,12 @@ export function integrationStatus() {
     supabase: Boolean(bridgeEnv.supabaseUrl() && (bridgeEnv.supabaseAnon() || bridgeEnv.supabaseService())),
     razorpay: Boolean(bridgeEnv.razorpayKeyId() && bridgeEnv.razorpayKeySecret()),
     razorpayWebhook: Boolean(bridgeEnv.razorpayWebhookSecret()),
+    // OCI namespace is optional: the storage adapter resolves it through OCI when omitted.
     oci: Boolean(
       bridgeEnv.ociTenancyOcid() &&
         bridgeEnv.ociUserOcid() &&
         bridgeEnv.ociPrivateKey() &&
         bridgeEnv.ociRegion() &&
-        bridgeEnv.ociNamespace() &&
         bridgeEnv.ociBucket(),
     ),
     mail: Boolean(bridgeEnv.smtpHost() && bridgeEnv.smtpUser() && bridgeEnv.smtpPass()),
