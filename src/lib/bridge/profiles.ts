@@ -207,7 +207,7 @@ export const completeOnboarding = createServerFn({ method: "POST" })
         }
 
         await persistSupabaseIdentityLink(tx, bridgeUserId, context.userId);
-        const roleForTransaction = internalRole;
+        const roleForTransaction: string | null = internalRole;
         return roleForTransaction;
       });
       void invitedRole;
