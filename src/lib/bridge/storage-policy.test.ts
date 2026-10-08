@@ -18,7 +18,7 @@ describe("storage policy", () => {
     assert.equal(result.protected, true);
   });
 
-  it("moves a cold active master recommendation to Infrequent", () => {
+  it("keeps licensed masters on Standard regardless of inactivity", () => {    const result = evaluateStoragePolicy({      assetKind: "master",      titleStatus: "LICENSED",      now,      lastAccessedAt: new Date("2025-01-01T00:00:00Z"),    });    assert.equal(result.recommendedTier, "STANDARD");    assert.equal(result.protected, true);  });  it("moves a cold active master recommendation to Infrequent", () => {
     const result = evaluateStoragePolicy({
       assetKind: "master",
       titleStatus: "LIVE_FOR_BUYERS",
