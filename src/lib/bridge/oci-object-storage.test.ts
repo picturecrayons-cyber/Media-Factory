@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { generateKeyPairSync, verify } from "node:crypto";
+import { createHash, generateKeyPairSync, verify } from "node:crypto";
 import { sealVerifiedObject, verifyObject } from "./oci-object-storage.server.ts";
 
 test("OCI copy polling uses Object Storage and only verifies successful copies", async (t) => {
@@ -65,33 +65,55 @@ test("OCI copy polling uses Object Storage and only verifies successful copies",
   }
 });
 
-test("OCI tier mutation sends the official Object Storage action payload", async () => {
-  const begin = ["-----BEGIN", " PRIVATE KEY-----"].join("");
-  const end = ["-----END", " PRIVATE KEY-----"].join("");
+test("OCI tier mutation signs and sends a successful Object Storage action", async () => {
+  const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
   const values = {
     OCI_TENANCY_OCID: "test-tenancy", OCI_USER_OCID: "test-user",
-    OCI_PRIVATE_KEY: `${begin}\\nMIIB-test-only\\n${end}`,
+    OCI_PRIVATE_KEY: privateKey.export({ type: "pkcs8", format: "pem" }).toString(),
     OCI_FINGERPRINT: "test-fingerprint", OCI_REGION: "ap-mumbai-1",
     OCI_NAMESPACE: "test-namespace", OCI_BUCKET_NAME: "test-bucket",
   };
   const saved = Object.fromEntries(Object.keys(values).map((key) => [key, process.env[key]]));
   const originalFetch = globalThis.fetch;
   Object.assign(process.env, values);
+  let requestCount = 0;
   globalThis.fetch = async (input, init) => {
+    requestCount += 1;
     const url = new URL(String(input));
     assert.equal(init?.method, "POST");
+    assert.equal(url.origin, "https://objectstorage.ap-mumbai-1.oraclecloud.com");
     assert.equal(url.pathname, "/n/test-namespace/b/test-bucket/actions/updateObjectStorageTier");
-    const body = JSON.parse(String(init?.body));
-    assert.equal(body.objectName, "test-key");
-    assert.equal(body.storageTier, "InfrequentAccess");
+    const rawBody = String(init?.body);
+    const body = JSON.parse(rawBody);
+    assert.deepEqual(body, { objectName: "test-key", storageTier: "InfrequentAccess" });
+    const headers = new Headers(init?.headers);
+    const authorization = headers.get("authorization") || "";
+    const signature = authorization.match(/signature="([^"]+)"/)?.[1];
+    assert.ok(signature, "OCI authorization must contain a signature");
+    assert.match(authorization, /algorithm="rsa-sha256"/);
+    assert.match(authorization, /headers="\(request-target\) host date x-content-sha256 content-type content-length"/);
+    const digest = createHash("sha256").update(rawBody).digest("base64");
+    assert.equal(headers.get("x-content-sha256"), digest);
+    assert.equal(headers.get("content-type"), "application/json");
+    assert.equal(headers.get("content-length"), String(Buffer.byteLength(rawBody)));
+    const signed = [
+      `(request-target): post ${url.pathname}`,
+      `host: ${url.host}`,
+      `date: ${headers.get("date")}`,
+      `x-content-sha256: ${digest}`,
+      "content-type: application/json",
+      `content-length: ${Buffer.byteLength(rawBody)}`,
+    ].join("\\n");
+    assert.ok(verify("RSA-SHA256", Buffer.from(signed), publicKey, Buffer.from(signature, "base64")));
     return new Response(null, { status: 200, headers: { "opc-request-id": "tier-test" } });
   };
   try {
     const { updateObjectStorageTier } = await import("./oci-object-storage.server.ts");
-    await assert.rejects(
-      updateObjectStorageTier({ key: "test-key", storageTier: "InfrequentAccess" }),
-      /Invalid private key|PKCS#8|DECODER|unsupported/i,
+    assert.deepEqual(
+      await updateObjectStorageTier({ key: "test-key", storageTier: "InfrequentAccess" }),
+      { key: "test-key", storageTier: "InfrequentAccess", requestId: "tier-test" },
     );
+    assert.equal(requestCount, 1, "one signed OCI tier mutation should be sent");
   } finally {
     globalThis.fetch = originalFetch;
     for (const [key, value] of Object.entries(saved)) {
