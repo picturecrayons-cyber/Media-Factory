@@ -122,7 +122,6 @@ test("OCI copy polling uses Object Storage and only verifies successful copies",
   }
 });
 
-
 test("OCI object verification rejects an unexpected content type", async () => {
   const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
   const fingerprint = fingerprintFor(privateKey);
