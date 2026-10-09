@@ -266,7 +266,9 @@ export async function deleteObject(key: string) {
   return { deleted: res.status !== 404, key };
 }
 
+/** Build an OCI-safe object name while preserving Unicode in the original filename. */
 export function titleAssetKey(opts: { ownerUserId: string; titleId: string; kind: string; filename: string }) {
-  const safe = opts.filename.replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 80);
+  const filename = opts.filename.normalize("NFC").replace(/[\\u0000-\\u001f\\u007f/\\\\]/g, "_").trim();
+  const safe = Array.from(filename || "upload").slice(0, 120).join("");
   return `bridge/${opts.ownerUserId}/${opts.titleId}/${opts.kind}/${Date.now()}-${safe}`;
 }
