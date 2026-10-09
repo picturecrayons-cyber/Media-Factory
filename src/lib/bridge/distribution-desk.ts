@@ -167,7 +167,10 @@ export const approveDistributionDraft = createServerFn({ method: "POST" })
       update bridge_distribution_inquiries
       set status = 'APPROVED_DRAFT', reviewed_by = ${actor.userId}, reviewed_at = now(),
           updated_by = ${actor.userId}, updated_at = now()
-      where id = ${data.inquiryId} and status in ('DRAFT_PENDING_OPERATOR_APPROVAL', 'DRAFT_READY')
+      where id = ${data.inquiryId}
+        and status in ('DRAFT_PENDING_OPERATOR_APPROVAL', 'DRAFT_READY')
+        and draft_subject = ${draft.draft_subject}
+        and draft_body = ${draft.draft_body}
       returning id
     `;
     if (!updated[0]) throw new Error("Draft changed during review; reload before approving");
