@@ -50,7 +50,7 @@ test("OCI private key normalization produces valid RSA signatures for supported 
           /keyId="test-tenancy\/test-user\/test-fingerprint"/,
           "OCI Authorization header must use the configured identity and fingerprint",
         );
-        const signed = `(request-target): head ${url.pathname}\\nhost: ${url.host}\\ndate: ${headers.get("date")}`;
+        const signed = `(request-target): head ${url.pathname}\nhost: ${url.host}\ndate: ${headers.get("date")}`;
         assert.ok(
           verify("RSA-SHA256", Buffer.from(signed), publicKey, Buffer.from(signature, "base64")),
           "generated OCI signature must verify against the matching public key",
