@@ -26,6 +26,13 @@ export async function evaluateStorageController(now = new Date()): Promise<Stora
        and a.storage_policy <> 'MANUAL'
      order by a.created_at asc
   `;
+  // Restoration is a separate workflow metric: restoring assets are intentionally
+  // excluded from policy evaluation above, but must still be counted here.
+  const restoringRows = await sql`
+    select count(*)::int as count
+      from bridge_assets
+     where restore_state = 'RESTORING'
+  `;
 
   const gbByTier: Record<StorageTier, number> = { STANDARD: 0, INFREQUENT: 0, ARCHIVE: 0 };
   const transitionedGbByTier: Record<StorageTier, number> = { STANDARD: 0, INFREQUENT: 0, ARCHIVE: 0 };
@@ -67,11 +74,13 @@ export async function evaluateStorageController(now = new Date()): Promise<Stora
       if (Number.isFinite(sizeGb) && sizeGb > 0) result.transitionedGbByTier[target] += sizeGb;
     }
   }
+  // Planning estimates only (USD/GB-month); validate/configure against the account's
+  // current OCI region, tier, and retrieval/transaction charges before financial use.
   const monthlyRatePerGb: Record<StorageTier, number> = { STANDARD: 0.025, INFREQUENT: 0.01, ARCHIVE: 0.0025 };
   result.estimatedMonthlyCost = Object.entries(gbByTier).reduce((sum, [tier, gb]) => sum + gb * monthlyRatePerGb[tier as StorageTier], 0);
   const totalGb = Object.values(gbByTier).reduce((sum, gb) => sum + gb, 0);
   result.estimatedMonthlySavingsVsStandard = Math.max(0, totalGb * monthlyRatePerGb.STANDARD - result.estimatedMonthlyCost);
-  result.restoreCount = rows.filter((asset) => String(asset.restore_state) === "RESTORING").length;
+  result.restoreCount = Number(restoringRows[0]?.count ?? 0);
   return result;
 }
 
