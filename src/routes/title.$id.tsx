@@ -306,7 +306,8 @@ function FilesPanel({
       });
       const put = await fetch(signed.url, {
         method: signed.method,
-        body: file,
+        // Send raw bytes as a Blob, not a File object, so browser upload transport never needs the Unicode filename.
+        body: file.slice(0, file.size, file.type || "application/octet-stream"),
         headers: { "content-type": file.type || "application/octet-stream" },
       });
       if (!put.ok) throw new Error(`Upload failed (${put.status})`);
