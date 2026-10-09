@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { assessDistributionAvails, type DistributionAvailsRow } from "./distribution-avails.ts";
+import { hasExclusiveRightsOverlap } from "./distribution-avails-policy.ts";
 
 const base: DistributionAvailsRow = {
   id: "title-1",
@@ -58,4 +59,17 @@ test("missing core metadata is blocked even when other evidence exists", () => {
   const result = assessDistributionAvails({ ...base, language: null }, new Date("2026-10-09T00:00:00.000Z"));
   assert.equal(result.decision, "HOLD");
   assert.ok(result.blockers.includes("Core metadata is incomplete"));
+});
+
+test("exclusive grants with overlapping scope require operator review", () => {
+  const grant = {
+    territories: ["IN"],
+    languages: ["Malayalam"],
+    media: ["SVOD"],
+    window_start: "2026-01-01T00:00:00.000Z",
+    window_end: "2027-01-01T00:00:00.000Z",
+    exclusivity: "EXCLUSIVE",
+  };
+  assert.equal(hasExclusiveRightsOverlap([grant, { ...grant, exclusivity: "NON_EXCLUSIVE" }]), true);
+  assert.equal(hasExclusiveRightsOverlap([{ ...grant, exclusivity: "NON_EXCLUSIVE" }, { ...grant, exclusivity: "NON_EXCLUSIVE" }]), false);
 });
