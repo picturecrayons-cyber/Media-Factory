@@ -61,6 +61,7 @@ function DashboardBody() {
 
   if (dashboardQ.isPending) return <p className="text-sm text-muted">Checking access…</p>;
   if (dashboardQ.isError) return <p role="alert" className="text-sm text-accent">Super admin access required.</p>;
+  if (titlesQ.isPending) return <p className="text-sm text-muted">Loading dashboard data…</p>;
 
   return (
     <div className="space-y-5">
