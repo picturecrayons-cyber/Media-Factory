@@ -4,6 +4,7 @@ import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { Button } from "@/components/ui/button";
 import { CreateTitleForm } from "@/components/bridge/title-desk";
+import { AdminOnlyTitleSlate } from "@/components/bridge/admin-only-title-slate";
 import { listTitles } from "@/lib/bridge/titles";
 import { listLoopPublicationReadiness } from "@/lib/bridge/loop-publication";
 import { hasPermission } from "@/lib/bridge/rbac";
@@ -76,6 +77,10 @@ function CmsBody({ actor }: { actor: any }) {
           </Link>
         ))}
       </nav>
+
+      <div className="mt-6">
+        <AdminOnlyTitleSlate />
+      </div>
 
       <div className="mt-6">
         {tab === "ingest" ? <IngestDesk actor={actor} /> : null}
