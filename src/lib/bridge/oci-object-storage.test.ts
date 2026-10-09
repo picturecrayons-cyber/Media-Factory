@@ -3,14 +3,16 @@ import assert from "node:assert/strict";
 import { generateKeyPairSync, verify } from "node:crypto";
 import { sealVerifiedObject, verifyObject } from "./oci-object-storage.server.ts";
 
-test("OCI private key normalization accepts escaped and quoted PEM secrets", async () => {
-  const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+test("OCI private key normalization produces valid RSA signatures for supported secret formats", async () => {
+  const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
   const pem = privateKey.export({ type: "pkcs8", format: "pem" }).toString();
   const variants = [
     pem,
     JSON.stringify(pem),
     pem.replaceAll("\n", "\\n"),
     JSON.stringify(pem.replaceAll("\n", "\\n")),
+    pem.replaceAll("\n", "\r\n"),
+    \`\uFEFF\${pem}\`,
   ];
 
   const originalFetch = globalThis.fetch;
@@ -36,14 +38,34 @@ test("OCI private key normalization accepts escaped and quoted PEM secrets", asy
         OCI_NAMESPACE: "test-namespace",
         OCI_BUCKET_NAME: "test-bucket",
       });
-      globalThis.fetch = async () =>
-        new Response(null, {
+      globalThis.fetch = async (input, init) => {
+        const url = new URL(String(input));
+        assert.equal(init?.method, "HEAD");
+        const headers = new Headers(init?.headers);
+        const authorization = headers.get("authorization") ?? "";
+        const signature = authorization.match(/signature="([^"]+)"/)?.[1];
+        assert.ok(signature, "OCI Authorization header must contain a signature");
+        assert.match(
+          authorization,
+          /keyId="test-tenancy\/test-user\/test-fingerprint"/,
+          "OCI Authorization header must use the configured identity and fingerprint",
+        );
+        const signed = \`(request-target): head \${url.pathname}\nhost: \${url.host}\ndate: \${headers.get("date")}\`;
+        assert.ok(
+          verify("RSA-SHA256", Buffer.from(signed), publicKey, Buffer.from(signature, "base64")),
+          "generated OCI signature must verify against the matching public key",
+        );
+        return new Response(null, {
           status: 200,
           headers: { "content-length": "1", etag: '"test-etag"' },
         });
+      };
 
       await assert.doesNotReject(verifyObject("asset-key"));
     }
+
+    process.env.OCI_PRIVATE_KEY = "not-a-private-key";
+    await assert.rejects(verifyObject("asset-key"), /PEM encoded/);
   } finally {
     globalThis.fetch = originalFetch;
     for (const [key, value] of Object.entries(saved)) {
@@ -52,7 +74,6 @@ test("OCI private key normalization accepts escaped and quoted PEM secrets", asy
     }
   }
 });
-
 test("OCI copy polling uses Object Storage and only verifies successful copies", async (t) => {
   const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
   const values = {
