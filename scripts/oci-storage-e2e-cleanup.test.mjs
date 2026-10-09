@@ -20,12 +20,12 @@ test("cleanup deletes and verifies both run-owned objects before checking the ro
   });
 
   assert.deepEqual(calls, [
+    "rollback",
+    "verify-db",
     "delete:sealed",
     "head:sealed",
     "delete:source",
     "head:source",
-    "rollback",
-    "verify-db",
   ]);
   assert.deepEqual(result, {
     cleanedObjectCount: 2,
@@ -57,14 +57,16 @@ test("cleanup still attempts rollback and fixture verification when object clean
   assert.ok(calls.includes("verify-db"));
 });
 
-test("cleanup fails closed and skips fixture assertion when rollback fails", async () => {
+test("cleanup fails closed and retains objects when rollback fails", async () => {
   let fixtureVerified = false;
+  const calls = [];
   await assert.rejects(
     cleanupOciE2E({
       runKeys: [],
-      deleteObject: async () => {},
+      deleteObject: async () => calls.push("delete"),
       objectExists: async () => false,
       rollback: async () => {
+        calls.push("rollback");
         throw new Error("simulated rollback failure");
       },
       verifyDatabaseState: async () => {
@@ -74,4 +76,5 @@ test("cleanup fails closed and skips fixture assertion when rollback fails", asy
     /CLEANUP_INCOMPLETE.*rollback failed/,
   );
   assert.equal(fixtureVerified, false);
+  assert.deepEqual(calls, ["rollback"]);
 });
