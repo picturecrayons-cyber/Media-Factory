@@ -5,6 +5,7 @@ import {
   createSign,
 } from "node:crypto";
 import { bridgeEnv } from "./env.ts";
+import { toLatin1 } from "./latin1.ts";
 
 type OciConfig = {
   tenancy: string;
@@ -142,7 +143,10 @@ async function signedFetch(opts: {
     body,
     contentType: body === undefined ? undefined : "application/json",
   });
-  return fetch(url, { method: opts.method, headers, body });
+  const safeHeaders = Object.fromEntries(
+    Object.entries(headers).map(([key, value]) => [toLatin1(key), toLatin1(value)]),
+  );
+  return fetch(url, { method: opts.method, headers: safeHeaders, body });
 }
 
 async function resolveNamespace(cfg: OciConfig) {

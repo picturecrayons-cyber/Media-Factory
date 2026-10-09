@@ -22,6 +22,7 @@ import {
   getOttIngestAccept,
   validateOttIngestFile,
 } from "@/lib/bridge/ott-ingest-spec";
+import { asciiUploadName } from "@/lib/bridge/latin1";
 
 export const Route = createFileRoute("/title/$id")({ component: TitlePage });
 
@@ -278,10 +279,12 @@ function FilesPanel({
   const [uploading, setUploading] = useState<SimpleAssetKind | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   async function uploadFile(kind: SimpleAssetKind, file: File) {
+    const filename = asciiUploadName(file.name);
+    const contentType = file.type || "application/octet-stream";
     const validation = validateOttIngestFile({
       kind,
-      filename: file.name,
-      contentType: file.type || "application/octet-stream",
+      filename,
+      contentType,
     });
     if (!validation.ok) {
       setMessage(validation.message);
@@ -294,14 +297,16 @@ function FilesPanel({
         data: {
           titleId,
           kind,
-          filename: file.name,
-          contentType: file.type || "application/octet-stream",
+          filename,
+          contentType,
         },
       });
-      const put = await fetch(signed.url, {
+      const uploadUrl = new URL(signed.url);
+      uploadUrl.pathname = uploadUrl.pathname.split("/").map((part) => encodeURIComponent(decodeURIComponent(part))).join("/");
+      const put = await fetch(uploadUrl.toString(), {
         method: signed.method,
         body: file,
-        headers: { "content-type": file.type || "application/octet-stream" },
+        headers: { "content-type": contentType },
       });
       if (!put.ok) throw new Error(`Upload failed (${put.status})`);
       await confirmAssetUpload({ data: { assetId: signed.assetId, expectedByteSize: file.size } });
