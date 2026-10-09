@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { assertPublicationCanExtend, findCoveringRightsGrant, type BridgeRightsGrant } from "./rights-coverage.ts";
+import { assertDraftCanBeApproved, buildDistributionDraft } from "./distribution-draft-core.ts";
 
 const baseGrant: BridgeRightsGrant = {
   id: "grant-1",
