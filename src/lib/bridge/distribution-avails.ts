@@ -21,13 +21,13 @@ export type DistributionAvailsRow = {
   legal_review_recorded: boolean;
   valid_rights_grants: Array<{
     id: string;
-    territories: unknown;
-    languages: unknown;
-    media: unknown;
-    window_start: string | Date | null;
-    window_end: string | Date | null;
+    territories: string[];
+    languages: string[];
+    media: string[];
+    window_start: string | null;
+    window_end: string | null;
     exclusivity: string;
-    holdbacks: unknown;
+    holdbacks: string[];
   }>;
 };
 
@@ -98,7 +98,7 @@ export const listDistributionAvails = createServerFn({ method: "GET" })
         coalesce((
           select jsonb_agg(jsonb_build_object(
             'id', g.id, 'territories', g.territories, 'languages', g.languages,
-            'media', g.media, 'window_start', g.window_start, 'window_end', g.window_end,
+            'media', g.media, 'window_start', g.window_start::text, 'window_end', g.window_end::text,
             'exclusivity', g.exclusivity, 'holdbacks', g.holdbacks
           ))
           from bridge_rights_grants g
@@ -109,9 +109,10 @@ export const listDistributionAvails = createServerFn({ method: "GET" })
       order by t.name asc, t.id asc
       limit 300
     `;
+    const serializableRows = JSON.parse(JSON.stringify(rows)) as DistributionAvailsRow[];
     return {
       generatedAt: new Date().toISOString(),
       readOnly: true as const,
-      rows: rows.map((row) => ({ ...row, assessment: assessDistributionAvails(row) })),
+      rows: serializableRows.map((row) => ({ ...row, assessment: assessDistributionAvails(row) })),
     };
   });
