@@ -32,3 +32,24 @@ test("entitlement and title transition happen before webhook is marked processed
   assert.ok(entitlement < processed);
   assert.ok(transition < processed);
 });
+
+test("invalid Razorpay signatures are rejected before JSON parsing or persistence", () => {
+  const rejectSignature = source.indexOf('if(!safeEqualHex(expected,signature))return new Response("Invalid signature",{status:401})');
+  const parsePayload = source.indexOf("let payload:any;try{payload=JSON.parse(raw)}catch");
+  const persistEvent = source.indexOf('supabase.from("bridge_webhook_events").insert');
+  assert.ok(rejectSignature >= 0 && parsePayload > rejectSignature && persistEvent > parsePayload);
+});
+
+test("duplicate event IDs with changed payloads are rejected as collisions", () => {
+  assert.ok(source.includes('if(existing.payload_hash!==hash)return new Response("Event collision",{status:409})'));
+});
+
+test("processed webhook duplicates return success without replaying payment side effects", () => {
+  assert.ok(source.includes('if(existing.status==="processed")return Response.json({ok:true,duplicate:true})'));
+});
+
+test("only one active worker claims an event and active duplicates are acknowledged", () => {
+  assert.ok(source.includes('.neq("status","processed")'));
+  assert.ok(source.includes('processing_token.is.null,processing_started_at.lt.${staleBefore}'));
+  assert.ok(source.includes('if(!claimed)return Response.json({ok:true,duplicate:true,in_progress:true})'));
+});
