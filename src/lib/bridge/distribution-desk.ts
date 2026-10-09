@@ -126,12 +126,14 @@ export const approveDistributionDraft = createServerFn({ method: "POST" })
       draftSubject: draft.draft_subject, draftBody: draft.draft_body,
       reviewerUserId: actor.userId, explicitApproval: data.explicitApproval,
     });
-    await sql`
+    const updated = await sql<{ id: string }>`
       update bridge_distribution_inquiries
       set status = 'APPROVED_DRAFT', reviewed_by = ${actor.userId}, reviewed_at = now(),
           updated_by = ${actor.userId}, updated_at = now()
       where id = ${data.inquiryId} and status = 'DRAFT_READY'
+      returning id
     `;
+    if (!updated[0]) throw new Error("Draft changed during review; reload before approving");
     await writeAudit({
       actorUserId: actor.userId, action: "distribution.draft_human_approved",
       entityType: "bridge_distribution_inquiry", entityId: data.inquiryId,
