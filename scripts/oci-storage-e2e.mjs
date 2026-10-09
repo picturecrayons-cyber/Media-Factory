@@ -6,10 +6,8 @@ import pg from "pg";
 const required = [
   "OCI_TENANCY_OCID",
   "OCI_USER_OCID",
-  "OCI_FINGERPRINT",
   "OCI_PRIVATE_KEY",
   "OCI_REGION",
-  "OCI_NAMESPACE",
   "OCI_BUCKET_NAME",
   "DATABASE_URL",
   "BRIDGE_E2E_ASSET_ID",
