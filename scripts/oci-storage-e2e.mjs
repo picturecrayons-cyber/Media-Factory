@@ -35,6 +35,7 @@ let sourceKey = null;
 let sealedKey = null;
 let expectedPersistedContentType = null;
 let persistedByteSize = null;
+let persistedTitleUpdatedAt = null;
 let persisted = false;
 
 function redact(value) {
@@ -44,7 +45,8 @@ function redact(value) {
 async function assertOriginalDatabaseState(client = pool) {
   if (!snapshot) return;
   const state = await client.query(
-    `select a.id, a.s3_key, a.byte_size, a.content_type, t.poster_key, t.master_key
+    `select a.id, a.s3_key, a.byte_size, a.content_type, t.poster_key, t.master_key,
+            t.status, t.owner_user_id::text as owner_user_id, t.updated_at::text as title_updated_at
        from bridge_assets a join bridge_titles t on t.id = a.title_id
       where a.id = $1`,
     [snapshot.id],
@@ -54,8 +56,11 @@ async function assertOriginalDatabaseState(client = pool) {
   assert.equal(row.s3_key, snapshot.s3_key, "asset key was not restored");
   assert.equal(row.byte_size, snapshot.byte_size, "asset byte_size was not restored");
   assert.equal(row.content_type, snapshot.content_type, "asset content_type was not restored");
-  if (snapshot.kind === "poster") assert.equal(row.poster_key, snapshot.title_key, "poster pointer was not restored");
-  if (snapshot.kind === "master") assert.equal(row.master_key, snapshot.title_key, "master pointer was not restored");
+  assert.equal(row.poster_key, snapshot.poster_key, "poster pointer was not restored");
+  assert.equal(row.master_key, snapshot.master_key, "master pointer was not restored");
+  assert.equal(row.status, snapshot.status, "title status changed during E2E");
+  assert.equal(row.owner_user_id, snapshot.owner_user_id, "title owner changed during E2E");
+  assert.equal(row.title_updated_at, snapshot.title_updated_at, "title updated_at was not restored");
 }
 
 async function rollbackDatabase() {
@@ -65,9 +70,8 @@ async function rollbackDatabase() {
     await client.query("BEGIN");
     const locked = await client.query(
       `select a.id, a.s3_key, a.byte_size, a.content_type,
-              case when a.kind = 'poster' then t.poster_key
-                   when a.kind = 'master' then t.master_key
-                   else null end as title_key
+              t.poster_key, t.master_key, t.status,
+              t.owner_user_id::text as owner_user_id, t.updated_at::text as title_updated_at
          from bridge_assets a join bridge_titles t on t.id = a.title_id
         where a.id = $1
         for update of a, t`,
@@ -76,14 +80,32 @@ async function rollbackDatabase() {
     const current = locked.rows[0];
     if (!current) throw new Error("E2E asset disappeared; refusing database rollback");
 
+    const titlePointersOriginal =
+      current.poster_key === snapshot.poster_key && current.master_key === snapshot.master_key;
+    const titlePointersPersisted =
+      snapshot.kind === "poster"
+        ? current.poster_key === sealedKey && current.master_key === snapshot.master_key
+        : snapshot.kind === "master"
+          ? current.master_key === sealedKey && current.poster_key === snapshot.poster_key
+          : titlePointersOriginal;
+    const titleMetadataOriginal =
+      current.status === snapshot.status &&
+      current.owner_user_id === snapshot.owner_user_id &&
+      current.title_updated_at === snapshot.title_updated_at;
+    const titleMetadataThisRun =
+      current.status === snapshot.status &&
+      current.owner_user_id === snapshot.owner_user_id &&
+      current.title_updated_at === persistedTitleUpdatedAt;
     const isOriginal =
       current.s3_key === snapshot.s3_key &&
       current.byte_size === snapshot.byte_size &&
-      current.content_type === snapshot.content_type;
+      current.content_type === snapshot.content_type &&
+      titlePointersOriginal && titleMetadataOriginal;
     const isPersisted =
       current.s3_key === sealedKey &&
       Number(current.byte_size) === persistedByteSize &&
-      current.content_type === expectedPersistedContentType;
+      current.content_type === expectedPersistedContentType &&
+      titlePointersPersisted && titleMetadataThisRun;
 
     if (isOriginal) {
       if (snapshot.kind === "poster" || snapshot.kind === "master") {
@@ -111,12 +133,34 @@ async function rollbackDatabase() {
 
     if (snapshot.kind === "poster" || snapshot.kind === "master") {
       const titleColumn = snapshot.kind === "poster" ? "poster_key" : "master_key";
+      const otherColumn = snapshot.kind === "poster" ? "master_key" : "poster_key";
+      const otherPointer = snapshot.kind === "poster" ? snapshot.master_key : snapshot.poster_key;
       const titleRestore = await client.query(
-        `update bridge_titles set ${titleColumn} = $2, updated_at = now()
-          where id = $1 and ${titleColumn} = $3 returning id`,
-        [snapshot.title_id, snapshot.title_key, sealedKey],
+        `update bridge_titles
+            set ${titleColumn} = $2, updated_at = $3::timestamptz
+          where id = $1 and ${titleColumn} = $4 and ${otherColumn} is not distinct from $8
+            and updated_at = $5::timestamptz and status = $6
+            and owner_user_id::text = $7
+          returning id`,
+        [
+          snapshot.title_id, snapshot.title_key, snapshot.title_updated_at, sealedKey,
+          persistedTitleUpdatedAt, snapshot.status, snapshot.owner_user_id, otherPointer,
+        ],
       );
-      if (titleRestore.rowCount !== 1) throw new Error("CAS rollback refused: title pointer changed during cleanup");
+      if (titleRestore.rowCount !== 1) throw new Error("CAS rollback refused: title pointer or metadata changed during cleanup");
+    } else {
+      const titleRestore = await client.query(
+        `update bridge_titles set updated_at = $2::timestamptz
+          where id = $1 and updated_at = $3::timestamptz
+            and status = $4 and owner_user_id::text = $5
+            and poster_key is not distinct from $6 and master_key is not distinct from $7
+          returning id`,
+        [
+          snapshot.title_id, snapshot.title_updated_at, persistedTitleUpdatedAt,
+          snapshot.status, snapshot.owner_user_id, snapshot.poster_key, snapshot.master_key,
+        ],
+      );
+      if (titleRestore.rowCount !== 1) throw new Error("CAS rollback refused: title metadata changed during cleanup");
     }
     await client.query("COMMIT");
   } catch (error) {
@@ -141,7 +185,8 @@ async function cleanup() {
 try {
   const result = await pool.query(
     `select a.id, a.title_id, a.kind, a.s3_key, a.content_type, a.created_by,
-            a.byte_size, t.status, t.owner_user_id,
+            a.byte_size, t.status, t.owner_user_id::text as owner_user_id,
+            t.poster_key, t.master_key, t.updated_at::text as title_updated_at,
             case when a.kind = 'poster' then t.poster_key
                  when a.kind = 'master' then t.master_key
                  else null end as title_key
@@ -190,37 +235,62 @@ try {
 
   expectedPersistedContentType = sealed.contentType ?? asset.content_type;
   persistedByteSize = sealed.byteSize;
-  const sql = { query: async (query, params) => (await pool.query(query, params)).rows };
-  const didPersist = await persistVerifiedAsset(sql, {
-    assetId: asset.id,
-    actorUserId: asset.created_by,
-    internalActor: false,
-    titleId: asset.title_id,
-    kind: asset.kind,
-    byteSize: sealed.byteSize,
-    contentType: sealed.contentType,
-    checksum: sealed.etag,
-    // Use the original pointer as the DB compare-and-set token. The actual
-    // OCI source key is unique, so the historical object is never overwritten.
-    sourceKey: asset.s3_key,
-    sealedKey,
-  });
-  assert.equal(didPersist, true);
-  persisted = true;
+  const dbClient = await pool.connect();
+  try {
+    await dbClient.query("BEGIN");
+    const sql = { query: async (query, params) => (await dbClient.query(query, params)).rows };
+    const didPersist = await persistVerifiedAsset(sql, {
+      assetId: asset.id,
+      actorUserId: asset.created_by,
+      internalActor: false,
+      titleId: asset.title_id,
+      kind: asset.kind,
+      byteSize: sealed.byteSize,
+      contentType: sealed.contentType,
+      checksum: sealed.etag,
+      // The original DB pointer is the CAS token; OCI objects use unique run-owned keys.
+      sourceKey: asset.s3_key,
+      sealedKey,
+    });
+    assert.equal(didPersist, true);
+    const titleState = await dbClient.query(
+      `select updated_at::text as title_updated_at from bridge_titles where id = $1`,
+      [asset.title_id],
+    );
+    if (!titleState.rows[0]) throw new Error("E2E title disappeared after persistence");
+    persistedTitleUpdatedAt = titleState.rows[0].title_updated_at;
+    await dbClient.query("COMMIT");
+    persisted = true;
+  } catch (error) {
+    await dbClient.query("ROLLBACK");
+    throw error;
+  } finally {
+    dbClient.release();
+  }
 
   const state = await pool.query(
-    `select a.s3_key, a.byte_size, a.content_type,
+    `select a.s3_key, a.byte_size, a.content_type, t.updated_at::text as title_updated_at,
+            t.poster_key, t.master_key,
             exists (
               select 1 from bridge_audit_logs l
                where l.entity_id = a.id and l.action = 'asset.upload_verified'
                  and l.created_at >= $2 and l.metadata->>'titleId' = $3
             ) as audited
-       from bridge_assets a where a.id = $1`,
+       from bridge_assets a join bridge_titles t on t.id = a.title_id where a.id = $1`,
     [asset.id, startedAt.toISOString(), asset.title_id],
   );
   assert.equal(state.rows[0].s3_key, sealedKey);
   assert.equal(Number(state.rows[0].byte_size), sealed.byteSize);
   assert.equal(state.rows[0].content_type, expectedPersistedContentType);
+  assert.equal(state.rows[0].title_updated_at, persistedTitleUpdatedAt);
+  assert.equal(
+    state.rows[0].poster_key,
+    asset.kind === "poster" ? sealedKey : asset.poster_key,
+  );
+  assert.equal(
+    state.rows[0].master_key,
+    asset.kind === "master" ? sealedKey : asset.master_key,
+  );
   assert.equal(state.rows[0].audited, true);
   console.log("5/6 Bridge state + audit history: PASS");
 
