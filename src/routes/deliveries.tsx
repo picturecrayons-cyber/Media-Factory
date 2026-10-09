@@ -1,18 +1,17 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { listTitles } from "@/lib/bridge/titles";
 import { hasPermission } from "@/lib/bridge/rbac";
 import type { Actor } from "@/lib/bridge/rbac";
+import { VENDOR_JOB_TYPES, type VendorJobType } from "@/lib/delivery/vendor-jobs";
 import {
-  VENDOR_JOB_TYPES,
-  canDeliver,
-  createVendorJob,
-  type VendorJob,
-  type VendorJobType,
-} from "@/lib/delivery/vendor-jobs";
+  listVendorJobs,
+  listVendorServiceCatalog,
+  createPersistentVendorJob,
+} from "@/lib/delivery/vendor-jobs.server";
 
 export const Route = createFileRoute("/deliveries")({ component: Deliveries });
 
@@ -22,7 +21,15 @@ const LABELS: Record<VendorJobType, string> = {
   imf_request: "IMF package request",
   dcp_request: "DCP package request",
   human_qc: "Human QC",
+  subtitles_localization: "Subtitles & localization",
+  audio_description: "Audio description",
+  color_finishing: "AI post-production & color",
+  ott_delivery: "OTT master delivery",
+  poster_campaign: "Poster & campaign generation",
 };
+
+const money = (paise: number | null | undefined) =>
+  paise == null ? "Vendor quote required" : "₹" + (paise / 100).toLocaleString("en-IN", { maximumFractionDigits: 2 });
 
 function Deliveries() {
   return (
@@ -38,64 +45,167 @@ function Deliveries() {
 }
 
 function VendorJobs({ actor }: { actor: Actor }) {
-  const canRequest = hasPermission(actor, "title.deliver") || hasPermission(actor, "title.create");
-  const [jobs, setJobs] = useState<VendorJob[]>([]);
+  const canRequest = hasPermission(actor, "title.deliver") ||
+    hasPermission(actor, "title.create") ||
+    hasPermission(actor, "service.quote_create") ||
+    hasPermission(actor, "service.order_create");
+  const queryClient = useQueryClient();
   const [type, setType] = useState<VendorJobType>("human_qc");
   const [titleId, setTitleId] = useState("");
-  const [error, setError] = useState("");
+  const [serviceLane, setServiceLane] = useState<"managed" | "self_service">("managed");
+  const [note, setNote] = useState("");
+  const [language, setLanguage] = useState("Malayalam");
+  const [runtime, setRuntime] = useState("");
+  const [deadline, setDeadline] = useState("");
+  const [resolution, setResolution] = useState("4K");
+  const [audio, setAudio] = useState("5.1");
+  const [encryption, setEncryption] = useState("not_required");
+  const [message, setMessage] = useState("");
+  const titlesQuery = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles() });
+  const jobsQuery = useQuery({ queryKey: ["bridge-vendor-jobs"], queryFn: () => listVendorJobs() });
+  const catalogQuery = useQuery({ queryKey: ["bridge-vendor-service-catalog"], queryFn: () => listVendorServiceCatalog() });
 
-  function onRequest() {
-    try {
-      setJobs((prev) => [createVendorJob(type, titleId), ...prev]);
-      setError("");
-      setTitleId("");
-    } catch {
-      setError("Title id required. Job stays requested until a reviewer signs off.");
-    }
-  }
+  const createJob = useMutation({
+    mutationFn: () => createPersistentVendorJob({
+      data: {
+        titleId,
+        type,
+        serviceLane,
+        scope: {
+          language,
+          runtimeMinutes: runtime ? Number(runtime) : undefined,
+          deadline: deadline || undefined,
+          resolution,
+          audio,
+          encryption,
+          kdmRequired: encryption === "encrypted_kdm",
+        },
+        note,
+        idempotencyKey: crypto.randomUUID(),
+      },
+    }),
+    onSuccess: async (result) => {
+      setMessage(result.streamVistaState === "not_connected"
+        ? "Job saved in Bridge. StreamVista routing is not yet connected; do not treat this as a vendor assignment."
+        : "Vendor job saved.");
+      setNote("");
+      await queryClient.invalidateQueries({ queryKey: ["bridge-vendor-jobs"] });
+    },
+    onError: (error) => setMessage(error instanceof Error ? error.message : "Could not save vendor job."),
+  });
+
+  const titles = titlesQuery.data?.titles ?? [];
+  const catalog = catalogQuery.data?.catalog ?? [];
+  const jobs = jobsQuery.data?.jobs ?? [];
+  const selectedPrice = catalog.filter((item) => item.serviceType === type);
 
   return (
     <section className="mb-6 rounded-2xl border border-line bg-surface p-5 sm:p-6">
-      <h2 className="font-display text-xl font-semibold">Vendor jobs</h2>
+      <h2 className="font-display text-xl font-semibold">Vendor Jobs · Technical Services Marketplace</h2>
       <p className="mt-1 text-sm text-muted">
-        Dubbing, loudness, IMF, DCP, and human QC open as requested. No auto Dolby, IMF, or DCP master. Delivery only after sign-off.
+        Request a specialist. Indicative prices are estimates, not a confirmed vendor quote. No automatic Dolby, IMF or DCP master. Release only after human sign-off.
       </p>
+
       {canRequest ? (
-        <div className="mt-4 flex flex-wrap gap-2">
-          <select
-            className="rounded-lg border border-line bg-transparent px-3 py-2 text-sm"
-            value={type}
-            onChange={(e) => setType(e.target.value as VendorJobType)}
-          >
-            {VENDOR_JOB_TYPES.map((jobType) => (
-              <option key={jobType} value={jobType}>
-                {LABELS[jobType]}
-              </option>
-            ))}
-          </select>
-          <input
-            className="rounded-lg border border-line bg-transparent px-3 py-2 text-sm"
-            placeholder="Title id"
-            value={titleId}
-            onChange={(e) => setTitleId(e.target.value)}
-          />
-          <button type="button" className="rounded-lg border border-line px-3 py-2 text-sm" onClick={onRequest}>
-            Request
-          </button>
+        <div className="mt-5 space-y-4">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <label className="grid gap-1 text-sm">
+              <span>Film / title</span>
+              <select className="rounded-lg border border-line bg-transparent px-3 py-2" value={titleId} onChange={(e) => setTitleId(e.target.value)}>
+                <option value="">Select a Bridge title</option>
+                {titles.map((title) => <option key={title.id} value={title.id}>{title.name} · {title.id.slice(0, 8)}</option>)}
+              </select>
+            </label>
+            <label className="grid gap-1 text-sm">
+              <span>Service</span>
+              <select className="rounded-lg border border-line bg-transparent px-3 py-2" value={type} onChange={(e) => setType(e.target.value as VendorJobType)}>
+                {VENDOR_JOB_TYPES.map((jobType) => <option key={jobType} value={jobType}>{LABELS[jobType]}</option>)}
+              </select>
+            </label>
+            <label className="grid gap-1 text-sm">
+              <span>Workflow</span>
+              <select className="rounded-lg border border-line bg-transparent px-3 py-2" value={serviceLane} onChange={(e) => setServiceLane(e.target.value as "managed" | "self_service")}>
+                <option value="managed">Managed support · human QC</option>
+                <option value="self_service">Self-service · scope permitting</option>
+              </select>
+            </label>
+            <label className="grid gap-1 text-sm">
+              <span>Language</span>
+              <input className="rounded-lg border border-line bg-transparent px-3 py-2" value={language} onChange={(e) => setLanguage(e.target.value)} />
+            </label>
+            <label className="grid gap-1 text-sm">
+              <span>Runtime (minutes, if applicable)</span>
+              <input className="rounded-lg border border-line bg-transparent px-3 py-2" type="number" min="1" max="600" value={runtime} onChange={(e) => setRuntime(e.target.value)} />
+            </label>
+            <label className="grid gap-1 text-sm">
+              <span>Deadline requested</span>
+              <input className="rounded-lg border border-line bg-transparent px-3 py-2" type="date" value={deadline} onChange={(e) => setDeadline(e.target.value)} />
+            </label>
+            <label className="grid gap-1 text-sm">
+              <span>Master resolution</span>
+              <select className="rounded-lg border border-line bg-transparent px-3 py-2" value={resolution} onChange={(e) => setResolution(e.target.value)}>
+                <option>HD</option><option>2K</option><option>4K</option><option>Other / vendor advice</option>
+              </select>
+            </label>
+            <label className="grid gap-1 text-sm">
+              <span>Audio format</span>
+              <select className="rounded-lg border border-line bg-transparent px-3 py-2" value={audio} onChange={(e) => setAudio(e.target.value)}>
+                <option>Stereo</option><option>5.1</option><option>7.1</option><option>Atmos / vendor quote</option>
+              </select>
+            </label>
+            <label className="grid gap-1 text-sm">
+              <span>Encryption / KDM</span>
+              <select className="rounded-lg border border-line bg-transparent px-3 py-2" value={encryption} onChange={(e) => setEncryption(e.target.value)}>
+                <option value="not_required">Not required</option><option value="encrypted_kdm">Encryption + KDM required</option><option value="needs_vendor_advice">Need vendor advice</option>
+              </select>
+            </label>
+          </div>
+          {selectedPrice.map((price) => (
+            <div key={price.id} className="rounded-xl border border-line p-3 text-sm">
+              <p className="font-semibold">{price.displayName}</p>
+              <p className="mt-1 text-muted">{price.indicativeMinPaise == null || price.indicativeMaxPaise == null
+                ? "Price on request"
+                : money(price.indicativeMinPaise) + " – " + money(price.indicativeMaxPaise) + " · " + price.pricingUnit.replaceAll("_", " ")}</p>
+              <p className="text-xs text-muted">Indicative market estimate · {price.quoteRequired ? "Vendor quote required" : "Scope must be confirmed"} · taxes confirmed in the quote</p>
+              {price.sourceUrl ? <a className="text-xs underline" href={price.sourceUrl} target="_blank" rel="noreferrer">Pricing reference</a> : null}
+            </div>
+          ))}
+          <label className="grid gap-1 text-sm">
+            <span>Technical scope / special instructions</span>
+            <textarea className="rounded-lg border border-line bg-transparent px-3 py-2" rows={3} value={note} onChange={(e) => setNote(e.target.value)} placeholder="M&E availability, sync requirements, output profiles, reference specs, etc." />
+          </label>
+          <div className="flex flex-wrap items-center gap-3">
+            <button type="button" disabled={!titleId || createJob.isPending} className="rounded-lg border border-line px-4 py-2 text-sm disabled:opacity-50" onClick={() => createJob.mutate()}>
+              {createJob.isPending ? "Saving…" : "Create vendor job"}
+            </button>
+            <span className="text-xs text-muted">No charge is taken at request stage. Payment requires an approved quote.</span>
+          </div>
+          {message ? <p className="text-sm" role="status">{message}</p> : null}
+          {catalogQuery.isError ? <p className="text-sm text-amber-500">Pricing catalogue could not load. Do not assume displayed estimates are current.</p> : null}
         </div>
       ) : (
-        <p className="mt-3 text-sm text-muted">You can view jobs. Request needs delivery write.</p>
+        <p className="mt-3 text-sm text-muted">You can view jobs. Requesting requires delivery or service-order permission.</p>
       )}
-      {error ? <p className="mt-3 text-sm" role="alert">{error}</p> : null}
-      <ul className="mt-4 divide-y divide-line rounded-xl border border-line">
-        {jobs.map((job) => (
-          <li key={job.id} className="flex items-center justify-between gap-3 p-4 text-sm">
-            <span>{LABELS[job.type]} · {job.titleId}</span>
-            <span>{job.state}{canDeliver(job) ? " · download allowed" : " · no output"}</span>
-          </li>
-        ))}
-        {!jobs.length ? <li className="p-4 text-sm text-muted">No vendor jobs yet.</li> : null}
-      </ul>
+
+      <div className="mt-6">
+        <h3 className="font-semibold">Live vendor jobs</h3>
+        {jobsQuery.isPending ? <p className="mt-2 text-sm text-muted">Loading jobs…</p> : jobsQuery.isError ? <p role="alert" className="mt-2 text-sm">Vendor jobs unavailable. Check database migration and access controls.</p> : (
+          <div className="mt-3 divide-y divide-line rounded-xl border border-line">
+            {jobs.map((job) => (
+              <div key={job.id} className="grid gap-2 p-4 sm:grid-cols-[minmax(0,1fr)_auto]">
+                <div>
+                  <p className="text-sm font-semibold">{job.titleName} · {LABELS[job.type as VendorJobType] ?? job.type}</p>
+                  <p className="mt-1 text-xs text-muted">Job {job.id} · {job.serviceLane} · {job.status.replaceAll("_", " ")}</p>
+                  <p className="text-xs text-muted">Payment: {job.paymentStatus} · {job.deliverableAvailable ? "Deliverable attached" : "No deliverable"} · {job.signedOff ? "Signed off" : "Awaiting sign-off"}</p>
+                  {job.indicativeMinPaise != null && job.indicativeMaxPaise != null ? <p className="text-xs text-muted">Indicative estimate: {money(job.indicativeMinPaise)}–{money(job.indicativeMaxPaise)} · final price awaits quote</p> : null}
+                </div>
+                <span className="h-fit rounded-full border border-line px-3 py-1 text-xs">{job.status}</span>
+              </div>
+            ))}
+            {!jobs.length ? <p className="p-4 text-sm text-muted">No vendor jobs yet.</p> : null}
+          </div>
+        )}
+      </div>
     </section>
   );
 }
