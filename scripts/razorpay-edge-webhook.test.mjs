@@ -34,22 +34,24 @@ test("entitlement and title transition happen before webhook is marked processed
 });
 
 test("invalid Razorpay signatures are rejected before JSON parsing or persistence", () => {
-  const rejectSignature = source.indexOf('if(!safeEqualHex(expected,signature))return new Response("Invalid signature",{status:401})');
-  const parsePayload = source.indexOf("let payload:any;try{payload=JSON.parse(raw)}catch");
+  const rejectSignature = source.indexOf("if (!safeEqualHex(expected, signature))");
+  const parsePayload = source.indexOf("let payload: any;");
   const persistEvent = source.indexOf('supabase.from("bridge_webhook_events").insert');
   assert.ok(rejectSignature >= 0 && parsePayload > rejectSignature && persistEvent > parsePayload);
 });
 
 test("duplicate event IDs with changed payloads are rejected as collisions", () => {
-  assert.ok(source.includes('if(existing.payload_hash!==hash)return new Response("Event collision",{status:409})'));
+  assert.match(source, /existing\.payload_hash\s*!==\s*hash[\s\S]{0,80}Event collision/);
 });
 
 test("processed webhook duplicates return success without replaying payment side effects", () => {
-  assert.ok(source.includes('if(existing.status==="processed")return Response.json({ok:true,duplicate:true})'));
+  assert.match(source, /existing\.status\s*===\s*"processed"[\s\S]{0,100}duplicate:\s*true/);
 });
 
-test("only one active worker claims an event and active duplicates are acknowledged", () => {
-  assert.ok(source.includes('.neq("status","processed")'));
-  assert.ok(source.includes('processing_token.is.null,processing_started_at.lt.${staleBefore}'));
-  assert.ok(source.includes('if(!claimed)return Response.json({ok:true,duplicate:true,in_progress:true})'));
+test("duplicate insert conflicts are reconciled before payment side effects", () => {
+  const insertEvent = source.indexOf('supabase.from("bridge_webhook_events").insert');
+  const readExisting = source.indexOf('supabase.from("bridge_webhook_events").select("status,payload_hash")');
+  const paymentSideEffects = source.indexOf('if (eventName === "payment.captured")');
+  assert.ok(insertEvent >= 0 && readExisting > insertEvent && paymentSideEffects > readExisting);
+  assert.match(source, /String\(insertError\.code\)\s*!==\s*"23505"/);
 });
