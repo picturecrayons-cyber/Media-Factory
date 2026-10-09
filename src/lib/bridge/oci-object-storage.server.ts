@@ -174,7 +174,26 @@ async function createPar(opts: {
   };
   const path = `/n/${encodeURIComponent(namespace)}/b/${encodeURIComponent(cfg.bucket)}/p/`;
   const res = await signedFetch({ cfg, method: "POST", path, body });
-  if (!res.ok) throw new Error(`OCI pre-authenticated request failed (${res.status})`);
+  if (!res.ok) {
+    // OCI error responses are useful for diagnosing auth/configuration failures, but
+    // never log request headers, signatures, private keys, PAR URLs, or request bodies.
+    const requestId = res.headers.get("opc-request-id") || res.headers.get("x-oracle-request-id");
+    let errorCode = "unknown";
+    let errorMessage = "no OCI error message returned";
+    try {
+      const detail = (await res.json()) as { code?: unknown; message?: unknown };
+      if (typeof detail.code === "string") errorCode = detail.code.slice(0, 80);
+      if (typeof detail.message === "string") {
+        errorMessage = detail.message.replace(/[\\r\\n\\t]+/g, " ").slice(0, 240);
+      }
+    } catch {
+      // Do not emit a raw response body; it may contain unexpected data.
+    }
+    const requestRef = requestId ? `, requestId=${requestId.slice(0, 120)}` : "";
+    throw new Error(
+      `OCI pre-authenticated request failed (${res.status}; code=${errorCode}; message=${errorMessage}${requestRef})`,
+    );
+  }
   const parsed = (await res.json()) as { accessUri?: string };
   if (!parsed.accessUri) throw new Error("OCI pre-authenticated request returned no access URI");
   return {
