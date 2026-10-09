@@ -146,6 +146,5 @@ export const createPersistentVendorJob = createServerFn({ method: "POST" })
       if (retry[0]) return { jobId: retry[0].id, status: retry[0].status, duplicate: true };
       throw error;
     }
-    // Intentionally truthful until StreamVista exposes and verifies a receiver API.
     return { jobId, status: "requested", duplicate: false, streamVistaState: "not_connected" as const };
   });
