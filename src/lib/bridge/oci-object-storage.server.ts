@@ -277,16 +277,6 @@ export async function deleteObject(key: string) {
   return { deleted: res.status !== 404, key };
 }
 
-/** Return false only when OCI confirms the object is absent; other failures fail closed. */
-export async function objectExists(key: string) {
-  const cfg = config();
-  const namespace = await resolveNamespace(cfg);
-  const path = `/n/${encodeURIComponent(namespace)}/b/${encodeURIComponent(cfg.bucket)}/o/${encodedObjectName(key)}`;
-  const res = await signedFetch({ cfg, method: "HEAD", path });
-  if (res.status === 404) return false;
-  if (!res.ok) throw new Error(`OCI object existence check failed (${res.status})`);
-  return true;
-}
 
 export function titleAssetKey(opts: { ownerUserId: string; titleId: string; kind: string; filename: string }) {
   const safe = opts.filename.replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 80);
