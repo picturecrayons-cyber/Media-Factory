@@ -4,68 +4,7 @@ import { getSql } from "@/lib/db";
 import { assertPermission } from "./rbac";
 import { requireVerifiedActor } from "./session";
 import { assertNotDevUser } from "./guards";
-import { hasExclusiveRightsOverlap } from "./distribution-avails-policy";
-
-export type DistributionAvailsRow = {
-  id: string;
-  name: string;
-  language: string | null;
-  year: number | null;
-  runtime_minutes: number | null;
-  content_type: string | null;
-  status: string;
-  master_key: string | null;
-  poster_key: string | null;
-  master_verified: boolean;
-  qc_verified: boolean;
-  legal_review_recorded: boolean;
-  valid_rights_grants: Array<{
-    id: string;
-    territories: string[];
-    languages: string[];
-    media: string[];
-    window_start: string | null;
-    window_end: string | null;
-    exclusivity: string;
-    holdbacks: string[];
-  }>;
-};
-
-export function assessDistributionAvails(row: DistributionAvailsRow, now = new Date()) {
-  const blockers: string[] = [];
-  if (!row.name.trim() || !row.language?.trim() || !row.year || !row.runtime_minutes || !row.content_type?.trim()) {
-    blockers.push("Core metadata is incomplete");
-  }
-  if (!row.master_key || !row.master_verified) blockers.push("Current master asset is not verified");
-  if (!row.poster_key) blockers.push("Poster/artwork is missing");
-  if (!row.qc_verified) blockers.push("Current master/artwork QC sign-off is missing");
-  if (!row.legal_review_recorded) blockers.push("Recorded legal review evidence is missing");
-  const activeGrants = row.valid_rights_grants.filter((grant) => {
-    if (!Array.isArray(grant.territories) || !grant.territories.length ||
-        !Array.isArray(grant.languages) || !grant.languages.length ||
-        !Array.isArray(grant.media) || !grant.media.length ||
-        !grant.window_start || !grant.window_end) return false;
-    const start = new Date(grant.window_start);
-    const end = new Date(grant.window_end);
-    return Number.isFinite(start.getTime()) && Number.isFinite(end.getTime()) && start <= now && end > now && end > start;
-  });
-  if (!activeGrants.length) blockers.push("No current, structured rights grant with explicit territory, language, media and finite window");
-  const hasConflict = activeGrants.some((grant) => {
-    const territories = grant.territories as unknown[];
-    const media = grant.media as unknown[];
-    const holdbacks = Array.isArray(grant.holdbacks) ? grant.holdbacks : [];
-    return territories.some((value) => typeof value !== "string" || !value.trim()) ||
-      media.some((value) => typeof value !== "string" || !value.trim()) ||
-      holdbacks.some((value) => typeof value !== "string" || !value.trim());
-  });
-  if (hasConflict) blockers.push("Rights dimensions or holdbacks contain invalid structured values");
-  if (hasExclusiveRightsOverlap(activeGrants)) blockers.push("Potential overlapping exclusive grants require operator/legal review");
-  return {
-    decision: blockers.length === 0 ? "NEEDS_OPERATOR_REVIEW" as const : "HOLD" as const,
-    blockers,
-    rightsGrantCount: activeGrants.length,
-  };
-}
+import { assessDistributionAvails, type DistributionAvailsRow } from "./distribution-avails-policy";
 
 /** Read-only, fail-closed report. This function never creates or changes catalog records. */
 export const listDistributionAvails = createServerFn({ method: "GET" })
