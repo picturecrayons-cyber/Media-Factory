@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { assessDistributionAvails, type DistributionAvailsRow } from "./distribution-avails.ts";
-import { hasExclusiveRightsOverlap } from "./distribution-avails-policy.ts";
+import { assessDistributionAvails, hasExclusiveRightsOverlap, type DistributionAvailsRow } from "./distribution-avails-policy.ts";
 
 const base: DistributionAvailsRow = {
   id: "title-1",
