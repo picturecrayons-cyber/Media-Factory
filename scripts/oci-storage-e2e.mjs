@@ -43,7 +43,8 @@ function redact(value) {
 }
 
 async function assertOriginalDatabaseState(client = pool) {
-  if (!snapshot) return;
+  // Before the fixture has been read, execution has performed no DB or OCI writes.
+  if (!snapshot) return { verified: true, state: "not-started" };
   const state = await client.query(
     `select a.id, a.s3_key, a.byte_size, a.content_type, t.poster_key, t.master_key,
             t.status, t.owner_user_id::text as owner_user_id, t.updated_at::text as title_updated_at
@@ -61,10 +62,14 @@ async function assertOriginalDatabaseState(client = pool) {
   assert.equal(row.status, snapshot.status, "title status changed during E2E");
   assert.equal(row.owner_user_id, snapshot.owner_user_id, "title owner changed during E2E");
   assert.equal(row.title_updated_at, snapshot.title_updated_at, "title updated_at was not restored");
+  return { verified: true, state: "original" };
 }
 
 async function rollbackDatabase() {
-  if (!snapshot || !sealedKey) return;
+  if (!snapshot) return { outcome: "not-started" };
+  // If no sealed key exists, persistence could not have started. The independent
+  // read-back below is still mandatory before cleanup can report success.
+  if (!sealedKey) return { outcome: "already-original" };
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
@@ -108,11 +113,8 @@ async function rollbackDatabase() {
       titlePointersPersisted && titleMetadataThisRun;
 
     if (isOriginal) {
-      if (snapshot.kind === "poster" || snapshot.kind === "master") {
-        assert.equal(current.title_key, snapshot.title_key, "title pointer changed unexpectedly");
-      }
       await client.query("COMMIT");
-      return;
+      return { outcome: "already-original" };
     }
     if (!isPersisted || !persisted) {
       throw new Error("CAS rollback refused: asset state no longer matches this E2E run");
@@ -163,6 +165,7 @@ async function rollbackDatabase() {
       if (titleRestore.rowCount !== 1) throw new Error("CAS rollback refused: title metadata changed during cleanup");
     }
     await client.query("COMMIT");
+    return { outcome: "restored" };
   } catch (error) {
     await client.query("ROLLBACK");
     throw error;
