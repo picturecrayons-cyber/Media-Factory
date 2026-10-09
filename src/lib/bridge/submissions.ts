@@ -66,72 +66,76 @@ export const createRightsReadySubmission = createServerFn({ method: "POST" })
     const slug = `${data.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 48) || "title"}-${id.slice(0, 6)}`;
     const sql = await getSql();
 
-    await sql`
-      insert into bridge_titles (
-        id, slug, name, original_title, owner_user_id, owner_account_type, status,
-        synopsis, long_synopsis, language, original_language, year, runtime_minutes,
-        content_type, country_of_origin, release_date
-      ) values (
-        ${id}, ${slug}, ${data.name}, ${data.name}, ${actor.userId}, ${actor.accountType}, 'DRAFT',
-        ${data.synopsis}, ${data.synopsis}, ${data.originalLanguage}, ${data.originalLanguage},
-        ${data.releaseYear}, ${data.runtimeMinutes}, ${data.contentType}, ${data.countryOfOrigin},
-        make_date(${data.releaseYear}, 1, 1)
-      )
-    `;
+    // Keep the canonical title, rights, legal review, intake metadata, event,
+    // and audit entry atomic. A failure must not leave a half-created title.
+    return await sql.transaction(async (tx) => {
+      await tx`
+        insert into bridge_titles (
+          id, slug, name, original_title, owner_user_id, owner_account_type, status,
+          synopsis, long_synopsis, language, original_language, year, runtime_minutes,
+          content_type, country_of_origin, release_date
+        ) values (
+          ${id}, ${slug}, ${data.name}, ${data.name}, ${actor.userId}, ${actor.accountType}, 'DRAFT',
+          ${data.synopsis}, ${data.synopsis}, ${data.originalLanguage}, ${data.originalLanguage},
+          ${data.releaseYear}, ${data.runtimeMinutes}, ${data.contentType}, ${data.countryOfOrigin},
+          make_date(${data.releaseYear}, 1, 1)
+        )
+      `;
 
-    const rightsRows = await sql<{ id: string }>`
-      insert into bridge_rights_grants (
-        title_id, grant_type, territories, languages, media, window_start, window_end,
-        exclusivity, evidence, status, created_by
-      ) values (
-        ${id}, 'DISTRIBUTION', ${JSON.stringify(data.territories)}::jsonb,
-        ${JSON.stringify(data.rightsLanguages)}::jsonb, ${JSON.stringify(data.exploitation)}::jsonb,
-        ${data.windowStart}, ${data.windowEnd}, ${data.exclusivity},
-        ${JSON.stringify([{ type: data.authorizationEvidenceType, status: "PENDING_REVIEW" }])}::jsonb,
-        'DRAFT', ${actor.userId}
-      )
-      returning id::text
-    `;
+      const rightsRows = await tx<{ id: string }>`
+        insert into bridge_rights_grants (
+          title_id, grant_type, territories, languages, media, window_start, window_end,
+          exclusivity, evidence, status, created_by
+        ) values (
+          ${id}, 'DISTRIBUTION', ${JSON.stringify(data.territories)}::jsonb,
+          ${JSON.stringify(data.rightsLanguages)}::jsonb, ${JSON.stringify(data.exploitation)}::jsonb,
+          ${data.windowStart}, ${data.windowEnd}, ${data.exclusivity},
+          ${JSON.stringify([{ type: data.authorizationEvidenceType, status: "PENDING_REVIEW" }])}::jsonb,
+          'DRAFT', ${actor.userId}
+        )
+        returning id::text
+      `;
 
-    await sql`
-      insert into bridge_legal_cases (title_id, status, evidence)
-      values (
-        ${id}, 'PENDING',
-        ${JSON.stringify([{
-          authorityType: data.authorityType,
-          evidenceType: data.authorizationEvidenceType,
-          authorizationConfirmed: data.authorizationConfirmed,
-          status: "PENDING_EVIDENCE_REVIEW"
-        }])}::jsonb
-      )
-    `;
+      await tx`
+        insert into bridge_legal_cases (title_id, status, evidence)
+        values (
+          ${id}, 'PENDING',
+          ${JSON.stringify([{
+            authorityType: data.authorityType,
+            evidenceType: data.authorizationEvidenceType,
+            authorizationConfirmed: data.authorizationConfirmed,
+            status: "PENDING_EVIDENCE_REVIEW"
+          }])}::jsonb
+        )
+      `;
 
-    await sql`
-      insert into bridge_title_submission_intake (
-        title_id, authority_type, authorization_evidence_type, authorization_confirmed,
-        buyer_channels, screener_mode, screener_url
-      ) values (
-        ${id}, ${data.authorityType}, ${data.authorizationEvidenceType}, ${data.authorizationConfirmed},
-        ${JSON.stringify(data.buyerChannels)}::jsonb, ${data.screenerMode}, ${data.screenerUrl ?? null}
-      )
-    `;
+      await tx`
+        insert into bridge_title_submission_intake (
+          title_id, authority_type, authorization_evidence_type, authorization_confirmed,
+          buyer_channels, screener_mode, screener_url
+        ) values (
+          ${id}, ${data.authorityType}, ${data.authorizationEvidenceType}, ${data.authorizationConfirmed},
+          ${JSON.stringify(data.buyerChannels)}::jsonb, ${data.screenerMode}, ${data.screenerUrl ?? null}
+        )
+      `;
 
-    await sql`
-      insert into bridge_title_events (title_id, from_status, to_status, actor_user_id, note)
-      values (${id}, null, 'DRAFT', ${actor.userId}, 'rights-ready public submission')
-    `;
+      await tx`
+        insert into bridge_title_events (title_id, from_status, to_status, actor_user_id, note)
+        values (${id}, null, 'DRAFT', ${actor.userId}, 'rights-ready public submission')
+      `;
 
-    await writeAudit({
-      actorUserId: actor.userId,
-      action: "title.rights_ready_submission.create",
-      entityType: "bridge_title",
-      entityId: id,
-      metadata: {
-        rightsGrantId: rightsRows[0]?.id ?? null,
-        screenerMode: data.screenerMode,
-        buyerChannels: data.buyerChannels,
-      },
+      await writeAudit({
+        actorUserId: actor.userId,
+        action: "title.rights_ready_submission.create",
+        entityType: "bridge_title",
+        entityId: id,
+        metadata: {
+          rightsGrantId: rightsRows[0]?.id ?? null,
+          screenerMode: data.screenerMode,
+          buyerChannels: data.buyerChannels,
+        },
+      }, tx);
+
+      return { titleId: id, status: "DRAFT" as const };
     });
-
-    return { titleId: id, status: "DRAFT" as const };
   });
