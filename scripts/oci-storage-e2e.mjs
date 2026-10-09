@@ -18,6 +18,7 @@ const {
   signUpload, objectExists, verifyObject, sealVerifiedObject, signDownload, deleteObject,
 } = await import("../src/lib/bridge/oci-object-storage.server.ts");
 const { persistVerifiedAsset } = await import("../src/lib/bridge/asset-confirmation.ts");
+const { cleanupOciE2E } = await import("./oci-storage-e2e-cleanup.mjs");
 
 const assetId = process.env.BRIDGE_E2E_ASSET_ID;
 const runId = randomUUID();
@@ -127,28 +128,14 @@ async function rollbackDatabase() {
 }
 
 async function cleanup() {
-  // Restore DB references before deleting objects. If compare-and-set rollback
-  // encounters a concurrent change, fail closed and retain objects potentially
-  // referenced by the database.
-  if (snapshot) {
-    try {
-      await rollbackDatabase();
-      await assertOriginalDatabaseState();
-    } catch (error) {
-      throw new Error(`CLEANUP_INCOMPLETE database rollback: ${redact(error instanceof Error ? error.message : String(error))}`);
-    }
-  }
-  const errors = [];
-  for (const key of [...createdKeys].reverse()) {
-    try {
-      await deleteObject(key);
-      if (await objectExists(key)) throw new Error("object still exists after delete");
-      console.log(`CLEANUP object absent: ${key === sourceKey ? "run-owned source" : "run-owned sealed destination"}`);
-    } catch (error) {
-      errors.push(error instanceof Error ? error.message : String(error));
-    }
-  }
-  if (errors.length) throw new Error(`CLEANUP_INCOMPLETE ${errors.map(redact).join("; ")}`);
+  const result = await cleanupOciE2E({
+    runKeys: createdKeys,
+    deleteObject,
+    objectExists,
+    rollback: rollbackDatabase,
+    verifyDatabaseState: assertOriginalDatabaseState,
+  });
+  console.log(`CLEANUP PASS: DB restored + independently verified; ${result.cleanedObjectCount} run-owned objects absent`);
 }
 
 try {
