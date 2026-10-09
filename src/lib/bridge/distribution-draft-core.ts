@@ -7,7 +7,7 @@ export type DistributionDraftInput = {
 export type DistributionDraft = {
   subject: string;
   body: string;
-  status: "DRAFT_READY";
+  status: "DRAFT_PENDING_OPERATOR_APPROVAL";
   claimsAvailability: false;
   outboundAction: "NONE";
 };
@@ -43,7 +43,7 @@ export function buildDistributionDraft(input: DistributionDraftInput): Distribut
     "Crayons Pictures Distribution",
   ].join("\n");
 
-  return { subject, body, status: "DRAFT_READY", claimsAvailability: false, outboundAction: "NONE" };
+  return { subject, body, status: "DRAFT_PENDING_OPERATOR_APPROVAL", claimsAvailability: false, outboundAction: "NONE" };
 }
 
 export function assertDraftCanBeApproved(input: {
