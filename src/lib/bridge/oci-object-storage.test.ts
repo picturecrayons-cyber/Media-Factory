@@ -150,7 +150,7 @@ test("OCI title asset keys preserve Malayalam filenames and escape path separato
   });
   assert.match(key, /ജനനം 1947 Pranayam Thudarunnu\.mp4$/u);
   assert.equal(key.includes("જનനം 1947"), true);
-  assert.equal(key.includes("\\u0000"), false);
+  assert.equal(/[\\x00-\\x1f\\x7f]/u.test(key), false);
   assert.equal(key.split("/").length, 5);
 
   const hostile = titleAssetKey({
