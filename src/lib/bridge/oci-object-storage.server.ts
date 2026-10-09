@@ -198,6 +198,17 @@ export async function signDownload(opts: { key: string; expiresIn?: number }) {
   return { url: signed.url, key: opts.key, bucket: signed.bucket, method: "GET" as const };
 }
 
+/** Return whether an object key exists; any non-404 error fails closed. */
+export async function objectExists(key: string): Promise<boolean> {
+  const cfg = config();
+  const namespace = await resolveNamespace(cfg);
+  const path = `/n/${encodeURIComponent(namespace)}/b/${encodeURIComponent(cfg.bucket)}/o/${encodedObjectName(key)}`;
+  const res = await signedFetch({ cfg, method: "HEAD", path });
+  if (res.status === 404) return false;
+  if (!res.ok) throw new Error(`OCI object existence check failed (${res.status})`);
+  return true;
+}
+
 export async function verifyObject(key: string, expectedContentType?: string | null) {
   const cfg = config();
   const namespace = await resolveNamespace(cfg);
