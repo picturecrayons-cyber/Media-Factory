@@ -8,12 +8,12 @@ const FORBIDDEN = [
   "rzp_live_",
   "rzp_test_",
   "AKIA",
-  "BEGIN PRIVATE KEY",
   "sk_live_",
 ];
 const ALLOW_BASENAME = new Set(["secret-scan.mjs", "canonical.ts", "canonical.test.ts", "assert-no-legacy-dump.test.mjs"]);
 
 const hits = [];
+const PRIVATE_KEY_PEM = /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----[\s\S]{40,}?-----END (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/;
 
 function walk(dir) {
   for (const name of readdirSync(dir)) {
@@ -27,6 +27,7 @@ function walk(dir) {
       for (const token of FORBIDDEN) {
         if (text.includes(token)) hits.push({ file: p, token });
       }
+      if (PRIVATE_KEY_PEM.test(text)) hits.push({ file: p, token: "PEM private key block" });
     }
   }
 }
