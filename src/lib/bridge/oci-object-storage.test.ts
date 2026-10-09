@@ -61,6 +61,7 @@ test("OCI private key normalization accepts escaped and quoted PEM secrets", asy
 
 test("OCI copy polling uses Object Storage and only verifies successful copies", async (t) => {
   const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  const fingerprint = fingerprintFor(privateKey);
   const values = {
     OCI_TENANCY_OCID: "test-tenancy",
     OCI_USER_OCID: "test-user",
@@ -106,7 +107,7 @@ test("OCI copy polling uses Object Storage and only verifies successful copies",
           assert.equal((await sealVerifiedObject("source-key", "sealed-key", "source-etag")).byteSize, 12);
           assert.deepEqual(calls.map((call) => call.method), ["POST", "GET", "HEAD"]);
         } else {
-          const message = outcome === "HTTP_ERROR" ? /lookup failed \(403\)/ : new RegExp(`copy ${outcome.toLowerCase()}`);
+          const message = outcome === "HTTP_ERROR" ? /lookup failed \\(403\\)/ : new RegExp(`copy ${outcome.toLowerCase()}`);
           await assert.rejects(sealVerifiedObject("source-key", "sealed-key", "source-etag"), message);
           assert.deepEqual(calls.map((call) => call.method), ["POST", "GET"]);
         }
@@ -124,6 +125,7 @@ test("OCI copy polling uses Object Storage and only verifies successful copies",
 
 test("OCI object verification rejects an unexpected content type", async () => {
   const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  const fingerprint = fingerprintFor(privateKey);
   const values = {
     OCI_TENANCY_OCID: "test-tenancy", OCI_USER_OCID: "test-user",
     OCI_PRIVATE_KEY: privateKey.export({ type: "pkcs8", format: "pem" }).toString(),
