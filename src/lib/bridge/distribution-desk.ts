@@ -65,12 +65,12 @@ export const listDistributionInquiries = createServerFn({ method: "GET" })
     const sql = await getSql();
     const rows = await sql<{
       id: string; source_reference: string; buyer_name: string; buyer_email: string;
-      inquiry_text: string; request_summary: unknown; title_id: string | null; title_name: string | null;
+      inquiry_text: string; title_id: string | null; title_name: string | null;
       draft_subject: string; draft_body: string; status: string; created_at: string;
       reviewed_by: string | null; reviewed_at: string | null;
     }>`
       select i.id, i.source_reference, i.buyer_name, i.buyer_email, i.inquiry_text,
-        i.request_summary, i.title_id, t.name as title_name, i.draft_subject, i.draft_body,
+        i.title_id, t.name as title_name, i.draft_subject, i.draft_body,
         i.status, i.created_at, i.reviewed_by, i.reviewed_at
       from bridge_distribution_inquiries i
       left join bridge_titles t on t.id = i.title_id
