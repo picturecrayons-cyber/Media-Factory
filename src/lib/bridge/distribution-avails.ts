@@ -4,6 +4,7 @@ import { getSql } from "@/lib/db";
 import { assertPermission } from "./rbac";
 import { requireVerifiedActor } from "./session";
 import { assertNotDevUser } from "./guards";
+import { hasExclusiveRightsOverlap } from "./distribution-avails-policy";
 
 export type DistributionAvailsRow = {
   id: string;
@@ -58,6 +59,7 @@ export function assessDistributionAvails(row: DistributionAvailsRow, now = new D
       holdbacks.some((value) => typeof value !== "string" || !value.trim());
   });
   if (hasConflict) blockers.push("Rights dimensions or holdbacks contain invalid structured values");
+  if (hasExclusiveRightsOverlap(activeGrants)) blockers.push("Potential overlapping exclusive grants require operator/legal review");
   return {
     decision: blockers.length === 0 ? "NEEDS_OPERATOR_REVIEW" as const : "HOLD" as const,
     blockers,
