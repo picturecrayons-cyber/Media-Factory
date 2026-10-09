@@ -2,6 +2,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import pg from "pg";
+import { cleanupOciE2E } from "./oci-storage-e2e-cleanup.mjs";
 
 const required = [
   "OCI_TENANCY_OCID",
@@ -21,79 +22,85 @@ if (missing.length) {
   process.exit(2);
 }
 
-const { signUpload, verifyObject, sealVerifiedObject, signDownload, deleteObject } =
+const { signUpload, verifyObject, sealVerifiedObject, signDownload, deleteObject, objectExists } =
   await import("../src/lib/bridge/oci-object-storage.server.ts");
 const { persistVerifiedAsset } =
   await import("../src/lib/bridge/asset-confirmation.ts");
 
 const assetId = process.env.BRIDGE_E2E_ASSET_ID;
-const pool = new pg.Pool({
+const client = new pg.Client({
   connectionString: process.env.DATABASE_URL,
-  max: 1,
+  connectionTimeoutMillis: 10000,
   ssl: { rejectUnauthorized: false },
 });
-
+const runId = randomUUID();
+const safeAssetId = String(assetId).replace(/[^a-zA-Z0-9_-]+/g, "_").slice(0, 80);
+const runPrefix = `bridge-e2e/${safeAssetId}/${runId}`;
+const sourceKey = `${runPrefix}/source.bin`;
+const sealedKey = `${runPrefix}/sealed.bin`;
+// Register both unique keys before network I/O. Deletes of nonexistent keys are idempotent.
+const runKeys = [sourceKey, sealedKey];
 const payload = Buffer.from(
-  `CRAYONS_BRIDGE_STORAGE_E2E ${new Date().toISOString()} ${randomUUID()}`,
+  `CRAYONS_BRIDGE_STORAGE_E2E ${new Date().toISOString()} ${runId}`,
   "utf8",
 );
 const startedAt = new Date();
-const createdKeys = [];
+
+let connected = false;
+let transactionOpen = false;
 let snapshot = null;
-let sealedKey = null;
+let runResult = null;
+let runError = null;
 
 function redact(value) {
-  return String(value ?? "").replace(/https?:\/\/\S+/g, "[redacted-url]");
+  return String(value ?? "")
+    .replace(/https?:\/\/\S+/g, "[redacted-url]")
+    .replace(/-----BEGIN [^-]+-----[\s\S]*?-----END [^-]+-----/g, "[redacted-key]");
 }
 
-async function cleanup() {
-  const errors = [];
-  for (const key of [...createdKeys].reverse()) {
-    try {
-      await deleteObject(key);
-      console.log("CLEANUP sealed object deleted");
-    } catch (error) {
-      errors.push(error instanceof Error ? error.message : String(error));
-    }
-  }
-  if (snapshot && sealedKey) {
-    const reverted = await pool.query(
-      `update bridge_assets
-          set byte_size = null,
-              s3_key = $2,
-              content_type = $3
-        where id = $1
-          and s3_key = $4
-          and byte_size is not null
-        returning id`,
-      [snapshot.id, snapshot.s3_key, snapshot.content_type, sealedKey],
-    );
-    if (snapshot.kind === "poster" || snapshot.kind === "master") {
-      const column = snapshot.kind === "poster" ? "poster_key" : "master_key";
-      await pool.query(
-        `update bridge_titles
-            set ${column} = case when ${column} = $2 then $3 else ${column} end,
-                updated_at = now()
-          where id = $1`,
-        [snapshot.title_id, sealedKey, snapshot.title_key],
-      );
-    }
-    console.log(`CLEANUP asset revert rows=${reverted.rowCount}`);
-  }
-  if (errors.length) throw new Error(`CLEANUP_INCOMPLETE ${errors.map(redact).join("; ")}`);
-}
-
-try {
-  const result = await pool.query(
+async function readFixtureState(id) {
+  return client.query(
     `select a.id, a.title_id, a.kind, a.s3_key, a.content_type, a.created_by,
-            a.byte_size, t.status, t.owner_user_id,
-            case when a.kind = 'poster' then t.poster_key
-                 when a.kind = 'master' then t.master_key
-                 else null end as title_key
+            a.byte_size, t.status, t.owner_user_id, t.poster_key, t.master_key,
+            t.updated_at as title_updated_at
        from bridge_assets a
        join bridge_titles t on t.id = a.title_id
       where a.id = $1
       limit 1`,
+    [id],
+  );
+}
+
+function assertFixtureRestored(before, after) {
+  assert.ok(after, "fixture row must still exist after rollback");
+  for (const key of [
+    "id", "title_id", "kind", "s3_key", "content_type", "created_by",
+    "byte_size", "status", "owner_user_id", "poster_key", "master_key",
+  ]) {
+    assert.deepEqual(after[key], before[key], `fixture field ${key} must be restored`);
+  }
+  assert.equal(
+    new Date(after.title_updated_at).toISOString(),
+    new Date(before.title_updated_at).toISOString(),
+    "title updated_at must be restored",
+  );
+}
+
+try {
+  await client.connect();
+  connected = true;
+  await client.query("BEGIN");
+  transactionOpen = true;
+
+  const result = await client.query(
+    `select a.id, a.title_id, a.kind, a.s3_key, a.content_type, a.created_by,
+            a.byte_size, t.status, t.owner_user_id, t.poster_key, t.master_key,
+            t.updated_at as title_updated_at
+       from bridge_assets a
+       join bridge_titles t on t.id = a.title_id
+      where a.id = $1
+      limit 1
+      for update of a, t`,
     [assetId],
   );
   const asset = result.rows[0];
@@ -105,32 +112,39 @@ try {
   assert.equal(asset.created_by, asset.owner_user_id, "E2E asset must belong to the title owner");
   snapshot = asset;
 
-  console.log("1/6 pending Bridge asset record: PASS");
-  const upload = await signUpload({
-    key: asset.s3_key,
-    contentType: asset.content_type || "application/octet-stream",
-  });
+  console.log("1/6 locked pending fixture row: PASS");
+  const contentType = asset.content_type || "application/octet-stream";
+  const upload = await signUpload({ key: sourceKey, contentType });
   const put = await fetch(upload.url, {
     method: "PUT",
-    headers: { "content-type": asset.content_type || "application/octet-stream" },
+    headers: { "content-type": contentType },
     body: payload,
   });
   if (!put.ok) throw new Error(`OCI PUT failed (${put.status})`);
-  console.log("2/6 request OCI signed upload URL + PUT: PASS");
+  console.log("2/6 run-unique OCI PUT: PASS");
 
-  const verified = await verifyObject(asset.s3_key, asset.content_type);
+  const movedToRunKey = await client.query(
+    `update bridge_assets
+        set s3_key = $2
+      where id = $1
+        and s3_key = $3
+        and byte_size is null
+      returning id`,
+    [asset.id, sourceKey, asset.s3_key],
+  );
+  assert.equal(movedToRunKey.rowCount, 1, "fixture source-key compare-and-set must update exactly one row");
+
+  const verified = await verifyObject(sourceKey, contentType);
   assert.equal(verified.byteSize, payload.byteLength);
   assert.ok(verified.etag);
   console.log("3/6 OCI HEAD/ETag verification: PASS");
 
-  sealedKey = `${asset.s3_key}.verified/${randomUUID()}`;
-  const sealed = await sealVerifiedObject(asset.s3_key, sealedKey, verified.etag);
-  createdKeys.push(sealedKey);
+  const sealed = await sealVerifiedObject(sourceKey, sealedKey, verified.etag);
   assert.equal(sealed.byteSize, verified.byteSize);
   assert.ok(sealed.etag);
-  console.log("4/6 copy seal: PASS (not OCI retention)");
+  console.log("4/6 verified OCI copy: PASS (copy is not OCI retention)");
 
-  const sql = { query: async (query, params) => (await pool.query(query, params)).rows };
+  const sql = { query: async (query, params) => (await client.query(query, params)).rows };
   const persisted = await persistVerifiedAsset(sql, {
     assetId: asset.id,
     actorUserId: asset.created_by,
@@ -140,58 +154,97 @@ try {
     byteSize: sealed.byteSize,
     contentType: sealed.contentType,
     checksum: sealed.etag,
-    sourceKey: asset.s3_key,
+    sourceKey,
     sealedKey,
   });
   assert.equal(persisted, true);
-  const state = await pool.query(
-    `select a.s3_key, a.byte_size,
+
+  const state = await client.query(
+    `select a.s3_key, a.byte_size, a.content_type, t.poster_key, t.master_key,
             exists (
               select 1 from bridge_audit_logs l
                where l.entity_id = a.id
                  and l.action = 'asset.upload_verified'
                  and l.created_at >= $2
+                 and l.metadata->>'checksum' = $3
             ) as audited
        from bridge_assets a
+       join bridge_titles t on t.id = a.title_id
       where a.id = $1`,
-    [asset.id, startedAt.toISOString()],
+    [asset.id, startedAt.toISOString(), sealed.etag],
   );
-  assert.equal(state.rows[0].s3_key, sealedKey);
-  assert.equal(Number(state.rows[0].byte_size), sealed.byteSize);
-  assert.equal(state.rows[0].audited, true);
-  console.log("5/6 Bridge persisted asset state + audit: PASS");
+  const persistedState = state.rows[0];
+  assert.ok(persistedState, "persisted asset state must be queryable");
+  assert.equal(persistedState.s3_key, sealedKey);
+  assert.equal(Number(persistedState.byte_size), sealed.byteSize);
+  assert.equal(persistedState.audited, true, "audit event must exist inside the test transaction");
+  if (asset.kind === "poster") assert.equal(persistedState.poster_key, sealedKey);
+  else assert.equal(persistedState.poster_key, asset.poster_key);
+  if (asset.kind === "master") assert.equal(persistedState.master_key, sealedKey);
+  else assert.equal(persistedState.master_key, asset.master_key);
+  console.log("5/6 Bridge state + in-transaction audit: PASS");
 
   const download = await signDownload({ key: sealedKey });
   const get = await fetch(download.url);
   if (!get.ok) throw new Error(`OCI signed GET failed (${get.status})`);
   const downloaded = Buffer.from(await get.arrayBuffer());
   assert.deepEqual(downloaded, payload);
-  console.log("6/6 signed download + byte verification: PASS");
+  console.log("6/6 signed download + bytes: PASS");
 
-  await cleanup();
-  const after = await pool.query(
-    `select s3_key, byte_size from bridge_assets where id = $1`,
-    [asset.id],
-  );
-  assert.equal(after.rows[0].s3_key, snapshot.s3_key);
-  assert.equal(after.rows[0].byte_size, null);
-  console.log(JSON.stringify({
+  runResult = {
     status: "PASS",
     assetId: asset.id,
     titleId: asset.title_id,
     byteSize: sealed.byteSize,
-    persisted: true,
-    auditRecorded: true,
-    auditPreserved: true,
-    fixtureKeyPreserved: true,
-    cleanedSealedCopy: true,
-  }));
+    persistedInsideTransaction: true,
+    auditObservedWithinTransaction: true,
+    databaseTransactionRolledBack: true,
+    fixtureStateVerifiedAfterRollback: true,
+    runOwnedObjectsDeletedAndAbsent: true,
+  };
 } catch (error) {
-  console.error("STORAGE_E2E_FAILED", redact(error instanceof Error ? error.message : String(error)));
-  try { await cleanup(); } catch (cleanupError) {
-    console.error("CLEANUP_FAILED", redact(cleanupError instanceof Error ? cleanupError.message : String(cleanupError)));
-  }
+  runError = error instanceof Error ? error : new Error(String(error));
+  console.error("STORAGE_E2E_FAILED", redact(runError.message));
   process.exitCode = 1;
 } finally {
-  await pool.end();
+  if (connected) {
+    try {
+      await cleanupOciE2E({
+        runKeys,
+        deleteObject,
+        objectExists,
+        rollback: async () => {
+          if (transactionOpen) {
+            await client.query("ROLLBACK");
+            transactionOpen = false;
+          }
+        },
+        verifyDatabaseState: snapshot
+          ? async () => {
+              const after = await readFixtureState(snapshot.id);
+              assertFixtureRestored(snapshot, after.rows[0]);
+            }
+          : undefined,
+      });
+      console.log("CLEANUP_PASS: both run-owned objects absent; DB transaction rolled back; fixture fields restored");
+    } catch (cleanupError) {
+      console.error(
+        "CLEANUP_FAILED",
+        redact(cleanupError instanceof Error ? cleanupError.message : String(cleanupError)),
+      );
+      process.exitCode = 1;
+    }
+    try {
+      await client.end();
+    } catch (closeError) {
+      console.error("DATABASE_CLOSE_FAILED", redact(closeError instanceof Error ? closeError.message : String(closeError)));
+      process.exitCode = 1;
+    }
+  } else {
+    process.exitCode = 1;
+  }
+}
+
+if (runResult && process.exitCode !== 1) {
+  console.log(JSON.stringify(runResult));
 }
