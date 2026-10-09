@@ -107,7 +107,7 @@ test("OCI copy polling uses Object Storage and only verifies successful copies",
           assert.equal((await sealVerifiedObject("source-key", "sealed-key", "source-etag")).byteSize, 12);
           assert.deepEqual(calls.map((call) => call.method), ["POST", "GET", "HEAD"]);
         } else {
-          const message = outcome === "HTTP_ERROR" ? /lookup failed \\(403\\)/ : new RegExp(`copy ${outcome.toLowerCase()}`);
+          const message = outcome === "HTTP_ERROR" ? /lookup failed \(403\)/ : new RegExp(`copy ${outcome.toLowerCase()}`);
           await assert.rejects(sealVerifiedObject("source-key", "sealed-key", "source-etag"), message);
           assert.deepEqual(calls.map((call) => call.method), ["POST", "GET"]);
         }
