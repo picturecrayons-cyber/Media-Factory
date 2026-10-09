@@ -47,7 +47,7 @@ test("payment alone never marks a job delivered", () => {
 
 test("delivery requires delivered state, an attached artifact and sign-off", () => {
   const signed = {
-    state: "delivered",
+    state: "delivered" as const,
     deliverableAssetKey: "private/job/master.mov",
     signoffAt: "2026-10-09T00:00:00.000Z",
   };
