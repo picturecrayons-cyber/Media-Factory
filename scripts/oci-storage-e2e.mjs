@@ -47,6 +47,7 @@ const payload = Buffer.from(
 const startedAt = new Date();
 
 let connected = false;
+let transactionStarted = false;
 let transactionOpen = false;
 let snapshot = null;
 let runResult = null;
@@ -90,6 +91,7 @@ try {
   await client.connect();
   connected = true;
   await client.query("BEGIN");
+  transactionStarted = true;
   transactionOpen = true;
 
   const result = await client.query(
@@ -207,7 +209,7 @@ try {
   console.error("STORAGE_E2E_FAILED", redact(runError.message));
   process.exitCode = 1;
 } finally {
-  if (connected) {
+  if (connected && transactionStarted) {
     try {
       await cleanupOciE2E({
         runKeys,
@@ -240,6 +242,15 @@ try {
       console.error("DATABASE_CLOSE_FAILED", redact(closeError instanceof Error ? closeError.message : String(closeError)));
       process.exitCode = 1;
     }
+  } else if (connected) {
+    // No OCI operations happen until BEGIN succeeds, so there is nothing to clean.
+    console.error("CLEANUP_NOT_NEEDED: stopped before transaction and object operations");
+    try {
+      await client.end();
+    } catch (closeError) {
+      console.error("DATABASE_CLOSE_FAILED", redact(closeError instanceof Error ? closeError.message : String(closeError)));
+    }
+    process.exitCode = 1;
   } else {
     process.exitCode = 1;
   }
