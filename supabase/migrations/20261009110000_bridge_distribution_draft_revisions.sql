@@ -1,4 +1,7 @@
 -- Append-only, database-enforced version history for Distribution Desk draft changes.
+alter table public.bridge_distribution_inquiries drop constraint if exists bridge_distribution_inquiries_status_check;
+alter table public.bridge_distribution_inquiries add constraint bridge_distribution_inquiries_status_check
+  check (status in ('RECEIVED','NEEDS_REVIEW','DRAFT_PENDING_OPERATOR_APPROVAL','DRAFT_READY','APPROVED_DRAFT'));
 create table if not exists public.bridge_distribution_draft_revisions (
   id bigint generated always as identity primary key,
   inquiry_id uuid not null references public.bridge_distribution_inquiries(id) on delete restrict,
