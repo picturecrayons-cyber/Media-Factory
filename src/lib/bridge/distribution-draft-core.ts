@@ -13,6 +13,8 @@ export type DistributionDraft = {
 };
 
 function clean(value: string | null | undefined, max: number): string {
+  // Control characters are removed from untrusted text before it is used in a draft.
+  // eslint-disable-next-line no-control-regex
   return (value ?? "").replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim().slice(0, max);
 }
 
