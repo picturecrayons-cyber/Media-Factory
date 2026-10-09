@@ -122,7 +122,7 @@ test("distribution draft makes no availability claim and has no outbound action"
     titleName: "Jananam 1947",
     inquiryText: "Please confirm worldwide rights and send the screener.",
   });
-  assert.equal(draft.status, "DRAFT_READY");
+  assert.equal(draft.status, "DRAFT_PENDING_OPERATOR_APPROVAL");
   assert.equal(draft.claimsAvailability, false);
   assert.equal(draft.outboundAction, "NONE");
   assert.match(draft.body, /Availability, pricing, delivery timing and screening access are not confirmed/);
