@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { generateKeyPairSync, verify } from "node:crypto";
 import { sealVerifiedObject, verifyObject } from "./oci-object-storage.server.ts";
+import { validateOttIngestFile } from "./ott-ingest-spec.ts";
 
 test("OCI private key normalization accepts escaped and quoted PEM secrets", async () => {
   const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
@@ -140,7 +141,7 @@ test("OCI object verification rejects an unexpected content type", async () => {
   }
 });
 
-test("OCI title asset keys preserve Malayalam filenames and escape path separators", async () => {
+test("OCI title asset keys are ASCII-only even when filenames contain Malayalam or path separators", async () => {
   const { titleAssetKey } = await import("./oci-object-storage.server.ts");
   const key = titleAssetKey({
     ownerUserId: "owner",
@@ -148,8 +149,8 @@ test("OCI title asset keys preserve Malayalam filenames and escape path separato
     kind: "master",
     filename: "ജനനം 1947 Pranayam Thudarunnu.mp4",
   });
-  assert.match(key, /ജനനം 1947 Pranayam Thudarunnu\.mp4$/u);
-  assert.equal(key.split(String.fromCharCode(0)).length, 1);
+  assert.match(key, /-[0-9a-f-]{36}\.mp4$/);
+  assert.match(key, /^[\x00-\x7F]+$/);
   assert.equal(key.split("/").length, 5);
 
   const hostile = titleAssetKey({
@@ -159,5 +160,24 @@ test("OCI title asset keys preserve Malayalam filenames and escape path separato
     filename: "../മലയാളം\\\u0000.png",
   });
   assert.equal(hostile.split("/").length, 5);
-  assert.match(hostile, /മലയാളം__\.png$/u);
+  assert.match(hostile, /-[0-9a-f-]{36}\.png$/);
+  assert.match(hostile, /^[\x00-\x7F]+$/);
+});
+
+
+test("OTT ingest file sizes are checked before requesting storage upload", () => {
+  const GiB = 1024 ** 3;
+  const MiB = 1024 ** 2;
+  assert.equal(validateOttIngestFile({
+    kind: "master", filename: "upload.mp4", contentType: "video/mp4", byteSize: 49 * GiB,
+  }).ok, true);
+  const oversizedMaster = validateOttIngestFile({
+    kind: "master", filename: "upload.mp4", contentType: "video/mp4", byteSize: 49 * GiB + 1,
+  });
+  assert.equal(oversizedMaster.ok, false);
+  if (!oversizedMaster.ok) assert.match(oversizedMaster.message, /49 GiB/);
+  const oversizedPoster = validateOttIngestFile({
+    kind: "poster_vertical", filename: "upload.jpg", contentType: "image/jpeg", byteSize: 25 * MiB + 1,
+  });
+  assert.equal(oversizedPoster.ok, false);
 });

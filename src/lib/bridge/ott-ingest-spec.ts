@@ -5,11 +5,16 @@ type OttIngestRule = {
   extensions: readonly string[];
   mimeTypes: readonly string[];
   mimeByExtension: Readonly<Record<string, readonly string[]>>;
+  maxBytes: number;
 };
+
+const MiB = 1024 ** 2;
+const GiB = 1024 ** 3;
 
 export const OTT_INGEST_SPEC: Record<OttIngestKind, OttIngestRule> = {
   master: {
     label: "Master Video",
+    maxBytes: 49 * GiB,
     extensions: [".mp4", ".mov", ".mxf"],
     mimeTypes: ["video/mp4", "video/quicktime", "application/mxf", "video/mxf"],
     mimeByExtension: {
@@ -20,6 +25,7 @@ export const OTT_INGEST_SPEC: Record<OttIngestKind, OttIngestRule> = {
   },
   poster: {
     label: "Artwork",
+    maxBytes: 25 * MiB,
     extensions: [".png", ".jpg", ".jpeg", ".webp"],
     mimeTypes: ["image/png", "image/jpeg", "image/webp"],
     mimeByExtension: {
@@ -31,6 +37,7 @@ export const OTT_INGEST_SPEC: Record<OttIngestKind, OttIngestRule> = {
   },
   poster_vertical: {
     label: "Vertical Poster",
+    maxBytes: 25 * MiB,
     extensions: [".png", ".jpg", ".jpeg", ".webp"],
     mimeTypes: ["image/png", "image/jpeg", "image/webp"],
     mimeByExtension: {
@@ -42,6 +49,7 @@ export const OTT_INGEST_SPEC: Record<OttIngestKind, OttIngestRule> = {
   },
   poster_horizontal: {
     label: "Horizontal Artwork",
+    maxBytes: 25 * MiB,
     extensions: [".png", ".jpg", ".jpeg", ".webp"],
     mimeTypes: ["image/png", "image/jpeg", "image/webp"],
     mimeByExtension: {
@@ -53,6 +61,7 @@ export const OTT_INGEST_SPEC: Record<OttIngestKind, OttIngestRule> = {
   },
   thumbnail: {
     label: "Thumbnail",
+    maxBytes: 25 * MiB,
     extensions: [".png", ".jpg", ".jpeg", ".webp"],
     mimeTypes: ["image/png", "image/jpeg", "image/webp"],
     mimeByExtension: {
@@ -64,6 +73,7 @@ export const OTT_INGEST_SPEC: Record<OttIngestKind, OttIngestRule> = {
   },
   subtitle: {
     label: "Subtitle",
+    maxBytes: 50 * MiB,
     extensions: [".srt", ".vtt", ".ttml", ".xml"],
     mimeTypes: [
       "application/x-subrip",
@@ -82,6 +92,7 @@ export const OTT_INGEST_SPEC: Record<OttIngestKind, OttIngestRule> = {
   },
   screener: {
     label: "Trailer / Screener",
+    maxBytes: 49 * GiB,
     extensions: [".mp4", ".mov", ".mxf"],
     mimeTypes: ["video/mp4", "video/quicktime", "application/mxf", "video/mxf"],
     mimeByExtension: {
@@ -92,6 +103,7 @@ export const OTT_INGEST_SPEC: Record<OttIngestKind, OttIngestRule> = {
   },
   censor_certificate: {
     label: "Censor Certificate",
+    maxBytes: 50 * MiB,
     extensions: [".pdf", ".png", ".jpg", ".jpeg"],
     mimeTypes: ["application/pdf", "image/png", "image/jpeg"],
     mimeByExtension: {
@@ -103,6 +115,7 @@ export const OTT_INGEST_SPEC: Record<OttIngestKind, OttIngestRule> = {
   },
   technical: {
     label: "Technical / Camera Package",
+    maxBytes: 1 * GiB,
     extensions: [".cube", ".aml", ".xml", ".pkg"],
     mimeTypes: [
       "application/octet-stream",
@@ -133,10 +146,21 @@ export function validateOttIngestFile(args: {
   kind: OttIngestKind;
   filename: string;
   contentType?: string | null;
+  byteSize?: number;
 }): { ok: true } | { ok: false; message: string } {
   const rule = OTT_INGEST_SPEC[args.kind];
   const extension = extensionOf(args.filename);
   const contentType = (args.contentType ?? "").toLowerCase();
+
+  if (args.byteSize !== undefined && (!Number.isSafeInteger(args.byteSize) || args.byteSize <= 0)) {
+    return { ok: false, message: "The selected file is empty or has an invalid size." };
+  }
+  if (args.byteSize !== undefined && args.byteSize > rule.maxBytes) {
+    const maxLabel = rule.maxBytes >= GiB
+      ? `${rule.maxBytes / GiB} GiB`
+      : `${rule.maxBytes / MiB} MiB`;
+    return { ok: false, message: `${rule.label} exceeds the ${maxLabel} upload limit.` };
+  }
 
   if (!rule.extensions.includes(extension)) {
     return {

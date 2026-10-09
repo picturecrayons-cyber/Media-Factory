@@ -282,6 +282,7 @@ function FilesPanel({
       kind,
       filename: file.name,
       contentType: file.type || "application/octet-stream",
+      byteSize: file.size,
     });
     if (!validation.ok) {
       setMessage(validation.message);
@@ -290,12 +291,17 @@ function FilesPanel({
     setUploading(kind);
     setMessage(`Preparing ${kind} upload…`);
     try {
+      // Do not send the original Unicode filename through the server-function transport.
+      // The browser retains it for display; the storage key uses only a random ID and extension.
+      const extension = file.name.slice(file.name.lastIndexOf(".")).toLowerCase();
+      const transportFilename = /^[.][a-z0-9]{1,10}$/.test(extension) ? `upload${extension}` : "upload";
       const signed = await requestAssetUpload({
         data: {
           titleId,
           kind,
-          filename: file.name,
+          filename: transportFilename,
           contentType: file.type || "application/octet-stream",
+          byteSize: file.size,
         },
       });
       const put = await fetch(signed.url, {
@@ -306,7 +312,7 @@ function FilesPanel({
       if (!put.ok) throw new Error(`Upload failed (${put.status})`);
       await confirmAssetUpload({ data: { assetId: signed.assetId, expectedByteSize: file.size } });
       await onAssetsChanged();
-      setMessage(`${kind[0].toUpperCase() + kind.slice(1)} is ready.`);
+      setMessage(`${file.name} — ${kind[0].toUpperCase() + kind.slice(1)} is uploaded and verified.`);
     } catch (error) {
       const raw = error instanceof Error ? error.message : "Upload failed";
       setMessage(

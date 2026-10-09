@@ -32,6 +32,7 @@ export const requestAssetUpload = createServerFn({ method: "POST" })
       kind: z.enum(ASSET_KINDS),
       filename: z.string().min(1).max(120),
       contentType: z.string().min(3).max(120),
+      byteSize: z.number().int().positive(),
     }),
   )
   .handler(async ({ context, data }) => {
@@ -48,6 +49,7 @@ export const requestAssetUpload = createServerFn({ method: "POST" })
       kind: data.kind as OttIngestKind,
       filename: data.filename,
       contentType: data.contentType,
+      byteSize: data.byteSize,
     });
     if (!ingestValidation.ok) throw new Error(ingestValidation.message);
     const { signUpload, titleAssetKey } = await import("./oci-object-storage.server");

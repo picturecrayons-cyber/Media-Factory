@@ -3,6 +3,7 @@ import {
   createPrivateKey,
   createPublicKey,
   createSign,
+  randomUUID,
 } from "node:crypto";
 import { bridgeEnv } from "./env.ts";
 
@@ -266,13 +267,9 @@ export async function deleteObject(key: string) {
   return { deleted: res.status !== 404, key };
 }
 
-/** Build an OCI-safe object name while preserving Unicode in the original filename. */
+/** Build an ASCII-only OCI object key; the original filename stays in the browser UI. */
 export function titleAssetKey(opts: { ownerUserId: string; titleId: string; kind: string; filename: string }) {
-  const backslash = String.fromCharCode(92);
-  const filename = Array.from(opts.filename.normalize("NFC"), (char) => {
-    const code = char.codePointAt(0) ?? 0;
-    return code < 32 || code === 127 || char === "/" || char === backslash ? "_" : char;
-  }).join("").trim();
-  const safe = Array.from(filename || "upload").slice(0, 120).join("");
-  return "bridge/" + opts.ownerUserId + "/" + opts.titleId + "/" + opts.kind + "/" + Date.now() + "-" + safe;
+  const extension = opts.filename.match(/\.([A-Za-z0-9]{1,10})$/)?.[1]?.toLowerCase();
+  const suffix = extension ? "." + extension : "";
+  return "bridge/" + opts.ownerUserId + "/" + opts.titleId + "/" + opts.kind + "/" + Date.now() + "-" + randomUUID() + suffix;
 }
