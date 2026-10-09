@@ -4,13 +4,15 @@ import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { Button } from "@/components/ui/button";
 import { CreateTitleForm } from "@/components/bridge/title-desk";
+import { AdminOnlyTitleSlate } from "@/components/bridge/admin-only-title-slate";
+import { DistributionAvailsReport } from "@/components/bridge/distribution-avails-report";
 import { listTitles } from "@/lib/bridge/titles";
 import { listLoopPublicationReadiness } from "@/lib/bridge/loop-publication";
 import { hasPermission } from "@/lib/bridge/rbac";
 
 export const Route = createFileRoute("/cms")({ component: OperationalCms });
 
-const tabs = ["ingest", "licensing", "publishing"] as const;
+const tabs = ["ingest", "licensing", "publishing", "avails"] as const;
 type Tab = (typeof tabs)[number];
 
 function OperationalCms() {
@@ -78,9 +80,14 @@ function CmsBody({ actor }: { actor: any }) {
       </nav>
 
       <div className="mt-6">
+        <AdminOnlyTitleSlate />
+      </div>
+
+      <div className="mt-6">
         {tab === "ingest" ? <IngestDesk actor={actor} /> : null}
         {tab === "licensing" ? <LicensingDesk titles={titles} /> : null}
         {tab === "publishing" ? <PublishingDesk publications={publications} /> : null}
+        {tab === "avails" ? <DistributionAvailsReport /> : null}
       </div>
     </BridgeShell>
   );
