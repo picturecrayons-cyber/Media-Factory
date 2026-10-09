@@ -114,7 +114,7 @@ test("extension cannot restore suspended revoked expired or pending publications
   assert.doesNotThrow(() => assertPublicationCanExtend("authorized", null));
 });
 
-import { assertDraftCanBeApproved, buildDistributionDraft } from "./distribution-draft-core.ts";
+
 
 test("distribution draft makes no availability claim and has no outbound action", () => {
   const draft = buildDistributionDraft({
