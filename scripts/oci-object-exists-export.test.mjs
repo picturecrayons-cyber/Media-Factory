@@ -7,7 +7,7 @@ test("OCI object storage module exports objectExists exactly once", () => {
     new URL("../src/lib/bridge/oci-object-storage.server.ts", import.meta.url),
     "utf8",
   );
-  const declarations = source.match(/export\\s+async\\s+function\\s+objectExists\\s*\\(/g) ?? [];
+  const declarations = source.match(/export\s+async\s+function\s+objectExists\s*\(/g) ?? [];
   assert.equal(
     declarations.length,
     1,
