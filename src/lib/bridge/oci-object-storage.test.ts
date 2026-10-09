@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { generateKeyPairSync, verify } from "node:crypto";
-import { sealVerifiedObject, verifyObject } from "./oci-object-storage.server.ts";
+import { objectExists, sealVerifiedObject, verifyObject } from "./oci-object-storage.server.ts";
 
 test("OCI private key normalization accepts escaped and quoted PEM secrets", async () => {
   const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
@@ -136,6 +136,47 @@ test("OCI object verification rejects an unexpected content type", async () => {
     globalThis.fetch = originalFetch;
     for (const [key, value] of Object.entries(saved)) {
       if (value === undefined) delete process.env[key]; else process.env[key] = value;
+    }
+  }
+});
+
+
+test("OCI objectExists reports absence and presence using signed HEAD", async () => {
+  const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  const values = {
+    OCI_TENANCY_OCID: "test-tenancy",
+    OCI_USER_OCID: "test-user",
+    OCI_PRIVATE_KEY: privateKey.export({ type: "pkcs8", format: "pem" }).toString(),
+    OCI_FINGERPRINT: "test-fingerprint",
+    OCI_REGION: "ap-mumbai-1",
+    OCI_NAMESPACE: "test-namespace",
+    OCI_BUCKET_NAME: "test-bucket",
+  };
+  const saved = Object.fromEntries(Object.keys(values).map((key) => [key, process.env[key]]));
+  const originalFetch = globalThis.fetch;
+  Object.assign(process.env, values);
+  try {
+    for (const status of [200, 404, 403]) {
+      globalThis.fetch = async (input, init) => {
+        const url = new URL(String(input));
+        assert.equal(init?.method, "HEAD");
+        assert.equal(url.pathname, "/n/test-namespace/b/test-bucket/o/run%2Fkey");
+        const headers = new Headers(init?.headers);
+        const signature = headers.get("authorization")?.match(/signature="([^"]+)"/)?.[1];
+        assert.ok(signature);
+        const signed = `(request-target): head ${url.pathname}\nhost: ${url.host}\ndate: ${headers.get("date")}`;
+        assert.ok(verify("RSA-SHA256", Buffer.from(signed), publicKey, Buffer.from(signature, "base64")));
+        return new Response(null, { status });
+      };
+      if (status === 200) assert.equal(await objectExists("run/key"), true);
+      else if (status === 404) assert.equal(await objectExists("run/key"), false);
+      else await assert.rejects(objectExists("run/key"), /existence check failed \(403\)/);
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
+    for (const [key, value] of Object.entries(saved)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
     }
   }
 });
