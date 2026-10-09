@@ -7,7 +7,7 @@
 ## Executive result
 
 - 25 active (non-merged) title rows; only 20 distinct normalized title names. This does not reconcile to the requested 21-title working list and indicates duplicate/alias cleanup is needed before bulk outreach.
-- 1 row is marked `LIVE_FOR_BUYERS`; 23 are `DRAFT`; 0 are `LICENSING_READY`.
+- 1 row is marked `LIVE_FOR_BUYERS`; 23 are `DRAFT`; 1 is `PREPARING`; 0 are `LICENSING_READY`.
 - Only 1 row has a master key and poster key; 0 title rows have a current valid `bridge_rights_grants` record, 0 QC case rows, 0 legal case rows, and 0 asset-version rows in the queried live schema snapshot.
 - No active Loop publication authorization exists in the queried rows. Jananam 1947's only publication row is revoked.
 - No inquiry table existed before this change. This PR adds a server-only intake/draft ledger; it does not connect a mailbox or send email.
