@@ -139,3 +139,25 @@ test("OCI object verification rejects an unexpected content type", async () => {
     }
   }
 });
+
+test("OCI title asset keys preserve Malayalam filenames and escape path separators", async () => {
+  const { titleAssetKey } = await import("./oci-object-storage.server.ts");
+  const key = titleAssetKey({
+    ownerUserId: "owner",
+    titleId: "title",
+    kind: "master",
+    filename: "ജനനം 1947 Pranayam Thudarunnu.mp4",
+  });
+  assert.match(key, /ജനനം 1947 Pranayam Thudarunnu\.mp4$/u);
+  assert.equal(key.split(String.fromCharCode(0)).length, 1);
+  assert.equal(key.split("/").length, 5);
+
+  const hostile = titleAssetKey({
+    ownerUserId: "owner",
+    titleId: "title",
+    kind: "poster",
+    filename: "../മലയാളം\\\u0000.png",
+  });
+  assert.equal(hostile.split("/").length, 5);
+  assert.match(hostile, /മലയാളം__\.png$/u);
+});
