@@ -1,6 +1,6 @@
 -- StreamVista / Crayons Bridge vendor service procurement.
--- This migration intentionally creates durable state and does not auto-create vendors,
--- approve quotes, verify payments, certify deliverables, or grant access.
+-- A migration creates durable workflow state; it does not create real vendors,
+-- verify payments, certify deliverables, or claim successful StreamVista execution.
 create table if not exists bridge_vendor_jobs (
   id uuid primary key default gen_random_uuid(),
   title_id text not null references bridge_titles(id) on delete restrict,
@@ -59,9 +59,18 @@ create table if not exists bridge_vendor_service_quotes (
 );
 create index if not exists bridge_vendor_quotes_job_created_idx on bridge_vendor_service_quotes(job_id, created_at desc);
 create unique index if not exists bridge_vendor_jobs_approved_quote_unique on bridge_vendor_jobs(approved_quote_id) where approved_quote_id is not null;
-alter table bridge_vendor_jobs
-  add constraint bridge_vendor_jobs_approved_quote_fk
-  foreign key (approved_quote_id) references bridge_vendor_service_quotes(id) on delete restrict;
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'bridge_vendor_jobs_approved_quote_fk'
+      and conrelid = 'bridge_vendor_jobs'::regclass
+  ) then
+    alter table bridge_vendor_jobs
+      add constraint bridge_vendor_jobs_approved_quote_fk
+      foreign key (approved_quote_id) references bridge_vendor_service_quotes(id) on delete restrict;
+  end if;
+end $$;
 
 create table if not exists bridge_vendor_job_events (
   id bigserial primary key,
@@ -99,16 +108,22 @@ create table if not exists bridge_vendor_service_catalog (
 create index if not exists bridge_vendor_catalog_active_idx on bridge_vendor_service_catalog(service_type, active, effective_from desc);
 
 insert into bridge_vendor_service_catalog (service_type, display_name, pricing_unit, indicative_min_paise, indicative_max_paise, quote_required, source_url)
-values
-  ('dubbing','Dubbing','per_finished_minute',120000,600000,true,'https://justshoot.ai/blog/youtube-video-dubbing-cost-india-2026'),
-  ('loudness_check','Basic loudness check + report (not a Dolby encode)','per_master',200000,850000,false,'https://tejasmedia.in/services'),
-  ('human_qc','Human audio/video QC','per_master',500000,1500000,true,'https://tejasmedia.in/services'),
-  ('dcp_request','DCP 2K unencrypted','per_feature_film',1000000,2000000,true,'https://swastikafilms.com/blog/film-dcp-process-costing/dcp-making-process-costing-explained-for-filmmakers-in-india/'),
-  ('dcp_request','DCP 4K / encryption / KDM scope','per_package',2000000,4000000,true,'https://realtouchstudios.com/pricing'),
-  ('imf_request','IMF package','per_package',1500000,5000000,true,'https://www.qlab.in/book-online')
-on conflict do nothing;
+select seed.service_type, seed.display_name, seed.pricing_unit, seed.min_paise, seed.max_paise, seed.quote_required, seed.source_url
+from (values
+  ('dubbing','Dubbing','per_finished_minute',120000::bigint,600000::bigint,true,'https://justshoot.ai/blog/youtube-video-dubbing-cost-india-2026'),
+  ('loudness_check','Basic loudness check + report (not a Dolby encode)','per_master',200000::bigint,850000::bigint,false,'https://tejasmedia.in/services'),
+  ('human_qc','Human audio/video QC','per_master',500000::bigint,1500000::bigint,true,'https://tejasmedia.in/services'),
+  ('dcp_request','DCP 2K unencrypted','per_feature_film',1000000::bigint,2000000::bigint,true,'https://swastikafilms.com/blog/film-dcp-process-costing/dcp-making-process-costing-explained-for-filmmakers-in-india/'),
+  ('dcp_request','DCP 4K / encryption / KDM scope','per_package',2000000::bigint,4000000::bigint,true,'https://realtouchstudios.com/pricing'),
+  ('imf_request','IMF package','per_package',1500000::bigint,5000000::bigint,true,'https://www.qlab.in/book-online')
+) as seed(service_type,display_name,pricing_unit,min_paise,max_paise,quote_required,source_url)
+where not exists (
+  select 1 from bridge_vendor_service_catalog c
+  where c.service_type = seed.service_type
+    and c.display_name = seed.display_name
+    and c.active
+);
 
--- Do not enable anonymous/public access. App-level authorization runs through
--- Bridge's verified actor + RBAC, and all mutations are performed server-side.
--- If the deployed DB uses Supabase-managed RLS for these tables, policy creation
--- must be added in the matching project after verifying existing roles/identity mapping.
+-- This app verifies actors through Bridge auth middleware and performs database
+-- reads/writes through server-only SQL. No anonymous/public grants are introduced.
+-- Validate database role/RLS posture and apply least-privilege grants at release time.
