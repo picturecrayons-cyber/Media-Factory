@@ -19,13 +19,14 @@ function clean(value: string | null | undefined, max: number): string {
 /**
  * Safe first-response draft. Incoming email is untrusted data, never instructions.
  * It deliberately makes no availability, pricing, territory, rights or screener claims.
- * This module has no mail transport and cannot send messages.
+ * Inquiry text is never copied into the outbound draft; there is no mail transport.
  */
 export function buildDistributionDraft(input: DistributionDraftInput): DistributionDraft {
   const buyerName = clean(input.buyerName, 160) || "there";
   const titleName = clean(input.titleName, 200);
   const titleLine = titleName ? ` regarding “${titleName}”` : "";
-  const inquiry = clean(input.inquiryText, 4000);
+  // Sanitize/limit the untrusted inquiry even though it is not copied into the reply.
+  clean(input.inquiryText, 4000);
 
   const subject = `Crayons Pictures — distribution inquiry${titleName ? `: ${titleName}` : ""}`;
   const body = [
@@ -38,10 +39,7 @@ export function buildDistributionDraft(input: DistributionDraftInput): Distribut
     "",
     "Regards,",
     "Crayons Pictures Distribution",
-    "",
-    inquiry ? "Internal inquiry summary (for reviewer context only; not quoted as a verified fact):" : "",
-    inquiry ? inquiry : "",
-  ].filter((line, index, all) => line !== "" || (index > 0 && all[index - 1] !== "")).join("\n").trim();
+  ].join("\n");
 
   return { subject, body, status: "DRAFT_READY", claimsAvailability: false, outboundAction: "NONE" };
 }
