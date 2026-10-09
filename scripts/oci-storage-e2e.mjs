@@ -41,11 +41,9 @@ const startedAt = new Date();
 const createdKeys = [];
 let snapshot = null;
 let sealedKey = null;
-let sealedEtag = null;
 
 function redact(value) {
-  const text = String(value ?? "");
-  return text.replace(/https?:\/\/\S+/g, "[redacted-url]");
+  return String(value ?? "").replace(/https?:\/\/\S+/g, "[redacted-url]");
 }
 
 async function cleanup() {
@@ -53,21 +51,21 @@ async function cleanup() {
   for (const key of [...createdKeys].reverse()) {
     try {
       await deleteObject(key);
-      console.log(`CLEANUP object deleted key=${key}`);
+      console.log("CLEANUP sealed object deleted");
     } catch (error) {
-      errors.push(`object ${key}: ${error instanceof Error ? error.message : String(error)}`);
+      errors.push(error instanceof Error ? error.message : String(error));
     }
   }
   if (snapshot && sealedKey) {
     const reverted = await pool.query(
-      `update bridge_assets a
+      `update bridge_assets
           set byte_size = null,
               s3_key = $2,
               content_type = $3
-        where a.id = $1
-          and a.s3_key = $4
-          and a.byte_size is not null
-        returning a.id`,
+        where id = $1
+          and s3_key = $4
+          and byte_size is not null
+        returning id`,
       [snapshot.id, snapshot.s3_key, snapshot.content_type, sealedKey],
     );
     if (snapshot.kind === "poster" || snapshot.kind === "master") {
@@ -80,15 +78,6 @@ async function cleanup() {
         [snapshot.title_id, sealedKey, snapshot.title_key],
       );
     }
-    await pool.query(
-      `delete from bridge_audit_logs
-        where entity_id = $1
-          and entity_type = 'bridge_asset'
-          and action = 'asset.upload_verified'
-          and created_at >= $2
-          and metadata->>'checksum' = $3`,
-      [snapshot.id, startedAt.toISOString(), sealedEtag],
-    );
     console.log(`CLEANUP asset revert rows=${reverted.rowCount}`);
   }
   if (errors.length) throw new Error(`CLEANUP_INCOMPLETE ${errors.map(redact).join("; ")}`);
@@ -127,7 +116,6 @@ try {
     body: payload,
   });
   if (!put.ok) throw new Error(`OCI PUT failed (${put.status})`);
-  createdKeys.push(asset.s3_key);
   console.log("2/6 request OCI signed upload URL + PUT: PASS");
 
   const verified = await verifyObject(asset.s3_key, asset.content_type);
@@ -138,10 +126,9 @@ try {
   sealedKey = `${asset.s3_key}.verified/${randomUUID()}`;
   const sealed = await sealVerifiedObject(asset.s3_key, sealedKey, verified.etag);
   createdKeys.push(sealedKey);
-  sealedEtag = sealed.etag;
   assert.equal(sealed.byteSize, verified.byteSize);
   assert.ok(sealed.etag);
-  console.log("4/6 immutable OCI seal: PASS");
+  console.log("4/6 copy seal: PASS (not OCI retention)");
 
   const sql = { query: async (query, params) => (await pool.query(query, params)).rows };
   const persisted = await persistVerifiedAsset(sql, {
@@ -195,7 +182,9 @@ try {
     byteSize: sealed.byteSize,
     persisted: true,
     auditRecorded: true,
-    cleaned: true,
+    auditPreserved: true,
+    fixtureKeyPreserved: true,
+    cleanedSealedCopy: true,
   }));
 } catch (error) {
   console.error("STORAGE_E2E_FAILED", redact(error instanceof Error ? error.message : String(error)));
