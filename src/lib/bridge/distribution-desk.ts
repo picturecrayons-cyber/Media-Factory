@@ -158,7 +158,7 @@ export const approveDistributionDraft = createServerFn({ method: "POST" })
       where id = ${data.inquiryId} limit 1
     `;
     const draft = drafts[0];
-    if (!draft || !["DRAFT_PENDING_OPERATOR_APPROVAL", "DRAFT_READY"].includes(draft.status)) throw new Error("Only a pending operator-review draft can be approved");
+    if (!draft || (draft.status !== "DRAFT_PENDING_OPERATOR_APPROVAL" && draft.status !== "DRAFT_READY")) throw new Error("Only a pending operator-review draft can be approved");
     assertDraftCanBeApproved({
       draftSubject: draft.draft_subject, draftBody: draft.draft_body,
       reviewerUserId: actor.userId, explicitApproval: data.explicitApproval,
