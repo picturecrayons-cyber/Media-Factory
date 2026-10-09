@@ -11,7 +11,7 @@ import {
   listVendorJobs,
   listVendorServiceCatalog,
   createPersistentVendorJob,
-} from "@/lib/delivery/vendor-jobs.server";
+} from "@/lib/delivery/vendor-jobs.rpc";
 
 export const Route = createFileRoute("/deliveries")({ component: Deliveries });
 
