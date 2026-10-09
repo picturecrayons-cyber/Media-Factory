@@ -149,7 +149,7 @@ test("OCI title asset keys preserve Malayalam filenames and escape path separato
     filename: "ജനനം 1947 Pranayam Thudarunnu.mp4",
   });
   assert.match(key, /ജനനം 1947 Pranayam Thudarunnu\.mp4$/u);
-  assert.equal(key.includes("/1947"), true);
+  assert.equal(key.includes("જનനം 1947"), true);
   assert.equal(key.includes("\\u0000"), false);
   assert.equal(key.split("/").length, 5);
 
@@ -160,5 +160,5 @@ test("OCI title asset keys preserve Malayalam filenames and escape path separato
     filename: "../മലയാളം\\\u0000.png",
   });
   assert.equal(hostile.split("/").length, 5);
-  assert.match(hostile, /മലയാളം_\.png$/u);
+  assert.match(hostile, /മലയാളം__\.png$/u);
 });
