@@ -103,7 +103,7 @@ test("OCI tier mutation signs and sends a successful Object Storage action", asy
       `x-content-sha256: ${digest}`,
       "content-type: application/json",
       `content-length: ${Buffer.byteLength(rawBody)}`,
-    ].join("\\n");
+    ].join("\n");
     assert.ok(verify("RSA-SHA256", Buffer.from(signed), publicKey, Buffer.from(signature, "base64")));
     return new Response(null, { status: 200, headers: { "opc-request-id": "tier-test" } });
   };
