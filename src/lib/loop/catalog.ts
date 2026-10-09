@@ -87,6 +87,7 @@ export const getLoopCatalog = createServerFn({ method: "GET" })
       from loop_titles l
       join bridge_loop_publications p on p.loop_title_id = l.id
       where p.authorization_status = 'authorized'
+        and p.revoked_at is null
         and l.published = true
         and l.listed = true
         and l.status = 'approved'
@@ -183,8 +184,12 @@ export const getLoopTitleDetails = createServerFn({ method: "GET" })
       join bridge_loop_publications p on p.loop_title_id = l.id
       where (l.id = ${data.slugOrId} or l.slug = ${data.slugOrId})
         and p.authorization_status = 'authorized'
+        and p.revoked_at is null
         and l.published = true
+        and l.listed = true
         and l.status = 'approved'
+        and (p.window_start is null or p.window_start <= now())
+        and (p.window_end is null or p.window_end >= now())
       limit 1
     `;
 
@@ -208,7 +213,12 @@ export const getLoopTitleDetails = createServerFn({ method: "GET" })
       join bridge_loop_publications p on p.loop_title_id = l.id
       where l.id != ${title.id}
         and p.authorization_status = 'authorized'
+        and p.revoked_at is null
         and l.published = true
+        and l.listed = true
+        and l.status = 'approved'
+        and (p.window_start is null or p.window_start <= now())
+        and (p.window_end is null or p.window_end >= now())
       limit 6
     `;
 
@@ -230,7 +240,19 @@ export const checkPlaybackEntitlement = createServerFn({ method: "GET" })
 
     // Check title access tier
     const titles = await sql<{ id: string; access_tier: string }>`
-      select id, access_tier from loop_titles where id = ${data.loopTitleId} limit 1
+      select l.id, l.access_tier
+      from loop_titles l
+      join bridge_loop_publications p on p.loop_title_id = l.id
+      where l.id = ${data.loopTitleId}
+        and l.status = 'approved'
+        and l.listed = true
+        and l.published = true
+        and p.authorization_status = 'authorized'
+        and p.revoked_at is null
+        and (p.window_start is null or p.window_start <= now())
+        and (p.window_end is null or p.window_end >= now())
+        and (l.access_tier <> 'TVOD' or 'TVOD' = any(p.exploitation_models))
+      limit 1
     `;
     const title = titles[0];
     if (!title) {
@@ -261,13 +283,14 @@ export const checkPlaybackEntitlement = createServerFn({ method: "GET" })
     }
 
     // Check TVOD Entitlement
-    const tvods = await sql<{ id: number; access_type: string; expires_at: string | Date | null }>`
+    const tvods = await sql<{ id: string; access_type: string; expires_at: string | Date | null }>`
       select id, access_type, expires_at
-      from loop_entitlements
+      from loop_user_tvod_entitlements
       where user_id = ${context.userId}
-        and loop_title_id = ${data.loopTitleId}
+        and title_id = ${data.loopTitleId}
+        and status = 'ACTIVE'
         and (expires_at is null or expires_at > now())
-      order by created_at desc
+      order by purchased_at desc
       limit 1
     `;
 
