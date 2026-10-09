@@ -1,17 +1,8 @@
 name: Bridge OCI Storage E2E
 
 on:
+  # Manual-only: this workflow mutates a designated pending E2E asset and writes audit state.
   workflow_dispatch:
-  push:
-    branches:
-      - main
-    paths:
-      - ".github/workflows/bridge-oci-storage-e2e.yml"
-      - "scripts/oci-storage-e2e.mjs"
-      - "src/lib/bridge/**"
-      - "src/routes/title.$id.tsx"
-      - "package.json"
-      - "package-lock.json"
 
 jobs:
   storage-e2e:
@@ -24,7 +15,7 @@ jobs:
           node-version: "24"
           cache: npm
       - run: npm ci
-      - name: Run production OCI → Bridge persistence round-trip
+      - name: Run OCI → Bridge persistence round-trip
         env:
           OCI_TENANCY_OCID: ${{ secrets.OCI_TENANCY_OCID }}
           OCI_USER_OCID: ${{ secrets.OCI_USER_OCID }}
@@ -35,4 +26,4 @@ jobs:
           OCI_BUCKET_NAME: ${{ secrets.OCI_BUCKET_NAME }}
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           BRIDGE_E2E_ASSET_ID: ${{ secrets.BRIDGE_E2E_ASSET_ID }}
-        run: node scripts/oci-storage-e2e.mjs
+        run: node --experimental-strip-types scripts/oci-storage-e2e.mjs
