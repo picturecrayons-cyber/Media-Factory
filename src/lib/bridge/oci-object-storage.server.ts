@@ -56,6 +56,10 @@ function derivedFingerprint(privateKey: string) {
     .join(":");
 }
 
+function normalizeFingerprint(value: string) {
+  return value.replaceAll(":", "").trim().toLowerCase();
+}
+
 function config(): OciConfig {
   const tenancy = bridgeEnv.ociTenancyOcid();
   const user = bridgeEnv.ociUserOcid();
@@ -65,11 +69,21 @@ function config(): OciConfig {
   if (!tenancy || !user || !privateKey || !region || !bucket) {
     throw new Error("OCI Object Storage is not fully configured");
   }
+  const configuredFingerprint = bridgeEnv.ociFingerprint()?.trim();
+  const computedFingerprint = derivedFingerprint(privateKey);
+  if (
+    configuredFingerprint &&
+    normalizeFingerprint(configuredFingerprint) !== normalizeFingerprint(computedFingerprint)
+  ) {
+    throw new Error(
+      "OCI_FINGERPRINT does not match the fingerprint derived from OCI_PRIVATE_KEY; verify the Preview API signing key registration",
+    );
+  }
   return {
     tenancy,
     user,
     privateKey: normalizePrivateKey(privateKey),
-    fingerprint: bridgeEnv.ociFingerprint() || derivedFingerprint(privateKey),
+    fingerprint: configuredFingerprint || computedFingerprint,
     region,
     bucket,
     namespace: bridgeEnv.ociNamespace(),
