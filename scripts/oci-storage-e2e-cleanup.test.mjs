@@ -103,8 +103,14 @@ test("cleanup still attempts every run-owned object and fails closed when an obj
         calls.push(`head:${key}`);
         return key === "sealed";
       },
-      rollback: rollbackAlreadyOriginal,
-      verifyDatabaseState: verifiedDatabaseState,
+      rollback: async () => {
+        calls.push("rollback");
+        return { outcome: "already-original" };
+      },
+      verifyDatabaseState: async () => {
+        calls.push("verify-db");
+        return { verified: true };
+      },
     }),
     /CLEANUP_INCOMPLETE.*object deletion/,
   );
