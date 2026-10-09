@@ -19,7 +19,8 @@ jobs:
 
     services:
       postgres:
-        image: postgres:17
+        # Use the public AWS ECR mirror to avoid Docker Hub anonymous pull-rate limits.
+        image: public.ecr.aws/docker/library/postgres:17
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
