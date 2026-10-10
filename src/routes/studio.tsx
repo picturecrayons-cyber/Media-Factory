@@ -20,7 +20,8 @@ function Studio() {
               opportunity="Submit a slate. Production services stay optional and separate from licensing."
               steps={["Add title", "Prepare assets", "Rights clearance", "License", "Deliver"]}
             />
-            <InsuranceReadinessPanel audience="Studio" />\n            <section id="add-title">
+            <InsuranceReadinessPanel audience="Studio" />
+            <section id="add-title">
               <h2 className="text-lg font-semibold">Add title</h2>
               <div className="mt-3"><CreateTitleForm concise /></div>
             </section>
