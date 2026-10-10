@@ -174,7 +174,24 @@ async function createPar(opts: {
   };
   const path = `/n/${encodeURIComponent(namespace)}/b/${encodeURIComponent(cfg.bucket)}/p/`;
   const res = await signedFetch({ cfg, method: "POST", path, body });
-  if (!res.ok) throw new Error(`OCI pre-authenticated request failed (${res.status})`);
+  if (!res.ok) {
+    let ociCode = "";
+    try {
+      const errorBody = (await res.clone().json()) as { code?: unknown };
+      if (typeof errorBody.code === "string" && /^[A-Za-z0-9_-]{1,80}$/.test(errorBody.code)) {
+        ociCode = errorBody.code;
+      }
+    } catch {
+      // Keep diagnostics safe and useful even when OCI returns a non-JSON error.
+    }
+    const requestId = res.headers.get("opc-request-id");
+    const details = [
+      `OCI pre-authenticated request failed (${res.status})`,
+      ociCode ? `code=${ociCode}` : "",
+      requestId && /^[A-Za-z0-9/_+=:-]{1,160}$/.test(requestId) ? `requestId=${requestId}` : "",
+    ].filter(Boolean).join("; ");
+    throw new Error(details);
+  }
   const parsed = (await res.json()) as { accessUri?: string };
   if (!parsed.accessUri) throw new Error("OCI pre-authenticated request returned no access URI");
   return {
