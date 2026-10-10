@@ -82,7 +82,8 @@ async function fixture() {
       ).replaceAll("public.", `${schema}.`),
     );
     await db.exec(`insert into bridge_titles values('title-123','owner','QC_REVIEW','sealed/master','sealed/poster',now());
-    insert into bridge_assets values('master','title-123','master','sealed/master',100),('poster','title-123','poster','sealed/poster',100);`);
+    update bridge_titles set synopsis='A verified test title synopsis', language='Malayalam', content_type='FEATURE';
+    insert into bridge_assets values('master','title-123','master','sealed/master',100),('poster','title-123','poster','sealed/poster',100),('screener','title-123','screener','sealed/screener',100);`);
     function adapter(query: (text: string, params?: unknown[]) => Promise<{ rows: unknown[] }>) {
       const sql = (async (strings: TemplateStringsArray, ...params: unknown[]) => {
         let text = strings[0];
@@ -108,7 +109,7 @@ async function fixture() {
       "@/lib/db": { getSql: async () => sql },
       "./session": {},
       "./rbac": rbac,
-      "./titles": {},
+      "./titles": { assertLicensingReady: async () => undefined },
     "./env": {bridgeEnv:{}},
       "./workflow-policy": policy,
     };
@@ -158,6 +159,7 @@ test("real SQL services persist QC, independently approved license, lifecycle an
     const saved = (await f.sql.transaction((tx) => f.save(tx, owner, license))) as {
       grantId: string;
     };
+    await f.sql.query(`insert into bridge_destination_packages(title_id,destination,readiness_state) values('title-123','BUYER','HOLD')`);
     await f.sql.transaction((tx) =>
       f.review(tx, qc, {
         titleId: "title-123",
