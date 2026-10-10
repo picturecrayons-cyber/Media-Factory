@@ -2,6 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { CreateTitleForm, TitleList } from "@/components/bridge/title-desk";
+import { InsuranceReadinessPanel } from "@/components/bridge/insurance-readiness-panel";
 
 export const Route = createFileRoute("/creator")({ component: Creator });
 
