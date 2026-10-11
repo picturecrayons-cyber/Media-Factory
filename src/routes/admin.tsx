@@ -72,17 +72,33 @@ function AdminBody({ actor }: { actor: any }) {
         </section>
 
         <section aria-label="Operational summary" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <Metric label="All titles" value={titlesQ.isPending || titlesQ.isError ? "—" : String(titles.length)} detail="Canonical catalog" />
-          <Metric label="QC / intake" value={titlesQ.isPending || titlesQ.isError ? "—" : String(qcQueue)} detail="Awaiting review" />
-          <Metric label="Rights review" value={titlesQ.isPending || titlesQ.isError ? "—" : String(rightsQueue)} detail="Clearance queue" />
-          <Metric label="Buyer-ready pipeline" value={titlesQ.isPending || titlesQ.isError ? "—" : String(buyerReady)} detail="Licensing stages" />
+          <Metric label="All titles" value={titlesQ.isPending ? "Loading…" : titlesQ.isError ? "Unavailable" : String(titles.length)} detail="Canonical catalog" />
+          <Metric label="QC / intake" value={titlesQ.isPending ? "Loading…" : titlesQ.isError ? "Unavailable" : String(qcQueue)} detail="Awaiting review" />
+          <Metric label="Rights review" value={titlesQ.isPending ? "Loading…" : titlesQ.isError ? "Unavailable" : String(rightsQueue)} detail="Clearance queue" />
+          <Metric label="Buyer-ready pipeline" value={titlesQ.isPending ? "Loading…" : titlesQ.isError ? "Unavailable" : String(buyerReady)} detail="Licensing stages" />
         </section>
 
+        {titlesQ.isError ? (
+          <section role="alert" className="rounded-xl border border-red-500/40 bg-surface px-4 py-4">
+            <p className="font-medium">Canonical title metrics are unavailable.</p>
+            <p className="mt-1 text-sm text-muted">The title query failed; unavailable data is not reported as zero.</p>
+            <div className="mt-3"><Button variant="outline" onClick={() => void titlesQ.refetch()}>Retry title metrics</Button></div>
+          </section>
+        ) : null}
+
         <section className="grid gap-3 sm:grid-cols-3">
-          <CompactMetric label="Loop publications" value={distQ.isPending || distQ.isError ? "—" : String(live)} />
-          <CompactMetric label="Bridge profiles" value={profilesQ.isPending || profilesQ.isError ? "—" : String(profiles.length)} />
-          <CompactMetric label="Named organization labels" value={profilesQ.isPending || profilesQ.isError ? "—" : String(organizationLabels.size)} />
+          <CompactMetric label="Loop publications" value={distQ.isPending ? "Loading…" : distQ.isError ? "Unavailable" : String(live)} />
+          <CompactMetric label="Bridge profiles" value={profilesQ.isPending ? "Loading…" : profilesQ.isError ? "Unavailable" : String(profiles.length)} />
+          <CompactMetric label="Named organization labels" value={profilesQ.isPending ? "Loading…" : profilesQ.isError ? "Unavailable" : String(organizationLabels.size)} />
         </section>
+
+        {distQ.isError ? (
+          <section role="alert" className="rounded-xl border border-red-500/40 bg-surface px-4 py-4">
+            <p className="font-medium">Loop publication readiness is unavailable.</p>
+            <p className="mt-1 text-sm text-muted">Publication data could not be verified. This does not mean there are zero publications.</p>
+            <div className="mt-3"><Button variant="outline" onClick={() => void distQ.refetch()}>Retry publication metrics</Button></div>
+          </section>
+        ) : null}
 
         <section className="rounded-3xl border border-line bg-surface p-5 sm:p-6">
           <div className="flex flex-wrap items-end justify-between gap-3">
