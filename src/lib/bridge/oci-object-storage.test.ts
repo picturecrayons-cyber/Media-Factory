@@ -12,11 +12,17 @@ test("OCI private key normalization accepts escaped and quoted PEM secrets", asy
   const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
   const pem = privateKey.export({ type: "pkcs8", format: "pem" }).toString();
   const fingerprint = fingerprintFor(privateKey);
-  const variants = [
+  const keyVariants = [
     pem,
     JSON.stringify(pem),
     pem.replaceAll("\n", "\\n"),
     JSON.stringify(pem.replaceAll("\n", "\\n")),
+  ];
+  const fingerprintVariants = [
+    fingerprint,
+    fingerprint.toUpperCase(),
+    fingerprint.replaceAll(":", ""),
+    fingerprint.replaceAll(":", "").toUpperCase(),
   ];
 
   const originalFetch = globalThis.fetch;
@@ -32,23 +38,32 @@ test("OCI private key normalization accepts escaped and quoted PEM secrets", asy
   const saved = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
 
   try {
-    for (const variant of variants) {
-      Object.assign(process.env, {
-        OCI_TENANCY_OCID: "test-tenancy",
-        OCI_USER_OCID: "test-user",
-        OCI_PRIVATE_KEY: variant,
-        OCI_FINGERPRINT: fingerprint,
-        OCI_REGION: "ap-mumbai-1",
-        OCI_NAMESPACE: "test-namespace",
-        OCI_BUCKET_NAME: "test-bucket",
-      });
-      globalThis.fetch = async () =>
-        new Response(null, {
-          status: 200,
-          headers: { "content-length": "1", etag: '"test-etag"' },
+    for (const keyVariant of keyVariants) {
+      for (const fingerprintVariant of fingerprintVariants) {
+        Object.assign(process.env, {
+          OCI_TENANCY_OCID: "test-tenancy",
+          OCI_USER_OCID: "test-user",
+          OCI_PRIVATE_KEY: keyVariant,
+          OCI_FINGERPRINT: fingerprintVariant,
+          OCI_REGION: "ap-mumbai-1",
+          OCI_NAMESPACE: "test-namespace",
+          OCI_BUCKET_NAME: "test-bucket",
         });
+        let authorization = "";
+        globalThis.fetch = async (_input, init) => {
+          authorization = new Headers(init?.headers).get("authorization") || "";
+          return new Response(null, {
+            status: 200,
+            headers: { "content-length": "1", etag: '"test-etag"' },
+          });
+        };
 
-      await assert.doesNotReject(verifyObject("asset-key"));
+        await assert.doesNotReject(verifyObject("asset-key"));
+        assert.ok(
+          authorization.includes(`keyId="test-tenancy/test-user/${fingerprint}"`),
+          "OCI Signature keyId must use canonical lowercase colon-separated fingerprint",
+        );
+      }
     }
   } finally {
     globalThis.fetch = originalFetch;
