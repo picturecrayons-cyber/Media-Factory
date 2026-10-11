@@ -6,6 +6,7 @@ import { requireVerifiedActor } from "./session";
 import { assertPermission, canReadTitle, canOperateOnTitle, type Actor } from "./rbac";
 import { loadTitle } from "./titles";
 import { loopLicenseInput, producerSharePaise } from "./workflow-policy";
+import { hasExclusiveRightsConflict, type BridgeRightsGrant } from "./rights-coverage";
 import { bridgeEnv } from "./env";
 
 async function audit(tx: Sql, user: string, title: string, action: string, metadata: object) {
@@ -106,6 +107,31 @@ export async function reviewWorkflow(tx: Sql, actor: Actor, data: z.infer<typeof
       throw new Error("Another legal reviewer must approve this license");
     if (data.decision === "APPROVE" && new Date(grant.window_end) <= new Date())
       throw new Error("License has expired");
+    if (data.decision === "APPROVE") {
+      // Serialize approvals per title so two concurrent reviews cannot both
+      // approve conflicting exclusive grants after reading the same old state.
+      await tx`select pg_advisory_xact_lock(hashtextextended(${`rights-approval:${data.titleId}`},0))`;
+      const existingGrants = await tx<BridgeRightsGrant>`select id,status,territories,languages,media,window_start,window_end,exclusivity
+        from bridge_rights_grants where title_id=${data.titleId} and id<>${data.grantId} and status='VALID' for update`;
+      const candidate: BridgeRightsGrant = {
+        id: data.grantId,
+        status: "DRAFT",
+        territories: grant.territories ?? [],
+        languages: grant.languages ?? [],
+        media: grant.media ?? [],
+        window_start: grant.window_start ?? null,
+        window_end: grant.window_end,
+        exclusivity: grant.exclusivity,
+      };
+      const conflict = existingGrants.find((existing) => hasExclusiveRightsConflict(candidate, existing));
+      if (conflict) {
+        await audit(tx, actor.userId, data.titleId, "license.approval_blocked_exclusive_conflict", {
+          grantId: data.grantId,
+          conflictingGrantId: conflict.id,
+        });
+        throw new Error("Approval blocked: this grant conflicts with an existing exclusive rights grant for an overlapping scope and window");
+      }
+    }
     await tx`insert into bridge_legal_cases(title_id,status,evidence,reviewed_by,reviewed_at)
       values (${data.titleId},${data.decision === "APPROVE" ? "APPROVED" : "REJECTED"},
       ${JSON.stringify([{ grantId: data.grantId, note: data.note }])}::jsonb,${actor.userId},now())`;
