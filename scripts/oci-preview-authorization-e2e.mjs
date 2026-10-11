@@ -1,0 +1,117 @@
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import {
+  deleteObject,
+  sealVerifiedObject,
+  signDownload,
+  signUpload,
+  verifyObject,
+} from "../src/lib/bridge/oci-object-storage.server.ts";
+
+function previewBaseUrl() {
+  const raw = process.env.BRIDGE_PREVIEW_URL?.trim();
+  if (!raw) throw new Error("BRIDGE_PREVIEW_URL is required; refusing to guess a target.");
+  const url = new URL(raw);
+  if (url.protocol !== "https:" || !url.hostname.endsWith(".vercel.app")) {
+    throw new Error("Preview E2E only accepts an HTTPS, deployment-specific *.vercel.app URL.");
+  }
+  if (/^(bridge\.crayonspictures\.(in|com)|crayonsloop\.(in|com)|www\.)/i.test(url.hostname)) {
+    throw new Error("Production/custom domains are not allowed for this Preview-only test.");
+  }
+  if (url.pathname !== "/" || url.search || url.hash) {
+    throw new Error("BRIDGE_PREVIEW_URL must be an origin only, without path, query, or fragment.");
+  }
+  return url.origin;
+}
+
+function required(name: string) {
+  const value = process.env[name]?.trim();
+  if (!value) throw new Error(`${name} is required; no test was executed.`);
+  return value;
+}
+
+const previewUrl = previewBaseUrl();
+const titleId = required("BRIDGE_PREVIEW_TITLE_ID");
+const accessToken = required("BRIDGE_PREVIEW_ACCESS_TOKEN");
+const invalidToken = "invalid-preview-e2e-token";
+const runId = randomUUID();
+const payload = Buffer.from(`CRAYONS-BRIDGE-PREVIEW-OCI-E2E:${runId}`, "utf8");
+const sourceKey = `bridge/_e2e/preview/${Date.now()}-${runId}.txt`;
+const sealedKey = `${sourceKey}.verified/${runId}`;
+let sourceUploaded = false;
+let sealedCreated = false;
+
+try {
+  // First prove the Preview endpoint denies both anonymous and invalid sessions.
+  const anonymous = await fetch(`${previewUrl}/api/loop/media?titleId=${encodeURIComponent(titleId)}&mediaType=master`);
+  assert.equal(anonymous.status, 401, `Anonymous playback request must be denied (received ${anonymous.status}).`);
+
+  const invalidSession = await fetch(`${previewUrl}/api/loop/media?titleId=${encodeURIComponent(titleId)}&mediaType=master`, {
+    headers: { authorization: `Bearer ${invalidToken}` },
+  });
+  assert.equal(invalidSession.status, 401, `Invalid session must be denied (received ${invalidSession.status}).`);
+
+  // Exercise the real OCI upload -> HEAD verification -> immutable copy -> signed GET round-trip.
+  const upload = await signUpload({ key: sourceKey, contentType: "text/plain" });
+  assert.equal(upload.method, "PUT");
+  const put = await fetch(upload.url, {
+    method: "PUT",
+    headers: { "content-type": "text/plain" },
+    body: payload,
+  });
+  assert.ok(put.ok, `OCI upload failed with HTTP ${put.status}`);
+  sourceUploaded = true;
+
+  const verified = await verifyObject(sourceKey, "text/plain");
+  assert.equal(verified.byteSize, payload.byteLength);
+  assert.ok(verified.etag, "OCI source ETag missing");
+
+  const sealed = await sealVerifiedObject(sourceKey, sealedKey, verified.etag);
+  sealedCreated = true;
+  assert.equal(sealed.byteSize, payload.byteLength);
+  assert.ok(sealed.etag, "OCI sealed ETag missing");
+
+  const download = await signDownload({ key: sealedKey });
+  assert.equal(download.method, "GET");
+  const get = await fetch(download.url);
+  assert.ok(get.ok, `OCI signed download failed with HTTP ${get.status}`);
+  assert.deepEqual(Buffer.from(await get.arrayBuffer()), payload, "OCI round-trip payload mismatch");
+
+  // A valid user session must pass Bridge's publication, territory/window, TVOD,
+  // rental-entitlement and asset gates before a short-lived stream URL is issued.
+  const authorized = await fetch(
+    `${previewUrl}/api/loop/media?titleId=${encodeURIComponent(titleId)}&mediaType=master`,
+    { headers: { authorization: `Bearer ${accessToken}` } },
+  );
+  assert.equal(authorized.status, 200, `Authorized playback should pass only for a valid, entitled title (received ${authorized.status}).`);
+  const response = await authorized.json();
+  assert.equal(response.success, true);
+  assert.equal(response.storageAuthority, "bridge-oci");
+  assert.equal(response.expiresInSeconds, 300);
+  assert.ok(typeof response.streamUrl === "string" && response.streamUrl.startsWith("https://"));
+  // Do not print the signed URL, bearer token, or object credentials.
+  const stream = await fetch(response.streamUrl);
+  assert.ok(stream.ok, `Authorized OCI stream fetch failed with HTTP ${stream.status}`);
+  assert.ok((await stream.arrayBuffer()).byteLength > 0, "Authorized stream returned an empty object");
+
+  console.log(JSON.stringify({
+    status: "PASS",
+    environment: "preview",
+    provider: "oracle-oci-object-storage",
+    checks: [
+      "anonymous-playback-denied",
+      "invalid-session-denied",
+      "signed-upload",
+      "object-head-verification",
+      "immutable-seal",
+      "signed-download-integrity",
+      "bridge-publication-and-entitlement-authorization",
+      "authorized-playback",
+    ],
+    byteSize: payload.byteLength,
+    previewHost: new URL(previewUrl).hostname,
+  }, null, 2));
+} finally {
+  if (sealedCreated) await deleteObject(sealedKey).catch(() => undefined);
+  if (sourceUploaded) await deleteObject(sourceKey).catch(() => undefined);
+}
