@@ -99,9 +99,14 @@ export async function reviewWorkflow(tx: Sql, actor: Actor, data: z.infer<typeof
     if (!data.grantId) throw new Error("Select a license draft");
     const [grant] = await tx<{
       status: string;
-      window_end: string;
+      territories: unknown;
+      languages: unknown;
+      media: unknown;
+      window_start: string | Date | null;
+      window_end: string | Date | null;
+      exclusivity: string;
       created_by: string;
-    }>`select status,window_end,created_by from bridge_rights_grants where id=${data.grantId} and title_id=${data.titleId} for update`;
+    }>`select status,territories,languages,media,window_start,window_end,exclusivity,created_by from bridge_rights_grants where id=${data.grantId} and title_id=${data.titleId} for update`;
     if (!grant || grant.status !== "DRAFT") throw new Error("License draft is unavailable");
     if (grant.created_by === actor.userId)
       throw new Error("Another legal reviewer must approve this license");
@@ -125,10 +130,6 @@ export async function reviewWorkflow(tx: Sql, actor: Actor, data: z.infer<typeof
       };
       const conflict = existingGrants.find((existing) => hasExclusiveRightsConflict(candidate, existing));
       if (conflict) {
-        await audit(tx, actor.userId, data.titleId, "license.approval_blocked_exclusive_conflict", {
-          grantId: data.grantId,
-          conflictingGrantId: conflict.id,
-        });
         throw new Error("Approval blocked: this grant conflicts with an existing exclusive rights grant for an overlapping scope and window");
       }
     }
