@@ -125,6 +125,7 @@ test("OCI copy polling uses Object Storage and only verifies successful copies",
 
 test("OCI object verification rejects an unexpected content type", async () => {
   const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  const fingerprint = fingerprintFor(privateKey);
   const values = {
     OCI_TENANCY_OCID: "test-tenancy", OCI_USER_OCID: "test-user",
     OCI_PRIVATE_KEY: privateKey.export({ type: "pkcs8", format: "pem" }).toString(),
@@ -185,6 +186,7 @@ test("OCI configuration errors name missing required variables without exposing 
 
 test("OCI authorization failures include safe service diagnostics without exposing credentials", async () => {
   const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  const fingerprint = fingerprintFor(privateKey);
   const values = {
     OCI_TENANCY_OCID: "test-tenancy",
     OCI_USER_OCID: "test-user",
