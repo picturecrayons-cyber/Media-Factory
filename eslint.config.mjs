@@ -16,6 +16,7 @@ export default tseslint.config(
       ".nitro/**",
       "node_modules/**",
       "src/routeTree.gen.ts",
+      "crayons-loop-streaming-platform/**",
     ],
   },
   js.configs.recommended,

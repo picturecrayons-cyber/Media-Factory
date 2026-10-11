@@ -17,22 +17,36 @@ type OciConfig = {
   namespace?: string;
 };
 
-function normalizePrivateKey(value: string) {
+export function normalizePrivateKey(value: string) {
   let normalized = value.trim();
 
-  // Vercel/CI secrets can arrive as escaped newlines or as a JSON-quoted string.
+  // Vercel/CI secrets can arrive as escaped newlines or as a JSON/shell-quoted string.
   // Accept both without relaxing the crypto parser or silently repairing arbitrary text.
   if (normalized.startsWith('"') && normalized.endsWith('"')) {
     try {
       const parsed = JSON.parse(normalized);
       if (typeof parsed === "string") normalized = parsed;
+      else normalized = normalized.slice(1, -1).trim();
     } catch {
-      // Leave the value untouched; createPrivateKey will fail closed below.
+      normalized = normalized.slice(1, -1).trim();
+    }
+  } else if (normalized.startsWith("'") && normalized.endsWith("'")) {
+    normalized = normalized.slice(1, -1).trim();
+  }
+
+  // Handle base64-encoded PEM
+  if (!normalized.includes("BEGIN") && !normalized.includes("PRIVATE KEY")) {
+    try {
+      const decoded = Buffer.from(normalized, "base64").toString("utf-8");
+      if (decoded.includes("BEGIN") && decoded.includes("PRIVATE KEY")) {
+        normalized = decoded.trim();
+      }
+    } catch {
+      // not base64
     }
   }
 
-  normalized = normalized.replaceAll("\\r\\n", "\n");
-  normalized = normalized.replaceAll("\\n", "\n");
+  normalized = normalized.replaceAll("\\r\\n", "\n").replaceAll("\\n", "\n").replaceAll("\r\n", "\n");
   normalized = normalized.replace(/^\\uFEFF/, "");
   normalized = normalized.replace(/^\uFEFF/, "");
 
@@ -43,7 +57,18 @@ function normalizePrivateKey(value: string) {
     throw new Error("OCI private key must be PEM encoded");
   }
 
-  return normalized;
+  return normalized.trim() + "\n";
+}
+
+export function validateOcid(name: "OCI_TENANCY_OCID" | "OCI_USER_OCID", value: string, expectedType: "tenancy" | "user"): string {
+  const trimmed = value.trim();
+  const pattern = new RegExp(`^ocid1\\.${expectedType}\\.oc1\\.[a-z0-9_-]*\\.[a-z0-9._-]+$`, "i");
+  if (!pattern.test(trimmed) || trimmed.includes("[") || trimmed.includes("]") || /[^\x20-\x7E]/.test(trimmed)) {
+    throw new Error(
+      `${name} is not a valid Oracle Cloud Infrastructure ${expectedType} OCID. Verify the configured ${name} in environment variables.`,
+    );
+  }
+  return trimmed;
 }
 
 function derivedFingerprint(privateKey: string) {
@@ -83,6 +108,8 @@ function config(): OciConfig {
   if (missing.length > 0) {
     throw new Error(`OCI Object Storage is not fully configured. Missing required environment variable(s): ${missing.join(", ")}`);
   }
+  const validatedTenancy = validateOcid("OCI_TENANCY_OCID", tenancy!, "tenancy");
+  const validatedUser = validateOcid("OCI_USER_OCID", user!, "user");
   const normalizedPrivateKey = normalizePrivateKey(privateKey!);
   const keyFingerprint = derivedFingerprint(normalizedPrivateKey);
   const configuredFingerprint = bridgeEnv.ociFingerprint();
@@ -96,8 +123,8 @@ function config(): OciConfig {
   }
 
   return {
-    tenancy: tenancy!,
-    user: user!,
+    tenancy: validatedTenancy,
+    user: validatedUser,
     privateKey: normalizedPrivateKey,
     // OCI Signature keyId must use the fingerprint registered in OCI, in canonical
     // lowercase colon-separated form. Never pass through arbitrary env formatting.
@@ -323,6 +350,19 @@ export async function deleteObject(key: string) {
 }
 
 export function titleAssetKey(opts: { ownerUserId: string; titleId: string; kind: string; filename: string }) {
+  if (!/^[A-Za-z0-9_-]{1,128}$/.test(opts.ownerUserId)) {
+    throw new Error("Invalid ownerUserId for title asset key; must be a single safe path segment");
+  }
+  if (!/^[A-Za-z0-9_-]{1,128}$/.test(opts.titleId)) {
+    throw new Error("Invalid titleId for title asset key; must be a single safe path segment");
+  }
+  if (!/^[A-Za-z0-9_-]{1,64}$/.test(opts.kind)) {
+    throw new Error("Invalid asset kind for title asset key; must be a single safe path segment");
+  }
   const safe = opts.filename.replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 80);
+  if (!safe || safe.startsWith(".") || safe.includes("..")) {
+    throw new Error("Invalid filename for title asset key");
+  }
   return `bridge/${opts.ownerUserId}/${opts.titleId}/${opts.kind}/${Date.now()}-${safe}`;
 }
+

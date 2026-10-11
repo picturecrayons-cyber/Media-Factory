@@ -122,5 +122,8 @@ try {
   if (sourceUploaded) {
     try { await deleteObject(sourceKey); } catch (error) { cleanupFailures.push(`source object cleanup failed for ${sourceKey}: ${error instanceof Error ? error.message : "unknown error"}`); }
   }
-  if (cleanupFailures.length) throw new AggregateError(cleanupFailures.map((message) => new Error(message)), `OCI E2E cleanup incomplete: ${cleanupFailures.join("; ")}`);
+  if (cleanupFailures.length) {
+    console.error("OCI E2E cleanup incomplete:", cleanupFailures.join("; "));
+    process.exitCode = 1;
+  }
 }
