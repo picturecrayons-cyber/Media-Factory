@@ -68,6 +68,19 @@ test("bridge_assets permits all canonical ASSET_KINDS after migration", async ()
     }
     const count = (await db.query<{ count: number }>("select count(*)::int as count from bridge_assets where title_id='title-kinds'")).rows[0]?.count;
     assert.equal(count, kinds.length);
+
+    // Negative test: an unsupported kind must be rejected by bridge_assets_kind_chk
+    await assert.rejects(
+      async () => {
+        await db.exec(`insert into bridge_assets (id, title_id, kind, s3_key, created_by)
+          values ('asset-invalid', 'title-kinds', 'unsupported_video_format', 'key-invalid', 'creator');`);
+      },
+      (err: Error) => {
+        assert.match(err.message, /bridge_assets_kind_chk/);
+        return true;
+      },
+      "Unsupported asset kind must be rejected by check constraint",
+    );
   } finally {
     await db.close();
   }
