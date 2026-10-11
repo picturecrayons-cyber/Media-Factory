@@ -72,15 +72,15 @@ function AdminBody({ actor }: { actor: any }) {
         </section>
 
         <section aria-label="Operational summary" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <Metric label="All titles" value={titlesQ.isPending ? "—" : String(titles.length)} detail="Canonical catalog" />
-          <Metric label="QC / intake" value={titlesQ.isPending ? "—" : String(qcQueue)} detail="Awaiting review" />
-          <Metric label="Rights review" value={titlesQ.isPending ? "—" : String(rightsQueue)} detail="Clearance queue" />
-          <Metric label="Buyer-ready pipeline" value={titlesQ.isPending ? "—" : String(buyerReady)} detail="Licensing stages" />
+          <Metric label="All titles" value={titlesQ.isPending || titlesQ.isError ? "—" : String(titles.length)} detail="Canonical catalog" />
+          <Metric label="QC / intake" value={titlesQ.isPending || titlesQ.isError ? "—" : String(qcQueue)} detail="Awaiting review" />
+          <Metric label="Rights review" value={titlesQ.isPending || titlesQ.isError ? "—" : String(rightsQueue)} detail="Clearance queue" />
+          <Metric label="Buyer-ready pipeline" value={titlesQ.isPending || titlesQ.isError ? "—" : String(buyerReady)} detail="Licensing stages" />
         </section>
 
         <section className="grid gap-3 sm:grid-cols-3">
-          <CompactMetric label="Loop publications" value={distQ.isPending ? "—" : String(live)} />
-          <CompactMetric label="Bridge profiles" value={profilesQ.isPending ? "—" : String(profiles.length)} />
+          <CompactMetric label="Loop publications" value={distQ.isPending || distQ.isError ? "—" : String(live)} />
+          <CompactMetric label="Bridge profiles" value={profilesQ.isPending || profilesQ.isError ? "—" : String(profiles.length)} />
           <CompactMetric label="Named organization labels" value={profilesQ.isPending || profilesQ.isError ? "—" : String(organizationLabels.size)} />
         </section>
 
@@ -103,7 +103,7 @@ function AdminBody({ actor }: { actor: any }) {
                 <Link to="/title/$id" params={{ id: title.id }} className="shrink-0 text-sm font-semibold text-accent hover:underline">Open title →</Link>
               </div>
             ))}
-            {!titlesQ.isPending && attention.length === 0 ? <p className="py-6 text-sm text-muted">No titles are currently in these review stages.</p> : null}
+            {!titlesQ.isPending && !titlesQ.isError && attention.length === 0 ? <p className="py-6 text-sm text-muted">No titles are currently in these review stages.</p> : null}
             {titlesQ.isError ? <p role="alert" className="py-4 text-sm text-muted">The live title queue could not be loaded. Refresh to retry.</p> : null}
           </div>
         </section>
