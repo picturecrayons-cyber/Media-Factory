@@ -139,3 +139,38 @@ test("OCI object verification rejects an unexpected content type", async () => {
     }
   }
 });
+
+
+test("OCI configuration errors name missing required variables without exposing secret values", async () => {
+  const keys = [
+    "OCI_TENANCY_OCID",
+    "OCI_USER_OCID",
+    "OCI_PRIVATE_KEY",
+    "PRIVATE_KEY",
+    "OCI_FINGERPRINT",
+    "OCI_REGION",
+    "OCI_NAMESPACE",
+    "OCI_BUCKET_NAME",
+  ];
+  const saved = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+  try {
+    Object.assign(process.env, {
+      OCI_TENANCY_OCID: "test-tenancy",
+      OCI_USER_OCID: "test-user",
+      OCI_REGION: "ap-mumbai-1",
+      OCI_NAMESPACE: "test-namespace",
+      OCI_BUCKET_NAME: "test-bucket",
+    });
+    delete process.env.OCI_PRIVATE_KEY;
+    delete process.env.PRIVATE_KEY;
+    await assert.rejects(
+      verifyObject("asset-key"),
+      /Missing required environment variable\\(s\\): OCI_PRIVATE_KEY \\(or legacy PRIVATE_KEY\\)/,
+    );
+  } finally {
+    for (const [key, value] of Object.entries(saved)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+});
