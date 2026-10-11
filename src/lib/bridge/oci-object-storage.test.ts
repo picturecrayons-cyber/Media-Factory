@@ -165,7 +165,7 @@ test("OCI configuration errors name missing required variables without exposing 
     delete process.env.PRIVATE_KEY;
     await assert.rejects(
       verifyObject("asset-key"),
-      /Missing required environment variable\\(s\\): OCI_PRIVATE_KEY \\(or legacy PRIVATE_KEY\\)/,
+      /Missing required environment variable\(s\): OCI_PRIVATE_KEY \(or legacy PRIVATE_KEY\)/,
     );
   } finally {
     for (const [key, value] of Object.entries(saved)) {
