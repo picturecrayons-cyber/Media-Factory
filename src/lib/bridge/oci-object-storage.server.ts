@@ -56,6 +56,10 @@ function derivedFingerprint(privateKey: string) {
     .join(":");
 }
 
+function normalizeFingerprint(value: string) {
+  return value.trim().toLowerCase().replaceAll(":", "");
+}
+
 function config(): OciConfig {
   const tenancy = bridgeEnv.ociTenancyOcid();
   const user = bridgeEnv.ociUserOcid();
@@ -71,11 +75,23 @@ function config(): OciConfig {
   if (missing.length > 0) {
     throw new Error(`OCI Object Storage is not fully configured. Missing required environment variable(s): ${missing.join(", ")}`);
   }
+  const normalizedPrivateKey = normalizePrivateKey(privateKey);
+  const keyFingerprint = derivedFingerprint(normalizedPrivateKey);
+  const configuredFingerprint = bridgeEnv.ociFingerprint();
+  if (
+    configuredFingerprint &&
+    normalizeFingerprint(configuredFingerprint) !== normalizeFingerprint(keyFingerprint)
+  ) {
+    throw new Error(
+      "OCI_FINGERPRINT does not match OCI_PRIVATE_KEY. Use the fingerprint of the public key paired with this private key in the OCI user API keys.",
+    );
+  }
+
   return {
     tenancy,
     user,
-    privateKey: normalizePrivateKey(privateKey),
-    fingerprint: bridgeEnv.ociFingerprint() || derivedFingerprint(privateKey),
+    privateKey: normalizedPrivateKey,
+    fingerprint: configuredFingerprint || keyFingerprint,
     region,
     bucket,
     namespace: bridgeEnv.ociNamespace(),
