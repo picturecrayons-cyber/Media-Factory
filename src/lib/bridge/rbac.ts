@@ -33,6 +33,7 @@ const INTERNAL_PERMISSIONS: Record<InternalRole, readonly Permission[]> = {
     "delivery.read",
     "delivery.read_finance",
     "asset.sign_download",
+    "asset.sign_upload",
     "finance.read",
     "finance.record_settlement",
     "users.invite_internal",
