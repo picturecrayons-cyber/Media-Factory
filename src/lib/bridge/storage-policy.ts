@@ -140,7 +140,7 @@ export function canDeleteAsset(input: StoragePolicyInput & {
 }) {
   const now = input.now ?? new Date();
   if (input.legalHold || input.commercialHold || input.deliveryActive) return false;
-  if (ACTIVE_TITLE_STATUSES.has(input.titleStatus) || input.titleStatus === "LICENSED" || input.titleStatus === "DELIVERED") return false;
+  if (ACTIVE_TITLE_STATUSES.has(input.titleStatus) || input.titleStatus === "LICENSED") return false;
   if (input.licenseActive || input.loopPublished || input.loopPlaybackActive) return false;
   if (input.isSoleMaster || input.isInActivePackage) return false;
   if (!input.retentionUntil || input.retentionUntil.getTime() > now.getTime()) return false;

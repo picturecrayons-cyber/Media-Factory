@@ -18,7 +18,16 @@ describe("storage policy", () => {
     assert.equal(result.protected, true);
   });
 
-  it("allows a cold licensed asset to use Infrequent but never Archive by default", () => {    const result = evaluateStoragePolicy({      assetKind: "master",      titleStatus: "LICENSED",      now,      lastAccessedAt: new Date("2025-01-01T00:00:00Z"),    });    assert.equal(result.recommendedTier, "INFREQUENT");    assert.deepEqual(result.allowedTiers, ["STANDARD", "INFREQUENT"]);  });  it("moves a cold active master recommendation to Infrequent", () => {
+  it("allows a cold licensed asset to use Infrequent but never Archive by default", () => {
+    const result = evaluateStoragePolicy({
+      assetKind: "master",
+      titleStatus: "LICENSED",
+      now,
+      lastAccessedAt: new Date("2025-01-01T00:00:00Z"),
+    });
+    assert.equal(result.recommendedTier, "INFREQUENT");
+    assert.deepEqual(result.allowedTiers, ["STANDARD", "INFREQUENT"]);
+  });  it("moves a cold active master recommendation to Infrequent", () => {
     const result = evaluateStoragePolicy({
       assetKind: "master",
       titleStatus: "PREPARING",
