@@ -82,7 +82,12 @@ async function serveLoopMedia(request: Request) {
 
   const windowStart = grant.window_start ? new Date(grant.window_start).getTime() : null;
   const windowEnd = grant.window_end ? new Date(grant.window_end).getTime() : null;
-  const territoryAllowed = grant.territories?.includes("WORLDWIDE") || grant.territories?.includes("IN");
+  // Vercel injects the request-country header at the edge. Never accept a
+  // caller-supplied territory query parameter as proof of location.
+  const requestCountry = (request.headers.get("x-vercel-ip-country") || "").trim().toUpperCase();
+  const allowedTerritories: string[] = Array.isArray(grant.territories) ? grant.territories : [];
+  const territoryAllowed = allowedTerritories.includes("WORLDWIDE") ||
+    (requestCountry.length === 2 && allowedTerritories.includes(requestCountry));
   const modelAllowed = Boolean(title.access_tier && grant.exploitation_models?.includes(title.access_tier));
   if ((windowStart !== null && windowStart > now.getTime()) ||
       (windowEnd !== null && windowEnd <= now.getTime()) ||
@@ -123,7 +128,6 @@ async function serveLoopMedia(request: Request) {
   }
 
   // Verify the exact OCI object exists and is non-empty before issuing a read PAR.
-  // Never return storage access based only on a database key.
   try {
     await verifyObject(objectKey);
   } catch (error) {
