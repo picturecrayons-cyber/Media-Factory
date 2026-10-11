@@ -110,7 +110,7 @@ export async function reviewWorkflow(tx: Sql, actor: Actor, data: z.infer<typeof
     if (!grant || grant.status !== "DRAFT") throw new Error("License draft is unavailable");
     if (grant.created_by === actor.userId)
       throw new Error("Another legal reviewer must approve this license");
-    if (data.decision === "APPROVE" && new Date(grant.window_end) <= new Date())
+    if (data.decision === "APPROVE" && (!grant.window_end || new Date(grant.window_end) <= new Date()))
       throw new Error("License has expired");
     if (data.decision === "APPROVE") {
       // Serialize approvals per title so two concurrent reviews cannot both
