@@ -1,11 +1,17 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { generateKeyPairSync, verify } from "node:crypto";
+import { createHash, createPublicKey, generateKeyPairSync, verify } from "node:crypto";
 import { sealVerifiedObject, verifyObject } from "./oci-object-storage.server.ts";
+
+function fingerprintFor(privateKey: ReturnType<typeof generateKeyPairSync>["privateKey"]) {
+  const der = createPublicKey(privateKey).export({ type: "spki", format: "der" });
+  return createHash("md5").update(der).digest("hex").match(/.{1,2}/g)!.join(":");
+}
 
 test("OCI private key normalization accepts escaped and quoted PEM secrets", async () => {
   const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
   const pem = privateKey.export({ type: "pkcs8", format: "pem" }).toString();
+  const fingerprint = fingerprintFor(privateKey);
   const variants = [
     pem,
     JSON.stringify(pem),
@@ -31,7 +37,7 @@ test("OCI private key normalization accepts escaped and quoted PEM secrets", asy
         OCI_TENANCY_OCID: "test-tenancy",
         OCI_USER_OCID: "test-user",
         OCI_PRIVATE_KEY: variant,
-        OCI_FINGERPRINT: "test-fingerprint",
+        OCI_FINGERPRINT: fingerprint,
         OCI_REGION: "ap-mumbai-1",
         OCI_NAMESPACE: "test-namespace",
         OCI_BUCKET_NAME: "test-bucket",
@@ -55,11 +61,12 @@ test("OCI private key normalization accepts escaped and quoted PEM secrets", asy
 
 test("OCI copy polling uses Object Storage and only verifies successful copies", async (t) => {
   const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  const fingerprint = fingerprintFor(privateKey);
   const values = {
     OCI_TENANCY_OCID: "test-tenancy",
     OCI_USER_OCID: "test-user",
     OCI_PRIVATE_KEY: privateKey.export({ type: "pkcs8", format: "pem" }).toString(),
-    OCI_FINGERPRINT: "test-fingerprint",
+    OCI_FINGERPRINT: fingerprint,
     OCI_REGION: "ap-mumbai-1",
     OCI_NAMESPACE: "test-namespace",
     OCI_BUCKET_NAME: "test-bucket",
@@ -121,7 +128,7 @@ test("OCI object verification rejects an unexpected content type", async () => {
   const values = {
     OCI_TENANCY_OCID: "test-tenancy", OCI_USER_OCID: "test-user",
     OCI_PRIVATE_KEY: privateKey.export({ type: "pkcs8", format: "pem" }).toString(),
-    OCI_FINGERPRINT: "test-fingerprint", OCI_REGION: "ap-mumbai-1",
+    OCI_FINGERPRINT: fingerprint, OCI_REGION: "ap-mumbai-1",
     OCI_NAMESPACE: "test-namespace", OCI_BUCKET_NAME: "test-bucket",
   };
   const saved = Object.fromEntries(Object.keys(values).map((key) => [key, process.env[key]]));
@@ -182,7 +189,7 @@ test("OCI authorization failures include safe service diagnostics without exposi
     OCI_TENANCY_OCID: "test-tenancy",
     OCI_USER_OCID: "test-user",
     OCI_PRIVATE_KEY: privateKey.export({ type: "pkcs8", format: "pem" }).toString(),
-    OCI_FINGERPRINT: "test-fingerprint",
+    OCI_FINGERPRINT: fingerprint,
     OCI_REGION: "ap-mumbai-1",
     OCI_NAMESPACE: "test-namespace",
     OCI_BUCKET_NAME: "test-bucket",
@@ -208,6 +215,35 @@ test("OCI authorization failures include safe service diagnostics without exposi
         return true;
       },
     );
+  } finally {
+    globalThis.fetch = originalFetch;
+    for (const [key, value] of Object.entries(saved)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+});
+
+
+test("OCI rejects a configured fingerprint that does not match the private key before making a request", async () => {
+  const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  const keys = ["OCI_TENANCY_OCID", "OCI_USER_OCID", "OCI_PRIVATE_KEY", "OCI_FINGERPRINT", "OCI_REGION", "OCI_NAMESPACE", "OCI_BUCKET_NAME"];
+  const saved = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+  const originalFetch = globalThis.fetch;
+  Object.assign(process.env, {
+    OCI_TENANCY_OCID: "test-tenancy",
+    OCI_USER_OCID: "test-user",
+    OCI_PRIVATE_KEY: privateKey.export({ type: "pkcs8", format: "pem" }).toString(),
+    OCI_FINGERPRINT: "00:11:22:33",
+    OCI_REGION: "ap-mumbai-1",
+    OCI_NAMESPACE: "test-namespace",
+    OCI_BUCKET_NAME: "test-bucket",
+  });
+  let called = false;
+  globalThis.fetch = async () => { called = true; return new Response(null, { status: 200 }); };
+  try {
+    await assert.rejects(verifyObject("asset-key"), /OCI_FINGERPRINT does not match OCI_PRIVATE_KEY/);
+    assert.equal(called, false);
   } finally {
     globalThis.fetch = originalFetch;
     for (const [key, value] of Object.entries(saved)) {
