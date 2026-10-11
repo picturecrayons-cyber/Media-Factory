@@ -228,7 +228,7 @@ async function ociFailure(res: Response, operation: string) {
   );
 }
 
-async function resolveNamespace(cfg: OciConfig) {
+export async function resolveNamespace(cfg: OciConfig) {
   if (cfg.namespace) return cfg.namespace;
   const res = await signedFetch({ cfg, method: "GET", path: "/n/" });
   if (!res.ok) throw await ociFailure(res, "namespace lookup");
