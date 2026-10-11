@@ -2,6 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { assertPermission, canAccessDashboard, canGrantInternalRole, canMutateTitle, canOperateOnTitle, canReadTitle, hasPermission, hasStaffPermission, permissionForTransition, workspaceHome } from "./rbac.ts";
 import type { Actor } from "./rbac.ts";
+import { ACCOUNT_TYPES } from "./types.ts";
 
 const actor = (
   userId: string,
@@ -12,7 +13,6 @@ const actor = (
 const creator = (verified = true) => actor("creator-a", "independent_creator", null, verified);
 const studio = () => actor("studio-a", "studio");
 const buyer = () => actor("buyer-a", "buyer");
-const investor = () => actor("investor-a", "investor");
 const admin = () => actor("admin-a", "independent_creator", "admin");
 const superAdmin = () => actor("super-a", "independent_creator", "super_admin");
 const viewer = () => actor("viewer-a", "independent_creator", "viewer");
@@ -21,6 +21,9 @@ const legal = actor("legal1", "independent_creator", "legal_reviewer");
 const finance = actor("finance1", "independent_creator", "finance");
 
 describe("PRD authorization matrix", () => {
+  it("exposes only creator, studio, and buyer as public account types", () => {
+    assert.deepEqual(ACCOUNT_TYPES, ["independent_creator", "studio", "buyer"]);
+  });
   it("fails closed until email is verified", () => {
     assert.equal(hasPermission(creator(false), "title.create"), false);
     assert.throws(() => assertPermission(creator(false), "title.create"), /Email verification/);
@@ -167,7 +170,6 @@ describe("PRD authorization matrix", () => {
     assert.equal(workspaceHome(creator()), "/creator");
     assert.equal(workspaceHome(studio()), "/studio");
     assert.equal(workspaceHome(buyer()), "/buyer");
-    assert.equal(workspaceHome(investor()), "/investor");
     assert.equal(workspaceHome(superAdmin()), "/dashboard");
     assert.equal(workspaceHome(admin()), "/internal");
     assert.equal(workspaceHome(qc), "/internal?desk=qc");
