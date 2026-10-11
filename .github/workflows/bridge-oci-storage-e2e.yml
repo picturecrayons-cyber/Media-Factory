@@ -28,4 +28,4 @@ jobs:
           BRIDGE_E2E_ASSET_ID: ${{ secrets.BRIDGE_E2E_ASSET_ID }}
           BRIDGE_E2E_EXPECTED_DATABASE_HOST: ${{ vars.BRIDGE_E2E_EXPECTED_DATABASE_HOST }}
           BRIDGE_E2E_NONPROD_CONFIRMATION: I_CONFIRM_NON_PRODUCTION
-        run: node scripts/oci-storage-e2e.mjs
+        run: node --experimental-strip-types scripts/oci-storage-e2e.mjs
