@@ -3,7 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { bridgeEnv } from "@/lib/bridge/env";
 import { signDownload } from "@/lib/bridge/oci-object-storage.server";
 
-type MediaType = "master" | "poster" | "trailer";
+type MediaType = "master" | "poster";
 
 function bearerToken(request: Request) {
   const value = request.headers.get("authorization") || "";
@@ -25,7 +25,7 @@ async function serveLoopMedia(request: Request) {
   if (!requestedTitle || requestedTitle.length > 200) {
     return errorResponse(400, "TITLE_REQUIRED", "A Loop title ID is required");
   }
-  if (!["master", "poster", "trailer"].includes(mediaType)) {
+  if (!["master", "poster"].includes(mediaType)) {
     return errorResponse(400, "MEDIA_TYPE_INVALID", "Unsupported media type");
   }
 
@@ -117,11 +117,7 @@ async function serveLoopMedia(request: Request) {
   if (bridgeTitleError) return errorResponse(503, "BRIDGE_ASSET_LOOKUP_FAILED", "Bridge could not resolve the approved media asset");
   if (!bridgeTitle) return errorResponse(404, "BRIDGE_TITLE_NOT_FOUND", "The Bridge title record was not found");
 
-  const objectKey = mediaType === "master"
-    ? bridgeTitle.master_key
-    : mediaType === "poster"
-      ? bridgeTitle.poster_key
-      : null;
+  const objectKey = mediaType === "master" ? bridgeTitle.master_key : bridgeTitle.poster_key;
   if (!objectKey || typeof objectKey !== "string") {
     return errorResponse(404, "BRIDGE_ASSET_NOT_READY", "The requested media asset is not verified in Bridge storage");
   }
