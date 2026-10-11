@@ -1,7 +1,7 @@
-export const BRIDGE_CANONICAL_ORIGIN = "https://www.crayonspictures.in";
+export const BRIDGE_CANONICAL_ORIGIN = "https://bridge.crayonspictures.in";
 
 const RETIRED_SUFFIX = ".streamvista.in";
-const APPROVED_PRODUCTION_HOSTS = new Set(["www.crayonspictures.in"]);
+const APPROVED_PRODUCTION_HOSTS = new Set(["bridge.crayonspictures.in", "www.crayonspictures.in"]);
 const APPROVED_PREVIEW_HOST_SUFFIX = ".vercel.app";
 
 export function normalizeBridgeOrigin(value: string | undefined): string | undefined {
