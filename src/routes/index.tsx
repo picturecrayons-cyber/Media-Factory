@@ -199,19 +199,13 @@ function Home() {
                 className="flex flex-col justify-between rounded-3xl border border-line bg-elevated p-7 sm:p-8"
               >
                 <div>
-                  <h3 className="font-display text-2xl font-semibold text-fg">Investors</h3>
+                  <h3 className="font-display text-2xl font-semibold text-fg">Investor records</h3>
                   <p className="mt-3 text-sm leading-relaxed text-muted">
-                    Track approved title participation and investment records.
+                    Investment participation records remain managed through authorized Bridge operations. Investor self-service accounts are not available.
                   </p>
                 </div>
-                <div className="mt-8 pt-5 border-t border-line">
-                  <Link
-                    to="/signup"
-                    search={{ role: "investor" }}
-                    className="inline-flex items-center text-xs font-semibold text-accent hover:underline"
-                  >
-                    Create Investor Access →
-                  </Link>
+                <div className="mt-8 border-t border-line pt-5">
+                  <span className="text-xs font-semibold text-muted">Managed access only</span>
                 </div>
               </div>
 
