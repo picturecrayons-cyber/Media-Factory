@@ -62,8 +62,14 @@ function config(): OciConfig {
   const privateKey = bridgeEnv.ociPrivateKey();
   const region = bridgeEnv.ociRegion();
   const bucket = bridgeEnv.ociBucket();
-  if (!tenancy || !user || !privateKey || !region || !bucket) {
-    throw new Error("OCI Object Storage is not fully configured");
+  const missing: string[] = [];
+  if (!tenancy) missing.push("OCI_TENANCY_OCID");
+  if (!user) missing.push("OCI_USER_OCID");
+  if (!privateKey) missing.push("OCI_PRIVATE_KEY (or legacy PRIVATE_KEY)");
+  if (!region) missing.push("OCI_REGION");
+  if (!bucket) missing.push("OCI_BUCKET_NAME");
+  if (missing.length > 0) {
+    throw new Error(`OCI Object Storage is not fully configured. Missing required environment variable(s): ${missing.join(", ")}`);
   }
   return {
     tenancy,
