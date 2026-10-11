@@ -1,7 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { createFileRoute } from "@tanstack/react-router";
 import { bridgeEnv } from "@/lib/bridge/env";
-import { signDownload } from "@/lib/bridge/oci-object-storage.server";
+import { signDownload, verifyObject } from "@/lib/bridge/oci-object-storage.server";
 
 type MediaType = "master" | "poster";
 
@@ -21,7 +21,7 @@ async function serveLoopMedia(request: Request) {
 
   const url = new URL(request.url);
   const requestedTitle = (url.searchParams.get("titleId") || "").trim();
-  const mediaType = (url.searchParams.get("mediaType") || "master").toLowerCase() as MediaType;
+  const mediaType = (url.searchParams.get("mediaType") || "master").trim().toLowerCase() as MediaType;
   if (!requestedTitle || requestedTitle.length > 200) {
     return errorResponse(400, "TITLE_REQUIRED", "A Loop title ID is required");
   }
@@ -120,6 +120,17 @@ async function serveLoopMedia(request: Request) {
   const objectKey = mediaType === "master" ? bridgeTitle.master_key : bridgeTitle.poster_key;
   if (!objectKey || typeof objectKey !== "string") {
     return errorResponse(404, "BRIDGE_ASSET_NOT_READY", "The requested media asset is not verified in Bridge storage");
+  }
+
+  // Verify the exact OCI object exists and is non-empty before issuing a read PAR.
+  // Never return storage access based only on a database key.
+  try {
+    await verifyObject(objectKey);
+  } catch (error) {
+    if (error instanceof Error && /verification failed \(404\)/.test(error.message)) {
+      return errorResponse(404, "BRIDGE_ASSET_NOT_READY", "The requested media asset is not available in Bridge storage");
+    }
+    return errorResponse(503, "BRIDGE_ASSET_VERIFICATION_FAILED", "Bridge could not verify the media asset in storage");
   }
 
   try {
