@@ -1,5 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { Button } from "@/components/ui/button";
@@ -35,10 +36,17 @@ function AdminBody({ actor }: { actor: any }) {
   const auditQ = useQuery({ queryKey: ["bridge-audit"], queryFn: () => listAuditLogs() });
   const distQ = useQuery({ queryKey: ["loop-publication-readiness"], queryFn: () => listLoopPublicationReadiness() });
   const profilesQ = useQuery({ queryKey: ["bridge-admin-profiles"], queryFn: () => listAdminProfiles() });
+  const [profileSearch, setProfileSearch] = useState("");
   const titles = titlesQ.data?.titles ?? [];
   const distribution = distQ.data?.titles ?? [];
   const profiles = profilesQ.data?.profiles ?? [];
-  const organizations = new Set(profiles.map((p) => p.organizationName).filter(Boolean));
+  const normalizedProfileSearch = profileSearch.trim().toLocaleLowerCase();
+  const filteredProfiles = profiles.filter((profile) => [profile.displayName, profile.email, profile.accountType, profile.organizationName ?? "", profile.internalRole ?? ""]
+    .some((value) => value.toLocaleLowerCase().includes(normalizedProfileSearch)));
+  // The current schema stores an organization label on each profile; it does not
+  // define a canonical organizations or membership table. Do not present labels as
+  // authoritative organization records or imply membership counts.
+  const organizationLabels = new Set(profiles.map((p) => p.organizationName?.trim()).filter((name): name is string => Boolean(name)));
   const qcQueue = titles.filter((t) => t.status === "PREPARING" || t.status === "QC_REVIEW").length;
   const rightsQueue = titles.filter((t) => t.status === "RIGHTS_REVIEW").length;
   const buyerReady = titles.filter((t) => ["LICENSING_READY", "LIVE_FOR_BUYERS", "IN_NEGOTIATION", "LICENSED"].includes(t.status)).length;
@@ -73,7 +81,7 @@ function AdminBody({ actor }: { actor: any }) {
         <section className="grid gap-3 sm:grid-cols-3">
           <CompactMetric label="Loop publications" value={distQ.isPending ? "—" : String(live)} />
           <CompactMetric label="Bridge profiles" value={profilesQ.isPending ? "—" : String(profiles.length)} />
-          <CompactMetric label="Organizations" value={profilesQ.isPending ? "—" : String(organizations.size)} />
+          <CompactMetric label="Named organization labels" value={profilesQ.isPending || profilesQ.isError ? "—" : String(organizationLabels.size)} />
         </section>
 
         <section className="rounded-3xl border border-line bg-surface p-5 sm:p-6">
@@ -100,30 +108,89 @@ function AdminBody({ actor }: { actor: any }) {
           </div>
         </section>
 
-        <details className="rounded-2xl border border-line bg-surface p-5">
-          <summary className="cursor-pointer font-semibold">Users & organizations <span className="ml-2 text-sm font-normal text-muted">({profiles.length})</span></summary>
-          <p className="mt-2 text-sm text-muted">Authoritative Bridge profiles only. Role changes remain invite/onboarding controlled.</p>
-          <div className="mt-4 overflow-x-auto">
-            <table className="w-full min-w-[680px] text-left text-sm">
-              <thead className="border-b border-line text-xs uppercase tracking-wider text-muted">
-                <tr><th className="px-3 py-3">User</th><th className="px-3 py-3">Account</th><th className="px-3 py-3">Organization</th><th className="px-3 py-3">Internal role</th><th className="px-3 py-3">Verified</th></tr>
-              </thead>
-              <tbody className="divide-y divide-line">
-                {profiles.slice(0, 50).map((profile) => (
-                  <tr key={profile.userId}>
-                    <td className="px-3 py-3"><p className="font-medium">{profile.displayName}</p><p className="text-xs text-muted">{profile.email}</p></td>
-                    <td className="px-3 py-3">{profile.accountType.replaceAll("_", " ")}</td>
-                    <td className="px-3 py-3">{profile.organizationName ?? "—"}</td>
-                    <td className="px-3 py-3">{profile.internalRole?.replaceAll("_", " ") ?? "—"}</td>
-                    <td className="px-3 py-3">{profile.emailVerified ? "Yes" : "No"}</td>
-                  </tr>
-                ))}
-                {!profiles.length ? <tr><td colSpan={5} className="px-3 py-8 text-center text-muted">No Bridge profiles found.</td></tr> : null}
-              </tbody>
-            </table>
+        <section aria-labelledby="users-organizations-heading" className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <h3 id="users-organizations-heading" className="font-display text-xl font-semibold">Users &amp; organization affiliations</h3>
+              <p className="mt-1 max-w-2xl text-sm text-muted">
+                Persisted Bridge profiles only. Organization values below are profile labels, not verified organization memberships.
+                Internal role assignment remains invite-controlled.
+              </p>
+            </div>
+            <Link to="/internal" className="shrink-0"><Button variant="outline">Invite internal user</Button></Link>
           </div>
-          <div className="mt-4"><Link to="/internal"><Button variant="outline">Invite internal user</Button></Link></div>
-        </details>
+
+          <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <label className="block w-full sm:max-w-md">
+              <span className="sr-only">Search users and organization affiliations</span>
+              <input
+                type="search"
+                value={profileSearch}
+                onChange={(event) => setProfileSearch(event.target.value)}
+                placeholder="Search name, email, role, account or organization…"
+                aria-label="Search users and organization affiliations"
+                className="w-full rounded-xl border border-line bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-accent"
+              />
+            </label>
+            <p className="text-sm text-muted" aria-live="polite">
+              {profilesQ.isPending ? "Loading profiles…" : profilesQ.isError ? "Profile data unavailable" : `${filteredProfiles.length} of ${profiles.length} profiles`}
+            </p>
+          </div>
+
+          {profilesQ.isPending ? (
+            <div role="status" className="mt-4 rounded-xl border border-line px-4 py-8 text-center text-sm text-muted">Loading authoritative Bridge profiles…</div>
+          ) : null}
+
+          {profilesQ.isError ? (
+            <div role="alert" className="mt-4 rounded-xl border border-red-500/40 px-4 py-5">
+              <p className="font-medium">Users and organization affiliations could not be loaded.</p>
+              <p className="mt-1 text-sm text-muted">This is a data-fetch error, not an empty result. No zero count is reported.</p>
+              <div className="mt-3"><Button variant="outline" onClick={() => void profilesQ.refetch()}>Retry loading profiles</Button></div>
+            </div>
+          ) : null}
+
+          {!profilesQ.isPending && !profilesQ.isError ? (
+            <div className="mt-4 overflow-x-auto rounded-xl border border-line">
+              <table className="w-full min-w-[760px] table-fixed border-collapse text-left text-sm">
+                <colgroup>
+                  <col className="w-[29%]" />
+                  <col className="w-[15%]" />
+                  <col className="w-[23%]" />
+                  <col className="w-[17%]" />
+                  <col className="w-[16%]" />
+                </colgroup>
+                <thead className="bg-background text-xs uppercase tracking-wider text-muted">
+                  <tr>
+                    <th scope="col" className="border-b border-line px-4 py-3 font-semibold">User</th>
+                    <th scope="col" className="border-b border-line px-4 py-3 font-semibold">Public role</th>
+                    <th scope="col" className="border-b border-line px-4 py-3 font-semibold">Organization label</th>
+                    <th scope="col" className="border-b border-line px-4 py-3 font-semibold">Internal role</th>
+                    <th scope="col" className="border-b border-line px-4 py-3 font-semibold">Email verified</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-line">
+                  {filteredProfiles.map((profile) => (
+                    <tr key={profile.userId} className="align-top hover:bg-background/60">
+                      <td className="break-words px-4 py-3">
+                        <p className="font-medium">{profile.displayName || "Name unavailable"}</p>
+                        <p className="mt-1 break-all text-xs text-muted">{profile.email}</p>
+                      </td>
+                      <td className="break-words px-4 py-3 capitalize">{profile.accountType.replaceAll("_", " ")}</td>
+                      <td className="break-words px-4 py-3">{profile.organizationName?.trim() || "—"}</td>
+                      <td className="break-words px-4 py-3 capitalize">{profile.internalRole?.replaceAll("_", " ") ?? "—"}</td>
+                      <td className="px-4 py-3">{profile.emailVerified ? "Yes" : "No"}</td>
+                    </tr>
+                  ))}
+                  {!filteredProfiles.length ? (
+                    <tr><td colSpan={5} className="px-4 py-8 text-center text-muted">
+                      {profiles.length ? "No profiles match this search." : "No Bridge profiles were returned by the successful query."}
+                    </td></tr>
+                  ) : null}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
+        </section>
 
         <details className="rounded-2xl border border-line bg-surface p-5">
           <summary className="cursor-pointer font-semibold">Recent operator activity</summary>
