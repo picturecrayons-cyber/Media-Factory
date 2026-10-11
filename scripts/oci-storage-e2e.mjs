@@ -161,11 +161,12 @@ try {
               select 1 from bridge_audit_logs l
                where l.entity_id = a.id
                  and l.action = 'asset.upload_verified'
+                 and l.metadata->>'checksum' = $2
             ) as audited
        from bridge_assets a
        join bridge_titles t on t.id = a.title_id
       where a.id = $1`,
-    [asset.id],
+    [asset.id, sealed.etag],
   );
   const persistedState = state.rows[0];
   assert.equal(persistedState.s3_key, sealedKey);
