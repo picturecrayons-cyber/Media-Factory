@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import {
   deleteObject,
   sealVerifiedObject,
@@ -39,6 +39,7 @@ const accessToken = required("BRIDGE_PREVIEW_ACCESS_TOKEN");
 const invalidToken = "invalid-preview-e2e-token";
 const runId = randomUUID();
 const payload = Buffer.from(`CRAYONS-BRIDGE-PREVIEW-OCI-E2E:${runId}`, "utf8");
+const payloadSha256 = createHash("sha256").update(payload).digest("hex");
 const sourceKey = `bridge/${ownerUserId}/${titleId}/e2e/${Date.now()}-${runId}.txt`;
 const sealedKey = `${sourceKey}.verified/${runId}`;
 let sourceUploaded = false;
@@ -78,7 +79,11 @@ try {
   assert.equal(download.method, "GET");
   const get = await fetch(download.url);
   assert.ok(get.ok, `OCI signed download failed with HTTP ${get.status}`);
-  assert.deepEqual(Buffer.from(await get.arrayBuffer()), payload, "OCI round-trip payload mismatch");
+  const downloadedBytes = Buffer.from(await get.arrayBuffer());
+  const downloadedSha256 = createHash("sha256").update(downloadedBytes).digest("hex");
+  assert.equal(downloadedBytes.byteLength, payload.byteLength, "OCI downloaded byte length mismatch");
+  assert.equal(downloadedSha256, payloadSha256, "OCI round-trip payload SHA-256 mismatch");
+  assert.deepEqual(downloadedBytes, payload, "OCI round-trip payload content mismatch");
 
   // A valid user session must pass Bridge's publication, territory/window, TVOD,
   // rental-entitlement and asset gates before a short-lived stream URL is issued.
@@ -108,22 +113,47 @@ try {
       "object-head-verification",
       "immutable-seal",
       "signed-download-integrity",
+      "sha256-payload-verified",
       "bridge-publication-and-entitlement-authorization",
       "authorized-playback",
     ],
     byteSize: payload.byteLength,
+    sha256: payloadSha256,
     previewHost: new URL(previewUrl).hostname,
   }, null, 2));
 } finally {
   const cleanupFailures = [];
   if (sealedCreated) {
-    try { await deleteObject(sealedKey); } catch (error) { cleanupFailures.push(`sealed object cleanup failed for ${sealedKey}: ${error instanceof Error ? error.message : "unknown error"}`); }
+    try {
+      await deleteObject(sealedKey);
+      try {
+        await verifyObject(sealedKey);
+        cleanupFailures.push(`sealed object ${sealedKey} still exists after deletion`);
+      } catch {
+        // Expected: object is absent (404)
+      }
+    } catch (error) {
+      cleanupFailures.push(`sealed object cleanup failed for ${sealedKey}: ${error instanceof Error ? error.message : "unknown error"}`);
+    }
   }
   if (sourceUploaded) {
-    try { await deleteObject(sourceKey); } catch (error) { cleanupFailures.push(`source object cleanup failed for ${sourceKey}: ${error instanceof Error ? error.message : "unknown error"}`); }
+    try {
+      await deleteObject(sourceKey);
+      try {
+        await verifyObject(sourceKey);
+        cleanupFailures.push(`source object ${sourceKey} still exists after deletion`);
+      } catch {
+        // Expected: object is absent (404)
+      }
+    } catch (error) {
+      cleanupFailures.push(`source object cleanup failed for ${sourceKey}: ${error instanceof Error ? error.message : "unknown error"}`);
+    }
   }
   if (cleanupFailures.length) {
     console.error("OCI E2E cleanup incomplete:", cleanupFailures.join("; "));
     process.exitCode = 1;
+  } else if (sourceUploaded || sealedCreated) {
+    console.log("OCI E2E post-cleanup: confirmed both test objects absent from bucket.");
   }
 }
+
