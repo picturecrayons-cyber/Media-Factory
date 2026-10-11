@@ -75,7 +75,7 @@ function config(): OciConfig {
   if (missing.length > 0) {
     throw new Error(`OCI Object Storage is not fully configured. Missing required environment variable(s): ${missing.join(", ")}`);
   }
-  const normalizedPrivateKey = normalizePrivateKey(privateKey);
+  const normalizedPrivateKey = normalizePrivateKey(privateKey!);
   const keyFingerprint = derivedFingerprint(normalizedPrivateKey);
   const configuredFingerprint = bridgeEnv.ociFingerprint();
   if (
@@ -88,12 +88,12 @@ function config(): OciConfig {
   }
 
   return {
-    tenancy,
-    user,
+    tenancy: tenancy!,
+    user: user!,
     privateKey: normalizedPrivateKey,
     fingerprint: configuredFingerprint || keyFingerprint,
-    region,
-    bucket,
+    region: region!,
+    bucket: bucket!,
     namespace: bridgeEnv.ociNamespace(),
   };
 }
