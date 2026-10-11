@@ -32,11 +32,14 @@ function required(name) {
 
 const previewUrl = previewBaseUrl();
 const titleId = required("BRIDGE_PREVIEW_TITLE_ID");
+const ownerUserId = required("BRIDGE_PREVIEW_OWNER_USER_ID");
+assert.match(titleId, /^[A-Za-z0-9_-]{1,128}$/, "BRIDGE_PREVIEW_TITLE_ID must be a single safe path segment.");
+assert.match(ownerUserId, /^[A-Za-z0-9_-]{1,128}$/, "BRIDGE_PREVIEW_OWNER_USER_ID must be a single safe path segment.");
 const accessToken = required("BRIDGE_PREVIEW_ACCESS_TOKEN");
 const invalidToken = "invalid-preview-e2e-token";
 const runId = randomUUID();
 const payload = Buffer.from(`CRAYONS-BRIDGE-PREVIEW-OCI-E2E:${runId}`, "utf8");
-const sourceKey = `bridge/_e2e/preview/${Date.now()}-${runId}.txt`;
+const sourceKey = `bridge/${ownerUserId}/${titleId}/e2e/${Date.now()}-${runId}.txt`;
 const sealedKey = `${sourceKey}.verified/${runId}`;
 let sourceUploaded = false;
 let sealedCreated = false;
@@ -112,6 +115,12 @@ try {
     previewHost: new URL(previewUrl).hostname,
   }, null, 2));
 } finally {
-  if (sealedCreated) await deleteObject(sealedKey).catch(() => undefined);
-  if (sourceUploaded) await deleteObject(sourceKey).catch(() => undefined);
+  const cleanupFailures = [];
+  if (sealedCreated) {
+    try { await deleteObject(sealedKey); } catch (error) { cleanupFailures.push(`sealed object cleanup failed for ${sealedKey}: ${error instanceof Error ? error.message : "unknown error"}`); }
+  }
+  if (sourceUploaded) {
+    try { await deleteObject(sourceKey); } catch (error) { cleanupFailures.push(`source object cleanup failed for ${sourceKey}: ${error instanceof Error ? error.message : "unknown error"}`); }
+  }
+  if (cleanupFailures.length) throw new AggregateError(cleanupFailures.map((message) => new Error(message)), `OCI E2E cleanup incomplete: ${cleanupFailures.join("; ")}`);
 }
