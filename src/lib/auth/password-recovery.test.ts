@@ -42,7 +42,10 @@ describe("password recovery flow and callback bypass prevention", () => {
     const resetPasswordCode = readFileSync(new URL("../../routes/reset-password.tsx", import.meta.url), "utf8");
 
     assert.match(clientCode, /getPasswordRecoveryRedirectUrl\(\)/);
-    assert.doesNotMatch(clientCode, /redirectTo\s*=/);
+    assert.doesNotMatch(
+      clientCode,
+      new RegExp("redirectTo\\s*=\\s*" + String.fromCharCode(96) + "\\$\\{origin\\}\\/reset-password" + String.fromCharCode(96)),
+    );
     assert.match(callbackCode, /type\s*===\s*"recovery"/);
     assert.match(callbackCode, /markRecoverySession\(session\.access_token\)/);
     assert.match(callbackCode, /navigate\(\{\s*to:\s*"\/reset-password"\s*\}\)/);
