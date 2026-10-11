@@ -57,7 +57,15 @@ function derivedFingerprint(privateKey: string) {
 }
 
 function normalizeFingerprint(value: string) {
-  return value.trim().toLowerCase().replaceAll(":", "");
+  return value.trim().toLowerCase().replaceAll(":", "").replaceAll(" ", "");
+}
+
+function canonicalFingerprint(value: string) {
+  const hex = normalizeFingerprint(value);
+  if (!/^[a-f0-9]{32}$/.test(hex)) {
+    throw new Error("OCI_FINGERPRINT must be a 32-character MD5 fingerprint, optionally colon-separated.");
+  }
+  return hex.match(/.{2}/g)!.join(":");
 }
 
 function config(): OciConfig {
@@ -91,7 +99,9 @@ function config(): OciConfig {
     tenancy: tenancy!,
     user: user!,
     privateKey: normalizedPrivateKey,
-    fingerprint: configuredFingerprint || keyFingerprint,
+    // OCI Signature keyId must use the fingerprint registered in OCI, in canonical
+    // lowercase colon-separated form. Never pass through arbitrary env formatting.
+    fingerprint: canonicalFingerprint(configuredFingerprint || keyFingerprint),
     region: region!,
     bucket: bucket!,
     namespace: bridgeEnv.ociNamespace(),
