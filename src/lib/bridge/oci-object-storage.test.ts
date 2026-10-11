@@ -174,3 +174,45 @@ test("OCI configuration errors name missing required variables without exposing 
     }
   }
 });
+
+
+test("OCI authorization failures include safe service diagnostics without exposing credentials", async () => {
+  const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  const values = {
+    OCI_TENANCY_OCID: "test-tenancy",
+    OCI_USER_OCID: "test-user",
+    OCI_PRIVATE_KEY: privateKey.export({ type: "pkcs8", format: "pem" }).toString(),
+    OCI_FINGERPRINT: "test-fingerprint",
+    OCI_REGION: "ap-mumbai-1",
+    OCI_NAMESPACE: "test-namespace",
+    OCI_BUCKET_NAME: "test-bucket",
+  };
+  const saved = Object.fromEntries(Object.keys(values).map((key) => [key, process.env[key]]));
+  const originalFetch = globalThis.fetch;
+  Object.assign(process.env, values);
+  globalThis.fetch = async () => Response.json(
+    { code: "NotAuthenticated", message: "The required information to complete authentication was not provided." },
+    { status: 401, headers: { "opc-request-id": "test-request-id" } },
+  );
+  try {
+    const { signUpload } = await import("./oci-object-storage.server.ts");
+    await assert.rejects(
+      signUpload({ key: "asset-key", contentType: "video/mp4" }),
+      (error: unknown) => {
+        assert.ok(error instanceof Error);
+        assert.match(error.message, /pre-authenticated request creation failed \(401\)/);
+        assert.match(error.message, /NotAuthenticated/);
+        assert.match(error.message, /registered API-key fingerprint\/public key/);
+        assert.match(error.message, /test-request-id/);
+        assert.doesNotMatch(error.message, /BEGIN PRIVATE KEY|test-fingerprint|test-tenancy/);
+        return true;
+      },
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+    for (const [key, value] of Object.entries(saved)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+});
