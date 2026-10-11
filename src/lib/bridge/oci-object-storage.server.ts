@@ -155,10 +155,30 @@ async function signedFetch(opts: {
   return fetch(url, { method: opts.method, headers: safeHeaders, body });
 }
 
+async function ociFailure(res: Response, operation: string) {
+  let serviceCode = "";
+  let serviceMessage = "";
+  try {
+    const body = (await res.clone().json()) as { code?: unknown; message?: unknown };
+    if (typeof body.code === "string") serviceCode = body.code.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 80);
+    if (typeof body.message === "string") serviceMessage = body.message.replace(/[\r\n\t]+/g, " ").slice(0, 240);
+  } catch {
+    // OCI can return an empty or non-JSON error body; never include the raw body.
+  }
+  const requestId = res.headers.get("opc-request-id")?.replace(/[^a-zA-Z0-9/_.:-]/g, "").slice(0, 120);
+  const detail = [serviceCode, serviceMessage].filter(Boolean).join(": ");
+  const authHint = res.status === 401 || res.status === 403
+    ? " Check the OCI tenancy/user OCIDs, region, registered API-key fingerprint/public key, and required Object Storage IAM policy."
+    : "";
+  return new Error(
+    `OCI ${operation} failed (${res.status})${detail ? `: ${detail}` : ""}${requestId ? ` [request id: ${requestId}]` : ""}.${authHint}`,
+  );
+}
+
 async function resolveNamespace(cfg: OciConfig) {
   if (cfg.namespace) return cfg.namespace;
   const res = await signedFetch({ cfg, method: "GET", path: "/n/" });
-  if (!res.ok) throw new Error(`OCI namespace lookup failed (${res.status})`);
+  if (!res.ok) throw await ociFailure(res, "namespace lookup");
   const ns = (await res.text()).replaceAll('"', "").trim();
   if (!ns) throw new Error("OCI Object Storage namespace is empty");
   return ns;
@@ -180,7 +200,7 @@ async function createPar(opts: {
   };
   const path = `/n/${encodeURIComponent(namespace)}/b/${encodeURIComponent(cfg.bucket)}/p/`;
   const res = await signedFetch({ cfg, method: "POST", path, body });
-  if (!res.ok) throw new Error(`OCI pre-authenticated request failed (${res.status})`);
+  if (!res.ok) throw await ociFailure(res, "pre-authenticated request creation");
   const parsed = (await res.json()) as { accessUri?: string };
   if (!parsed.accessUri) throw new Error("OCI pre-authenticated request returned no access URI");
   return {
@@ -213,7 +233,7 @@ export async function verifyObject(key: string, expectedContentType?: string | n
   const namespace = await resolveNamespace(cfg);
   const path = `/n/${encodeURIComponent(namespace)}/b/${encodeURIComponent(cfg.bucket)}/o/${encodedObjectName(key)}`;
   const res = await signedFetch({ cfg, method: "HEAD", path });
-  if (!res.ok) throw new Error(`OCI object verification failed (${res.status})`);
+  if (!res.ok) throw await ociFailure(res, "object verification");
   const contentLength = Number(res.headers.get("content-length") || 0);
   const contentType = res.headers.get("content-type");
   if (expectedContentType && contentType !== expectedContentType) {
@@ -232,7 +252,7 @@ async function pollWorkRequest(cfg: OciConfig, workRequestId: string) {
   for (let i = 0; i < 30; i += 1) {
     const headers = signHeaders({ cfg, method: "GET", url });
     const res = await fetch(url, { method: "GET", headers });
-    if (!res.ok) throw new Error(`OCI copy work-request lookup failed (${res.status})`);
+    if (!res.ok) throw await ociFailure(res, "copy work-request lookup");
     const body = (await res.json()) as { status?: string };
     if (body.status === "SUCCEEDED") return;
     if (body.status === "FAILED" || body.status === "CANCELED") {
@@ -261,7 +281,7 @@ export async function sealVerifiedObject(sourceKey: string, destinationKey: stri
       destinationObjectName: destinationKey,
     },
   });
-  if (res.status !== 202 && !res.ok) throw new Error(`OCI object copy failed (${res.status})`);
+  if (res.status !== 202 && !res.ok) throw await ociFailure(res, "object copy");
   const workRequestId = res.headers.get("opc-work-request-id");
   if (workRequestId) await pollWorkRequest(cfg, workRequestId);
   return verifyObject(destinationKey);
