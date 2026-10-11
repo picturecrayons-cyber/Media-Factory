@@ -47,3 +47,28 @@ test("only a verified upload sets the master reference, once, with an audit even
     await db.close();
   }
 });
+
+test("bridge_assets permits all canonical ASSET_KINDS after migration", async () => {
+  const db = new PGlite();
+  try {
+    await db.waitReady;
+    await db.exec("create role anon; create role authenticated;");
+    await db.exec(readFileSync(join(process.cwd(), "migrations/0004_bridge.sql"), "utf8"));
+    await db.exec(readFileSync(join(process.cwd(), "migrations/0021_bridge_assets_kinds.sql"), "utf8"));
+    await db.exec(`insert into bridge_titles (id,slug,name,owner_user_id,owner_account_type)
+      values ('title-kinds','title-kinds','Title Kinds','creator','independent_creator');`);
+
+    const kinds = [
+      "poster", "poster_vertical", "poster_horizontal", "thumbnail",
+      "screener", "master", "subtitle", "technical", "censor_certificate",
+    ];
+    for (const kind of kinds) {
+      await db.exec(`insert into bridge_assets (id, title_id, kind, s3_key, created_by)
+        values ('asset-${kind}', 'title-kinds', '${kind}', 'key-${kind}', 'creator');`);
+    }
+    const count = (await db.query<{ count: number }>("select count(*)::int as count from bridge_assets where title_id='title-kinds'")).rows[0]?.count;
+    assert.equal(count, kinds.length);
+  } finally {
+    await db.close();
+  }
+});

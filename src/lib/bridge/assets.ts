@@ -60,10 +60,33 @@ export const requestAssetUpload = createServerFn({ method: "POST" })
     const signed = await signUpload({ key, contentType: data.contentType });
     const id = randomBytes(16).toString("hex");
     const sql = await getSql();
-    await sql`
-      insert into bridge_assets (id, title_id, kind, s3_key, content_type, created_by)
-      values (${id}, ${title.id}, ${data.kind}, ${key}, ${data.contentType}, ${actor.userId})
-    `;
+    try {
+      await sql`
+        insert into bridge_assets (id, title_id, kind, s3_key, content_type, created_by)
+        values (${id}, ${title.id}, ${data.kind}, ${key}, ${data.contentType}, ${actor.userId})
+      `;
+    } catch (insertError: unknown) {
+      const errStr = insertError instanceof Error ? insertError.message : String(insertError);
+      if (errStr.includes("bridge_assets_kind_chk")) {
+        await sql`
+          alter table bridge_assets drop constraint if exists bridge_assets_kind_chk;
+          alter table bridge_assets add constraint bridge_assets_kind_chk check (
+            kind in (
+              'poster', 'poster_vertical', 'poster_horizontal', 'thumbnail',
+              'screener', 'master', 'subtitle', 'technical', 'censor_certificate'
+            )
+          );
+        `.catch((alterErr) => {
+          console.error("Failed to auto-repair bridge_assets_kind_chk:", alterErr);
+        });
+        await sql`
+          insert into bridge_assets (id, title_id, kind, s3_key, content_type, created_by)
+          values (${id}, ${title.id}, ${data.kind}, ${key}, ${data.contentType}, ${actor.userId})
+        `;
+      } else {
+        throw insertError;
+      }
+    }
     await sql`
       update loop_media_migration_queue
       set status = 'UPLOADED', target_path = ${key}, updated_at = now()
