@@ -1,13 +1,14 @@
 import type { AccountType, InternalRole, Permission, TitleStatus } from "./types.ts";
 
 const INTERNAL_PERMISSIONS: Record<InternalRole, readonly Permission[]> = {
-  viewer: ["title.read_catalog", "audit.read"],
-  qc_reviewer: ["title.read_catalog", "title.qc_review", "asset.sign_download", "audit.read"],
+  viewer: ["title.read_catalog", "audit.read", "storage.read"],
+  qc_reviewer: ["title.read_catalog", "title.qc_review", "asset.sign_download", "audit.read", "storage.read"],
   legal_reviewer: [
     "title.read_catalog",
     "title.rights_review",
     "asset.sign_download",
     "audit.read",
+    "storage.read",
   ],
   finance: [
     "title.read_catalog",
@@ -15,6 +16,7 @@ const INTERNAL_PERMISSIONS: Record<InternalRole, readonly Permission[]> = {
     "finance.record_settlement",
     "entitlement.read_own",
     "audit.read",
+    "storage.read",
   ],
   admin: [
     "title.read_catalog",
@@ -37,6 +39,9 @@ const INTERNAL_PERMISSIONS: Record<InternalRole, readonly Permission[]> = {
     "finance.record_settlement",
     "users.invite_internal",
     "audit.read",
+    "storage.read",
+    "storage.recommend",
+    "storage.manage",
     "loop.publish",
     "loop.revoke",
     "loop.certify_playback",
