@@ -50,7 +50,7 @@ const sealedKey = `bridge-e2e/${runId}/sealed.bin`;
 const pool = new pg.Pool({
   connectionString: process.env.DATABASE_URL,
   max: 1,
-  ssl: { rejectUnauthorized: false },
+  ssl: { rejectUnauthorized: true },
 });
 let client;
 let transactionOpen = false;
