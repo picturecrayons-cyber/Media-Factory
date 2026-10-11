@@ -24,7 +24,7 @@ function previewBaseUrl() {
   return url.origin;
 }
 
-function required(name: string) {
+function required(name) {
   const value = process.env[name]?.trim();
   if (!value) throw new Error(`${name} is required; no test was executed.`);
   return value;
