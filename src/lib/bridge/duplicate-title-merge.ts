@@ -24,6 +24,8 @@ export type MergeTitle = {
 
 export type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
 
+export type MergeRecord = { [key: string]: JsonValue | Date };
+
 export type MergeRights = {
   id: string;
   territories: JsonValue;
@@ -190,10 +192,10 @@ async function loadMergeState(sql: Sql, titleId: string) {
   ] = await Promise.all([
     sql<MergeTitle>`select id,name,slug,language,status,owner_user_id,year,runtime_minutes,original_language from public.bridge_titles where id=${titleId} limit 1`,
     sql<MergeRights>`select id,territories,languages,window_start,window_end,exclusivity,status from public.bridge_rights_grants where title_id=${titleId} order by created_at`,
-    sql`select * from public.bridge_buyer_title_access where title_id=${titleId} order by buyer_user_id`,
-    sql`select id,asset_group,asset_type,version,language,codec,s3_key,checksum_sha256,processing_state from public.bridge_asset_versions where title_id=${titleId} order by asset_group,asset_type,version,language`,
-    sql`select id,destination,package_version,rights_grant_id,qc_case_id,asset_version_ids,readiness_state,authorized_at from public.bridge_destination_packages where title_id=${titleId} order by destination,package_version`,
-    sql`select id,bridge_title_id,loop_title_id,authorization_status,territories,languages,exploitation_models,window_start,window_end,approved_at,revoked_at from public.bridge_loop_publications where bridge_title_id=${titleId}`,
+    sql<MergeRecord>`select * from public.bridge_buyer_title_access where title_id=${titleId} order by buyer_user_id`,
+    sql<MergeRecord>`select id,asset_group,asset_type,version,language,codec,s3_key,checksum_sha256,processing_state from public.bridge_asset_versions where title_id=${titleId} order by asset_group,asset_type,version,language`,
+    sql<MergeRecord>`select id,destination,package_version,rights_grant_id,qc_case_id,asset_version_ids,readiness_state,authorized_at from public.bridge_destination_packages where title_id=${titleId} order by destination,package_version`,
+    sql<MergeRecord>`select id,bridge_title_id,loop_title_id,authorization_status,territories,languages,exploitation_models,window_start,window_end,approved_at,revoked_at from public.bridge_loop_publications where bridge_title_id=${titleId}`,
   ]);
   return {
     title: title[0] ?? null,
