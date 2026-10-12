@@ -275,12 +275,12 @@ function formatBytes(bytes: number): string {
 function storageErrorDetail(responseText: string): string {
   // OCI returns structured XML errors for many failed PAR uploads. Expose only
   // the short error code/message; never show the signed URL or full response.
-  const code = responseText.match(/<Code>([^<]{1,100})<\\/Code>/i)?.[1];
-  const message = responseText.match(/<Message>([^<]{1,200})<\\/Message>/i)?.[1];
+  const code = responseText.match(/<Code>([^<]{1,100})<\/Code>/i)?.[1];
+  const message = responseText.match(/<Message>([^<]{1,200})<\/Message>/i)?.[1];
   return [code, message]
     .filter((part): part is string => Boolean(part))
     .join(": ")
-    .replace(/\\s+/g, " ")
+    .replace(/\s+/g, " ")
     .slice(0, 240);
 }
 function FilesPanel({
