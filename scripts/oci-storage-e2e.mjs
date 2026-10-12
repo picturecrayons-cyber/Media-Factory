@@ -21,8 +21,13 @@ if (missing.length) {
   process.exit(2);
 }
 
-const { signUpload, verifyObject, sealVerifiedObject, signDownload } =
-  await import("../src/lib/bridge/oci-object-storage.server.ts");
+const {
+  deleteObject,
+  signUpload,
+  verifyObject,
+  sealVerifiedObject,
+  signDownload,
+} = await import("../src/lib/bridge/oci-object-storage.server.ts");
 const { persistVerifiedAsset } =
   await import("../src/lib/bridge/asset-confirmation.ts");
 
@@ -39,6 +44,9 @@ const payload = Buffer.from(
 );
 
 let asset;
+let sourceKey;
+let sealedKey;
+let persisted = false;
 try {
   const result = await pool.query(
     `select a.id, a.title_id, a.kind, a.s3_key, a.content_type, a.created_by,
@@ -57,10 +65,21 @@ try {
   }
   assert.equal(asset.created_by, asset.owner_user_id, "E2E asset must belong to the title owner");
 
+  // Database persistence irreversibly changes the asset/audit row. Require an
+  // explicit opt-in only after a disposable Preview fixture and cleanup are approved.
+  if (process.env.BRIDGE_E2E_ALLOW_DB_MUTATION !== "YES") {
+    throw new Error(
+      "Blocked: set BRIDGE_E2E_ALLOW_DB_MUTATION=YES only after confirming this is a dedicated disposable Preview test asset and the cleanup plan is approved",
+    );
+  }
+
+  // Use a unique source key so retries never overwrite the fixture's old object.
+  sourceKey = `${asset.s3_key}.e2e-source/${randomUUID()}`;
+
   console.log("1/6 pending Bridge asset record: PASS");
   console.log("2/6 request OCI signed upload URL: START");
   const upload = await signUpload({
-    key: asset.s3_key,
+    key: sourceKey,
     contentType: asset.content_type || "application/octet-stream",
   });
   const put = await fetch(upload.url, {
@@ -72,14 +91,14 @@ try {
   console.log("2/6 request OCI signed upload URL + PUT: PASS");
 
   console.log("3/6 OCI HEAD/ETag verification: START");
-  const verified = await verifyObject(asset.s3_key, asset.content_type);
+  const verified = await verifyObject(sourceKey, asset.content_type);
   assert.equal(verified.byteSize, payload.byteLength);
   assert.ok(verified.etag);
   console.log("3/6 OCI HEAD/ETag verification: PASS");
 
-  const sealedKey = `${asset.s3_key}.verified/${randomUUID()}`;
+  sealedKey = `${asset.s3_key}.verified-e2e/${randomUUID()}`;
   console.log("4/6 immutable OCI seal: START");
-  const sealed = await sealVerifiedObject(asset.s3_key, sealedKey, verified.etag);
+  const sealed = await sealVerifiedObject(sourceKey, sealedKey, verified.etag);
   assert.equal(sealed.byteSize, verified.byteSize);
   assert.ok(sealed.etag);
   console.log("4/6 immutable OCI seal: PASS");
@@ -88,7 +107,7 @@ try {
   const sql = {
     query: async (query, params) => (await pool.query(query, params)).rows,
   };
-  const persisted = await persistVerifiedAsset(sql, {
+  const wasPersisted = await persistVerifiedAsset(sql, {
     assetId: asset.id,
     actorUserId: asset.created_by,
     internalActor: false,
@@ -97,10 +116,11 @@ try {
     byteSize: sealed.byteSize,
     contentType: sealed.contentType,
     checksum: sealed.etag,
-    sourceKey: asset.s3_key,
+    sourceKey,
     sealedKey,
   });
-  assert.equal(persisted, true);
+  assert.equal(wasPersisted, true);
+  persisted = true;
 
   const state = await pool.query(
     `select a.s3_key, a.byte_size, a.content_type,
@@ -133,7 +153,7 @@ try {
     status: "PASS",
     assetId: asset.id,
     titleId: asset.title_id,
-    sourceKey: asset.s3_key,
+    sourceKey,
     sealedKey,
     byteSize: sealed.byteSize,
     etag: sealed.etag,
@@ -144,5 +164,27 @@ try {
   console.error("STORAGE_E2E_FAILED", error instanceof Error ? error.message : String(error));
   process.exitCode = 1;
 } finally {
+  // Once persisted, the sealed object is now referenced by the asset and must
+  // not be deleted automatically. Before persistence, clean only keys created
+  // by this run; failures to clean are reported for manual operator cleanup.
+  const cleanupErrors = [];
+  if (!persisted && sealedKey) {
+    try {
+      await deleteObject(sealedKey);
+    } catch (error) {
+      cleanupErrors.push(`sealed object ${sealedKey}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+  if (sourceKey) {
+    try {
+      await deleteObject(sourceKey);
+    } catch (error) {
+      cleanupErrors.push(`source object ${sourceKey}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+  if (cleanupErrors.length) {
+    console.error(`STORAGE_E2E_CLEANUP_REQUIRED ${cleanupErrors.join("; ")}`);
+    process.exitCode = 1;
+  }
   await pool.end();
 }
