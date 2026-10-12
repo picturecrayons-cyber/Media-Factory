@@ -56,6 +56,10 @@ function derivedFingerprint(privateKey: string) {
     .join(":");
 }
 
+function normalizeFingerprint(value: string) {
+  return value.trim().toLowerCase().replaceAll(":", "").replaceAll(" ", "");
+}
+
 function config(): OciConfig {
   const tenancy = bridgeEnv.ociTenancyOcid();
   const user = bridgeEnv.ociUserOcid();
@@ -71,15 +75,62 @@ function config(): OciConfig {
     if (!bucket) missing.push("OCI_BUCKET_NAME");
     throw new Error(`OCI Object Storage is not fully configured. Missing required environment variable(s): ${missing.join(", ")}`);
   }
+
+  const normalizedPrivateKey = normalizePrivateKey(privateKey);
+  // Always derive the fingerprint from the configured private key. If an optional
+  // configured fingerprint exists, fail closed when it doesn't match this key.
+  const fingerprint = derivedFingerprint(normalizedPrivateKey);
+  const configuredFingerprint = bridgeEnv.ociFingerprint();
+  if (configuredFingerprint) {
+    const configuredHex = normalizeFingerprint(configuredFingerprint);
+    if (!/^[a-f0-9]{32}$/.test(configuredHex)) {
+      throw new Error("OCI_FINGERPRINT must be a 32-character MD5 fingerprint, optionally colon-separated.");
+    }
+    if (configuredHex !== normalizeFingerprint(fingerprint)) {
+      throw new Error("OCI_FINGERPRINT does not match OCI_PRIVATE_KEY. Verify the key pair in Vercel Preview and OCI API Keys.");
+    }
+  }
+
   return {
     tenancy,
     user,
-    privateKey: normalizePrivateKey(privateKey),
-    fingerprint: bridgeEnv.ociFingerprint() || derivedFingerprint(privateKey),
+    privateKey: normalizedPrivateKey,
+    fingerprint,
     region,
     bucket,
     namespace: bridgeEnv.ociNamespace(),
   };
+}
+
+async function ociFailure(res: Response, operation: string) {
+  let code = "";
+  let message = "";
+  try {
+    const body = await res.clone().json() as { code?: unknown; message?: unknown };
+    if (typeof body.code === "string" && /^[A-Za-z0-9_-]{1,64}$/.test(body.code)) {
+      code = body.code;
+    }
+    if (typeof body.message === "string") {
+      // Bound and sanitize provider text; never log the response body or auth headers.
+      message = body.message
+        .replace(/[\r\n\t\x00-\x1f\x7f]/g, " ")
+        .replace(/-----BEGIN [^-]+-----[\s\S]*?-----END [^-]+-----/gi, "[redacted-key]")
+        .replace(/Bearer\s+\S+/gi, "Bearer [redacted]")
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, 180);
+    }
+  } catch {
+    // Some OCI errors have no JSON body; status and request ID remain useful.
+  }
+  const requestId = res.headers.get("opc-request-id");
+  const details = [
+    `OCI ${operation} failed (${res.status})`,
+    code ? `code=${code}` : "",
+    message ? `message=${message}` : "",
+    requestId && /^[A-Za-z0-9._:-]{1,160}$/.test(requestId) ? `requestId=${requestId}` : "",
+  ].filter(Boolean);
+  return new Error(details.join("; "));
 }
 
 function endpoint(region: string) {
@@ -158,7 +209,7 @@ async function signedFetch(opts: {
 async function resolveNamespace(cfg: OciConfig) {
   if (cfg.namespace) return cfg.namespace;
   const res = await signedFetch({ cfg, method: "GET", path: "/n/" });
-  if (!res.ok) throw new Error(`OCI namespace lookup failed (${res.status})`);
+  if (!res.ok) throw await ociFailure(res, "namespace lookup");
   const ns = (await res.text()).replaceAll('"', "").trim();
   if (!ns) throw new Error("OCI Object Storage namespace is empty");
   return ns;
@@ -180,7 +231,7 @@ async function createPar(opts: {
   };
   const path = `/n/${encodeURIComponent(namespace)}/b/${encodeURIComponent(cfg.bucket)}/p/`;
   const res = await signedFetch({ cfg, method: "POST", path, body });
-  if (!res.ok) throw new Error(`OCI pre-authenticated request failed (${res.status})`);
+  if (!res.ok) throw await ociFailure(res, "pre-authenticated request creation");
   const parsed = (await res.json()) as { accessUri?: string };
   if (!parsed.accessUri) throw new Error("OCI pre-authenticated request returned no access URI");
   return {
@@ -213,7 +264,7 @@ export async function verifyObject(key: string, expectedContentType?: string | n
   const namespace = await resolveNamespace(cfg);
   const path = `/n/${encodeURIComponent(namespace)}/b/${encodeURIComponent(cfg.bucket)}/o/${encodedObjectName(key)}`;
   const res = await signedFetch({ cfg, method: "HEAD", path });
-  if (!res.ok) throw new Error(`OCI object verification failed (${res.status})`);
+  if (!res.ok) throw await ociFailure(res, "object verification");
   const contentLength = Number(res.headers.get("content-length") || 0);
   const contentType = res.headers.get("content-type");
   if (expectedContentType && contentType !== expectedContentType) {
@@ -232,7 +283,7 @@ async function pollWorkRequest(cfg: OciConfig, workRequestId: string) {
   for (let i = 0; i < 30; i += 1) {
     const headers = signHeaders({ cfg, method: "GET", url });
     const res = await fetch(url, { method: "GET", headers });
-    if (!res.ok) throw new Error(`OCI copy work-request lookup failed (${res.status})`);
+    if (!res.ok) throw await ociFailure(res, "copy work-request lookup");
     const body = (await res.json()) as { status?: string };
     if (body.status === "SUCCEEDED") return;
     if (body.status === "FAILED" || body.status === "CANCELED") {
@@ -261,7 +312,7 @@ export async function sealVerifiedObject(sourceKey: string, destinationKey: stri
       destinationObjectName: destinationKey,
     },
   });
-  if (res.status !== 202 && !res.ok) throw new Error(`OCI object copy failed (${res.status})`);
+  if (res.status !== 202 && !res.ok) throw await ociFailure(res, "object copy");
   const workRequestId = res.headers.get("opc-work-request-id");
   if (workRequestId) await pollWorkRequest(cfg, workRequestId);
   return verifyObject(destinationKey);
@@ -272,7 +323,7 @@ export async function deleteObject(key: string) {
   const namespace = await resolveNamespace(cfg);
   const path = `/n/${encodeURIComponent(namespace)}/b/${encodeURIComponent(cfg.bucket)}/o/${encodedObjectName(key)}`;
   const res = await signedFetch({ cfg, method: "DELETE", path });
-  if (!res.ok && res.status !== 404) throw new Error(`OCI object deletion failed (${res.status})`);
+  if (!res.ok && res.status !== 404) throw await ociFailure(res, "object deletion");
   return { deleted: res.status !== 404, key };
 }
 
