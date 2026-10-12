@@ -114,8 +114,14 @@ async function ociFailure(res: Response, operation: string) {
       // Bound and sanitize provider text; never log the response body or auth headers.
       message = body.message
         .split("").map((char) => { const code = char.charCodeAt(0); return code < 32 || code === 127 ? " " : char; }).join("")
-        .replace(/-----BEGIN [^-]+-----[\s\S]*?-----END [^-]+-----/gi, "[redacted-key]")
-        .replace(/Bearer\s+\S+/gi, "Bearer [redacted]")
+        // Provider response text is untrusted. Remove credential material and URLs
+        // before showing a bounded diagnostic message in the authenticated Studio UI.
+        .replace(/-----BEGIN [^-]*PRIVATE KEY-----[\s\S]*?-----END [^-]*PRIVATE KEY-----/gi, "[redacted-key]")
+        .replace(/\b(?:authorization|proxy-authorization)\s*[:=]\s*[^,;]+/gi, "[redacted-authorization]")
+        .replace(/\b(?:Bearer|Basic)\s+[A-Za-z0-9._~+/=-]+/gi, "[redacted-auth]")
+        .replace(/\b(keyId|signature|access_token|refresh_token|token|secret|password|private_key|privateKey)\s*[:=]\s*["']?[^,;\s"']+/gi, "$1=[redacted]")
+        .replace(/https?:\/\/[^\s"'<>]+/gi, "[redacted-url]")
+        .replace(/\bocid1[a-z0-9._-]+/gi, "[redacted-ocid]")
         .replace(/\s+/g, " ")
         .trim()
         .slice(0, 180);
