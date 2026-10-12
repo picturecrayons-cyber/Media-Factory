@@ -22,10 +22,12 @@ export type MergeTitle = {
   original_language?: string | null;
 };
 
+export type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
+
 export type MergeRights = {
   id: string;
-  territories: unknown;
-  languages: unknown;
+  territories: JsonValue;
+  languages: JsonValue;
   window_start: string | Date | null;
   window_end: string | Date | null;
   exclusivity: string | null;
