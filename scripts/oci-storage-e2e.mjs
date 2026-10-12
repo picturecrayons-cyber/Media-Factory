@@ -3,6 +3,13 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import pg from "pg";
 
+import {
+  errorText,
+  requireEnvironment,
+  requireExplicitFlag,
+  requirePreviewDatabase,
+} from "./oci-e2e-safety.mjs";
+
 const required = [
   "OCI_TENANCY_OCID",
   "OCI_USER_OCID",
@@ -15,9 +22,16 @@ const required = [
   "BRIDGE_E2E_ASSET_ID",
 ];
 
-const missing = required.filter((key) => !String(process.env[key] ?? "").trim());
-if (missing.length) {
-  console.error(`STORAGE_E2E_BLOCKED missing: ${missing.join(", ")}`);
+let databaseUrl;
+try {
+  requireExplicitFlag(
+    "--confirm-mutable",
+    "database-writing storage E2E requires a disposable Preview fixture and an approved cleanup plan",
+  );
+  requireEnvironment(required);
+  databaseUrl = requirePreviewDatabase(process.env.DATABASE_URL);
+} catch (error) {
+  console.error("STORAGE_E2E_BLOCKED", errorText(error));
   process.exit(2);
 }
 
@@ -30,20 +44,6 @@ const {
 } = await import("../src/lib/bridge/oci-object-storage.server.ts");
 const { persistVerifiedAsset } =
   await import("../src/lib/bridge/asset-confirmation.ts");
-
-const databaseUrl = new URL(process.env.DATABASE_URL);
-const dbHost = databaseUrl.hostname.toLowerCase();
-const productionDatabaseHosts = new Set([
-  "db.mlmgugivsyoxzdgwkbpu.supabase.co",
-]);
-if (productionDatabaseHosts.has(dbHost) || dbHost.includes("production")) {
-  console.error("STORAGE_E2E_BLOCKED: refuse to run against a known production database host");
-  process.exit(2);
-}
-if (process.env.BRIDGE_E2E_ENVIRONMENT !== "preview") {
-  console.error("STORAGE_E2E_BLOCKED: set BRIDGE_E2E_ENVIRONMENT=preview only for the approved non-production Preview environment");
-  process.exit(2);
-}
 
 const assetId = process.env.BRIDGE_E2E_ASSET_ID;
 const pool = new pg.Pool({
@@ -75,17 +75,25 @@ try {
   asset = result.rows[0];
   if (!asset) throw new Error("E2E asset not found");
   if (asset.byte_size !== null) throw new Error("E2E asset is already verified; provide a fresh pending asset");
+  if (!String(asset.slug ?? "").startsWith("internal-oci-storage-e2e-")) {
+    throw new Error("E2E asset must belong to a dedicated internal-oci-storage-e2e-* title; refusing customer or production titles");
+  }
+  if (!String(asset.name ?? "").toUpperCase().startsWith("INTERNAL TEST ONLY")) {
+    throw new Error("E2E title name must start with 'INTERNAL TEST ONLY'.");
+  }
   if (!["DRAFT", "UPLOADING", "PREPARING"].includes(asset.status)) {
     throw new Error(`E2E title is not uploadable: ${asset.status}`);
   }
   assert.equal(asset.created_by, asset.owner_user_id, "E2E asset must belong to the title owner");
 
-  // Database persistence irreversibly changes the asset/audit row. Require an
-  // explicit opt-in only after a disposable Preview fixture and cleanup are approved.
-  if (process.env.BRIDGE_E2E_ALLOW_DB_MUTATION !== "YES") {
-    throw new Error(
-      "Blocked: set BRIDGE_E2E_ALLOW_DB_MUTATION=YES only after confirming this is a dedicated disposable Preview test asset and the cleanup plan is approved",
-    );
+  const freshCutoff = Date.now() - 24 * 60 * 60 * 1000;
+  const titleCreatedAt = Date.parse(String(asset.title_created_at ?? ""));
+  const assetCreatedAt = Date.parse(String(asset.asset_created_at ?? ""));
+  if (!Number.isFinite(titleCreatedAt) || titleCreatedAt < freshCutoff) {
+    throw new Error("E2E title must have been created within the last 24 hours; provision a fresh disposable Preview fixture.");
+  }
+  if (!Number.isFinite(assetCreatedAt) || assetCreatedAt < freshCutoff) {
+    throw new Error("E2E asset must have been created within the last 24 hours; provision a fresh pending asset.");
   }
 
   // Use a unique source key so retries never overwrite the fixture's old object.
