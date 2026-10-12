@@ -113,7 +113,7 @@ async function ociFailure(res: Response, operation: string) {
     if (typeof body.message === "string") {
       // Bound and sanitize provider text; never log the response body or auth headers.
       message = body.message
-        .replace(/[\r\n\t\x00-\x1f\x7f]/g, " ")
+        .split("").map((char) => { const code = char.charCodeAt(0); return code < 32 || code === 127 ? " " : char; }).join("")
         .replace(/-----BEGIN [^-]+-----[\s\S]*?-----END [^-]+-----/gi, "[redacted-key]")
         .replace(/Bearer\s+\S+/gi, "Bearer [redacted]")
         .replace(/\s+/g, " ")
