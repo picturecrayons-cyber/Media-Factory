@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/button";
 import { CreateTitleForm } from "@/components/bridge/title-desk";
 import { listTitles } from "@/lib/bridge/titles";
 import { listLoopPublicationReadiness } from "@/lib/bridge/loop-publication";
-import { hasPermission, type Actor } from "@/lib/bridge/rbac";
+import { hasPermission } from "@/lib/bridge/rbac";
+import type { BridgeActor } from "@/lib/bridge/session";
 
 export const Route = createFileRoute("/cms")({ component: OperationalCms });
 
@@ -17,7 +18,7 @@ function OperationalCms() {
   return <RequireBridge allow="super_admin">{(actor) => <CmsBody actor={actor} />}</RequireBridge>;
 }
 
-function CmsBody({ actor }: { actor: Actor }) {
+function CmsBody({ actor }: { actor: BridgeActor }) {
   const search = Route.useSearch() as { tab?: Tab };
   const tab: Tab = tabs.includes(search.tab as Tab) ? (search.tab as Tab) : "ingest";
   const titlesQ = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles() });
@@ -86,7 +87,7 @@ function CmsBody({ actor }: { actor: Actor }) {
   );
 }
 
-function IngestDesk({ actor }: { actor: Actor }) {
+function IngestDesk({ actor }: { actor: BridgeActor }) {
   const canCreate =
     hasPermission(actor, "title.create") || hasPermission(actor, "title.ingest_internal");
   return (
