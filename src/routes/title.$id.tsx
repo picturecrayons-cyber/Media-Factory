@@ -290,7 +290,6 @@ function FilesPanel({
 }) {
   const [uploading, setUploading] = useState<SimpleAssetKind | null>(null);
   const [message, setMessage] = useState<string | null>(null);
-  const [uploadPercent, setUploadPercent] = useState<number | null>(null);
 
   function putFileWithProgress(url: string, method: string, file: File, contentType: string) {
     return new Promise<void>((resolve, reject) => {
@@ -300,7 +299,6 @@ function FilesPanel({
       request.timeout = 30 * 60 * 1000;
       request.upload.onprogress = (event) => {
         if (event.lengthComputable && event.total > 0) {
-          setUploadPercent(Math.min(100, Math.round((event.loaded / event.total) * 100)));
           setMessage(`Uploading ${file.name}: ${Math.min(100, Math.round((event.loaded / event.total) * 100))}% (${formatBytes(event.loaded)} of ${formatBytes(event.total)})`);
         } else {
           setMessage(`Uploading ${file.name}: ${formatBytes(event.loaded)} sent`);
@@ -326,7 +324,6 @@ function FilesPanel({
       return;
     }
     setUploading(kind);
-    setUploadPercent(null);
     setMessage(`Requesting secure upload link for ${kind}…`);
     try {
       const signed = await requestAssetUpload({
@@ -336,7 +333,6 @@ function FilesPanel({
       const uploadUrl = new URL(signed.url);
       uploadUrl.pathname = uploadUrl.pathname.split("/").map((part) => encodeURIComponent(decodeURIComponent(part))).join("/");
       await putFileWithProgress(uploadUrl.toString(), signed.method, file, contentType);
-      setUploadPercent(100);
       setMessage("Upload received. Verifying file integrity and sealing the private copy…");
       await confirmAssetUpload({ data: { assetId: signed.assetId, expectedByteSize: file.size } });
       setMessage("Storage verification passed. Refreshing title assets…");
