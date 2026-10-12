@@ -65,7 +65,9 @@ let persistenceAttempted = false;
 try {
   const result = await pool.query(
     `select a.id, a.title_id, a.kind, a.s3_key, a.content_type, a.created_by,
-            a.byte_size, t.status, t.owner_user_id
+            a.byte_size, a.created_at as asset_created_at,
+            t.status, t.owner_user_id, t.slug, t.name,
+            t.created_at as title_created_at
        from bridge_assets a
        join bridge_titles t on t.id = a.title_id
       where a.id = $1
