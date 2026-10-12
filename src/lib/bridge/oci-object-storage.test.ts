@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { generateKeyPairSync, verify } from "node:crypto";
-import { sealVerifiedObject, verifyObject } from "./oci-object-storage.server.ts";
+import { diagnoseOciAuthentication, sealVerifiedObject, verifyObject } from "./oci-object-storage.server.ts";
 
 test("OCI private key normalization accepts escaped and quoted PEM secrets", async () => {
   const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
@@ -236,6 +236,57 @@ test("OCI authorization errors include bounded safe provider context and request
         return true;
       },
     );
+  } finally {
+    globalThis.fetch = originalFetch;
+    for (const [key, value] of Object.entries(saved)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+});
+
+
+test("OCI diagnostic verifies namespace and bucket using read-only GET requests", async () => {
+  const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  const values = {
+    OCI_TENANCY_OCID: "test-tenancy",
+    OCI_USER_OCID: "test-user",
+    OCI_PRIVATE_KEY: privateKey.export({ type: "pkcs8", format: "pem" }).toString(),
+    OCI_FINGERPRINT: "",
+    OCI_REGION: "ap-mumbai-1",
+    OCI_NAMESPACE: "test-namespace",
+    OCI_BUCKET_NAME: "test-bucket",
+  };
+  const saved = Object.fromEntries(Object.keys(values).map((key) => [key, process.env[key]]));
+  const originalFetch = globalThis.fetch;
+  const calls: Array<{ method: string; path: string }> = [];
+  Object.assign(process.env, values);
+  globalThis.fetch = async (input, init) => {
+    const url = new URL(String(input));
+    const method = init?.method || "GET";
+    calls.push({ method, path: url.pathname });
+    assert.equal(method, "GET", "diagnostic must never mutate storage");
+    const headers = new Headers(init?.headers);
+    const signature = headers.get("authorization")?.match(/signature="([^"]+)"/)?.[1];
+    assert.ok(signature);
+    const signed = `(request-target): get ${url.pathname}
+host: ${url.host}
+date: ${headers.get("date")}`;
+    assert.ok(verify("RSA-SHA256", Buffer.from(signed), publicKey, Buffer.from(signature, "base64")));
+    if (url.pathname === "/n/") return new Response('"test-namespace"', { status: 200 });
+    assert.equal(url.pathname, "/n/test-namespace/b/test-bucket");
+    return Response.json({ name: "test-bucket" }, { status: 200 });
+  };
+  try {
+    const result = await diagnoseOciAuthentication();
+    assert.equal(result.status, "passed");
+    assert.equal(result.mode, "read-only");
+    assert.equal(result.checks.namespaceAuthentication, "passed");
+    assert.equal(result.checks.bucketReadAccess, "passed");
+    assert.deepEqual(calls, [
+      { method: "GET", path: "/n/" },
+      { method: "GET", path: "/n/test-namespace/b/test-bucket" },
+    ]);
   } finally {
     globalThis.fetch = originalFetch;
     for (const [key, value] of Object.entries(saved)) {
