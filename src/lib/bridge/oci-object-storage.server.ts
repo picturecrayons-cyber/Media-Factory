@@ -331,3 +331,43 @@ export function titleAssetKey(opts: { ownerUserId: string; titleId: string; kind
   const safe = opts.filename.replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 80);
   return `bridge/${opts.ownerUserId}/${opts.titleId}/${opts.kind}/${Date.now()}-${safe}`;
 }
+
+
+/**
+ * Read-only authentication diagnostic. Performs only OCI namespace and bucket GETs;
+ * it never creates PARs, uploads, copies, or deletes objects.
+ */
+export async function diagnoseOciAuthentication() {
+  const cfg = config();
+  const namespaceResponse = await signedFetch({ cfg, method: "GET", path: "/n/" });
+  if (!namespaceResponse.ok) {
+    throw await ociFailure(namespaceResponse, "read-only namespace authentication check");
+  }
+
+  const namespace = (await namespaceResponse.text()).replaceAll('"', "").trim();
+  if (!namespace) throw new Error("OCI read-only namespace check returned an empty namespace");
+  if (cfg.namespace && cfg.namespace !== namespace) {
+    throw new Error("OCI_NAMESPACE does not match the namespace returned by the authenticated OCI identity");
+  }
+
+  const bucketPath = `/n/${encodeURIComponent(namespace)}/b/${encodeURIComponent(cfg.bucket)}`;
+  const bucketResponse = await signedFetch({ cfg, method: "GET", path: bucketPath });
+  if (!bucketResponse.ok) {
+    throw await ociFailure(bucketResponse, "read-only bucket access check");
+  }
+  // Consume the response without returning provider details or configuration secrets.
+  await bucketResponse.arrayBuffer();
+
+  return {
+    status: "passed" as const,
+    mode: "read-only" as const,
+    region: cfg.region,
+    bucket: cfg.bucket,
+    namespace,
+    fingerprint: cfg.fingerprint,
+    checks: {
+      namespaceAuthentication: "passed" as const,
+      bucketReadAccess: "passed" as const,
+    },
+  };
+}
