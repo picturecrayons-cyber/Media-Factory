@@ -220,7 +220,7 @@ async function ociFailure(res: Response, operation: string) {
   }
   const requestId = res.headers.get("opc-request-id")?.replace(/[^a-zA-Z0-9/_.:-]/g, "").slice(0, 120);
   const detail = [serviceCode, serviceMessage].filter(Boolean).join(": ");
-  const authHint = res.status === 401 || res.status === 403
+  const authHint = res.status === 401 || res.status === 403 || serviceCode === "InsufficientServicePermissions"
     ? " Check the OCI tenancy/user OCIDs, region, registered API-key fingerprint/public key, and required Object Storage IAM policy."
     : "";
   return new Error(

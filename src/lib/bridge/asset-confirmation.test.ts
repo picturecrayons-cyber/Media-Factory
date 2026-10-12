@@ -85,3 +85,38 @@ test("bridge_assets permits all canonical ASSET_KINDS after migration", async ()
     await db.close();
   }
 });
+
+test("verifying poster_vertical populates poster_key on bridge_titles", async () => {
+  const db = new PGlite();
+  try {
+    await db.waitReady;
+    await db.exec("create role anon; create role authenticated;");
+    await db.exec(readFileSync(join(process.cwd(), "migrations/0004_bridge.sql"), "utf8"));
+    await db.exec(readFileSync(join(process.cwd(), "migrations/0021_bridge_assets_kinds.sql"), "utf8"));
+    await db.exec(`insert into bridge_titles (id, slug, name, owner_user_id, owner_account_type)
+      values ('title-vertical', 'title-vertical', 'Vertical Title', 'creator', 'independent_creator');
+      insert into bridge_assets (id, title_id, kind, s3_key, content_type, created_by)
+      values ('asset-vert-1', 'title-vertical', 'poster_vertical', 'bridge/creator/title-vertical/poster_vertical/art.png', 'image/png', 'creator');`);
+    const sql = { query: async <T>(query: string, params: unknown[]) => (await db.query<T>(query, params)).rows };
+    const success = await persistVerifiedAsset(sql, {
+      assetId: "asset-vert-1",
+      actorUserId: "creator",
+      internalActor: false,
+      titleId: "title-vertical",
+      kind: "poster_vertical",
+      byteSize: 2048,
+      contentType: "image/png",
+      checksum: "etag-vert",
+      sourceKey: "bridge/creator/title-vertical/poster_vertical/art.png",
+      sealedKey: "bridge/creator/title-vertical/poster_vertical/art.png.verified/uuid-vert",
+    });
+    assert.equal(success, true);
+    const title = (await db.query<{ poster_key: string | null }>(
+      "select poster_key from bridge_titles where id = 'title-vertical'",
+    )).rows[0];
+    assert.equal(title?.poster_key, "bridge/creator/title-vertical/poster_vertical/art.png.verified/uuid-vert");
+  } finally {
+    await db.close();
+  }
+});
+

@@ -432,3 +432,47 @@ test("OCI rejects a configured fingerprint that does not match the private key b
     }
   }
 });
+
+test("OCI InsufficientServicePermissions error generates IAM policy guidance without leaking secrets", async () => {
+  const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  const fingerprint = fingerprintFor(privateKey);
+  const values = {
+    OCI_TENANCY_OCID: MOCK_TENANCY_OCID,
+    OCI_USER_OCID: MOCK_USER_OCID,
+    OCI_PRIVATE_KEY: privateKey.export({ type: "pkcs8", format: "pem" }).toString(),
+    OCI_FINGERPRINT: fingerprint,
+    OCI_REGION: "ap-mumbai-1",
+    OCI_NAMESPACE: "test-namespace",
+    OCI_BUCKET_NAME: "test-bucket",
+  };
+  const saved = Object.fromEntries(Object.keys(values).map((key) => [key, process.env[key]]));
+  const originalFetch = globalThis.fetch;
+  Object.assign(process.env, values);
+  globalThis.fetch = async () =>
+    Response.json(
+      { code: "InsufficientServicePermissions", message: "The service does not have permissions to perform this operation." },
+      { status: 400, headers: { "opc-request-id": "bom-1:test-request-id" } },
+    );
+  try {
+    const { sealVerifiedObject } = await import("./oci-object-storage.server.ts");
+    await assert.rejects(
+      sealVerifiedObject("source-key", "dest-key", "etag-test"),
+      (error: unknown) => {
+        assert.ok(error instanceof Error);
+        assert.match(error.message, /OCI object copy failed \(400\)/);
+        assert.match(error.message, /InsufficientServicePermissions/);
+        assert.match(error.message, /Object Storage IAM policy/);
+        assert.match(error.message, /bom-1:test-request-id/);
+        assert.doesNotMatch(error.message, /BEGIN PRIVATE KEY|testtenancy/);
+        return true;
+      },
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+    for (const [key, value] of Object.entries(saved)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+});
+
