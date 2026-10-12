@@ -5,16 +5,38 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { StatusChip } from "@/components/bridge/status-rail";
 import { createTitle, listTitles } from "@/lib/bridge/titles";
+import type { TitleStatus } from "@/lib/bridge/types";
 import { BRIDGE_LOOP_LANES } from "@/lib/bridge/loop-lanes";
 
-export function TitleList({ empty, query = "" }: { empty: string; query?: string }) {
+const NEXT_STEPS: Record<TitleStatus, string> = {
+  DRAFT: "Complete title details and prepare the required assets.",
+  UPLOADING: "Finish uploading assets and confirm they are verified.",
+  PREPARING: "Review title metadata and check required assets.",
+  QC_REVIEW: "Await QC review and address any requested changes.",
+  RIGHTS_REVIEW: "Track rights and legal clearance; publishing remains gated.",
+  LICENSING_READY: "Review licensing readiness and available next actions.",
+  LIVE_FOR_BUYERS: "Review buyer visibility and any incoming interest.",
+  IN_NEGOTIATION: "Track the licensing discussion and agreed terms.",
+  LICENSED: "Review the authorized delivery requirements.",
+  DELIVERED: "Review delivery status and the available delivery record.",
+};
+
+export function TitleList({
+  empty,
+  query = "",
+  showNextStep = false,
+}: {
+  empty: string;
+  query?: string;
+  showNextStep?: boolean;
+}) {
   const titlesQ = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles() });
   const titles = (titlesQ.data?.titles ?? []).filter((t) => !query || `${t.name} ${t.language} ${t.year ?? ""}`.toLowerCase().includes(query.toLowerCase()));
   if (titlesQ.isPending) return <p className="text-sm text-muted">Loading titles…</p>;
   if (titlesQ.isError) {
     return (
       <div role="alert" className="flex flex-wrap items-center gap-3 text-sm text-accent">
-        <p>Could not load titles.</p>
+        <p>Could not load titles. Your workspace has not been changed.</p>
         <Button type="button" onClick={() => void titlesQ.refetch()}>Retry</Button>
       </div>
     );
@@ -27,17 +49,26 @@ export function TitleList({ empty, query = "" }: { empty: string; query?: string
           <Link
             to="/title/$id"
             params={{ id: t.id }}
-            className="flex flex-wrap items-center justify-between gap-3 px-4 py-4 hover:bg-fg/5"
+            className="flex flex-wrap items-center justify-between gap-3 px-4 py-4 hover:bg-fg/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-accent"
           >
-            <div>
+            <div className="min-w-0 flex-1">
               <p className="font-medium">{t.name}</p>
               <p className="text-sm text-muted">
                 {t.contentType ? `${t.contentType} · ` : ""}
                 {t.language}
                 {t.year ? ` · ${t.year}` : ""}
               </p>
+              {showNextStep && (
+                <p className="mt-2 max-w-2xl text-sm text-muted">
+                  <span className="font-medium text-fg">Next step: </span>
+                  {NEXT_STEPS[t.status] ?? "Open the title workspace to review its current requirements."}
+                </p>
+              )}
             </div>
-            <StatusChip status={t.status} />
+            <span className="flex shrink-0 flex-col items-end gap-2">
+              <StatusChip status={t.status} />
+              {showNextStep && <span className="text-sm font-medium text-accent">Continue title <span aria-hidden="true">→</span></span>}
+            </span>
           </Link>
         </li>
       ))}
