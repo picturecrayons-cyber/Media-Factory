@@ -75,7 +75,7 @@ test("unpublished/revoked/out-of-window titles fail closed before FREE playback"
 test("active TVOD entitlement from canonical table grants playback", async () => {
   const h = harness({
     titleRows: [{ id: "title-1", access_tier: "TVOD" }],
-    entitlementRows: [{ id: "entitlement-1", access_type: "TVOD_RENTAL", expires_at: null }],
+    entitlementRows: [{ id: "entitlement-1", access_type: "TVOD_RENTAL", expires_at: "2099-01-01T00:00:00.000Z" }],
   });
   const result = await h.check({ context: { userId: "user-1" }, data: { loopTitleId: "title-1" } });
   assert.equal(result.canPlay, true);
