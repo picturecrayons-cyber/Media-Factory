@@ -111,7 +111,7 @@ async function serveLoopMedia(request: Request) {
       .eq("user_id", userId)
       .eq("title_id", title.id)
       .eq("status", "ACTIVE")
-      .eq("access_type", "TVOD_RENTAL")
+      .eq("access_type", "RENTAL")
       .gt("expires_at", now.toISOString())
       .limit(1);
     if (entitlementError) return errorResponse(503, "ENTITLEMENT_UNAVAILABLE", "Rental entitlement could not be verified");
