@@ -87,7 +87,7 @@ async function listCatalog(sql: Sql): Promise<TitleRow[]> {
 }
 
 async function listOwned(sql: Sql, userId: string): Promise<TitleRow[]> {
-  // Studio organization_name is a display label, not a verified tenant identifier.
+  // Studio organization labels are display metadata, not verified tenant identifiers.
   // Never use a matching label to expand read access across different user IDs.
   const mergeColumnAvailable = await hasTitleMergeColumn(sql);
   return mergeColumnAvailable
