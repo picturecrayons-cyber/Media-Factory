@@ -6,9 +6,14 @@ import { ModuleKind, transpileModule } from "typescript";
 import { z } from "zod";
 
 // Run the real server handler with isolated SQL/auth dependencies. No external DB calls.
-function harness(options = {}) {
-  const queries = [];
-  const sql = async (strings, ..._values) => {
+type HarnessOptions = {
+  titleRows?: Array<{ id: string; access_tier: string }>;
+  entitlementRows?: Array<{ id: string; access_type: string; expires_at: string | null }>;
+};
+
+function harness(options: HarnessOptions = {}) {
+  const queries: string[] = [];
+  const sql = async (strings: TemplateStringsArray, ..._values: unknown[]) => {
     const query = strings.join("?");
     queries.push(query);
     if (query.includes("select l.id, l.access_tier")) return options.titleRows ?? [];
@@ -16,10 +21,22 @@ function harness(options = {}) {
     if (query.includes("from loop_subscriptions")) return [];
     return [];
   };
-  const modules = {
+  const source = readFileSync(new URL("./catalog.ts", import.meta.url), "utf8");
+  const output = transpileModule(source, {
+    compilerOptions: { module: ModuleKind.CommonJS },
+  }).outputText;
+  const exportedModule: { checkPlaybackEntitlement?: (args: unknown) => Promise<{
+    canPlay: boolean;
+    accessType: string;
+  }> } = {};
+  const modules: Record<string, unknown> = {
     "@tanstack/react-start": {
       createServerFn: () => {
-        const builder = {
+        const builder: {
+          middleware: (...args: unknown[]) => typeof builder;
+          validator: (...args: unknown[]) => typeof builder;
+          handler: (handler: (...args: unknown[]) => unknown) => unknown;
+        } = {
           middleware: () => builder,
           validator: () => builder,
           handler: (handler) => handler,
@@ -31,19 +48,15 @@ function harness(options = {}) {
     "@/lib/auth/middleware": { authMiddleware: {} },
     "@/lib/db": { getSql: async () => sql },
   };
-  const source = readFileSync(new URL("./catalog.ts", import.meta.url), "utf8");
-  const output = transpileModule(source, {
-    compilerOptions: { module: ModuleKind.CommonJS },
-  }).outputText;
-  const exports = {};
   runInNewContext(output, {
-    exports,
-    require: (name) => {
+    exports: exportedModule,
+    require: (name: string) => {
       assert.ok(name in modules, `Unexpected dependency: ${name}`);
       return modules[name];
     },
   });
-  return { check: exports.checkPlaybackEntitlement, queries };
+  assert.equal(typeof exportedModule.checkPlaybackEntitlement, "function");
+  return { check: exportedModule.checkPlaybackEntitlement!, queries };
 }
 
 test("unpublished/revoked/out-of-window titles fail closed before FREE playback", async () => {
