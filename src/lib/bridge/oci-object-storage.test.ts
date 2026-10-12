@@ -232,7 +232,7 @@ test("OCI authorization errors include bounded safe provider context and request
         assert.match(error.message, /object verification failed \(401\)/);
         assert.match(error.message, /code=NotAuthenticated/);
         assert.match(error.message, /requestId=request-12345/);
-        assert.doesNotMatch(error.message, /BEGIN PRIVATE KEY|authorization:|supersecret-signature|secret-token|bearer-secret|url-secret|tenancy\\/user\\/fingerprint|https?:\\/\\//i);
+        assert.doesNotMatch(error.message, /BEGIN PRIVATE KEY|authorization:|supersecret-signature|secret-token|bearer-secret|url-secret|tenancy\/user\/fingerprint|https?:\/\//i);
         return true;
       },
     );
