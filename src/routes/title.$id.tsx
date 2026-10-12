@@ -301,7 +301,10 @@ function FilesPanel({
   onAssetsChanged: () => Promise<unknown> | unknown;
 }) {
   const [uploading, setUploading] = useState<SimpleAssetKind | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  const [phase, setPhase] = useState<"idle" | "uploading" | "verifying" | "sealing" | "refreshing">("idle");
   const [message, setMessage] = useState<string | null>(null);
+  const [messageIsError, setMessageIsError] = useState(false);
 
   function putFileWithProgress(url: string, method: string, file: File, contentType: string) {
     return new Promise<void>((resolve, reject) => {
@@ -310,13 +313,19 @@ function FilesPanel({
       request.setRequestHeader("content-type", contentType);
       request.timeout = 30 * 60 * 1000;
       request.upload.onloadstart = () => {
-        setMessage(`Upload request started for ${file.name}; waiting for storage progress…`);
+        setUploadProgress(0);
+        setPhase("uploading");
+        setMessage(`Uploading ${file.name}…`);
       };
       request.upload.onprogress = (event) => {
         if (event.lengthComputable && event.total > 0) {
           const percent = Math.min(100, Math.round((event.loaded / event.total) * 100));
+          setUploadProgress(percent);
+          setPhase("uploading");
           setMessage(`Uploading ${file.name}: ${percent}% (${formatBytes(event.loaded)} of ${formatBytes(event.total)})`);
         } else {
+          setUploadProgress(null);
+          setPhase("uploading");
           setMessage(`Uploading ${file.name}: ${formatBytes(event.loaded)} sent`);
         }
       };
@@ -344,6 +353,9 @@ function FilesPanel({
       return;
     }
     setUploading(kind);
+    setUploadProgress(null);
+    setMessageIsError(false);
+    setPhase("uploading");
     setMessage(`Requesting secure upload link for ${kind}…`);
     try {
       const signed = await requestAssetUpload({
@@ -353,20 +365,30 @@ function FilesPanel({
       const uploadUrl = new URL(signed.url);
       uploadUrl.pathname = uploadUrl.pathname.split("/").map((part) => encodeURIComponent(decodeURIComponent(part))).join("/");
       await putFileWithProgress(uploadUrl.toString(), signed.method, file, contentType);
-      setMessage("Upload received. Verifying file integrity and sealing the private copy…");
+      setPhase("verifying");
+      setUploadProgress(100);
+      setMessage("Upload received. Verifying OCI checksum and object size…");
+      setPhase("sealing");
       await confirmAssetUpload({ data: { assetId: signed.assetId, expectedByteSize: file.size } });
-      setMessage("Storage verification passed. Refreshing title assets…");
+      setMessage("Asset sealed and verified. Refreshing title assets…");
+      setPhase("refreshing");
       await onAssetsChanged();
+      setMessageIsError(false);
       setMessage(`${kind[0].toUpperCase() + kind.slice(1)} is ready and verified.`);
     } catch (error) {
       const raw = error instanceof Error ? error.message : "Upload failed";
+      setMessageIsError(true);
       setMessage(
-        raw.includes("STORAGE_UNAVAILABLE")
-          ? "Storage service is currently unavailable. No publication status was changed."
-          : raw,
+        raw.includes("InsufficientServicePermissions")
+          ? "OCI copy permission is missing. Ask the OCI administrator to verify the Object Storage service principal's access to the staging source and destination buckets, including any customer-managed encryption key permissions. No publication status was changed."
+          : raw.includes("STORAGE_UNAVAILABLE")
+            ? "Storage service is currently unavailable. No publication status was changed. Check OCI service permissions and retry after the storage owner confirms access."
+            : raw,
       );
     } finally {
       setUploading(null);
+      setPhase("idle");
+      setUploadProgress(null);
     }
   }
   async function download(id: string) {
@@ -404,7 +426,41 @@ function FilesPanel({
           />
         ))}
       </div>
-      {message ? <p role="status" aria-live="polite" className="mt-3 break-words text-xs text-muted">{message}</p> : null}
+      {uploading ? (
+        <div className="mt-4 rounded-2xl border border-accent/20 bg-elevated/50 p-4">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-sm font-medium">{message ?? "Preparing secure upload…"}</p>
+            {uploadProgress !== null ? <span className="text-xs tabular-nums text-muted">{uploadProgress}%</span> : null}
+          </div>
+          {uploadProgress !== null ? (
+            <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-line" role="progressbar" aria-label="Upload progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={uploadProgress}>
+              <div className="h-full rounded-full bg-accent transition-[width] duration-200 ease-out" style={{ width: `${uploadProgress}%` }} />
+            </div>
+          ) : null}
+          <ol className="mt-3 grid gap-2 text-xs sm:grid-cols-4" aria-label="Storage processing steps">
+            {([
+              ["uploading", "Upload file"],
+              ["verifying", "Verify checksum and size"],
+              ["sealing", "Seal private asset"],
+              ["refreshing", "Refresh asset record"],
+            ] as const).map(([step, label]) => {
+              const order = { idle: 0, uploading: 1, verifying: 2, sealing: 3, refreshing: 4 };
+              const complete = order[phase] > order[step];
+              const current = phase === step;
+              return <li key={step} className={`rounded-lg border px-2.5 py-2 ${complete ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-400" : current ? "border-accent/30 bg-accent/5 text-fg" : "border-line text-muted"}`}>
+                <span aria-hidden="true">{complete ? "✓" : current ? "•" : "○"}</span> {label}
+              </li>;
+            })}
+          </ol>
+        </div>
+      ) : null}
+      {message && !uploading ? (
+        <div role={messageIsError ? "alert" : "status"} aria-live="polite" className={`mt-3 break-words rounded-2xl border p-4 text-sm ${messageIsError ? "border-destructive/30 bg-destructive/10 text-destructive-foreground" : "border-emerald-500/20 bg-emerald-500/5 text-muted"}`}>
+          <p className="font-medium">{messageIsError ? "Upload needs attention" : "Storage update"}</p>
+          <p className="mt-1">{message}</p>
+          {messageIsError ? <p className="mt-2 text-xs opacity-90">Before retrying, check the staging bucket, service-principal permissions, and whether the asset record already changed.</p> : null}
+        </div>
+      ) : null}
       <div className="mt-5 space-y-2">
         {assets.map((a) => (
           <div
@@ -445,18 +501,27 @@ function FileTypeCard({
   onFile: (file: File) => void;
 }) {
   const spec = OTT_INGEST_SPEC[kind];
+  const ready = status === "Ready";
   return (
-    <div className="rounded-xl border border-line p-4">
+    <div className="group rounded-2xl border border-accent/20 bg-surface/80 p-4 backdrop-blur-md transition duration-200 hover:border-accent/50 hover:shadow-[0_0_24px_rgba(80,180,160,0.08)]">
       <div className="flex items-start justify-between gap-3">
-        <div>
+        <div className="min-w-0">
           <p className="text-sm font-semibold">{label}</p>
-          <p className="mt-1 text-xs text-muted">{status}</p>
+          <div className="mt-1 flex items-center gap-2">
+            {ready ? (
+              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium text-emerald-400">
+                <span aria-hidden="true">✓</span> Verified
+              </span>
+            ) : (
+              <span className="text-xs text-muted">{busy ? "Transfer in progress" : status}</span>
+            )}
+          </div>
           <p className="mt-2 text-[11px] leading-5 text-muted">
             Allowed: {spec.extensions.map((ext) => ext.replace(".", "").toUpperCase()).join(", ")}
           </p>
         </div>
-        <label className="cursor-pointer rounded-full border border-line px-3 py-1.5 text-xs font-semibold">
-          {busy ? "Uploading…" : status === "Ready" ? "Replace" : "Upload"}
+        <label className={`shrink-0 rounded-full border px-3 py-1.5 text-xs font-semibold transition ${canUpload && !busy ? "cursor-pointer border-line hover:border-accent/50 hover:bg-accent/5" : "cursor-not-allowed border-line opacity-50"}`}>
+          {busy ? "Uploading…" : ready ? "Replace" : "Upload"}
           <input
             className="sr-only"
             type="file"
