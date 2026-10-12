@@ -259,6 +259,18 @@ function Metric({ label, value }: { label: string; value: string }) {
 }
 
 type SimpleAssetKind = "master" | "poster_vertical" | "poster_horizontal" | "thumbnail" | "subtitle" | "screener" | "censor_certificate";
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  const units = ["KB", "MB", "GB", "TB"];
+  let value = bytes / 1024;
+  let unit = units[0];
+  for (let index = 1; value >= 1024 && index < units.length - 1; index++) {
+    value /= 1024;
+    unit = units[index];
+  }
+  return `${value.toFixed(value >= 10 ? 0 : 1)} ${unit}`;
+}
 function FilesPanel({
   titleId,
   assets,
@@ -278,45 +290,60 @@ function FilesPanel({
 }) {
   const [uploading, setUploading] = useState<SimpleAssetKind | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+
+  function putFileWithProgress(url: string, method: string, file: File, contentType: string) {
+    return new Promise<void>((resolve, reject) => {
+      const request = new XMLHttpRequest();
+      request.open(method, url);
+      request.setRequestHeader("content-type", contentType);
+      request.timeout = 30 * 60 * 1000;
+      request.upload.onprogress = (event) => {
+        if (event.lengthComputable && event.total > 0) {
+          const percent = Math.min(100, Math.round((event.loaded / event.total) * 100));
+          setMessage(`Uploading ${file.name}: ${percent}% (${formatBytes(event.loaded)} of ${formatBytes(event.total)})`);
+        } else {
+          setMessage(`Uploading ${file.name}: ${formatBytes(event.loaded)} sent`);
+        }
+      };
+      request.onload = () => {
+        if (request.status >= 200 && request.status < 300) resolve();
+        else reject(new Error(`Storage upload failed (${request.status})`));
+      };
+      request.onerror = () => reject(new Error("Storage upload failed due to a network or CORS error. Check the connection and storage CORS settings."));
+      request.ontimeout = () => reject(new Error("Upload timed out after 30 minutes. Check the title assets before retrying."));
+      request.onabort = () => reject(new Error("Upload was interrupted."));
+      request.send(file);
+    });
+  }
+
   async function uploadFile(kind: SimpleAssetKind, file: File) {
     const filename = asciiUploadName(file.name);
     const contentType = file.type || "application/octet-stream";
-    const validation = validateOttIngestFile({
-      kind,
-      filename,
-      contentType,
-    });
+    const validation = validateOttIngestFile({ kind, filename, contentType });
     if (!validation.ok) {
       setMessage(validation.message);
       return;
     }
     setUploading(kind);
-    setMessage(`Preparing ${kind} upload…`);
+    setMessage(`Requesting secure upload link for ${kind}…`);
     try {
       const signed = await requestAssetUpload({
-        data: {
-          titleId,
-          kind,
-          filename,
-          contentType,
-        },
+        data: { titleId, kind, filename, contentType },
       });
+      setMessage(`Secure upload link ready. Uploading ${kind}…`);
       const uploadUrl = new URL(signed.url);
       uploadUrl.pathname = uploadUrl.pathname.split("/").map((part) => encodeURIComponent(decodeURIComponent(part))).join("/");
-      const put = await fetch(uploadUrl.toString(), {
-        method: signed.method,
-        body: file,
-        headers: { "content-type": contentType },
-      });
-      if (!put.ok) throw new Error(`Upload failed (${put.status})`);
+      await putFileWithProgress(uploadUrl.toString(), signed.method, file, contentType);
+      setMessage("Upload received. Verifying file integrity and sealing the private copy…");
       await confirmAssetUpload({ data: { assetId: signed.assetId, expectedByteSize: file.size } });
+      setMessage("Storage verification passed. Refreshing title assets…");
       await onAssetsChanged();
-      setMessage(`${kind[0].toUpperCase() + kind.slice(1)} is ready.`);
+      setMessage(`${kind[0].toUpperCase() + kind.slice(1)} is ready and verified.`);
     } catch (error) {
       const raw = error instanceof Error ? error.message : "Upload failed";
       setMessage(
         raw.includes("STORAGE_UNAVAILABLE")
-          ? "Storage service is currently unavailable. Please try again later."
+          ? "Storage service is currently unavailable. No publication status was changed."
           : raw,
       );
     } finally {
@@ -358,7 +385,7 @@ function FilesPanel({
           />
         ))}
       </div>
-      {message ? <p className="mt-3 text-xs text-muted">{message}</p> : null}
+      {message ? <p role="status" aria-live="polite" className="mt-3 break-words text-xs text-muted">{message}</p> : null}
       <div className="mt-5 space-y-2">
         {assets.map((a) => (
           <div
