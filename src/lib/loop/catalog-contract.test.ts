@@ -55,8 +55,8 @@ test("unpublished/revoked/out-of-window titles fail closed before FREE playback"
   assert.match(h.queries[0], /l\.published = true/);
   assert.match(h.queries[0], /p\.authorization_status = 'authorized'/);
   assert.match(h.queries[0], /p\.revoked_at is null/);
-  assert.match(h.queries[0], /p\.window_start is null or p\.window_start <= now\(\)/);
-  assert.match(h.queries[0], /p\.window_end is null or p\.window_end >= now\(\)/);
+  assert.match(h.queries[0], /p\.window_start is not null and p\.window_start <= now\(\)/);
+  assert.match(h.queries[0], /p\.window_end is not null and p\.window_end >= now\(\)/);
 });
 
 test("active TVOD entitlement from canonical table grants playback", async () => {
