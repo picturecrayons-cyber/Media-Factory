@@ -271,6 +271,18 @@ function formatBytes(bytes: number): string {
   }
   return `${value.toFixed(value >= 10 ? 0 : 1)} ${unit}`;
 }
+
+function storageErrorDetail(responseText: string): string {
+  // OCI returns structured XML errors for many failed PAR uploads. Expose only
+  // the short error code/message; never show the signed URL or full response.
+  const code = responseText.match(/<Code>([^<]{1,100})<\\/Code>/i)?.[1];
+  const message = responseText.match(/<Message>([^<]{1,200})<\\/Message>/i)?.[1];
+  return [code, message]
+    .filter((part): part is string => Boolean(part))
+    .join(": ")
+    .replace(/\\s+/g, " ")
+    .slice(0, 240);
+}
 function FilesPanel({
   titleId,
   assets,
@@ -297,6 +309,9 @@ function FilesPanel({
       request.open(method, url);
       request.setRequestHeader("content-type", contentType);
       request.timeout = 30 * 60 * 1000;
+      request.upload.onloadstart = () => {
+        setMessage(`Upload request started for ${file.name}; waiting for storage progress…`);
+      };
       request.upload.onprogress = (event) => {
         if (event.lengthComputable && event.total > 0) {
           const percent = Math.min(100, Math.round((event.loaded / event.total) * 100));
@@ -306,12 +321,16 @@ function FilesPanel({
         }
       };
       request.onload = () => {
-        if (request.status >= 200 && request.status < 300) resolve();
-        else reject(new Error(`Storage upload failed (${request.status})`));
+        if (request.status >= 200 && request.status < 300) {
+          resolve();
+          return;
+        }
+        const detail = storageErrorDetail(request.responseText || "");
+        reject(new Error(`Storage upload failed (HTTP ${request.status})${detail ? `: ${detail}` : ""}`));
       };
-      request.onerror = () => reject(new Error("Storage upload failed due to a network or CORS error. Check the connection and storage CORS settings."));
-      request.ontimeout = () => reject(new Error("Upload timed out after 30 minutes. Check the title assets before retrying."));
-      request.onabort = () => reject(new Error("Upload was interrupted."));
+      request.onerror = () => reject(new Error("Storage upload failed before the browser received a response. This usually means a network, TLS, or storage CORS/preflight block; no file verification was completed."));
+      request.ontimeout = () => reject(new Error("Upload timed out after 30 minutes without a completed storage response. Check the asset list before retrying."));
+      request.onabort = () => reject(new Error("Upload was interrupted before storage confirmed receipt."));
       request.send(file);
     });
   }
