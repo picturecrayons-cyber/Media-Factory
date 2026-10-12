@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { authMiddleware } from "@/lib/auth/middleware";
-import { getSql } from "@/lib/db";
+import { getSql, type Sql } from "@/lib/db";
 import { assertPermission } from "./rbac";
 import { requireVerifiedActor } from "./session";
 import { assertNotDevUser } from "./guards";
@@ -177,7 +177,7 @@ export function evaluateDuplicateTitleMerge(input: MergeEvaluationInput): {
   return { decision, reasons, collisions };
 }
 
-async function loadMergeState(sql: any, titleId: string) {
+async function loadMergeState(sql: Sql, titleId: string) {
   const [
     title,
     rights,
