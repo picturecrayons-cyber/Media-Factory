@@ -7,6 +7,7 @@ import { assertPermission, canReadTitle, canOperateOnTitle, type Actor } from ".
 import { loadTitle } from "./titles";
 import { loopLicenseInput, producerSharePaise } from "./workflow-policy";
 import { bridgeEnv } from "./env";
+import { assertNotDevUser } from "./guards";
 
 async function audit(tx: Sql, user: string, title: string, action: string, metadata: object) {
   await tx`insert into bridge_audit_logs(actor_user_id,action,entity_type,entity_id,metadata)
@@ -57,6 +58,7 @@ export const submitLoopLicense = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(loopLicenseInput)
   .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
     return (await getSql()).transaction((tx) => saveLoopLicense(tx, actor, data));
   });
@@ -133,6 +135,7 @@ export const reviewTitleWorkflow = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(reviewInput)
   .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
     return (await getSql()).transaction((tx) => reviewWorkflow(tx, actor, data));
   });
@@ -141,6 +144,7 @@ export const getTitleWorkflow = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .validator(z.object({ titleId: z.string().min(8) }))
   .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
     const title = await loadTitle(data.titleId);
     if (
@@ -195,6 +199,7 @@ export const getTitleRevenue = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .validator(z.object({ titleId: z.string().min(8) }))
   .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
     const title = await loadTitle(data.titleId);
     if (!title || !canOperateOnTitle(actor, title, "title.read_own", "finance.read"))
@@ -349,6 +354,7 @@ export const recordSettlementEvidence = createServerFn({ method: "POST" })
     }),
   )
   .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
     assertPermission(actor, "finance.record_settlement");
     const title = await loadTitle(data.titleId);
