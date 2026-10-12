@@ -80,8 +80,10 @@ async function serveLoopMedia(request: Request) {
   if (grantError) return errorResponse(503, "BRIDGE_AUTHORIZATION_UNAVAILABLE", "Bridge publication authorization could not be verified");
   if (!grant) return errorResponse(403, "BRIDGE_GRANT_REQUIRED", "Bridge has not authorized this title for Loop");
 
-  const windowStart = grant.window_start ? new Date(grant.window_start).getTime() : null;
-  const windowEnd = grant.window_end ? new Date(grant.window_end).getTime() : null;
+  // Publication preflight requires an explicit, valid distribution window.
+  // Treat missing or malformed bounds as unauthorized rather than widening rights.
+  const windowStart = grant.window_start ? new Date(grant.window_start).getTime() : Number.NaN;
+  const windowEnd = grant.window_end ? new Date(grant.window_end).getTime() : Number.NaN;
   // Vercel injects the request-country header at the edge. Never accept a
   // caller-supplied territory query parameter as proof of location.
   const requestCountry = (request.headers.get("x-vercel-ip-country") || "").trim().toUpperCase();
@@ -89,9 +91,13 @@ async function serveLoopMedia(request: Request) {
   const territoryAllowed = allowedTerritories.includes("WORLDWIDE") ||
     (requestCountry.length === 2 && allowedTerritories.includes(requestCountry));
   const modelAllowed = Boolean(title.access_tier && grant.exploitation_models?.includes(title.access_tier));
-  if ((windowStart !== null && windowStart > now.getTime()) ||
-      (windowEnd !== null && windowEnd <= now.getTime()) ||
-      !territoryAllowed || !modelAllowed) {
+  if (!Number.isFinite(windowStart) ||
+      !Number.isFinite(windowEnd) ||
+      windowStart > now.getTime() ||
+      windowEnd <= now.getTime() ||
+      windowEnd <= windowStart ||
+      !territoryAllowed ||
+      !modelAllowed) {
     return errorResponse(403, "BRIDGE_GRANT_OUT_OF_SCOPE", "The Bridge publication grant does not cover this request");
   }
 
@@ -105,7 +111,7 @@ async function serveLoopMedia(request: Request) {
       .eq("user_id", userId)
       .eq("title_id", title.id)
       .eq("status", "ACTIVE")
-      .eq("access_type", "RENTAL")
+      .eq("access_type", "TVOD_RENTAL")
       .gt("expires_at", now.toISOString())
       .limit(1);
     if (entitlementError) return errorResponse(503, "ENTITLEMENT_UNAVAILABLE", "Rental entitlement could not be verified");
