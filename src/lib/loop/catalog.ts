@@ -297,7 +297,7 @@ export const checkPlaybackEntitlement = createServerFn({ method: "GET" })
     if (tvods.length > 0) {
       return {
         loopTitleId: data.loopTitleId,
-        accessType: (tvods[0].access_type as "TVOD_RENTAL" | "TVOD_PURCHASE") || "TVOD_RENTAL",
+        accessType: tvods[0].access_type === "PURCHASE" ? "TVOD_PURCHASE" : "TVOD_RENTAL",
         expiresAt: tvods[0].expires_at ? new Date(tvods[0].expires_at).toISOString() : null,
         canPlay: true,
       };
