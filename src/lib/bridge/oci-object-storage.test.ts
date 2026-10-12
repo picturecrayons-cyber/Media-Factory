@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { generateKeyPairSync, verify } from "node:crypto";
-import { sealVerifiedObject, verifyObject } from "./oci-object-storage.server.ts";
+import { diagnoseOciAuthentication, sealVerifiedObject, verifyObject } from "./oci-object-storage.server.ts";
 
 test("OCI private key normalization accepts escaped and quoted PEM secrets", async () => {
   const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
@@ -31,7 +31,7 @@ test("OCI private key normalization accepts escaped and quoted PEM secrets", asy
         OCI_TENANCY_OCID: "test-tenancy",
         OCI_USER_OCID: "test-user",
         OCI_PRIVATE_KEY: variant,
-        OCI_FINGERPRINT: "test-fingerprint",
+        OCI_FINGERPRINT: "",
         OCI_REGION: "ap-mumbai-1",
         OCI_NAMESPACE: "test-namespace",
         OCI_BUCKET_NAME: "test-bucket",
@@ -59,7 +59,7 @@ test("OCI copy polling uses Object Storage and only verifies successful copies",
     OCI_TENANCY_OCID: "test-tenancy",
     OCI_USER_OCID: "test-user",
     OCI_PRIVATE_KEY: privateKey.export({ type: "pkcs8", format: "pem" }).toString(),
-    OCI_FINGERPRINT: "test-fingerprint",
+    OCI_FINGERPRINT: "",
     OCI_REGION: "ap-mumbai-1",
     OCI_NAMESPACE: "test-namespace",
     OCI_BUCKET_NAME: "test-bucket",
@@ -121,7 +121,7 @@ test("OCI object verification rejects an unexpected content type", async () => {
   const values = {
     OCI_TENANCY_OCID: "test-tenancy", OCI_USER_OCID: "test-user",
     OCI_PRIVATE_KEY: privateKey.export({ type: "pkcs8", format: "pem" }).toString(),
-    OCI_FINGERPRINT: "test-fingerprint", OCI_REGION: "ap-mumbai-1",
+    OCI_FINGERPRINT: "", OCI_REGION: "ap-mumbai-1",
     OCI_NAMESPACE: "test-namespace", OCI_BUCKET_NAME: "test-bucket",
   };
   const saved = Object.fromEntries(Object.keys(values).map((key) => [key, process.env[key]]));
@@ -168,6 +168,127 @@ test("OCI configuration errors name missing required variables without exposing 
       /Missing required environment variable\(s\): OCI_PRIVATE_KEY \(or legacy PRIVATE_KEY\)/,
     );
   } finally {
+    for (const [key, value] of Object.entries(saved)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+});
+
+
+test("OCI configured fingerprint mismatch fails closed before making a request", async () => {
+  const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  const values = {
+    OCI_TENANCY_OCID: "test-tenancy",
+    OCI_USER_OCID: "test-user",
+    OCI_PRIVATE_KEY: privateKey.export({ type: "pkcs8", format: "pem" }).toString(),
+    OCI_FINGERPRINT: "00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00",
+    OCI_REGION: "ap-mumbai-1",
+    OCI_NAMESPACE: "test-namespace",
+    OCI_BUCKET_NAME: "test-bucket",
+  };
+  const saved = Object.fromEntries(Object.keys(values).map((key) => [key, process.env[key]]));
+  const originalFetch = globalThis.fetch;
+  let fetchCalled = false;
+  Object.assign(process.env, values);
+  globalThis.fetch = async () => { fetchCalled = true; return new Response(null, { status: 200 }); };
+  try {
+    await assert.rejects(
+      verifyObject("asset-key"),
+      /OCI_FINGERPRINT does not match OCI_PRIVATE_KEY/,
+    );
+    assert.equal(fetchCalled, false, "A mismatched key pair must be rejected before sending an OCI request");
+  } finally {
+    globalThis.fetch = originalFetch;
+    for (const [key, value] of Object.entries(saved)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+});
+
+test("OCI authorization errors include bounded safe provider context and request ID", async () => {
+  const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  const values = {
+    OCI_TENANCY_OCID: "test-tenancy",
+    OCI_USER_OCID: "test-user",
+    OCI_PRIVATE_KEY: privateKey.export({ type: "pkcs8", format: "pem" }).toString(),
+    OCI_FINGERPRINT: "",
+    OCI_REGION: "ap-mumbai-1",
+    OCI_NAMESPACE: "test-namespace",
+    OCI_BUCKET_NAME: "test-bucket",
+  };
+  const saved = Object.fromEntries(Object.keys(values).map((key) => [key, process.env[key]]));
+  const originalFetch = globalThis.fetch;
+  Object.assign(process.env, values);
+  globalThis.fetch = async () => Response.json(
+    { code: "NotAuthenticated", message: `The request signature is invalid; keyId="tenancy/user/fingerprint", signature="supersecret-signature", token=secret-token authorization: Bearer bearer-secret https://example.com/?token=url-secret` },
+    { status: 401, headers: { "opc-request-id": "request-12345" } },
+  );
+  try {
+    await assert.rejects(
+      verifyObject("asset-key"),
+      (error: Error) => {
+        assert.match(error.message, /object verification failed \(401\)/);
+        assert.match(error.message, /code=NotAuthenticated/);
+        assert.match(error.message, /requestId=request-12345/);
+        assert.doesNotMatch(error.message, /BEGIN PRIVATE KEY|authorization:|supersecret-signature|secret-token|bearer-secret|url-secret|tenancy\/user\/fingerprint|https?:\/\//i);
+        return true;
+      },
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+    for (const [key, value] of Object.entries(saved)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+});
+
+
+test("OCI diagnostic verifies namespace and bucket using read-only GET requests", async () => {
+  const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  const values = {
+    OCI_TENANCY_OCID: "test-tenancy",
+    OCI_USER_OCID: "test-user",
+    OCI_PRIVATE_KEY: privateKey.export({ type: "pkcs8", format: "pem" }).toString(),
+    OCI_FINGERPRINT: "",
+    OCI_REGION: "ap-mumbai-1",
+    OCI_NAMESPACE: "test-namespace",
+    OCI_BUCKET_NAME: "test-bucket",
+  };
+  const saved = Object.fromEntries(Object.keys(values).map((key) => [key, process.env[key]]));
+  const originalFetch = globalThis.fetch;
+  const calls: Array<{ method: string; path: string }> = [];
+  Object.assign(process.env, values);
+  globalThis.fetch = async (input, init) => {
+    const url = new URL(String(input));
+    const method = init?.method || "GET";
+    calls.push({ method, path: url.pathname });
+    assert.equal(method, "GET", "diagnostic must never mutate storage");
+    const headers = new Headers(init?.headers);
+    const signature = headers.get("authorization")?.match(/signature="([^"]+)"/)?.[1];
+    assert.ok(signature);
+    const signed = `(request-target): get ${url.pathname}
+host: ${url.host}
+date: ${headers.get("date")}`;
+    assert.ok(verify("RSA-SHA256", Buffer.from(signed), publicKey, Buffer.from(signature, "base64")));
+    if (url.pathname === "/n/") return new Response('"test-namespace"', { status: 200 });
+    assert.equal(url.pathname, "/n/test-namespace/b/test-bucket");
+    return Response.json({ name: "test-bucket" }, { status: 200 });
+  };
+  try {
+    const result = await diagnoseOciAuthentication();
+    assert.equal(result.status, "passed");
+    assert.equal(result.mode, "read-only");
+    assert.equal(result.checks.namespaceAuthentication, "passed");
+    assert.equal(result.checks.bucketReadAccess, "passed");
+    assert.deepEqual(calls, [
+      { method: "GET", path: "/n/" },
+      { method: "GET", path: "/n/test-namespace/b/test-bucket" },
+    ]);
+  } finally {
+    globalThis.fetch = originalFetch;
     for (const [key, value] of Object.entries(saved)) {
       if (value === undefined) delete process.env[key];
       else process.env[key] = value;
