@@ -31,6 +31,20 @@ const {
 const { persistVerifiedAsset } =
   await import("../src/lib/bridge/asset-confirmation.ts");
 
+const databaseUrl = new URL(process.env.DATABASE_URL);
+const dbHost = databaseUrl.hostname.toLowerCase();
+const productionDatabaseHosts = new Set([
+  "db.mlmgugivsyoxzdgwkbpu.supabase.co",
+]);
+if (productionDatabaseHosts.has(dbHost) || dbHost.includes("production")) {
+  console.error("STORAGE_E2E_BLOCKED: refuse to run against a known production database host");
+  process.exit(2);
+}
+if (process.env.BRIDGE_E2E_ENVIRONMENT !== "preview") {
+  console.error("STORAGE_E2E_BLOCKED: set BRIDGE_E2E_ENVIRONMENT=preview only for the approved non-production Preview environment");
+  process.exit(2);
+}
+
 const assetId = process.env.BRIDGE_E2E_ASSET_ID;
 const pool = new pg.Pool({
   connectionString: process.env.DATABASE_URL,
@@ -47,6 +61,7 @@ let asset;
 let sourceKey;
 let sealedKey;
 let persisted = false;
+let persistenceAttempted = false;
 try {
   const result = await pool.query(
     `select a.id, a.title_id, a.kind, a.s3_key, a.content_type, a.created_by,
@@ -107,6 +122,9 @@ try {
   const sql = {
     query: async (query, params) => (await pool.query(query, params)).rows,
   };
+  // From this point onward the helper may write an asset key/audit row even if
+  // a later assertion or return path fails. Do not auto-delete a possibly-referenced sealed object.
+  persistenceAttempted = true;
   const wasPersisted = await persistVerifiedAsset(sql, {
     assetId: asset.id,
     actorUserId: asset.created_by,
@@ -168,7 +186,7 @@ try {
   // not be deleted automatically. Before persistence, clean only keys created
   // by this run; failures to clean are reported for manual operator cleanup.
   const cleanupErrors = [];
-  if (!persisted && sealedKey) {
+  if (!persistenceAttempted && sealedKey) {
     try {
       await deleteObject(sealedKey);
     } catch (error) {
@@ -181,6 +199,10 @@ try {
     } catch (error) {
       cleanupErrors.push(`source object ${sourceKey}: ${error instanceof Error ? error.message : String(error)}`);
     }
+  }
+  if (persistenceAttempted && !persisted) {
+    console.error(`STORAGE_E2E_PERSISTENCE_STATE_UNKNOWN asset=${assetId} sealedKey=${sealedKey ?? "not-created"}; inspect database before manual cleanup`);
+    process.exitCode = 1;
   }
   if (cleanupErrors.length) {
     console.error(`STORAGE_E2E_CLEANUP_REQUIRED ${cleanupErrors.join("; ")}`);
