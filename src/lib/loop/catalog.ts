@@ -91,8 +91,8 @@ export const getLoopCatalog = createServerFn({ method: "GET" })
         and l.published = true
         and l.listed = true
         and l.status = 'approved'
-        and (p.window_start is null or p.window_start <= now())
-        and (p.window_end is null or p.window_end >= now())
+        and p.window_start is not null and p.window_start <= now()
+        and p.window_end is not null and p.window_end >= now()
       order by l.featured desc, l.created_at desc
       limit 100
     `;
@@ -188,8 +188,8 @@ export const getLoopTitleDetails = createServerFn({ method: "GET" })
         and l.published = true
         and l.listed = true
         and l.status = 'approved'
-        and (p.window_start is null or p.window_start <= now())
-        and (p.window_end is null or p.window_end >= now())
+        and p.window_start is not null and p.window_start <= now()
+        and p.window_end is not null and p.window_end >= now()
       limit 1
     `;
 
@@ -217,8 +217,8 @@ export const getLoopTitleDetails = createServerFn({ method: "GET" })
         and l.published = true
         and l.listed = true
         and l.status = 'approved'
-        and (p.window_start is null or p.window_start <= now())
-        and (p.window_end is null or p.window_end >= now())
+        and p.window_start is not null and p.window_start <= now()
+        and p.window_end is not null and p.window_end >= now()
       limit 6
     `;
 
@@ -249,8 +249,8 @@ export const checkPlaybackEntitlement = createServerFn({ method: "GET" })
         and l.published = true
         and p.authorization_status = 'authorized'
         and p.revoked_at is null
-        and (p.window_start is null or p.window_start <= now())
-        and (p.window_end is null or p.window_end >= now())
+        and p.window_start is not null and p.window_start <= now()
+        and p.window_end is not null and p.window_end >= now()
         and (l.access_tier <> 'TVOD' or 'TVOD' = any(p.exploitation_models))
       limit 1
     `;
