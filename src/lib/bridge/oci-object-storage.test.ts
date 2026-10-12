@@ -222,7 +222,7 @@ test("OCI authorization errors include bounded safe provider context and request
   const originalFetch = globalThis.fetch;
   Object.assign(process.env, values);
   globalThis.fetch = async () => Response.json(
-    { code: "NotAuthenticated", message: "The request signature is invalid" },
+    { code: "NotAuthenticated", message: `The request signature is invalid; keyId="tenancy/user/fingerprint", signature="supersecret-signature", token=secret-token authorization: Bearer bearer-secret https://example.com/?token=url-secret` },
     { status: 401, headers: { "opc-request-id": "request-12345" } },
   );
   try {
@@ -232,7 +232,7 @@ test("OCI authorization errors include bounded safe provider context and request
         assert.match(error.message, /object verification failed \(401\)/);
         assert.match(error.message, /code=NotAuthenticated/);
         assert.match(error.message, /requestId=request-12345/);
-        assert.doesNotMatch(error.message, /BEGIN PRIVATE KEY|authorization:/i);
+        assert.doesNotMatch(error.message, /BEGIN PRIVATE KEY|authorization:|supersecret-signature|secret-token|bearer-secret|url-secret|tenancy\\/user\\/fingerprint|https?:\\/\\//i);
         return true;
       },
     );
