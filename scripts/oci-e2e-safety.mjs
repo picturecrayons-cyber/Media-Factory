@@ -25,8 +25,13 @@ export function requirePreviewDatabase(rawUrl) {
 
   const host = url.hostname.toLowerCase();
   const knownProductionHosts = new Set(["db.mlmgugivsyoxzdgwkbpu.supabase.co"]);
-  if (knownProductionHosts.has(host) || host.includes("production")) {
-    throw new Error("refusing to run against a known production database host.");
+  const productionProjectRef = "mlmgugivsyoxzdgwkbpu";
+  if (
+    knownProductionHosts.has(host) ||
+    host.includes("production") ||
+    url.username.toLowerCase().includes(productionProjectRef)
+  ) {
+    throw new Error("refusing to run against a known production database host or connection user.");
   }
   if (process.env.VERCEL_ENV && process.env.VERCEL_ENV !== "preview") {
     throw new Error(`VERCEL_ENV is "${process.env.VERCEL_ENV}", not "preview".`);
