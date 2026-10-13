@@ -89,11 +89,16 @@ function config(): OciConfig {
   if (!tenancy || !user || !privateKey || !region || !bucket) {
     throw new Error("OCI Object Storage is not fully configured");
   }
+  const derived = derivedFingerprint(privateKey);
+  const configuredFingerprint = bridgeEnv.ociFingerprint();
+  if (configuredFingerprint && normalizeFingerprint(configuredFingerprint) !== normalizeFingerprint(derived)) {
+    throw new Error("OCI private key fingerprint does not match OCI_FINGERPRINT; verify the Preview key and fingerprint binding");
+  }
   return {
     tenancy,
     user,
     privateKey: normalizePrivateKey(privateKey),
-    fingerprint: bridgeEnv.ociFingerprint() || derivedFingerprint(privateKey),
+    fingerprint: configuredFingerprint || derived,
     region,
     bucket,
     namespace: bridgeEnv.ociNamespace(),
