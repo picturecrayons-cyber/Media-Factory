@@ -149,7 +149,6 @@ export const submitInvestmentOfferForLegalReview = createServerFn({ method: "POS
     const rows = await sql<{ id: string; status: string; created_by: string }>`select id, status, created_by from bridge_title_investment_offers where id = ${data.offerId} for update`;
     const offer = rows[0];
     if (!offer || offer.status !== "DRAFT") throw new Error("Only a draft offer can enter legal review");
-    if (offer.created_by === actor.userId) throw new Error("A different authorized reviewer must perform legal review");
     await sql`update bridge_title_investment_offers set status = 'LEGAL_REVIEW', updated_by = ${actor.userId}, updated_at = now() where id = ${data.offerId}`;
     await writeAudit({ actorUserId: actor.userId, action: "investment_offer.submitted_for_review", entityType: "bridge_title_investment_offer", entityId: data.offerId, metadata: {} });
     return { ok: true, status: "LEGAL_REVIEW" as const };
