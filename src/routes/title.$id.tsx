@@ -2,7 +2,7 @@ import { canOperateOnTitle } from "@/lib/bridge/rbac";
 import { getTitleWorkflow } from "@/lib/bridge/workflow";
 import { WorkflowDesk } from "@/components/bridge/workflow-desk";
 import { publicationIsActive } from "@/lib/bridge/workflow-policy";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { useState } from "react";
 import { RequireBridge } from "@/components/bridge/gate";
@@ -26,7 +26,7 @@ import { asciiUploadName } from "@/lib/bridge/latin1";
 
 export const Route = createFileRoute("/title/$id")({ component: TitlePage });
 
-const WORKSPACE_TABS = ["Overview", "Files"] as const;
+const WORKSPACE_TABS = ["Overview", "Media & Assets"] as const;
 type WorkspaceTab = (typeof WORKSPACE_TABS)[number];
 
 function LaneStore({ titleId, stored, locked }: { titleId: string; stored: string; locked: boolean }) {
@@ -125,6 +125,40 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
   return (
     <div className="space-y-5">
       <WorkflowDesk title={title} actor={actor} />
+      <section aria-label="Title release path" className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">One canonical title record</p>
+            <h2 className="mt-1 font-display text-xl font-semibold">From submission to authorized delivery</h2>
+            <p className="mt-1 max-w-3xl text-sm leading-6 text-muted">Creators and studios prepare the submission. Internal reviewers verify ownership, rights, technical QC and package readiness. Buyer visibility and delivery remain gated by recorded authorization.</p>
+          </div>
+          <span className="w-fit rounded-full border border-line px-3 py-1.5 text-xs font-semibold">Bridge ID · {title.id.slice(0, 12)}</span>
+        </div>
+        <ol className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          {[
+            { n: "01", name: "Title intake", status: "Created", detail: "Canonical ID and owner record", done: true },
+            { n: "02", name: "Media & assets", status: assets.some((a) => a.kind === "master" && a.verified) && assets.some((a) => ["poster", "poster_vertical", "poster_horizontal"].includes(a.kind) && a.verified) ? "Verified assets found" : "Required assets missing", detail: "Master and artwork must be verified", done: assets.some((a) => a.kind === "master" && a.verified) && assets.some((a) => ["poster", "poster_vertical", "poster_horizontal"].includes(a.kind) && a.verified) },
+            { n: "03", name: "Rights & QC", status: qcReady && rightsReady ? "Review evidence passed" : "Review pending", detail: "Independent technical and legal checks", done: qcReady && rightsReady },
+            { n: "04", name: "Buyer & delivery", status: distributionReady ? "Active publication authorization" : "Authorization not active", detail: "Buyer strategy is not a rights grant", done: distributionReady },
+          ].map((step) => (
+            <li key={step.n} className="rounded-xl border border-line p-4">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs font-semibold text-muted">{step.n}</span>
+                <span className={"rounded-full px-2 py-1 text-[11px] font-semibold " + (step.done ? "bg-emerald-500/10 text-emerald-600" : "bg-amber-500/10 text-amber-700")}>{step.done ? "Complete" : "Pending"}</span>
+              </div>
+              <h3 className="mt-3 font-semibold">{step.name}</h3>
+              <p className="mt-1 text-sm">{step.status}</p>
+              <p className="mt-1 text-xs leading-5 text-muted">{step.detail}</p>
+            </li>
+          ))}
+        </ol>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <button type="button" onClick={() => setActiveTab("Media & Assets")} className="rounded-full bg-fg px-4 py-2 text-sm font-semibold text-bg">Review media & assets</button>
+          <Link to="/admin/workstations" className="rounded-full border border-line px-4 py-2 text-sm font-semibold">Internal QC & rights review</Link>
+          {actor.internalRole ? <Link to="/buyer" className="rounded-full border border-line px-4 py-2 text-sm font-semibold">Buyer pipeline</Link> : null}
+        </div>
+        {assetsQ.isError ? <p role="alert" className="mt-3 text-sm text-red-600">Asset status could not be verified. Do not treat this title as upload-ready.</p> : null}
+      </section>
       {assetsQ.isError ? <p role="alert">Assets unavailable: {assetsQ.error.message}</p> : null}
       <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
         <div className="grid gap-5 md:grid-cols-[180px_1fr]">
@@ -180,7 +214,7 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
             <div className="mt-5">
               <button
                 type="button"
-                onClick={() => setActiveTab("Files")}
+                onClick={() => setActiveTab("Media & Assets")}
                 className="rounded-full bg-fg px-5 py-2.5 text-sm font-semibold text-bg"
               >
                 Upload Files
