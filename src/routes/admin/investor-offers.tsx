@@ -39,7 +39,7 @@ function OfferAdminBody({ role }: { role: string }) {
   const [windowEnd, setWindowEnd] = useState("");
   const [terms, setTerms] = useState("Draft commercial summary only. No return is promised. Final terms, risk disclosures, eligibility and legal documents must be approved before publication.");
   const create = useMutation({
-    mutationFn: () => createInvestmentOfferDraft({
+    mutationFn: () => createInvestmentOfferDraft({ data: {
       titleId,
       minimumAmountPaise: Math.round(Number(min) * 100),
       targetAmountPaise: Math.round(Number(target) * 100),
@@ -55,11 +55,11 @@ function OfferAdminBody({ role }: { role: string }) {
       windowStart: windowStart || null,
       windowEnd: windowEnd || null,
       termsSummary: terms,
-    }),
+    } }),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["bridge-investment-offers-admin"] }); setTitleId(""); },
   });
   const transition = useMutation({
-    mutationFn: (input: { offerId: string; decision: "SUBMIT_FOR_REVIEW" | "APPROVE_LEGAL" | "RETURN_FOR_CHANGES" | "PUBLISH" | "PAUSE"; reviewReference?: string; notes?: string }) => transitionInvestmentOffer(input),
+    mutationFn: (input: { offerId: string; decision: "SUBMIT_FOR_REVIEW" | "APPROVE_LEGAL" | "RETURN_FOR_CHANGES" | "PUBLISH" | "PAUSE"; reviewReference?: string; notes?: string }) => transitionInvestmentOffer({ data: input }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["bridge-investment-offers-admin"] }),
   });
   const offers = query.data?.offers ?? [];
