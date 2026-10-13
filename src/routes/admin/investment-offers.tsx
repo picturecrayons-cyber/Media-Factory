@@ -39,6 +39,7 @@ const emptyForm = {
   termsDocumentUrl: "",
   riskDisclosure: "Investment involves risk, including possible partial or total loss. Returns and distributions are not guaranteed. This expression of interest is not an accepted subscription or a payment request. Offer publication does not transfer copyright or rights excluded from the written terms. Eligibility and legal/compliance approval are required before any subscription or funds are accepted.",
   rightsEvidenceReference: "",
+  eligibleInvestorUserIds: "",
 };
 
 function InvestmentOfferAdmin() {
@@ -108,6 +109,7 @@ function InvestmentOfferAdminBody({ actor }: { actor: { internalRole: string | n
       termsDocumentUrl: dateOrNull(form.termsDocumentUrl),
       riskDisclosure: form.riskDisclosure,
       rightsEvidenceReference: form.rightsEvidenceReference,
+      eligibleInvestorUserIds: form.eligibleInvestorUserIds.split("\\n").map((s) => s.trim()).filter(Boolean),
     });
   }
 
@@ -156,6 +158,7 @@ function InvestmentOfferAdminBody({ actor }: { actor: { internalRole: string | n
           <Field label="Information memorandum URL"><input type="url" value={form.informationMemorandumUrl} onChange={(e) => update("informationMemorandumUrl", e.target.value)} className="field" /></Field>
           <Field label="Approved terms document URL"><input type="url" value={form.termsDocumentUrl} onChange={(e) => update("termsDocumentUrl", e.target.value)} className="field" /></Field>
           <Field label="Rights evidence reference"><input required value={form.rightsEvidenceReference} onChange={(e) => update("rightsEvidenceReference", e.target.value)} className="field" /></Field>
+          <Field label="Eligible investor account IDs (one per line)"><textarea required value={form.eligibleInvestorUserIds} onChange={(e) => update("eligibleInvestorUserIds", e.target.value)} className="field min-h-24" /><span className="block text-xs text-muted">Use verified Bridge investor user IDs. Empty eligibility is fail-closed; offers are not public.</span></Field>
           <Field label="Risk disclosure"><textarea required minLength={50} value={form.riskDisclosure} onChange={(e) => update("riskDisclosure", e.target.value)} className="field min-h-32" /></Field>
           <div className="md:col-span-2">
             <Button type="submit" disabled={createQ.isPending || !form.titleId}>{createQ.isPending ? "Saving draft…" : "Save offer draft"}</Button>
