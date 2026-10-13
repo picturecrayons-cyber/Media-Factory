@@ -55,10 +55,10 @@ export const listPublishedInvestmentOffers = createServerFn({ method: "GET" })
       target_amount_paise: number | string; application_increment_paise: number | string;
       participation_basis: string; participation_percent: number | string | null;
       participation_formula: string; receipt_scope: string; tenure_start: string | null;
-      tenure_months: number; maturity_date: string | null; rights_included: unknown;
-      rights_excluded: unknown; permitted_costs: unknown; recoupment_priority: string;
+      tenure_months: number; maturity_date: string | null; rights_included: string[];
+      rights_excluded: string[]; permitted_costs: string[]; recoupment_priority: string;
       distribution_frequency: string; calculation_method: string; information_memorandum_url: string | null;
-      terms_document_url: string | null; risk_disclosure: string; eligibility_rules: unknown; published_at: string;
+      terms_document_url: string | null; risk_disclosure: string; eligibility_rules: { eligibleInvestorUserIds: string[] }; published_at: string;
     }>`select o.id, o.title_id, t.name as title_name, o.version, o.currency,
         o.minimum_amount_paise, o.maximum_amount_paise, o.target_amount_paise,
         o.application_increment_paise, o.participation_basis, o.participation_percent,
@@ -95,7 +95,7 @@ export const listAdminInvestmentOffers = createServerFn({ method: "GET" })
       from bridge_title_investment_offers o
       join bridge_titles t on t.id = o.title_id
       order by o.updated_at desc limit 200`;
-    return { offers: JSON.parse(JSON.stringify(rows)) };
+    return { offers: JSON.parse(JSON.stringify(rows)) as typeof rows };
   });
 
 export const createInvestmentOfferDraft = createServerFn({ method: "POST" })
@@ -246,7 +246,7 @@ export const listMyInvestmentInterests = createServerFn({ method: "GET" })
     const actor = await actorFor(context.userId);
     if (actor.accountType !== "investor" || actor.internalRole) throw new Error("Investor account required");
     const sql = await getSql();
-    const rows = await sql`select a.id, a.offer_id, a.offer_version, a.requested_amount_paise, a.status,
+    const rows = await sql<{ id: string; offer_id: string; offer_version: number; requested_amount_paise: number | string; status: string; eligibility_status: string; created_at: string; title_name: string }>`select a.id, a.offer_id, a.offer_version, a.requested_amount_paise, a.status,
       a.eligibility_status, a.created_at, t.name as title_name
       from bridge_title_investment_applications a
       join bridge_title_investment_offers o on o.id = a.offer_id
