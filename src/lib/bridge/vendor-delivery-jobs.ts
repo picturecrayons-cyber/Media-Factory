@@ -11,6 +11,22 @@ import { requireVerifiedActor } from "./session";
 const jobType = z.enum(["dubbing", "loudness_check", "imf_request", "dcp_request", "human_qc"]);
 const actionSchema = z.enum(["start_review", "sign_off", "block"]);
 
+function vendorJobsUnavailable(error: unknown): never {
+  const dbError = error as { code?: unknown; message?: unknown };
+  if (dbError?.code === "42P01" || (typeof dbError?.message === "string" && /bridge_vendor_jobs.*does not exist|relation .*bridge_vendor_jobs.* does not exist/i.test(dbError.message))) {
+    throw new Error("Vendor job storage is not installed in this environment. No request was saved; ask an administrator to complete the approved database migration.");
+  }
+  throw error;
+}
+
+async function withVendorJobStorage<T>(operation: () => Promise<T>): Promise<T> {
+  try {
+    return await operation();
+  } catch (error) {
+    return vendorJobsUnavailable(error);
+  }
+}
+
 type VendorJobRow = {
   id: string;
   title_id: string;
@@ -42,7 +58,7 @@ export const listVendorDeliveryJobs = createServerFn({ method: "GET" })
     assertPermission(actor, "delivery.read");
     const sql = await getSql();
     const internal = Boolean(actor.internalRole);
-    const rows = await sql<VendorJobRow>`
+    const rows = await withVendorJobStorage(() => sql<VendorJobRow>`
       select j.id, j.title_id, t.name as title_name, j.job_type, j.state, j.note,
              j.requested_by, j.reviewed_by, j.reviewed_at, j.created_at, j.updated_at
       from public.bridge_vendor_jobs j
@@ -50,7 +66,7 @@ export const listVendorDeliveryJobs = createServerFn({ method: "GET" })
       where (${internal} or t.owner_user_id = ${actor.userId})
       order by j.created_at desc
       limit 200
-    `;
+    `);
     return { jobs: rows };
   });
 
@@ -65,7 +81,7 @@ export const requestVendorDeliveryJob = createServerFn({ method: "POST" })
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
     const sql = await getSql();
-    return sql.transaction(async (tx) => {
+    return withVendorJobStorage(() => sql.transaction(async (tx) => {
       const [title] = await tx<{ owner_user_id: string }>`
         select owner_user_id from public.bridge_titles where id = ${data.titleId} for update
       `;
@@ -84,7 +100,7 @@ export const requestVendorDeliveryJob = createServerFn({ method: "POST" })
         metadata: { titleId: data.titleId, type: data.type },
       }, tx);
       return { id, state: "requested" as const };
-    });
+    }));
   });
 
 export const transitionVendorDeliveryJob = createServerFn({ method: "POST" })
@@ -100,7 +116,7 @@ export const transitionVendorDeliveryJob = createServerFn({ method: "POST" })
     assertPermission(actor, "title.deliver");
     if (!actor.internalRole) throw new Error("Forbidden");
     const sql = await getSql();
-    return sql.transaction(async (tx) => {
+    return withVendorJobStorage(() => sql.transaction(async (tx) => {
       const [job] = await tx<{
         id: string; title_id: string; state: string; title_name: string;
       }>`
@@ -133,5 +149,5 @@ export const transitionVendorDeliveryJob = createServerFn({ method: "POST" })
         metadata: { titleId: job.title_id, from: job.state, to: next, note: data.note ?? null },
       }, tx);
       return { id: job.id, state: next };
-    });
+    }));
   });
