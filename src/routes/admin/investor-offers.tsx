@@ -45,7 +45,7 @@ function OfferAdminBody({ role }: { role: string }) {
       targetAmountPaise: Math.round(Number(target) * 100),
       maximumAmountPaise: Math.round(Number(max) * 100),
       participationBasis: basis,
-      participationPercent: participation.trim() ? Number(participation) : null,
+      participationPercent: basis === "FIXED_ECONOMIC_SHARE" ? null : (participation.trim() ? Number(participation) : null),
       tenureMonths: Number(tenure),
       rightsIncluded: split(included),
       rightsExcluded: split(excluded),
@@ -91,13 +91,13 @@ function OfferAdminBody({ role }: { role: string }) {
     </section>
     <section className="rounded-3xl border border-line bg-surface p-6">
       <h3 className="font-display text-2xl font-semibold">Offer approval queue</h3>
-      <p className="mt-1 text-sm text-muted">Legal review requires a recorded document reference. Only super admin can publish an approved offer.</p>
+      <p className="mt-1 text-sm text-muted">A dedicated legal reviewer who did not create the offer must record a document reference. A different super admin must publish the approved offer.</p>
       {query.isError ? <p role="alert" className="mt-4 text-sm text-red-400">Investment-offer tables are not available in this environment. Apply the migration only through the approved release process.</p> : null}
       <div className="mt-4 space-y-3">{offers.map((o: any) => <article key={o.id} className="rounded-xl border border-line p-4">
         <div className="flex flex-wrap items-start justify-between gap-3"><div><h4 className="font-semibold">{o.title_name}</h4><p className="text-sm text-muted">{money(o.minimum_amount_paise)} minimum · {money(o.target_amount_paise)} target · {money(o.maximum_amount_paise)} maximum · {o.tenure_months} months</p><p className="mt-1 text-xs text-muted">Status: {o.status} · Rights included: {(o.rights_included ?? []).join(", ")} · Excluded: {(o.rights_excluded ?? []).join(", ")}</p></div><span className="rounded-full border border-line px-3 py-1 text-xs">{o.status}</span></div>
         <div className="mt-3 flex flex-wrap gap-2">
           {o.status === "DRAFT" && ["admin","super_admin"].includes(role) ? <Button variant="outline" disabled={transition.isPending} onClick={() => transition.mutate({offerId:o.id,decision:"SUBMIT_FOR_REVIEW"})}>Submit for legal review</Button> : null}
-          {o.status === "LEGAL_REVIEW" && ["legal_reviewer","admin","super_admin"].includes(role) ? <LegalActions offerId={o.id} busy={transition.isPending} onAct={(input) => transition.mutate(input)} /> : null}
+          {o.status === "LEGAL_REVIEW" && role === "legal_reviewer" ? <LegalActions offerId={o.id} busy={transition.isPending} onAct={(input) => transition.mutate(input)} /> : null}
           {o.status === "APPROVED" && role === "super_admin" ? <Button disabled={transition.isPending} onClick={() => transition.mutate({offerId:o.id,decision:"PUBLISH"})}>Publish approved offer</Button> : null}
           {["APPROVED","PUBLISHED"].includes(o.status) && ["admin","super_admin"].includes(role) ? <Button variant="outline" disabled={transition.isPending} onClick={() => transition.mutate({offerId:o.id,decision:"PAUSE"})}>Pause offer</Button> : null}
         </div>
