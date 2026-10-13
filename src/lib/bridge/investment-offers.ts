@@ -168,10 +168,28 @@ export const reviewInvestmentOffer = createServerFn({ method: "POST" })
     if (data.decision === "RETURN") {
       await sql`update bridge_title_investment_offers set status = 'DRAFT', legal_reviewer_user_id = ${actor.userId}, legal_reviewed_at = now(), updated_by = ${actor.userId}, updated_at = now() where id = ${data.offerId}`;
     } else {
-      await sql`update bridge_title_investment_offers set status = 'APPROVED', legal_reviewer_user_id = ${actor.userId}, legal_reviewed_at = now(), approved_by = ${actor.userId}, approved_at = now(), updated_by = ${actor.userId}, updated_at = now() where id = ${data.offerId}`;
+      await sql`update bridge_title_investment_offers set status = 'APPROVAL_PENDING', legal_reviewer_user_id = ${actor.userId}, legal_reviewed_at = now(), updated_by = ${actor.userId}, updated_at = now() where id = ${data.offerId}`;
     }
     await writeAudit({ actorUserId: actor.userId, action: data.decision === "APPROVE" ? "investment_offer.approved" : "investment_offer.returned", entityType: "bridge_title_investment_offer", entityId: data.offerId, metadata: { note: data.note } });
-    return { ok: true, status: data.decision === "APPROVE" ? "APPROVED" as const : "DRAFT" as const };
+    return { ok: true, status: data.decision === "APPROVE" ? "APPROVAL_PENDING" as const : "DRAFT" as const };
+  });
+
+export const approveInvestmentOffer = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({ offerId: z.string().uuid() }))
+  .handler(async ({ context, data }) => {
+    const actor = await actorFor(context.userId);
+    requireAdmin(actor);
+    const sql = await getSql();
+    const rows = await sql<{ id: string; status: string; created_by: string; legal_reviewer_user_id: string | null }>`select id, status, created_by, legal_reviewer_user_id from bridge_title_investment_offers where id = ${data.offerId} limit 1`;
+    const offer = rows[0];
+    if (!offer || offer.status !== "APPROVAL_PENDING" || !offer.legal_reviewer_user_id) throw new Error("Offer must pass independent legal review first");
+    if (offer.created_by === actor.userId || offer.legal_reviewer_user_id === actor.userId) {
+      throw new Error("Commercial approver must differ from the offer author and legal reviewer");
+    }
+    await sql`update bridge_title_investment_offers set status = 'APPROVED', approved_by = ${actor.userId}, approved_at = now(), updated_by = ${actor.userId}, updated_at = now() where id = ${data.offerId} and status = 'APPROVAL_PENDING'`;
+    await writeAudit({ actorUserId: actor.userId, action: "investment_offer.commercially_approved", entityType: "bridge_title_investment_offer", entityId: data.offerId, metadata: {} });
+    return { ok: true, status: "APPROVED" as const };
   });
 
 export const publishInvestmentOffer = createServerFn({ method: "POST" })
