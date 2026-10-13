@@ -17,7 +17,7 @@ function InvestorBody({ userId }: { userId: string }) {
   const offersQ = useQuery({ queryKey: ["bridge-investment-offers-investor", userId], queryFn: () => listPublishedInvestmentOffers() });
   const [amounts, setAmounts] = useState<Record<string,string>>({});
   const [notes, setNotes] = useState<Record<string,string>>({});
-  const request = useMutation({ mutationFn: (v:{offerId:string;amountPaise:number;note?:string}) => requestInvestmentInformation(v), onSuccess: () => qc.invalidateQueries({queryKey:["bridge-investment-offers-investor",userId]}) });
+  const request = useMutation({ mutationFn: (v:{offerId:string;amountPaise:number;note?:string}) => requestInvestmentInformation({ data: v }), onSuccess: () => qc.invalidateQueries({queryKey:["bridge-investment-offers-investor",userId]}) });
   const rows = portfolio.data?.investments ?? [];
   const offers = offersQ.data?.offers ?? [];
   const interests = offersQ.data?.interests ?? [];
