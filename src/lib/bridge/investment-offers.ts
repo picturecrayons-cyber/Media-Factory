@@ -272,9 +272,9 @@ export const submitInvestmentInterest = createServerFn({ method: "POST" })
     const actor = await actorFor(context.userId);
     if (actor.accountType !== "investor" || actor.internalRole) throw new Error("Investor account required");
     const sql = await getSql();
-    const offers = await sql<{ id: string; version: number; status: string; minimum_amount_paise: number | string; maximum_amount_paise: number | string; application_increment_paise: number | string; eligibility_rules: unknown }>`select id, version, status, minimum_amount_paise, maximum_amount_paise, application_increment_paise, eligibility_rules from bridge_title_investment_offers where id = ${data.offerId} limit 1`;
+    const offers = await sql<{ id: string; version: number; status: string; title_status: string; minimum_amount_paise: number | string; maximum_amount_paise: number | string; application_increment_paise: number | string; eligibility_rules: unknown }>`select o.id, o.version, o.status, t.status as title_status, o.minimum_amount_paise, o.maximum_amount_paise, o.application_increment_paise, o.eligibility_rules from bridge_title_investment_offers o join bridge_titles t on t.id = o.title_id where o.id = ${data.offerId} limit 1`;
     const offer = offers[0];
-    if (!offer || offer.status !== "PUBLISHED") throw new Error("This offer is not currently available");
+    if (!offer || offer.status !== "PUBLISHED" || !["LICENSING_READY", "LIVE_FOR_BUYERS"].includes(offer.title_status)) throw new Error("This offer is not currently available");
     const eligibleIds = (offer.eligibility_rules as { eligibleInvestorUserIds?: string[] } | null)?.eligibleInvestorUserIds ?? [];
     if (!eligibleIds.includes(actor.userId)) throw new Error("This account is not eligible for this offer");
     if (data.disclosureVersion !== Number(offer.version)) throw new Error("Please review the current published offer and disclosure version");
