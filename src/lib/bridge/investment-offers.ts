@@ -58,7 +58,7 @@ export const listPublishedInvestmentOffers = createServerFn({ method: "GET" })
       tenure_months: number; maturity_date: string | null; rights_included: string[];
       rights_excluded: string[]; permitted_costs: string[]; recoupment_priority: string;
       distribution_frequency: string; calculation_method: string; information_memorandum_url: string | null;
-      terms_document_url: string | null; risk_disclosure: string; eligibility_rules: { eligibleInvestorUserIds: string[] }; published_at: string;
+      terms_document_url: string | null; risk_disclosure: string; published_at: string;
     }>`select o.id, o.title_id, t.name as title_name, o.version, o.currency,
         o.minimum_amount_paise, o.maximum_amount_paise, o.target_amount_paise,
         o.application_increment_paise, o.participation_basis, o.participation_percent,
@@ -66,7 +66,7 @@ export const listPublishedInvestmentOffers = createServerFn({ method: "GET" })
         o.maturity_date, o.rights_included, o.rights_excluded, o.permitted_costs,
         o.recoupment_priority, o.distribution_frequency, o.calculation_method,
         o.information_memorandum_url, o.terms_document_url, o.risk_disclosure,
-        o.eligibility_rules, o.published_at
+        o.published_at
       from bridge_title_investment_offers o
       join bridge_titles t on t.id = o.title_id
       where o.status = 'PUBLISHED'
