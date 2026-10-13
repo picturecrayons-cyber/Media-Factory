@@ -1,8 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createHash, createPublicKey, generateKeyPairSync, verify } from "node:crypto";
+import { createHash, createPublicKey, generateKeyPairSync, verify, type KeyObject } from "node:crypto";
 
-function fingerprint(privateKey: ReturnType<typeof generateKeyPairSync>["privateKey"]) {
+function fingerprint(privateKey: KeyObject) {
   const publicDer = createPublicKey(privateKey).export({ type: "spki", format: "der" });
   return createHash("md5").update(publicDer).digest("hex").match(/.{1,2}/g)!.join(":");
 }
