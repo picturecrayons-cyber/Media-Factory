@@ -100,11 +100,6 @@ export const listPublishedInvestmentOffers = createServerFn({ method: "GET" })
         information_memorandum_url: row.information_memorandum_url,
         terms_document_url: row.terms_document_url,
         risk_disclosure: row.risk_disclosure,
-        eligibility_rules: {
-          eligibleInvestorUserIds: Array.isArray(row.eligibility_rules?.eligibleInvestorUserIds)
-            ? row.eligibility_rules.eligibleInvestorUserIds.filter((id): id is string => typeof id === "string")
-            : [],
-        },
         published_at: row.published_at,
       })),
     };
