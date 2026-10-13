@@ -108,6 +108,7 @@ export const createInvestmentOfferDraft = createServerFn({ method: "POST" })
         data.targetAmountPaise < data.minimumAmountPaise ||
         data.targetAmountPaise > data.maximumAmountPaise ||
         data.minimumAmountPaise % data.applicationIncrementPaise !== 0 ||
+        (data.targetAmountPaise - data.minimumAmountPaise) % data.applicationIncrementPaise !== 0 ||
         data.maximumAmountPaise % data.applicationIncrementPaise !== 0) {
       throw new Error("Offer amount limits or increments are inconsistent");
     }
