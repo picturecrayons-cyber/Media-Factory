@@ -73,7 +73,41 @@ export const listPublishedInvestmentOffers = createServerFn({ method: "GET" })
         and t.status in ('LICENSING_READY','LIVE_FOR_BUYERS')
         and o.eligibility_rules->'eligibleInvestorUserIds' ? ${actor.userId}
       order by o.published_at desc limit 100`;
-    return { offers: JSON.parse(JSON.stringify(rows)) as typeof rows };
+    return {
+      offers: rows.map((row) => ({
+        id: row.id,
+        title_id: row.title_id,
+        title_name: row.title_name,
+        version: Number(row.version),
+        currency: row.currency,
+        minimum_amount_paise: Number(row.minimum_amount_paise),
+        maximum_amount_paise: Number(row.maximum_amount_paise),
+        target_amount_paise: Number(row.target_amount_paise),
+        application_increment_paise: Number(row.application_increment_paise),
+        participation_basis: row.participation_basis,
+        participation_percent: row.participation_percent === null ? null : Number(row.participation_percent),
+        participation_formula: row.participation_formula,
+        receipt_scope: row.receipt_scope,
+        tenure_start: row.tenure_start,
+        tenure_months: Number(row.tenure_months),
+        maturity_date: row.maturity_date,
+        rights_included: row.rights_included.map(String),
+        rights_excluded: row.rights_excluded.map(String),
+        permitted_costs: row.permitted_costs.map(String),
+        recoupment_priority: row.recoupment_priority,
+        distribution_frequency: row.distribution_frequency,
+        calculation_method: row.calculation_method,
+        information_memorandum_url: row.information_memorandum_url,
+        terms_document_url: row.terms_document_url,
+        risk_disclosure: row.risk_disclosure,
+        eligibility_rules: {
+          eligibleInvestorUserIds: Array.isArray(row.eligibility_rules?.eligibleInvestorUserIds)
+            ? row.eligibility_rules.eligibleInvestorUserIds.filter((id): id is string => typeof id === "string")
+            : [],
+        },
+        published_at: row.published_at,
+      })),
+    };
   });
 
 export const listAdminInvestmentOffers = createServerFn({ method: "GET" })
@@ -95,7 +129,25 @@ export const listAdminInvestmentOffers = createServerFn({ method: "GET" })
       from bridge_title_investment_offers o
       join bridge_titles t on t.id = o.title_id
       order by o.updated_at desc limit 200`;
-    return { offers: JSON.parse(JSON.stringify(rows)) as typeof rows };
+    return {
+      offers: rows.map((row) => ({
+        id: row.id,
+        title_id: row.title_id,
+        title_name: row.title_name,
+        version: Number(row.version),
+        status: row.status,
+        minimum_amount_paise: Number(row.minimum_amount_paise),
+        maximum_amount_paise: Number(row.maximum_amount_paise),
+        target_amount_paise: Number(row.target_amount_paise),
+        participation_basis: row.participation_basis,
+        tenure_months: Number(row.tenure_months),
+        created_by: row.created_by,
+        legal_reviewer_user_id: row.legal_reviewer_user_id,
+        approved_by: row.approved_by,
+        published_by: row.published_by,
+        updated_at: row.updated_at,
+      })),
+    };
   });
 
 export const createInvestmentOfferDraft = createServerFn({ method: "POST" })
@@ -254,5 +306,16 @@ export const listMyInvestmentInterests = createServerFn({ method: "GET" })
       join bridge_titles t on t.id = o.title_id
       where a.investor_user_id = ${actor.userId}
       order by a.created_at desc limit 100`;
-    return { applications: JSON.parse(JSON.stringify(rows)) as typeof rows };
+    return {
+      applications: rows.map((row) => ({
+        id: row.id,
+        offer_id: row.offer_id,
+        offer_version: Number(row.offer_version),
+        requested_amount_paise: Number(row.requested_amount_paise),
+        status: row.status,
+        eligibility_status: row.eligibility_status,
+        created_at: row.created_at,
+        title_name: row.title_name,
+      })),
+    };
   });
