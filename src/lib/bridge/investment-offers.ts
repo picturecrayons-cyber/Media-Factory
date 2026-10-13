@@ -71,7 +71,7 @@ export const listPublishedInvestmentOffers = createServerFn({ method: "GET" })
       where o.status = 'PUBLISHED'
         and t.status in ('LICENSING_READY','LIVE_FOR_BUYERS')
       order by o.published_at desc limit 100`;
-    return { offers: JSON.parse(JSON.stringify(rows)) };
+    return { offers: JSON.parse(JSON.stringify(rows)) as typeof rows };
   });
 
 export const listAdminInvestmentOffers = createServerFn({ method: "GET" })
@@ -248,5 +248,5 @@ export const listMyInvestmentInterests = createServerFn({ method: "GET" })
       join bridge_titles t on t.id = o.title_id
       where a.investor_user_id = ${actor.userId}
       order by a.created_at desc limit 100`;
-    return { applications: JSON.parse(JSON.stringify(rows)) };
+    return { applications: JSON.parse(JSON.stringify(rows)) as typeof rows };
   });
