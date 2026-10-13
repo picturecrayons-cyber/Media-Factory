@@ -24,6 +24,13 @@ function previewBaseUrl() {
   return url.origin;
 }
 
+function isObjectNotFound(error) {
+  // verifyObject wraps OCI HEAD failures with this operation and HTTP status.
+  // Do not treat auth, network, configuration, or any other failure as absence.
+  return error instanceof Error &&
+    /^OCI object verification failed \(404\)(?::|\.)/.test(error.message);
+}
+
 function required(name) {
   const value = process.env[name]?.trim();
   if (!value) throw new Error(`${name} is required; no test was executed.`);
@@ -129,8 +136,12 @@ try {
       try {
         await verifyObject(sealedKey);
         cleanupFailures.push(`sealed object ${sealedKey} still exists after deletion`);
-      } catch {
-        // Expected: object is absent (404)
+      } catch (error) {
+        if (!isObjectNotFound(error)) {
+          cleanupFailures.push(
+            `sealed object absence verification failed for ${sealedKey}: ${error instanceof Error ? error.message : "unknown error"}`,
+          );
+        }
       }
     } catch (error) {
       cleanupFailures.push(`sealed object cleanup failed for ${sealedKey}: ${error instanceof Error ? error.message : "unknown error"}`);
@@ -142,8 +153,12 @@ try {
       try {
         await verifyObject(sourceKey);
         cleanupFailures.push(`source object ${sourceKey} still exists after deletion`);
-      } catch {
-        // Expected: object is absent (404)
+      } catch (error) {
+        if (!isObjectNotFound(error)) {
+          cleanupFailures.push(
+            `source object absence verification failed for ${sourceKey}: ${error instanceof Error ? error.message : "unknown error"}`,
+          );
+        }
       }
     } catch (error) {
       cleanupFailures.push(`source object cleanup failed for ${sourceKey}: ${error instanceof Error ? error.message : "unknown error"}`);
