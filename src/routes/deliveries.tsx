@@ -74,7 +74,12 @@ function VendorJobs({ actor }: { actor: Actor }) {
       setNote("");
       await refreshJobs();
     },
-    onError: () => setError("Could not create the request. Check title access and try again."),
+    onError: (error) => {
+      const message = error instanceof Error ? error.message : "";
+      setError(message.includes("Vendor job storage is not installed")
+        ? message
+        : "Could not create the request. Check title access and try again.");
+    },
   });
   const transitionMutation = useMutation({
     mutationFn: (input: { jobId: string; action: "start_review" | "sign_off" | "block" }) =>
@@ -149,7 +154,11 @@ function VendorJobs({ actor }: { actor: Actor }) {
       {titlesQuery.isError ? <p className="mt-3 text-sm" role="alert">Accessible titles could not be loaded.</p> : null}
       {error ? <p className="mt-3 text-sm" role="alert">{error}</p> : null}
       {jobsQuery.isError ? (
-        <p className="mt-4 text-sm" role="alert">Saved vendor jobs could not be loaded. Refresh to retry.</p>
+        <p className="mt-4 text-sm" role="alert">
+          {jobsQuery.error instanceof Error && jobsQuery.error.message.includes("Vendor job storage is not installed")
+            ? jobsQuery.error.message
+            : "Saved vendor jobs could not be loaded. Refresh to retry."}
+        </p>
       ) : jobsQuery.isPending ? (
         <p className="mt-4 text-sm text-muted">Loading saved vendor jobs…</p>
       ) : (
