@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState, type FormEvent } from "react";
+import { useState, type FormEvent, type ReactNode } from "react";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { Button } from "@/components/ui/button";
@@ -186,6 +186,6 @@ function InvestmentOfferAdminBody({ actor }: { actor: { internalRole: string | n
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({ label, children }: { label: string; children: ReactNode }) {
   return <label className="block space-y-1.5 text-sm"><span className="font-medium">{label}</span>{children}</label>;
 }
