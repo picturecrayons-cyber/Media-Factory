@@ -6,6 +6,7 @@ import { BridgeShell } from "@/components/bridge/shell";
 import { Button } from "@/components/ui/button";
 import { listTitles } from "@/lib/bridge/titles";
 import {
+  approveInvestmentOffer,
   createInvestmentOfferDraft,
   listAdminInvestmentOffers,
   publishInvestmentOffer,
@@ -65,6 +66,10 @@ function InvestmentOfferAdminBody({ actor }: { actor: { internalRole: string | n
   });
   const reviewQ = useMutation({
     mutationFn: (data: { offerId: string; decision: "APPROVE" | "RETURN"; note: string }) => reviewInvestmentOffer({ data }),
+    onSuccess: () => void refresh(),
+  });
+  const approveQ = useMutation({
+    mutationFn: (offerId: string) => approveInvestmentOffer({ data: { offerId } }),
     onSuccess: () => void refresh(),
   });
   const publishQ = useMutation({
@@ -163,7 +168,7 @@ function InvestmentOfferAdminBody({ actor }: { actor: { internalRole: string | n
       <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
         <h3 className="font-display text-xl font-semibold">Review and publication queue</h3>
         {offersQ.isError ? <p role="alert" className="mt-3 rounded-lg border border-line p-4 text-sm text-muted">Offer data is not available in this Preview yet. The proposed schema has not been applied.</p> : null}
-        {reviewQ.isError || publishQ.isError || submitQ.isError ? <p role="alert" className="mt-3 text-sm text-red-400">{reviewQ.error?.message ?? publishQ.error?.message ?? submitQ.error?.message}</p> : null}
+        {reviewQ.isError || approveQ.isError || publishQ.isError || submitQ.isError ? <p role="alert" className="mt-3 text-sm text-red-400">{reviewQ.error?.message ?? approveQ.error?.message ?? publishQ.error?.message ?? submitQ.error?.message}</p> : null}
         <div className="mt-4 divide-y divide-line">
           {offers.map((offer) => (
             <article key={offer.id} className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between">
@@ -174,6 +179,7 @@ function InvestmentOfferAdminBody({ actor }: { actor: { internalRole: string | n
               <div className="flex flex-wrap gap-2">
                 {offer.status === "DRAFT" ? <Button size="sm" variant="outline" disabled={submitQ.isPending} onClick={() => submitQ.mutate(offer.id)}>Submit for legal review</Button> : null}
                 {offer.status === "LEGAL_REVIEW" ? <Button size="sm" variant="outline" disabled={reviewQ.isPending} onClick={() => reviewQ.mutate({ offerId: offer.id, decision: "APPROVE", note: "Reviewed in authorized Bridge workflow; verify supporting evidence and legal approval record." })}>Approve after review</Button> : null}
+                {offer.status === "APPROVAL_PENDING" ? <Button size="sm" variant="outline" disabled={approveQ.isPending} onClick={() => approveQ.mutate(offer.id)}>Commercial approval</Button> : null}
                 {offer.status === "APPROVED" && actor.internalRole === "super_admin" ? <Button size="sm" disabled={publishQ.isPending} onClick={() => publishQ.mutate(offer.id)}>Publish offer</Button> : null}
               </div>
             </article>
