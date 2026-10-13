@@ -109,7 +109,7 @@ function InvestmentOfferAdminBody({ actor }: { actor: { internalRole: string | n
       termsDocumentUrl: dateOrNull(form.termsDocumentUrl),
       riskDisclosure: form.riskDisclosure,
       rightsEvidenceReference: form.rightsEvidenceReference,
-      eligibleInvestorUserIds: form.eligibleInvestorUserIds.split("\\n").map((s) => s.trim()).filter(Boolean),
+      eligibleInvestorUserIds: form.eligibleInvestorUserIds.split(/\r?\n/).map((s) => s.trim()).filter(Boolean),
     });
   }
 
