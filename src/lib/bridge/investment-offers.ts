@@ -54,8 +54,8 @@ export const listPublishedInvestmentOffers = createServerFn({ method: "GET" })
       target_amount_paise: number | string; application_increment_paise: number | string;
       participation_basis: string; participation_percent: number | string | null;
       participation_formula: string; receipt_scope: string; tenure_start: string | null;
-      tenure_months: number; maturity_date: string | null; rights_included: unknown;
-      rights_excluded: unknown; permitted_costs: unknown; recoupment_priority: string;
+      tenure_months: number; maturity_date: string | null; rights_included: string[];
+      rights_excluded: string[]; permitted_costs: string[]; recoupment_priority: string;
       distribution_frequency: string; calculation_method: string; information_memorandum_url: string | null;
       terms_document_url: string | null; risk_disclosure: string; eligibility_rules: unknown; published_at: string;
     }>`select o.id, o.title_id, t.name as title_name, o.version, o.currency,
@@ -65,13 +65,13 @@ export const listPublishedInvestmentOffers = createServerFn({ method: "GET" })
         o.maturity_date, o.rights_included, o.rights_excluded, o.permitted_costs,
         o.recoupment_priority, o.distribution_frequency, o.calculation_method,
         o.information_memorandum_url, o.terms_document_url, o.risk_disclosure,
-        o.eligibility_rules, o.published_at
+        o.published_at
       from bridge_title_investment_offers o
       join bridge_titles t on t.id = o.title_id
       where o.status = 'PUBLISHED'
         and t.status in ('LICENSING_READY','LIVE_FOR_BUYERS')
       order by o.published_at desc limit 100`;
-    return { offers: JSON.parse(JSON.stringify(rows)) as typeof rows };
+    return { offers: rows };
   });
 
 export const listAdminInvestmentOffers = createServerFn({ method: "GET" })
@@ -93,7 +93,7 @@ export const listAdminInvestmentOffers = createServerFn({ method: "GET" })
       from bridge_title_investment_offers o
       join bridge_titles t on t.id = o.title_id
       order by o.updated_at desc limit 200`;
-    return { offers: JSON.parse(JSON.stringify(rows)) };
+    return { offers: rows };
   });
 
 export const createInvestmentOfferDraft = createServerFn({ method: "POST" })
@@ -241,12 +241,18 @@ export const listMyInvestmentInterests = createServerFn({ method: "GET" })
     const actor = await actorFor(context.userId);
     if (actor.accountType !== "investor" || actor.internalRole) throw new Error("Investor account required");
     const sql = await getSql();
-    const rows = await sql`select a.id, a.offer_id, a.offer_version, a.requested_amount_paise, a.status,
+    const rows = await sql<{
+      id: string; offer_id: string; offer_version: number; requested_amount_paise: number | string;
+      status: string; eligibility_status: string | null; created_at: string; title_name: string;
+    }>`select a.id, a.offer_id, a.offer_version, a.requested_amount_paise, a.status,
       a.eligibility_status, a.created_at, t.name as title_name
       from bridge_title_investment_applications a
       join bridge_title_investment_offers o on o.id = a.offer_id
       join bridge_titles t on t.id = o.title_id
       where a.investor_user_id = ${actor.userId}
       order by a.created_at desc limit 100`;
-    return { applications: JSON.parse(JSON.stringify(rows)) as typeof rows };
+    return { applications: rows.map((row) => ({
+      ...row,
+      requested_amount_paise: Number(row.requested_amount_paise),
+    })) };
   });
