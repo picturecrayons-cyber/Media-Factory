@@ -136,19 +136,19 @@ export const transitionInvestmentOffer = createServerFn({ method: "POST" })
 
       let updated: { id: string }[];
       if (data.decision === "APPROVE_LEGAL") {
-        updated = await tx`update bridge_title_investment_offers
+        updated = await tx<{id:string}>`update bridge_title_investment_offers
           set status=${status}, review_reference=${data.reviewReference},
               reviewed_by=${actor.userId}, approved_at=now(),
               review_notes=${data.notes ?? null}, updated_at=now()
           where id=${data.offerId} and status=${offer.status}
           returning id`;
       } else if (data.decision === "PUBLISH") {
-        updated = await tx`update bridge_title_investment_offers
+        updated = await tx<{id:string}>`update bridge_title_investment_offers
           set status=${status}, published_by=${actor.userId}, published_at=now(), updated_at=now()
           where id=${data.offerId} and status=${offer.status}
           returning id`;
       } else {
-        updated = await tx`update bridge_title_investment_offers
+        updated = await tx<{id:string}>`update bridge_title_investment_offers
           set status=${status}, review_notes=${data.notes ?? null}, updated_at=now()
           where id=${data.offerId} and status=${offer.status}
           returning id`;
