@@ -27,6 +27,7 @@ create table if not exists public.bridge_title_investment_offers (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   check (minimum_amount_paise <= target_amount_paise and target_amount_paise <= maximum_amount_paise),
+  check ((participation_basis = 'FIXED_ECONOMIC_SHARE' and participation_percent is null) or (participation_basis in ('NET_DISTRIBUTION_RECEIPTS','GROSS_DISTRIBUTION_RECEIPTS') and participation_percent between 0.01 and 100)),
   check (window_start is null or window_end is null or window_start <= window_end),
   check (status not in ('APPROVED','PUBLISHED') or (review_reference is not null and reviewed_by is not null and approved_at is not null))
 );
