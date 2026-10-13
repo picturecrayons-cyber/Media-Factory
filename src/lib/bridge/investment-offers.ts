@@ -92,8 +92,7 @@ export const transitionInvestmentOffer = createServerFn({ method: "POST" })
     // Lock the offer and write the transition + audit record in one transaction.
     // The status predicate on UPDATE is an additional compare-and-swap guard.
     return sql.transaction(async (tx) => {
-      const rows = await tx<{id:string; status:string; created_by:string; reviewed_by:string | null}>(
-      )`select id, status, created_by, reviewed_by
+      const rows = await tx<{id:string; status:string; created_by:string; reviewed_by:string | null}>`select id, status, created_by, reviewed_by
           from bridge_title_investment_offers
           where id = ${data.offerId}
           for update`;
@@ -135,7 +134,7 @@ export const transitionInvestmentOffer = createServerFn({ method: "POST" })
         status = "PAUSED";
       }
 
-      let updated;
+      let updated: { id: string }[];
       if (data.decision === "APPROVE_LEGAL") {
         updated = await tx`update bridge_title_investment_offers
           set status=${status}, review_reference=${data.reviewReference},
