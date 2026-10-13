@@ -76,7 +76,7 @@ function DashboardBody() {
           <>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <Stat label="Recognized service revenue (net of refunds)" value={money(finance.recognizedRevenuePaise ?? 0)} />
-              <Stat label="Paid invoice value outstanding after refunds" value={money(finance.paidInvoiceValuePaise ?? 0)} />
+              <Stat label="Net paid invoice value after refunds" value={money(finance.paidInvoiceValuePaise ?? 0)} />
               <Stat label="Operating & payment costs recorded" value={money(finance.operatingCostsPaise ?? 0)} />
               <Stat label="Net contribution (recorded costs)" value={money(finance.netContributionPaise ?? 0)} />
             </div>
