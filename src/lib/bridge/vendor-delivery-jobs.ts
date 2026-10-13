@@ -39,6 +39,7 @@ export const listVendorDeliveryJobs = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
+    assertPermission(actor, "delivery.read");
     const sql = await getSql();
     const internal = Boolean(actor.internalRole);
     const rows = await sql<VendorJobRow>`
