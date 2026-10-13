@@ -219,7 +219,7 @@ export const submitInvestmentInterest = createServerFn({ method: "POST" })
     const actor = await actorFor(context.userId);
     if (actor.accountType !== "investor" || actor.internalRole) throw new Error("Investor account required");
     const sql = await getSql();
-    const offers = await sql<{ id: string; version: number; status: string; minimum_amount_paise: number | string; maximum_amount_paise: number | string; application_increment_paise: number | string }>`select id, version, status, minimum_amount_paise, maximum_amount_paise, application_increment_paise, eligibility_rules from bridge_title_investment_offers where id = ${data.offerId} limit 1`;
+    const offers = await sql<{ id: string; version: number; status: string; minimum_amount_paise: number | string; maximum_amount_paise: number | string; application_increment_paise: number | string; eligibility_rules: unknown }>`select id, version, status, minimum_amount_paise, maximum_amount_paise, application_increment_paise, eligibility_rules from bridge_title_investment_offers where id = ${data.offerId} limit 1`;
     const offer = offers[0];
     if (!offer || offer.status !== "PUBLISHED") throw new Error("This offer is not currently available");
     const eligibleIds = (offer.eligibility_rules as { eligibleInvestorUserIds?: string[] } | null)?.eligibleInvestorUserIds ?? [];
