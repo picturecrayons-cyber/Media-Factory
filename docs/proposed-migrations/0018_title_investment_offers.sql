@@ -6,7 +6,7 @@ create table if not exists public.bridge_title_investment_offers (
   id uuid primary key default gen_random_uuid(),
   title_id text not null references public.bridge_titles(id) on delete restrict,
   version integer not null default 1 check (version > 0),
-  status text not null default 'DRAFT' check (status in ('DRAFT','LEGAL_REVIEW','APPROVED','PUBLISHED','PAUSED','CLOSED','WITHDRAWN')),
+  status text not null default 'DRAFT' check (status in ('DRAFT','LEGAL_REVIEW','APPROVAL_PENDING','APPROVED','PUBLISHED','PAUSED','CLOSED','WITHDRAWN')),
   currency text not null default 'INR' check (currency = 'INR'),
   minimum_amount_paise bigint not null check (minimum_amount_paise > 0),
   maximum_amount_paise bigint not null check (maximum_amount_paise >= minimum_amount_paise),
