@@ -40,6 +40,7 @@ const offerInput = z.object({
   termsDocumentUrl: z.string().url().max(2000).nullable(),
   riskDisclosure: z.string().trim().min(50).max(10000),
   rightsEvidenceReference: z.string().trim().min(5).max(2000),
+  eligibleInvestorUserIds: z.array(z.string().trim().min(1).max(200)).min(1).max(500),
 });
 
 export const listPublishedInvestmentOffers = createServerFn({ method: "GET" })
@@ -70,6 +71,7 @@ export const listPublishedInvestmentOffers = createServerFn({ method: "GET" })
       join bridge_titles t on t.id = o.title_id
       where o.status = 'PUBLISHED'
         and t.status in ('LICENSING_READY','LIVE_FOR_BUYERS')
+        and o.eligibility_rules->'eligibleInvestorUserIds' ? ${actor.userId}
       order by o.published_at desc limit 100`;
     return { offers: JSON.parse(JSON.stringify(rows)) as typeof rows };
   });
@@ -122,7 +124,7 @@ export const createInvestmentOfferDraft = createServerFn({ method: "POST" })
       receipt_scope, tenure_start, tenure_months, maturity_date, rights_included, rights_excluded,
       permitted_costs, recoupment_priority, distribution_frequency, calculation_method,
       information_memorandum_url, terms_document_url, risk_disclosure, rights_evidence_reference,
-      created_by, updated_by
+      eligibility_rules, created_by, updated_by
     ) values (
       ${data.titleId}, ${version}, 'DRAFT', ${data.minimumAmountPaise}, ${data.maximumAmountPaise},
       ${data.targetAmountPaise}, ${data.applicationIncrementPaise}, ${data.participationBasis},
@@ -131,7 +133,7 @@ export const createInvestmentOfferDraft = createServerFn({ method: "POST" })
       ${JSON.stringify(data.rightsExcluded)}::jsonb, ${JSON.stringify(data.permittedCosts)}::jsonb,
       ${data.recoupmentPriority}, ${data.distributionFrequency}, ${data.calculationMethod},
       ${data.informationMemorandumUrl}, ${data.termsDocumentUrl}, ${data.riskDisclosure},
-      ${data.rightsEvidenceReference}, ${actor.userId}, ${actor.userId}
+      ${data.rightsEvidenceReference}, ${JSON.stringify({ eligibleInvestorUserIds: data.eligibleInvestorUserIds })}::jsonb, ${actor.userId}, ${actor.userId}
     ) returning id`;
     const id = rows[0]?.id;
     if (!id) throw new Error("Offer draft could not be created");
@@ -217,9 +219,12 @@ export const submitInvestmentInterest = createServerFn({ method: "POST" })
     const actor = await actorFor(context.userId);
     if (actor.accountType !== "investor" || actor.internalRole) throw new Error("Investor account required");
     const sql = await getSql();
-    const offers = await sql<{ id: string; version: number; status: string; minimum_amount_paise: number | string; maximum_amount_paise: number | string; application_increment_paise: number | string }>`select id, version, status, minimum_amount_paise, maximum_amount_paise, application_increment_paise from bridge_title_investment_offers where id = ${data.offerId} limit 1`;
+    const offers = await sql<{ id: string; version: number; status: string; minimum_amount_paise: number | string; maximum_amount_paise: number | string; application_increment_paise: number | string }>`select id, version, status, minimum_amount_paise, maximum_amount_paise, application_increment_paise, eligibility_rules from bridge_title_investment_offers where id = ${data.offerId} limit 1`;
     const offer = offers[0];
     if (!offer || offer.status !== "PUBLISHED") throw new Error("This offer is not currently available");
+    const eligibleIds = (offer.eligibility_rules as { eligibleInvestorUserIds?: string[] } | null)?.eligibleInvestorUserIds ?? [];
+    if (!eligibleIds.includes(actor.userId)) throw new Error("This account is not eligible for this offer");
+    if (data.disclosureVersion !== Number(offer.version)) throw new Error("Please review the current published offer and disclosure version");
     const amount = data.requestedAmountPaise;
     const min = Number(offer.minimum_amount_paise);
     const max = Number(offer.maximum_amount_paise);
