@@ -124,7 +124,6 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
 
   return (
     <div className="space-y-5">
-      <WorkflowDesk title={title} actor={actor} />
       <section aria-label="Title release path" className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
@@ -155,10 +154,10 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
         <div className="mt-4 flex flex-wrap gap-2">
           <button type="button" onClick={() => setActiveTab("Media & Assets")} className="rounded-full bg-fg px-4 py-2 text-sm font-semibold text-bg">Review media & assets</button>
           <Link to="/admin/workstations" className="rounded-full border border-line px-4 py-2 text-sm font-semibold">Internal QC & rights review</Link>
-          {actor.internalRole ? <Link to="/buyer" className="rounded-full border border-line px-4 py-2 text-sm font-semibold">Buyer pipeline</Link> : null}
         </div>
         {assetsQ.isError ? <p role="alert" className="mt-3 text-sm text-red-600">Asset status could not be verified. Do not treat this title as upload-ready.</p> : null}
       </section>
+      <WorkflowDesk title={title} actor={actor} />
       {assetsQ.isError ? <p role="alert">Assets unavailable: {assetsQ.error.message}</p> : null}
       <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
         <div className="grid gap-5 md:grid-cols-[180px_1fr]">
