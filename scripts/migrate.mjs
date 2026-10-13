@@ -60,6 +60,19 @@ async function main() {
   const pool = new pg.Pool({ connectionString: databaseUrl, max: 1, ssl });
   const client = await pool.connect();
   try {
+    // Supabase tracks applied migrations in supabase_migrations.schema_migrations.
+    // This legacy runner uses a separate _migrations ledger and cannot safely infer
+    // which numbered files have already been applied to a Supabase project. Fail
+    // closed before any DDL rather than replaying the full historical migration set.
+    const historyCheck = await client.query(
+      "SELECT to_regclass('supabase_migrations.schema_migrations') IS NOT NULL AS has_supabase_history",
+    );
+    if (historyCheck.rows[0]?.has_supabase_history) {
+      throw new Error(
+        "Supabase migration history detected. Refusing to use the legacy _migrations runner; use the approved Supabase migration workflow instead. No migration was applied.",
+      );
+    }
+
     await client.query(
       "CREATE TABLE IF NOT EXISTS _migrations (name TEXT PRIMARY KEY, applied_at TIMESTAMPTZ NOT NULL DEFAULT now())",
     );
