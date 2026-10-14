@@ -102,9 +102,21 @@ function BuyerBody() {
     mutationFn: async ({ titleId, dealId }: { titleId: string; dealId: string }) => {
       let idempotencyKey = idempotencyKeys.current.get(dealId);
       if (!idempotencyKey) {
-        idempotencyKey = `lic-${dealId}-${crypto.randomUUID()}`;
-        idempotencyKeys.current.set(dealId, idempotencyKey);
+        try {
+          idempotencyKey = sessionStorage.getItem(`bridge-license-purchase:${dealId}`) ?? undefined;
+        } catch {
+          // Session storage can be disabled; the in-memory key still stabilizes retries in this mount.
+        }
       }
+      if (!idempotencyKey) {
+        idempotencyKey = `lic-${dealId}-${crypto.randomUUID()}`;
+        try {
+          sessionStorage.setItem(`bridge-license-purchase:${dealId}`, idempotencyKey);
+        } catch {
+          // Keep the same key in memory if browser storage is unavailable.
+        }
+      }
+      idempotencyKeys.current.set(dealId, idempotencyKey);
       const created = await createLicenseOrder({
         data: { titleId, dealId, idempotencyKey },
       });
@@ -142,6 +154,11 @@ function BuyerBody() {
     },
     onSuccess: (_result, variables) => {
       idempotencyKeys.current.delete(variables.dealId);
+      try {
+        sessionStorage.removeItem(`bridge-license-purchase:${variables.dealId}`);
+      } catch {
+        // Successful verification is already authoritative on the server.
+      }
       toast("License payment verified");
       void qc.invalidateQueries({ queryKey: ["bridge-titles"] });
       void qc.invalidateQueries({ queryKey: ["bridge-entitlements"] });
