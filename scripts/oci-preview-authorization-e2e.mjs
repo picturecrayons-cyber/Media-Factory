@@ -49,8 +49,6 @@ const payload = Buffer.from(`CRAYONS-BRIDGE-PREVIEW-OCI-E2E:${runId}`, "utf8");
 const payloadSha256 = createHash("sha256").update(payload).digest("hex");
 const sourceKey = `bridge/${ownerUserId}/${titleId}/e2e/${Date.now()}-${runId}.txt`;
 const sealedKey = `${sourceKey}.verified/${runId}`;
-let sourceUploaded = false;
-let sealedCreated = false;
 
 try {
   // First prove the Preview endpoint denies both anonymous and invalid sessions.
@@ -71,14 +69,12 @@ try {
     body: payload,
   });
   assert.ok(put.ok, `OCI upload failed with HTTP ${put.status}`);
-  sourceUploaded = true;
 
   const verified = await verifyObject(sourceKey, "text/plain");
   assert.equal(verified.byteSize, payload.byteLength);
   assert.ok(verified.etag, "OCI source ETag missing");
 
   const sealed = await sealVerifiedObject(sourceKey, sealedKey, verified.etag);
-  sealedCreated = true;
   assert.equal(sealed.byteSize, payload.byteLength);
   assert.ok(sealed.etag, "OCI sealed ETag missing");
 
@@ -129,42 +125,41 @@ try {
     previewHost: new URL(previewUrl).hostname,
   }, null, 2));
 } finally {
+  // Always attempt cleanup for both unpredictable UUID-scoped keys, even if PUT/copy
+  // succeeded remotely but the response was lost before the local success flag could be set.
+  // A confirmed OCI 404 is the only accepted proof of absence.
   const cleanupFailures = [];
-  if (sealedCreated) {
+
+  async function cleanupAndVerify(key, label) {
+    let deleteError = null;
     try {
-      await deleteObject(sealedKey);
-      try {
-        await verifyObject(sealedKey);
-        cleanupFailures.push(`sealed object ${sealedKey} still exists after deletion`);
-      } catch (error) {
-        if (!isConfirmedObjectNotFound(error)) {
-          cleanupFailures.push(`sealed object absence was not verified for ${sealedKey}: ${error instanceof Error ? error.message : "unknown error"}`);
-        }
-      }
+      await deleteObject(key);
     } catch (error) {
-      cleanupFailures.push(`sealed object cleanup failed for ${sealedKey}: ${error instanceof Error ? error.message : "unknown error"}`);
+      deleteError = error;
     }
-  }
-  if (sourceUploaded) {
+
     try {
-      await deleteObject(sourceKey);
-      try {
-        await verifyObject(sourceKey);
-        cleanupFailures.push(`source object ${sourceKey} still exists after deletion`);
-      } catch (error) {
-        if (!isConfirmedObjectNotFound(error)) {
-          cleanupFailures.push(`source object absence was not verified for ${sourceKey}: ${error instanceof Error ? error.message : "unknown error"}`);
-        }
-      }
+      await verifyObject(key);
+      cleanupFailures.push(`${label} test object still exists after cleanup`);
     } catch (error) {
-      cleanupFailures.push(`source object cleanup failed for ${sourceKey}: ${error instanceof Error ? error.message : "unknown error"}`);
+      if (isConfirmedObjectNotFound(error)) return;
+      cleanupFailures.push(`${label} test object absence could not be verified (${error instanceof Error ? error.message : "unknown error"})`);
     }
+
+    // A DELETE error is harmless only when a subsequent HEAD conclusively confirmed 404.
+    // That case returns above. Keep this guard to make the intended behavior explicit.
+    if (deleteError && cleanupFailures.length === 0) return;
   }
+
+  // Keys include a fresh UUID generated for this run, so these deletes cannot target a
+  // pre-existing title object. Cleanup is attempted even if upload/copy returned ambiguously.
+  await cleanupAndVerify(sealedKey, "sealed");
+  await cleanupAndVerify(sourceKey, "source");
+
   if (cleanupFailures.length) {
     console.error("OCI E2E cleanup incomplete:", cleanupFailures.join("; "));
     process.exitCode = 1;
-  } else if (sourceUploaded || sealedCreated) {
-    console.log("OCI E2E post-cleanup: confirmed every created test object absent from bucket.");
+  } else {
+    console.log("OCI E2E post-cleanup: confirmed both generated test keys absent from bucket.");
   }
 }
-
