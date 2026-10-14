@@ -97,16 +97,18 @@ export async function grantFromCapturedPayment(opts: {
     const deals = await sql<{
       id: string; title_id: string; buyer_user_id: string; status: string;
       term_start: string | Date; term_end: string | Date; contract_reference: string | null;
+      agreed_fee_paise: number; currency: string;
     }>`
-      select id, title_id, buyer_user_id, status, term_start, term_end, contract_reference
+      select id, title_id, buyer_user_id, status, term_start, term_end, contract_reference, agreed_fee_paise, currency
       from public.bridge_license_deals
       where id = ${payment.deal_id}
       limit 1
     `;
     const deal = deals[0];
     if (!deal || deal.title_id !== payment.title_id || deal.buyer_user_id !== payment.user_id ||
-        !["ACCEPTED", "PAYMENT_PENDING", "LICENSED"].includes(deal.status) || !deal.contract_reference) {
-      throw new Error("Payment is not linked to an accepted licensing deal");
+        !["ACCEPTED", "PAYMENT_PENDING", "LICENSED"].includes(deal.status) || !deal.contract_reference ||
+        Number(deal.agreed_fee_paise) !== Number(payment.amount_paise) || deal.currency !== payment.currency || deal.currency !== "INR") {
+      throw new Error("Payment does not match the accepted licensing deal");
     }
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -123,6 +125,16 @@ export async function grantFromCapturedPayment(opts: {
       set status = 'LICENSED', licensed_at = coalesce(licensed_at, now()), updated_at = now()
       where id = ${deal.id} and status in ('ACCEPTED', 'PAYMENT_PENDING', 'LICENSED')
     `;
+    const title = await loadTitle(payment.title_id);
+    if (title && (title.status === "LIVE_FOR_BUYERS" || title.status === "IN_NEGOTIATION")) {
+      await recordTransition({
+        titleId: title.id,
+        from: title.status,
+        to: "LICENSED",
+        actorUserId: opts.actorUserId ?? payment.user_id,
+        note: "accepted deal payment captured",
+      });
+    }
     await writeAudit({
       actorUserId: opts.actorUserId ?? payment.user_id,
       action: "licensing.deal_payment_captured",
@@ -502,15 +514,20 @@ export const listOwnEntitlements = createServerFn({ method: "GET" })
         payment_id: string;
         access_type: string;
         created_at: string | Date;
+        deal_id: string | null;
       }>`
-        select title_id, payment_id, access_type, created_at
+        select title_id, payment_id, access_type, created_at, null::uuid as deal_id
         from bridge_entitlements where user_id = ${actor.userId}
+        union all
+        select title_id, payment_id, 'license' as access_type, granted_at as created_at, deal_id
+        from public.bridge_deal_entitlements where buyer_user_id = ${actor.userId}
         order by created_at desc
       `;
       return {
         entitlements: rows.map((r) => ({
           titleId: r.title_id,
           paymentId: r.payment_id,
+          dealId: r.deal_id,
           accessType: r.access_type,
           createdAt: r.created_at instanceof Date ? r.created_at.toISOString() : String(r.created_at),
         })),
