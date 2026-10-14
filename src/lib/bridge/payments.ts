@@ -11,6 +11,7 @@ import { loadTitle, recordTransition } from "./titles";
 import { writeAudit } from "./audit";
 import { assertBuyerPublishable } from "./buyer-visibility";
 import { assertNotDevUser } from "./guards";
+import { hasExclusiveScopeConflict } from "./licensing-deal-policy";
 
 function requireRazorpayKeys() {
   const keyId = bridgeEnv.razorpayKeyId();
@@ -255,23 +256,25 @@ export const createAcceptedLicenseDeal = createServerFn({ method: "POST" })
         and term_start <= ${data.termEnd}::date
         and term_end >= ${data.termStart}::date
     `;
-    const norm = (value: string) => value.trim().toUpperCase();
-    const overlap = (left: string[], right: string[]) => {
-      const a = new Set(left.map(norm));
-      const b = new Set(right.map(norm));
-      const aAll = a.has("ALL") || a.has("*") || a.has("WORLDWIDE");
-      const bAll = b.has("ALL") || b.has("*") || b.has("WORLDWIDE");
-      return aAll || bAll || [...a].some((value) => b.has(value));
-    };
-    const conflicts = overlappingDeals.find((existing) => {
-      if (existing.exclusivity !== "EXCLUSIVE" && data.exclusivity !== "EXCLUSIVE") return false;
-      const oldTerritories = Array.isArray(existing.territories) ? existing.territories.map(String) : [];
-      const oldLanguages = Array.isArray(existing.languages) ? existing.languages.map(String) : [];
-      const oldModes = Array.isArray(existing.media_modes) ? existing.media_modes.map(String) : [];
-      return overlap(oldTerritories, data.territories) &&
-        overlap(oldLanguages, data.languages) &&
-        overlap(oldModes, data.mediaModes);
-    });
+    const conflicts = hasExclusiveScopeConflict({
+      rightsCategory: data.rightsCategory,
+      territories: data.territories,
+      languages: data.languages,
+      mediaModes: data.mediaModes,
+      termStart: data.termStart,
+      termEnd: data.termEnd,
+      exclusivity: data.exclusivity,
+      status: "DRAFT",
+    }, overlappingDeals.map((existing) => ({
+      rightsCategory: existing.rights_category,
+      territories: Array.isArray(existing.territories) ? existing.territories.map(String) : [],
+      languages: Array.isArray(existing.languages) ? existing.languages.map(String) : [],
+      mediaModes: Array.isArray(existing.media_modes) ? existing.media_modes.map(String) : [],
+      termStart: String(existing.term_start).slice(0, 10),
+      termEnd: String(existing.term_end).slice(0, 10),
+      exclusivity: existing.exclusivity as "EXCLUSIVE" | "NON_EXCLUSIVE",
+      status: "ACCEPTED",
+    })));
     if (conflicts) {
       throw new Error("RIGHTS_CONFLICT: an overlapping exclusive deal already exists for this title, territory, language, media mode, and term");
     }
