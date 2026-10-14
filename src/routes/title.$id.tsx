@@ -261,14 +261,7 @@ function Metric({ label, value }: { label: string; value: string }) {
 
 type SimpleAssetKind = "master" | "poster_vertical" | "poster_horizontal" | "thumbnail" | "subtitle" | "screener" | "censor_certificate";
 
-function storageErrorDetail(responseText: string): string {
-  const code = responseText.match(/<Code>\\s*([^<]{1,80})\\s*<\\/Code>/i)?.[1]?.trim();
-  const message = responseText.match(/<Message>\\s*([^<]{1,200})\\s*<\\/Message>/i)?.[1]
-    ?.replace(/https?:\\/\\/\\S+/gi, "[url]")
-    .replace(/[\\r\\n\\t]+/g, " ")
-    .trim();
-  return [code, message].filter(Boolean).join(": ").slice(0, 240);
-}
+
 function FilesPanel({
   titleId,
   assets,
@@ -310,8 +303,7 @@ function FilesPanel({
       };
       request.onload = () => {
         if (request.status >= 200 && request.status < 300) { resolve(); return; }
-        const detail = storageErrorDetail(request.responseText || "");
-        reject(new Error(`Storage upload failed (HTTP ${request.status})${detail ? `: ${detail}` : ""}`));
+        reject(new Error(`Storage upload failed (HTTP ${request.status}). Check storage availability and retry only after checking the asset list.`));
       };
       request.onerror = () => reject(new Error("The storage request failed before a response arrived. Check network connectivity and storage CORS; no verification was completed."));
       request.ontimeout = () => reject(new Error("The upload timed out after 30 minutes. Check the asset list before retrying; this upload session does not support automatic resume."));
