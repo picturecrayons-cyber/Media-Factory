@@ -34,7 +34,7 @@ function isConfirmedObjectNotFound(error) {
   // verifyObject converts an actual OCI HEAD HTTP response into this bounded error.
   // Do not treat auth failures, server errors, malformed responses, or network errors as absence.
   return error instanceof Error &&
-    /^OCI object verification failed \\(404\\)(?::|\\.|\\s)/.test(error.message);
+    /^OCI object verification failed \(404\)(?::|\.|\s)/.test(error.message);
 }
 
 const previewUrl = previewBaseUrl();
@@ -164,7 +164,7 @@ try {
     console.error("OCI E2E cleanup incomplete:", cleanupFailures.join("; "));
     process.exitCode = 1;
   } else if (sourceUploaded || sealedCreated) {
-    console.log("OCI E2E post-cleanup: confirmed both test objects absent from bucket.");
+    console.log("OCI E2E post-cleanup: confirmed every created test object absent from bucket.");
   }
 }
 
