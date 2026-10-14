@@ -87,23 +87,49 @@ test("bridge_assets permits all canonical ASSET_KINDS after forward migration", 
   }
 });
 
-test("fresh canonical schema (migrations/0004_bridge.sql) permits all 9 kinds and rejects invalid kinds out of the box", async () => {
+test("fresh database replays original 0004_bridge.sql followed by forward migration to permit all 9 kinds", async () => {
   const db = new PGlite();
   try {
     await db.waitReady;
     await db.exec("create role anon; create role authenticated;");
-    // Execute ONLY 0004_bridge.sql (no forward migration) to verify fresh/local DB baseline
+    // 1. Replay original 0004_bridge.sql baseline
     await db.exec(readFileSync(join(process.cwd(), "migrations/0004_bridge.sql"), "utf8"));
     await db.exec(`insert into bridge_titles (id,slug,name,owner_user_id,owner_account_type)
       values ('title-fresh','title-fresh','Fresh Title','creator','independent_creator');`);
 
+    // Verify original 0004 constraint permits original kind (poster) but rejects new kind (poster_vertical)
+    await db.exec(`insert into bridge_assets (id, title_id, kind, s3_key, created_by)
+      values ('fresh-poster', 'title-fresh', 'poster', 'fresh-key-poster', 'creator');`);
+
+    await assert.rejects(
+      async () => {
+        await db.exec(`insert into bridge_assets (id, title_id, kind, s3_key, created_by)
+          values ('fresh-vertical', 'title-fresh', 'poster_vertical', 'fresh-key-vertical', 'creator');`);
+      },
+      (err: Error) => {
+        assert.match(err.message, /bridge_assets_kind_chk/);
+        return true;
+      },
+      "Original 0004 constraint must reject poster_vertical before forward migration is applied",
+    );
+
+    // 2. Replay forward migration 0021_bridge_assets_kinds.sql
+    await db.exec(readFileSync(join(process.cwd(), "migrations/0021_bridge_assets_kinds.sql"), "utf8"));
+
+    // 3. Verify all 9 canonical kinds succeed after forward migration
     for (const kind of ASSET_KINDS) {
+      if (kind === "poster") continue; // already inserted before migration
       await db.exec(`insert into bridge_assets (id, title_id, kind, s3_key, created_by)
         values ('fresh-${kind}', 'title-fresh', '${kind}', 'fresh-key-${kind}', 'creator');`);
     }
     const count = (await db.query<{ count: number }>("select count(*)::int as count from bridge_assets where title_id='title-fresh'")).rows[0]?.count;
     assert.equal(count, ASSET_KINDS.length);
 
+    // 4. Verify existing valid rows remain intact
+    const existingRow = (await db.query<{ id: string; kind: string }>("select id, kind from bridge_assets where id='fresh-poster'")).rows[0];
+    assert.deepEqual(existingRow, { id: "fresh-poster", kind: "poster" });
+
+    // 5. Verify invalid kinds remain rejected
     await assert.rejects(
       async () => {
         await db.exec(`insert into bridge_assets (id, title_id, kind, s3_key, created_by)
@@ -113,7 +139,7 @@ test("fresh canonical schema (migrations/0004_bridge.sql) permits all 9 kinds an
         assert.match(err.message, /bridge_assets_kind_chk/);
         return true;
       },
-      "Unsupported asset kind must be rejected by fresh canonical 0004 schema constraint",
+      "Unsupported asset kind must be rejected by forward migration check constraint",
     );
   } finally {
     await db.close();
