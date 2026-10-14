@@ -19,6 +19,8 @@ import { getLoopPublication } from "@/lib/bridge/loop-publication";
 import type { BridgeActor } from "@/lib/bridge/session";
 import {
   OTT_INGEST_SPEC,
+  OTT_INGEST_CARDS,
+  type OttIngestKind,
   getOttIngestAccept,
   validateOttIngestFile,
 } from "@/lib/bridge/ott-ingest-spec";
@@ -258,7 +260,10 @@ function Metric({ label, value }: { label: string; value: string }) {
   );
 }
 
-type SimpleAssetKind = "master" | "poster_vertical" | "poster_horizontal" | "thumbnail" | "subtitle" | "screener" | "censor_certificate";
+export type SimpleAssetKind = OttIngestKind;
+export const OTT_CARDS = OTT_INGEST_CARDS;
+
+
 function FilesPanel({
   titleId,
   assets,
@@ -348,15 +353,7 @@ function FilesPanel({
     const signed = await requestAssetDownload({ data: { assetId: id } });
     window.location.assign(signed.url);
   }
-  const cards: [SimpleAssetKind, string, string][] = [
-    ["master", "Main Film", "Required"],
-    ["screener", "Trailer", "Add"],
-    ["poster_vertical", "Vertical Poster", "Add"],
-    ["poster_horizontal", "Horizontal Artwork", "Add"],
-    ["thumbnail", "Thumbnail", "Add"],
-    ["subtitle", "Subtitle", "Optional"],
-    ["censor_certificate", "Censor Certificate", "Optional"],
-  ];
+  const cards = OTT_CARDS;
   return (
     <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
       <div className="flex items-center justify-between gap-3">

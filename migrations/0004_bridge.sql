@@ -68,7 +68,19 @@ create table if not exists bridge_assets (
   byte_size bigint,
   created_by text not null,
   created_at timestamptz not null default now(),
-  constraint bridge_assets_kind_chk check (kind in ('poster', 'screener', 'master', 'subtitle'))
+  constraint bridge_assets_kind_chk check (
+    kind in (
+      'poster',
+      'poster_vertical',
+      'poster_horizontal',
+      'thumbnail',
+      'screener',
+      'master',
+      'subtitle',
+      'technical',
+      'censor_certificate'
+    )
+  )
 );
 
 create table if not exists bridge_payments (
