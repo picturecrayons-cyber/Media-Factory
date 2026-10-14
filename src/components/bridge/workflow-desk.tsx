@@ -8,6 +8,7 @@ import {
   reviewTitleWorkflow,
 } from "@/lib/bridge/workflow";
 import { advanceTitle } from "@/lib/bridge/titles";
+import { listTitleAssets } from "@/lib/bridge/assets";
 import {
   authorizeLoopPublication,
   getLoopPublication,
@@ -39,6 +40,14 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
     queryFn: () => getLoopPublication({ data: { bridgeTitleId: title.id } }),
     enabled: Boolean(actor.internalRole) || actor.accountType !== "buyer",
   });
+  const assets = useQuery({
+    queryKey: ["title-assets", title.id],
+    queryFn: () => listTitleAssets({ data: { titleId: title.id } }),
+    enabled: Boolean(actor.internalRole) || actor.accountType !== "buyer",
+  });
+  const masterVerified = Boolean(assets.data?.assets.some((asset) =>
+    asset.kind === "master" && asset.verified && Number(asset.byteSize) > 0
+  ));
   const canFinance = canOperateOnTitle(actor, title, "title.read_own", "finance.read");
   const revenue = useQuery({
     queryKey: ["title-revenue", title.id],
@@ -98,7 +107,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
   const grants = workflow.data?.grants ?? [];
   const valid = grants.find((g) => g.status === "VALID" && new Date(g.window_end) > new Date());
   const pub = publication.data?.publication;
-  const button = (label: string, run: () => Promise<unknown>) => (
+  const button = (label: string, run: () => Promise<unknown>, disabled = false) => (
     <button
       type="button"
       className="rounded-lg border border-line px-4 py-2 text-sm disabled:opacity-50"
@@ -176,8 +185,14 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                                 : "QC_REVIEW",
                         },
                       }),
+                    title.status === "PREPARING" && (!masterVerified || assets.isPending || assets.isError),
                   )
                 : null}
+              {title.status === "PREPARING" && (!masterVerified || assets.isPending || assets.isError) ? (
+                <p role="status" className="text-sm text-muted">
+                  Submit for QC is locked until a server-verified Main Film master is saved. {assets.isError ? "Asset verification status could not be loaded; retry the asset list before submitting." : assets.isPending ? "Checking the saved master verification…" : "Upload the Main Film and wait for server-side size, ETag, and sealed-copy verification."}
+                </p>
+              ) : null}
               {title.status === "QC_REVIEW" && hasPermission(actor, "title.qc_review") ? (
                 <>
                   {input(
