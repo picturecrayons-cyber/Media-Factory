@@ -260,6 +260,15 @@ function Metric({ label, value }: { label: string; value: string }) {
 }
 
 type SimpleAssetKind = "master" | "poster_vertical" | "poster_horizontal" | "thumbnail" | "subtitle" | "screener" | "censor_certificate";
+
+function storageErrorDetail(responseText: string): string {
+  const code = responseText.match(/<Code>\\s*([^<]{1,80})\\s*<\\/Code>/i)?.[1]?.trim();
+  const message = responseText.match(/<Message>\\s*([^<]{1,200})\\s*<\\/Message>/i)?.[1]
+    ?.replace(/https?:\\/\\/\\S+/gi, "[url]")
+    .replace(/[\\r\\n\\t]+/g, " ")
+    .trim();
+  return [code, message].filter(Boolean).join(": ").slice(0, 240);
+}
 function FilesPanel({
   titleId,
   assets,
