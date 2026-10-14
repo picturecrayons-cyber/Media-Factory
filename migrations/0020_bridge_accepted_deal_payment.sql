@@ -36,6 +36,9 @@ create index if not exists bridge_license_deals_title_idx
 alter table public.bridge_payments
   add column if not exists deal_id uuid references public.bridge_license_deals(id) on delete restrict;
 create index if not exists bridge_payments_deal_idx on public.bridge_payments(deal_id);
+-- One accepted deal can create only one canonical payment order; retries must reuse it.
+create unique index if not exists bridge_payments_deal_unique
+  on public.bridge_payments(deal_id) where deal_id is not null;
 
 create table if not exists public.bridge_deal_entitlements (
   id uuid primary key default gen_random_uuid(),
