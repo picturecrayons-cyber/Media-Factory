@@ -88,7 +88,9 @@ create table if not exists public.bridge_rights_evidence (
 create table if not exists public.bridge_rights_commitments (
   id uuid primary key default gen_random_uuid(),
   title_right_id uuid not null references public.bridge_title_rights(id) on delete restrict,
-  deal_id uuid references public.bridge_deals(id) on delete restrict,
+  -- The existing production deal relation is not yet reproducibly represented in the migration baseline.
+  -- Keep this nullable reference unbound until the canonical deal schema is added to migrations.
+  deal_id uuid,
   commitment_type text not null
     check (commitment_type in ('SIGNED_LICENSE','HOLD_BACK','OPTION','EXISTING_GRANT','DISPUTE','OTHER')),
   status text not null default 'ACTIVE'
