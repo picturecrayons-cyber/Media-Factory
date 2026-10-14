@@ -9,6 +9,7 @@ import { listTitles } from "@/lib/bridge/titles";
 import {
   createLicenseOrder,
   listOwnEntitlements,
+  listOwnAcceptedLicenseDeals,
   verifyLicensePayment,
 } from "@/lib/bridge/payments";
 
@@ -61,29 +62,51 @@ function Buyer() {
   );
 }
 
+type BuyerDeal = {
+  id: string;
+  titleId: string;
+  titleName: string;
+  language: string;
+  rightsCategory: string;
+  territories: string[];
+  languages: string[];
+  mediaModes: string[];
+  termStart: string;
+  termEnd: string;
+  exclusivity: string;
+  agreedFeePaise: number;
+  currency: string;
+  status: string;
+};
+
 function BuyerBody() {
   const qc = useQueryClient();
   const [tab, setTab] = useState<"discover" | "licenses">("discover");
   const [query, setQuery] = useState("");
-  // Reuse the same key for retries of one title purchase; do not mint a new
-  // key on every click. Clear it only after server verification succeeds.
+  // Persist per-deal idempotency keys for this browser session so reloads and
+  // checkout retries reuse the same server-side purchase identity.
   const idempotencyKeys = useRef(new Map<string, string>());
   const titlesQ = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles() });
   const entQ = useQuery({
     queryKey: ["bridge-entitlements"],
     queryFn: () => listOwnEntitlements(),
   });
+  const dealsQ = useQuery({
+    queryKey: ["bridge-accepted-license-deals"],
+    queryFn: () => listOwnAcceptedLicenseDeals(),
+  });
   const entitled = new Set(entQ.data?.entitlements.map((e) => e.titleId));
+  const entitledDeals = new Set(entQ.data?.entitlements.map((e) => e.dealId).filter((id): id is string => Boolean(id)));
 
   const order = useMutation({
-    mutationFn: async (titleId: string) => {
-      let idempotencyKey = idempotencyKeys.current.get(titleId);
+    mutationFn: async ({ titleId, dealId }: { titleId: string; dealId: string }) => {
+      let idempotencyKey = idempotencyKeys.current.get(dealId);
       if (!idempotencyKey) {
-        idempotencyKey = `lic-${titleId}-${crypto.randomUUID()}`;
-        idempotencyKeys.current.set(titleId, idempotencyKey);
+        idempotencyKey = `lic-${dealId}-${crypto.randomUUID()}`;
+        idempotencyKeys.current.set(dealId, idempotencyKey);
       }
       const created = await createLicenseOrder({
-        data: { titleId, idempotencyKey },
+        data: { titleId, dealId, idempotencyKey },
       });
       const Razorpay = await loadRazorpay();
       await new Promise<void>((resolve, reject) => {
@@ -115,13 +138,14 @@ function BuyerBody() {
         });
         ck.open();
       });
-      return titleId;
+      return { titleId, dealId };
     },
-    onSuccess: (_titleId, titleId) => {
-      idempotencyKeys.current.delete(titleId);
+    onSuccess: (_result, variables) => {
+      idempotencyKeys.current.delete(variables.dealId);
       toast("License payment verified");
       void qc.invalidateQueries({ queryKey: ["bridge-titles"] });
       void qc.invalidateQueries({ queryKey: ["bridge-entitlements"] });
+      void qc.invalidateQueries({ queryKey: ["bridge-accepted-license-deals"] });
       setTab("licenses");
     },
     onError: (err) => toast(err instanceof Error ? err.message : "Payment did not complete"),
@@ -132,7 +156,7 @@ function BuyerBody() {
   const visible = titles.filter((t) => !needle || `${t.name} ${t.language}`.toLowerCase().includes(needle));
   const licensed = titles.filter((t) => entitled.has(t.id));
 
-  if (titlesQ.isPending || entQ.isPending) return <p>Loading buyer workspace…</p>;
+  if (titlesQ.isPending || entQ.isPending || dealsQ.isPending) return <p>Loading buyer workspace…</p>;
   if (titlesQ.isError)
     return (
       <p role="alert">
@@ -178,9 +202,9 @@ function BuyerBody() {
           No licensing-ready titles are available yet. Titles appear here after Bridge authorizes buyer access.
         </p>
       ) : tab === "licenses" ? (
-        <TitleList titles={licensed} entitled={entitled} order={order} empty="Your completed licenses will appear here." />
+        <TitleList titles={licensed} entitled={entitled} entitledDeals={entitledDeals} deals={[]} order={order} mode="licenses" empty="Your completed licenses will appear here." />
       ) : (
-        <TitleList titles={visible} entitled={entitled} order={order} empty="No titles match this search." />
+        <TitleList titles={visible} entitled={entitled} entitledDeals={entitledDeals} deals={dealsQ.data?.deals ?? []} order={order} mode="discover" empty="No titles match this search." />
       )}
     </div>
   );
@@ -189,48 +213,65 @@ function BuyerBody() {
 function TitleList({
   titles,
   entitled,
+  entitledDeals,
+  deals,
   order,
+  mode,
   empty,
 }: {
   titles: Array<{ id: string; name: string; language: string; licensingFeePaise: number; status: string }>;
   entitled: Set<string>;
-  order: { isPending: boolean; mutate: (id: string) => void };
+  entitledDeals: Set<string>;
+  deals: BuyerDeal[];
+  order: { isPending: boolean; mutate: (input: { titleId: string; dealId: string }) => void };
+  mode: "discover" | "licenses";
   empty: string;
 }) {
   if (!titles.length) return <p className="py-6 text-sm text-muted">{empty}</p>;
   return (
     <ul className="divide-y divide-line rounded-sm border border-line">
-      {titles.map((t) => (
-        <li key={t.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-4">
-          <div className="min-w-0">
-            <Link to="/title/$id" params={{ id: t.id }} className="font-medium hover:text-accent">
-              {t.name}
-            </Link>
-            <p className="mt-1 text-sm text-muted">
-              {t.language} · {t.licensingFeePaise > 0 ? `₹${(t.licensingFeePaise / 100).toLocaleString("en-IN", { maximumFractionDigits: 0 })}` : "Price unavailable"}
-            </p>
-          </div>
-          <div className="flex items-center gap-3">
-            {entitled.has(t.id) ? (
+      {titles.map((t) => {
+        const titleDeals = deals.filter((deal) => deal.titleId === t.id);
+        return (
+          <li key={t.id} className="flex flex-wrap items-start justify-between gap-3 px-4 py-4">
+            <div className="min-w-0 flex-1">
+              <Link to="/title/$id" params={{ id: t.id }} className="font-medium hover:text-accent">
+                {t.name}
+              </Link>
+              <p className="mt-1 text-sm text-muted">{t.language}</p>
+              {mode === "discover" && (
+                <div className="mt-3 space-y-2">
+                  {!titleDeals.length ? (
+                    <p className="text-sm text-muted">No accepted offer is available. Bridge must record an approved deal before checkout.</p>
+                  ) : titleDeals.map((deal) => (
+                    <div key={deal.id} className="rounded-sm border border-line p-3">
+                      <p className="font-medium">{deal.rightsCategory} · {deal.exclusivity === "EXCLUSIVE" ? "Exclusive" : "Non-exclusive"}</p>
+                      <p className="mt-1 text-sm text-muted">
+                        {deal.territories.join(", ")} · {deal.languages.join(", ")} · {deal.termStart} to {deal.termEnd}
+                      </p>
+                      <p className="mt-1 text-sm">
+                        {deal.currency} {(deal.agreedFeePaise / 100).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </p>
+                      <div className="mt-2">
+                        {entitledDeals.has(deal.id) ? (
+                          <span className="text-sm font-medium text-accent">Licensed under this deal</span>
+                        ) : (
+                          <Button disabled={order.isPending} onClick={() => order.mutate({ titleId: t.id, dealId: deal.id })}>
+                            {order.isPending ? "Opening checkout…" : "Pay agreed fee"}
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            {mode === "licenses" && entitled.has(t.id) && (
               <span className="text-sm font-medium text-accent">Licensed</span>
-            ) : tabSafeOrderButton(t, order)}
-          </div>
-        </li>
-      ))}
+            )}
+          </li>
+        );
+      })}
     </ul>
-  );
-}
-
-function tabSafeOrderButton(
-  title: { id: string; licensingFeePaise: number },
-  order: { isPending: boolean; mutate: (id: string) => void },
-) {
-  return (
-    <Button
-      disabled={order.isPending || title.licensingFeePaise <= 0}
-      onClick={() => order.mutate(title.id)}
-    >
-      {order.isPending ? "Opening checkout…" : "License"}
-    </Button>
   );
 }
