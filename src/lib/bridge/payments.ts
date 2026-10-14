@@ -270,8 +270,8 @@ export const createAcceptedLicenseDeal = createServerFn({ method: "POST" })
       territories: Array.isArray(existing.territories) ? existing.territories.map(String) : [],
       languages: Array.isArray(existing.languages) ? existing.languages.map(String) : [],
       mediaModes: Array.isArray(existing.media_modes) ? existing.media_modes.map(String) : [],
-      termStart: String(existing.term_start).slice(0, 10),
-      termEnd: String(existing.term_end).slice(0, 10),
+      termStart: existing.term_start instanceof Date ? existing.term_start.toISOString().slice(0, 10) : String(existing.term_start).slice(0, 10),
+      termEnd: existing.term_end instanceof Date ? existing.term_end.toISOString().slice(0, 10) : String(existing.term_end).slice(0, 10),
       exclusivity: existing.exclusivity as "EXCLUSIVE" | "NON_EXCLUSIVE",
       status: "ACCEPTED",
     })));
