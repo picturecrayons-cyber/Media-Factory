@@ -130,7 +130,7 @@ function BuyerBody() {
   const titles = titlesQ.data?.titles ?? [];
   const needle = query.trim().toLowerCase();
   const visible = titles.filter((t) => !needle || `${t.name} ${t.language}`.toLowerCase().includes(needle));
-  const licensed = visible.filter((t) => entitled.has(t.id));
+  const licensed = titles.filter((t) => entitled.has(t.id));
 
   if (titlesQ.isPending || entQ.isPending) return <p>Loading buyer workspace…</p>;
   if (titlesQ.isError)
