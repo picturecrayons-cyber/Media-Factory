@@ -1,0 +1,67 @@
+name: OCI Preview Storage E2E
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bridge-oci-preview-e2e
+  cancel-in-progress: false
+
+jobs:
+  oci-preview-storage-e2e:
+    name: OCI upload, verify, seal, download, cleanup
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Require explicitly configured Preview-only secrets
+        env:
+          BRIDGE_PREVIEW_URL: ${{ secrets.BRIDGE_PREVIEW_URL }}
+          BRIDGE_PREVIEW_TITLE_ID: ${{ secrets.BRIDGE_PREVIEW_TITLE_ID }}
+          BRIDGE_PREVIEW_OWNER_USER_ID: ${{ secrets.BRIDGE_PREVIEW_OWNER_USER_ID }}
+          BRIDGE_PREVIEW_ACCESS_TOKEN: ${{ secrets.BRIDGE_PREVIEW_ACCESS_TOKEN }}
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+          OCI_TENANCY_OCID: ${{ secrets.OCI_TENANCY_OCID }}
+          OCI_USER_OCID: ${{ secrets.OCI_USER_OCID }}
+          OCI_FINGERPRINT: ${{ secrets.OCI_FINGERPRINT }}
+          OCI_PRIVATE_KEY: ${{ secrets.OCI_PRIVATE_KEY }}
+          OCI_REGION: ${{ secrets.OCI_REGION }}
+          OCI_NAMESPACE: ${{ secrets.OCI_NAMESPACE }}
+          OCI_BUCKET_NAME: ${{ secrets.OCI_BUCKET_NAME }}
+        run: |
+          set -eu
+          for key in BRIDGE_PREVIEW_URL BRIDGE_PREVIEW_TITLE_ID BRIDGE_PREVIEW_OWNER_USER_ID BRIDGE_PREVIEW_ACCESS_TOKEN VERCEL_AUTOMATION_BYPASS_SECRET OCI_TENANCY_OCID OCI_USER_OCID OCI_FINGERPRINT OCI_PRIVATE_KEY OCI_REGION OCI_NAMESPACE OCI_BUCKET_NAME; do
+            eval 'value=${'"$key"'-}'
+            if [ -z "$value" ]; then echo "E2E BLOCKED: required repository secret $key is missing"; exit 2; fi
+          done
+          case "$BRIDGE_PREVIEW_URL" in
+            https://*.vercel.app/) ;;
+            *) echo "E2E BLOCKED: BRIDGE_PREVIEW_URL must be a deployment-specific HTTPS *.vercel.app origin"; exit 2 ;;
+          esac
+          case "$BRIDGE_PREVIEW_URL" in
+            *crayonspictures.in*|*crayonspictures.com*|*crayonsloop.in*|*crayonsloop.com*)
+              echo "E2E BLOCKED: production/custom domains are forbidden"; exit 2 ;;
+          esac
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - name: Run real OCI storage acceptance flow
+        env:
+          BRIDGE_PREVIEW_URL: ${{ secrets.BRIDGE_PREVIEW_URL }}
+          BRIDGE_PREVIEW_TITLE_ID: ${{ secrets.BRIDGE_PREVIEW_TITLE_ID }}
+          BRIDGE_PREVIEW_OWNER_USER_ID: ${{ secrets.BRIDGE_PREVIEW_OWNER_USER_ID }}
+          BRIDGE_PREVIEW_ACCESS_TOKEN: ${{ secrets.BRIDGE_PREVIEW_ACCESS_TOKEN }}
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+          OCI_TENANCY_OCID: ${{ secrets.OCI_TENANCY_OCID }}
+          OCI_USER_OCID: ${{ secrets.OCI_USER_OCID }}
+          OCI_FINGERPRINT: ${{ secrets.OCI_FINGERPRINT }}
+          OCI_PRIVATE_KEY: ${{ secrets.OCI_PRIVATE_KEY }}
+          OCI_REGION: ${{ secrets.OCI_REGION }}
+          OCI_NAMESPACE: ${{ secrets.OCI_NAMESPACE }}
+          OCI_BUCKET_NAME: ${{ secrets.OCI_BUCKET_NAME }}
+        run: node --experimental-strip-types scripts/with-vercel-preview-bypass.mjs
