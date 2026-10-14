@@ -418,7 +418,8 @@ export const createLicenseOrder = createServerFn({ method: "POST" })
     }>`
       select id, provider_order_id, amount_paise, title_id, package_id, deal_id, status
       from bridge_payments
-      where user_id = ${actor.userId} and purpose = ${"title_license"} and idempotency_key = ${data.idempotencyKey}
+      where user_id = ${actor.userId} and purpose = ${"title_license"}
+        and (idempotency_key = ${data.idempotencyKey} or (${data.dealId ?? null}::uuid is not null and deal_id = ${data.dealId ?? null}))
       limit 1
     `;
     if (existing[0] && (existing[0].title_id !== title.id ||
