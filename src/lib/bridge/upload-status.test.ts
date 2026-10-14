@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { createUploadSnapshot, evaluateUploadStall, formatUploadBytes, recordTransferProgress, setUploadStage } from "./upload-status.ts";
 
 test("preparation begins without fabricated transfer progress", () => {
@@ -45,7 +46,7 @@ test("failures are explicit and byte formatting is safe", () => {
 });
 
 test("accessibility contract uses announced status and progress semantics in UI", () => {
-  const source = (await import("node:fs")).readFileSync("src/routes/title.$id.tsx", "utf8");
+  const source = readFileSync("src/routes/title.$id.tsx", "utf8");
   assert.match(source, /aria-live="polite"/);
   assert.match(source, /role="progressbar"/);
   assert.match(source, /aria-valuenow=/);
