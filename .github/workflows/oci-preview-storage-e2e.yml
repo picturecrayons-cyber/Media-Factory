@@ -53,8 +53,9 @@ jobs:
             echo "E2E BLOCKED: Preview bucket must differ from production bucket"
             exit 2
           fi
+          # Accept an origin with or without its optional trailing slash; reject paths.
           case "$BRIDGE_PREVIEW_URL" in
-            https://*.vercel.app/) ;;
+            https://*.vercel.app|https://*.vercel.app/) ;;
             *) echo "E2E BLOCKED: BRIDGE_PREVIEW_URL must be a deployment-specific HTTPS *.vercel.app origin"; exit 2 ;;
           esac
           case "$BRIDGE_PREVIEW_URL" in
