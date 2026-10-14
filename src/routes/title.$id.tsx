@@ -296,6 +296,9 @@ function FilesPanel({
       request.open(method, url);
       request.setRequestHeader("content-type", contentType);
       request.timeout = 30 * 60 * 1000;
+      request.upload.onloadstart = () => {
+        setStatus((current) => current ? setUploadStage(current, "transferring", "Browser started sending film bytes; waiting for measurable progress…") : current);
+      };
       request.upload.onprogress = (event) => {
         setStatus((current) => current ? recordTransferProgress(
           current, event.loaded, event.lengthComputable && event.total > 0 ? event.total : null, Date.now(),
@@ -325,7 +328,7 @@ function FilesPanel({
     setStatus(createUploadSnapshot(file.name, file.size));
     try {
       const signed = await requestAssetUpload({ data: { titleId, kind, filename, contentType } });
-      setStatus((current) => current ? setUploadStage(current, "transferring", "Secure upload prepared. Waiting for byte-transfer progress…") : current);
+      setStatus((current) => current ? setUploadStage(current, "preparing", "Secure upload prepared. Opening the byte-transfer request…") : current);
       const uploadUrl = new URL(signed.url);
       uploadUrl.pathname = uploadUrl.pathname.split("/").map((part) => encodeURIComponent(decodeURIComponent(part))).join("/");
       await putFileWithProgress(uploadUrl.toString(), signed.method, file, contentType);
