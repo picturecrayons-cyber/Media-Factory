@@ -226,18 +226,21 @@ export const listTitleAssets = createServerFn({ method: "GET" })
       created_at: string | Date;
     }>`
       select id, kind, s3_key, content_type, byte_size, created_at
-      from bridge_assets where title_id = ${title.id} and byte_size > 0 order by created_at desc
+      from bridge_assets where title_id = ${title.id} order by created_at desc
     `;
     return {
       assets: rows
-        .filter((r) => !buyer || !["master", "technical", "censor_certificate"].includes(r.kind))
+        // Operators and title owners can see pending verification records to diagnose ingest.
+        // Buyers must never see unverified assets or internal-only media types.
+        .filter((r) => (!buyer || (r.byte_size != null && Number(r.byte_size) > 0)) &&
+          (!buyer || !["master", "technical", "censor_certificate"].includes(r.kind)))
         .map((r) => ({
           id: r.id,
           kind: r.kind,
           key: buyer ? null : r.s3_key,
           contentType: r.content_type,
           byteSize: r.byte_size,
-          verified: Number(r.byte_size) > 0,
+          verified: r.byte_size != null && Number(r.byte_size) > 0,
           createdAt:
             r.created_at instanceof Date ? r.created_at.toISOString() : String(r.created_at),
         })),
