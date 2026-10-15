@@ -20,8 +20,8 @@ type TitleRightRow = {
   id: string; title_id: string; category_code: string; family: string; category_label: string;
   evidence_status: string; availability_status: string; exclusivity: string; monetisation_models: string[];
   transmission_modes: string[]; start_date: string | null; end_date: string | null; premiere_window: string | null;
-  permitted_plays: number | null; restrictions: Record<string, unknown>; buyer_visible_summary: string | null;
-  internal_notes: string | null; reviewed_by: string | null; reviewed_at: string | null; created_at: string; updated_at: string;
+  permitted_plays: number | null; buyer_visible_summary: string | null;
+  reviewed_by: string | null; reviewed_at: string | null; created_at: string; updated_at: string;
 };
 type TerritoryRow = { title_right_id: string; territory_code: string; territory_label: string; scope_type: string };
 type LanguageRow = { title_right_id: string; language_code: string; language_label: string; language_scope: string };
@@ -117,7 +117,7 @@ export const listTitleRights = createServerFn({ method: "GET" })
       select r.id, r.title_id, r.category_code, c.family, c.label as category_label,
              r.evidence_status, r.availability_status, r.exclusivity, r.monetisation_models,
              r.transmission_modes, r.start_date, r.end_date, r.premiere_window,
-             r.permitted_plays, r.restrictions, r.buyer_visible_summary, r.internal_notes,
+             r.permitted_plays, r.buyer_visible_summary,
              r.reviewed_by, r.reviewed_at, r.created_at, r.updated_at
       from public.bridge_title_rights r
       join public.bridge_rights_categories c on c.code = r.category_code
