@@ -126,8 +126,9 @@ export async function grantFromCapturedPayment(opts: {
       set status = 'LICENSED', licensed_at = coalesce(licensed_at, now()), updated_at = now()
       where id = ${deal.id} and status in ('ACCEPTED', 'PAYMENT_PENDING', 'LICENSED')
     `;
+    // A single buyer deal must not transition the title globally: other rights scopes may remain available.
     const title = await loadTitle(payment.title_id);
-    if (title && (title.status === "LIVE_FOR_BUYERS" || title.status === "IN_NEGOTIATION")) {
+    if (!payment.deal_id && title && (title.status === "LIVE_FOR_BUYERS" || title.status === "IN_NEGOTIATION")) {
       await recordTransition({
         titleId: title.id,
         from: title.status,
