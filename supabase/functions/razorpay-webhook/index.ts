@@ -146,9 +146,10 @@ Deno.serve(async (req: Request) => {
         if (entitlementError) return await failEvent(supabase, id, "Bridge entitlement grant failed");
       }
 
+      // Deal-scoped licensing must not mark the entire title licensed; other rights scopes may remain available.
       const { data: title, error: titleError } = await supabase.from("bridge_titles").select("status").eq("id", localPayment.title_id).maybeSingle();
       if (titleError) return await failEvent(supabase, id, "Bridge title lookup failed");
-      if (title && (title.status === "LIVE_FOR_BUYERS" || title.status === "IN_NEGOTIATION")) {
+      if (!localPayment.deal_id && title && (title.status === "LIVE_FOR_BUYERS" || title.status === "IN_NEGOTIATION")) {
         const { error: transitionError } = await supabase.from("bridge_titles").update({ status: "LICENSED", updated_at: now }).eq("id", localPayment.title_id);
         if (transitionError) return await failEvent(supabase, id, "Bridge title transition failed");
         const { error: eventError } = await supabase.from("bridge_title_events").insert({
