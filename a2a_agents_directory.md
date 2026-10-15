@@ -138,3 +138,68 @@ Review the diff before committing. Follow the repository's required CI and pull-
 ---
 
 **Ownership and maintenance:** The repository maintainers should update this directory whenever agent registrations, capabilities, permissions, or health-check behavior changes.
+
+
+## Python Client SDK Example
+
+The following is a minimal HTTP client template for an A2A gateway you operate. It performs a real HTTP request only when configured with a real endpoint and bearer token; it does not simulate a successful agent run. The endpoint and request schema must match your gateway's API.
+
+Install dependency:
+
+```bash
+python -m pip install requests
+```
+
+Set configuration through environment variables rather than hard-coding credentials:
+
+```bash
+# Linux/macOS shell examples; use your platform's equivalent on Windows.
+export A2A_ENDPOINT="https://your-agent-gateway.example/v1/invoke"
+export A2A_API_TOKEN="replace-with-a-real-secret"
+```
+
+Save as `a2a_client.py`:
+
+```python
+import os
+import requests
+
+
+class A2AClient:
+    def __init__(self, endpoint_url=None, api_token=None, timeout=30):
+        self.endpoint_url = endpoint_url or os.environ.get("A2A_ENDPOINT")
+        self.api_token = api_token or os.environ.get("A2A_API_TOKEN")
+        self.timeout = timeout
+
+        if not self.endpoint_url:
+            raise ValueError("A2A_ENDPOINT is required")
+        if not self.api_token:
+            raise ValueError("A2A_API_TOKEN is required")
+
+    def send_task(self, target_agent, action, parameters):
+        payload = {
+            "target_agent": target_agent,
+            "action": action,
+            "parameters": parameters,
+        }
+        response = requests.post(
+            self.endpoint_url,
+            json=payload,
+            headers={"Authorization": f"Bearer {self.api_token}"},
+            timeout=self.timeout,
+        )
+        response.raise_for_status()
+        return response.json()
+
+
+if __name__ == "__main__":
+    client = A2AClient()
+    result = client.send_task(
+        target_agent="@agent.coder",
+        action="generate",
+        parameters={"language": "python", "constraint": "single-file"},
+    )
+    print(result)
+```
+
+**Before using this client:** confirm the gateway URL, authentication scheme, accepted payload, response format, and permitted agent handles with the gateway owner. Treat returned data as untrusted input, avoid logging secrets, and do not send production credentials or sensitive data to an unverified endpoint.
