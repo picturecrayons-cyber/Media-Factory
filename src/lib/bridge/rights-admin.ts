@@ -15,6 +15,22 @@ import {
   RIGHTS_MONETISATION_MODELS,
 } from "./rights-taxonomy";
 
+type RightsCategoryRow = { code: string; family: string; label: string; description: string; buyer_types: string[]; sort_order: number };
+type TitleRightRow = {
+  id: string; title_id: string; category_code: string; family: string; category_label: string;
+  evidence_status: string; availability_status: string; exclusivity: string; monetisation_models: string[];
+  transmission_modes: string[]; start_date: string | null; end_date: string | null; premiere_window: string | null;
+  permitted_plays: number | null; restrictions: Record<string, unknown>; buyer_visible_summary: string | null;
+  internal_notes: string | null; reviewed_by: string | null; reviewed_at: string | null; created_at: string; updated_at: string;
+};
+type TerritoryRow = { title_right_id: string; territory_code: string; territory_label: string; scope_type: string };
+type LanguageRow = { title_right_id: string; language_code: string; language_label: string; language_scope: string };
+type EvidenceRow = {
+  id: string; title_right_id: string; evidence_type: string; document_hash: string | null;
+  source_rightsholder: string | null; effective_date: string | null; expiry_date: string | null;
+  review_status: string; reviewed_by: string | null; reviewed_at: string | null; confidential: boolean;
+};
+
 const scopeInput = z.object({
   code: z.string().trim().min(2).max(16),
   label: z.string().trim().min(2).max(80),
@@ -78,7 +94,7 @@ export const listRightsCategories = createServerFn({ method: "GET" })
     const actor = await requireVerifiedActor(context.userId);
     assertPermission(actor, "title.rights_review");
     const sql = await getSql();
-    const categories = await sql`
+    const categories = await sql<RightsCategoryRow>`
       select code, family, label, description, buyer_types, sort_order
       from public.bridge_rights_categories
       where active = true
@@ -97,7 +113,7 @@ export const listTitleRights = createServerFn({ method: "GET" })
     const title = await loadTitle(data.titleId);
     if (!title || !canReadTitle(actor, title)) throw new Error("Not found");
     const sql = await getSql();
-    const rights = await sql`
+    const rights = await sql<TitleRightRow>`
       select r.id, r.title_id, r.category_code, c.family, c.label as category_label,
              r.evidence_status, r.availability_status, r.exclusivity, r.monetisation_models,
              r.transmission_modes, r.start_date, r.end_date, r.premiere_window,
@@ -108,14 +124,14 @@ export const listTitleRights = createServerFn({ method: "GET" })
       where r.title_id = ${data.titleId}
       order by c.sort_order, c.label, r.created_at desc
     `;
-    const ids = rights.map((right: { id: string }) => right.id);
+    const ids = rights.map((right) => right.id);
     if (!ids.length) return { rights: [] };
     const [territories, languages, evidence] = await Promise.all([
-      sql`select title_right_id, territory_code, territory_label, scope_type
+      sql<TerritoryRow>`select title_right_id, territory_code, territory_label, scope_type
           from public.bridge_title_right_territories where title_right_id = any(${ids}::uuid[])`,
-      sql`select title_right_id, language_code, language_label, language_scope
+      sql<LanguageRow>`select title_right_id, language_code, language_label, language_scope
           from public.bridge_title_right_languages where title_right_id = any(${ids}::uuid[])`,
-      sql`select id, title_right_id, evidence_type, document_hash, source_rightsholder,
+      sql<EvidenceRow>`select id, title_right_id, evidence_type, document_hash, source_rightsholder,
                  effective_date, expiry_date, review_status, reviewed_by, reviewed_at, confidential
           from public.bridge_rights_evidence where title_right_id = any(${ids}::uuid[])
           order by created_at desc`,
@@ -123,9 +139,9 @@ export const listTitleRights = createServerFn({ method: "GET" })
     return {
       rights: rights.map((right: { id: string }) => ({
         ...right,
-        territories: territories.filter((item: { title_right_id: string }) => item.title_right_id === right.id),
-        languages: languages.filter((item: { title_right_id: string }) => item.title_right_id === right.id),
-        evidence: evidence.filter((item: { title_right_id: string }) => item.title_right_id === right.id),
+        territories: territories.filter((item) => item.title_right_id === right.id),
+        languages: languages.filter((item) => item.title_right_id === right.id),
+        evidence: evidence.filter((item) => item.title_right_id === right.id),
       })),
     };
   });
@@ -141,7 +157,7 @@ export const createTitleRight = createServerFn({ method: "POST" })
     if (!title || !canReadTitle(actor, title)) throw new Error("Not found");
     const sql = await getSql();
 
-    const category = await sql`
+    const category = await sql<{ code: string }>`
       select code from public.bridge_rights_categories where code = ${data.categoryCode} and active = true limit 1
     `;
     if (!category.length) throw new Error("RIGHTS_CATEGORY_NOT_ACTIVE");
@@ -209,14 +225,14 @@ export const reviewRightsEvidence = createServerFn({ method: "POST" })
     const actor = await requireVerifiedActor(context.userId);
     assertPermission(actor, "title.rights_review");
     const sql = await getSql();
-    const rows = await sql`
+    const rows = await sql<{ id: string; title_right_id: string; title_id: string }>`
       select e.id, e.title_right_id, r.title_id
       from public.bridge_rights_evidence e
       join public.bridge_title_rights r on r.id = e.title_right_id
       where e.id = ${data.evidenceId}::uuid
       limit 1
     `;
-    const row = rows[0] as { id: string; title_right_id: string; title_id: string } | undefined;
+    const row = rows[0];
     if (!row) throw new Error("Evidence not found");
     const title = await loadTitle(row.title_id);
     if (!title || !canReadTitle(actor, title)) throw new Error("Not found");
@@ -227,12 +243,12 @@ export const reviewRightsEvidence = createServerFn({ method: "POST" })
         set review_status = ${data.reviewStatus}, reviewed_by = ${actor.userId}, reviewed_at = now()
         where id = ${data.evidenceId}::uuid
       `;
-      const evidenceRows = await tx`
+      const evidenceRows = await tx<{ review_status: EvidenceReviewStatus }>`
         select review_status from public.bridge_rights_evidence
         where title_right_id = ${row.title_right_id}::uuid
       `;
       const nextStatus = summarizeEvidenceStatus(
-        evidenceRows.map((item: { review_status: EvidenceReviewStatus }) => item.review_status),
+        evidenceRows.map((item) => item.review_status),
       );
       await tx`
         update public.bridge_title_rights
