@@ -15,6 +15,18 @@ import {
 
 export const Route = createFileRoute("/admin-rights")({ component: RightsDesk });
 
+type RightsCategory = { code: string; family: string; label: string };
+type RightsEvidence = { id: string; evidence_type: string; review_status: string; source_rightsholder: string | null; document_hash: string | null };
+type TitleRight = {
+  id: string; category_label: string; evidence_status: string; availability_status: string; exclusivity: string;
+  start_date: string | null; end_date: string | null; buyer_visible_summary: string | null;
+  territories: Array<{ territory_label: string }>;
+  languages: Array<{ language_label: string; language_scope: string }>;
+  evidence: RightsEvidence[];
+};
+
+
+
 function RightsDesk() {
   return (
     <RequireBridge allow="internal">
@@ -38,7 +50,7 @@ function RightsDesk() {
 function RightsDeskBody() {
   const qc = useQueryClient();
   const titlesQ = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles() });
-  const categoriesQ = useQuery({ queryKey: ["bridge-rights-categories"], queryFn: () => listRightsCategories() });
+  const categoriesQ = useQuery<{ categories: RightsCategory[] }>({ queryKey: ["bridge-rights-categories"], queryFn: async () => await listRightsCategories() as { categories: RightsCategory[] } });
   const [titleId, setTitleId] = useState("");
   const [categoryCode, setCategoryCode] = useState("");
   const [territoryCode, setTerritoryCode] = useState("US");
@@ -61,7 +73,7 @@ function RightsDeskBody() {
   const selectedTitle = useMemo(() => titles.find((t) => t.id === titleId), [titles, titleId]);
   const rightsQ = useQuery({
     queryKey: ["bridge-title-rights", titleId],
-    queryFn: () => listTitleRights({ data: { titleId } }),
+    queryFn: async () => await listTitleRights({ data: { titleId } }) as { rights: TitleRight[] },
     enabled: titleId.length >= 8,
     retry: false,
   });
@@ -153,7 +165,7 @@ function RightsDeskBody() {
         <label className="text-sm sm:col-span-2">Rights category
           <select required value={categoryCode} onChange={(e) => setCategoryCode(e.target.value)} className="mt-1 h-11 w-full rounded-lg border border-line-strong bg-elevated px-3">
             <option value="">Select category</option>
-            {categories.map((category: { code: string; family: string; label: string }) => <option key={category.code} value={category.code}>{category.family} · {category.label}</option>)}
+            {categories.map((category) => <option key={category.code} value={category.code}>{category.family} · {category.label}</option>)}
           </select>
         </label>
         <label className="text-sm">Territory code
@@ -219,16 +231,16 @@ function RightsDeskBody() {
         {rightsQ.isError ? <p role="alert" className="mt-4 text-sm text-muted">Rights records are unavailable. Check that the reviewed taxonomy migration is applied in this environment.</p> : null}
         {rightsQ.data?.rights.length === 0 ? <p className="mt-4 text-sm text-muted">No rights records for this title yet.</p> : null}
         <div className="mt-4 space-y-4">
-          {(rightsQ.data?.rights ?? []).map((right: any) => (
+          {(rightsQ.data?.rights ?? []).map((right) => (
             <article key={right.id} className="rounded-xl border border-line p-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div><h4 className="font-semibold">{right.category_label}</h4><p className="mt-1 text-xs text-muted">{right.evidence_status} · {right.availability_status} · {right.exclusivity}</p></div>
                 <span className="text-xs text-muted">{right.start_date ?? "Start unspecified"} → {right.end_date ?? "End unspecified"}</span>
               </div>
-              <p className="mt-2 text-sm">{(right.territories ?? []).map((v: any) => v.territory_label).join(", ")} · {(right.languages ?? []).map((v: any) => `${v.language_label} (${v.language_scope.replaceAll("_", " ").toLowerCase()})`).join(", ")}</p>
+              <p className="mt-2 text-sm">{(right.territories ?? []).map((v) => v.territory_label).join(", ")} · {(right.languages ?? []).map((v) => `${v.language_label} (${v.language_scope.replaceAll("_", " ").toLowerCase()})`).join(", ")}</p>
               <p className="mt-2 text-sm text-muted">{right.buyer_visible_summary || "No buyer-visible summary."}</p>
               <div className="mt-3 space-y-2">
-                {(right.evidence ?? []).map((evidence: any) => (
+                {(right.evidence ?? []).map((evidence) => (
                   <div key={evidence.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-elevated p-3">
                     <div><p className="text-sm font-medium">{evidence.evidence_type} · {evidence.review_status}</p><p className="text-xs text-muted">{evidence.source_rightsholder || "Source not recorded"} · {evidence.document_hash ? "Hash recorded" : "No hash recorded"}</p></div>
                     {evidence.review_status === "PENDING_REVIEW" ? <div className="flex flex-wrap gap-2"><Button type="button" size="sm" disabled={review.isPending} onClick={() => review.mutate({ evidenceId: evidence.id, status: "VERIFIED" })}>Verify evidence</Button><Button type="button" size="sm" variant="outline" disabled={review.isPending} onClick={() => review.mutate({ evidenceId: evidence.id, status: "REJECTED" })}>Reject</Button><Button type="button" size="sm" variant="outline" disabled={review.isPending} onClick={() => review.mutate({ evidenceId: evidence.id, status: "DISPUTED" })}>Dispute</Button></div> : null}
