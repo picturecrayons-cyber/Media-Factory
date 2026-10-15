@@ -8,7 +8,6 @@ import { requireVerifiedActor } from "./session";
 import { loadTitle } from "./titles";
 import { writeAudit } from "./audit";
 import {
-  RIGHTS_EVIDENCE_STATUSES,
   RIGHTS_AVAILABILITY_STATUSES,
   RIGHTS_EXCLUSIVITY,
   RIGHTS_LANGUAGE_SCOPES,
