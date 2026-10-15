@@ -4,7 +4,7 @@ import { WorkflowDesk } from "@/components/bridge/workflow-desk";
 import { publicationIsActive } from "@/lib/bridge/workflow-policy";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { getTitle, updateTitle } from "@/lib/bridge/titles";
@@ -23,6 +23,7 @@ import {
   validateOttIngestFile,
 } from "@/lib/bridge/ott-ingest-spec";
 import { asciiUploadName } from "@/lib/bridge/latin1";
+import { createUploadSnapshot, evaluateUploadStall, formatUploadBytes, recordTransferProgress, setUploadStage, type MasterUploadSnapshot } from "@/lib/bridge/upload-status";
 
 export const Route = createFileRoute("/title/$id")({ component: TitlePage });
 
@@ -259,6 +260,8 @@ function Metric({ label, value }: { label: string; value: string }) {
 }
 
 type SimpleAssetKind = "master" | "poster_vertical" | "poster_horizontal" | "thumbnail" | "subtitle" | "screener" | "censor_certificate";
+
+
 function FilesPanel({
   titleId,
   assets,
@@ -277,52 +280,77 @@ function FilesPanel({
   onAssetsChanged: () => Promise<unknown> | unknown;
 }) {
   const [uploading, setUploading] = useState<SimpleAssetKind | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
+  const [status, setStatus] = useState<MasterUploadSnapshot | null>(null);
+
+  useEffect(() => {
+    if (!status || status.stage !== "transferring") return;
+    const timer = window.setInterval(() => {
+      setStatus((current) => current ? evaluateUploadStall(current, Date.now()) : current);
+    }, 2000);
+    return () => window.clearInterval(timer);
+  }, [status?.stage, status?.lastProgressAt]);
+
+  function putFileWithProgress(url: string, method: string, file: File, contentType: string) {
+    return new Promise<void>((resolve, reject) => {
+      const request = new XMLHttpRequest();
+      request.open(method, url);
+      request.setRequestHeader("content-type", contentType);
+      request.timeout = 30 * 60 * 1000;
+      request.upload.onloadstart = () => {
+        setStatus((current) => current ? setUploadStage(current, "transferring", "Browser started sending film bytes; waiting for measurable progress…") : current);
+      };
+      request.upload.onprogress = (event) => {
+        setStatus((current) => current ? recordTransferProgress(
+          current, event.loaded, event.lengthComputable && event.total > 0 ? event.total : null, Date.now(),
+        ) : current);
+      };
+      request.onload = () => {
+        if (request.status >= 200 && request.status < 300) { resolve(); return; }
+        reject(new Error(`Storage upload failed (HTTP ${request.status}). Check storage availability and retry only after checking the asset list.`));
+      };
+      request.onerror = () => reject(new Error("The storage request failed before a response arrived. Check network connectivity and storage CORS; no verification was completed."));
+      request.ontimeout = () => reject(new Error("The upload timed out after 30 minutes. Check the asset list before retrying; this upload session does not support automatic resume."));
+      request.onabort = () => reject(new Error("The upload was interrupted. Check the asset list before starting a new upload; automatic resume is not supported."));
+      request.send(file);
+    });
+  }
+
   async function uploadFile(kind: SimpleAssetKind, file: File) {
+    if (uploading) return;
     const filename = asciiUploadName(file.name);
     const contentType = file.type || "application/octet-stream";
-    const validation = validateOttIngestFile({
-      kind,
-      filename,
-      contentType,
-    });
+    const validation = validateOttIngestFile({ kind, filename, contentType });
     if (!validation.ok) {
-      setMessage(validation.message);
+      setStatus(setUploadStage(createUploadSnapshot(file.name, file.size), "failed", validation.message));
       return;
     }
     setUploading(kind);
-    setMessage(`Preparing ${kind} upload…`);
+    setStatus(createUploadSnapshot(file.name, file.size));
     try {
-      const signed = await requestAssetUpload({
-        data: {
-          titleId,
-          kind,
-          filename,
-          contentType,
-        },
-      });
+      const signed = await requestAssetUpload({ data: { titleId, kind, filename, contentType } });
+      setStatus((current) => current ? setUploadStage(current, "preparing", "Secure upload prepared. Opening the byte-transfer request…") : current);
       const uploadUrl = new URL(signed.url);
       uploadUrl.pathname = uploadUrl.pathname.split("/").map((part) => encodeURIComponent(decodeURIComponent(part))).join("/");
-      const put = await fetch(uploadUrl.toString(), {
-        method: signed.method,
-        body: file,
-        headers: { "content-type": contentType },
-      });
-      if (!put.ok) throw new Error(`Upload failed (${put.status})`);
-      await confirmAssetUpload({ data: { assetId: signed.assetId, expectedByteSize: file.size } });
+      await putFileWithProgress(uploadUrl.toString(), signed.method, file, contentType);
+      setStatus((current) => current ? setUploadStage(current, "verifying", "Bytes sent. Server is checking object size, ETag, and the sealed private copy…") : current);
+      const confirmation = await confirmAssetUpload({ data: { assetId: signed.assetId, expectedByteSize: file.size } });
+      if (confirmation?.verified !== true) throw new Error("The server did not confirm master verification. QC remains locked.");
+      setStatus((current) => current ? setUploadStage(current, "refreshing", "Storage verification passed. Refreshing the saved asset record…") : current);
       await onAssetsChanged();
-      setMessage(`${kind[0].toUpperCase() + kind.slice(1)} is ready.`);
+      setStatus((current) => current ? setUploadStage(current, "complete", "Upload and server-side verification completed successfully.") : current);
     } catch (error) {
-      const raw = error instanceof Error ? error.message : "Upload failed";
-      setMessage(
-        raw.includes("STORAGE_UNAVAILABLE")
-          ? "Storage service is currently unavailable. Please try again later."
-          : raw,
-      );
+      const raw = error instanceof Error ? error.message : "Upload failed unexpectedly.";
+      const message = raw.includes("STORAGE_UNAVAILABLE")
+        ? "Storage service is unavailable. No verification was recorded; check the asset list before retrying."
+        : raw.includes("NetworkError") || raw.includes("Failed to fetch")
+          ? "Network or CORS error. Verification did not complete. Check the asset list before starting a new upload; resume is not supported."
+          : raw;
+      setStatus((current) => current ? setUploadStage(current, "failed", message) : current);
     } finally {
       setUploading(null);
     }
   }
+
   async function download(id: string) {
     const signed = await requestAssetDownload({ data: { assetId: id } });
     window.location.assign(signed.url);
@@ -336,6 +364,17 @@ function FilesPanel({
     ["subtitle", "Subtitle", "Optional"],
     ["censor_certificate", "Censor Certificate", "Optional"],
   ];
+  const active = status && !["complete", "failed"].includes(status.stage);
+  const percent = status?.total && status.total > 0 ? Math.min(100, Math.round((status.loaded / status.total) * 100)) : null;
+  const stageLabel: Record<MasterUploadSnapshot["stage"], string> = {
+    preparing: "1 · Preparing secure upload",
+    transferring: "2 · Transferring file bytes",
+    stalled: "2 · Transfer may be stalled",
+    verifying: "3 · Server-side verification",
+    refreshing: "4 · Refreshing verified asset",
+    complete: "Verified completion",
+    failed: "Upload failed — verification not confirmed",
+  };
   return (
     <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
       <div className="flex items-center justify-between gap-3">
@@ -345,6 +384,37 @@ function FilesPanel({
         </div>
         <span className="text-xs text-muted">Ready / Missing</span>
       </div>
+      {status ? (
+        <section aria-labelledby="master-upload-status-title" aria-live="polite" className="mt-5 rounded-2xl border-2 border-accent/40 bg-elevated/40 p-4 sm:p-5">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-accent">Central upload status</p>
+              <h3 id="master-upload-status-title" className="mt-1 text-base font-semibold">{status.filename}</h3>
+              <p className="mt-1 text-sm text-muted">{formatUploadBytes(status.fileSize)} total file size</p>
+            </div>
+            <span className="rounded-full border border-line px-3 py-1 text-xs font-semibold">{stageLabel[status.stage]}</span>
+          </div>
+          {status.stage === "transferring" || status.stage === "stalled" || status.stage === "verifying" || status.stage === "refreshing" || status.stage === "complete" ? (
+            <div className="mt-4">
+              <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+                <span>Browser-reported transfer</span>
+                <strong>{percent == null ? `${formatUploadBytes(status.loaded)} sent` : `${percent}% · ${formatUploadBytes(status.loaded)} / ${formatUploadBytes(status.total ?? status.fileSize)}`}</strong>
+              </div>
+              <div role="progressbar" aria-label="File byte transfer progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent ?? undefined} aria-valuetext={percent == null ? `${formatUploadBytes(status.loaded)} sent; total transfer size unavailable` : `${percent} percent transferred`} className="mt-2 h-3 overflow-hidden rounded-full bg-line">
+                <div className="h-full rounded-full bg-accent transition-[width]" style={{ width: `${percent ?? 0}%` }} />
+              </div>
+              <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-xs text-muted">
+                <span>Speed: {status.bytesPerSecond != null ? `${formatUploadBytes(status.bytesPerSecond)}/s` : "Not enough recent data"}</span>
+                <span>ETA: {status.etaSeconds != null && Number.isFinite(status.etaSeconds) ? `${Math.ceil(status.etaSeconds)} sec` : "Unavailable"}</span>
+              </div>
+            </div>
+          ) : null}
+          <p role="status" aria-live="polite" className="mt-3 break-words text-sm">{status.message}</p>
+          {status.stage === "transferring" ? <p className="mt-1 text-xs text-muted">Transfer percentage describes bytes sent by this browser only. It is not storage verification.</p> : null}
+          {status.stage === "stalled" ? <p className="mt-1 text-xs text-muted">Wait for the request to resolve or fail. Automatic resume is not supported, so a duplicate upload is not started.</p> : null}
+          {status.stage === "failed" ? <p className="mt-1 text-xs text-muted">Safe next step: refresh/check the asset list first. Start a new upload only after confirming no verified asset exists; this upload session cannot resume.</p> : null}
+        </section>
+      ) : null}
       <div className="mt-5 grid gap-3 sm:grid-cols-2">
         {cards.map(([kind, label, empty]) => (
           <FileTypeCard
@@ -353,30 +423,19 @@ function FilesPanel({
             label={label}
             status={assets.some((a) => (a.kind === kind || (kind === "poster_vertical" && a.kind === "poster")) && a.verified) ? "Ready" : empty}
             busy={uploading === kind}
-            canUpload={canUpload}
+            canUpload={canUpload && !uploading}
             onFile={(file) => void uploadFile(kind, file)}
           />
         ))}
       </div>
-      {message ? <p className="mt-3 text-xs text-muted">{message}</p> : null}
       <div className="mt-5 space-y-2">
         {assets.map((a) => (
-          <div
-            key={a.id}
-            className="flex items-center justify-between gap-3 rounded-xl border border-line p-4"
-          >
+          <div key={a.id} className="flex items-center justify-between gap-3 rounded-xl border border-line p-4">
             <div>
               <p className="text-sm font-semibold">{a.kind}</p>
-              <p className="text-xs text-muted">{a.verified ? "Ready" : "Processing"}</p>
+              <p className="text-xs text-muted">{a.verified ? "Ready — server verified" : "Not verified"}</p>
             </div>
-            {a.verified ? (
-              <button
-                onClick={() => void download(a.id)}
-                className="rounded-full border border-line px-4 py-2 text-xs font-semibold"
-              >
-                Download
-              </button>
-            ) : null}
+            {a.verified ? <button onClick={() => void download(a.id)} className="rounded-full border border-line px-4 py-2 text-xs font-semibold">Download</button> : null}
           </div>
         ))}
       </div>
