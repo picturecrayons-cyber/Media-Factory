@@ -106,9 +106,9 @@ test("OCI copy polling uses Object Storage and only verifies successful copies",
           assert.deepEqual(calls.map((call) => call.method), ["POST", "GET", "HEAD"]);
         } else {
           const message = outcome === "HTTP_ERROR"
-            ? /lookup failed \\(403\\)/
+            ? /lookup failed \(403\)/
             : outcome === "HTTP_400"
-              ? /OCI object copy failed \\(400\\).*code=InvalidParameter.*message=Destination object name is invalid.*requestId=req-oci-copy-400/
+              ? /OCI object copy failed \(400\).*code=InvalidParameter.*message=Destination object name is invalid.*requestId=req-oci-copy-400/
               : new RegExp(`copy ${outcome.toLowerCase()}`);
           await assert.rejects(sealVerifiedObject("source-key", "sealed-key", "source-etag"), message);
           assert.deepEqual(calls.map((call) => call.method), ["POST", "GET"]);
