@@ -301,6 +301,7 @@ function FilesPanel({
           contentType,
         },
       });
+      setMessage(`Uploading ${kind} to private OCI storage…`);
       const uploadUrl = new URL(signed.url);
       uploadUrl.pathname = uploadUrl.pathname.split("/").map((part) => encodeURIComponent(decodeURIComponent(part))).join("/");
       const put = await fetch(uploadUrl.toString(), {
@@ -308,7 +309,11 @@ function FilesPanel({
         body: file,
         headers: { "content-type": contentType },
       });
-      if (!put.ok) throw new Error(`Upload failed (${put.status})`);
+      if (!put.ok) {
+        const requestId = put.headers.get("opc-request-id") || put.headers.get("x-oracle-request-id");
+        throw new Error(`OCI upload failed (${put.status})${requestId ? ` · request ${requestId.slice(0, 100)}` : ""}`);
+      }
+      setMessage(`Verifying ${kind} in OCI and sealing the uploaded object…`);
       await confirmAssetUpload({ data: { assetId: signed.assetId, expectedByteSize: file.size } });
       await onAssetsChanged();
       setMessage(`${kind[0].toUpperCase() + kind.slice(1)} is ready.`);

@@ -56,6 +56,30 @@ function derivedFingerprint(privateKey: string) {
     .join(":");
 }
 
+
+function normalizeFingerprint(value: string) {
+  return value.toLowerCase().replaceAll(":", "").trim();
+}
+
+async function ociFailure(label: string, res: Response) {
+  let code = "OCIError";
+  let message = "";
+  try {
+    const text = (await res.text()).slice(0, 2048);
+    const parsed = JSON.parse(text) as { code?: unknown; message?: unknown };
+    if (typeof parsed.code === "string" && /^[A-Za-z0-9_-]{1,80}$/.test(parsed.code)) code = parsed.code;
+    if (typeof parsed.message === "string") {
+      message = parsed.message.replace(/[\r\n\t]+/g, " ").replace(/[^\x20-\x7E]/g, "").slice(0, 180);
+    }
+  } catch {
+    // Keep a bounded generic diagnostic when OCI does not return JSON.
+  }
+  const requestId = res.headers.get("opc-request-id") || res.headers.get("x-oracle-request-id");
+  return new Error(
+    `${label} (${res.status}; ${code}${message ? `; ${message}` : ""}${requestId ? `; requestId=${requestId.slice(0, 120)}` : ""})`,
+  );
+}
+
 function config(): OciConfig {
   const tenancy = bridgeEnv.ociTenancyOcid();
   const user = bridgeEnv.ociUserOcid();
@@ -65,11 +89,16 @@ function config(): OciConfig {
   if (!tenancy || !user || !privateKey || !region || !bucket) {
     throw new Error("OCI Object Storage is not fully configured");
   }
+  const derived = derivedFingerprint(privateKey);
+  const configuredFingerprint = bridgeEnv.ociFingerprint();
+  if (configuredFingerprint && normalizeFingerprint(configuredFingerprint) !== normalizeFingerprint(derived)) {
+    throw new Error("OCI private key fingerprint does not match OCI_FINGERPRINT; verify the Preview key and fingerprint binding");
+  }
   return {
     tenancy,
     user,
     privateKey: normalizePrivateKey(privateKey),
-    fingerprint: bridgeEnv.ociFingerprint() || derivedFingerprint(privateKey),
+    fingerprint: configuredFingerprint || derived,
     region,
     bucket,
     namespace: bridgeEnv.ociNamespace(),
@@ -146,13 +175,13 @@ async function signedFetch(opts: {
   const safeHeaders = Object.fromEntries(
     Object.entries(headers).map(([key, value]) => [toLatin1(key), toLatin1(value)]),
   );
-  return fetch(url, { method: opts.method, headers: safeHeaders, body });
+  return fetch(url, { method: opts.method, headers: safeHeaders, body, signal: AbortSignal.timeout(15_000) });
 }
 
 async function resolveNamespace(cfg: OciConfig) {
   if (cfg.namespace) return cfg.namespace;
   const res = await signedFetch({ cfg, method: "GET", path: "/n/" });
-  if (!res.ok) throw new Error(`OCI namespace lookup failed (${res.status})`);
+  if (!res.ok) throw await ociFailure("OCI namespace lookup failed", res);
   const ns = (await res.text()).replaceAll('"', "").trim();
   if (!ns) throw new Error("OCI Object Storage namespace is empty");
   return ns;
@@ -174,7 +203,7 @@ async function createPar(opts: {
   };
   const path = `/n/${encodeURIComponent(namespace)}/b/${encodeURIComponent(cfg.bucket)}/p/`;
   const res = await signedFetch({ cfg, method: "POST", path, body });
-  if (!res.ok) throw new Error(`OCI pre-authenticated request failed (${res.status})`);
+  if (!res.ok) throw await ociFailure("OCI pre-authenticated request failed", res);
   const parsed = (await res.json()) as { accessUri?: string };
   if (!parsed.accessUri) throw new Error("OCI pre-authenticated request returned no access URI");
   return {
@@ -207,7 +236,7 @@ export async function verifyObject(key: string, expectedContentType?: string | n
   const namespace = await resolveNamespace(cfg);
   const path = `/n/${encodeURIComponent(namespace)}/b/${encodeURIComponent(cfg.bucket)}/o/${encodedObjectName(key)}`;
   const res = await signedFetch({ cfg, method: "HEAD", path });
-  if (!res.ok) throw new Error(`OCI object verification failed (${res.status})`);
+  if (!res.ok) throw await ociFailure("OCI object verification failed", res);
   const contentLength = Number(res.headers.get("content-length") || 0);
   const contentType = res.headers.get("content-type");
   if (expectedContentType && contentType !== expectedContentType) {
@@ -226,7 +255,7 @@ async function pollWorkRequest(cfg: OciConfig, workRequestId: string) {
   for (let i = 0; i < 30; i += 1) {
     const headers = signHeaders({ cfg, method: "GET", url });
     const res = await fetch(url, { method: "GET", headers });
-    if (!res.ok) throw new Error(`OCI copy work-request lookup failed (${res.status})`);
+    if (!res.ok) throw await ociFailure("OCI copy work-request lookup failed", res);
     const body = (await res.json()) as { status?: string };
     if (body.status === "SUCCEEDED") return;
     if (body.status === "FAILED" || body.status === "CANCELED") {

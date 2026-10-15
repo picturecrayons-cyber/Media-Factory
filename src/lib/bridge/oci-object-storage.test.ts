@@ -1,6 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { generateKeyPairSync, verify } from "node:crypto";
+import { createHash, createPublicKey, generateKeyPairSync, verify, type KeyObject } from "node:crypto";
+
+function fingerprint(privateKey: KeyObject) {
+  const publicDer = createPublicKey(privateKey).export({ type: "spki", format: "der" });
+  return createHash("md5").update(publicDer).digest("hex").match(/.{1,2}/g)!.join(":");
+}
 import { sealVerifiedObject, verifyObject } from "./oci-object-storage.server.ts";
 
 test("OCI private key normalization accepts escaped and quoted PEM secrets", async () => {
@@ -31,7 +36,7 @@ test("OCI private key normalization accepts escaped and quoted PEM secrets", asy
         OCI_TENANCY_OCID: "test-tenancy",
         OCI_USER_OCID: "test-user",
         OCI_PRIVATE_KEY: variant,
-        OCI_FINGERPRINT: "test-fingerprint",
+        OCI_FINGERPRINT: fingerprint(privateKey),
         OCI_REGION: "ap-mumbai-1",
         OCI_NAMESPACE: "test-namespace",
         OCI_BUCKET_NAME: "test-bucket",
@@ -59,7 +64,7 @@ test("OCI copy polling uses Object Storage and only verifies successful copies",
     OCI_TENANCY_OCID: "test-tenancy",
     OCI_USER_OCID: "test-user",
     OCI_PRIVATE_KEY: privateKey.export({ type: "pkcs8", format: "pem" }).toString(),
-    OCI_FINGERPRINT: "test-fingerprint",
+    OCI_FINGERPRINT: fingerprint(privateKey),
     OCI_REGION: "ap-mumbai-1",
     OCI_NAMESPACE: "test-namespace",
     OCI_BUCKET_NAME: "test-bucket",
@@ -100,7 +105,7 @@ test("OCI copy polling uses Object Storage and only verifies successful copies",
           assert.equal((await sealVerifiedObject("source-key", "sealed-key", "source-etag")).byteSize, 12);
           assert.deepEqual(calls.map((call) => call.method), ["POST", "GET", "HEAD"]);
         } else {
-          const message = outcome === "HTTP_ERROR" ? /lookup failed \(403\)/ : new RegExp(`copy ${outcome.toLowerCase()}`);
+          const message = outcome === "HTTP_ERROR" ? /lookup failed \(403/ : new RegExp(`copy ${outcome.toLowerCase()}`);
           await assert.rejects(sealVerifiedObject("source-key", "sealed-key", "source-etag"), message);
           assert.deepEqual(calls.map((call) => call.method), ["POST", "GET"]);
         }
@@ -121,7 +126,7 @@ test("OCI object verification rejects an unexpected content type", async () => {
   const values = {
     OCI_TENANCY_OCID: "test-tenancy", OCI_USER_OCID: "test-user",
     OCI_PRIVATE_KEY: privateKey.export({ type: "pkcs8", format: "pem" }).toString(),
-    OCI_FINGERPRINT: "test-fingerprint", OCI_REGION: "ap-mumbai-1",
+    OCI_FINGERPRINT: fingerprint(privateKey), OCI_REGION: "ap-mumbai-1",
     OCI_NAMESPACE: "test-namespace", OCI_BUCKET_NAME: "test-bucket",
   };
   const saved = Object.fromEntries(Object.keys(values).map((key) => [key, process.env[key]]));
