@@ -79,6 +79,12 @@ test("OCI copy polling uses Object Storage and only verifies successful copies",
           if (method === "POST") {
             assert.equal(url.pathname, "/n/test-namespace/b/test-bucket/actions/copyObject");
             assert.equal(JSON.parse(String(init?.body)).sourceObjectIfMatch, "source-etag");
+            if (outcome === "HTTP_400") {
+              return Response.json(
+                { code: "InvalidParameter", message: "Destination object name is invalid" },
+                { status: 400, headers: { "opc-request-id": "req-oci-copy-400" } },
+              );
+            }
             return new Response(null, { status: 202, headers: { "opc-work-request-id": "copy/id" } });
           }
           if (method === "GET") {
@@ -89,12 +95,6 @@ test("OCI copy polling uses Object Storage and only verifies successful copies",
             const signed = `(request-target): get ${url.pathname}\nhost: ${url.host}\ndate: ${headers.get("date")}`;
             assert.ok(verify("RSA-SHA256", Buffer.from(signed), publicKey, Buffer.from(signature, "base64")));
             if (outcome === "HTTP_ERROR") return new Response(null, { status: 403 });
-            if (outcome === "HTTP_400") {
-              return Response.json(
-                { code: "InvalidParameter", message: "Destination object name is invalid" },
-                { status: 400, headers: { "opc-request-id": "req-oci-copy-400" } },
-              );
-            }
             return Response.json({ status: outcome });
           }
           assert.equal(method, "HEAD");
