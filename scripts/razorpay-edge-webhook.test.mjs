@@ -32,3 +32,27 @@ test("entitlement and title transition happen before webhook is marked processed
   assert.ok(entitlement < processed);
   assert.ok(transition < processed);
 });
+
+
+test("webhook processing uses a durable lease and only marks its own attempt processed", () => {
+  assert.match(source, /processing_token/);
+  assert.match(source, /processing_started_at/);
+  assert.match(source, /eq\("processing_token", token\)/);
+});
+
+test("captured webhook checks provider amount and currency before granting access", () => {
+  assert.match(source, /Payment amount mismatch/);
+  assert.match(source, /Payment currency mismatch/);
+  assert.match(source, /Number\(localPayment\.amount_paise\)/);
+});
+
+test("accepted deal payments create scoped entitlements, not title-wide grants", () => {
+  assert.match(source, /from\("bridge_license_deals"\)/);
+  assert.match(source, /from\("bridge_deal_entitlements"\)/);
+  assert.match(source, /deal\.agreed_fee_paise/);
+  assert.match(source, /licensing\.deal_payment_captured/);
+});
+
+test("deal-scoped captures do not transition the whole title to LICENSED", () => {
+  assert.match(source, /if \(!localPayment\.deal_id && title &&/);
+});

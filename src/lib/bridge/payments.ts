@@ -11,6 +11,7 @@ import { loadTitle, recordTransition } from "./titles";
 import { writeAudit } from "./audit";
 import { assertBuyerPublishable } from "./buyer-visibility";
 import { assertNotDevUser } from "./guards";
+import { hasExclusiveScopeConflict } from "./licensing-deal-policy";
 
 function requireRazorpayKeys() {
   const keyId = bridgeEnv.razorpayKeyId();
@@ -64,8 +65,9 @@ export async function grantFromCapturedPayment(opts: {
     currency: string;
     provider_payment_id: string | null;
     package_id: string | null;
+    deal_id: string | null;
   }>`
-    select id, user_id, title_id, package_id, amount_paise, status, currency, provider_payment_id
+    select id, user_id, title_id, package_id, deal_id, amount_paise, status, currency, provider_payment_id
     from bridge_payments where provider_order_id = ${opts.orderId} limit 1
   `;
   const payment = rows[0];
@@ -90,6 +92,59 @@ export async function grantFromCapturedPayment(opts: {
 
   if (!payment.title_id) {
     return { paymentId: payment.id, entitled: false };
+  }
+
+  if (payment.deal_id) {
+    const deals = await sql<{
+      id: string; title_id: string; buyer_user_id: string; status: string;
+      term_start: string | Date; term_end: string | Date; contract_reference: string | null;
+      agreed_fee_paise: number; currency: string;
+    }>`
+      select id, title_id, buyer_user_id, status, term_start, term_end, contract_reference, agreed_fee_paise, currency
+      from public.bridge_license_deals
+      where id = ${payment.deal_id}
+      limit 1
+    `;
+    const deal = deals[0];
+    if (!deal || deal.title_id !== payment.title_id || deal.buyer_user_id !== payment.user_id ||
+        !["ACCEPTED", "PAYMENT_PENDING", "LICENSED"].includes(deal.status) || !deal.contract_reference ||
+        Number(deal.agreed_fee_paise) !== Number(payment.amount_paise) || deal.currency !== payment.currency || deal.currency !== "INR") {
+      throw new Error("Payment does not match the accepted licensing deal");
+    }
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    if (new Date(deal.term_start).getTime() > today.getTime() || new Date(deal.term_end).getTime() < today.getTime()) {
+      throw new Error("The licensing deal is outside its term");
+    }
+    await sql`
+      insert into public.bridge_deal_entitlements (deal_id, title_id, buyer_user_id, payment_id)
+      values (${deal.id}, ${payment.title_id}, ${payment.user_id}, ${payment.id})
+      on conflict (deal_id, buyer_user_id) do nothing
+    `;
+    await sql`
+      update public.bridge_license_deals
+      set status = 'LICENSED', licensed_at = coalesce(licensed_at, now()), updated_at = now()
+      where id = ${deal.id} and status in ('ACCEPTED', 'PAYMENT_PENDING', 'LICENSED')
+    `;
+    // A single buyer deal must not transition the title globally: other rights scopes may remain available.
+    const title = await loadTitle(payment.title_id);
+    if (!payment.deal_id && title && (title.status === "LIVE_FOR_BUYERS" || title.status === "IN_NEGOTIATION")) {
+      await recordTransition({
+        titleId: title.id,
+        from: title.status,
+        to: "LICENSED",
+        actorUserId: opts.actorUserId ?? payment.user_id,
+        note: "accepted deal payment captured",
+      });
+    }
+    await writeAudit({
+      actorUserId: opts.actorUserId ?? payment.user_id,
+      action: "licensing.deal_payment_captured",
+      entityType: "bridge_license_deal",
+      entityId: deal.id,
+      metadata: { titleId: payment.title_id, paymentId: payment.id, amountPaise: payment.amount_paise, currency: payment.currency },
+    });
+    return { paymentId: payment.id, entitled: true, titleId: payment.title_id, dealId: deal.id };
   }
 
   if (payment.package_id) {
@@ -157,13 +212,151 @@ export const getCheckoutConfig = createServerFn({ method: "GET" })
     return { keyId };
   });
 
+export const createAcceptedLicenseDeal = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({
+    titleId: z.string().min(8),
+    buyerUserId: z.string().min(1).max(255),
+    rightsCategory: z.string().trim().min(2).max(100),
+    territories: z.array(z.string().trim().min(1).max(100)).min(1).max(100),
+    languages: z.array(z.string().trim().min(1).max(80)).min(1).max(50),
+    mediaModes: z.array(z.string().trim().min(1).max(80)).min(1).max(50),
+    termStart: z.string().date(),
+    termEnd: z.string().date(),
+    exclusivity: z.enum(["EXCLUSIVE", "NON_EXCLUSIVE"]),
+    agreedFeePaise: z.number().int().min(1).max(2_000_000_000),
+    contractReference: z.string().trim().min(3).max(500),
+    termsSnapshot: z.record(z.string(), z.unknown()).default({}),
+  }))
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    assertPermission(actor, "title.rights_review");
+    if (data.termEnd <= data.termStart) throw new Error("License term end must be after its start");
+    const title = await loadTitle(data.titleId);
+    if (!title || !["LICENSING_READY", "LIVE_FOR_BUYERS", "IN_NEGOTIATION", "LICENSED"].includes(title.status)) {
+      throw new Error("Title is not ready for a licensing deal");
+    }
+    const sql = await getSql();
+    const buyers = await sql<{ user_id: string }>`
+      select user_id from public.bridge_profiles
+      where user_id = ${data.buyerUserId} and account_type = 'buyer'
+      limit 1
+    `;
+    if (!buyers[0]) throw new Error("Selected buyer account was not found");
+
+    const overlappingDeals = await sql<{
+      id: string; rights_category: string; territories: unknown; languages: unknown; media_modes: unknown;
+      term_start: string | Date; term_end: string | Date; exclusivity: string;
+    }>`
+      select id, rights_category, territories, languages, media_modes, term_start, term_end, exclusivity
+      from public.bridge_license_deals
+      where title_id = ${title.id}
+        and rights_category = ${data.rightsCategory}
+        and status in ('ACCEPTED', 'PAYMENT_PENDING', 'LICENSED')
+        and term_start <= ${data.termEnd}::date
+        and term_end >= ${data.termStart}::date
+    `;
+    const conflicts = hasExclusiveScopeConflict({
+      rightsCategory: data.rightsCategory,
+      territories: data.territories,
+      languages: data.languages,
+      mediaModes: data.mediaModes,
+      termStart: data.termStart,
+      termEnd: data.termEnd,
+      exclusivity: data.exclusivity,
+      status: "DRAFT",
+    }, overlappingDeals.map((existing) => ({
+      rightsCategory: existing.rights_category,
+      territories: Array.isArray(existing.territories) ? existing.territories.map(String) : [],
+      languages: Array.isArray(existing.languages) ? existing.languages.map(String) : [],
+      mediaModes: Array.isArray(existing.media_modes) ? existing.media_modes.map(String) : [],
+      termStart: existing.term_start instanceof Date ? existing.term_start.toISOString().slice(0, 10) : String(existing.term_start).slice(0, 10),
+      termEnd: existing.term_end instanceof Date ? existing.term_end.toISOString().slice(0, 10) : String(existing.term_end).slice(0, 10),
+      exclusivity: existing.exclusivity as "EXCLUSIVE" | "NON_EXCLUSIVE",
+      status: "ACCEPTED",
+    })));
+    if (conflicts) {
+      throw new Error("RIGHTS_CONFLICT: an overlapping exclusive deal already exists for this title, territory, language, media mode, and term");
+    }
+
+    const id = crypto.randomUUID();
+    await sql`
+      insert into public.bridge_license_deals (
+        id, title_id, buyer_user_id, rights_category, territories, languages, media_modes,
+        term_start, term_end, exclusivity, agreed_fee_paise, currency, status,
+        contract_reference, terms_snapshot, created_by, accepted_by, accepted_at
+      ) values (
+        ${id}, ${title.id}, ${data.buyerUserId}, ${data.rightsCategory},
+        ${JSON.stringify(data.territories)}, ${JSON.stringify(data.languages)}, ${JSON.stringify(data.mediaModes)},
+        ${data.termStart}, ${data.termEnd}, ${data.exclusivity}, ${data.agreedFeePaise}, 'INR', 'ACCEPTED',
+        ${data.contractReference}, ${JSON.stringify(data.termsSnapshot)}, ${actor.userId}, ${actor.userId}, now()
+      )
+    `;
+    await writeAudit({
+      actorUserId: actor.userId,
+      action: "licensing.deal_accepted_recorded",
+      entityType: "bridge_license_deal",
+      entityId: id,
+      metadata: {
+        titleId: title.id, buyerUserId: data.buyerUserId, rightsCategory: data.rightsCategory,
+        agreedFeePaise: data.agreedFeePaise, currency: "INR", termStart: data.termStart, termEnd: data.termEnd,
+      },
+    });
+    return { dealId: id };
+  });
+
+export const listOwnAcceptedLicenseDeals = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    assertPermission(actor, "entitlement.read_own");
+    const sql = await getSql();
+    const rows = await sql<{
+      id: string; title_id: string; title_name: string; language: string;
+      rights_category: string; territories: unknown; languages: unknown; media_modes: unknown;
+      term_start: string | Date; term_end: string | Date; exclusivity: string;
+      agreed_fee_paise: number; currency: string; status: string;
+    }>`
+      select d.id, d.title_id, t.name as title_name, t.language, d.rights_category,
+             d.territories, d.languages, d.media_modes, d.term_start, d.term_end,
+             d.exclusivity, d.agreed_fee_paise, d.currency, d.status
+      from public.bridge_license_deals d
+      join public.bridge_titles t on t.id = d.title_id
+      where d.buyer_user_id = ${actor.userId}
+        and d.status = 'ACCEPTED'
+        and d.term_start <= current_date and d.term_end >= current_date
+      order by d.created_at desc
+    `;
+    return { deals: rows.map((d) => ({
+      id: d.id,
+      titleId: d.title_id,
+      titleName: d.title_name,
+      language: d.language,
+      rightsCategory: d.rights_category,
+      territories: Array.isArray(d.territories) ? d.territories.map(String) : [],
+      languages: Array.isArray(d.languages) ? d.languages.map(String) : [],
+      mediaModes: Array.isArray(d.media_modes) ? d.media_modes.map(String) : [],
+      termStart: String(d.term_start).slice(0, 10),
+      termEnd: String(d.term_end).slice(0, 10),
+      exclusivity: d.exclusivity,
+      agreedFeePaise: Number(d.agreed_fee_paise),
+      currency: d.currency,
+      status: d.status,
+    })) };
+  });
+
 export const createLicenseOrder = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(
     z.object({
       titleId: z.string().min(8),
+      dealId: z.string().uuid().optional(),
       packageId: z.string().uuid().optional(),
       idempotencyKey: z.string().min(8).max(80),
+    }).refine((value) => !(value.dealId && value.packageId), {
+      message: "Choose either an accepted deal or a language package",
     }),
   )
   .handler(async ({ context, data }) => {
@@ -178,15 +371,43 @@ export const createLicenseOrder = createServerFn({ method: "POST" })
       throw new Error("Title is not open for a new license order");
     }
     let amountPaise = title.licensingFeePaise;
-    if (data.packageId) {
-      const pkg = await sql<{ id: string; title_id: string; price_paise: number; status: string }>`
-        select id, title_id, price_paise, status
+    if (data.dealId) {
+      const deal = await sql<{
+        id: string; title_id: string; buyer_user_id: string; agreed_fee_paise: number;
+        currency: string; status: string; term_start: string | Date; term_end: string | Date;
+      }>`
+        select id, title_id, buyer_user_id, agreed_fee_paise, currency, status, term_start, term_end
+        from public.bridge_license_deals
+        where id = ${data.dealId}
+        limit 1
+      `;
+      const acceptedDeal = deal[0];
+      if (!acceptedDeal || acceptedDeal.status !== "ACCEPTED" ||
+          acceptedDeal.title_id !== title.id || acceptedDeal.buyer_user_id !== actor.userId ||
+          acceptedDeal.currency !== "INR") {
+        throw new Error("An accepted licensing deal for this buyer and title is required");
+      }
+      const termStart = new Date(acceptedDeal.term_start).getTime();
+      const termEnd = new Date(acceptedDeal.term_end).getTime();
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      if (termEnd < today.getTime() || termStart > today.getTime()) {
+        throw new Error("The accepted deal is outside its license term");
+      }
+      amountPaise = Number(acceptedDeal.agreed_fee_paise);
+    } else if (data.packageId) {
+      const pkg = await sql<{ id: string; title_id: string; price_paise: number; status: string; buyer_user_id: string | null }>`
+        select id, title_id, price_paise, status, buyer_user_id
         from bridge_license_packages
         where id = ${data.packageId} and title_id = ${title.id}
         limit 1
       `;
-      if (!pkg[0] || !["READY", "IN_NEGOTIATION"].includes(pkg[0].status)) throw new Error("License package is not available");
+      if (!pkg[0] || pkg[0].status !== "IN_NEGOTIATION" || pkg[0].buyer_user_id !== actor.userId) {
+        throw new Error("A buyer-assigned language package in negotiation is required");
+      }
       amountPaise = Number(pkg[0].price_paise);
+    } else {
+      throw new Error("An accepted licensing deal is required before title checkout");
     }
     if (amountPaise <= 0) throw new Error("Licensing price is not set");
     const { keyId } = requireRazorpayKeys();
@@ -197,14 +418,18 @@ export const createLicenseOrder = createServerFn({ method: "POST" })
       title_id: string | null;
       status: string;
       package_id: string | null;
+      deal_id: string | null;
     }>`
-      select id, provider_order_id, amount_paise, title_id, package_id, status
+      select id, provider_order_id, amount_paise, title_id, package_id, deal_id, status
       from bridge_payments
-      where user_id = ${actor.userId} and purpose = ${"title_license"} and idempotency_key = ${data.idempotencyKey}
+      where user_id = ${actor.userId} and purpose = ${"title_license"}
+        and (idempotency_key = ${data.idempotencyKey} or (${data.dealId ?? null}::uuid is not null and deal_id = ${data.dealId ?? null}))
       limit 1
     `;
-    if (existing[0] && (existing[0].title_id !== title.id || (existing[0].package_id ?? null) !== (data.packageId ?? null))) {
-      throw new Error("Idempotency key belongs to another title or package");
+    if (existing[0] && (existing[0].title_id !== title.id ||
+        (existing[0].package_id ?? null) !== (data.packageId ?? null) ||
+        (existing[0].deal_id ?? null) !== (data.dealId ?? null))) {
+      throw new Error("Idempotency key belongs to another title, package, or deal");
     }
     if (existing[0]?.provider_order_id) {
       return {
@@ -222,29 +447,31 @@ export const createLicenseOrder = createServerFn({ method: "POST" })
         amount: amountPaise,
         currency: "INR",
         receipt: data.idempotencyKey.slice(0, 40),
-        notes: { titleId: title.id, packageId: data.packageId ?? "", userId: actor.userId },
+        notes: { titleId: title.id, packageId: data.packageId ?? "", dealId: data.dealId ?? "", userId: actor.userId },
       }),
     });
 
     const id = randomBytes(16).toString("hex");
     const inserted = await sql<{ id: string }>`
       insert into bridge_payments (
-        id, user_id, title_id, package_id, purpose, provider_order_id, amount_paise, currency, status, idempotency_key
+        id, user_id, title_id, package_id, deal_id, purpose, provider_order_id, amount_paise, currency, status, idempotency_key
       ) values (
-        ${id}, ${actor.userId}, ${title.id}, ${data.packageId ?? null}, ${"title_license"}, ${rz.id},
+        ${id}, ${actor.userId}, ${title.id}, ${data.packageId ?? null}, ${data.dealId ?? null}, ${"title_license"}, ${rz.id},
         ${amountPaise}, ${"INR"}, ${"created"}, ${data.idempotencyKey}
       )
       on conflict (user_id, purpose, idempotency_key) do nothing
       returning id
     `;
     if (!inserted[0]) {
-      const winner = await sql<{ id: string; title_id: string | null; package_id: string | null; provider_order_id: string | null; amount_paise: number }>`
-        select id, title_id, package_id, provider_order_id, amount_paise from bridge_payments
+      const winner = await sql<{ id: string; title_id: string | null; package_id: string | null; deal_id: string | null; provider_order_id: string | null; amount_paise: number }>`
+        select id, title_id, package_id, deal_id, provider_order_id, amount_paise from bridge_payments
         where user_id = ${actor.userId} and purpose = ${"title_license"} and idempotency_key = ${data.idempotencyKey}
         limit 1
       `;
-      if (!winner[0]?.provider_order_id || winner[0].title_id !== title.id || (winner[0].package_id ?? null) !== (data.packageId ?? null)) {
-        throw new Error("Idempotency key belongs to another title/package or order is unavailable");
+      if (!winner[0]?.provider_order_id || winner[0].title_id !== title.id ||
+          (winner[0].package_id ?? null) !== (data.packageId ?? null) ||
+          (winner[0].deal_id ?? null) !== (data.dealId ?? null)) {
+        throw new Error("Idempotency key belongs to another title/package/deal or order is unavailable");
       }
       return {
         orderId: winner[0].provider_order_id,
@@ -276,7 +503,7 @@ export const createLicenseOrder = createServerFn({ method: "POST" })
       action: "payment.order_created",
       entityType: "bridge_payment",
       entityId: id,
-      metadata: { titleId: title.id, packageId: data.packageId ?? null },
+      metadata: { titleId: title.id, packageId: data.packageId ?? null, dealId: data.dealId ?? null, amountPaise, currency: "INR" },
     });
 
     return {
@@ -326,15 +553,20 @@ export const listOwnEntitlements = createServerFn({ method: "GET" })
         payment_id: string;
         access_type: string;
         created_at: string | Date;
+        deal_id: string | null;
       }>`
-        select title_id, payment_id, access_type, created_at
+        select title_id, payment_id, access_type, created_at, null::uuid as deal_id
         from bridge_entitlements where user_id = ${actor.userId}
+        union all
+        select title_id, payment_id, 'license' as access_type, granted_at as created_at, deal_id
+        from public.bridge_deal_entitlements where buyer_user_id = ${actor.userId}
         order by created_at desc
       `;
       return {
         entitlements: rows.map((r) => ({
           titleId: r.title_id,
           paymentId: r.payment_id,
+          dealId: r.deal_id,
           accessType: r.access_type,
           createdAt: r.created_at instanceof Date ? r.created_at.toISOString() : String(r.created_at),
         })),

@@ -1,15 +1,15 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
-import { StatusChip } from "@/components/bridge/status-rail";
 import { Button } from "@/components/ui/button";
 import { listTitles } from "@/lib/bridge/titles";
 import {
   createLicenseOrder,
   listOwnEntitlements,
+  listOwnAcceptedLicenseDeals,
   verifyLicensePayment,
 } from "@/lib/bridge/payments";
 
@@ -25,6 +25,7 @@ type RzCtor = new (opts: {
     razorpay_payment_id: string;
     razorpay_signature: string;
   }) => void;
+  modal?: { ondismiss?: () => void };
 }) => { open: () => void };
 
 function loadRazorpay(): Promise<RzCtor> {
@@ -51,8 +52,8 @@ function Buyer() {
     <RequireBridge allow="buyer">
       {(actor) => (
         <BridgeShell actor={actor} title="Buyer dashboard">
-          <p className="mb-6 max-w-2xl text-sm leading-relaxed text-muted">
-            Discover licensing-ready titles, open a listing, then license only after captured payment.
+          <p className="mb-5 max-w-2xl text-sm leading-relaxed text-muted">
+            Find licensing-ready titles and manage your licenses in one place.
           </p>
           <BuyerBody />
         </BridgeShell>
@@ -61,23 +62,67 @@ function Buyer() {
   );
 }
 
+type BuyerDeal = {
+  id: string;
+  titleId: string;
+  titleName: string;
+  language: string;
+  rightsCategory: string;
+  territories: string[];
+  languages: string[];
+  mediaModes: string[];
+  termStart: string;
+  termEnd: string;
+  exclusivity: string;
+  agreedFeePaise: number;
+  currency: string;
+  status: string;
+};
+
 function BuyerBody() {
   const qc = useQueryClient();
-  const [tab, setTab] = useState<"discover" | "listing" | "licenses">("discover");
+  const [tab, setTab] = useState<"discover" | "licenses">("discover");
   const [query, setQuery] = useState("");
+  // Persist per-deal idempotency keys for this browser session so reloads and
+  // checkout retries reuse the same server-side purchase identity.
+  const idempotencyKeys = useRef(new Map<string, string>());
   const titlesQ = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles() });
   const entQ = useQuery({
     queryKey: ["bridge-entitlements"],
     queryFn: () => listOwnEntitlements(),
   });
+  const dealsQ = useQuery({
+    queryKey: ["bridge-accepted-license-deals"],
+    queryFn: () => listOwnAcceptedLicenseDeals(),
+  });
   const entitled = new Set(entQ.data?.entitlements.map((e) => e.titleId));
+  const entitledDeals = new Set(entQ.data?.entitlements.map((e) => e.dealId).filter((id): id is string => Boolean(id)));
+
   const order = useMutation({
-    mutationFn: async (titleId: string) => {
+    mutationFn: async ({ titleId, dealId }: { titleId: string; dealId: string }) => {
+      let idempotencyKey = idempotencyKeys.current.get(dealId);
+      if (!idempotencyKey) {
+        try {
+          idempotencyKey = sessionStorage.getItem(`bridge-license-purchase:${dealId}`) ?? undefined;
+        } catch {
+          // Session storage can be disabled; the in-memory key still stabilizes retries in this mount.
+        }
+      }
+      if (!idempotencyKey) {
+        idempotencyKey = `lic-${dealId}-${crypto.randomUUID()}`;
+        try {
+          sessionStorage.setItem(`bridge-license-purchase:${dealId}`, idempotencyKey);
+        } catch {
+          // Keep the same key in memory if browser storage is unavailable.
+        }
+      }
+      idempotencyKeys.current.set(dealId, idempotencyKey);
       const created = await createLicenseOrder({
-        data: { titleId, idempotencyKey: `lic-${titleId}-${Date.now()}` },
+        data: { titleId, dealId, idempotencyKey },
       });
       const Razorpay = await loadRazorpay();
       await new Promise<void>((resolve, reject) => {
+        let verified = false;
         const ck = new Razorpay({
           key: created.keyId,
           amount: created.amountPaise,
@@ -91,17 +136,33 @@ function BuyerBody() {
                 signature: res.razorpay_signature,
               },
             })
-              .then(() => resolve())
+              .then(() => {
+                verified = true;
+                resolve();
+              })
               .catch(reject);
+          },
+          modal: {
+            ondismiss: () => {
+              if (!verified) reject(new Error("Checkout closed before payment was verified"));
+            },
           },
         });
         ck.open();
       });
+      return { titleId, dealId };
     },
-    onSuccess: () => {
-      toast("Payment captured — entitlement recorded");
+    onSuccess: (_result, variables) => {
+      idempotencyKeys.current.delete(variables.dealId);
+      try {
+        sessionStorage.removeItem(`bridge-license-purchase:${variables.dealId}`);
+      } catch {
+        // Successful verification is already authoritative on the server.
+      }
+      toast("License payment verified");
       void qc.invalidateQueries({ queryKey: ["bridge-titles"] });
       void qc.invalidateQueries({ queryKey: ["bridge-entitlements"] });
+      void qc.invalidateQueries({ queryKey: ["bridge-accepted-license-deals"] });
       setTab("licenses");
     },
     onError: (err) => toast(err instanceof Error ? err.message : "Payment did not complete"),
@@ -110,70 +171,124 @@ function BuyerBody() {
   const titles = titlesQ.data?.titles ?? [];
   const needle = query.trim().toLowerCase();
   const visible = titles.filter((t) => !needle || `${t.name} ${t.language}`.toLowerCase().includes(needle));
-  const licensed = visible.filter((t) => entitled.has(t.id));
-  if (titlesQ.isPending || entQ.isPending) return <p>Loading buyer dashboard…</p>;
+  const licensed = titles.filter((t) => entitled.has(t.id));
+
+  if (titlesQ.isPending || entQ.isPending || dealsQ.isPending) return <p>Loading buyer workspace…</p>;
   if (titlesQ.isError)
     return (
       <p role="alert">
-        No licensing-ready titles are on the desk yet.{" "}
-        <button type="button" className="underline" onClick={() => void titlesQ.refetch()}>Refresh</button>
+        Titles could not be loaded.{" "}
+        <button type="button" className="underline" onClick={() => void titlesQ.refetch()}>Try again</button>
       </p>
     );
 
   return (
-    <div className="space-y-5">
-      <div className="grid gap-3 sm:grid-cols-3">
-        <Stat label="Discover" value={String(titles.length)} note="Live for buyers" />
-        <Stat label="Listing" value={String(visible.length)} note="Matching this search" />
-        <Stat label="Licenses" value={String(licensed.length)} note="Captured entitlements" />
-      </div>
-      <div className="flex flex-wrap gap-2">
-        {(["discover", "listing", "licenses"] as const).map((id) => (
-          <button key={id} type="button" onClick={() => setTab(id)} className={`rounded-sm border px-3 py-1.5 text-sm capitalize ${tab === id ? "border-accent text-accent" : "border-line text-muted"}`}>
-            {id}
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line pb-3">
+        <div className="flex gap-2" aria-label="Buyer workspace">
+          <button
+            type="button"
+            onClick={() => setTab("discover")}
+            aria-pressed={tab === "discover"}
+            className={`rounded-sm px-3 py-2 text-sm ${tab === "discover" ? "bg-accent text-white" : "text-muted hover:text-foreground"}`}
+          >
+            Discover titles
           </button>
-        ))}
+          <button
+            type="button"
+            onClick={() => setTab("licenses")}
+            aria-pressed={tab === "licenses"}
+            className={`rounded-sm px-3 py-2 text-sm ${tab === "licenses" ? "bg-accent text-white" : "text-muted hover:text-foreground"}`}
+          >
+            My licenses
+          </button>
+        </div>
+        {tab === "discover" && (
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search title or language"
+            aria-label="Search titles by name or language"
+            className="w-full max-w-xs rounded-sm border border-line bg-transparent px-3 py-2 text-sm"
+          />
+        )}
       </div>
-      {tab !== "licenses" && (
-        <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search title or language" className="w-full max-w-md rounded-sm border border-line bg-transparent px-3 py-2 text-sm" />
-      )}
+
       {!titles.length ? (
-        <p className="text-sm text-muted">No live titles yet. Nothing is for sale until licensing-ready clears.</p>
+        <p className="py-6 text-sm text-muted">
+          No licensing-ready titles are available yet. Titles appear here after Bridge authorizes buyer access.
+        </p>
       ) : tab === "licenses" ? (
-        <TitleList titles={licensed} entitled={entitled} order={order} empty="No licenses yet. Discover a title and complete payment." />
+        <TitleList titles={licensed} entitled={entitled} entitledDeals={entitledDeals} deals={[]} order={order} mode="licenses" empty="Your completed licenses will appear here." />
       ) : (
-        <TitleList titles={visible} entitled={entitled} order={order} empty="No titles match this search." />
+        <TitleList titles={visible} entitled={entitled} entitledDeals={entitledDeals} deals={dealsQ.data?.deals ?? []} order={order} mode="discover" empty="No titles match this search." />
       )}
     </div>
   );
 }
 
-function Stat({ label, value, note }: { label: string; value: string; note: string }) {
-  return (
-    <div className="rounded-sm border border-line px-4 py-3">
-      <div className="text-xs uppercase tracking-widest text-muted">{label}</div>
-      <div className="mt-1 text-2xl font-semibold">{value}</div>
-      <div className="text-xs text-muted">{note}</div>
-    </div>
-  );
-}
-
-function TitleList({ titles, entitled, order, empty }: { titles: Array<{ id: string; name: string; language: string; licensingFeePaise: number; status: string }>; entitled: Set<string>; order: { isPending: boolean; mutate: (id: string) => void }; empty: string }) {
-  if (!titles.length) return <p className="text-sm text-muted">{empty}</p>;
+function TitleList({
+  titles,
+  entitled,
+  entitledDeals,
+  deals,
+  order,
+  mode,
+  empty,
+}: {
+  titles: Array<{ id: string; name: string; language: string; licensingFeePaise: number; status: string }>;
+  entitled: Set<string>;
+  entitledDeals: Set<string>;
+  deals: BuyerDeal[];
+  order: { isPending: boolean; mutate: (input: { titleId: string; dealId: string }) => void };
+  mode: "discover" | "licenses";
+  empty: string;
+}) {
+  if (!titles.length) return <p className="py-6 text-sm text-muted">{empty}</p>;
   return (
     <ul className="divide-y divide-line rounded-sm border border-line">
-      {titles.map((t) => (
-        <li key={t.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-4">
-          <div>
-            <Link to="/title/$id" params={{ id: t.id }} className="font-medium hover:text-accent">{t.name}</Link>
-            <p className="text-sm text-muted">{t.language}{t.licensingFeePaise > 0 ? ` · ₹${(t.licensingFeePaise / 100).toFixed(0)}` : " · fee unset"}</p>
-          </div>
-          <div className="flex items-center gap-3">
-            <StatusChip status={t.status as never} />
-            {entitled.has(t.id) ? <span className="text-sm text-accent">Licensed</span> : <Button disabled={order.isPending || t.licensingFeePaise <= 0} onClick={() => order.mutate(t.id)}>License</Button>}
-          </div>
-        </li>
-      ))}
+      {titles.map((t) => {
+        const titleDeals = deals.filter((deal) => deal.titleId === t.id);
+        return (
+          <li key={t.id} className="flex flex-wrap items-start justify-between gap-3 px-4 py-4">
+            <div className="min-w-0 flex-1">
+              <Link to="/title/$id" params={{ id: t.id }} className="font-medium hover:text-accent">
+                {t.name}
+              </Link>
+              <p className="mt-1 text-sm text-muted">{t.language}</p>
+              {mode === "discover" && (
+                <div className="mt-3 space-y-2">
+                  {!titleDeals.length ? (
+                    <p className="text-sm text-muted">No accepted offer is available. Bridge must record an approved deal before checkout.</p>
+                  ) : titleDeals.map((deal) => (
+                    <div key={deal.id} className="rounded-sm border border-line p-3">
+                      <p className="font-medium">{deal.rightsCategory} · {deal.exclusivity === "EXCLUSIVE" ? "Exclusive" : "Non-exclusive"}</p>
+                      <p className="mt-1 text-sm text-muted">
+                        {deal.territories.join(", ")} · {deal.languages.join(", ")} · {deal.termStart} to {deal.termEnd}
+                      </p>
+                      <p className="mt-1 text-sm">
+                        {deal.currency} {(deal.agreedFeePaise / 100).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </p>
+                      <div className="mt-2">
+                        {entitledDeals.has(deal.id) ? (
+                          <span className="text-sm font-medium text-accent">Licensed under this deal</span>
+                        ) : (
+                          <Button disabled={order.isPending} onClick={() => order.mutate({ titleId: t.id, dealId: deal.id })}>
+                            {order.isPending ? "Opening checkout…" : "Pay agreed fee"}
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            {mode === "licenses" && entitled.has(t.id) && (
+              <span className="text-sm font-medium text-accent">Licensed</span>
+            )}
+          </li>
+        );
+      })}
     </ul>
   );
 }
