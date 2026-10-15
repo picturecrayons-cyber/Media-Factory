@@ -7,6 +7,7 @@ import { assertPermission, canReadTitle } from "./rbac";
 import { requireVerifiedActor } from "./session";
 import { loadTitle } from "./titles";
 import { writeAudit } from "./audit";
+import { summarizeEvidenceStatus, type EvidenceReviewStatus } from "./rights-admin-policy";
 import {
   RIGHTS_AVAILABILITY_STATUSES,
   RIGHTS_EXCLUSIVITY,
@@ -226,17 +227,13 @@ export const reviewRightsEvidence = createServerFn({ method: "POST" })
         set review_status = ${data.reviewStatus}, reviewed_by = ${actor.userId}, reviewed_at = now()
         where id = ${data.evidenceId}::uuid
       `;
-      const summary = await tx`
-        select
-          count(*) filter (where review_status = 'VERIFIED') as verified_count,
-          count(*) filter (where review_status in ('PENDING_REVIEW','DISPUTED')) as pending_count,
-          count(*) filter (where review_status = 'REJECTED') as rejected_count
-        from public.bridge_rights_evidence where title_right_id = ${row.title_right_id}::uuid
+      const evidenceRows = await tx`
+        select review_status from public.bridge_rights_evidence
+        where title_right_id = ${row.title_right_id}::uuid
       `;
-      const counts = summary[0] as { verified_count: number; pending_count: number; rejected_count: number };
-      const nextStatus = Number(counts.rejected_count) > 0 ? "REJECTED"
-        : Number(counts.pending_count) > 0 ? "PENDING_REVIEW"
-        : Number(counts.verified_count) > 0 ? "VERIFIED" : "MISSING";
+      const nextStatus = summarizeEvidenceStatus(
+        evidenceRows.map((item: { review_status: EvidenceReviewStatus }) => item.review_status),
+      );
       await tx`
         update public.bridge_title_rights
         set evidence_status = ${nextStatus}, reviewed_by = ${actor.userId}, reviewed_at = now(), updated_at = now()
