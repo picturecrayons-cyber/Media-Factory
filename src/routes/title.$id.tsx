@@ -4,7 +4,7 @@ import { WorkflowDesk } from "@/components/bridge/workflow-desk";
 import { publicationIsActive } from "@/lib/bridge/workflow-policy";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { getTitle, updateTitle } from "@/lib/bridge/titles";
@@ -278,49 +278,85 @@ function FilesPanel({
 }) {
   const [uploading, setUploading] = useState<SimpleAssetKind | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<{
+    kind: SimpleAssetKind;
+    filename: string;
+    loaded: number;
+    total: number;
+    stage: "preparing" | "uploading" | "verifying";
+  } | null>(null);
+  const uploadXhrRef = useRef<XMLHttpRequest | null>(null);
+
   async function uploadFile(kind: SimpleAssetKind, file: File) {
     const filename = asciiUploadName(file.name);
     const contentType = file.type || "application/octet-stream";
-    const validation = validateOttIngestFile({
-      kind,
-      filename,
-      contentType,
-    });
+    const validation = validateOttIngestFile({ kind, filename, contentType });
     if (!validation.ok) {
       setMessage(validation.message);
       return;
     }
     setUploading(kind);
-    setMessage(`Preparing ${kind} upload…`);
+    setUploadProgress({ kind, filename: file.name, loaded: 0, total: file.size, stage: "preparing" });
+    setMessage("Preparing secure upload…");
     try {
       const signed = await requestAssetUpload({
-        data: {
-          titleId,
-          kind,
-          filename,
-          contentType,
-        },
+        data: { titleId, kind, filename, contentType },
       });
       const uploadUrl = new URL(signed.url);
-      uploadUrl.pathname = uploadUrl.pathname.split("/").map((part) => encodeURIComponent(decodeURIComponent(part))).join("/");
-      const put = await fetch(uploadUrl.toString(), {
-        method: signed.method,
-        body: file,
-        headers: { "content-type": contentType },
+      uploadUrl.pathname = uploadUrl.pathname
+        .split("/")
+        .map((part) => encodeURIComponent(decodeURIComponent(part)))
+        .join("/");
+      setUploadProgress({ kind, filename: file.name, loaded: 0, total: file.size, stage: "uploading" });
+      setMessage("Uploading file…");
+      await new Promise<void>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        uploadXhrRef.current = xhr;
+        xhr.open(signed.method, uploadUrl.toString());
+        xhr.setRequestHeader("content-type", contentType);
+        xhr.upload.onprogress = (event) => {
+          if (!event.lengthComputable) return;
+          setUploadProgress({
+            kind,
+            filename: file.name,
+            loaded: event.loaded,
+            total: event.total || file.size,
+            stage: "uploading",
+          });
+        };
+        xhr.onload = () => {
+          if (xhr.status >= 200 && xhr.status < 300) resolve();
+          else reject(new Error(`Upload failed (${xhr.status})`));
+        };
+        xhr.onerror = () => reject(new Error("Network error during upload"));
+        xhr.onabort = () => reject(new Error("UPLOAD_CANCELLED"));
+        xhr.send(file);
       });
-      if (!put.ok) throw new Error(`Upload failed (${put.status})`);
+      setUploadProgress({ kind, filename: file.name, loaded: file.size, total: file.size, stage: "verifying" });
+      setMessage("Upload transferred. Verifying the stored master…");
       await confirmAssetUpload({ data: { assetId: signed.assetId, expectedByteSize: file.size } });
       await onAssetsChanged();
-      setMessage(`${kind[0].toUpperCase() + kind.slice(1)} is ready.`);
+      setMessage(`${kind[0].toUpperCase() + kind.slice(1)} uploaded and verified.`);
     } catch (error) {
       const raw = error instanceof Error ? error.message : "Upload failed";
       setMessage(
-        raw.includes("STORAGE_UNAVAILABLE")
-          ? "Storage service is currently unavailable. Please try again later."
-          : raw,
+        raw === "UPLOAD_CANCELLED"
+          ? "Upload cancelled. The file was not verified; start a new upload only when ready."
+          : raw.includes("STORAGE_UNAVAILABLE")
+            ? "Storage service is currently unavailable. Please try again later."
+            : raw,
       );
     } finally {
+      uploadXhrRef.current = null;
       setUploading(null);
+      setUploadProgress(null);
+    }
+  }
+
+  function cancelUpload() {
+    if (!uploadXhrRef.current) return;
+    if (window.confirm("Cancel this upload? The file will not be verified, and you may need to upload it again.")) {
+      uploadXhrRef.current.abort();
     }
   }
   async function download(id: string) {
@@ -353,12 +389,66 @@ function FilesPanel({
             label={label}
             status={assets.some((a) => (a.kind === kind || (kind === "poster_vertical" && a.kind === "poster")) && a.verified) ? "Ready" : empty}
             busy={uploading === kind}
-            canUpload={canUpload}
+            canUpload={canUpload && !uploading}
             onFile={(file) => void uploadFile(kind, file)}
           />
         ))}
       </div>
-      {message ? <p className="mt-3 text-xs text-muted">{message}</p> : null}
+      {uploadProgress ? (
+        <section
+          role="status"
+          aria-live="polite"
+          aria-label="Master upload status"
+          className="mt-5 rounded-2xl border border-accent/40 bg-elevated p-4 sm:p-5"
+        >
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-sm font-semibold">
+                {uploadProgress.kind === "master" ? "Main Film upload" : `${uploadProgress.kind.replaceAll("_", " ")} upload`}
+              </p>
+              <p className="mt-1 break-words text-xs text-muted">{uploadProgress.filename}</p>
+              <p className="mt-1 text-xs text-muted">
+                {(uploadProgress.total / 1024 ** 3).toFixed(2)} GB total
+              </p>
+            </div>
+            <span className="rounded-full border border-line px-3 py-1.5 text-xs font-semibold">
+              {uploadProgress.stage === "preparing"
+                ? "Preparing"
+                : uploadProgress.stage === "verifying"
+                  ? "Verifying"
+                  : `${uploadProgress.total > 0 ? Math.min(100, Math.floor((uploadProgress.loaded / uploadProgress.total) * 100)) : 0}%`}
+            </span>
+          </div>
+          <progress
+            className="mt-4 h-2 w-full accent-current"
+            aria-label="File transfer progress"
+            max={uploadProgress.total || 1}
+            value={uploadProgress.stage === "uploading" ? uploadProgress.loaded : uploadProgress.stage === "verifying" ? uploadProgress.total : 0}
+          />
+          <p className="mt-2 text-xs text-muted">
+            {uploadProgress.stage === "preparing"
+              ? "Preparing secure upload. Transfer has not started yet."
+              : uploadProgress.stage === "verifying"
+                ? "Transfer finished. Checking the stored object and verified copy; this is not complete until verification succeeds."
+                : `${(uploadProgress.loaded / 1024 ** 3).toFixed(2)} GB of ${(uploadProgress.total / 1024 ** 3).toFixed(2)} GB transferred.`}
+          </p>
+          {uploadProgress.stage === "uploading" ? (
+            <div className="mt-4 flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                onClick={cancelUpload}
+                className="rounded-full border border-line-strong px-4 py-2 text-xs font-semibold"
+              >
+                Cancel upload
+              </button>
+              <p className="text-xs text-muted">
+                Pause/resume is not available for this single-request upload. Cancelling means you may need to upload the file again.
+              </p>
+            </div>
+          ) : null}
+        </section>
+      ) : null}
+      {message ? <p className="mt-3 text-sm text-muted" role="status" aria-live="polite">{message}</p> : null}
       <div className="mt-5 space-y-2">
         {assets.map((a) => (
           <div
