@@ -221,6 +221,31 @@ export async function verifyObject(key: string, expectedContentType?: string | n
   };
 }
 
+async function safeOciErrorDetails(res: Response) {
+  // OCI error bodies are untrusted. Only emit bounded, known fields; never dump
+  // arbitrary response text or request headers into application logs.
+  let code: string | undefined;
+  let message: string | undefined;
+  try {
+    const body = (await res.clone().json()) as { code?: unknown; message?: unknown };
+    const clean = (value: unknown) =>
+      typeof value === "string"
+        ? value.replace(/[\\u0000-\\u001f\\u007f]/g, " ").slice(0, 180)
+        : undefined;
+    code = clean(body.code);
+    message = clean(body.message);
+  } catch {
+    // Some OCI/gateway failures return an empty or non-JSON body.
+  }
+  const requestId = res.headers.get("opc-request-id") || res.headers.get("x-request-id") || undefined;
+  const cleanRequestId = requestId?.replace(/[^a-zA-Z0-9._:/-]/g, "").slice(0, 160);
+  return [
+    code ? `code=${code}` : undefined,
+    message ? `message=${message}` : undefined,
+    cleanRequestId ? `requestId=${cleanRequestId}` : undefined,
+  ].filter(Boolean).join(" ");
+}
+
 async function pollWorkRequest(cfg: OciConfig, workRequestId: string) {
   const url = new URL(`/workRequests/${encodeURIComponent(workRequestId)}`, endpoint(cfg.region));
   for (let i = 0; i < 30; i += 1) {
@@ -255,7 +280,10 @@ export async function sealVerifiedObject(sourceKey: string, destinationKey: stri
       destinationObjectName: destinationKey,
     },
   });
-  if (res.status !== 202 && !res.ok) throw new Error(`OCI object copy failed (${res.status})`);
+  if (res.status !== 202 && !res.ok) {
+    const details = await safeOciErrorDetails(res);
+    throw new Error(`OCI object copy failed (${res.status})${details ? ` ${details}` : ""}`);
+  }
   const workRequestId = res.headers.get("opc-work-request-id");
   if (workRequestId) await pollWorkRequest(cfg, workRequestId);
   return verifyObject(destinationKey);
