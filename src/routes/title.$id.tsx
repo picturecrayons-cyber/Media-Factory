@@ -144,6 +144,9 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
                 <h1 className="mt-1 font-display text-2xl font-semibold text-fg sm:text-3xl">
                   {title.name}
                 </h1>
+                <p className="mt-1 break-all text-xs text-muted">
+                  Title ID: <code>{title.id}</code>
+                </p>
                 <p className="mt-1 text-sm text-muted">
                   {title.language}
                   {title.year ? ` · ${title.year}` : ""}
@@ -368,6 +371,9 @@ function FilesPanel({
             <div>
               <p className="text-sm font-semibold">{a.kind}</p>
               <p className="text-xs text-muted">{a.verified ? "Ready" : "Processing"}</p>
+              <p className="mt-1 break-all text-[11px] text-muted">
+                Asset ID: <code>{a.id}</code>
+              </p>
             </div>
             {a.verified ? (
               <button
