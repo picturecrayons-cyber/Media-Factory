@@ -137,7 +137,7 @@ export const listTitleRights = createServerFn({ method: "GET" })
           order by created_at desc`,
     ]);
     return {
-      rights: rights.map((right: { id: string }) => ({
+      rights: rights.map((right) => ({
         ...right,
         territories: territories.filter((item) => item.title_right_id === right.id),
         languages: languages.filter((item) => item.title_right_id === right.id),
