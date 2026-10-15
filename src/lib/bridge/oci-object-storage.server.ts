@@ -230,7 +230,7 @@ async function safeOciErrorDetails(res: Response) {
     const body = (await res.clone().json()) as { code?: unknown; message?: unknown };
     const clean = (value: unknown) =>
       typeof value === "string"
-        ? value.replace(/[\\u0000-\\u001f\\u007f]/g, " ").slice(0, 180)
+        ? value.replace(/[\x00-\x1f\x7f]/g, " ").slice(0, 180)
         : undefined;
     code = clean(body.code);
     message = clean(body.message);
