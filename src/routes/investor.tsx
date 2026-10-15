@@ -36,6 +36,13 @@ function InvestorBody({ userId }: { userId: string }) {
         <article className="rounded-sm border border-line p-4"><p className="text-xs uppercase tracking-widest text-muted">Recorded capital</p><p className="mt-2 text-2xl font-semibold">₹{Math.round(totalCapital / 100).toLocaleString("en-IN")}</p></article>
       </section>
 
+      <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
+        <p className="text-xs font-semibold uppercase tracking-widest text-accent">Title-by-title opportunities</p>
+        <h3 className="mt-2 font-display text-xl font-semibold">Explore Admin-approved offers</h3>
+        <p className="mt-2 text-sm leading-6 text-muted">Review each title’s approved terms, rights included and excluded, participation formula, tenure and disclosures. Expressions of interest are not funded investments.</p>
+        <Link to="/investor-opportunities" className="mt-4 inline-flex rounded-full bg-accent px-4 py-2 text-sm font-semibold text-[#041018]">View investment opportunities →</Link>
+      </section>
+
       <section className="rounded-3xl border border-line bg-surface p-6">
         <div className="flex items-end justify-between gap-3">
           <div><p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">Portfolio</p><h3 className="mt-1 font-display text-2xl font-semibold">Your investments</h3></div>
