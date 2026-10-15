@@ -52,3 +52,7 @@ test("accepted deal payments create scoped entitlements, not title-wide grants",
   assert.match(source, /deal\.agreed_fee_paise/);
   assert.match(source, /licensing\.deal_payment_captured/);
 });
+
+test("deal-scoped captures do not transition the whole title to LICENSED", () => {
+  assert.match(source, /if \(!localPayment\.deal_id && title &&/);
+});
