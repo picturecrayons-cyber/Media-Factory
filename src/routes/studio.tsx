@@ -19,16 +19,34 @@ function Studio() {
               opportunity="Submit a slate. Production services stay optional and separate from licensing."
               steps={["Add title", "Prepare assets", "Rights clearance", "License", "Deliver"]}
             />
-            <section id="add-title">
-              <h2 className="text-lg font-semibold">Add title</h2>
+            <section id="add-title" aria-labelledby="add-title-heading">
+              <h2 id="add-title-heading" className="text-lg font-semibold">Add title</h2>
+              <p className="mt-1 text-sm text-muted">
+                New titles start as drafts. Creating a title does not publish it or make it visible to buyers.
+              </p>
               <div className="mt-3"><CreateTitleForm concise /></div>
             </section>
-            <section>
-              <h2 className="text-lg font-semibold">Studio slate</h2>
-              <div className="mt-3"><TitleList empty="No titles yet. Add the first title." /></div>
+            <section aria-labelledby="studio-slate-heading">
+              <div className="flex flex-wrap items-end justify-between gap-2">
+                <div>
+                  <h2 id="studio-slate-heading" className="text-lg font-semibold">Studio slate</h2>
+                  <p className="mt-1 text-sm text-muted">
+                    Open a title to continue its workflow. Rights, QC and publication checks remain required.
+                  </p>
+                </div>
+              </div>
+              <div className="mt-3">
+                <TitleList
+                  empty="No studio titles yet. Add your first title above to start a draft."
+                  showNextStep
+                />
+              </div>
             </section>
-            <section>
-              <h2 className="text-lg font-semibold">Production services</h2>
+            <section aria-labelledby="production-services-heading">
+              <h2 id="production-services-heading" className="text-lg font-semibold">Production services</h2>
+              <p className="mt-1 text-sm text-muted">
+                Optional service requests are managed separately and do not grant licensing or publishing approval.
+              </p>
               <div className="mt-3"><StreamVistaOrders /></div>
             </section>
           </div>
