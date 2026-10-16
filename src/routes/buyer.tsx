@@ -146,7 +146,7 @@ function InternalBuyerDesk() {
                 </div>
                 <div className="flex flex-wrap items-center gap-3">
                   <StatusChip status={t.status as never} />
-                  <Link to="/workspace" className="rounded-full border border-line px-3 py-1.5 text-sm font-semibold">Open record</Link>
+                  <Link to="/title/$id" params={{ id: t.id }} className="rounded-full border border-line px-3 py-1.5 text-sm font-semibold">Open record</Link>
                 </div>
               </li>
             ))}
@@ -210,12 +210,21 @@ function BuyerBody() {
   const visible = titles.filter((t) => !needle || `${t.name} ${t.language}`.toLowerCase().includes(needle));
   const licensed = visible.filter((t) => entitled.has(t.id));
   if (titlesQ.isPending || entQ.isPending) return <p>Loading buyer dashboard…</p>;
-  if (titlesQ.isError)
+  if (titlesQ.isError || entQ.isError)
     return (
-      <p role="alert">
-        No licensing-ready titles are on the desk yet.{" "}
-        <button type="button" className="underline" onClick={() => void titlesQ.refetch()}>Refresh</button>
-      </p>
+      <section className="rounded-xl border border-line bg-surface p-5">
+        <h2 className="font-semibold">Buyer data unavailable</h2>
+        <p role="alert" className="mt-2 text-sm text-muted">
+          The buyer catalog or license history could not be verified. No title availability or entitlement state is being inferred from missing data.
+        </p>
+        <button
+          type="button"
+          className="mt-4 rounded-full border border-line px-4 py-2 text-sm font-semibold"
+          onClick={() => { void titlesQ.refetch(); void entQ.refetch(); }}
+        >
+          Retry
+        </button>
+      </section>
     );
 
   return (
