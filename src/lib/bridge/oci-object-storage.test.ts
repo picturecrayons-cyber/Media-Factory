@@ -1,16 +1,176 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { generateKeyPairSync, verify } from "node:crypto";
-import { sealVerifiedObject, verifyObject } from "./oci-object-storage.server.ts";
+import { createHash, createPublicKey, generateKeyPairSync, verify } from "node:crypto";
+import {
+  normalizePrivateKey,
+  validateOcid,
+  titleAssetKey,
+  sealVerifiedObject,
+  verifyObject,
+} from "./oci-object-storage.server.ts";
+
+const MOCK_TENANCY_OCID = "ocid1.tenancy.oc1..aaaaaaaatesttenancy";
+const MOCK_USER_OCID = "ocid1.user.oc1..aaaaaaaatestuser";
+
+function fingerprintFor(privateKey: ReturnType<typeof generateKeyPairSync>["privateKey"]) {
+  const der = createPublicKey(privateKey).export({ type: "spki", format: "der" });
+  return createHash("md5").update(der).digest("hex").match(/.{1,2}/g)!.join(":");
+}
+
+test("validateOcid validates standard format and rejects invalid or placeholder OCIDs", () => {
+  // Valid OCIDs
+  assert.equal(
+    validateOcid("OCI_TENANCY_OCID", MOCK_TENANCY_OCID, "tenancy"),
+    MOCK_TENANCY_OCID,
+  );
+  assert.equal(
+    validateOcid("OCI_USER_OCID", MOCK_USER_OCID, "user"),
+    MOCK_USER_OCID,
+  );
+
+  // Rejects Malayalam / bracketed placeholders (the exact root cause of 401 NotAuthenticated)
+  assert.throws(
+    () =>
+      validateOcid(
+        "OCI_TENANCY_OCID",
+        "ocid1.tenancy.oc1..[ഇവിടെ_നിങ്ങൾ_കോപ്പി_ചെയ്ത_യഥാർത്ഥ_OCID_പേസ്റ്റ്_ചെയ്യുക]",
+        "tenancy",
+      ),
+    /is not a valid Oracle Cloud Infrastructure tenancy OCID/,
+  );
+
+  // Rejects arbitrary bracketed placeholders
+  assert.throws(
+    () =>
+      validateOcid(
+        "OCI_TENANCY_OCID",
+        "ocid1.tenancy.oc1..[PASTE_REAL_OCID_HERE]",
+        "tenancy",
+      ),
+    /is not a valid Oracle Cloud Infrastructure tenancy OCID/,
+  );
+
+  // Rejects non-OCID strings
+  assert.throws(
+    () => validateOcid("OCI_TENANCY_OCID", "test-tenancy", "tenancy"),
+    /is not a valid Oracle Cloud Infrastructure tenancy OCID/,
+  );
+
+  // Rejects mismatched expected type
+  assert.throws(
+    () => validateOcid("OCI_TENANCY_OCID", MOCK_USER_OCID, "tenancy"),
+    /is not a valid Oracle Cloud Infrastructure tenancy OCID/,
+  );
+  assert.throws(
+    () => validateOcid("OCI_USER_OCID", MOCK_TENANCY_OCID, "user"),
+    /is not a valid Oracle Cloud Infrastructure user OCID/,
+  );
+});
+
+test("normalizePrivateKey handles standard, quoted, escaped, and base64-encoded PEM", () => {
+  const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  const rawPem = privateKey.export({ type: "pkcs8", format: "pem" }).toString();
+
+  // Raw PEM
+  assert.equal(normalizePrivateKey(rawPem), rawPem.trim() + "\n");
+
+  // Escaped newlines
+  assert.equal(normalizePrivateKey(rawPem.replaceAll("\n", "\\n")), rawPem.trim() + "\n");
+
+  // Double-quoted string
+  assert.equal(normalizePrivateKey(JSON.stringify(rawPem)), rawPem.trim() + "\n");
+
+  // Single-quoted string
+  assert.equal(normalizePrivateKey(`'${rawPem.trim()}'`), rawPem.trim() + "\n");
+
+  // CRLF line breaks
+  assert.equal(normalizePrivateKey(rawPem.replaceAll("\n", "\r\n")), rawPem.trim() + "\n");
+
+  // Base64-encoded PEM
+  const base64 = Buffer.from(rawPem).toString("base64");
+  assert.equal(normalizePrivateKey(base64), rawPem.trim() + "\n");
+
+  // Rejects non-PEM string
+  assert.throws(
+    () => normalizePrivateKey("not-a-private-key"),
+    /OCI private key must be PEM encoded/,
+  );
+});
+
+test("titleAssetKey validates path segments and rejects traversal attempts", () => {
+  // Valid call constructs canonical path
+  const key = titleAssetKey({
+    ownerUserId: "usr-123",
+    titleId: "title-abc",
+    kind: "master",
+    filename: "video.mp4",
+  });
+  assert.match(key, /^bridge\/usr-123\/title-abc\/master\/\d+-video\.mp4$/);
+
+  // Rejects traversal in ownerUserId
+  assert.throws(
+    () =>
+      titleAssetKey({
+        ownerUserId: "../evil",
+        titleId: "title-abc",
+        kind: "master",
+        filename: "video.mp4",
+      }),
+    /Invalid ownerUserId for title asset key/,
+  );
+
+  // Rejects traversal in titleId
+  assert.throws(
+    () =>
+      titleAssetKey({
+        ownerUserId: "usr-123",
+        titleId: "../other-title",
+        kind: "master",
+        filename: "video.mp4",
+      }),
+    /Invalid titleId for title asset key/,
+  );
+
+  // Rejects traversal in kind
+  assert.throws(
+    () =>
+      titleAssetKey({
+        ownerUserId: "usr-123",
+        titleId: "title-abc",
+        kind: "master/sub",
+        filename: "video.mp4",
+      }),
+    /Invalid asset kind for title asset key/,
+  );
+
+  // Rejects traversal in filename
+  assert.throws(
+    () =>
+      titleAssetKey({
+        ownerUserId: "usr-123",
+        titleId: "title-abc",
+        kind: "master",
+        filename: "../../evil.mp4",
+      }),
+    /Invalid filename for title asset key/,
+  );
+});
 
 test("OCI private key normalization accepts escaped and quoted PEM secrets", async () => {
   const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
   const pem = privateKey.export({ type: "pkcs8", format: "pem" }).toString();
-  const variants = [
+  const fingerprint = fingerprintFor(privateKey);
+  const keyVariants = [
     pem,
     JSON.stringify(pem),
     pem.replaceAll("\n", "\\n"),
     JSON.stringify(pem.replaceAll("\n", "\\n")),
+  ];
+  const fingerprintVariants = [
+    fingerprint,
+    fingerprint.toUpperCase(),
+    fingerprint.replaceAll(":", ""),
+    fingerprint.replaceAll(":", "").toUpperCase(),
   ];
 
   const originalFetch = globalThis.fetch;
@@ -26,23 +186,32 @@ test("OCI private key normalization accepts escaped and quoted PEM secrets", asy
   const saved = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
 
   try {
-    for (const variant of variants) {
-      Object.assign(process.env, {
-        OCI_TENANCY_OCID: "test-tenancy",
-        OCI_USER_OCID: "test-user",
-        OCI_PRIVATE_KEY: variant,
-        OCI_FINGERPRINT: "test-fingerprint",
-        OCI_REGION: "ap-mumbai-1",
-        OCI_NAMESPACE: "test-namespace",
-        OCI_BUCKET_NAME: "test-bucket",
-      });
-      globalThis.fetch = async () =>
-        new Response(null, {
-          status: 200,
-          headers: { "content-length": "1", etag: '"test-etag"' },
+    for (const keyVariant of keyVariants) {
+      for (const fingerprintVariant of fingerprintVariants) {
+        Object.assign(process.env, {
+          OCI_TENANCY_OCID: MOCK_TENANCY_OCID,
+          OCI_USER_OCID: MOCK_USER_OCID,
+          OCI_PRIVATE_KEY: keyVariant,
+          OCI_FINGERPRINT: fingerprintVariant,
+          OCI_REGION: "ap-mumbai-1",
+          OCI_NAMESPACE: "test-namespace",
+          OCI_BUCKET_NAME: "test-bucket",
         });
+        let authorization = "";
+        globalThis.fetch = async (_input, init) => {
+          authorization = new Headers(init?.headers).get("authorization") || "";
+          return new Response(null, {
+            status: 200,
+            headers: { "content-length": "1", etag: '"test-etag"' },
+          });
+        };
 
-      await assert.doesNotReject(verifyObject("asset-key"));
+        await assert.doesNotReject(verifyObject("asset-key"));
+        assert.ok(
+          authorization.includes(`keyId="${MOCK_TENANCY_OCID}/${MOCK_USER_OCID}/${fingerprint}"`),
+          "OCI Signature keyId must use canonical lowercase colon-separated fingerprint",
+        );
+      }
     }
   } finally {
     globalThis.fetch = originalFetch;
@@ -55,11 +224,12 @@ test("OCI private key normalization accepts escaped and quoted PEM secrets", asy
 
 test("OCI copy polling uses Object Storage and only verifies successful copies", async (t) => {
   const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  const fingerprint = fingerprintFor(privateKey);
   const values = {
-    OCI_TENANCY_OCID: "test-tenancy",
-    OCI_USER_OCID: "test-user",
+    OCI_TENANCY_OCID: MOCK_TENANCY_OCID,
+    OCI_USER_OCID: MOCK_USER_OCID,
     OCI_PRIVATE_KEY: privateKey.export({ type: "pkcs8", format: "pem" }).toString(),
-    OCI_FINGERPRINT: "test-fingerprint",
+    OCI_FINGERPRINT: fingerprint,
     OCI_REGION: "ap-mumbai-1",
     OCI_NAMESPACE: "test-namespace",
     OCI_BUCKET_NAME: "test-bucket",
@@ -115,27 +285,194 @@ test("OCI copy polling uses Object Storage and only verifies successful copies",
   }
 });
 
-
 test("OCI object verification rejects an unexpected content type", async () => {
   const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  const fingerprint = fingerprintFor(privateKey);
   const values = {
-    OCI_TENANCY_OCID: "test-tenancy", OCI_USER_OCID: "test-user",
+    OCI_TENANCY_OCID: MOCK_TENANCY_OCID,
+    OCI_USER_OCID: MOCK_USER_OCID,
     OCI_PRIVATE_KEY: privateKey.export({ type: "pkcs8", format: "pem" }).toString(),
-    OCI_FINGERPRINT: "test-fingerprint", OCI_REGION: "ap-mumbai-1",
-    OCI_NAMESPACE: "test-namespace", OCI_BUCKET_NAME: "test-bucket",
+    OCI_FINGERPRINT: fingerprint,
+    OCI_REGION: "ap-mumbai-1",
+    OCI_NAMESPACE: "test-namespace",
+    OCI_BUCKET_NAME: "test-bucket",
   };
   const saved = Object.fromEntries(Object.keys(values).map((key) => [key, process.env[key]]));
   const originalFetch = globalThis.fetch;
   Object.assign(process.env, values);
-  globalThis.fetch = async () => new Response(null, { status: 200,
-    headers: { "content-length": "12", "content-type": "image/png", etag: '"test-etag"' } });
+  globalThis.fetch = async () =>
+    new Response(null, {
+      status: 200,
+      headers: { "content-length": "12", "content-type": "image/png", etag: '"test-etag"' },
+    });
   try {
     await assert.rejects(verifyObject("asset-key", "video/mp4"), /content type mismatch/);
     assert.equal((await verifyObject("asset-key", "image/png")).contentType, "image/png");
   } finally {
     globalThis.fetch = originalFetch;
     for (const [key, value] of Object.entries(saved)) {
-      if (value === undefined) delete process.env[key]; else process.env[key] = value;
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
     }
   }
 });
+
+test("OCI configuration errors name missing required variables without exposing secret values", async () => {
+  const keys = [
+    "OCI_TENANCY_OCID",
+    "OCI_USER_OCID",
+    "OCI_PRIVATE_KEY",
+    "PRIVATE_KEY",
+    "OCI_FINGERPRINT",
+    "OCI_REGION",
+    "OCI_NAMESPACE",
+    "OCI_BUCKET_NAME",
+  ];
+  const saved = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+  try {
+    Object.assign(process.env, {
+      OCI_TENANCY_OCID: MOCK_TENANCY_OCID,
+      OCI_USER_OCID: MOCK_USER_OCID,
+      OCI_REGION: "ap-mumbai-1",
+      OCI_NAMESPACE: "test-namespace",
+      OCI_BUCKET_NAME: "test-bucket",
+    });
+    delete process.env.OCI_PRIVATE_KEY;
+    delete process.env.PRIVATE_KEY;
+    await assert.rejects(
+      verifyObject("asset-key"),
+      /Missing required environment variable\(s\): OCI_PRIVATE_KEY \(or legacy PRIVATE_KEY\)/,
+    );
+  } finally {
+    for (const [key, value] of Object.entries(saved)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+});
+
+test("OCI authorization failures include safe service diagnostics without exposing credentials", async () => {
+  const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  const fingerprint = fingerprintFor(privateKey);
+  const values = {
+    OCI_TENANCY_OCID: MOCK_TENANCY_OCID,
+    OCI_USER_OCID: MOCK_USER_OCID,
+    OCI_PRIVATE_KEY: privateKey.export({ type: "pkcs8", format: "pem" }).toString(),
+    OCI_FINGERPRINT: fingerprint,
+    OCI_REGION: "ap-mumbai-1",
+    OCI_NAMESPACE: "test-namespace",
+    OCI_BUCKET_NAME: "test-bucket",
+  };
+  const saved = Object.fromEntries(Object.keys(values).map((key) => [key, process.env[key]]));
+  const originalFetch = globalThis.fetch;
+  Object.assign(process.env, values);
+  globalThis.fetch = async () =>
+    Response.json(
+      { code: "NotAuthenticated", message: "The required information to complete authentication was not provided." },
+      { status: 401, headers: { "opc-request-id": "test-request-id" } },
+    );
+  try {
+    const { signUpload } = await import("./oci-object-storage.server.ts");
+    await assert.rejects(
+      signUpload({ key: "asset-key", contentType: "video/mp4" }),
+      (error: unknown) => {
+        assert.ok(error instanceof Error);
+        assert.match(error.message, /pre-authenticated request creation failed \(401\)/);
+        assert.match(error.message, /NotAuthenticated/);
+        assert.match(error.message, /registered API-key fingerprint\/public key/);
+        assert.match(error.message, /test-request-id/);
+        assert.doesNotMatch(error.message, /BEGIN PRIVATE KEY|test-fingerprint|testtenancy/);
+        return true;
+      },
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+    for (const [key, value] of Object.entries(saved)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+});
+
+test("OCI rejects a configured fingerprint that does not match the private key before making a request", async () => {
+  const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  const keys = [
+    "OCI_TENANCY_OCID",
+    "OCI_USER_OCID",
+    "OCI_PRIVATE_KEY",
+    "OCI_FINGERPRINT",
+    "OCI_REGION",
+    "OCI_NAMESPACE",
+    "OCI_BUCKET_NAME",
+  ];
+  const saved = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+  const originalFetch = globalThis.fetch;
+  Object.assign(process.env, {
+    OCI_TENANCY_OCID: MOCK_TENANCY_OCID,
+    OCI_USER_OCID: MOCK_USER_OCID,
+    OCI_PRIVATE_KEY: privateKey.export({ type: "pkcs8", format: "pem" }).toString(),
+    OCI_FINGERPRINT: "00:11:22:33:44:55:66:77:88:99:aa:bb:cc:dd:ee:ff",
+    OCI_REGION: "ap-mumbai-1",
+    OCI_NAMESPACE: "test-namespace",
+    OCI_BUCKET_NAME: "test-bucket",
+  });
+  let called = false;
+  globalThis.fetch = async () => {
+    called = true;
+    return new Response(null, { status: 200 });
+  };
+  try {
+    await assert.rejects(verifyObject("asset-key"), /OCI_FINGERPRINT does not match OCI_PRIVATE_KEY/);
+    assert.equal(called, false);
+  } finally {
+    globalThis.fetch = originalFetch;
+    for (const [key, value] of Object.entries(saved)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+});
+
+test("OCI InsufficientServicePermissions error generates IAM policy guidance without leaking secrets", async () => {
+  const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  const fingerprint = fingerprintFor(privateKey);
+  const values = {
+    OCI_TENANCY_OCID: MOCK_TENANCY_OCID,
+    OCI_USER_OCID: MOCK_USER_OCID,
+    OCI_PRIVATE_KEY: privateKey.export({ type: "pkcs8", format: "pem" }).toString(),
+    OCI_FINGERPRINT: fingerprint,
+    OCI_REGION: "ap-mumbai-1",
+    OCI_NAMESPACE: "test-namespace",
+    OCI_BUCKET_NAME: "test-bucket",
+  };
+  const saved = Object.fromEntries(Object.keys(values).map((key) => [key, process.env[key]]));
+  const originalFetch = globalThis.fetch;
+  Object.assign(process.env, values);
+  globalThis.fetch = async () =>
+    Response.json(
+      { code: "InsufficientServicePermissions", message: "The service does not have permissions to perform this operation." },
+      { status: 400, headers: { "opc-request-id": "bom-1:test-request-id" } },
+    );
+  try {
+    const { sealVerifiedObject } = await import("./oci-object-storage.server.ts");
+    await assert.rejects(
+      sealVerifiedObject("source-key", "dest-key", "etag-test"),
+      (error: unknown) => {
+        assert.ok(error instanceof Error);
+        assert.match(error.message, /OCI object copy failed \(400\)/);
+        assert.match(error.message, /InsufficientServicePermissions/);
+        assert.match(error.message, /Object Storage IAM policy/);
+        assert.match(error.message, /bom-1:test-request-id/);
+        assert.doesNotMatch(error.message, /BEGIN PRIVATE KEY|testtenancy/);
+        return true;
+      },
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+    for (const [key, value] of Object.entries(saved)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+});
+

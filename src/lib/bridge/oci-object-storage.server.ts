@@ -17,22 +17,36 @@ type OciConfig = {
   namespace?: string;
 };
 
-function normalizePrivateKey(value: string) {
+export function normalizePrivateKey(value: string) {
   let normalized = value.trim();
 
-  // Vercel/CI secrets can arrive as escaped newlines or as a JSON-quoted string.
+  // Vercel/CI secrets can arrive as escaped newlines or as a JSON/shell-quoted string.
   // Accept both without relaxing the crypto parser or silently repairing arbitrary text.
   if (normalized.startsWith('"') && normalized.endsWith('"')) {
     try {
       const parsed = JSON.parse(normalized);
       if (typeof parsed === "string") normalized = parsed;
+      else normalized = normalized.slice(1, -1).trim();
     } catch {
-      // Leave the value untouched; createPrivateKey will fail closed below.
+      normalized = normalized.slice(1, -1).trim();
+    }
+  } else if (normalized.startsWith("'") && normalized.endsWith("'")) {
+    normalized = normalized.slice(1, -1).trim();
+  }
+
+  // Handle base64-encoded PEM
+  if (!normalized.includes("BEGIN") && !normalized.includes("PRIVATE KEY")) {
+    try {
+      const decoded = Buffer.from(normalized, "base64").toString("utf-8");
+      if (decoded.includes("BEGIN") && decoded.includes("PRIVATE KEY")) {
+        normalized = decoded.trim();
+      }
+    } catch {
+      // not base64
     }
   }
 
-  normalized = normalized.replaceAll("\\r\\n", "\n");
-  normalized = normalized.replaceAll("\\n", "\n");
+  normalized = normalized.replaceAll("\\r\\n", "\n").replaceAll("\\n", "\n").replaceAll("\r\n", "\n");
   normalized = normalized.replace(/^\\uFEFF/, "");
   normalized = normalized.replace(/^\uFEFF/, "");
 
@@ -43,7 +57,18 @@ function normalizePrivateKey(value: string) {
     throw new Error("OCI private key must be PEM encoded");
   }
 
-  return normalized;
+  return normalized.trim() + "\n";
+}
+
+export function validateOcid(name: "OCI_TENANCY_OCID" | "OCI_USER_OCID", value: string, expectedType: "tenancy" | "user"): string {
+  const trimmed = value.trim();
+  const pattern = new RegExp(`^ocid1\\.${expectedType}\\.oc1\\.[a-z0-9_-]*\\.[a-z0-9._-]+$`, "i");
+  if (!pattern.test(trimmed) || trimmed.includes("[") || trimmed.includes("]") || /[^\x20-\x7E]/.test(trimmed)) {
+    throw new Error(
+      `${name} is not a valid Oracle Cloud Infrastructure ${expectedType} OCID. Verify the configured ${name} in environment variables.`,
+    );
+  }
+  return trimmed;
 }
 
 function derivedFingerprint(privateKey: string) {
@@ -56,22 +81,56 @@ function derivedFingerprint(privateKey: string) {
     .join(":");
 }
 
+function normalizeFingerprint(value: string) {
+  return value.trim().toLowerCase().replaceAll(":", "").replaceAll(" ", "");
+}
+
+function canonicalFingerprint(value: string) {
+  const hex = normalizeFingerprint(value);
+  if (!/^[a-f0-9]{32}$/.test(hex)) {
+    throw new Error("OCI_FINGERPRINT must be a 32-character MD5 fingerprint, optionally colon-separated.");
+  }
+  return hex.match(/.{2}/g)!.join(":");
+}
+
 function config(): OciConfig {
   const tenancy = bridgeEnv.ociTenancyOcid();
   const user = bridgeEnv.ociUserOcid();
   const privateKey = bridgeEnv.ociPrivateKey();
   const region = bridgeEnv.ociRegion();
   const bucket = bridgeEnv.ociBucket();
-  if (!tenancy || !user || !privateKey || !region || !bucket) {
-    throw new Error("OCI Object Storage is not fully configured");
+  const missing: string[] = [];
+  if (!tenancy) missing.push("OCI_TENANCY_OCID");
+  if (!user) missing.push("OCI_USER_OCID");
+  if (!privateKey) missing.push("OCI_PRIVATE_KEY (or legacy PRIVATE_KEY)");
+  if (!region) missing.push("OCI_REGION");
+  if (!bucket) missing.push("OCI_BUCKET_NAME");
+  if (missing.length > 0) {
+    throw new Error(`OCI Object Storage is not fully configured. Missing required environment variable(s): ${missing.join(", ")}`);
   }
+  const validatedTenancy = validateOcid("OCI_TENANCY_OCID", tenancy!, "tenancy");
+  const validatedUser = validateOcid("OCI_USER_OCID", user!, "user");
+  const normalizedPrivateKey = normalizePrivateKey(privateKey!);
+  const keyFingerprint = derivedFingerprint(normalizedPrivateKey);
+  const configuredFingerprint = bridgeEnv.ociFingerprint();
+  if (
+    configuredFingerprint &&
+    normalizeFingerprint(configuredFingerprint) !== normalizeFingerprint(keyFingerprint)
+  ) {
+    throw new Error(
+      "OCI_FINGERPRINT does not match OCI_PRIVATE_KEY. Use the fingerprint of the public key paired with this private key in the OCI user API keys.",
+    );
+  }
+
   return {
-    tenancy,
-    user,
-    privateKey: normalizePrivateKey(privateKey),
-    fingerprint: bridgeEnv.ociFingerprint() || derivedFingerprint(privateKey),
-    region,
-    bucket,
+    tenancy: validatedTenancy,
+    user: validatedUser,
+    privateKey: normalizedPrivateKey,
+    // OCI Signature keyId must use the fingerprint registered in OCI, in canonical
+    // lowercase colon-separated form. Never pass through arbitrary env formatting.
+    fingerprint: canonicalFingerprint(configuredFingerprint || keyFingerprint),
+    region: region!,
+    bucket: bucket!,
     namespace: bridgeEnv.ociNamespace(),
   };
 }
@@ -149,10 +208,30 @@ async function signedFetch(opts: {
   return fetch(url, { method: opts.method, headers: safeHeaders, body });
 }
 
-async function resolveNamespace(cfg: OciConfig) {
+async function ociFailure(res: Response, operation: string) {
+  let serviceCode = "";
+  let serviceMessage = "";
+  try {
+    const body = (await res.clone().json()) as { code?: unknown; message?: unknown };
+    if (typeof body.code === "string") serviceCode = body.code.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 80);
+    if (typeof body.message === "string") serviceMessage = body.message.replace(/[\r\n\t]+/g, " ").slice(0, 240);
+  } catch {
+    // OCI can return an empty or non-JSON error body; never include the raw body.
+  }
+  const requestId = res.headers.get("opc-request-id")?.replace(/[^a-zA-Z0-9/_.:-]/g, "").slice(0, 120);
+  const detail = [serviceCode, serviceMessage].filter(Boolean).join(": ");
+  const authHint = res.status === 401 || res.status === 403 || serviceCode === "InsufficientServicePermissions"
+    ? " Check the OCI tenancy/user OCIDs, region, registered API-key fingerprint/public key, and required Object Storage IAM policy."
+    : "";
+  return new Error(
+    `OCI ${operation} failed (${res.status})${detail ? `: ${detail}` : ""}${requestId ? ` [request id: ${requestId}]` : ""}.${authHint}`,
+  );
+}
+
+export async function resolveNamespace(cfg: OciConfig) {
   if (cfg.namespace) return cfg.namespace;
   const res = await signedFetch({ cfg, method: "GET", path: "/n/" });
-  if (!res.ok) throw new Error(`OCI namespace lookup failed (${res.status})`);
+  if (!res.ok) throw await ociFailure(res, "namespace lookup");
   const ns = (await res.text()).replaceAll('"', "").trim();
   if (!ns) throw new Error("OCI Object Storage namespace is empty");
   return ns;
@@ -174,7 +253,7 @@ async function createPar(opts: {
   };
   const path = `/n/${encodeURIComponent(namespace)}/b/${encodeURIComponent(cfg.bucket)}/p/`;
   const res = await signedFetch({ cfg, method: "POST", path, body });
-  if (!res.ok) throw new Error(`OCI pre-authenticated request failed (${res.status})`);
+  if (!res.ok) throw await ociFailure(res, "pre-authenticated request creation");
   const parsed = (await res.json()) as { accessUri?: string };
   if (!parsed.accessUri) throw new Error("OCI pre-authenticated request returned no access URI");
   return {
@@ -207,7 +286,7 @@ export async function verifyObject(key: string, expectedContentType?: string | n
   const namespace = await resolveNamespace(cfg);
   const path = `/n/${encodeURIComponent(namespace)}/b/${encodeURIComponent(cfg.bucket)}/o/${encodedObjectName(key)}`;
   const res = await signedFetch({ cfg, method: "HEAD", path });
-  if (!res.ok) throw new Error(`OCI object verification failed (${res.status})`);
+  if (!res.ok) throw await ociFailure(res, "object verification");
   const contentLength = Number(res.headers.get("content-length") || 0);
   const contentType = res.headers.get("content-type");
   if (expectedContentType && contentType !== expectedContentType) {
@@ -226,7 +305,7 @@ async function pollWorkRequest(cfg: OciConfig, workRequestId: string) {
   for (let i = 0; i < 30; i += 1) {
     const headers = signHeaders({ cfg, method: "GET", url });
     const res = await fetch(url, { method: "GET", headers });
-    if (!res.ok) throw new Error(`OCI copy work-request lookup failed (${res.status})`);
+    if (!res.ok) throw await ociFailure(res, "copy work-request lookup");
     const body = (await res.json()) as { status?: string };
     if (body.status === "SUCCEEDED") return;
     if (body.status === "FAILED" || body.status === "CANCELED") {
@@ -255,7 +334,7 @@ export async function sealVerifiedObject(sourceKey: string, destinationKey: stri
       destinationObjectName: destinationKey,
     },
   });
-  if (res.status !== 202 && !res.ok) throw new Error(`OCI object copy failed (${res.status})`);
+  if (res.status !== 202 && !res.ok) throw await ociFailure(res, "object copy");
   const workRequestId = res.headers.get("opc-work-request-id");
   if (workRequestId) await pollWorkRequest(cfg, workRequestId);
   return verifyObject(destinationKey);
@@ -271,6 +350,19 @@ export async function deleteObject(key: string) {
 }
 
 export function titleAssetKey(opts: { ownerUserId: string; titleId: string; kind: string; filename: string }) {
+  if (!/^[A-Za-z0-9_-]{1,128}$/.test(opts.ownerUserId)) {
+    throw new Error("Invalid ownerUserId for title asset key; must be a single safe path segment");
+  }
+  if (!/^[A-Za-z0-9_-]{1,128}$/.test(opts.titleId)) {
+    throw new Error("Invalid titleId for title asset key; must be a single safe path segment");
+  }
+  if (!/^[A-Za-z0-9_-]{1,64}$/.test(opts.kind)) {
+    throw new Error("Invalid asset kind for title asset key; must be a single safe path segment");
+  }
   const safe = opts.filename.replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 80);
+  if (!safe || safe.startsWith(".") || safe.includes("..")) {
+    throw new Error("Invalid filename for title asset key");
+  }
   return `bridge/${opts.ownerUserId}/${opts.titleId}/${opts.kind}/${Date.now()}-${safe}`;
 }
+

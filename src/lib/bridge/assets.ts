@@ -42,7 +42,7 @@ export const requestAssetUpload = createServerFn({ method: "POST" })
     if (!title) throw new Error("Not found");
     if (title.ownerUserId !== actor.userId && !hasStaffPermission(actor, "asset.sign_upload")) throw new Error("Forbidden");
     if (!UPLOADABLE.has(title.status)) throw new Error("Uploads are closed for this status");
-    if (!["master", "poster", "poster_vertical", "poster_horizontal", "thumbnail", "subtitle", "screener", "technical", "censor_certificate"].includes(data.kind))
+    if (!ASSET_KINDS.includes(data.kind))
       throw new Error("This asset kind is not supported by the OTT ingest uploader");
     const ingestValidation = validateOttIngestFile({
       kind: data.kind as OttIngestKind,
@@ -64,6 +64,7 @@ export const requestAssetUpload = createServerFn({ method: "POST" })
       insert into bridge_assets (id, title_id, kind, s3_key, content_type, created_by)
       values (${id}, ${title.id}, ${data.kind}, ${key}, ${data.contentType}, ${actor.userId})
     `;
+
     await sql`
       update loop_media_migration_queue
       set status = 'UPLOADED', target_path = ${key}, updated_at = now()

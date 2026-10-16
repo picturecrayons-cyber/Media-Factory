@@ -19,6 +19,8 @@ import { getLoopPublication } from "@/lib/bridge/loop-publication";
 import type { BridgeActor } from "@/lib/bridge/session";
 import {
   OTT_INGEST_SPEC,
+  OTT_INGEST_CARDS,
+  type OttIngestKind,
   getOttIngestAccept,
   validateOttIngestFile,
 } from "@/lib/bridge/ott-ingest-spec";
@@ -258,7 +260,10 @@ function Metric({ label, value }: { label: string; value: string }) {
   );
 }
 
-type SimpleAssetKind = "master" | "poster_vertical" | "poster_horizontal" | "thumbnail" | "subtitle" | "screener" | "censor_certificate";
+export type SimpleAssetKind = OttIngestKind;
+export const OTT_CARDS = OTT_INGEST_CARDS;
+
+
 function FilesPanel({
   titleId,
   assets,
@@ -277,6 +282,8 @@ function FilesPanel({
   onAssetsChanged: () => Promise<unknown> | unknown;
 }) {
   const [uploading, setUploading] = useState<SimpleAssetKind | null>(null);
+  const [uploadStage, setUploadStage] = useState<"preparing" | "uploading" | "verifying" | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   async function uploadFile(kind: SimpleAssetKind, file: File) {
     const filename = asciiUploadName(file.name);
@@ -291,6 +298,8 @@ function FilesPanel({
       return;
     }
     setUploading(kind);
+    setUploadStage("preparing");
+    setUploadProgress(null);
     setMessage(`Preparing ${kind} upload…`);
     try {
       const signed = await requestAssetUpload({
@@ -303,15 +312,30 @@ function FilesPanel({
       });
       const uploadUrl = new URL(signed.url);
       uploadUrl.pathname = uploadUrl.pathname.split("/").map((part) => encodeURIComponent(decodeURIComponent(part))).join("/");
-      const put = await fetch(uploadUrl.toString(), {
-        method: signed.method,
-        body: file,
-        headers: { "content-type": contentType },
+      setUploadStage("uploading");
+      setUploadProgress(0);
+      await new Promise<void>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open(signed.method, uploadUrl.toString());
+        xhr.setRequestHeader("content-type", contentType);
+        xhr.upload.onprogress = (event) => {
+          if (event.lengthComputable && event.total > 0) {
+            setUploadProgress(Math.min(100, Math.round((event.loaded / event.total) * 100)));
+          }
+        };
+        xhr.onload = () => {
+          if (xhr.status >= 200 && xhr.status < 300) resolve();
+          else reject(new Error(`Upload failed (${xhr.status})`));
+        };
+        xhr.onerror = () => reject(new Error("Upload connection failed. Check the network and retry."));
+        xhr.onabort = () => reject(new Error("Upload was cancelled."));
+        xhr.send(file);
       });
-      if (!put.ok) throw new Error(`Upload failed (${put.status})`);
+      setUploadStage("verifying");
+      setMessage("Upload received. Verifying object and byte size…");
       await confirmAssetUpload({ data: { assetId: signed.assetId, expectedByteSize: file.size } });
       await onAssetsChanged();
-      setMessage(`${kind[0].toUpperCase() + kind.slice(1)} is ready.`);
+      setMessage(`${kind[0].toUpperCase() + kind.slice(1)} is ready. Upload and verification completed.`);
     } catch (error) {
       const raw = error instanceof Error ? error.message : "Upload failed";
       setMessage(
@@ -321,21 +345,15 @@ function FilesPanel({
       );
     } finally {
       setUploading(null);
+      setUploadStage(null);
+      setUploadProgress(null);
     }
   }
   async function download(id: string) {
     const signed = await requestAssetDownload({ data: { assetId: id } });
     window.location.assign(signed.url);
   }
-  const cards: [SimpleAssetKind, string, string][] = [
-    ["master", "Main Film", "Required"],
-    ["screener", "Trailer", "Add"],
-    ["poster_vertical", "Vertical Poster", "Add"],
-    ["poster_horizontal", "Horizontal Artwork", "Add"],
-    ["thumbnail", "Thumbnail", "Add"],
-    ["subtitle", "Subtitle", "Optional"],
-    ["censor_certificate", "Censor Certificate", "Optional"],
-  ];
+  const cards = OTT_CARDS;
   return (
     <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
       <div className="flex items-center justify-between gap-3">
@@ -358,7 +376,33 @@ function FilesPanel({
           />
         ))}
       </div>
-      {message ? <p className="mt-3 text-xs text-muted">{message}</p> : null}
+      {uploading ? (
+        <div className="mt-4 rounded-xl border border-line bg-elevated/40 p-4" role="status" aria-live="polite">
+          <div className="flex items-center justify-between gap-3 text-xs">
+            <span className="font-semibold">
+              {uploadStage === "preparing" ? "Preparing upload…" : uploadStage === "verifying" ? "Verifying uploaded file…" : "Uploading file…"}
+            </span>
+            {uploadStage === "uploading" && uploadProgress !== null ? <span>{uploadProgress}%</span> : null}
+          </div>
+          <div
+            className="mt-2 h-2 overflow-hidden rounded-full bg-line"
+            role="progressbar"
+            aria-label="File upload progress"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={uploadStage === "uploading" ? uploadProgress ?? 0 : undefined}
+          >
+            <div
+              className={`h-full rounded-full bg-accent transition-[width] duration-150 ${uploadStage !== "uploading" ? "w-full animate-pulse opacity-60" : ""}`}
+              style={uploadStage === "uploading" ? { width: `${uploadProgress ?? 0}%` } : undefined}
+            />
+          </div>
+          <p className="mt-2 text-xs text-muted">
+            {uploadStage === "preparing" ? "Requesting a secure upload destination." : uploadStage === "verifying" ? "The transfer finished; Bridge is checking the stored object before marking it ready." : "Keep this page open until verification finishes."}
+          </p>
+        </div>
+      ) : null}
+      {message ? <p className="mt-3 text-xs text-muted" role="status" aria-live="polite">{message}</p> : null}
       <div className="mt-5 space-y-2">
         {assets.map((a) => (
           <div

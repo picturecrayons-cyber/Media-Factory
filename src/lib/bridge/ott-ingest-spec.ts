@@ -157,3 +157,14 @@ export function validateOttIngestFile(args: {
 
   return { ok: true };
 }
+
+export const OTT_INGEST_CARDS: ReadonlyArray<readonly [OttIngestKind, string, string]> = [
+  ["master", "Main Film", "Required"],
+  ["screener", "Trailer", "Add"],
+  ["poster_vertical", "Vertical Poster", "Add"],
+  ["poster_horizontal", "Horizontal Artwork", "Add"],
+  ["thumbnail", "Thumbnail", "Add"],
+  ["subtitle", "Subtitle", "Optional"],
+  ["technical", "Technical Package", "Optional"],
+  ["censor_certificate", "Censor Certificate", "Optional"],
+] as const;
