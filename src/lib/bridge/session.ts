@@ -25,6 +25,15 @@ type BridgeProfileRow = {
 };
 
 function mapRow(r: BridgeProfileRow): BridgeActor {
+  // Database rows are untrusted at the authorization boundary. Reject legacy or
+  // malformed role values instead of silently widening access through a cast.
+  if (!(["independent_creator", "studio", "buyer"] as const).includes(r.account_type as AccountType)) {
+    throw new Error("Unsupported Bridge account type; access denied");
+  }
+  const allowedInternalRoles = ["admin", "super_admin", "qc_reviewer", "legal_reviewer", "finance", "viewer"] as const;
+  if (r.internal_role !== null && !allowedInternalRoles.includes(r.internal_role as InternalRole)) {
+    throw new Error("Unsupported Bridge internal role; access denied");
+  }
   return {
     userId: r.user_id,
     email: r.email,

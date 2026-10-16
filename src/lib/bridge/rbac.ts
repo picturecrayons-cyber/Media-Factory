@@ -99,9 +99,6 @@ const ACCOUNT_PERMISSIONS: Record<AccountType, readonly Permission[]> = {
     "entitlement.read_own",
     "asset.sign_download",
   ],
-  investor: [
-    "entitlement.read_own",
-  ],
 };
 
 export type Actor = {
@@ -218,6 +215,5 @@ export function workspaceHome(actor: Actor): string {
   if (actor.accountType === "independent_creator") return "/creator";
   if (actor.accountType === "studio") return "/studio";
   if (actor.accountType === "buyer") return "/buyer";
-  if (actor.accountType === "investor") return "/investor";
   return "/";
 }
