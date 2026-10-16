@@ -205,13 +205,12 @@ function Home() {
                   </p>
                 </div>
                 <div className="mt-8 pt-5 border-t border-line">
-                  <Link
-                    to="/signup"
-                    search={{ role: "investor" }}
-                    className="inline-flex items-center text-xs font-semibold text-accent hover:underline"
+                  <span
+                    className="inline-flex items-center text-xs font-semibold text-muted"
+                    aria-label="Investor access is not yet available"
                   >
-                    Create Investor Access →
-                  </Link>
+                    Investor access coming soon
+                  </span>
                 </div>
               </div>
 
