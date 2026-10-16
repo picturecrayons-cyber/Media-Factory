@@ -31,7 +31,7 @@ test("OCI private key normalization accepts escaped and quoted PEM secrets", asy
         OCI_TENANCY_OCID: "test-tenancy",
         OCI_USER_OCID: "test-user",
         OCI_PRIVATE_KEY: variant,
-        OCI_FINGERPRINT: "test-fingerprint",
+        OCI_FINGERPRINT: "",
         OCI_REGION: "ap-mumbai-1",
         OCI_NAMESPACE: "test-namespace",
         OCI_BUCKET_NAME: "test-bucket",
@@ -59,7 +59,7 @@ test("OCI copy polling uses Object Storage and only verifies successful copies",
     OCI_TENANCY_OCID: "test-tenancy",
     OCI_USER_OCID: "test-user",
     OCI_PRIVATE_KEY: privateKey.export({ type: "pkcs8", format: "pem" }).toString(),
-    OCI_FINGERPRINT: "test-fingerprint",
+    OCI_FINGERPRINT: "",
     OCI_REGION: "ap-mumbai-1",
     OCI_NAMESPACE: "test-namespace",
     OCI_BUCKET_NAME: "test-bucket",
@@ -121,7 +121,7 @@ test("OCI object verification rejects an unexpected content type", async () => {
   const values = {
     OCI_TENANCY_OCID: "test-tenancy", OCI_USER_OCID: "test-user",
     OCI_PRIVATE_KEY: privateKey.export({ type: "pkcs8", format: "pem" }).toString(),
-    OCI_FINGERPRINT: "test-fingerprint", OCI_REGION: "ap-mumbai-1",
+    OCI_FINGERPRINT: "", OCI_REGION: "ap-mumbai-1",
     OCI_NAMESPACE: "test-namespace", OCI_BUCKET_NAME: "test-bucket",
   };
   const saved = Object.fromEntries(Object.keys(values).map((key) => [key, process.env[key]]));

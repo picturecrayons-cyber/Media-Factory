@@ -65,11 +65,24 @@ function config(): OciConfig {
   if (!tenancy || !user || !privateKey || !region || !bucket) {
     throw new Error("OCI Object Storage is not fully configured");
   }
+  const normalizedPrivateKey = normalizePrivateKey(privateKey);
+  const derived = derivedFingerprint(normalizedPrivateKey);
+  const configuredFingerprint = bridgeEnv.ociFingerprint();
+  const normalizeFingerprint = (value: string) => value.replaceAll(":", "").trim().toLowerCase();
+  if (
+    configuredFingerprint &&
+    normalizeFingerprint(configuredFingerprint) !== normalizeFingerprint(derived)
+  ) {
+    throw new Error(
+      "OCI configured fingerprint does not match the public key derived from OCI_PRIVATE_KEY; check the Vercel environment-variable binding and OCI API key registration.",
+    );
+  }
+
   return {
     tenancy,
     user,
-    privateKey: normalizePrivateKey(privateKey),
-    fingerprint: bridgeEnv.ociFingerprint() || derivedFingerprint(privateKey),
+    privateKey: normalizedPrivateKey,
+    fingerprint: configuredFingerprint || derived,
     region,
     bucket,
     namespace: bridgeEnv.ociNamespace(),
@@ -146,7 +159,14 @@ async function signedFetch(opts: {
   const safeHeaders = Object.fromEntries(
     Object.entries(headers).map(([key, value]) => [toLatin1(key), toLatin1(value)]),
   );
-  return fetch(url, { method: opts.method, headers: safeHeaders, body });
+  // Bound OCI network waits so the title uploader returns a useful error instead
+  // of remaining indefinitely in its "Preparing upload…" state.
+  return fetch(url, {
+    method: opts.method,
+    headers: safeHeaders,
+    body,
+    signal: AbortSignal.timeout(12_000),
+  });
 }
 
 async function resolveNamespace(cfg: OciConfig) {
