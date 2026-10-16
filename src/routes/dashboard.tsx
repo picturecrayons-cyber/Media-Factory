@@ -23,9 +23,17 @@ function Dashboard() {
 function DashboardBody() {
   const dashboardQ = useQuery({ queryKey: ["bridge-dashboard-session"], queryFn: () => getDashboardSession(), retry: false });
   const titlesQ = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles(), enabled: dashboardQ.isSuccess });
-  if (dashboardQ.isPending) return <p className="text-sm text-muted">Checking access…</p>;
+  if (dashboardQ.isPending) return <p role="status" className="text-sm text-muted">Checking access…</p>;
   if (dashboardQ.isError) return <p role="alert" className="text-sm text-accent">Super admin access required.</p>;
-  const titles = titlesQ.data?.titles ?? [];
+  if (titlesQ.isPending) return <p role="status" className="text-sm text-muted">Loading live title data…</p>;
+  if (titlesQ.isError || !titlesQ.data || !Array.isArray(titlesQ.data.titles)) {
+    return (
+      <p role="alert" className="text-sm text-accent">
+        Title data is unavailable. Dashboard metrics are hidden until the data query succeeds.
+      </p>
+    );
+  }
+  const titles = titlesQ.data.titles;
   const live = titles.filter((t) => ["LIVE_FOR_BUYERS", "IN_NEGOTIATION", "LICENSED", "DELIVERED"].includes(t.status));
   const pipeline = titles.filter((t) => t.status === "LICENSING_READY").length;
   const deals = titles.filter((t) => t.status === "LICENSED" || t.status === "IN_NEGOTIATION").length;
