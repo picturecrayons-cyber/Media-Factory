@@ -13,6 +13,9 @@ on:
       - "package.json"
       - "package-lock.json"
 
+permissions:
+  contents: read
+
 jobs:
   storage-e2e:
     runs-on: ubuntu-latest
@@ -24,7 +27,37 @@ jobs:
           node-version: "24"
           cache: npm
       - run: npm ci
-      - name: Run production OCI → Bridge persistence round-trip
+
+      # Fail before starting storage/database tests if required GitHub Actions
+      # secrets are unavailable. Values are never echoed or printed.
+      - name: Preflight required E2E secrets
+        env:
+          OCI_TENANCY_OCID: ${{ secrets.OCI_TENANCY_OCID }}
+          OCI_USER_OCID: ${{ secrets.OCI_USER_OCID }}
+          OCI_FINGERPRINT: ${{ secrets.OCI_FINGERPRINT }}
+          OCI_PRIVATE_KEY: ${{ secrets.OCI_PRIVATE_KEY }}
+          OCI_REGION: ${{ secrets.OCI_REGION }}
+          OCI_NAMESPACE: ${{ secrets.OCI_NAMESPACE }}
+          OCI_BUCKET_NAME: ${{ secrets.OCI_BUCKET_NAME }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          BRIDGE_E2E_ASSET_ID: ${{ secrets.BRIDGE_E2E_ASSET_ID }}
+        run: |
+          node --input-type=module <<'NODE'
+          const required = [
+            "OCI_TENANCY_OCID", "OCI_USER_OCID", "OCI_FINGERPRINT",
+            "OCI_PRIVATE_KEY", "OCI_REGION", "OCI_NAMESPACE",
+            "OCI_BUCKET_NAME", "DATABASE_URL", "BRIDGE_E2E_ASSET_ID",
+          ];
+          const missing = required.filter((name) => !String(process.env[name] ?? "").trim());
+          if (missing.length) {
+            console.error(`OCI_E2E_PREFLIGHT_BLOCKED missing required GitHub Actions secrets: ${missing.join(", ")}`);
+            console.error("Configure these as repository or authorized environment secrets, then rerun the workflow.");
+            process.exit(2);
+          }
+          console.log("OCI_E2E_PREFLIGHT_PASS: all required secret inputs are present (values redacted).");
+          NODE
+
+      - name: Run controlled OCI → Bridge persistence round-trip
         env:
           OCI_TENANCY_OCID: ${{ secrets.OCI_TENANCY_OCID }}
           OCI_USER_OCID: ${{ secrets.OCI_USER_OCID }}
