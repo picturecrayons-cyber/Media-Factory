@@ -13,9 +13,12 @@ on:
       - "package.json"
       - "package-lock.json"
 
+permissions:
+  contents: read
+
 jobs:
   storage-e2e:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
@@ -24,7 +27,35 @@ jobs:
           node-version: "24"
           cache: npm
       - run: npm ci
+      - name: Preflight production E2E configuration
+        id: preflight
+        env:
+          OCI_TENANCY_OCID: ${{ secrets.OCI_TENANCY_OCID }}
+          OCI_USER_OCID: ${{ secrets.OCI_USER_OCID }}
+          OCI_FINGERPRINT: ${{ secrets.OCI_FINGERPRINT }}
+          OCI_PRIVATE_KEY: ${{ secrets.OCI_PRIVATE_KEY }}
+          OCI_REGION: ${{ secrets.OCI_REGION }}
+          OCI_NAMESPACE: ${{ secrets.OCI_NAMESPACE }}
+          OCI_BUCKET_NAME: ${{ secrets.OCI_BUCKET_NAME }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          BRIDGE_E2E_ASSET_ID: ${{ secrets.BRIDGE_E2E_ASSET_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          required=(OCI_TENANCY_OCID OCI_USER_OCID OCI_FINGERPRINT OCI_PRIVATE_KEY OCI_REGION OCI_NAMESPACE OCI_BUCKET_NAME DATABASE_URL BRIDGE_E2E_ASSET_ID)
+          missing=()
+          for key in "${required[@]}"; do
+            if [[ -z "${!key:-}" ]]; then missing+=("$key"); fi
+          done
+          if (( ${#missing[@]} > 0 )); then
+            echo "::error title=Storage E2E blocked::Required GitHub Actions secrets are missing or empty: ${missing[*]}. Configure repository Actions secrets, then rerun this workflow."
+            echo "result=blocked" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+          echo "All required inputs are present; credentials are not printed."
+          echo "result=ready" >> "$GITHUB_OUTPUT"
       - name: Run production OCI → Bridge persistence round-trip
+        if: steps.preflight.outputs.result == 'ready'
         env:
           OCI_TENANCY_OCID: ${{ secrets.OCI_TENANCY_OCID }}
           OCI_USER_OCID: ${{ secrets.OCI_USER_OCID }}
