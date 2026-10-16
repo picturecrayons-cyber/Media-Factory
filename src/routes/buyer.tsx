@@ -48,16 +48,114 @@ function loadRazorpay(): Promise<RzCtor> {
 
 function Buyer() {
   return (
-    <RequireBridge allow="buyer">
-      {(actor) => (
-        <BridgeShell actor={actor} title="Buyer dashboard">
-          <p className="mb-6 max-w-2xl text-sm leading-relaxed text-muted">
-            Discover licensing-ready titles, open a listing, then license only after captured payment.
-          </p>
-          <BuyerBody />
-        </BridgeShell>
-      )}
+    <RequireBridge>
+      {(actor) => {
+        if (actor.internalRole) {
+          if (actor.internalRole !== "super_admin" && actor.internalRole !== "admin") {
+            return (
+              <BridgeShell actor={actor} title="Buyer desk">
+                <p role="alert" className="text-sm text-muted">Administrator access is required for the internal buyer pipeline.</p>
+              </BridgeShell>
+            );
+          }
+          return (
+            <BridgeShell actor={actor} title="Buyer desk">
+              <InternalBuyerDesk />
+            </BridgeShell>
+          );
+        }
+        if (actor.accountType !== "buyer") {
+          return (
+            <BridgeShell actor={actor} title="Buyer desk">
+              <p role="alert" className="text-sm text-muted">This desk is available to buyer accounts and authorized Bridge administrators.</p>
+            </BridgeShell>
+          );
+        }
+        return (
+          <BridgeShell actor={actor} title="Buyer dashboard">
+            <p className="mb-6 max-w-2xl text-sm leading-relaxed text-muted">
+              Discover licensing-ready titles, open a listing, then license only after captured payment.
+            </p>
+            <BuyerBody />
+          </BridgeShell>
+        );
+      }}
     </RequireBridge>
+  );
+}
+
+function InternalBuyerDesk() {
+  const titlesQ = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles() });
+  const [query, setQuery] = useState("");
+  const titles = titlesQ.data?.titles ?? [];
+  const needle = query.trim().toLowerCase();
+  const matches = titles.filter((t) => !needle || `${t.name} ${t.language} ${t.status}`.toLowerCase().includes(needle));
+  const readyStatuses = ["LICENSING_READY", "LIVE_FOR_BUYERS", "IN_NEGOTIATION", "LICENSED", "DELIVERED"];
+  const ready = titles.filter((t) => readyStatuses.includes(t.status));
+  const live = titles.filter((t) => t.status === "LIVE_FOR_BUYERS");
+  const deals = titles.filter((t) => ["IN_NEGOTIATION", "LICENSED", "DELIVERED"].includes(t.status));
+
+  if (titlesQ.isPending) return <p className="text-sm text-muted">Loading the canonical title pipeline…</p>;
+  if (titlesQ.isError) {
+    return (
+      <section className="rounded-xl border border-line p-5">
+        <h2 className="font-semibold">Buyer pipeline unavailable</h2>
+        <p role="alert" className="mt-2 text-sm text-muted">Bridge could not load title records. No buyer or licensing changes have been made.</p>
+        <Button className="mt-4" variant="outline" onClick={() => void titlesQ.refetch()}>Retry</Button>
+      </section>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <section className="rounded-2xl border border-line bg-surface p-5 sm:p-7">
+        <p className="text-xs font-semibold uppercase tracking-widest text-accent">Bridge authorizes · Loop delivers</p>
+        <h2 className="mt-2 font-display text-2xl font-semibold sm:text-3xl">Buyer pipeline</h2>
+        <p className="mt-2 max-w-3xl text-sm leading-6 text-muted">
+          Track the catalog from licensing readiness through buyer visibility and active deals. This is a read-only operations desk: it does not grant rights, publish to Loop, or record payment.
+        </p>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <Link to="/workspace" className="rounded-full bg-accent px-4 py-2 text-sm font-semibold text-[#041018]">Review titles</Link>
+          <Link to="/admin/workstations" className="rounded-full border border-line px-4 py-2 text-sm font-semibold">Rights & QC</Link>
+          <Link to="/deliveries" className="rounded-full border border-line px-4 py-2 text-sm font-semibold">Deliveries</Link>
+        </div>
+      </section>
+      <section aria-label="Buyer pipeline summary" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <Stat label="Catalog" value={String(titles.length)} note="Canonical Bridge title records" />
+        <Stat label="Buyer-ready or later" value={String(ready.length)} note="Not proof of an active rights grant" />
+        <Stat label="Live for buyers" value={String(live.length)} note="Buyer-visible status" />
+        <Stat label="Active deal stages" value={String(deals.length)} note="Negotiation, licensed or delivered" />
+      </section>
+      <section className="rounded-2xl border border-line bg-surface p-4 sm:p-5">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h3 className="text-lg font-semibold">Title pipeline</h3>
+            <p className="mt-1 text-sm text-muted">Search by title, language or lifecycle status.</p>
+          </div>
+          <span className="text-xs text-muted">{matches.length} of {titles.length} titles</span>
+        </div>
+        <input aria-label="Search buyer pipeline" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search title, language or status" className="mt-4 w-full rounded-lg border border-line bg-transparent px-3 py-2 text-sm sm:max-w-md" />
+        {matches.length ? (
+          <ul className="mt-4 divide-y divide-line rounded-lg border border-line">
+            {matches.map((t) => (
+              <li key={t.id} className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0">
+                  <p className="font-semibold">{t.name}</p>
+                  <p className="mt-1 text-sm text-muted">{t.language || "Language not set"} · {t.contentType.replaceAll("_", " ")}</p>
+                  <p className="mt-1 text-xs text-muted">Fee metadata: {t.licensingFeePaise > 0 ? `₹${(t.licensingFeePaise / 100).toLocaleString("en-IN")}` : "not set"} · not collected revenue</p>
+                </div>
+                <div className="flex flex-wrap items-center gap-3">
+                  <StatusChip status={t.status as never} />
+                  <Link to="/title/$id" params={{ id: t.id }} className="rounded-full border border-line px-3 py-1.5 text-sm font-semibold">Open record</Link>
+                </div>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="mt-4 rounded-lg border border-dashed border-line p-6 text-sm text-muted">No titles match. Clear the search or check the title workspace.</p>
+        )}
+      </section>
+    </div>
   );
 }
 
@@ -112,12 +210,21 @@ function BuyerBody() {
   const visible = titles.filter((t) => !needle || `${t.name} ${t.language}`.toLowerCase().includes(needle));
   const licensed = visible.filter((t) => entitled.has(t.id));
   if (titlesQ.isPending || entQ.isPending) return <p>Loading buyer dashboard…</p>;
-  if (titlesQ.isError)
+  if (titlesQ.isError || entQ.isError)
     return (
-      <p role="alert">
-        No licensing-ready titles are on the desk yet.{" "}
-        <button type="button" className="underline" onClick={() => void titlesQ.refetch()}>Refresh</button>
-      </p>
+      <section className="rounded-xl border border-line bg-surface p-5">
+        <h2 className="font-semibold">Buyer data unavailable</h2>
+        <p role="alert" className="mt-2 text-sm text-muted">
+          The buyer catalog or license history could not be verified. No title availability or entitlement state is being inferred from missing data.
+        </p>
+        <button
+          type="button"
+          className="mt-4 rounded-full border border-line px-4 py-2 text-sm font-semibold"
+          onClick={() => { void titlesQ.refetch(); void entQ.refetch(); }}
+        >
+          Retry
+        </button>
+      </section>
     );
 
   return (
