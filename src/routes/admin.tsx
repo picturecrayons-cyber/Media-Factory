@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { listTitles, listAuditLogs } from "@/lib/bridge/titles";
 import { listLoopPublicationReadiness } from "@/lib/bridge/loop-publication";
 import { listAdminProfiles } from "@/lib/bridge/profiles";
+import type { BridgeActor } from "@/lib/bridge/session";
 
 export const Route = createFileRoute("/admin")({ component: AdminControlPlane });
 
@@ -30,7 +31,7 @@ function AdminControlPlane() {
   );
 }
 
-function AdminBody({ actor }: { actor: any }) {
+function AdminBody({ actor }: { actor: BridgeActor }) {
   const titlesQ = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles() });
   const auditQ = useQuery({ queryKey: ["bridge-audit"], queryFn: () => listAuditLogs() });
   const distQ = useQuery({ queryKey: ["loop-publication-readiness"], queryFn: () => listLoopPublicationReadiness() });

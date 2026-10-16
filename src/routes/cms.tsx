@@ -7,6 +7,7 @@ import { CreateTitleForm } from "@/components/bridge/title-desk";
 import { listTitles } from "@/lib/bridge/titles";
 import { listLoopPublicationReadiness } from "@/lib/bridge/loop-publication";
 import { hasPermission } from "@/lib/bridge/rbac";
+import type { BridgeActor } from "@/lib/bridge/session";
 
 export const Route = createFileRoute("/cms")({ component: OperationalCms });
 
@@ -17,7 +18,7 @@ function OperationalCms() {
   return <RequireBridge allow="super_admin">{(actor) => <CmsBody actor={actor} />}</RequireBridge>;
 }
 
-function CmsBody({ actor }: { actor: any }) {
+function CmsBody({ actor }: { actor: BridgeActor }) {
   const search = Route.useSearch() as { tab?: Tab };
   const tab: Tab = tabs.includes(search.tab as Tab) ? (search.tab as Tab) : "ingest";
   const titlesQ = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles() });
@@ -86,7 +87,7 @@ function CmsBody({ actor }: { actor: any }) {
   );
 }
 
-function IngestDesk({ actor }: { actor: any }) {
+function IngestDesk({ actor }: { actor: BridgeActor }) {
   const canCreate =
     hasPermission(actor, "title.create") || hasPermission(actor, "title.ingest_internal");
   return (
@@ -141,7 +142,7 @@ function IngestDesk({ actor }: { actor: any }) {
   );
 }
 
-function LicensingDesk({ titles }: { titles: Array<any> }) {
+function LicensingDesk({ titles }: { titles: Awaited<ReturnType<typeof listTitles>>["titles"] }) {
   const rows = titles.filter((title) =>
     ["LICENSING_READY", "LIVE_FOR_BUYERS", "IN_NEGOTIATION", "LICENSED", "DELIVERED"].includes(
       title.status,
@@ -211,7 +212,7 @@ function LicensingDesk({ titles }: { titles: Array<any> }) {
   );
 }
 
-function PublishingDesk({ publications }: { publications: Array<any> }) {
+function PublishingDesk({ publications }: { publications: Awaited<ReturnType<typeof listLoopPublicationReadiness>>["titles"] }) {
   return (
     <section className="rounded-3xl border border-line bg-surface p-6">
       <div className="flex flex-wrap items-end justify-between gap-3">

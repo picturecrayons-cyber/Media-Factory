@@ -10,12 +10,12 @@ test("external Razorpay function disables Supabase gateway JWT verification", ()
 });
 
 test("fallback event ID awaits the body hash", () => {
-  assert.match(source, /`\$\{e\}:\$\{await sha256\(raw\)\}`/);
+  assert.match(source, /`\$\{event\}:\$\{await sha256\(raw\)\}`/);
   assert.doesNotMatch(source, /\$\{awaitHash\(raw\)\}/);
 });
 
 test("captured Bridge payment is resolved from provider_order_id, not only notes", () => {
-  assert.match(source, /from\("bridge_payments"\)[\s\S]*eq\("provider_order_id", payment\.order_id\)/);
+  assert.match(source, /from\("bridge_payments"\)[\s\S]*eq\("provider_order_id", paymentOrderId\)/);
   assert.match(source, /if \(localPayment\) surface = "bridge"/);
 });
 
