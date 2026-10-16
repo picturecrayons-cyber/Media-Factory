@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
-import { assertPermission } from "./rbac";
+import { assertPermission, canAccessDashboard } from "./rbac";
 import { requireVerifiedActor } from "./session";
 import { writeAudit } from "./audit";
 import { assertNotDevUser } from "./guards";
@@ -16,7 +16,7 @@ export const listAdminWorkstations = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
     const actor = await actorFor(context.userId);
-    if (!actor.internalRole) throw new Error("Forbidden");
+    if (!canAccessDashboard(actor)) throw new Error("Super admin access required");
     assertPermission(actor, "title.read_catalog");
     const sql = await getSql();
     const [titles, assets, assetVersions, qc, legal, rights, packages, publications, profiles, audit] = await Promise.all([

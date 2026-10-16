@@ -111,7 +111,7 @@ describe("PRD authorization matrix", () => {
 
   it("ordinary admins cannot grant super admin while super admin has an explicit grant matrix", () => {
     assert.equal(canGrantInternalRole(admin(), "viewer"), true);
-    assert.equal(canGrantInternalRole(admin(), "admin"), true);
+    assert.equal(canGrantInternalRole(admin(), "admin"), false);
     assert.equal(canGrantInternalRole(admin(), "super_admin"), false);
     assert.equal(canGrantInternalRole(superAdmin(), "super_admin"), true);
     assert.equal(canGrantInternalRole(qc, "viewer"), false);

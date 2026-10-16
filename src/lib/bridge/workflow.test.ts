@@ -110,6 +110,7 @@ async function fixture() {
       "./rbac": rbac,
       "./titles": {},
     "./env": {bridgeEnv:{}},
+      "./guards": { assertNotDevUser: (userId: string) => { if (userId === "dev-user") throw new Error("Mock/dev authorization is disabled for Crayons Bridge"); } },
       "./workflow-policy": policy,
     };
     const exports: Record<string, (...args: unknown[]) => Promise<unknown>> = {};
