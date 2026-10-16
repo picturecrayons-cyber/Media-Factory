@@ -255,7 +255,22 @@ export async function sealVerifiedObject(sourceKey: string, destinationKey: stri
       destinationObjectName: destinationKey,
     },
   });
-  if (res.status !== 202 && !res.ok) throw new Error(`OCI object copy failed (${res.status})`);
+  if (res.status !== 202 && !res.ok) {
+    // Preserve only OCI's structured error code/message; never log or return auth headers or signed URLs.
+    const rawError = await res.text().catch(() => "");
+    let detail = "";
+    try {
+      const parsed = JSON.parse(rawError) as { code?: unknown; message?: unknown };
+      const code = typeof parsed.code === "string" ? parsed.code.slice(0, 80) : "";
+      const message = typeof parsed.message === "string" ? parsed.message.replace(/https?:\/\/\S+/gi, "[url]").replace(/[\r\n\t]+/g, " ").slice(0, 240) : "";
+      detail = [code, message].filter(Boolean).join(": ");
+    } catch {
+      const code = rawError.match(/<Code>\s*([^<]{1,80})\s*<\/Code>/i)?.[1]?.trim();
+      const message = rawError.match(/<Message>\s*([^<]{1,240})\s*<\/Message>/i)?.[1]?.replace(/[\r\n\t]+/g, " ").trim();
+      detail = [code, message?.replace(/https?:\/\/\S+/gi, "[url]")].filter(Boolean).join(": ");
+    }
+    throw new Error(`OCI object copy failed (${res.status})${detail ? `: ${detail}` : ""}`);
+  }
   const workRequestId = res.headers.get("opc-work-request-id");
   if (workRequestId) await pollWorkRequest(cfg, workRequestId);
   return verifyObject(destinationKey);
