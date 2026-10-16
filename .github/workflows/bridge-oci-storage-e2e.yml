@@ -2,21 +2,21 @@ name: Bridge OCI Storage E2E
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
-    paths:
-      - ".github/workflows/bridge-oci-storage-e2e.yml"
-      - "scripts/oci-storage-e2e.mjs"
-      - "src/lib/bridge/**"
-      - "src/routes/title.$id.tsx"
-      - "package.json"
-      - "package-lock.json"
+    inputs:
+      confirm_preview_only:
+        description: "Confirm OCI bucket, database, and asset are Preview-only"
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
 
 jobs:
   storage-e2e:
-    # Production-triggered events must never get production credential access from this destructive E2E.
-    # Keep execution pinned to the isolated Preview environment and dedicated secret names.
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.confirm_preview_only == true }}
+    # Manual-only test; no automatic writes from pushes to main.
+    # Environment reviewers and dedicated Preview secrets must be configured separately.
     environment: bridge-preview-storage
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -27,6 +27,35 @@ jobs:
           node-version: "24"
           cache: npm
       - run: npm ci
+      - name: Validate required Preview-only settings
+        env:
+          OCI_TENANCY_OCID: ${{ secrets.BRIDGE_E2E_OCI_TENANCY_OCID }}
+          OCI_USER_OCID: ${{ secrets.BRIDGE_E2E_OCI_USER_OCID }}
+          OCI_FINGERPRINT: ${{ secrets.BRIDGE_E2E_OCI_FINGERPRINT }}
+          OCI_PRIVATE_KEY: ${{ secrets.BRIDGE_E2E_OCI_PRIVATE_KEY }}
+          OCI_REGION: ${{ secrets.BRIDGE_E2E_OCI_REGION }}
+          OCI_NAMESPACE: ${{ secrets.BRIDGE_E2E_OCI_NAMESPACE }}
+          OCI_BUCKET_NAME: ${{ secrets.BRIDGE_E2E_OCI_BUCKET_NAME }}
+          DATABASE_URL: ${{ secrets.BRIDGE_E2E_DATABASE_URL }}
+          BRIDGE_E2E_ASSET_ID: ${{ secrets.BRIDGE_E2E_ASSET_ID }}
+        run: |
+          set -eu
+          test -n "$OCI_TENANCY_OCID"
+          test -n "$OCI_USER_OCID"
+          test -n "$OCI_FINGERPRINT"
+          test -n "$OCI_PRIVATE_KEY"
+          test -n "$OCI_REGION"
+          test -n "$OCI_NAMESPACE"
+          test -n "$OCI_BUCKET_NAME"
+          test -n "$DATABASE_URL"
+          test -n "$BRIDGE_E2E_ASSET_ID"
+          case "$DATABASE_URL" in
+            *mlmgugivsyoxzdgwkbpu*|*uakpqqardziifcwzvgfx*)
+              echo "BLOCKED: known canonical/wrong production or legacy Supabase refs are not permitted for Preview E2E."
+              exit 2
+              ;;
+          esac
+          echo "Required values are present; target ownership is still an authorized operator responsibility."
       - name: Run Preview OCI → Bridge persistence round-trip
         env:
           OCI_TENANCY_OCID: ${{ secrets.BRIDGE_E2E_OCI_TENANCY_OCID }}
