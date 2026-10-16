@@ -255,7 +255,23 @@ export async function sealVerifiedObject(sourceKey: string, destinationKey: stri
       destinationObjectName: destinationKey,
     },
   });
-  if (res.status !== 202 && !res.ok) throw new Error(`OCI object copy failed (${res.status})`);
+  if (res.status !== 202 && !res.ok) {
+    // OCI uses a JSON service error body for many copy failures. Surface its
+    // bounded diagnostic code/message and request ID so operators can identify
+    // the rejected precondition without retrying blindly. Never log credentials.
+    const errorBody = await res.clone().json().catch(() => null) as
+      | { code?: unknown; message?: unknown }
+      | null;
+    const safeCode = typeof errorBody?.code === "string" ? errorBody.code.slice(0, 80) : "";
+    const safeMessage = typeof errorBody?.message === "string"
+      ? errorBody.message.replace(/[\\r\\n\\t]+/g, " ").slice(0, 240)
+      : "";
+    const requestId = res.headers.get("opc-request-id") || res.headers.get("opc-work-request-id") || "";
+    const detail = [safeCode, safeMessage, requestId ? `requestId=${requestId.slice(0, 120)}` : ""]
+      .filter(Boolean)
+      .join("; ");
+    throw new Error(`OCI object copy failed (${res.status})${detail ? `: ${detail}` : ""}`);
+  }
   const workRequestId = res.headers.get("opc-work-request-id");
   if (workRequestId) await pollWorkRequest(cfg, workRequestId);
   return verifyObject(destinationKey);
