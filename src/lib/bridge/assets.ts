@@ -64,6 +64,7 @@ export const requestAssetUpload = createServerFn({ method: "POST" })
       insert into bridge_assets (id, title_id, kind, s3_key, content_type, created_by)
       values (${id}, ${title.id}, ${data.kind}, ${key}, ${data.contentType}, ${actor.userId})
     `;
+
     await sql`
       update loop_media_migration_queue
       set status = 'UPLOADED', target_path = ${key}, updated_at = now()
