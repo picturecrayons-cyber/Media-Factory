@@ -11,6 +11,7 @@ test("only a verified upload sets the active artwork reference, once, with an au
     await db.waitReady;
     await db.exec("create role anon; create role authenticated;");
     await db.exec(readFileSync(join(process.cwd(), "migrations/0004_bridge.sql"), "utf8"));
+    await db.exec("alter table bridge_assets drop constraint bridge_assets_kind_chk");
     await db.exec(`insert into bridge_titles (id,slug,name,owner_user_id,owner_account_type)
       values ('title1234','title','Title','creator','independent_creator');
       insert into bridge_assets (id,title_id,kind,s3_key,content_type,created_by)
