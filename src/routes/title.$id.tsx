@@ -368,6 +368,7 @@ function FilesPanel({
     });
     if (!validation.ok) {
       setMessage(validation.message);
+      uploadLock.current = false;
       return;
     }
     setUploading(kind);
@@ -441,7 +442,7 @@ function FilesPanel({
           />
         ))}
       </div>
-      {message ? <p className="mt-3 text-xs text-muted">{message}</p> : null}
+      {message ? <p role={/failed|unavailable|error|forbidden|mismatch|retry|not found/i.test(message) ? "alert" : "status"} aria-live="polite" className="mt-3 text-xs text-muted">{message}</p> : null}
       <div className="mt-5 space-y-2">
         {assets.map((a) => (
           <div
