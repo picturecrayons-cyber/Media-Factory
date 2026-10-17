@@ -32,3 +32,26 @@ test("entitlement and title transition happen before webhook is marked processed
   assert.ok(entitlement < processed);
   assert.ok(transition < processed);
 });
+
+test("invalid Razorpay signatures are rejected before JSON parsing or persistence", () => {
+  const rejectSignature = source.indexOf("if (!safeEqualHex(expected, signature))");
+  const parsePayload = source.indexOf("let payload: any;");
+  const persistEvent = source.indexOf('supabase.from("bridge_webhook_events").insert');
+  assert.ok(rejectSignature >= 0 && parsePayload > rejectSignature && persistEvent > parsePayload);
+});
+
+test("duplicate event IDs with changed payloads are rejected as collisions", () => {
+  assert.match(source, /existing\.payload_hash\s*!==\s*hash[\s\S]{0,80}Event collision/);
+});
+
+test("processed webhook duplicates return success without replaying payment side effects", () => {
+  assert.match(source, /existing\.status\s*===\s*"processed"[\s\S]{0,100}duplicate:\s*true/);
+});
+
+test("duplicate insert conflicts are reconciled before payment side effects", () => {
+  const insertEvent = source.indexOf('supabase.from("bridge_webhook_events").insert');
+  const readExisting = source.indexOf('supabase.from("bridge_webhook_events").select("status,payload_hash")');
+  const paymentSideEffects = source.indexOf('if (eventName === "payment.captured")');
+  assert.ok(insertEvent >= 0 && readExisting > insertEvent && paymentSideEffects > readExisting);
+  assert.match(source, /String\(insertError\.code\)\s*!==\s*"23505"/);
+});

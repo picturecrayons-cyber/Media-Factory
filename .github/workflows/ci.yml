@@ -40,7 +40,8 @@ jobs:
     timeout-minutes: 10
     services:
       postgres:
-        image: postgres:16-alpine
+        # Use the public AWS ECR mirror to avoid Docker Hub anonymous pull-rate limits.
+        image: public.ecr.aws/docker/library/postgres:16-alpine
         env:
           POSTGRES_USER: workflow_test
           POSTGRES_PASSWORD: workflow_test
