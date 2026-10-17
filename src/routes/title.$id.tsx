@@ -5,7 +5,6 @@ import { publicationIsActive } from "@/lib/bridge/workflow-policy";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { useState } from "react";
-import { toast } from "sonner";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { getTitle, updateTitle } from "@/lib/bridge/titles";
@@ -283,7 +282,7 @@ function Metric({ label, value }: { label: string; value: string }) {
   );
 }
 
-type SimpleAssetKind = "master" | "poster_vertical" | "poster_horizontal" | "thumbnail" | "subtitle" | "screener" | "censor_certificate";
+type SimpleAssetKind = "master" | "poster" | "poster_vertical" | "poster_horizontal" | "thumbnail" | "subtitle" | "screener" | "censor_certificate";
 function FilesPanel({
   titleId,
   assets,
@@ -305,7 +304,9 @@ function FilesPanel({
   const [uploading, setUploading] = useState<SimpleAssetKind | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const queryClient = useQueryClient();
+  const uploadInFlight = useState(false);
   async function uploadFile(kind: SimpleAssetKind, file: File) {
+    if (uploading) return;
     const filename = asciiUploadName(file.name);
     const contentType = file.type || "application/octet-stream";
     const validation = validateOttIngestFile({
@@ -357,6 +358,7 @@ function FilesPanel({
   }
   const cards: [SimpleAssetKind, string, string][] = [
     ["master", "Main Film", "Required"],
+    ["poster", "Poster", "Add"],
     ["screener", "Trailer", "Add"],
     ["poster_vertical", "Vertical Poster", "Add"],
     ["poster_horizontal", "Horizontal Artwork", "Add"],
