@@ -21,7 +21,7 @@ export async function persistVerifiedAsset(sql: Pick<Sql, "query">, opts: {
       where a.id = $3 and a.created_by = $4 and a.byte_size is null and a.s3_key = $8
         and exists (select 1 from bridge_titles t where t.id = a.title_id
           and ((t.status in ('DRAFT','UPLOADING','PREPARING') and ($5 or t.owner_user_id = $4))
-            or ($9 and t.status = 'LIVE_FOR_BUYERS')))
+            or ($5 and $9 and t.status = 'LIVE_FOR_BUYERS')))
       returning a.id, a.title_id, a.kind, a.s3_key
     ), title_set as (
       update bridge_titles t set
