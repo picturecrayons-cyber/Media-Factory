@@ -43,6 +43,29 @@ test("only a verified upload sets the active artwork reference, once, with an au
     );
     assert.equal(audit.rows[0]?.action, "asset.upload_verified");
     assert.equal(JSON.parse(audit.rows[0]?.metadata ?? "{}").checksum, "etag-1");
+    await db.exec(`insert into bridge_assets (id,title_id,kind,s3_key,content_type,created_by)
+      values ('assetposter1','title1234','poster_vertical','bridge/creator/title1234/poster_vertical/poster.jpg','image/jpeg','creator'),
+             ('assetposter2','title1234','poster_horizontal','bridge/creator/title1234/poster_horizontal/poster.jpg','image/jpeg','creator');`);
+    const posterArgs = {
+      ...args,
+      assetId: "assetposter1",
+      kind: "poster_vertical",
+      sourceKey: "bridge/creator/title1234/poster_vertical/poster.jpg",
+      sealedKey: "bridge/creator/title1234/poster_vertical/poster.jpg.verified/uuid-2",
+    };
+    assert.equal(await persistVerifiedAsset(sql, posterArgs), true);
+    const poster = await db.query<{ poster_key: string | null }>("select poster_key from bridge_titles where id='title1234'");
+    assert.equal(poster.rows[0]?.poster_key, posterArgs.sealedKey);
+    const horizontalArgs = {
+      ...args,
+      assetId: "assetposter2",
+      kind: "poster_horizontal",
+      sourceKey: "bridge/creator/title1234/poster_horizontal/poster.jpg",
+      sealedKey: "bridge/creator/title1234/poster_horizontal/poster.jpg.verified/uuid-3",
+    };
+    assert.equal(await persistVerifiedAsset(sql, horizontalArgs), true);
+    const horizontal = await db.query<{ poster_key: string | null }>("select poster_key from bridge_titles where id='title1234'");
+    assert.equal(horizontal.rows[0]?.poster_key, horizontalArgs.sealedKey);
   } finally {
     await db.close();
   }
