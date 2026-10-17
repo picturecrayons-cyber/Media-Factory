@@ -6,7 +6,7 @@ import { getSql, type Sql } from "@/lib/db";
 import type { AccountType, TitleStatus } from "./types";
 import { TITLE_STATUSES, type BridgeTitle } from "./types";
 import { assertTransition, nextStatus } from "./lifecycle";
-import { assertPermission, canMutateTitle, canReadTitle, hasPermission, hasStaffPermission, permissionForTransition } from "./rbac";
+import { assertSuperAdmin, assertPermission, canMutateTitle, canReadTitle, hasPermission, hasStaffPermission, permissionForTransition } from "./rbac";
 import { requireVerifiedActor } from "./session";
 import { writeAudit } from "./audit";
 import { assertNotDevUser } from "./guards";
@@ -488,6 +488,9 @@ export const advanceTitle = createServerFn({ method: "POST" })
     if (!title || !canReadTitle(actor, title)) throw new Error("Not found");
     if (data.to === "LICENSED") {
       throw new Error("LICENSED is granted only after a captured Razorpay payment");
+    }
+    if (["QC_REVIEW", "RIGHTS_REVIEW", "LICENSING_READY"].includes(data.to)) {
+      assertSuperAdmin(actor);
     }
     if (["RIGHTS_REVIEW", "LICENSING_READY"].includes(data.to))
       throw new Error("Use the recorded QC or legal review action");
