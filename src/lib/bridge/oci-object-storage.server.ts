@@ -228,7 +228,7 @@ async function pollWorkRequest(cfg: OciConfig, workRequestId: string) {
     const res = await fetch(url, { method: "GET", headers });
     if (!res.ok) throw new Error(`OCI copy work-request lookup failed (${res.status})`);
     const body = (await res.json()) as { status?: string };
-    if (body.status === "SUCCEEDED") return;
+    if (body.status === "SUCCEEDED" || body.status === "COMPLETED") return;
     if (body.status === "FAILED" || body.status === "CANCELED") {
       throw new Error(`OCI object copy ${body.status.toLowerCase()}`);
     }
