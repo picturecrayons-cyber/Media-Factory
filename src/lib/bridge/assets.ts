@@ -4,7 +4,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import { ASSET_KINDS } from "./types";
-import { assertPermission, canReadTitle, hasStaffPermission } from "./rbac";
+import { assertPermission, assertSuperAdmin, canReadTitle, hasStaffPermission } from "./rbac";
 import { requireVerifiedActor } from "./session";
 import { loadTitle } from "./titles";
 import { writeAudit } from "./audit";
@@ -37,13 +37,22 @@ export const requestAssetUpload = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
-    assertPermission(actor, actor.internalRole ? "title.ingest_internal" : "asset.sign_upload");
+    assertSuperAdmin(actor);
+    assertPermission(actor, "title.ingest_internal");
     const title = await loadTitle(data.titleId);
     if (!title) throw new Error("Not found");
     if (title.ownerUserId !== actor.userId && !hasStaffPermission(actor, "asset.sign_upload")) throw new Error("Forbidden");
-    if (!UPLOADABLE.has(title.status)) throw new Error("Uploads are closed for this status");
+    const liveBackfill = actor.emailVerified && actor.internalRole === "super_admin" && title.status === "LIVE_FOR_BUYERS";
+    if (!UPLOADABLE.has(title.status) && !liveBackfill) throw new Error("Uploads are closed for this status");
     if (!["master", "poster", "poster_vertical", "poster_horizontal", "thumbnail", "subtitle", "screener", "technical", "censor_certificate"].includes(data.kind))
       throw new Error("This asset kind is not supported by the OTT ingest uploader");
+    if (liveBackfill) {
+      const checkSql = await getSql();
+      const prior = await checkSql<{ id: string }>`select id from bridge_assets where title_id = ${title.id} and byte_size > 0 and (kind = ${data.kind} or (${data.kind} = 'poster_vertical' and kind = 'poster')) limit 1`;
+      const protectedPointer = (data.kind === "master" && Boolean(title.masterKey)) ||
+        (["poster", "poster_vertical"].includes(data.kind) && Boolean(title.posterKey));
+      if (prior.length || protectedPointer) throw new Error("This live title already has a verified asset of this type. Use a separate, reviewed replacement workflow.");
+    }
     const ingestValidation = validateOttIngestFile({
       kind: data.kind as OttIngestKind,
       filename: data.filename,
@@ -92,7 +101,8 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
-    assertPermission(actor, actor.internalRole ? "title.ingest_internal" : "asset.sign_upload");
+    assertSuperAdmin(actor);
+    assertPermission(actor, "title.ingest_internal");
     const sql = await getSql();
     const rows = await sql<{
       id: string;
@@ -109,8 +119,15 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
     const asset = rows[0];
     if (!asset || (asset.created_by !== actor.userId && !hasStaffPermission(actor, "asset.sign_upload"))) throw new Error("Asset not found");
     const title = await loadTitle(asset.title_id);
-    if (!title || (title.ownerUserId !== actor.userId && !hasStaffPermission(actor, "asset.sign_upload")) || !UPLOADABLE.has(title.status)) {
+    const liveBackfill = actor.emailVerified && actor.internalRole === "super_admin" && title?.status === "LIVE_FOR_BUYERS";
+    if (!title || (title.ownerUserId !== actor.userId && !hasStaffPermission(actor, "asset.sign_upload")) || (!UPLOADABLE.has(title.status) && !liveBackfill)) {
       throw new Error("Upload confirmation is closed for this title");
+    }
+    if (liveBackfill) {
+      const prior = await sql<{ id: string }>`select id from bridge_assets where title_id = ${title.id} and id <> ${asset.id} and byte_size > 0 and (kind = ${asset.kind} or (${asset.kind} = 'poster_vertical' and kind = 'poster')) limit 1`;
+      const protectedPointer = (asset.kind === "master" && Boolean(title.masterKey)) ||
+        (["poster", "poster_vertical"].includes(asset.kind) && Boolean(title.posterKey));
+      if (prior.length || protectedPointer) throw new Error("This live title already has a verified asset of this type. Use a separate, reviewed replacement workflow.");
     }
     if (asset.byte_size != null)
       return { assetId: asset.id, byteSize: Number(asset.byte_size), verified: true };
@@ -122,7 +139,7 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
     }
     if (!object.etag) throw new Error("Object ETag is required for immutable verification");
     const sealedKey = `${asset.s3_key}.verified/${randomUUID()}`;
-    const sealed = await sealVerifiedObject(asset.s3_key, sealedKey, object.etag);
+    const sealed = await sealVerifiedObject(asset.s3_key, sealedKey, object.etag, object.contentType);
     if (sealed.byteSize !== object.byteSize || !sealed.etag) {
       throw new Error("Verified copy differs from the uploaded object");
     }
@@ -130,6 +147,7 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
       assetId: asset.id,
       actorUserId: actor.userId,
       internalActor: Boolean(actor.internalRole),
+      allowLiveBackfill: actor.emailVerified && actor.internalRole === "super_admin" && title.status === "LIVE_FOR_BUYERS",
       titleId: title.id,
       kind: asset.kind,
       byteSize: sealed.byteSize,
@@ -137,6 +155,9 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
       checksum: sealed.etag,
       sourceKey: asset.s3_key,
       sealedKey,
+      storageWorkRequestId: sealed.workRequestId,
+      storageWorkRequestStatus: sealed.workRequestStatus,
+      storageRequestId: sealed.copyRequestId,
     });
     if (confirmed) {
       await sql`

@@ -1,6 +1,6 @@
-import { describe, it } from "node:test";
+import { describe, it, test } from "node:test";
 import assert from "node:assert/strict";
-import { assertPermission, canAccessDashboard, canGrantInternalRole, canMutateTitle, canOperateOnTitle, canReadTitle, hasPermission, hasStaffPermission, permissionForTransition, workspaceHome } from "./rbac.ts";
+import { assertPermission, assertSuperAdmin, canAccessDashboard, canGrantInternalRole, canMutateTitle, canOperateOnTitle, canReadTitle, hasPermission, hasStaffPermission, permissionForTransition, workspaceHome } from "./rbac.ts";
 import type { Actor } from "./rbac.ts";
 
 const actor = (
@@ -179,4 +179,12 @@ it("CMS ingest belongs only to verified super admins", () => {
   assert.equal(hasPermission(superAdmin(), "title.ingest_internal"), true);
   for (const a of [creator(), studio(), buyer(), admin(), viewer(), qc, legal, finance])
     assert.equal(hasPermission(a, "title.ingest_internal"), false);
+});
+
+
+test("only verified Super Admin sessions pass the explicit upload authorization gate", () => {
+  assert.doesNotThrow(() => assertSuperAdmin(superAdmin()));
+  assert.throws(() => assertSuperAdmin(admin()), /Super admin access required/);
+  assert.throws(() => assertSuperAdmin(creator()), /Super admin access required/);
+  assert.throws(() => assertSuperAdmin(actor("unverified-super", "independent_creator", "super_admin", false)), /Super admin access required/);
 });

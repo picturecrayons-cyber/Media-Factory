@@ -115,7 +115,8 @@ async function fixture() {
     const exports: Record<string, (...args: unknown[]) => Promise<unknown>> = {};
     const source = readFileSync(new URL("./workflow.ts", import.meta.url), "utf8");
     runInNewContext(
-      transpileModule(source, { compilerOptions: { module: ModuleKind.CommonJS } }).outputText,
+      transpileModule(source, { compilerOptions: { module: ModuleKind.CommonJS } }).outputText +
+        "\nexports.__testSaveLoopLicense = saveLoopLicense;\nexports.__testReviewWorkflow = reviewWorkflow;",
       {
         exports,
         Date,
@@ -125,7 +126,7 @@ async function fixture() {
         },
       },
     );
-    return { db, sql, save: exports.saveLoopLicense, review: exports.reviewWorkflow };
+    return { db, sql, save: exports.__testSaveLoopLicense, review: exports.__testReviewWorkflow };
   } catch (error) {
     await db.close();
     throw error;
@@ -137,8 +138,9 @@ const owner = {
   accountType: "independent_creator" as const,
   internalRole: null,
 };
-const qc = { ...owner, userId: "qc", internalRole: "qc_reviewer" as const };
-const legal = { ...owner, userId: "legal", internalRole: "legal_reviewer" as const };
+const superAdmin = { ...owner, userId: "super-admin", internalRole: "super_admin" as const };
+const superAdminQc = { ...owner, userId: "super-admin-qc", internalRole: "super_admin" as const };
+const superAdminLegal = { ...owner, userId: "super-admin-legal", internalRole: "super_admin" as const };
 const license = {
   titleId: "title-123",
   territories: ["WORLDWIDE"],
@@ -152,14 +154,14 @@ const license = {
   distributorSharePct: 20,
 };
 
-test("real SQL services persist QC, independently approved license, lifecycle and audit", async () => {
+test("verified Super Admin can persist QC, license review, lifecycle and audit", async () => {
   const f = await fixture();
   try {
-    const saved = (await f.sql.transaction((tx) => f.save(tx, owner, license))) as {
+    const saved = (await f.sql.transaction((tx) => f.save(tx, superAdmin, license))) as {
       grantId: string;
     };
     await f.sql.transaction((tx) =>
-      f.review(tx, qc, {
+      f.review(tx, superAdminQc, {
         titleId: "title-123",
         stage: "QC",
         decision: "APPROVE",
@@ -167,7 +169,7 @@ test("real SQL services persist QC, independently approved license, lifecycle an
       }),
     );
     await f.sql.transaction((tx) =>
-      f.review(tx, legal, {
+      f.review(tx, superAdminLegal, {
         titleId: "title-123",
         stage: "LEGAL",
         decision: "APPROVE",
@@ -199,11 +201,11 @@ test("unauthorized review and unverified current assets cannot clear QC", async 
     };
     await assert.rejects(
       f.sql.transaction((tx) => f.review(tx, owner, data)),
-      /Forbidden/,
+      /Super admin access required/,
     );
     await f.sql.query("update bridge_assets set byte_size=null where kind='master'");
     await assert.rejects(
-      f.sql.transaction((tx) => f.review(tx, qc, data)),
+      f.sql.transaction((tx) => f.review(tx, superAdminQc, data)),
       /Verified/,
     );
     assert.equal((await f.sql.query("select * from bridge_qc_cases")).length, 0);
@@ -217,7 +219,7 @@ test("an audit failure rolls back review records and lifecycle", async () => {
     await f.sql.query("drop table bridge_audit_logs");
     await assert.rejects(
       f.sql.transaction((tx) =>
-        f.review(tx, qc, {
+        f.review(tx, superAdminQc, {
           titleId: "title-123",
           stage: "QC",
           decision: "APPROVE",
@@ -256,8 +258,8 @@ test("concurrent reviewer calls cannot approve the same lifecycle twice", async 
       note: "Verified playback review",
     };
     const results = await Promise.allSettled([
-      f.sql.transaction((tx) => f.review(tx, qc, data)),
-      f.sql.transaction((tx) => f.review(tx, qc, data)),
+      f.sql.transaction((tx) => f.review(tx, superAdminQc, data)),
+      f.sql.transaction((tx) => f.review(tx, superAdminLegal, data)),
     ]);
     assert.equal(results.filter((r) => r.status === "fulfilled").length, 1);
     assert.equal((await f.sql.query("select * from bridge_qc_cases")).length, 1);
@@ -268,7 +270,7 @@ test("concurrent reviewer calls cannot approve the same lifecycle twice", async 
 test("license author cannot approve their own agreement", async () => {
   const f = await fixture();
   try {
-    const admin = { ...owner, userId: "admin", internalRole: "admin" as const };
+    const admin = superAdmin;
     const saved = (await f.sql.transaction((tx) => f.save(tx, admin, license))) as {
       grantId: string;
     };

@@ -168,6 +168,12 @@ export function hasPermission(actor: Actor, permission: Permission): boolean {
     : hasAccountPermission(actor, permission);
 }
 
+export function assertSuperAdmin(actor: Actor): void {
+  if (!actor.emailVerified || actor.internalRole !== "super_admin") {
+    throw new Error("Super admin access required");
+  }
+}
+
 export function assertPermission(actor: Actor, permission: Permission): void {
   if (!actor.emailVerified) throw new Error("Email verification required");
   if (!hasPermission(actor, permission)) {

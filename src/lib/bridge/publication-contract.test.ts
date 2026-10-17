@@ -50,8 +50,13 @@ function harness(grants: unknown[], allowed = true, existing = false) {
     zod: { z },
     "@/lib/auth/middleware": { authMiddleware: {} },
     "@/lib/db": { getSql: async () => sql },
-    "./rbac": { assertPermission: () => { if (!allowed) throw new Error("Forbidden"); } },
-    "./session": { requireVerifiedActor: async () => ({ userId: "operator", emailVerified: true }) },
+    "./rbac": {
+      assertSuperAdmin: (actor: { emailVerified: boolean; internalRole?: string }) => {
+        if (!actor.emailVerified || actor.internalRole !== "super_admin") throw new Error("Forbidden");
+      },
+      assertPermission: () => { if (!allowed) throw new Error("Forbidden"); },
+    },
+    "./session": { requireVerifiedActor: async () => ({ userId: "operator", emailVerified: true, internalRole: "super_admin" }) },
     "./guards": { assertNotDevUser: () => {} },
     "./audit": { writeAudit: async () => {} },
     "./rights-coverage": rights,
