@@ -223,18 +223,21 @@ export async function verifyObject(key: string, expectedContentType?: string | n
 
 async function pollWorkRequest(cfg: OciConfig, workRequestId: string) {
   const url = new URL(`/workRequests/${encodeURIComponent(workRequestId)}`, endpoint(cfg.region));
+  let lastStatus = "";
   for (let i = 0; i < 30; i += 1) {
     const headers = signHeaders({ cfg, method: "GET", url });
     const res = await fetch(url, { method: "GET", headers });
     if (!res.ok) throw new Error(`OCI copy work-request lookup failed (${res.status})`);
     const body = (await res.json()) as { status?: string };
-    if (body.status === "SUCCEEDED") return;
-    if (body.status === "FAILED" || body.status === "CANCELED") {
-      throw new Error(`OCI object copy ${body.status.toLowerCase()}`);
+    const status = typeof body.status === "string" ? body.status.toUpperCase() : "";
+    lastStatus = status;
+    if (status === "SUCCEEDED" || status === "COMPLETED") return;
+    if (status === "FAILED" || status === "CANCELED") {
+      throw new Error(`OCI object copy ${status.toLowerCase()}`);
     }
     await new Promise((resolve) => setTimeout(resolve, 1000));
   }
-  throw new Error("OCI object copy did not complete in time");
+  throw new Error(`OCI object copy did not complete in time${lastStatus ? ` (last status: ${lastStatus})` : ""}`);
 }
 
 /** Copy a verified upload into an immutable destination key. */
