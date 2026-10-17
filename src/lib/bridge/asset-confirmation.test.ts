@@ -28,6 +28,9 @@ test("only a verified upload sets the master reference, once, with an audit even
       checksum: "etag-1",
       sourceKey: "bridge/creator/title1234/master/video.mp4",
       sealedKey: "bridge/creator/title1234/master/video.mp4.verified/uuid-1",
+      storageWorkRequestId: "copy/id",
+      storageWorkRequestStatus: "SUCCEEDED",
+      storageRequestId: "copy-request-1",
     };
     const state = async () => (await db.query<{ master_key: string | null; byte_size: number | null }>(`
       select t.master_key, a.byte_size from bridge_titles t join bridge_assets a on a.title_id=t.id
@@ -44,6 +47,9 @@ test("only a verified upload sets the master reference, once, with an audit even
     );
     assert.equal(audit.rows[0]?.action, "asset.upload_verified");
     assert.equal(JSON.parse(audit.rows[0]?.metadata ?? "{}").checksum, "etag-1");
+    assert.equal(JSON.parse(audit.rows[0]?.metadata ?? "{}").storageWorkRequestId, "copy/id");
+    assert.equal(JSON.parse(audit.rows[0]?.metadata ?? "{}").storageWorkRequestStatus, "SUCCEEDED");
+    assert.equal(JSON.parse(audit.rows[0]?.metadata ?? "{}").storageRequestId, "copy-request-1");
   } finally {
     await db.close();
   }
