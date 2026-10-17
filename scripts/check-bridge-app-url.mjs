@@ -5,12 +5,13 @@ const originSource = fs.readFileSync(new URL("../src/lib/bridge/origin.ts", impo
 const authSource = fs.readFileSync(new URL("../src/lib/auth/client.ts", import.meta.url), "utf8");
 
 const required = [
-  [originSource, 'BRIDGE_CANONICAL_ORIGIN = "https://www.crayonspictures.in"'],
-  [originSource, 'host.endsWith(RETIRED_SUFFIX)'],
+  [originSource, 'BRIDGE_CANONICAL_ORIGIN = "https://bridge.crayonspictures.in"'],
+  [originSource, '"bridge.crayonspictures.in", "www.crayonspictures.in"'],
+  [originSource, "host.endsWith(RETIRED_SUFFIX)"],
   [envSource, 'resolveBridgeConfiguredOrigin(read("APP_URL"), read("SITE_URL"))'],
   [authSource, 'bridgeCallbackUrl(typeof window !== "undefined" ? window.location.origin : undefined)'],
-  [originSource, 'isApprovedBridgeOrigin'],
-  [originSource, 'bridgeCallbackUrl'],
+  [originSource, "isApprovedBridgeOrigin"],
+  [originSource, "bridgeCallbackUrl"],
 ];
 const missing = required.filter(([source, needle]) => !source.includes(needle)).map(([, needle]) => needle);
 if (missing.length) {
