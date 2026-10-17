@@ -274,3 +274,24 @@ export function titleAssetKey(opts: { ownerUserId: string; titleId: string; kind
   const safe = opts.filename.replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 80);
   return `bridge/${opts.ownerUserId}/${opts.titleId}/${opts.kind}/${Date.now()}-${safe}`;
 }
+
+export type OciStorageTier = "Standard" | "InfrequentAccess" | "Archive";
+
+/** Change an OCI object's physical storage tier. Caller must enforce business policy first. */
+export async function updateObjectStorageTier(opts: { key: string; storageTier: OciStorageTier; versionId?: string }) {
+  const cfg = config();
+  const namespace = await resolveNamespace(cfg);
+  const path = "/n/" + encodeURIComponent(namespace) + "/b/" + encodeURIComponent(cfg.bucket) + "/actions/updateObjectStorageTier";
+  const res = await signedFetch({
+    cfg,
+    method: "POST",
+    path,
+    body: {
+      objectName: opts.key,
+      storageTier: opts.storageTier,
+      ...(opts.versionId ? { versionId: opts.versionId } : {}),
+    },
+  });
+  if (!res.ok) throw new Error(`OCI storage tier update failed (${res.status})`);
+  return { key: opts.key, storageTier: opts.storageTier, requestId: res.headers.get("opc-request-id") };
+}

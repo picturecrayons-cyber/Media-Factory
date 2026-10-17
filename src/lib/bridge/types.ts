@@ -71,6 +71,20 @@ export const ASSET_KINDS = [
 ] as const;
 export type AssetKind = (typeof ASSET_KINDS)[number];
 
+export const STORAGE_TIERS = ["STANDARD", "INFREQUENT", "ARCHIVE"] as const;
+export type StorageTier = (typeof STORAGE_TIERS)[number];
+
+export const STORAGE_BUSINESS_STATES = [
+  "ACTIVE",
+  "STREAMING",
+  "COMMERCIAL",
+  "DELIVERY",
+  "PRESERVATION",
+  "TEMPORARY",
+  "ABANDONED",
+] as const;
+export type StorageBusinessState = (typeof STORAGE_BUSINESS_STATES)[number];
+
 export const PERMISSIONS = [
   "title.ingest_internal",
   "title.create",
@@ -101,5 +115,8 @@ export const PERMISSIONS = [
   "loop.publish",
   "loop.revoke",
   "loop.certify_playback",
+  "storage.read",
+  "storage.recommend",
+  "storage.manage",
 ] as const;
 export type Permission = (typeof PERMISSIONS)[number];
