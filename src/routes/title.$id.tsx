@@ -5,6 +5,7 @@ import { publicationIsActive } from "@/lib/bridge/workflow-policy";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { useState } from "react";
+import { toast } from "sonner";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { getTitle, updateTitle } from "@/lib/bridge/titles";
@@ -76,6 +77,15 @@ function TitlePage() {
 
 function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
   const [activeTab, setActiveTab] = useState<WorkspaceTab>("Overview");
+  const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
+  const copyTitleId = async () => {
+    try {
+      await navigator.clipboard.writeText(id);
+      setCopyState("copied");
+    } catch {
+      setCopyState("failed");
+    }
+  };
 
   const titleQ = useQuery({
     queryKey: ["bridge-title", id],
@@ -125,15 +135,30 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
   return (
     <div className="space-y-5">
       <WorkflowDesk title={title} actor={actor} />
+      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-line bg-surface px-4 py-3">
+        <span className="text-xs font-semibold text-muted">Title ID</span>
+        <code className="min-w-0 break-all text-xs" data-testid="title-id">{title.id}</code>
+        <button type="button" onClick={() => void copyTitleId()} className="rounded-full border border-line px-3 py-1.5 text-xs font-semibold">Copy ID</button>
+        <span role="status" aria-live="polite" className="text-xs text-muted">{copyState === "copied" ? "Title ID copied." : copyState === "failed" ? "Copy failed. Select and copy the ID manually." : ""}</span>
+      </div>
       {assetsQ.isError ? <p role="alert">Assets unavailable: {assetsQ.error.message}</p> : null}
       <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
         <div className="grid gap-5 md:grid-cols-[180px_1fr]">
           <div className="aspect-[2/3] overflow-hidden rounded-xl border border-line bg-elevated">
-            <div className="grid h-full place-items-center px-4 text-center text-xs text-muted">
-              {assets.some((asset) => ["poster_vertical", "poster"].includes(asset.kind))
-                ? "Vertical poster ready"
-                : "Add vertical poster"}
-            </div>
+            {(() => {
+              const artwork = assets.find((asset) => ["poster_vertical", "poster", "thumbnail", "poster_horizontal"].includes(asset.kind) && asset.verified && asset.key);
+              return artwork?.key ? (
+                <img
+                  src={`/api/bridge/assets/${encodeURIComponent(artwork.id)}/preview?v=${encodeURIComponent(artwork.key.split(".verified/")[1] || artwork.key)}`}
+                  alt={`${title.name} artwork`}
+                  className="h-full w-full object-cover"
+                  loading="eager"
+                  onError={(event) => { event.currentTarget.style.display = "none"; }}
+                />
+              ) : (
+                <div className="grid h-full place-items-center px-4 text-center text-xs text-muted">Add vertical poster or thumbnail</div>
+              );
+            })()}
           </div>
           <div className="min-w-0">
             <div className="flex flex-wrap items-start justify-between gap-3">
@@ -269,6 +294,7 @@ function FilesPanel({
   titleId: string;
   assets: Array<{
     id: string;
+    key?: string | null;
     kind: string;
     contentType: string | null;
     byteSize: number | null;
@@ -278,6 +304,7 @@ function FilesPanel({
 }) {
   const [uploading, setUploading] = useState<SimpleAssetKind | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const queryClient = useQueryClient();
   async function uploadFile(kind: SimpleAssetKind, file: File) {
     const filename = asciiUploadName(file.name);
     const contentType = file.type || "application/octet-stream";
@@ -311,7 +338,8 @@ function FilesPanel({
       if (!put.ok) throw new Error(`Upload failed (${put.status})`);
       await confirmAssetUpload({ data: { assetId: signed.assetId, expectedByteSize: file.size } });
       await onAssetsChanged();
-      setMessage(`${kind[0].toUpperCase() + kind.slice(1)} is ready.`);
+      await queryClient.invalidateQueries({ queryKey: ["bridge-title", titleId] });
+      setMessage(`${kind[0].toUpperCase() + kind.slice(1)} verified and saved.`);
     } catch (error) {
       const raw = error instanceof Error ? error.message : "Upload failed";
       setMessage(
