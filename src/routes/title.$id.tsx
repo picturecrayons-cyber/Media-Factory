@@ -4,7 +4,7 @@ import { WorkflowDesk } from "@/components/bridge/workflow-desk";
 import { publicationIsActive } from "@/lib/bridge/workflow-policy";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { getTitle, updateTitle } from "@/lib/bridge/titles";
@@ -79,12 +79,14 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
   const [activeTab, setActiveTab] = useState<WorkspaceTab>("Overview");
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
   const [draft, setDraft] = useState<{ name: string; synopsis: string; language: string; year: string; runtimeMinutes: string } | null>(null);
+  const [metadataSaved, setMetadataSaved] = useState(false);
   const queryClient = useQueryClient();
   const titleEditMutation = useMutation({
     mutationFn: (data: { name?: string; synopsis?: string; language?: string; year?: number | null; runtimeMinutes?: number | null }) => updateTitle({ data: { id, ...data } }),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["bridge-title", id] });
       setDraft(null);
+      setMetadataSaved(true);
     },
   });
   const copyTitleId = async () => {
@@ -146,20 +148,15 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
         <button type="button" onClick={() => void copyTitleId()} className="rounded-full border border-line px-3 py-1.5 text-xs font-semibold">Copy ID</button>
         <span role="status" aria-live="polite" className="text-xs text-muted">{copyState === "copied" ? "Title ID copied." : copyState === "failed" ? "Copy failed. Select and copy the ID manually." : ""}</span>
       </div>
-      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-line bg-surface px-4 py-3">
-        <span className="text-xs font-semibold text-muted">Title ID</span>
-        <code className="min-w-0 break-all text-xs" data-testid="title-id">{title.id}</code>
-        <button type="button" onClick={() => void copyTitleId()} className="rounded-full border border-line px-3 py-1.5 text-xs font-semibold">Copy ID</button>
-        <span role="status" aria-live="polite" className="text-xs text-muted">{copyState === "copied" ? "Title ID copied." : copyState === "failed" ? "Copy failed. Select and copy the ID manually." : ""}</span>
-      </div>
+
       {assetsQ.isError ? <p role="alert">Assets unavailable: {assetsQ.error.message}</p> : null}
       <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
         <div className="grid gap-5 md:grid-cols-[180px_1fr]">
           <div className="aspect-[2/3] overflow-hidden rounded-xl border border-line bg-elevated">
             {(() => {
-              const artwork = assets.find((asset) => ["poster_vertical", "poster", "thumbnail", "poster_horizontal"].includes(asset.kind) && asset.verified && asset.key);
-              return artwork?.key ? (
-                <ArtworkPreview assetId={artwork.id} version={artwork.key.split(".verified/")[1] || artwork.key} titleName={title.name} />
+              const artwork = assets.find((asset) => ["poster_vertical", "poster", "thumbnail", "poster_horizontal"].includes(asset.kind) && asset.verified);
+              return artwork ? (
+                <ArtworkPreview assetId={artwork.id} version={artwork.key ? (artwork.key.split(".verified/")[1] || artwork.key) : ""} titleName={title.name} />
               ) : (
                 <div className="grid h-full place-items-center px-4 text-center text-xs text-muted">Add vertical poster or thumbnail</div>
               );
@@ -282,11 +279,12 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
                 <label className="block text-sm">Runtime (minutes)<input inputMode="numeric" value={draft.runtimeMinutes} disabled={titleEditMutation.isPending} onChange={(e) => setDraft({ ...draft, runtimeMinutes: e.target.value })} className="mt-1 block w-full rounded-lg border border-line bg-elevated px-3 py-2" /></label>
               </div>
               {titleEditMutation.isError ? <p role="alert" className="text-xs text-red-600">Save failed: {titleEditMutation.error instanceof Error ? titleEditMutation.error.message : "Please retry."}</p> : null}
-              {titleEditMutation.isSuccess ? <p role="status" className="text-xs text-muted">Changes saved.</p> : null}
-              <div className="flex gap-2"><button type="submit" disabled={titleEditMutation.isPending} className="rounded-full bg-fg px-4 py-2 text-xs font-semibold text-bg">{titleEditMutation.isPending ? "Saving…" : "Save Changes"}</button><button type="button" disabled={titleEditMutation.isPending} onClick={() => { setDraft(null); titleEditMutation.reset(); }} className="rounded-full border border-line px-4 py-2 text-xs font-semibold">Cancel</button></div>
+              {draft.name !== title.name || draft.synopsis !== (title.synopsis || "") || draft.language !== (title.language || "Malayalam") || draft.year !== (title.year == null ? "" : String(title.year)) || draft.runtimeMinutes !== (title.runtimeMinutes == null ? "" : String(title.runtimeMinutes)) ? <p role="status" className="text-xs text-muted">Unsaved changes</p> : <p className="text-xs text-muted">No unsaved changes</p>}
+              <div className="flex gap-2"><button type="submit" disabled={titleEditMutation.isPending || !(draft.name !== title.name || draft.synopsis !== (title.synopsis || "") || draft.language !== (title.language || "Malayalam") || draft.year !== (title.year == null ? "" : String(title.year)) || draft.runtimeMinutes !== (title.runtimeMinutes == null ? "" : String(title.runtimeMinutes)))} className="rounded-full bg-fg px-4 py-2 text-xs font-semibold text-bg">{titleEditMutation.isPending ? "Saving…" : "Save Changes"}</button><button type="button" disabled={titleEditMutation.isPending} onClick={() => { setDraft(null); titleEditMutation.reset(); }} className="rounded-full border border-line px-4 py-2 text-xs font-semibold">Cancel</button></div>
             </form>
           )}
-          <LaneStore key={title.contentType} titleId={title.id} stored={loopStageType(title.contentType)} locked={!actor.internalRole && !["DRAFT", "UPLOADING", "PREPARING"].includes(title.status)} />
+          {metadataSaved ? <p role="status" aria-live="polite" className="mt-3 text-xs text-muted">Metadata changes saved.</p> : null}
+          <LaneStore key={title.contentType titleId={title.id} stored={loopStageType(title.contentType)} locked={!actor.internalRole && !["DRAFT", "UPLOADING", "PREPARING"].includes(title.status)} />
           {title.synopsis ? <p className="mt-4 text-sm leading-6 text-muted">{title.synopsis}</p> : null}
           <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <Metric label="QC" value={qcReady ? "READY" : "PENDING"} />
@@ -357,7 +355,7 @@ function FilesPanel({
   const [uploading, setUploading] = useState<SimpleAssetKind | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const queryClient = useQueryClient();
-  const uploadLock = useState({ current: false })[0];
+  const uploadLock = useRef(false);
   async function uploadFile(kind: SimpleAssetKind, file: File) {
     if (uploadLock.current) return;
     uploadLock.current = true;
@@ -438,7 +436,7 @@ function FilesPanel({
             label={label}
             status={assets.some((a) => (a.kind === kind || (kind === "poster_vertical" && a.kind === "poster")) && a.verified) ? "Ready" : empty}
             busy={uploading === kind}
-            canUpload={canUpload}
+            canUpload={canUpload && uploading === null}
             onFile={(file) => void uploadFile(kind, file)}
           />
         ))}
