@@ -224,15 +224,17 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
                 </span>
               ) : null}
             </div>
-            <div className="mt-5">
-              <button
-                type="button"
-                onClick={() => setActiveTab("Files")}
-                className="rounded-full bg-fg px-5 py-2.5 text-sm font-semibold text-bg"
-              >
-                Upload Files
-              </button>
-            </div>
+            {actor.emailVerified && actor.internalRole === "super_admin" ? (
+              <div className="mt-5">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("Files")}
+                  className="rounded-full bg-fg px-5 py-2.5 text-sm font-semibold text-bg"
+                >
+                  Upload Files
+                </button>
+              </div>
+            ) : null}
           </div>
         </div>
       </section>
@@ -285,9 +287,9 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
       ) : activeTab === "Files" ? (
         <FilesPanel
           canUpload={
-            canOperateOnTitle(actor, title, "asset.sign_upload", "title.ingest_internal") &&
-            (["DRAFT", "UPLOADING", "PREPARING"].includes(title.status) ||
-              (actor.emailVerified && actor.internalRole === "super_admin" && title.status === "LIVE_FOR_BUYERS"))
+            actor.emailVerified &&
+            actor.internalRole === "super_admin" &&
+            (["DRAFT", "UPLOADING", "PREPARING"].includes(title.status) || title.status === "LIVE_FOR_BUYERS")
           }
           titleId={id}
           assets={assets}
