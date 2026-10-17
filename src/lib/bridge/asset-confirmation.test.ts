@@ -20,6 +20,7 @@ test("only a verified upload sets the master reference, once, with an audit even
       assetId: "asset1234",
       actorUserId: "creator",
       internalActor: false,
+      allowLiveBackfill: false,
       titleId: "title1234",
       kind: "master",
       byteSize: 120,
