@@ -316,8 +316,10 @@ function FilesPanel({
   const [uploading, setUploading] = useState<SimpleAssetKind | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const queryClient = useQueryClient();
+  const uploadLock = useState({ current: false })[0];
   async function uploadFile(kind: SimpleAssetKind, file: File) {
-    if (uploading) return;
+    if (uploadLock.current) return;
+    uploadLock.current = true;
     const filename = asciiUploadName(file.name);
     const contentType = file.type || "application/octet-stream";
     const validation = validateOttIngestFile({
@@ -360,6 +362,7 @@ function FilesPanel({
           : raw,
       );
     } finally {
+      uploadLock.current = false;
       setUploading(null);
     }
   }
