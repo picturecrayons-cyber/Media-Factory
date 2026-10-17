@@ -155,6 +155,9 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
       checksum: sealed.etag,
       sourceKey: asset.s3_key,
       sealedKey,
+      storageWorkRequestId: sealed.workRequestId,
+      storageWorkRequestStatus: sealed.workRequestStatus,
+      storageRequestId: sealed.copyRequestId,
     });
     if (confirmed) {
       await sql`
