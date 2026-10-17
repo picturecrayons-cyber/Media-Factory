@@ -139,7 +139,7 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
     }
     if (!object.etag) throw new Error("Object ETag is required for immutable verification");
     const sealedKey = `${asset.s3_key}.verified/${randomUUID()}`;
-    const sealed = await sealVerifiedObject(asset.s3_key, sealedKey, object.etag);
+    const sealed = await sealVerifiedObject(asset.s3_key, sealedKey, object.etag, object.contentType);
     if (sealed.byteSize !== object.byteSize || !sealed.etag) {
       throw new Error("Verified copy differs from the uploaded object");
     }
