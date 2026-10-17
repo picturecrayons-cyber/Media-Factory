@@ -223,22 +223,34 @@ export async function verifyObject(key: string, expectedContentType?: string | n
 
 async function pollWorkRequest(cfg: OciConfig, workRequestId: string) {
   const url = new URL(`/workRequests/${encodeURIComponent(workRequestId)}`, endpoint(cfg.region));
+  let lastStatus = "UNKNOWN";
+  let lastPercentComplete: number | undefined;
   for (let i = 0; i < 120; i += 1) {
     const headers = signHeaders({ cfg, method: "GET", url });
     const res = await fetch(url, { method: "GET", headers });
-    if (!res.ok) throw new Error(`OCI copy work-request lookup failed (${res.status})`);
-    const body = (await res.json()) as { status?: string };
-    if (body.status === "SUCCEEDED") return;
-    if (body.status === "FAILED" || body.status === "CANCELED") {
-      throw new Error(`OCI object copy ${body.status.toLowerCase()}`);
+    const requestId = res.headers.get("opc-request-id") ?? "missing";
+    if (!res.ok) {
+      throw new Error(`OCI copy work-request lookup failed (${res.status}; workRequestId=${workRequestId}; opc-request-id=${requestId})`);
+    }
+    const body = (await res.json()) as {
+      status?: string;
+      percentComplete?: number;
+      errors?: Array<{ code?: string; message?: string }>;
+    };
+    lastStatus = body.status ?? "UNKNOWN";
+    lastPercentComplete = body.percentComplete;
+    if (lastStatus === "SUCCEEDED") return;
+    if (lastStatus === "FAILED" || lastStatus === "CANCELED") {
+      const details = body.errors?.map((item) => [item.code, item.message].filter(Boolean).join(": ")).filter(Boolean).join("; ");
+      throw new Error(`OCI object copy ${lastStatus.toLowerCase()} (workRequestId=${workRequestId}; opc-request-id=${requestId}${details ? `; details=${details}` : ""})`);
     }
     await new Promise((resolve) => setTimeout(resolve, 1000));
   }
-  throw new Error("OCI object copy did not complete in time");
+  throw new Error(`OCI object copy did not complete in time (workRequestId=${workRequestId}; lastStatus=${lastStatus}; percentComplete=${lastPercentComplete ?? "unknown"})`);
 }
 
 /** Copy a verified upload into an immutable destination key. */
-export async function sealVerifiedObject(sourceKey: string, destinationKey: string, expectedEtag: string) {
+export async function sealVerifiedObject(sourceKey: string, destinationKey: string, expectedEtag: string, expectedContentType?: string | null) {
   const cfg = config();
   const namespace = await resolveNamespace(cfg);
   const path = `/n/${encodeURIComponent(namespace)}/b/${encodeURIComponent(cfg.bucket)}/actions/copyObject`;
@@ -255,10 +267,11 @@ export async function sealVerifiedObject(sourceKey: string, destinationKey: stri
       destinationObjectName: destinationKey,
     },
   });
-  if (res.status !== 202 && !res.ok) throw new Error(`OCI object copy failed (${res.status})`);
+  if (res.status !== 202 && !res.ok) throw new Error(`OCI object copy failed (${res.status}; opc-request-id=${res.headers.get("opc-request-id") ?? "missing"})`);
   const workRequestId = res.headers.get("opc-work-request-id");
   if (workRequestId) await pollWorkRequest(cfg, workRequestId);
-  return verifyObject(destinationKey);
+  else if (res.status === 202) throw new Error(`OCI object copy accepted without opc-work-request-id (opc-request-id=${res.headers.get("opc-request-id") ?? "missing"})`);
+  return verifyObject(destinationKey, expectedContentType);
 }
 
 export async function deleteObject(key: string) {
