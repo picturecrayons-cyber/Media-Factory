@@ -5,6 +5,7 @@ export async function persistVerifiedAsset(sql: Pick<Sql, "query">, opts: {
   assetId: string;
   actorUserId: string;
   internalActor: boolean;
+  allowLiveBackfill: boolean;
   titleId: string;
   kind: string;
   byteSize: number;
@@ -12,6 +13,9 @@ export async function persistVerifiedAsset(sql: Pick<Sql, "query">, opts: {
   checksum: string | null;
   sourceKey: string;
   sealedKey: string;
+  storageWorkRequestId?: string | null;
+  storageWorkRequestStatus?: string | null;
+  storageRequestId?: string | null;
 }): Promise<boolean> {
   if (!Number.isSafeInteger(opts.byteSize) || opts.byteSize <= 0) throw new Error("Uploaded object is empty");
   const rows = await sql.query<{ entity_id: string }>(`
@@ -19,12 +23,13 @@ export async function persistVerifiedAsset(sql: Pick<Sql, "query">, opts: {
       update bridge_assets a set byte_size = $1, content_type = coalesce($2, a.content_type), s3_key = $7
       where a.id = $3 and a.created_by = $4 and a.byte_size is null and a.s3_key = $8
         and exists (select 1 from bridge_titles t where t.id = a.title_id
-          and ($5 or t.owner_user_id = $4) and t.status in ('DRAFT','UPLOADING','PREPARING'))
+          and ((t.status in ('DRAFT','UPLOADING','PREPARING') and ($5 or t.owner_user_id = $4))
+            or ($5 and $9 and t.status = 'LIVE_FOR_BUYERS')))
       returning a.id, a.title_id, a.kind, a.s3_key
     ), title_set as (
       update bridge_titles t set
-        poster_key = case when v.kind = 'poster' then v.s3_key else t.poster_key end,
-        master_key = case when v.kind = 'master' then v.s3_key else t.master_key end,
+        poster_key = case when t.status in ('DRAFT','UPLOADING','PREPARING') and v.kind in ('poster','poster_vertical') then v.s3_key else t.poster_key end,
+        master_key = case when t.status in ('DRAFT','UPLOADING','PREPARING') and v.kind = 'master' then v.s3_key else t.master_key end,
         updated_at = now()
       from verified v where t.id = v.title_id returning t.id
     )
@@ -43,9 +48,13 @@ export async function persistVerifiedAsset(sql: Pick<Sql, "query">, opts: {
       kind: opts.kind,
       byteSize: opts.byteSize,
       checksum: opts.checksum,
+      storageWorkRequestId: opts.storageWorkRequestId ?? null,
+      storageWorkRequestStatus: opts.storageWorkRequestStatus ?? null,
+      storageRequestId: opts.storageRequestId ?? null,
     }),
     opts.sealedKey,
     opts.sourceKey,
+    opts.allowLiveBackfill,
   ]);
   return Boolean(rows[0]);
 }

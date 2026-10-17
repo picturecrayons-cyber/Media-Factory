@@ -1,10 +1,9 @@
-import { canOperateOnTitle } from "@/lib/bridge/rbac";
 import { getTitleWorkflow } from "@/lib/bridge/workflow";
 import { WorkflowDesk } from "@/components/bridge/workflow-desk";
 import { publicationIsActive } from "@/lib/bridge/workflow-policy";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { getTitle, updateTitle } from "@/lib/bridge/titles";
@@ -24,6 +23,7 @@ import {
 } from "@/lib/bridge/ott-ingest-spec";
 import { asciiUploadName } from "@/lib/bridge/latin1";
 import { findVerifiedPosterAsset } from "@/lib/bridge/poster-preview";
+import { canUploadTitleAssets } from "@/lib/bridge/upload-ui-policy";
 
 export const Route = createFileRoute("/title/$id")({ component: TitlePage });
 
@@ -80,6 +80,7 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
   const [activeTab, setActiveTab] = useState<WorkspaceTab>("Overview");
   const [posterPreviewUrl, setPosterPreviewUrl] = useState<string | null>(null);
   const [posterPreviewFailed, setPosterPreviewFailed] = useState(false);
+  const [posterPreviewRetried, setPosterPreviewRetried] = useState(false);
 
   const titleQ = useQuery({
     queryKey: ["bridge-title", id],
@@ -108,6 +109,7 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
     const poster = findVerifiedPosterAsset(assets);
     setPosterPreviewUrl(null);
     setPosterPreviewFailed(false);
+    setPosterPreviewRetried(false);
     if (!poster) return () => { cancelled = true; };
 
     void requestAssetDownload({ data: { assetId: poster.id } })
@@ -156,7 +158,21 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
                 src={posterPreviewUrl}
                 alt={`Vertical poster for ${title.name}`}
                 className="h-full w-full object-contain"
-                onError={() => setPosterPreviewFailed(true)}
+                onError={() => {
+                  if (posterPreviewRetried) {
+                    setPosterPreviewFailed(true);
+                    return;
+                  }
+                  const poster = findVerifiedPosterAsset(assets);
+                  if (!poster) {
+                    setPosterPreviewFailed(true);
+                    return;
+                  }
+                  setPosterPreviewRetried(true);
+                  void requestAssetDownload({ data: { assetId: poster.id } })
+                    .then((signed) => setPosterPreviewUrl(signed.url))
+                    .catch(() => setPosterPreviewFailed(true));
+                }}
               />
             ) : (
               <div className="grid h-full place-items-center px-4 text-center text-xs text-muted">
@@ -208,15 +224,17 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
                 </span>
               ) : null}
             </div>
-            <div className="mt-5">
-              <button
-                type="button"
-                onClick={() => setActiveTab("Files")}
-                className="rounded-full bg-fg px-5 py-2.5 text-sm font-semibold text-bg"
-              >
-                Upload Files
-              </button>
-            </div>
+            {actor.emailVerified && actor.internalRole === "super_admin" ? (
+              <div className="mt-5">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("Files")}
+                  className="rounded-full bg-fg px-5 py-2.5 text-sm font-semibold text-bg"
+                >
+                  Upload Files
+                </button>
+              </div>
+            ) : null}
           </div>
         </div>
       </section>
@@ -268,10 +286,7 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
         </section>
       ) : activeTab === "Files" ? (
         <FilesPanel
-          canUpload={
-            canOperateOnTitle(actor, title, "asset.sign_upload", "title.ingest_internal") &&
-            ["DRAFT", "UPLOADING", "PREPARING"].includes(title.status)
-          }
+          canUpload={canUploadTitleAssets(actor, title.status)}
           titleId={id}
           assets={assets}
           onAssetsChanged={() => assetsQ.refetch()}
@@ -323,6 +338,7 @@ function FilesPanel({
     }
     setUploading(kind);
     setMessage(`Preparing ${kind} upload…`);
+    let stage: "signing" | "storage" | "confirming" = "signing";
     try {
       const signed = await requestAssetUpload({
         data: {
@@ -332,6 +348,8 @@ function FilesPanel({
           contentType,
         },
       });
+      stage = "storage";
+      setMessage(`Uploading ${kind} to storage…`);
       const uploadUrl = new URL(signed.url);
       uploadUrl.pathname = uploadUrl.pathname.split("/").map((part) => encodeURIComponent(decodeURIComponent(part))).join("/");
       const put = await fetch(uploadUrl.toString(), {
@@ -339,17 +357,23 @@ function FilesPanel({
         body: file,
         headers: { "content-type": contentType },
       });
-      if (!put.ok) throw new Error(`Upload failed (${put.status})`);
+      if (!put.ok) throw new Error(`Storage returned HTTP ${put.status}`);
+      stage = "confirming";
+      setMessage(`Verifying ${kind} upload…`);
       await confirmAssetUpload({ data: { assetId: signed.assetId, expectedByteSize: file.size } });
       await onAssetsChanged();
       setMessage(`${kind[0].toUpperCase() + kind.slice(1)} is ready.`);
     } catch (error) {
       const raw = error instanceof Error ? error.message : "Upload failed";
-      setMessage(
-        raw.includes("STORAGE_UNAVAILABLE")
-          ? "Storage service is currently unavailable. Please try again later."
-          : raw,
-      );
+      const detail = raw.includes("STORAGE_UNAVAILABLE")
+        ? "Storage service is currently unavailable. Please try again later."
+        : raw;
+      const stageLabel = stage === "signing"
+        ? "Could not request a signed upload URL"
+        : stage === "storage"
+          ? "The file could not be uploaded to storage"
+          : "The uploaded file could not be verified";
+      setMessage(`${stageLabel}: ${detail}`);
     } finally {
       setUploading(null);
     }
@@ -389,7 +413,12 @@ function FilesPanel({
           />
         ))}
       </div>
-      {message ? <p className="mt-3 text-xs text-muted">{message}</p> : null}
+      {!canUpload ? (
+        <p className="mt-3 text-xs text-muted" role="note">
+          Upload is disabled. A verified Super Admin account is required, and this title must be in an uploadable status.
+        </p>
+      ) : null}
+      {message ? <p className="mt-3 text-xs text-muted" role="status" aria-live="polite">{message}</p> : null}
       <div className="mt-5 space-y-2">
         {assets.map((a) => (
           <div
@@ -430,6 +459,8 @@ function FileTypeCard({
   onFile: (file: File) => void;
 }) {
   const spec = OTT_INGEST_SPEC[kind];
+  const inputRef = useRef<HTMLInputElement>(null);
+  const disabled = busy || !canUpload;
   return (
     <div className="rounded-xl border border-line p-4">
       <div className="flex items-start justify-between gap-3">
@@ -440,20 +471,39 @@ function FileTypeCard({
             Allowed: {spec.extensions.map((ext) => ext.replace(".", "").toUpperCase()).join(", ")}
           </p>
         </div>
-        <label className="cursor-pointer rounded-full border border-line px-3 py-1.5 text-xs font-semibold">
-          {busy ? "Uploading…" : status === "Ready" ? "Replace" : "Upload"}
+        <div className="flex flex-col items-end gap-1">
+          <button
+            type="button"
+            disabled={disabled}
+            aria-describedby={!canUpload ? `${kind}-upload-help` : undefined}
+            onClick={() => inputRef.current?.click()}
+            className={`rounded-full border px-3 py-1.5 text-xs font-semibold ${
+              disabled
+                ? "cursor-not-allowed border-line bg-elevated text-muted opacity-60"
+                : "cursor-pointer border-line hover:bg-elevated"
+            }`}
+          >
+            {busy ? "Uploading…" : status === "Ready" ? "Replace" : "Upload"}
+          </button>
           <input
+            ref={inputRef}
             className="sr-only"
             type="file"
             accept={getOttIngestAccept(kind)}
-            disabled={busy || !canUpload}
+            disabled={disabled}
+            aria-label={`${label} file`}
             onChange={(e) => {
               const file = e.currentTarget.files?.[0];
               if (file) onFile(file);
               e.currentTarget.value = "";
             }}
           />
-        </label>
+          {!canUpload ? (
+            <span id={`${kind}-upload-help`} className="max-w-40 text-right text-[10px] leading-4 text-muted">
+              Verified Super Admin access required
+            </span>
+          ) : null}
+        </div>
       </div>
     </div>
   );

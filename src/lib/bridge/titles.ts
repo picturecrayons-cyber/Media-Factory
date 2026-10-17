@@ -6,7 +6,7 @@ import { getSql, type Sql } from "@/lib/db";
 import type { AccountType, TitleStatus } from "./types";
 import { TITLE_STATUSES, type BridgeTitle } from "./types";
 import { assertTransition, nextStatus } from "./lifecycle";
-import { assertPermission, canMutateTitle, canReadTitle, hasPermission, hasStaffPermission, permissionForTransition } from "./rbac";
+import { assertSuperAdmin, assertPermission, canMutateTitle, canReadTitle, hasPermission, hasStaffPermission, permissionForTransition } from "./rbac";
 import { requireVerifiedActor } from "./session";
 import { writeAudit } from "./audit";
 import { assertNotDevUser } from "./guards";
@@ -438,7 +438,7 @@ async function assertLicensingReady(titleId: string) {
       ) as master_ok,
       exists (
         select 1 from bridge_assets a
-        where a.title_id = t.id and a.kind = 'poster' and coalesce(a.byte_size, 0) > 0
+        where a.title_id = t.id and a.kind in ('poster', 'poster_vertical') and coalesce(a.byte_size, 0) > 0
       ) as poster_ok,
       exists (
         select 1 from bridge_destination_packages p
@@ -489,6 +489,9 @@ export const advanceTitle = createServerFn({ method: "POST" })
     if (data.to === "LICENSED") {
       throw new Error("LICENSED is granted only after a captured Razorpay payment");
     }
+    if (["QC_REVIEW", "RIGHTS_REVIEW", "LICENSING_READY"].includes(data.to)) {
+      assertSuperAdmin(actor);
+    }
     if (["RIGHTS_REVIEW", "LICENSING_READY"].includes(data.to))
       throw new Error("Use the recorded QC or legal review action");
     if (data.to === "QC_REVIEW") {
@@ -498,7 +501,7 @@ export const advanceTitle = createServerFn({ method: "POST" })
       }>`select kind,s3_key from bridge_assets where title_id=${title.id} and byte_size>0`;
       if (
         !verified.some((a) => a.kind === "master" && a.s3_key === title.masterKey) ||
-        !verified.some((a) => a.kind === "poster" && a.s3_key === title.posterKey)
+        !verified.some((a) => ["poster", "poster_vertical"].includes(a.kind) && a.s3_key === title.posterKey)
       )
         throw new Error("Verified master and artwork required before QC");
     }

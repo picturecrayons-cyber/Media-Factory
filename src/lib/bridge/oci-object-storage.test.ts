@@ -79,7 +79,7 @@ test("OCI copy polling uses Object Storage and only verifies successful copies",
           if (method === "POST") {
             assert.equal(url.pathname, "/n/test-namespace/b/test-bucket/actions/copyObject");
             assert.equal(JSON.parse(String(init?.body)).sourceObjectIfMatch, "source-etag");
-            return new Response(null, { status: 202, headers: { "opc-work-request-id": "copy/id" } });
+            return new Response(null, { status: 202, headers: { "opc-work-request-id": "copy/id", "opc-request-id": "copy-request-1" } });
           }
           if (method === "GET") {
             assert.equal(url.pathname, "/workRequests/copy%2Fid");
@@ -94,10 +94,14 @@ test("OCI copy polling uses Object Storage and only verifies successful copies",
           }
           assert.equal(method, "HEAD");
           assert.equal(url.pathname, "/n/test-namespace/b/test-bucket/o/sealed-key");
-          return new Response(null, { headers: { "content-length": "12", etag: '"sealed-etag"' } });
+          return new Response(null, { headers: { "content-length": "12", "content-type": "image/png", etag: '"sealed-etag"' } });
         };
         if (outcome === "SUCCEEDED") {
-          assert.equal((await sealVerifiedObject("source-key", "sealed-key", "source-etag")).byteSize, 12);
+          const sealed = await sealVerifiedObject("source-key", "sealed-key", "source-etag", "image/png");
+          assert.equal(sealed.byteSize, 12);
+          assert.equal(sealed.workRequestId, "copy/id");
+          assert.equal(sealed.workRequestStatus, "SUCCEEDED");
+          assert.equal(sealed.copyRequestId, "copy-request-1");
           assert.deepEqual(calls.map((call) => call.method), ["POST", "GET", "HEAD"]);
         } else {
           const message = outcome === "HTTP_ERROR" ? /lookup failed \(403\)/ : new RegExp(`copy ${outcome.toLowerCase()}`);
