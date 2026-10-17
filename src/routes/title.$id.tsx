@@ -13,6 +13,7 @@ import {
   confirmAssetUpload,
   listTitleAssets,
   requestAssetDownload,
+  requestAssetPreview,
   requestAssetUpload,
 } from "@/lib/bridge/assets";
 import { getLoopPublication } from "@/lib/bridge/loop-publication";
@@ -147,13 +148,7 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
             {(() => {
               const artwork = assets.find((asset) => ["poster_vertical", "poster", "thumbnail", "poster_horizontal"].includes(asset.kind) && asset.verified && asset.key);
               return artwork?.key ? (
-                <img
-                  src={`/api/bridge/assets/${encodeURIComponent(artwork.id)}/preview?v=${encodeURIComponent(artwork.key.split(".verified/")[1] || artwork.key)}`}
-                  alt={`${title.name} artwork`}
-                  className="h-full w-full object-cover"
-                  loading="eager"
-                  onError={(event) => { event.currentTarget.style.display = "none"; }}
-                />
+                <ArtworkPreview assetId={artwork.id} version={artwork.key.split(".verified/")[1] || artwork.key} titleName={title.name} />
               ) : (
                 <div className="grid h-full place-items-center px-4 text-center text-xs text-muted">Add vertical poster or thumbnail</div>
               );
@@ -273,6 +268,23 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
     </div>
   );
 }
+
+function ArtworkPreview({ assetId, version, titleName }: { assetId: string; version: string; titleName: string }) {
+  const previewQ = useQuery({
+    queryKey: ["bridge-artwork-preview", assetId, version],
+    queryFn: () => requestAssetPreview({ data: { assetId, version } }),
+    staleTime: 0,
+    gcTime: 0,
+    refetchOnMount: "always",
+  });
+  if (!previewQ.data?.url) {
+    return <div role={previewQ.isError ? "alert" : "status"} className="grid h-full place-items-center px-4 text-center text-xs text-muted">
+      {previewQ.isError ? "Artwork preview unavailable" : "Loading artwork…"}
+    </div>;
+  }
+  return <img src={previewQ.data.url} alt={`${titleName} artwork`} className="h-full w-full object-cover" loading="eager" />;
+}
+
 function Metric({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-xl border border-line bg-elevated/40 p-4">
