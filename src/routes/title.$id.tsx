@@ -80,6 +80,7 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
   const [activeTab, setActiveTab] = useState<WorkspaceTab>("Overview");
   const [posterPreviewUrl, setPosterPreviewUrl] = useState<string | null>(null);
   const [posterPreviewFailed, setPosterPreviewFailed] = useState(false);
+  const [posterPreviewRetried, setPosterPreviewRetried] = useState(false);
 
   const titleQ = useQuery({
     queryKey: ["bridge-title", id],
@@ -108,6 +109,7 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
     const poster = findVerifiedPosterAsset(assets);
     setPosterPreviewUrl(null);
     setPosterPreviewFailed(false);
+    setPosterPreviewRetried(false);
     if (!poster) return () => { cancelled = true; };
 
     void requestAssetDownload({ data: { assetId: poster.id } })
@@ -156,7 +158,21 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
                 src={posterPreviewUrl}
                 alt={`Vertical poster for ${title.name}`}
                 className="h-full w-full object-contain"
-                onError={() => setPosterPreviewFailed(true)}
+                onError={() => {
+                  if (posterPreviewRetried) {
+                    setPosterPreviewFailed(true);
+                    return;
+                  }
+                  const poster = findVerifiedPosterAsset(assets);
+                  if (!poster) {
+                    setPosterPreviewFailed(true);
+                    return;
+                  }
+                  setPosterPreviewRetried(true);
+                  void requestAssetDownload({ data: { assetId: poster.id } })
+                    .then((signed) => setPosterPreviewUrl(signed.url))
+                    .catch(() => setPosterPreviewFailed(true));
+                }}
               />
             ) : (
               <div className="grid h-full place-items-center px-4 text-center text-xs text-muted">
