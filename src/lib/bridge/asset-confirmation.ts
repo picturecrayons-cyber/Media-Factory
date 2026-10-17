@@ -13,6 +13,9 @@ export async function persistVerifiedAsset(sql: Pick<Sql, "query">, opts: {
   checksum: string | null;
   sourceKey: string;
   sealedKey: string;
+  storageWorkRequestId?: string | null;
+  storageWorkRequestStatus?: string | null;
+  storageRequestId?: string | null;
 }): Promise<boolean> {
   if (!Number.isSafeInteger(opts.byteSize) || opts.byteSize <= 0) throw new Error("Uploaded object is empty");
   const rows = await sql.query<{ entity_id: string }>(`
@@ -45,6 +48,9 @@ export async function persistVerifiedAsset(sql: Pick<Sql, "query">, opts: {
       kind: opts.kind,
       byteSize: opts.byteSize,
       checksum: opts.checksum,
+      storageWorkRequestId: opts.storageWorkRequestId ?? null,
+      storageWorkRequestStatus: opts.storageWorkRequestStatus ?? null,
+      storageRequestId: opts.storageRequestId ?? null,
     }),
     opts.sealedKey,
     opts.sourceKey,
