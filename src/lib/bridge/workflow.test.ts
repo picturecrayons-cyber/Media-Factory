@@ -138,8 +138,6 @@ const owner = {
   accountType: "independent_creator" as const,
   internalRole: null,
 };
-const qc = { ...owner, userId: "qc", internalRole: "qc_reviewer" as const };
-const legal = { ...owner, userId: "legal", internalRole: "legal_reviewer" as const };
 const superAdmin = { ...owner, userId: "super-admin", internalRole: "super_admin" as const };
 const superAdminQc = { ...owner, userId: "super-admin-qc", internalRole: "super_admin" as const };
 const superAdminLegal = { ...owner, userId: "super-admin-legal", internalRole: "super_admin" as const };
