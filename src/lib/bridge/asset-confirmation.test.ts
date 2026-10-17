@@ -23,7 +23,7 @@ test("only a verified upload sets the active artwork reference, once, with an au
       titleId: "title1234",
       kind: "thumbnail",
       byteSize: 120,
-      contentType: "video/mp4",
+      contentType: "image/jpeg",
       checksum: "etag-1",
       sourceKey: "bridge/creator/title1234/thumbnail/art.jpg",
       sealedKey: "bridge/creator/title1234/thumbnail/art.jpg.verified/uuid-1",
