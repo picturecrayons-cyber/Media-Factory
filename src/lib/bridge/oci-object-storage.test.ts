@@ -94,10 +94,10 @@ test("OCI copy polling uses Object Storage and only verifies successful copies",
           }
           assert.equal(method, "HEAD");
           assert.equal(url.pathname, "/n/test-namespace/b/test-bucket/o/sealed-key");
-          return new Response(null, { headers: { "content-length": "12", etag: '"sealed-etag"' } });
+          return new Response(null, { headers: { "content-length": "12", "content-type": "image/png", etag: '"sealed-etag"' } });
         };
         if (outcome === "SUCCEEDED") {
-          assert.equal((await sealVerifiedObject("source-key", "sealed-key", "source-etag")).byteSize, 12);
+          assert.equal((await sealVerifiedObject("source-key", "sealed-key", "source-etag", "image/png")).byteSize, 12);
           assert.deepEqual(calls.map((call) => call.method), ["POST", "GET", "HEAD"]);
         } else {
           const message = outcome === "HTTP_ERROR" ? /lookup failed \(403\)/ : new RegExp(`copy ${outcome.toLowerCase()}`);
