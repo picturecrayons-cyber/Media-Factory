@@ -23,10 +23,12 @@ import {
   validateOttIngestFile,
 } from "@/lib/bridge/ott-ingest-spec";
 import { asciiUploadName } from "@/lib/bridge/latin1";
+import { findVerifiedPosterAsset } from "@/lib/bridge/poster-preview";
 
 export const Route = createFileRoute("/title/$id")({ component: TitlePage });
 
 const WORKSPACE_TABS = ["Overview", "Files"] as const;
+const EMPTY_ASSETS: never[] = [];
 type WorkspaceTab = (typeof WORKSPACE_TABS)[number];
 
 function LaneStore({ titleId, stored, locked }: { titleId: string; stored: string; locked: boolean }) {
@@ -98,17 +100,12 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
     enabled: Boolean(actor.internalRole) || actor.accountType !== "buyer",
   });
   const title = titleQ.data?.title;
-  const assets = assetsQ.data?.assets ?? [];
+  const assets = assetsQ.data?.assets ?? EMPTY_ASSETS;
   const pub = pubQ.data?.publication;
 
   useEffect(() => {
     let cancelled = false;
-    const poster = assets.find(
-      (asset) =>
-        asset.verified &&
-        ["poster_vertical", "poster"].includes(asset.kind) &&
-        Boolean(asset.contentType?.startsWith("image/")),
-    );
+    const poster = findVerifiedPosterAsset(assets);
     setPosterPreviewUrl(null);
     setPosterPreviewFailed(false);
     if (!poster) return () => { cancelled = true; };
@@ -122,7 +119,7 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
       });
 
     return () => { cancelled = true; };
-  }, [assetsQ.data?.assets]);
+  }, [assets]);
 
   if (titleQ.isPending) return <p className="text-sm text-muted">Loading title workspace…</p>;
   if (titleQ.isError)
