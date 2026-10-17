@@ -120,7 +120,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
       />
     </label>
   );
-  if (actor.accountType === "buyer" && !actor.internalRole) return null;
+  if (actor.internalRole !== "super_admin") return null;
   return (
     <section className="space-y-4 rounded-2xl border border-line bg-surface p-5">
       <h2 className="font-display text-xl">Title operations</h2>
