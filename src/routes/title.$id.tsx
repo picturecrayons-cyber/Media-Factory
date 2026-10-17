@@ -316,7 +316,6 @@ function FilesPanel({
   const [uploading, setUploading] = useState<SimpleAssetKind | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const queryClient = useQueryClient();
-  const uploadInFlight = useState(false);
   async function uploadFile(kind: SimpleAssetKind, file: File) {
     if (uploading) return;
     const filename = asciiUploadName(file.name);
