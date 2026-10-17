@@ -115,7 +115,8 @@ async function fixture() {
     const exports: Record<string, (...args: unknown[]) => Promise<unknown>> = {};
     const source = readFileSync(new URL("./workflow.ts", import.meta.url), "utf8");
     runInNewContext(
-      transpileModule(source, { compilerOptions: { module: ModuleKind.CommonJS } }).outputText,
+      transpileModule(source, { compilerOptions: { module: ModuleKind.CommonJS } }).outputText +
+        "\nexports.__testSaveLoopLicense = saveLoopLicense;\nexports.__testReviewWorkflow = reviewWorkflow;",
       {
         exports,
         Date,
@@ -125,7 +126,7 @@ async function fixture() {
         },
       },
     );
-    return { db, sql, save: exports.submitLoopLicense, review: exports.reviewTitleWorkflow };
+    return { db, sql, save: exports.__testSaveLoopLicense, review: exports.__testReviewWorkflow };
   } catch (error) {
     await db.close();
     throw error;
@@ -140,6 +141,8 @@ const owner = {
 const qc = { ...owner, userId: "qc", internalRole: "qc_reviewer" as const };
 const legal = { ...owner, userId: "legal", internalRole: "legal_reviewer" as const };
 const superAdmin = { ...owner, userId: "super-admin", internalRole: "super_admin" as const };
+const superAdminQc = { ...owner, userId: "super-admin-qc", internalRole: "super_admin" as const };
+const superAdminLegal = { ...owner, userId: "super-admin-legal", internalRole: "super_admin" as const };
 const license = {
   titleId: "title-123",
   territories: ["WORLDWIDE"],
@@ -160,7 +163,7 @@ test("verified Super Admin can persist QC, license review, lifecycle and audit",
       grantId: string;
     };
     await f.sql.transaction((tx) =>
-      f.review(tx, superAdmin, {
+      f.review(tx, superAdminQc, {
         titleId: "title-123",
         stage: "QC",
         decision: "APPROVE",
@@ -168,7 +171,7 @@ test("verified Super Admin can persist QC, license review, lifecycle and audit",
       }),
     );
     await f.sql.transaction((tx) =>
-      f.review(tx, superAdmin, {
+      f.review(tx, superAdminLegal, {
         titleId: "title-123",
         stage: "LEGAL",
         decision: "APPROVE",
@@ -204,7 +207,7 @@ test("unauthorized review and unverified current assets cannot clear QC", async 
     );
     await f.sql.query("update bridge_assets set byte_size=null where kind='master'");
     await assert.rejects(
-      f.sql.transaction((tx) => f.review(tx, superAdmin, data)),
+      f.sql.transaction((tx) => f.review(tx, superAdminQc, data)),
       /Verified/,
     );
     assert.equal((await f.sql.query("select * from bridge_qc_cases")).length, 0);
@@ -218,7 +221,7 @@ test("an audit failure rolls back review records and lifecycle", async () => {
     await f.sql.query("drop table bridge_audit_logs");
     await assert.rejects(
       f.sql.transaction((tx) =>
-        f.review(tx, superAdmin, {
+        f.review(tx, superAdminQc, {
           titleId: "title-123",
           stage: "QC",
           decision: "APPROVE",
@@ -257,8 +260,8 @@ test("concurrent reviewer calls cannot approve the same lifecycle twice", async 
       note: "Verified playback review",
     };
     const results = await Promise.allSettled([
-      f.sql.transaction((tx) => f.review(tx, superAdmin, data)),
-      f.sql.transaction((tx) => f.review(tx, superAdmin, data)),
+      f.sql.transaction((tx) => f.review(tx, superAdminQc, data)),
+      f.sql.transaction((tx) => f.review(tx, superAdminLegal, data)),
     ]);
     assert.equal(results.filter((r) => r.status === "fulfilled").length, 1);
     assert.equal((await f.sql.query("select * from bridge_qc_cases")).length, 1);
