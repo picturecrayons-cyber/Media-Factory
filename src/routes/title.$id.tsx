@@ -122,7 +122,7 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
       });
 
     return () => { cancelled = true; };
-  }, [assets]);
+  }, [assetsQ.data?.assets]);
 
   if (titleQ.isPending) return <p className="text-sm text-muted">Loading title workspace…</p>;
   if (titleQ.isError)
