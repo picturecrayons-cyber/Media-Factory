@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { PGlite } from "@electric-sql/pglite";
 import { persistVerifiedAsset } from "./asset-confirmation.ts";
 
-test("only a verified upload sets the master reference, once, with an audit event", async () => {
+test("only a verified upload sets the active artwork reference, once, with an audit event", async () => {
   const db = new PGlite();
   try {
     await db.waitReady;
@@ -14,28 +14,28 @@ test("only a verified upload sets the master reference, once, with an audit even
     await db.exec(`insert into bridge_titles (id,slug,name,owner_user_id,owner_account_type)
       values ('title1234','title','Title','creator','independent_creator');
       insert into bridge_assets (id,title_id,kind,s3_key,content_type,created_by)
-      values ('asset1234','title1234','master','bridge/creator/title1234/master/video.mp4','video/mp4','creator');`);
+      values ('asset1234','title1234','thumbnail','bridge/creator/title1234/thumbnail/art.jpg','image/jpeg','creator');`);
     const sql = { query: async <T>(query: string, params: unknown[]) => (await db.query<T>(query, params)).rows };
     const args = {
       assetId: "asset1234",
       actorUserId: "creator",
       internalActor: false,
       titleId: "title1234",
-      kind: "master",
+      kind: "thumbnail",
       byteSize: 120,
       contentType: "video/mp4",
       checksum: "etag-1",
-      sourceKey: "bridge/creator/title1234/master/video.mp4",
-      sealedKey: "bridge/creator/title1234/master/video.mp4.verified/uuid-1",
+      sourceKey: "bridge/creator/title1234/thumbnail/art.jpg",
+      sealedKey: "bridge/creator/title1234/thumbnail/art.jpg.verified/uuid-1",
     };
-    const state = async () => (await db.query<{ master_key: string | null; byte_size: number | null }>(`
-      select t.master_key, a.byte_size from bridge_titles t join bridge_assets a on a.title_id=t.id
+    const state = async () => (await db.query<{ poster_key: string | null; master_key: string | null; byte_size: number | null }>(`
+      select t.poster_key, t.master_key, a.byte_size from bridge_titles t join bridge_assets a on a.title_id=t.id
       where a.id='asset1234'`)).rows[0];
-    assert.deepEqual(await state(), { master_key: null, byte_size: null });
+    assert.deepEqual(await state(), { poster_key: null, master_key: null, byte_size: null });
     assert.equal(await persistVerifiedAsset(sql, { ...args, actorUserId: "intruder" }), false);
-    assert.deepEqual(await state(), { master_key: null, byte_size: null });
+    assert.deepEqual(await state(), { poster_key: null, master_key: null, byte_size: null });
     assert.equal(await persistVerifiedAsset(sql, args), true);
-    assert.deepEqual(await state(), { master_key: "bridge/creator/title1234/master/video.mp4.verified/uuid-1", byte_size: 120 });
+    assert.deepEqual(await state(), { poster_key: "bridge/creator/title1234/thumbnail/art.jpg.verified/uuid-1", master_key: null, byte_size: 120 });
     assert.equal(await persistVerifiedAsset(sql, args), false);
     assert.equal(await persistVerifiedAsset(sql, { ...args, assetId: "asset1234", sourceKey: "wrong" }), false);
     const audit = await db.query<{ action: string; metadata: string }>(
