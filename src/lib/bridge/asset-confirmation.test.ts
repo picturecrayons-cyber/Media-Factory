@@ -35,6 +35,12 @@ test("only a verified upload sets the active artwork reference, once, with an au
     assert.deepEqual(await state(), { poster_key: null, master_key: null, byte_size: null });
     assert.equal(await persistVerifiedAsset(sql, { ...args, actorUserId: "intruder" }), false);
     assert.deepEqual(await state(), { poster_key: null, master_key: null, byte_size: null });
+    // A failed/unapproved replacement must not replace previously active verified artwork.
+    await db.exec("update bridge_titles set poster_key = 'previous-verified-artwork' where id = 'title1234'");
+    assert.equal(await persistVerifiedAsset(sql, { ...args, actorUserId: "intruder" }), false);
+    const preserved = await db.query<{ poster_key: string | null }>("select poster_key from bridge_titles where id='title1234'");
+    assert.equal(preserved.rows[0]?.poster_key, "previous-verified-artwork");
+    await db.exec("update bridge_titles set poster_key = null where id = 'title1234'");
     assert.equal(await persistVerifiedAsset(sql, args), true);
     assert.deepEqual(await state(), { poster_key: "bridge/creator/title1234/thumbnail/art.jpg.verified/uuid-1", master_key: null, byte_size: 120 });
     assert.equal(await persistVerifiedAsset(sql, args), false);
