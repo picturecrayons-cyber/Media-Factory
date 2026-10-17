@@ -23,6 +23,7 @@ import {
 } from "@/lib/bridge/ott-ingest-spec";
 import { asciiUploadName } from "@/lib/bridge/latin1";
 import { findVerifiedPosterAsset } from "@/lib/bridge/poster-preview";
+import { canUploadTitleAssets } from "@/lib/bridge/upload-ui-policy";
 
 export const Route = createFileRoute("/title/$id")({ component: TitlePage });
 
@@ -285,11 +286,7 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
         </section>
       ) : activeTab === "Files" ? (
         <FilesPanel
-          canUpload={
-            actor.emailVerified &&
-            actor.internalRole === "super_admin" &&
-            (["DRAFT", "UPLOADING", "PREPARING"].includes(title.status) || title.status === "LIVE_FOR_BUYERS")
-          }
+          canUpload={canUploadTitleAssets(actor, title.status)}
           titleId={id}
           assets={assets}
           onAssetsChanged={() => assetsQ.refetch()}
