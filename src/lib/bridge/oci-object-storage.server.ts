@@ -221,7 +221,7 @@ export async function verifyObject(key: string, expectedContentType?: string | n
   };
 }
 
-async function pollWorkRequest(cfg: OciConfig, workRequestId: string) {
+async function pollWorkRequest(cfg: OciConfig, workRequestId: string): Promise<"COMPLETED" | "SUCCEEDED"> {
   const url = new URL(`/workRequests/${encodeURIComponent(workRequestId)}`, endpoint(cfg.region));
   let lastStatus = "UNKNOWN";
   let lastPercentComplete: number | undefined;
@@ -239,7 +239,9 @@ async function pollWorkRequest(cfg: OciConfig, workRequestId: string) {
     };
     lastStatus = body.status ?? "UNKNOWN";
     lastPercentComplete = body.percentComplete;
-    if (lastStatus === "SUCCEEDED") return;
+    // OCI Object Storage CopyObject work requests use COMPLETED as their
+    // successful terminal state (unlike several other OCI services, which use SUCCEEDED).
+    if (lastStatus === "COMPLETED" || lastStatus === "SUCCEEDED") return lastStatus;
     if (lastStatus === "FAILED" || lastStatus === "CANCELED") {
       const details = body.errors?.map((item) => [item.code, item.message].filter(Boolean).join(": ")).filter(Boolean).join("; ");
       throw new Error(`OCI object copy ${lastStatus.toLowerCase()} (workRequestId=${workRequestId}; opc-request-id=${requestId}${details ? `; details=${details}` : ""})`);
@@ -269,13 +271,13 @@ export async function sealVerifiedObject(sourceKey: string, destinationKey: stri
   });
   if (res.status !== 202 && !res.ok) throw new Error(`OCI object copy failed (${res.status}; opc-request-id=${res.headers.get("opc-request-id") ?? "missing"})`);
   const workRequestId = res.headers.get("opc-work-request-id");
-  if (workRequestId) await pollWorkRequest(cfg, workRequestId);
-  else if (res.status === 202) throw new Error(`OCI object copy accepted without opc-work-request-id (opc-request-id=${res.headers.get("opc-request-id") ?? "missing"})`);
+  const workRequestStatus = workRequestId ? await pollWorkRequest(cfg, workRequestId) : null;
+  if (!workRequestId && res.status === 202) throw new Error(`OCI object copy accepted without opc-work-request-id (opc-request-id=${res.headers.get("opc-request-id") ?? "missing"})`);
   const verified = await verifyObject(destinationKey, expectedContentType);
   return {
     ...verified,
     workRequestId: workRequestId ?? null,
-    workRequestStatus: workRequestId ? "SUCCEEDED" : "SYNC_VERIFIED",
+    workRequestStatus: workRequestStatus ?? "SYNC_VERIFIED",
     copyRequestId: res.headers.get("opc-request-id"),
   };
 }
