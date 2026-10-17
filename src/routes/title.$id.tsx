@@ -284,7 +284,7 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
             </form>
           )}
           {metadataSaved ? <p role="status" aria-live="polite" className="mt-3 text-xs text-muted">Metadata changes saved.</p> : null}
-          <LaneStore key={title.contentType titleId={title.id} stored={loopStageType(title.contentType)} locked={!actor.internalRole && !["DRAFT", "UPLOADING", "PREPARING"].includes(title.status)} />
+          <LaneStore key={title.contentType} titleId={title.id} stored={loopStageType(title.contentType)} locked={!actor.internalRole && !["DRAFT", "UPLOADING", "PREPARING"].includes(title.status)} />
           {title.synopsis ? <p className="mt-4 text-sm leading-6 text-muted">{title.synopsis}</p> : null}
           <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <Metric label="QC" value={qcReady ? "READY" : "PENDING"} />
