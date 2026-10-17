@@ -125,7 +125,7 @@ async function fixture() {
         },
       },
     );
-    return { db, sql, save: exports.saveLoopLicense, review: exports.reviewWorkflow };
+    return { db, sql, save: exports.submitLoopLicense, review: exports.reviewTitleWorkflow };
   } catch (error) {
     await db.close();
     throw error;
