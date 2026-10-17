@@ -270,5 +270,6 @@ export const requestAssetPreview = createServerFn({ method: "GET" })
       throw new Error("Artwork version is no longer active. Refresh the title.");
     }
     const { signDownload } = await import("./oci-object-storage.server");
-    return { ...(await signDownload({ key: asset.s3_key, expiresIn: 300 })), contentType: asset.content_type };
+    const signed = await signDownload({ key: asset.s3_key, expiresIn: 300 });
+    return { ...signed, contentType: asset.content_type, version: data.version ?? null };
   });
