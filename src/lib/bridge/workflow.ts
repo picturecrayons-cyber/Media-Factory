@@ -90,7 +90,7 @@ export async function reviewWorkflow(tx: Sql, actor: Actor, data: z.infer<typeof
     if (
       data.decision === "APPROVE" &&
       (!assets.some((a) => a.kind === "master" && a.s3_key === title.master_key) ||
-        !assets.some((a) => a.kind === "poster" && a.s3_key === title.poster_key))
+        !assets.some((a) => ["poster", "poster_vertical"].includes(a.kind) && a.s3_key === title.poster_key))
     )
       throw new Error("Verified current master and artwork are required");
     await tx`insert into bridge_qc_cases(title_id,status,reviewer_findings,reviewed_by,reviewed_at)
