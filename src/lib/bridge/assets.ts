@@ -46,7 +46,8 @@ export const requestAssetUpload = createServerFn({ method: "POST" })
     if (!["master", "poster", "poster_vertical", "poster_horizontal", "thumbnail", "subtitle", "screener", "technical", "censor_certificate"].includes(data.kind))
       throw new Error("This asset kind is not supported by the OTT ingest uploader");
     if (liveBackfill) {
-      const prior = await sql<{ id: string }>`select id from bridge_assets where title_id = ${title.id} and byte_size > 0 and (kind = ${data.kind} or (${data.kind} = 'poster_vertical' and kind = 'poster')) limit 1`;
+      const checkSql = await getSql();
+      const prior = await checkSql<{ id: string }>`select id from bridge_assets where title_id = ${title.id} and byte_size > 0 and (kind = ${data.kind} or (${data.kind} = 'poster_vertical' and kind = 'poster')) limit 1`;
       const protectedPointer = (data.kind === "master" && Boolean(title.masterKey)) ||
         (["poster", "poster_vertical"].includes(data.kind) && Boolean(title.posterKey));
       if (prior.length || protectedPointer) throw new Error("This live title already has a verified asset of this type. Use a separate, reviewed replacement workflow.");
