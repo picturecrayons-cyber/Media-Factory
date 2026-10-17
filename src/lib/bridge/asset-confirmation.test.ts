@@ -48,3 +48,27 @@ test("only a verified upload sets the master reference, once, with an audit even
     await db.close();
   }
 });
+
+
+test("live-title asset persistence requires the explicit Super Admin backfill gate", async () => {
+  const db = new PGlite();
+  try {
+    await db.waitReady;
+    await db.exec("create role anon; create role authenticated;");
+    await db.exec(readFileSync(join(process.cwd(), "migrations/0004_bridge.sql"), "utf8"));
+    await db.exec("insert into bridge_titles (id,slug,name,owner_user_id,owner_account_type,status,master_key,poster_key) values ('live12345','live-title','Live title','owner','independent_creator','LIVE_FOR_BUYERS','published/master','published/poster'); insert into bridge_assets (id,title_id,kind,s3_key,content_type,created_by) values ('liveasset123','live12345','subtitle','incoming/subtitle.vtt','text/vtt','admin');");
+    const sql = { query: async <T>(query: string, params: unknown[]) => (await db.query<T>(query, params)).rows };
+    const args = {
+      assetId: "liveasset123", actorUserId: "admin", internalActor: true, allowLiveBackfill: false,
+      titleId: "live12345", kind: "subtitle", byteSize: 120, contentType: "text/vtt", checksum: "etag-live",
+      sourceKey: "incoming/subtitle.vtt", sealedKey: "incoming/subtitle.vtt.verified/uuid-live",
+    };
+    assert.equal(await persistVerifiedAsset(sql, args), false);
+    assert.equal(await persistVerifiedAsset(sql, { ...args, allowLiveBackfill: true }), true);
+    const state = await db.query<{ status: string; master_key: string; poster_key: string; byte_size: number }>(
+      "select t.status,t.master_key,t.poster_key,a.byte_size from bridge_titles t join bridge_assets a on a.title_id=t.id where a.id='liveasset123'");
+    assert.deepEqual(state.rows[0], { status: "LIVE_FOR_BUYERS", master_key: "published/master", poster_key: "published/poster", byte_size: 120 });
+  } finally {
+    await db.close();
+  }
+});
