@@ -4,7 +4,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import { ASSET_KINDS } from "./types";
-import { assertPermission, canReadTitle, hasStaffPermission } from "./rbac";
+import { assertPermission, assertSuperAdmin, canReadTitle, hasStaffPermission } from "./rbac";
 import { requireVerifiedActor } from "./session";
 import { loadTitle } from "./titles";
 import { writeAudit } from "./audit";
@@ -37,7 +37,8 @@ export const requestAssetUpload = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
-    assertPermission(actor, actor.internalRole ? "title.ingest_internal" : "asset.sign_upload");
+    assertSuperAdmin(actor);
+    assertPermission(actor, "title.ingest_internal");
     const title = await loadTitle(data.titleId);
     if (!title) throw new Error("Not found");
     if (title.ownerUserId !== actor.userId && !hasStaffPermission(actor, "asset.sign_upload")) throw new Error("Forbidden");
@@ -100,7 +101,8 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
-    assertPermission(actor, actor.internalRole ? "title.ingest_internal" : "asset.sign_upload");
+    assertSuperAdmin(actor);
+    assertPermission(actor, "title.ingest_internal");
     const sql = await getSql();
     const rows = await sql<{
       id: string;
@@ -145,6 +147,7 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
       assetId: asset.id,
       actorUserId: actor.userId,
       internalActor: Boolean(actor.internalRole),
+      allowLiveBackfill: actor.emailVerified && actor.internalRole === "super_admin" && title.status === "LIVE_FOR_BUYERS",
       titleId: title.id,
       kind: asset.kind,
       byteSize: sealed.byteSize,
