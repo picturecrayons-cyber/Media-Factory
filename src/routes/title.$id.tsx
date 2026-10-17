@@ -78,6 +78,20 @@ function TitlePage() {
 function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
   const [activeTab, setActiveTab] = useState<WorkspaceTab>("Overview");
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
+  const [draft, setDraft] = useState<{ name: string; synopsis: string; language: string; year: string; runtimeMinutes: string } | null>(null);
+  const queryClient = useQueryClient();
+  const titleEditMutation = useMutation({
+    mutationFn: (data: { name?: string; synopsis?: string; language?: string; year?: number | null; runtimeMinutes?: number | null }) => updateTitle({ data: { id, ...data } }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["bridge-title", id] });
+      setDraft(null);
+    },
+  });
+  const copyTitleId = async () => {
+    try { await navigator.clipboard.writeText(id); setCopyState("copied"); }
+    catch { setCopyState("failed"); }
+  };
+  const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
   const copyTitleId = async () => {
     try {
       await navigator.clipboard.writeText(id);
@@ -135,6 +149,12 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
   return (
     <div className="space-y-5">
       <WorkflowDesk title={title} actor={actor} />
+      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-line bg-surface px-4 py-3">
+        <span className="text-xs font-semibold text-muted">Title ID</span>
+        <code className="min-w-0 break-all text-xs" data-testid="title-id">{title.id}</code>
+        <button type="button" onClick={() => void copyTitleId()} className="rounded-full border border-line px-3 py-1.5 text-xs font-semibold">Copy ID</button>
+        <span role="status" aria-live="polite" className="text-xs text-muted">{copyState === "copied" ? "Title ID copied." : copyState === "failed" ? "Copy failed. Select and copy the ID manually." : ""}</span>
+      </div>
       <div className="flex flex-wrap items-center gap-2 rounded-xl border border-line bg-surface px-4 py-3">
         <span className="text-xs font-semibold text-muted">Title ID</span>
         <code className="min-w-0 break-all text-xs" data-testid="title-id">{title.id}</code>
@@ -245,6 +265,36 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
             <Metric label="Director" value={title.credits?.filter((c) => c.role === "Director").map((c) => c.name).join(", ") || "—"} />
             <Metric label="Producer" value={title.credits?.filter((c) => c.role === "Producer").map((c) => c.name).join(", ") || "—"} />
           </div>
+          {draft === null ? (
+            <button type="button" onClick={() => setDraft({
+              name: title.name,
+              synopsis: title.synopsis || "",
+              language: title.language || "Malayalam",
+              year: title.year == null ? "" : String(title.year),
+              runtimeMinutes: title.runtimeMinutes == null ? "" : String(title.runtimeMinutes),
+            })} className="mt-5 rounded-full border border-line px-4 py-2 text-xs font-semibold">Edit metadata</button>
+          ) : (
+            <form className="mt-5 space-y-3 rounded-xl border border-line p-4" onSubmit={(event) => {
+              event.preventDefault();
+              if (titleEditMutation.isPending) return;
+              const year = draft.year.trim() ? Number(draft.year) : null;
+              const runtimeMinutes = draft.runtimeMinutes.trim() ? Number(draft.runtimeMinutes) : null;
+              if (draft.year.trim() && !Number.isInteger(year)) return;
+              if (draft.runtimeMinutes.trim() && (!Number.isInteger(runtimeMinutes) || Number(runtimeMinutes) < 1)) return;
+              titleEditMutation.mutate({ name: draft.name.trim(), synopsis: draft.synopsis, language: draft.language.trim(), year, runtimeMinutes });
+            }}>
+              <label className="block text-sm">Title name<input required value={draft.name} disabled={titleEditMutation.isPending} onChange={(e) => setDraft({ ...draft, name: e.target.value })} className="mt-1 block w-full rounded-lg border border-line bg-elevated px-3 py-2" /></label>
+              <label className="block text-sm">Synopsis<textarea value={draft.synopsis} disabled={titleEditMutation.isPending} onChange={(e) => setDraft({ ...draft, synopsis: e.target.value })} className="mt-1 block w-full rounded-lg border border-line bg-elevated px-3 py-2" rows={3} /></label>
+              <div className="grid gap-3 sm:grid-cols-3">
+                <label className="block text-sm">Language<input required value={draft.language} disabled={titleEditMutation.isPending} onChange={(e) => setDraft({ ...draft, language: e.target.value })} className="mt-1 block w-full rounded-lg border border-line bg-elevated px-3 py-2" /></label>
+                <label className="block text-sm">Year<input inputMode="numeric" value={draft.year} disabled={titleEditMutation.isPending} onChange={(e) => setDraft({ ...draft, year: e.target.value })} className="mt-1 block w-full rounded-lg border border-line bg-elevated px-3 py-2" /></label>
+                <label className="block text-sm">Runtime (minutes)<input inputMode="numeric" value={draft.runtimeMinutes} disabled={titleEditMutation.isPending} onChange={(e) => setDraft({ ...draft, runtimeMinutes: e.target.value })} className="mt-1 block w-full rounded-lg border border-line bg-elevated px-3 py-2" /></label>
+              </div>
+              {titleEditMutation.isError ? <p role="alert" className="text-xs text-red-600">Save failed: {titleEditMutation.error instanceof Error ? titleEditMutation.error.message : "Please retry."}</p> : null}
+              {titleEditMutation.isSuccess ? <p role="status" className="text-xs text-muted">Changes saved.</p> : null}
+              <div className="flex gap-2"><button type="submit" disabled={titleEditMutation.isPending} className="rounded-full bg-fg px-4 py-2 text-xs font-semibold text-bg">{titleEditMutation.isPending ? "Saving…" : "Save Changes"}</button><button type="button" disabled={titleEditMutation.isPending} onClick={() => { setDraft(null); titleEditMutation.reset(); }} className="rounded-full border border-line px-4 py-2 text-xs font-semibold">Cancel</button></div>
+            </form>
+          )}
           <LaneStore key={title.contentType} titleId={title.id} stored={loopStageType(title.contentType)} locked={!actor.internalRole && !["DRAFT", "UPLOADING", "PREPARING"].includes(title.status)} />
           {title.synopsis ? <p className="mt-4 text-sm leading-6 text-muted">{title.synopsis}</p> : null}
           <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
