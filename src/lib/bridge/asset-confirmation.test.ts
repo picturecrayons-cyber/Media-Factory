@@ -64,6 +64,7 @@ test("live-title asset persistence requires the explicit Super Admin backfill ga
       sourceKey: "incoming/subtitle.vtt", sealedKey: "incoming/subtitle.vtt.verified/uuid-live",
     };
     assert.equal(await persistVerifiedAsset(sql, args), false);
+    assert.equal(await persistVerifiedAsset(sql, { ...args, internalActor: false, allowLiveBackfill: true }), false);
     assert.equal(await persistVerifiedAsset(sql, { ...args, allowLiveBackfill: true }), true);
     const state = await db.query<{ status: string; master_key: string; poster_key: string; byte_size: number }>(
       "select t.status,t.master_key,t.poster_key,a.byte_size from bridge_titles t join bridge_assets a on a.title_id=t.id where a.id='liveasset123'");
