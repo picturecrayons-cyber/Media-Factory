@@ -91,15 +91,6 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
     try { await navigator.clipboard.writeText(id); setCopyState("copied"); }
     catch { setCopyState("failed"); }
   };
-  const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
-  const copyTitleId = async () => {
-    try {
-      await navigator.clipboard.writeText(id);
-      setCopyState("copied");
-    } catch {
-      setCopyState("failed");
-    }
-  };
 
   const titleQ = useQuery({
     queryKey: ["bridge-title", id],
