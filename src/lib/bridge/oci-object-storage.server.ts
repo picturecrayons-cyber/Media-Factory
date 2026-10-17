@@ -271,7 +271,13 @@ export async function sealVerifiedObject(sourceKey: string, destinationKey: stri
   const workRequestId = res.headers.get("opc-work-request-id");
   if (workRequestId) await pollWorkRequest(cfg, workRequestId);
   else if (res.status === 202) throw new Error(`OCI object copy accepted without opc-work-request-id (opc-request-id=${res.headers.get("opc-request-id") ?? "missing"})`);
-  return verifyObject(destinationKey, expectedContentType);
+  const verified = await verifyObject(destinationKey, expectedContentType);
+  return {
+    ...verified,
+    workRequestId: workRequestId ?? null,
+    workRequestStatus: workRequestId ? "SUCCEEDED" : "SYNC_VERIFIED",
+    copyRequestId: res.headers.get("opc-request-id"),
+  };
 }
 
 export async function deleteObject(key: string) {
