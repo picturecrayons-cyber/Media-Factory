@@ -41,9 +41,16 @@ export const requestAssetUpload = createServerFn({ method: "POST" })
     const title = await loadTitle(data.titleId);
     if (!title) throw new Error("Not found");
     if (title.ownerUserId !== actor.userId && !hasStaffPermission(actor, "asset.sign_upload")) throw new Error("Forbidden");
-    if (!UPLOADABLE.has(title.status)) throw new Error("Uploads are closed for this status");
+    const liveBackfill = actor.emailVerified && actor.internalRole === "super_admin" && title.status === "LIVE_FOR_BUYERS";
+    if (!UPLOADABLE.has(title.status) && !liveBackfill) throw new Error("Uploads are closed for this status");
     if (!["master", "poster", "poster_vertical", "poster_horizontal", "thumbnail", "subtitle", "screener", "technical", "censor_certificate"].includes(data.kind))
       throw new Error("This asset kind is not supported by the OTT ingest uploader");
+    if (liveBackfill) {
+      const prior = await sql<{ id: string }>`select id from bridge_assets where title_id = ${title.id} and byte_size > 0 and (kind = ${data.kind} or (${data.kind} = 'poster_vertical' and kind = 'poster')) limit 1`;
+      const protectedPointer = (data.kind === "master" && Boolean(title.masterKey)) ||
+        (["poster", "poster_vertical"].includes(data.kind) && Boolean(title.posterKey));
+      if (prior.length || protectedPointer) throw new Error("This live title already has a verified asset of this type. Use a separate, reviewed replacement workflow.");
+    }
     const ingestValidation = validateOttIngestFile({
       kind: data.kind as OttIngestKind,
       filename: data.filename,
@@ -109,8 +116,15 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
     const asset = rows[0];
     if (!asset || (asset.created_by !== actor.userId && !hasStaffPermission(actor, "asset.sign_upload"))) throw new Error("Asset not found");
     const title = await loadTitle(asset.title_id);
-    if (!title || (title.ownerUserId !== actor.userId && !hasStaffPermission(actor, "asset.sign_upload")) || !UPLOADABLE.has(title.status)) {
+    const liveBackfill = actor.emailVerified && actor.internalRole === "super_admin" && title?.status === "LIVE_FOR_BUYERS";
+    if (!title || (title.ownerUserId !== actor.userId && !hasStaffPermission(actor, "asset.sign_upload")) || (!UPLOADABLE.has(title.status) && !liveBackfill)) {
       throw new Error("Upload confirmation is closed for this title");
+    }
+    if (liveBackfill) {
+      const prior = await sql<{ id: string }>`select id from bridge_assets where title_id = ${title.id} and id <> ${asset.id} and byte_size > 0 and (kind = ${asset.kind} or (${asset.kind} = 'poster_vertical' and kind = 'poster')) limit 1`;
+      const protectedPointer = (asset.kind === "master" && Boolean(title.masterKey)) ||
+        (["poster", "poster_vertical"].includes(asset.kind) && Boolean(title.posterKey));
+      if (prior.length || protectedPointer) throw new Error("This live title already has a verified asset of this type. Use a separate, reviewed replacement workflow.");
     }
     if (asset.byte_size != null)
       return { assetId: asset.id, byteSize: Number(asset.byte_size), verified: true };
