@@ -370,8 +370,8 @@ export const updateTitle = createServerFn({ method: "POST" })
     return { title: next };
   });
 
-async function assertLicensingReady(titleId: string) {
-  const sql = await getSql();
+export async function assertLicensingReady(titleId: string, transaction?: Sql) {
+  const sql = transaction ?? (await getSql());
   const rows = await sql<{
     metadata_ok: boolean;
     rights_ok: boolean;

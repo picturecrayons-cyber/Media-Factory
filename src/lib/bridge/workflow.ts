@@ -4,7 +4,7 @@ import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql, type Sql } from "@/lib/db";
 import { requireVerifiedActor } from "./session";
 import { assertPermission, canReadTitle, canOperateOnTitle, type Actor } from "./rbac";
-import { loadTitle } from "./titles";
+import { assertLicensingReady, loadTitle } from "./titles";
 import { loopLicenseInput, producerSharePaise } from "./workflow-policy";
 import { bridgeEnv } from "./env";
 
@@ -110,6 +110,9 @@ export async function reviewWorkflow(tx: Sql, actor: Actor, data: z.infer<typeof
       values (${data.titleId},${data.decision === "APPROVE" ? "APPROVED" : "REJECTED"},
       ${JSON.stringify([{ grantId: data.grantId, note: data.note }])}::jsonb,${actor.userId},now())`;
     await tx`update bridge_rights_grants set status=${data.decision === "APPROVE" ? "VALID" : "REVOKED"} where id=${data.grantId}`;
+    if (data.decision === "APPROVE") {
+      await assertLicensingReady(data.titleId, tx);
+    }
   }
   const next =
     data.decision === "REJECT"
