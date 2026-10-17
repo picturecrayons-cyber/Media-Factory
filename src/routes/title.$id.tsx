@@ -4,7 +4,7 @@ import { WorkflowDesk } from "@/components/bridge/workflow-desk";
 import { publicationIsActive } from "@/lib/bridge/workflow-policy";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { getTitle, updateTitle } from "@/lib/bridge/titles";
@@ -23,10 +23,12 @@ import {
   validateOttIngestFile,
 } from "@/lib/bridge/ott-ingest-spec";
 import { asciiUploadName } from "@/lib/bridge/latin1";
+import { findVerifiedPosterAsset } from "@/lib/bridge/poster-preview";
 
 export const Route = createFileRoute("/title/$id")({ component: TitlePage });
 
 const WORKSPACE_TABS = ["Overview", "Files"] as const;
+const EMPTY_ASSETS: never[] = [];
 type WorkspaceTab = (typeof WORKSPACE_TABS)[number];
 
 function LaneStore({ titleId, stored, locked }: { titleId: string; stored: string; locked: boolean }) {
@@ -76,6 +78,8 @@ function TitlePage() {
 
 function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
   const [activeTab, setActiveTab] = useState<WorkspaceTab>("Overview");
+  const [posterPreviewUrl, setPosterPreviewUrl] = useState<string | null>(null);
+  const [posterPreviewFailed, setPosterPreviewFailed] = useState(false);
 
   const titleQ = useQuery({
     queryKey: ["bridge-title", id],
@@ -96,8 +100,26 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
     enabled: Boolean(actor.internalRole) || actor.accountType !== "buyer",
   });
   const title = titleQ.data?.title;
-  const assets = assetsQ.data?.assets ?? [];
+  const assets = assetsQ.data?.assets ?? EMPTY_ASSETS;
   const pub = pubQ.data?.publication;
+
+  useEffect(() => {
+    let cancelled = false;
+    const poster = findVerifiedPosterAsset(assets);
+    setPosterPreviewUrl(null);
+    setPosterPreviewFailed(false);
+    if (!poster) return () => { cancelled = true; };
+
+    void requestAssetDownload({ data: { assetId: poster.id } })
+      .then((signed) => {
+        if (!cancelled) setPosterPreviewUrl(signed.url);
+      })
+      .catch(() => {
+        if (!cancelled) setPosterPreviewFailed(true);
+      });
+
+    return () => { cancelled = true; };
+  }, [assets]);
 
   if (titleQ.isPending) return <p className="text-sm text-muted">Loading title workspace…</p>;
   if (titleQ.isError)
@@ -129,11 +151,20 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
       <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
         <div className="grid gap-5 md:grid-cols-[180px_1fr]">
           <div className="aspect-[2/3] overflow-hidden rounded-xl border border-line bg-elevated">
-            <div className="grid h-full place-items-center px-4 text-center text-xs text-muted">
-              {assets.some((asset) => ["poster_vertical", "poster"].includes(asset.kind))
-                ? "Vertical poster ready"
-                : "Add vertical poster"}
-            </div>
+            {posterPreviewUrl && !posterPreviewFailed ? (
+              <img
+                src={posterPreviewUrl}
+                alt={`Vertical poster for ${title.name}`}
+                className="h-full w-full object-contain"
+                onError={() => setPosterPreviewFailed(true)}
+              />
+            ) : (
+              <div className="grid h-full place-items-center px-4 text-center text-xs text-muted">
+                {assets.some((asset) => ["poster_vertical", "poster"].includes(asset.kind) && asset.verified)
+                  ? "Poster is verified, but its preview could not be loaded."
+                  : "Add vertical poster"}
+              </div>
+            )}
           </div>
           <div className="min-w-0">
             <div className="flex flex-wrap items-start justify-between gap-3">
