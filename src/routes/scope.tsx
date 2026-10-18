@@ -23,6 +23,30 @@ const deployments = [
 
 const checks: { area: string; status: Status; evidence: string; next: string }[] = [
   {
+    area: "Jananam 1947 Pranayam Thudarunnu — Main Film",
+    status: "NOT MET",
+    evidence: "The supplied Title Workspace screenshot marks the required main film as missing.",
+    next: "Upload the verified master (MP4, MOV or MXF), confirm the stored object, then verify playback and QC requirements.",
+  },
+  {
+    area: "Jananam 1947 Pranayam Thudarunnu — OCI copy",
+    status: "NOT MET",
+    evidence: "The supplied workspace reports: \"OCI object copy did not complete in time\". Current code polls a copy work request for up to 30 seconds before timing out; this message alone does not prove whether the copy later completed.",
+    next: "Check the OCI work-request status and destination object existence/ETag, then retry safely if absent. Capture OCI status/error evidence without exposing credentials.",
+  },
+  {
+    area: "Jananam 1947 Pranayam Thudarunnu — supporting assets",
+    status: "NEEDS VERIFICATION",
+    evidence: "The supplied workspace marks trailer, vertical poster, horizontal artwork, thumbnail, subtitle and censor certificate as Ready; it also lists poster, subtitle, censor certificate, thumbnail and screener downloads as Ready.",
+    next: "Verify each stored object, file integrity, subtitle timing, certificate validity and authorized download before QC submission.",
+  },
+  {
+    area: "Jananam 1947 Pranayam Thudarunnu — lifecycle and QC",
+    status: "NOT MET",
+    evidence: "Lifecycle is PREPARING and QC is Not reviewed in the supplied workspace.",
+    next: "Complete the master upload and all required asset checks, then submit for QC; do not mark the title ready before approval.",
+  },
+  {
     area: "Deployment responds",
     status: "MET",
     evidence: "Both supplied deployment URLs returned HTTP 200 on 18 Oct 2026.",
