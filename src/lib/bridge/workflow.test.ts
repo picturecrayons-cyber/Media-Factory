@@ -293,3 +293,25 @@ test("license author cannot approve their own agreement", async () => {
     await f.db.close();
   }
 });
+
+test("QC approval accepts the verified canonical vertical poster without a legacy poster", async () => {
+  const f = await fixture();
+  try {
+    await f.sql.query("update bridge_assets set kind='poster_vertical' where kind='poster'");
+    const result = await f.sql.transaction((tx) =>
+      f.review(tx, qc, {
+        titleId: "title-123",
+        stage: "QC",
+        decision: "APPROVE",
+        note: "Vertical poster and master verified",
+      }),
+    ) as { status: string };
+    assert.equal(result.status, "RIGHTS_REVIEW");
+    assert.equal(
+      (await f.sql.query<{ status: string }>("select status from bridge_qc_cases"))[0].status,
+      "PASSED",
+    );
+  } finally {
+    await f.db.close();
+  }
+});
