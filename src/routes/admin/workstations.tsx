@@ -6,6 +6,7 @@ import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { listAdminWorkstations, reviewAdminTitle, setBuyerPublicationGate } from "@/lib/bridge/admin-workstations";
 import { listDuplicateReviews, openDuplicateReview, decideDuplicateReview } from "@/lib/bridge/duplicate-reconciliation";
+import { buildTitleAuditGroups } from "@/lib/bridge/title-audit";
 
 export const Route = createFileRoute("/admin/workstations")({ component: AdminWorkstations });
 
@@ -94,8 +95,12 @@ function WorkstationBody() {
             rows={data.publications} titleName={titleName} fields={["bridge_title_id", "authorization_status", "territories", "languages", "window_end"]} />
         </div>
       ) : (
-        <SimpleTable title="Audit History" description="Persisted operator activity. No UI-only decisions."
-          rows={data.audit} fields={["action", "entity_type", "entity_id", "actor_user_id", "created_at"]} />
+        <div className="space-y-8">
+          <SimpleTable title="Audit History" description="Persisted operator activity. No UI-only decisions."
+            rows={data.audit} fields={["action", "entity_type", "entity_id", "actor_user_id", "created_at"]} />
+          <TitleIdentityAudit titles={data.titles} />
+          <DuplicateReviewSection />
+        </div>
       )}
 
       {review.isError || gate.isError ? <p className="rounded-xl border border-line p-4 text-sm">Action failed: {String(review.error ?? gate.error)}</p> : null}
@@ -121,6 +126,44 @@ function TitleQueue({ titles, review }: { titles: any[]; review: any }) {
           </div>
         )) : <Empty text="No titles in the Bridge catalog." />}
       </div>
+    </section>
+  );
+}
+
+
+function TitleIdentityAudit({ titles }: { titles: any[] }) {
+  const groups = buildTitleAuditGroups(titles);
+  return (
+    <section className="space-y-3">
+      <SectionHeader title="Canonical title identity audit" description="Read-only candidate discovery. Identity requires normalized title + language + release year; missing metadata stays in review. No records are merged, archived, or deleted here." />
+      {!groups.length ? <Empty text="No duplicate identity candidates found in the current title inventory." /> : (
+        <div className="space-y-3">
+          {groups.map((group) => (
+            <div key={group.key} className="rounded-2xl border border-line bg-surface p-4 space-y-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="font-semibold">{group.records[0]?.name}</p>
+                <span className="rounded-full border border-line px-2 py-1 text-xs">{group.classification === "MATCHED_IDENTITY_CANDIDATES" ? "Identity candidates" : "Metadata review"}</span>
+                <span className="text-xs text-muted">{group.language ?? "Language unknown"} · {group.year ?? "Year unknown"} · {group.records.length} records</span>
+              </div>
+              <div className="divide-y divide-line">
+                {group.records.map((record) => (
+                  <div key={record.id} className="flex flex-col gap-1 py-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <p className="text-sm">{record.name}</p>
+                      <p className="break-all text-xs text-muted">Title ID: {record.id}</p>
+                    </div>
+                    <p className="text-xs text-muted">{record.status ?? "Unknown status"} · {record.original_language ?? record.language ?? "Language unknown"} · {record.year ?? "Year unknown"}</p>
+                  </div>
+                ))}
+              </div>
+              {group.records.some((record) => record.status === "LIVE_FOR_BUYERS") ? (
+                <p className="text-sm font-medium">Buyer-visible record present: preserve it unless record-level evidence and separate approval authorize a change.</p>
+              ) : null}
+              {group.classification === "METADATA_REVIEW" ? <p className="text-xs text-muted">Do not merge this group until language and year are verified against source evidence.</p> : <p className="text-xs text-muted">Candidate match only—not proof of duplicate identity. Verify master/artwork, rights, OCI references, deliveries, and buyer visibility before any decision.</p>}
+            </div>
+          ))}
+        </div>
+      )}
     </section>
   );
 }
