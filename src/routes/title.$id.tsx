@@ -353,6 +353,7 @@ function FilesPanel({
   onAssetsChanged: () => Promise<unknown> | unknown;
 }) {
   const [uploading, setUploading] = useState<SimpleAssetKind | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<{ kind: SimpleAssetKind; percent: number; phase: "uploading" | "verifying" } | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const queryClient = useQueryClient();
   const uploadLock = useRef(false);
@@ -372,6 +373,7 @@ function FilesPanel({
       return;
     }
     setUploading(kind);
+    setUploadProgress({ kind, percent: 0, phase: "uploading" });
     setMessage(`Preparing ${kind} upload…`);
     try {
       const signed = await requestAssetUpload({
@@ -384,12 +386,25 @@ function FilesPanel({
       });
       const uploadUrl = new URL(signed.url);
       uploadUrl.pathname = uploadUrl.pathname.split("/").map((part) => encodeURIComponent(decodeURIComponent(part))).join("/");
-      const put = await fetch(uploadUrl.toString(), {
-        method: signed.method,
-        body: file,
-        headers: { "content-type": contentType },
+      await new Promise<void>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open(signed.method, uploadUrl.toString());
+        xhr.setRequestHeader("content-type", contentType);
+        xhr.upload.onprogress = (event) => {
+          if (!event.lengthComputable || event.total <= 0) return;
+          const percent = Math.min(100, Math.round((event.loaded / event.total) * 100));
+          setUploadProgress({ kind, percent, phase: "uploading" });
+        };
+        xhr.onload = () => {
+          if (xhr.status >= 200 && xhr.status < 300) resolve();
+          else reject(new Error(`Upload failed (${xhr.status})`));
+        };
+        xhr.onerror = () => reject(new Error("Upload failed due to a network error"));
+        xhr.onabort = () => reject(new Error("Upload was cancelled"));
+        xhr.send(file);
       });
-      if (!put.ok) throw new Error(`Upload failed (${put.status})`);
+      setUploadProgress({ kind, percent: 100, phase: "verifying" });
+      setMessage(`${kind[0].toUpperCase() + kind.slice(1)} uploaded (100%). Verifying in storage…`);
       await confirmAssetUpload({ data: { assetId: signed.assetId, expectedByteSize: file.size } });
       await onAssetsChanged();
       await queryClient.invalidateQueries({ queryKey: ["bridge-title", titleId] });
@@ -404,6 +419,7 @@ function FilesPanel({
     } finally {
       uploadLock.current = false;
       setUploading(null);
+      setUploadProgress(null);
     }
   }
   async function download(id: string) {
@@ -437,6 +453,7 @@ function FilesPanel({
             label={label}
             status={assets.some((a) => (a.kind === kind || (kind === "poster_vertical" && a.kind === "poster")) && a.verified) ? "Ready" : empty}
             busy={uploading === kind}
+            progress={uploadProgress?.kind === kind ? uploadProgress : null}
             canUpload={canUpload && uploading === null}
             onFile={(file) => void uploadFile(kind, file)}
           />
@@ -472,6 +489,7 @@ function FileTypeCard({
   label,
   status,
   busy,
+  progress,
   onFile,
   canUpload,
 }: {
@@ -480,6 +498,7 @@ function FileTypeCard({
   label: string;
   status: string;
   busy: boolean;
+  progress: { kind: SimpleAssetKind; percent: number; phase: "uploading" | "verifying" } | null;
   onFile: (file: File) => void;
 }) {
   const spec = OTT_INGEST_SPEC[kind];
@@ -508,6 +527,28 @@ function FileTypeCard({
           />
         </label>
       </div>
+      {progress ? (
+        <div className="mt-3 space-y-1.5" aria-live="polite">
+          <div className="flex items-center justify-between gap-3 text-xs text-muted">
+            <span>{progress.phase === "uploading" ? "Uploading file…" : "Upload complete · verifying in storage…"}</span>
+            <span className="tabular-nums font-semibold">{progress.percent}%</span>
+          </div>
+          <div
+            role="progressbar"
+            aria-label={`${label} upload progress`}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={progress.percent}
+            aria-valuetext={progress.phase === "verifying" ? "Upload complete, verifying in storage" : `${progress.percent}% uploaded`}
+            className="h-2 w-full overflow-hidden rounded-full bg-elevated"
+          >
+            <div
+              className="h-full rounded-full bg-accent transition-[width] duration-150"
+              style={{ width: `${progress.percent}%` }}
+            />
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
