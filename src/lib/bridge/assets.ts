@@ -12,6 +12,8 @@ import { assertNotDevUser } from "./guards";
 import { persistVerifiedAsset } from "./asset-confirmation";
 import { downloadDecision } from "./delivery-policy";
 import { validateOttIngestFile, type OttIngestKind } from "./ott-ingest-spec";
+import { validateArtworkDimensions } from "./ott-ingest-spec";
+import { readImageDimensions } from "./image-dimensions";
 
 const UPLOADABLE: ReadonlySet<string> = new Set(["DRAFT", "UPLOADING", "PREPARING"]);
 
@@ -115,8 +117,22 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
     if (asset.byte_size != null)
       return { assetId: asset.id, byteSize: Number(asset.byte_size), verified: true };
 
-    const { verifyObject, sealVerifiedObject } = await import("./oci-object-storage.server");
+    const { verifyObject, sealVerifiedObject, readObjectBytes } = await import("./oci-object-storage.server");
     const object = await verifyObject(asset.s3_key, asset.content_type);
+    if (asset.kind === "poster_vertical" || asset.kind === "poster_horizontal") {
+      if (!object.contentType || !["image/png", "image/jpeg", "image/webp"].includes(object.contentType)) {
+        throw new Error("Artwork must be a valid PNG, JPEG, or WebP image");
+      }
+      const imageBytes = await readObjectBytes(asset.s3_key);
+      const dimensions = readImageDimensions(imageBytes);
+      if (!dimensions) throw new Error("Could not read valid artwork dimensions from uploaded image bytes");
+      const orientation = validateArtworkDimensions(
+        asset.kind,
+        dimensions.width,
+        dimensions.height,
+      );
+      if (!orientation.ok) throw new Error(orientation.message);
+    }
     if (data.expectedByteSize != null && object.byteSize !== data.expectedByteSize) {
       throw new Error("Uploaded object size does not match the file that was sent");
     }
