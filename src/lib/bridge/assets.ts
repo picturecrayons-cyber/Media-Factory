@@ -167,7 +167,7 @@ export const startAssetMultipartUpload = createServerFn({ method: "POST" })
     kind: z.enum(ASSET_KINDS),
     filename: z.string().min(1).max(120),
     contentType: z.string().min(3).max(120),
-    expectedByteSize: z.number().int().min(100 * 1024 * 1024).max(10 * 1024 ** 4),
+    expectedByteSize: z.number().int().min(100 * 1024 * 1024).max(10_000 * 10 * 1024 * 1024),
   }))
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
