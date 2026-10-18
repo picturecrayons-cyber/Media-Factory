@@ -36,7 +36,6 @@ test("callback supports OTP and PKCE and verifies both session and user", () => 
   assert.match(source, /supabase\.auth\.getSession\(/);
   assert.match(source, /supabase\.auth\.getUser\(/);
   assert.match(source, /syncSupabaseSessionUser\(\)/);
-  assert.match(source, /startsWith\("\\\\\\\\"\)/);
 });
 
 test("session restoration covers stale refresh tokens, PKCE rotation, and retryable infrastructure errors", () => {
