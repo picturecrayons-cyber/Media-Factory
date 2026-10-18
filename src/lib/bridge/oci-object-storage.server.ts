@@ -202,6 +202,40 @@ export async function signDownload(opts: { key: string; expiresIn?: number }) {
   return { url: signed.url, key: opts.key, bucket: signed.bucket, method: "GET" as const };
 }
 
+/** Fetch a bounded object body for server-side inspection of small artwork assets. */
+export async function readObjectBytes(key: string, maxBytes = 25 * 1024 * 1024): Promise<Buffer> {
+  const cfg = config();
+  const namespace = await resolveNamespace(cfg);
+  const path = `/n/${encodeURIComponent(namespace)}/b/${encodeURIComponent(cfg.bucket)}/o/${encodedObjectName(key)}`;
+  const res = await signedFetch({ cfg, method: "GET", path });
+  if (!res.ok) throw new Error(`OCI object read failed (${res.status})`);
+  const declaredLength = Number(res.headers.get("content-length") || 0);
+  if (!Number.isSafeInteger(declaredLength) || declaredLength <= 0 || declaredLength > maxBytes) {
+    await res.body?.cancel();
+    throw new Error("Artwork file is empty or exceeds the server-side inspection limit");
+  }
+  if (!res.body) throw new Error("OCI object body is unavailable for artwork inspection");
+  const reader = res.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > maxBytes || total > declaredLength) {
+        await reader.cancel();
+        throw new Error("Artwork file exceeds the server-side inspection limit");
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  if (total !== declaredLength) throw new Error("Artwork body length did not match object metadata");
+  return Buffer.concat(chunks.map((chunk) => Buffer.from(chunk)), total);
+}
+
 export async function verifyObject(key: string, expectedContentType?: string | null) {
   const cfg = config();
   const namespace = await resolveNamespace(cfg);
