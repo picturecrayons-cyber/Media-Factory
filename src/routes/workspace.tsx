@@ -5,6 +5,7 @@ import { BridgeShell } from "@/components/bridge/shell";
 import { CreateTitleForm, TitleList } from "@/components/bridge/title-desk";
 import { Button } from "@/components/ui/button";
 import { hasPermission } from "@/lib/bridge/rbac";
+import { BRIDGE_LOOP_LANES } from "@/lib/bridge/loop-lanes";
 
 export const Route = createFileRoute("/workspace")({ component: Workspace });
 
