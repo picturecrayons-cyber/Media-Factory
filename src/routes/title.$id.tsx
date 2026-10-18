@@ -27,7 +27,7 @@ import { asciiUploadName } from "@/lib/bridge/latin1";
 
 export const Route = createFileRoute("/title/$id")({ component: TitlePage });
 
-const WORKSPACE_TABS = ["Overview", "Files", "Business & Release"] as const;
+const WORKSPACE_TABS = ["Overview", "Files", "Workflow"] as const;
 type WorkspaceTab = (typeof WORKSPACE_TABS)[number];
 
 function LaneStore({ titleId, stored, locked }: { titleId: string; stored: string; locked: boolean }) {
@@ -194,7 +194,7 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
         aria-label="Title Workspace Sections"
         className="flex gap-1 overflow-x-auto border-b border-line pb-3"
       >
-        {WORKSPACE_TABS.map((tab) => (
+        {(actor.accountType === "buyer" && !actor.internalRole ? (["Overview"] as const) : WORKSPACE_TABS).map((tab) => (
           <button
             key={tab}
             type="button"
@@ -245,7 +245,7 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
           assets={assets}
           onAssetsChanged={() => assetsQ.refetch()}
         />
-      ) : activeTab === "Business & Release" ? (
+      ) : activeTab === "Workflow" ? (
         <WorkflowDesk title={title} actor={actor} />
       ) : null}
     </div>
