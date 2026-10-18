@@ -425,13 +425,28 @@ function FilesPanel({
       const raw = error instanceof Error ? error.message : "Upload failed";
       const wasCancelled = raw === "Upload was cancelled.";
       setUploadProgress((current) => current ? { ...current, stage: wasCancelled ? "cancelled" : "failed" } : current);
-      setMessage(
-        wasCancelled
-          ? "Upload cancelled. You can select the file again to retry."
-          : raw.includes("STORAGE_UNAVAILABLE")
-            ? "Storage service is currently unavailable. Please try again later."
-            : raw,
-      );
+      if (verificationStarted) {
+        // The object may exist and the server may still be finishing verification.
+        // Refresh and offer retry for the same asset; never re-upload automatically.
+        try {
+          await onAssetsChanged();
+        } catch {
+          // Preserve the unresolved state if the refresh also fails.
+        }
+        setMessage(
+          raw === "VERIFICATION_TIMEOUT"
+            ? "Storage verification timed out. The upload may already exist; use Retry verification before uploading again."
+            : "Storage verification did not return a confirmed result: " + raw + ". The upload may already exist; use Retry verification before uploading again.",
+        );
+      } else {
+        setMessage(
+          wasCancelled
+            ? "Upload cancelled. You can select the file again to retry."
+            : raw.includes("STORAGE_UNAVAILABLE")
+              ? "Storage service is currently unavailable. Please try again later."
+              : raw,
+        );
+      }
     } finally {
       activeUploadRequest.current = null;
       setUploading(null);
@@ -444,7 +459,7 @@ function FilesPanel({
     setVerifyingAssetId(assetId);
     setMessage("Retrying storage verification…");
     try {
-      const result = await confirmAssetUpload({ data: { assetId } });
+      const result = await confirmAssetUploadWithTimeout({ assetId });
       if (!result.verified) throw new Error("Storage verification is still pending. Retry again shortly.");
       await onAssetsChanged();
       setMessage("Storage verified. The asset is now available in this title workspace.");
