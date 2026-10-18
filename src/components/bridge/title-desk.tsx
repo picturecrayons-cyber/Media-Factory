@@ -7,9 +7,28 @@ import { StatusChip } from "@/components/bridge/status-rail";
 import { createTitle, listTitles } from "@/lib/bridge/titles";
 import { BRIDGE_LOOP_LANES } from "@/lib/bridge/loop-lanes";
 
-export function TitleList({ empty, query = "" }: { empty: string; query?: string }) {
+export function TitleList({
+  empty,
+  query = "",
+  stageFilter = "all",
+  laneFilter = "all",
+}: {
+  empty: string;
+  query?: string;
+  stageFilter?: string;
+  laneFilter?: string;
+}) {
   const titlesQ = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles() });
-  const titles = (titlesQ.data?.titles ?? []).filter((t) => !query || `${t.name} ${t.language} ${t.year ?? ""}`.toLowerCase().includes(query.toLowerCase()));
+  const titles = (titlesQ.data?.titles ?? []).filter((t) => {
+    const matchesQuery = !query || `${t.name} ${t.language} ${t.year ?? ""}`.toLowerCase().includes(query.toLowerCase());
+    const matchesLane = laneFilter === "all" || t.contentType === laneFilter;
+    const matchesStage =
+      stageFilter === "all" ||
+      (stageFilter === "needs-decision" && ["QC_REVIEW", "RIGHTS_REVIEW", "LICENSING_READY"].includes(t.status)) ||
+      (stageFilter === "ready-to-license" && t.status === "LICENSING_READY") ||
+      (stageFilter === "live" && ["LIVE_FOR_BUYERS", "IN_NEGOTIATION", "LICENSED", "DELIVERED"].includes(t.status));
+    return matchesQuery && matchesLane && matchesStage;
+  });
   if (titlesQ.isPending) return <p className="text-sm text-muted">Loading titles…</p>;
   if (titlesQ.isError) {
     return (
