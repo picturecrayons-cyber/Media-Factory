@@ -295,7 +295,32 @@ function FilesPanel({
     }, 1000);
     return () => window.clearInterval(timer);
   }, [uploading, uploadStartedAt]);
+  async function validateArtworkOrientation(kind: SimpleAssetKind, file: File): Promise<string | null> {
+    if (kind !== "poster_vertical" && kind !== "poster_horizontal") return null;
+    let image: ImageBitmap;
+    try {
+      image = await createImageBitmap(file);
+    } catch {
+      return "Could not read image dimensions. Please choose a valid PNG, JPG, or WebP image.";
+    }
+    const { width, height } = image;
+    image.close();
+    if (width === height) return "Artwork must be landscape or portrait; square images are not accepted for these slots.";
+    if (kind === "poster_vertical" && height <= width) {
+      return "Vertical Poster must be portrait (height greater than width).";
+    }
+    if (kind === "poster_horizontal" && width <= height) {
+      return "Horizontal Artwork must be landscape (width greater than height).";
+    }
+    return null;
+  }
+
   async function uploadFile(kind: SimpleAssetKind, file: File) {
+    const orientationError = await validateArtworkOrientation(kind, file);
+    if (orientationError) {
+      setMessage(orientationError);
+      return;
+    }
     const filename = asciiUploadName(file.name);
     const contentType = file.type || "application/octet-stream";
     const validation = validateOttIngestFile({
@@ -400,7 +425,7 @@ function FilesPanel({
             key={kind}
             kind={kind}
             label={label}
-            status={assets.some((a) => (a.kind === kind || (kind === "poster_vertical" && a.kind === "poster")) && a.verified) ? "Ready" : empty}
+            status={assets.some((a) => a.kind === kind && a.verified) ? "Ready" : empty}
             busy={uploading === kind}
             canUpload={canUpload}
             onFile={(file) => void uploadFile(kind, file)}
