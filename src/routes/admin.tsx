@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { Button } from "@/components/ui/button";
+import { PublishingGatewayControl } from "@/components/bridge/publishing-gateway-control";
 import { listTitles, listAuditLogs } from "@/lib/bridge/titles";
 import { listLoopPublicationReadiness } from "@/lib/bridge/loop-publication";
 import { listAdminProfiles } from "@/lib/bridge/profiles";
@@ -62,6 +63,8 @@ function AdminBody({ actor }: { actor: any }) {
             </div>
           </div>
         </section>
+
+        <PublishingGatewayControl actorRole={actor.internalRole} />
 
         <section aria-label="Operational summary" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <Metric label="All titles" value={titlesQ.isPending ? "—" : String(titles.length)} detail="Canonical catalog" />
