@@ -487,7 +487,13 @@ function FilesPanel({
             key={kind}
             kind={kind}
             label={label}
-            status={assets.some((a) => a.kind === kind && a.verified) ? "Ready" : empty}
+            status={
+              assets.some((a) => a.kind === kind && a.verified)
+                ? "Ready"
+                : assets.some((a) => a.kind === kind)
+                  ? "Verifying"
+                  : empty
+            }
             busy={uploading === kind}
             canUpload={canUpload && uploading === null}
             onFile={(file) => void uploadFile(kind, file)}
