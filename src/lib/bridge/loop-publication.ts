@@ -204,21 +204,6 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
     assertPermission(actor, "title.read_catalog");
     const sql = await getSql();
 
-    // Auto-reevaluate any expired distribution windows
-    await sql`
-      update bridge_loop_publications
-      set authorization_status = 'expired', updated_at = now()
-      where window_end is not null and window_end < now() and authorization_status in ('authorized', 'live')
-    `.catch(() => {});
-
-    await sql`
-      update loop_titles
-      set status = 'expired', published = false, listed = false, updated_at = now()
-      where bridge_title_id in (
-        select bridge_title_id from bridge_loop_publications where authorization_status = 'expired'
-      ) and published = true
-    `.catch(() => {});
-
     const rows = await sql<{
       id: string;
       slug: string;
@@ -242,8 +227,14 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
       published: boolean | null;
       playback_path: string | null;
     }>`
-      select b.id, b.slug, b.name, b.status, b.language, b.master_key, b.poster_key,
+      select b.id, b.slug, b.name, b.status, b.language, b.content_type,
+             b.owner_user_id, b.owner_account_type, b.master_key, b.poster_key,
              b.synopsis, b.year, b.runtime_minutes,
+             exists(select 1 from bridge_qc_cases q where q.title_id=b.id and q.status='PASSED'
+               and q.reviewer_findings->0->>'masterKey'=b.master_key
+               and q.reviewer_findings->0->>'posterKey'=b.poster_key) as qc_ok,
+             array(select l.evidence->0->>'grantId' from bridge_legal_cases l
+               where l.title_id=b.id and l.status='APPROVED') as approved_legal_grant_ids,
              p.loop_title_id, p.authorization_status, p.window_start, p.window_end,
              p.territories, p.languages, p.exploitation_models,
              l.status as loop_status, l.listed, l.published, l.playback_path
@@ -255,7 +246,7 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
     `;
 
     const grants = await sql<BridgeRightsGrant & { title_id: string }>`
-      select id, title_id, status, territories, languages, media, window_start, window_end, exclusivity
+      select id, title_id, status, territories, languages, media, window_start, window_end, exclusivity, evidence
       from bridge_rights_grants where status = 'VALID'
     `;
 
@@ -274,43 +265,47 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
               },
             )
           : null;
-        const isReady =
-          Boolean(coveringGrant) &&
-          [
-            "LICENSING_READY",
-            "LIVE_FOR_BUYERS",
-            "IN_NEGOTIATION",
-            "LICENSED",
-            "DELIVERED",
-          ].includes(r.status) &&
-          Boolean(r.master_key) &&
-          Boolean(r.poster_key);
+        const commercialTerms = (coveringGrant as (BridgeRightsGrant & { evidence?: Array<{ commercialTerms?: CommercialTermsSummary }> }) | null)?.evidence?.[0]?.commercialTerms;
+        const hasCommercialTerms =
+          Number.isInteger(commercialTerms?.rightsOwnerSharePct) &&
+          Number.isInteger(commercialTerms?.distributorSharePct) &&
+          (commercialTerms?.rightsOwnerSharePct ?? 0) + (commercialTerms?.distributorSharePct ?? 0) === 100;
+        const legalApproved = Boolean(coveringGrant && r.approved_legal_grant_ids?.includes(coveringGrant.id));
+        const dimensionsReady = Boolean(
+          r.window_start && r.window_end &&
+          r.territories?.length === 1 && r.territories[0] === "WORLDWIDE" &&
+          r.exploitation_models?.length === 1 && r.exploitation_models[0] === "TVOD"
+        );
+        const statusReady = ["LICENSING_READY", "LIVE_FOR_BUYERS", "IN_NEGOTIATION", "LICENSED", "DELIVERED"].includes(r.status);
+        const isReady = Boolean(coveringGrant) && statusReady && Boolean(r.master_key) && Boolean(r.poster_key) &&
+          r.qc_ok && legalApproved && hasCommercialTerms && dimensionsReady &&
+          Boolean(r.synopsis?.trim()) && Boolean(r.content_type && r.content_type !== "Unclassified");
 
         const blockers: string[] = [];
-        if (!coveringGrant)
-          blockers.push("A matching rights grant and explicit publication dimensions are required");
-        if (
-          ![
-            "LICENSING_READY",
-            "LIVE_FOR_BUYERS",
-            "IN_NEGOTIATION",
-            "LICENSED",
-            "DELIVERED",
-          ].includes(r.status)
-        ) {
-          blockers.push(`Rights status (${r.status}) is not cleared for distribution`);
-        }
+        if (!coveringGrant) blockers.push("A matching active rights grant is required");
+        if (!statusReady) blockers.push(`Rights status (${r.status}) is not cleared for distribution`);
         if (!r.master_key) blockers.push("QC master video is missing");
         if (!r.poster_key) blockers.push("Artwork/poster is missing");
+        if (!r.qc_ok) blockers.push("QC approval for the current master and poster versions is required");
+        if (!legalApproved) blockers.push("Legal approval for the selected rights grant is required");
+        if (!hasCommercialTerms) blockers.push("Approved revenue shares totaling 100% are required");
+        if (!dimensionsReady) blockers.push("Explicit WORLDWIDE TVOD rights window is required");
+        if (!r.synopsis?.trim()) blockers.push("Consumer synopsis is missing");
+        if (!r.content_type || r.content_type === "Unclassified") blockers.push("Content type must be classified before Loop listing");
 
         return {
           id: r.id,
           slug: r.slug,
           name: r.name,
+          contentType: r.content_type,
+          ownerUserId: r.owner_user_id,
+          ownerAccountType: r.owner_account_type,
           bridgeStatus: r.status,
           language: r.language,
           hasMaster: Boolean(r.master_key),
           hasPoster: Boolean(r.poster_key),
+          qcApproved: r.qc_ok,
+          legalApproved,
           ready: isReady,
           blockers,
           publication: r.loop_title_id
