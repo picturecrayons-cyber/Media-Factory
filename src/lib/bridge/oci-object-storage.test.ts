@@ -9,8 +9,8 @@ test("OCI private key normalization accepts escaped and quoted PEM secrets", asy
   const variants = [
     pem,
     JSON.stringify(pem),
-    pem.replaceAll("\n", "\n"),
-    JSON.stringify(pem.replaceAll("\n", "\n")),
+    pem.replaceAll("\n", "\\n"),
+    JSON.stringify(pem.replaceAll("\n", "\\n")),
   ];
 
   const originalFetch = globalThis.fetch;
