@@ -68,7 +68,7 @@ test("OCI copy polling uses Object Storage and only verifies successful copies",
   const originalFetch = globalThis.fetch;
   Object.assign(process.env, values);
   try {
-    for (const outcome of ["SUCCEEDED", "FAILED", "CANCELED", "HTTP_ERROR"]) {
+    for (const outcome of ["SUCCEEDED", "COMPLETED", "FAILED", "CANCELED", "HTTP_ERROR"]) {
       await t.test(outcome, async () => {
         const calls: Array<{ url: URL; method: string }> = [];
         globalThis.fetch = async (input, init) => {
@@ -96,7 +96,7 @@ test("OCI copy polling uses Object Storage and only verifies successful copies",
           assert.equal(url.pathname, "/n/test-namespace/b/test-bucket/o/sealed-key");
           return new Response(null, { headers: { "content-length": "12", etag: '"sealed-etag"' } });
         };
-        if (outcome === "SUCCEEDED") {
+        if (outcome === "SUCCEEDED" || outcome === "COMPLETED") {
           assert.equal((await sealVerifiedObject("source-key", "sealed-key", "source-etag")).byteSize, 12);
           assert.deepEqual(calls.map((call) => call.method), ["POST", "GET", "HEAD"]);
         } else {
@@ -136,6 +136,49 @@ test("OCI object verification rejects an unexpected content type", async () => {
     globalThis.fetch = originalFetch;
     for (const [key, value] of Object.entries(saved)) {
       if (value === undefined) delete process.env[key]; else process.env[key] = value;
+    }
+  }
+});
+
+test("OCI copy failure includes bounded sanitized service diagnostics", async () => {
+  const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  const values = {
+    OCI_TENANCY_OCID: "test-tenancy",
+    OCI_USER_OCID: "test-user",
+    OCI_PRIVATE_KEY: privateKey.export({ type: "pkcs8", format: "pem" }).toString(),
+    OCI_FINGERPRINT: "test-fingerprint",
+    OCI_REGION: "ap-mumbai-1",
+    OCI_NAMESPACE: "test-namespace",
+    OCI_BUCKET_NAME: "test-bucket",
+  };
+  const saved = Object.fromEntries(Object.keys(values).map((key) => [key, process.env[key]]));
+  const originalFetch = globalThis.fetch;
+  Object.assign(process.env, values);
+  globalThis.fetch = async (_input, init) => {
+    assert.equal(init?.method, "POST");
+    return Response.json(
+      { code: "InsufficientServicePermissions", message: "copy denied\nplease check policy" },
+      { status: 400, headers: { "opc-request-id": "req-test-123" } },
+    );
+  };
+  try {
+    await assert.rejects(
+      sealVerifiedObject("source-key", "sealed-key", "source-etag"),
+      (error: unknown) => {
+        assert.ok(error instanceof Error);
+        assert.match(error.message, /OCI object copy failed \(400\)/);
+        assert.match(error.message, /InsufficientServicePermissions/);
+        assert.match(error.message, /copy denied please check policy/);
+        assert.match(error.message, /requestId=req-test-123/);
+        assert.doesNotMatch(error.message, /\\n/);
+        return true;
+      },
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+    for (const [key, value] of Object.entries(saved)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
     }
   }
 });

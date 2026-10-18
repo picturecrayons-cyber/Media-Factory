@@ -223,18 +223,21 @@ export async function verifyObject(key: string, expectedContentType?: string | n
 
 async function pollWorkRequest(cfg: OciConfig, workRequestId: string) {
   const url = new URL(`/workRequests/${encodeURIComponent(workRequestId)}`, endpoint(cfg.region));
+  let lastStatus = "";
   for (let i = 0; i < 30; i += 1) {
     const headers = signHeaders({ cfg, method: "GET", url });
     const res = await fetch(url, { method: "GET", headers });
     if (!res.ok) throw new Error(`OCI copy work-request lookup failed (${res.status})`);
     const body = (await res.json()) as { status?: string };
-    if (body.status === "SUCCEEDED") return;
-    if (body.status === "FAILED" || body.status === "CANCELED") {
-      throw new Error(`OCI object copy ${body.status.toLowerCase()}`);
+    const status = typeof body.status === "string" ? body.status.toUpperCase() : "";
+    lastStatus = status;
+    if (status === "SUCCEEDED" || status === "COMPLETED") return;
+    if (status === "FAILED" || status === "CANCELED") {
+      throw new Error(`OCI object copy ${status.toLowerCase()}`);
     }
     await new Promise((resolve) => setTimeout(resolve, 1000));
   }
-  throw new Error("OCI object copy did not complete in time");
+  throw new Error(`OCI object copy did not complete in time${lastStatus ? ` (last status: ${lastStatus})` : ""}`);
 }
 
 /** Copy a verified upload into an immutable destination key. */
@@ -255,7 +258,23 @@ export async function sealVerifiedObject(sourceKey: string, destinationKey: stri
       destinationObjectName: destinationKey,
     },
   });
-  if (res.status !== 202 && !res.ok) throw new Error(`OCI object copy failed (${res.status})`);
+  if (res.status !== 202 && !res.ok) {
+    // OCI uses a JSON service error body for many copy failures. Surface its
+    // bounded diagnostic code/message and request ID so operators can identify
+    // the rejected precondition without retrying blindly. Never log credentials.
+    const errorBody = await res.clone().json().catch(() => null) as
+      | { code?: unknown; message?: unknown }
+      | null;
+    const safeCode = typeof errorBody?.code === "string" ? errorBody.code.slice(0, 80) : "";
+    const safeMessage = typeof errorBody?.message === "string"
+      ? errorBody.message.replace(/[\r\n\t]+/g, " ").slice(0, 240)
+      : "";
+    const requestId = res.headers.get("opc-request-id") || res.headers.get("opc-work-request-id") || "";
+    const detail = [safeCode, safeMessage, requestId ? `requestId=${requestId.slice(0, 120)}` : ""]
+      .filter(Boolean)
+      .join("; ");
+    throw new Error(`OCI object copy failed (${res.status})${detail ? `: ${detail}` : ""}`);
+  }
   const workRequestId = res.headers.get("opc-work-request-id");
   if (workRequestId) await pollWorkRequest(cfg, workRequestId);
   return verifyObject(destinationKey);
