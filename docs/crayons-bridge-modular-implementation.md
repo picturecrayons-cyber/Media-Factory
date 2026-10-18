@@ -1,6 +1,6 @@
 # Crayons Bridge modular implementation
 
-**Status:** Audit complete; implementation staged incrementally  
+**Status:** First access-control hardening change committed; remaining modules staged incrementally  
 **Target:** non-production Preview only  
 **Base audited:** `main` at `9c56a25e4eba2de63c4c261503112c8945b2dd5a`
 
@@ -27,14 +27,14 @@
 
 ## First blocking finding: studio list/open mismatch
 
-The studio title list in `src/lib/bridge/titles.ts` currently includes records where the owner's `bridge_profiles.organization_name` matches the actor's organization name. The title detail endpoint uses `canReadTitle()`, which for a non-staff actor requires individual title ownership. A studio user may therefore see a colleague's title in the list but be unable to open it.
+The studio title list in `src/lib/bridge/titles.ts` previously included records where the owner's `bridge_profiles.organization_name` matched the actor's organization name. The title detail endpoint uses `canReadTitle()`, which for a non-staff actor requires individual title ownership. That created a list/detail mismatch and could expose title metadata across unrelated accounts that reused an organization name.
 
-**Do not fix this by allowing any matching organization-name string to authorize access.** The current inspected model has no explicit studio membership/ownership grant table. The correct implementation needs an explicit, revocable server-side membership/ownership relation, a migration, checks in every relevant read/mutation/upload path, and negative cross-studio tests. Until that exists, avoid broadening access.
+**Implemented first fail-closed fix:** `listOwned()` now lists only records owned by the authenticated actor (and excludes merged titles when that schema column exists). Organization-name equality no longer affects authorization. Existing API shape and `getTitle`/mutation owner checks remain unchanged. This intentionally does not add studio collaboration. The correct future implementation needs an explicit, revocable server-side membership/ownership relation, a migration, checks in every relevant read/mutation/upload/workflow path, and negative cross-studio tests; do not infer authorization from profile strings.
 
 ## Implementation sequence
 
-1. **Access model first:** design an explicit studio membership/ownership grant and migration; inventory all title read/update/asset/workflow/delivery endpoints; add cross-studio negative tests. Do not infer authorization from organization-name equality.
-2. **Title Management:** make list/detail/update semantics consistent under the explicit membership model.
+1. **Access model first — initial hardening committed:** removed implicit studio sharing based on organization-name equality. Next, design an explicit studio membership/ownership grant and migration; inventory all title read/update/asset/workflow/delivery endpoints; add cross-studio negative tests.
+2. **Title Management:** verify list/detail/update semantics remain consistent; only add collaboration after the explicit membership model is implemented.
 3. **Asset Ingest & Storage:** add end-to-end recovery/idempotency tests for verified success, rejection, timeout, and unknown outcome.
 4. **Rights & Licensing:** strengthen server-boundary negative tests and retain independent QC/legal review.
 5. **QC & Deliveries:** trace persisted delivery state and require sign-off; distinguish requests from completed deliverables.
@@ -45,7 +45,7 @@ The studio title list in `src/lib/bridge/titles.ts` currently includes records w
 ## Current validation status
 
 - Source audit: performed through GitHub repository files/search.
-- Unit tests/typecheck/lint: **not run** in this tool session.
+- Unit tests/typecheck/lint: **not run** in this tool session; CI result still needs checking.
 - Preview reproduction/acceptance: **not run**.
 - Production changes/deployment: **none**.
 - This document is an audit/implementation guardrail, not evidence that all six modules have been implemented.
