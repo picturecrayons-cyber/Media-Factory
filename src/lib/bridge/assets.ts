@@ -268,6 +268,8 @@ export const commitAssetMultipartUpload = createServerFn({ method: "POST" })
     if (!parts.length || parts.some((part) => !part.size)) throw new Error("OCI has no complete multipart part manifest");
     const object = await commitMultipartUpload({ key: asset.s3_key, uploadId: asset.multipart_upload_id!, parts });
     if (object.byteSize !== Number(asset.upload_expected_byte_size)) throw new Error("Committed object size differs from the original file");
+    if (asset.content_type && object.contentType !== asset.content_type) throw new Error("Committed object content type differs from the asset record");
+    if (!object.etag) throw new Error("Committed OCI object has no ETag; immutable sealing is blocked");
     const checksum = await checksumObject(asset.s3_key);
     if (checksum.byteSize !== object.byteSize) {
       await sql`update bridge_assets set upload_state = 'INTEGRITY_FAILED' where id = ${asset.id}`;
