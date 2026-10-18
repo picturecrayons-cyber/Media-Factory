@@ -376,9 +376,16 @@ export async function checksumObject(key: string) {
   if (!res.ok || !res.body) throw new Error(`OCI object readback failed (${res.status})`);
   const hash = createHash("sha256");
   let byteSize = 0;
-  for await (const chunk of res.body) {
-    hash.update(chunk);
-    byteSize += chunk.byteLength;
+  const reader = res.body.getReader();
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      hash.update(value);
+      byteSize += value.byteLength;
+    }
+  } finally {
+    reader.releaseLock();
   }
   return { sha256: hash.digest("hex"), byteSize };
 }
