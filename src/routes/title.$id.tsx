@@ -4,7 +4,7 @@ import { WorkflowDesk } from "@/components/bridge/workflow-desk";
 import { publicationIsActive } from "@/lib/bridge/workflow-policy";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { getTitle, updateTitle } from "@/lib/bridge/titles";
@@ -279,6 +279,7 @@ function FilesPanel({
   onAssetsChanged: () => Promise<unknown> | unknown;
 }) {
   const [uploading, setUploading] = useState<SimpleAssetKind | null>(null);
+  const uploadLock = useRef(false);
   const [message, setMessage] = useState<string | null>(null);
   const [uploadStartedAt, setUploadStartedAt] = useState<number | null>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
@@ -312,9 +313,14 @@ function FilesPanel({
   }
 
   async function uploadFile(kind: SimpleAssetKind, file: File) {
+    // Serialize transfers so a shared progress panel and elapsed timer can never be
+    // overwritten or cleared by another asset's request.
+    if (uploadLock.current) return;
+    uploadLock.current = true;
     const orientationError = await validateArtworkOrientation(kind, file);
     if (orientationError) {
       setMessage(orientationError);
+      uploadLock.current = false;
       return;
     }
     const filename = asciiUploadName(file.name);
@@ -326,6 +332,7 @@ function FilesPanel({
     });
     if (!validation.ok) {
       setMessage(validation.message);
+      uploadLock.current = false;
       return;
     }
     setUploading(kind);
@@ -391,6 +398,7 @@ function FilesPanel({
     } finally {
       setUploading(null);
       setUploadStartedAt(null);
+      uploadLock.current = false;
     }
   }
   async function download(id: string) {
@@ -423,7 +431,7 @@ function FilesPanel({
             label={label}
             status={assets.some((a) => a.kind === kind && a.verified) ? "Ready" : empty}
             busy={uploading === kind}
-            canUpload={canUpload}
+            canUpload={canUpload && uploading === null}
             onFile={(file) => void uploadFile(kind, file)}
           />
         ))}
