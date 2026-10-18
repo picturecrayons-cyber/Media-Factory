@@ -10,7 +10,6 @@ import { BridgeShell } from "@/components/bridge/shell";
 import { getTitle, updateTitle } from "@/lib/bridge/titles";
 import { BRIDGE_LOOP_LANES, loopStageType } from "@/lib/bridge/loop-lanes";
 import {
-  cancelAssetMultipartUpload,
   commitAssetMultipartUpload,
   confirmAssetUpload,
   listAssetMultipartParts,
