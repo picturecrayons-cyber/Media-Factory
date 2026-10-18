@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { generateKeyPairSync, verify } from "node:crypto";
-import { sealVerifiedObject, verifyObject } from "./oci-object-storage.server.ts";
+import { sealVerifiedObject, signMultipartPart, verifyObject } from "./oci-object-storage.server.ts";
 
 test("OCI private key normalization accepts escaped and quoted PEM secrets", async () => {
   const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
@@ -136,6 +136,39 @@ test("OCI object verification rejects an unexpected content type", async () => {
     globalThis.fetch = originalFetch;
     for (const [key, value] of Object.entries(saved)) {
       if (value === undefined) delete process.env[key]; else process.env[key] = value;
+    }
+  }
+});
+
+
+test("OCI multipart part signatures cover the exact encoded request target and use browser-settable x-date", async () => {
+  const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  const values = {
+    OCI_TENANCY_OCID: "test-tenancy",
+    OCI_USER_OCID: "test-user",
+    OCI_PRIVATE_KEY: privateKey.export({ type: "pkcs8", format: "pem" }).toString(),
+    OCI_FINGERPRINT: "test-fingerprint",
+    OCI_REGION: "ap-mumbai-1",
+    OCI_NAMESPACE: "test-namespace",
+    OCI_BUCKET_NAME: "test-bucket",
+  };
+  const saved = Object.fromEntries(Object.keys(values).map((key) => [key, process.env[key]]));
+  Object.assign(process.env, values);
+  try {
+    const signed = await signMultipartPart({ key: "bridge/title/master/file.mp4", uploadId: "upload/id", partNum: 3 });
+    const url = new URL(signed.url);
+    assert.equal(url.pathname, "/n/test-namespace/b/test-bucket/u/bridge%2Ftitle%2Fmaster%2Ffile.mp4");
+    assert.equal(url.search, "?uploadId=upload%2Fid&uploadPartNum=3");
+    assert.ok(signed.headers["x-date"]);
+    const auth = signed.headers.authorization;
+    const signature = auth.match(/signature="([^"]+)"/)?.[1];
+    assert.ok(signature);
+    const signedText = `(request-target): put ${url.pathname}${url.search}\\nhost: ${url.host}\\nx-date: ${signed.headers["x-date"]}`;
+    assert.ok(verify("RSA-SHA256", Buffer.from(signedText), publicKey, Buffer.from(signature, "base64")));
+  } finally {
+    for (const [key, value] of Object.entries(saved)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
     }
   }
 });
