@@ -99,6 +99,26 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
   const title = titleQ.data?.title;
   const assets = assetsQ.data?.assets ?? [];
   const pub = pubQ.data?.publication;
+  const [posterPreviewUrl, setPosterPreviewUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    const poster = assets.find((asset) => asset.verified && ["poster_vertical", "poster"].includes(asset.kind));
+    if (!poster) {
+      setPosterPreviewUrl(null);
+      return;
+    }
+    let cancelled = false;
+    requestAssetDownload({ data: { assetId: poster.id } })
+      .then((signed) => {
+        if (!cancelled) setPosterPreviewUrl(signed.url);
+      })
+      .catch(() => {
+        if (!cancelled) setPosterPreviewUrl(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [assets]);
 
   if (titleQ.isPending) return <p className="text-sm text-muted">Loading title workspace…</p>;
   if (titleQ.isError)
@@ -129,11 +149,19 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
       <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
         <div className="grid gap-5 md:grid-cols-[180px_1fr]">
           <div className="aspect-[2/3] overflow-hidden rounded-xl border border-line bg-elevated">
-            <div className="grid h-full place-items-center px-4 text-center text-xs text-muted">
-              {assets.some((asset) => ["poster_vertical", "poster"].includes(asset.kind))
-                ? "Vertical poster ready"
-                : "Add vertical poster"}
-            </div>
+            {posterPreviewUrl ? (
+              <img
+                src={posterPreviewUrl}
+                alt={`${title.name} vertical poster preview`}
+                className="h-full w-full object-contain"
+              />
+            ) : (
+              <div className="grid h-full place-items-center px-4 text-center text-xs text-muted">
+                {assets.some((asset) => asset.verified && ["poster_vertical", "poster"].includes(asset.kind))
+                  ? "Poster verified · preview unavailable"
+                  : "Add vertical poster"}
+              </div>
+            )}
           </div>
           <div className="min-w-0">
             <div className="flex flex-wrap items-start justify-between gap-3">
@@ -285,6 +313,7 @@ function FilesPanel({
   const uploadLock = useRef(false);
   const activeUploadRequest = useRef<XMLHttpRequest | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [verifyingAssetId, setVerifyingAssetId] = useState<string | null>(null);
   const [uploadStartedAt, setUploadStartedAt] = useState<number | null>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [uploadProgress, setUploadProgress] = useState<{
@@ -410,6 +439,26 @@ function FilesPanel({
       uploadLock.current = false;
     }
   }
+  async function retryVerification(assetId: string) {
+    if (uploadLock.current || verifyingAssetId) return;
+    setVerifyingAssetId(assetId);
+    setMessage("Retrying storage verification…");
+    try {
+      const result = await confirmAssetUpload({ data: { assetId } });
+      if (!result.verified) throw new Error("Storage verification is still pending. Retry again shortly.");
+      await onAssetsChanged();
+      setMessage("Storage verified. The asset is now available in this title workspace.");
+    } catch (error) {
+      setMessage(
+        error instanceof Error
+          ? `Verification retry failed: ${error.message}`
+          : "Verification retry failed. Check storage connectivity and retry.",
+      );
+    } finally {
+      setVerifyingAssetId(null);
+    }
+  }
+
   async function download(id: string) {
     const signed = await requestAssetDownload({ data: { assetId: id } });
     window.location.assign(signed.url);
@@ -506,20 +555,36 @@ function FilesPanel({
         {assets.map((a) => (
           <div
             key={a.id}
-            className="flex items-center justify-between gap-3 rounded-xl border border-line p-4"
+            className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line p-4"
           >
-            <div>
+            <div className="min-w-0">
               <p className="text-sm font-semibold">{a.kind}</p>
-              <p className="text-xs text-muted">{a.verified ? "Ready" : "Processing"}</p>
+              <p className="text-xs text-muted">
+                {a.verified ? "Storage-verified" : "Uploaded record · awaiting storage verification"}
+                {a.byteSize ? ` · ${(a.byteSize / (1024 * 1024)).toFixed(1)} MB` : ""}
+              </p>
             </div>
-            {a.verified ? (
-              <button
-                onClick={() => void download(a.id)}
-                className="rounded-full border border-line px-4 py-2 text-xs font-semibold"
-              >
-                Download
-              </button>
-            ) : null}
+            <div className="flex flex-wrap gap-2">
+              {!a.verified && canUpload ? (
+                <button
+                  type="button"
+                  disabled={verifyingAssetId !== null || uploading !== null}
+                  onClick={() => void retryVerification(a.id)}
+                  className="rounded-full border border-line px-4 py-2 text-xs font-semibold disabled:opacity-50"
+                >
+                  {verifyingAssetId === a.id ? "Verifying…" : "Retry verification"}
+                </button>
+              ) : null}
+              {a.verified ? (
+                <button
+                  type="button"
+                  onClick={() => void download(a.id)}
+                  className="rounded-full border border-line px-4 py-2 text-xs font-semibold"
+                >
+                  Preview / Download
+                </button>
+              ) : null}
+            </div>
           </div>
         ))}
       </div>
