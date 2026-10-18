@@ -366,3 +366,20 @@ export async function abortMultipartUpload(opts: { key: string; uploadId: string
   if (!res.ok && res.status !== 404) throw new Error(`OCI multipart abort failed (${res.status})`);
   return { aborted: res.status !== 404 };
 }
+
+
+/** Compute a real SHA-256 over object bytes; ETags are not treated as content checksums. */
+export async function checksumObject(key: string) {
+  const cfg = config();
+  const namespace = await resolveNamespace(cfg);
+  const path = `/n/${encodeURIComponent(namespace)}/b/${encodeURIComponent(cfg.bucket)}/o/${encodedObjectName(key)}`;
+  const res = await signedFetch({ cfg, method: "GET", path });
+  if (!res.ok || !res.body) throw new Error(`OCI object readback failed (${res.status})`);
+  const hash = createHash("sha256");
+  let byteSize = 0;
+  for await (const chunk of res.body) {
+    hash.update(chunk);
+    byteSize += chunk.byteLength;
+  }
+  return { sha256: hash.digest("hex"), byteSize };
+}
