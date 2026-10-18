@@ -20,6 +20,7 @@ import type { BridgeActor } from "@/lib/bridge/session";
 import {
   OTT_INGEST_SPEC,
   getOttIngestAccept,
+  validateArtworkDimensions,
   validateOttIngestFile,
 } from "@/lib/bridge/ott-ingest-spec";
 import { asciiUploadName } from "@/lib/bridge/latin1";
@@ -305,14 +306,8 @@ function FilesPanel({
     }
     const { width, height } = image;
     image.close();
-    if (width === height) return "Artwork must be landscape or portrait; square images are not accepted for these slots.";
-    if (kind === "poster_vertical" && height <= width) {
-      return "Vertical Poster must be portrait (height greater than width).";
-    }
-    if (kind === "poster_horizontal" && width <= height) {
-      return "Horizontal Artwork must be landscape (width greater than height).";
-    }
-    return null;
+    const result = validateArtworkDimensions(kind, width, height);
+    return result.ok ? null : result.message;
   }
 
   async function uploadFile(kind: SimpleAssetKind, file: File) {
