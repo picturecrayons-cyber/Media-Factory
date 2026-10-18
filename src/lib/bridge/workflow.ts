@@ -20,6 +20,9 @@ export async function saveLoopLicense(
   data: z.infer<typeof loopLicenseInput>,
 ) {
   data = loopLicenseInput.parse(data);
+  if (!actor.emailVerified || !["admin", "super_admin"].includes(actor.internalRole ?? "")) {
+    throw new Error("Only Bridge admins and super admins can submit Loop license drafts");
+  }
   const [title] = await tx<{
     owner_user_id: string;
     status: string;
