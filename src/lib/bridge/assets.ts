@@ -275,7 +275,7 @@ export const commitAssetMultipartUpload = createServerFn({ method: "POST" })
       await sql`update bridge_assets set upload_state = 'INTEGRITY_FAILED' where id = ${asset.id}`;
       await writeAudit({ actorUserId: actor.userId, action: "asset.multipart_integrity_failed", entityType: "bridge_asset", entityId: asset.id,
         metadata: { actualSha256: checksum.sha256, expectedByteSize: asset.upload_expected_byte_size, actualByteSize: checksum.byteSize } });
-      throw new Error("Stored object readback size does not match the original file size");
+      throw new Error("OCI byte readback size differs from the committed object size");
     }
     const sealedKey = `${asset.s3_key}.verified/${randomUUID()}`;
     const sealed = await sealVerifiedObject(asset.s3_key, sealedKey, object.etag || "");
