@@ -86,40 +86,19 @@ async function listCatalog(sql: Sql): Promise<TitleRow[]> {
   return sql<TitleRow>`select * from bridge_titles where merged_into_title_id is null order by updated_at desc limit 200`;
 }
 
-async function listOwned(sql: Sql, userId: string, organizationName: string | null): Promise<TitleRow[]> {
-  const org = organizationName?.trim() || null;
-  const mergeColumnAvailable = await hasTitleMergeColumn(sql);
-  if (!org) {
-    return mergeColumnAvailable
-      ? sql<TitleRow>`
-          select * from bridge_titles
-          where owner_user_id = ${userId} and merged_into_title_id is null
-          order by updated_at desc limit 200
-        `
-      : sql<TitleRow>`select * from bridge_titles where owner_user_id = ${userId} order by updated_at desc limit 200`;
+async function listOwned(sql: Sql, userId: string): Promise<TitleRow[]> {
+  // Organization-name equality is descriptive profile data, not an authorization
+  // grant. Until an explicit, revocable studio membership relation is available,
+  // list only titles owned by this actor so every listed title is openable under
+  // the same owner-based policy enforced by getTitle and title mutations.
+  if (await hasTitleMergeColumn(sql)) {
+    return sql<TitleRow>`
+      select * from bridge_titles
+      where owner_user_id = ${userId} and merged_into_title_id is null
+      order by updated_at desc limit 200
+    `;
   }
-  return mergeColumnAvailable
-    ? sql<TitleRow>`
-        select t.* from bridge_titles t
-        where t.merged_into_title_id is null
-          and (
-            t.owner_user_id = ${userId}
-            or t.owner_user_id in (
-              select user_id from bridge_profiles
-              where organization_name is not null and lower(organization_name) = lower(${org})
-            )
-          )
-        order by t.updated_at desc limit 200
-      `
-    : sql<TitleRow>`
-        select t.* from bridge_titles t
-        where t.owner_user_id = ${userId}
-          or t.owner_user_id in (
-            select user_id from bridge_profiles
-            where organization_name is not null and lower(organization_name) = lower(${org})
-          )
-        order by t.updated_at desc limit 200
-      `;
+  return sql<TitleRow>`select * from bridge_titles where owner_user_id = ${userId} order by updated_at desc limit 200`;
 }
 
 function slugify(name: string, id: string): string {
@@ -264,7 +243,7 @@ export const listTitles = createServerFn({ method: "GET" })
       }
     } else {
       assertPermission(actor, "title.read_own");
-      rows = await listOwned(sql, actor.userId, actor.accountType === "studio" ? actor.organizationName : null);
+      rows = await listOwned(sql, actor.userId);
     }
     return { titles: rows.flatMap((row) => {
       try {
