@@ -2,9 +2,7 @@
 alter table bridge_assets
   add column if not exists multipart_upload_id text,
   add column if not exists upload_expected_byte_size bigint,
-  add column if not exists upload_expected_sha256 text,
   add column if not exists checksum_sha256 text,
-  add column if not exists upload_parts jsonb not null default '[]'::jsonb,
   add column if not exists upload_state text;
 
 create index if not exists bridge_assets_pending_multipart_idx
