@@ -10,10 +10,15 @@ import { BridgeShell } from "@/components/bridge/shell";
 import { getTitle, updateTitle } from "@/lib/bridge/titles";
 import { BRIDGE_LOOP_LANES, loopStageType } from "@/lib/bridge/loop-lanes";
 import {
+  cancelAssetMultipartUpload,
+  commitAssetMultipartUpload,
   confirmAssetUpload,
+  listAssetMultipartParts,
   listTitleAssets,
   requestAssetDownload,
   requestAssetUpload,
+  signAssetMultipartPart,
+  startAssetMultipartUpload,
 } from "@/lib/bridge/assets";
 import { getLoopPublication } from "@/lib/bridge/loop-publication";
 import type { BridgeActor } from "@/lib/bridge/session";
@@ -346,11 +351,7 @@ function FilesPanel({
   async function uploadFile(kind: SimpleAssetKind, file: File) {
     const filename = asciiUploadName(file.name);
     const contentType = file.type || "application/octet-stream";
-    const validation = validateOttIngestFile({
-      kind,
-      filename,
-      contentType,
-    });
+    const validation = validateOttIngestFile({ kind, filename, contentType });
     if (!validation.ok) {
       setMessage(validation.message);
       return;
@@ -358,32 +359,73 @@ function FilesPanel({
     setUploading(kind);
     setMessage(`Preparing ${kind} upload…`);
     try {
-      const signed = await requestAssetUpload({
-        data: {
-          titleId,
-          kind,
-          filename,
-          contentType,
-        },
-      });
+      // OCI recommends multipart for large media. Parts are uploaded directly to OCI,
+      // while the server persists the upload ID and reconstructs the part manifest.
+      if (file.size >= 100 * 1024 * 1024) {
+        const storageKey = `crayons-bridge-upload:${titleId}:${kind}`;
+        type UploadSession = { assetId: string; fileName: string; size: number; lastModified: number; contentType: string };
+        let session: UploadSession | null = null;
+        try {
+          const saved = window.localStorage.getItem(storageKey);
+          if (saved) {
+            const parsed = JSON.parse(saved) as UploadSession;
+            if (parsed.fileName === file.name && parsed.size === file.size && parsed.lastModified === file.lastModified && parsed.contentType === contentType) {
+              session = parsed;
+            }
+          }
+        } catch {
+          session = null;
+        }
+        if (!session) {
+          const started = await startAssetMultipartUpload({
+            data: { titleId, kind, filename, contentType, expectedByteSize: file.size },
+          });
+          session = { assetId: started.assetId, fileName: file.name, size: file.size, lastModified: file.lastModified, contentType };
+          window.localStorage.setItem(storageKey, JSON.stringify(session));
+        }
+        const partSize = 10 * 1024 * 1024;
+        const partCount = Math.ceil(file.size / partSize);
+        let uploaded = await listAssetMultipartParts({ data: { assetId: session.assetId } });
+        const completed = new Map(uploaded.parts.map((part) => [part.partNum, part]));
+        for (let partNum = 1; partNum <= partCount; partNum += 1) {
+          const begin = (partNum - 1) * partSize;
+          const part = file.slice(begin, Math.min(begin + partSize, file.size));
+          if (completed.get(partNum)?.size === part.size) continue;
+          let succeeded = false;
+          let lastError: unknown;
+          for (let attempt = 1; attempt <= 3 && !succeeded; attempt += 1) {
+            try {
+              setMessage(`Uploading ${kind}: part ${partNum} of ${partCount} (attempt ${attempt}/3)…`);
+              const signed = await signAssetMultipartPart({ data: { assetId: session.assetId, partNum } });
+              const response = await fetch(signed.url, { method: "PUT", body: part, headers: signed.headers });
+              if (!response.ok) throw new Error(`Part ${partNum} upload failed (${response.status})`);
+              succeeded = true;
+            } catch (error) {
+              lastError = error;
+            }
+          }
+          if (!succeeded) throw lastError instanceof Error ? lastError : new Error(`Part ${partNum} upload failed`);
+        }
+        uploaded = await listAssetMultipartParts({ data: { assetId: session.assetId } });
+        if (uploaded.parts.length !== partCount) throw new Error("OCI part manifest is incomplete; retry the upload to resume missing parts");
+        const committed = await commitAssetMultipartUpload({ data: { assetId: session.assetId } });
+        window.localStorage.removeItem(storageKey);
+        await onAssetsChanged();
+        setMessage(`${kind[0].toUpperCase() + kind.slice(1)} stored and SHA-256 readback verified (${formatBytes(committed.byteSize)}).`);
+        return;
+      }
+
+      const signed = await requestAssetUpload({ data: { titleId, kind, filename, contentType } });
       const uploadUrl = new URL(signed.url);
       uploadUrl.pathname = uploadUrl.pathname.split("/").map((part) => encodeURIComponent(decodeURIComponent(part))).join("/");
-      const put = await fetch(uploadUrl.toString(), {
-        method: signed.method,
-        body: file,
-        headers: { "content-type": contentType },
-      });
+      const put = await fetch(uploadUrl.toString(), { method: signed.method, body: file, headers: { "content-type": contentType } });
       if (!put.ok) throw new Error(`Upload failed (${put.status})`);
       await confirmAssetUpload({ data: { assetId: signed.assetId, expectedByteSize: file.size } });
       await onAssetsChanged();
       setMessage(`${kind[0].toUpperCase() + kind.slice(1)} is ready.`);
     } catch (error) {
       const raw = error instanceof Error ? error.message : "Upload failed";
-      setMessage(
-        raw.includes("STORAGE_UNAVAILABLE")
-          ? "Storage service is currently unavailable. Please try again later."
-          : raw,
-      );
+      setMessage(raw.includes("STORAGE_UNAVAILABLE") ? "Storage service is currently unavailable. Please try again later." : raw);
     } finally {
       setUploading(null);
     }
