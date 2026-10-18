@@ -9,8 +9,8 @@ test("OCI private key normalization accepts escaped and quoted PEM secrets", asy
   const variants = [
     pem,
     JSON.stringify(pem),
-    pem.replaceAll("\n", "\\n"),
-    JSON.stringify(pem.replaceAll("\n", "\\n")),
+    pem.replaceAll("\n", "\n"),
+    JSON.stringify(pem.replaceAll("\n", "\n")),
   ];
 
   const originalFetch = globalThis.fetch;
@@ -163,7 +163,7 @@ test("OCI multipart part signatures cover the exact encoded request target and u
     const auth = signed.headers.authorization;
     const signature = auth.match(/signature="([^"]+)"/)?.[1];
     assert.ok(signature);
-    const signedText = `(request-target): put ${url.pathname}${url.search}\\nhost: ${url.host}\\nx-date: ${signed.headers["x-date"]}`;
+    const signedText = `(request-target): put ${url.pathname}${url.search}\nhost: ${url.host}\nx-date: ${signed.headers["x-date"]}`;
     assert.ok(verify("RSA-SHA256", Buffer.from(signedText), publicKey, Buffer.from(signature, "base64")));
   } finally {
     for (const [key, value] of Object.entries(saved)) {
