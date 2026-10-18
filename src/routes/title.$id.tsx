@@ -40,6 +40,8 @@ function LaneStore({ titleId, stored, locked }: { titleId: string; stored: strin
     <label className="mt-4 block text-sm">
       Stored for Loop preview
       <select
+        id="loop-preview-category"
+        name="loopPreviewCategory"
         value={value}
         disabled={locked || save.isPending}
         onChange={(event) => {
@@ -412,8 +414,6 @@ function FileTypeCard({
         <label className="cursor-pointer rounded-full border border-line px-3 py-1.5 text-xs font-semibold">
           {busy ? "Uploading…" : status === "Ready" ? "Replace" : "Upload"}
           <input
-            id={`title-asset-${kind}-upload`}
-            name={`title-asset-${kind}`}
             className="sr-only"
             type="file"
             accept={getOttIngestAccept(kind)}
