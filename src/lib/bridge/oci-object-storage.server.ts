@@ -94,14 +94,16 @@ function signHeaders(opts: {
   url: URL;
   body?: string;
   contentType?: string;
+  dateHeader?: "date" | "x-date";
 }) {
   const method = opts.method.toLowerCase();
   const date = new Date().toUTCString();
+  const dateHeader = opts.dateHeader ?? "date";
   const host = opts.url.host;
   const requestTarget = `${method} ${opts.url.pathname}${opts.url.search}`;
-  const lines = [`(request-target): ${requestTarget}`, `host: ${host}`, `date: ${date}`];
-  const signedHeaders = ["(request-target)", "host", "date"];
-  const headers: Record<string, string> = { host, date };
+  const lines = [`(request-target): ${requestTarget}`, `host: ${host}`, `${dateHeader}: ${date}`];
+  const signedHeaders = ["(request-target)", "host", dateHeader];
+  const headers: Record<string, string> = { host, [dateHeader]: date };
 
   if (opts.body !== undefined) {
     const contentType = opts.contentType || "application/json";
@@ -300,21 +302,18 @@ export async function startMultipartUpload(opts: { key: string; contentType: str
 }
 
 /** Create a short-lived OCI request signature for one part; object bytes go directly from browser to OCI. */
-export function signMultipartPart(opts: { key: string; uploadId: string; partNum: number }) {
+export async function signMultipartPart(opts: { key: string; uploadId: string; partNum: number }) {
   if (!Number.isInteger(opts.partNum) || opts.partNum < 1 || opts.partNum > 10000) {
     throw new Error("Multipart part number must be between 1 and 10000");
   }
   const cfg = config();
-  const namespace = cfg.namespace;
-  if (!namespace) {
-    throw new Error("OCI_NAMESPACE is required for direct multipart part uploads");
-  }
+  const namespace = await resolveNamespace(cfg);
   const path = `${multipartObjectPath(namespace, cfg.bucket, opts.key)}?uploadId=${encodeURIComponent(opts.uploadId)}&uploadPartNum=${opts.partNum}`;
   const url = new URL(path, endpoint(cfg.region));
-  const headers = signHeaders({ cfg, method: "PUT", url });
+  const headers = signHeaders({ cfg, method: "PUT", url, dateHeader: "x-date" });
   return {
     url: url.toString(),
-    headers: { authorization: headers.authorization, date: headers.date },
+    headers: { authorization: headers.authorization, "x-date": headers["x-date"] },
   };
 }
 
