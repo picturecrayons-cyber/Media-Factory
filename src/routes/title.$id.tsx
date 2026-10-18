@@ -4,7 +4,7 @@ import { WorkflowDesk } from "@/components/bridge/workflow-desk";
 import { publicationIsActive } from "@/lib/bridge/workflow-policy";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { getTitle, updateTitle } from "@/lib/bridge/titles";
@@ -277,8 +277,11 @@ function FilesPanel({
   onAssetsChanged: () => Promise<unknown> | unknown;
 }) {
   const [uploading, setUploading] = useState<SimpleAssetKind | null>(null);
+  const activeUploads = useRef<Set<SimpleAssetKind>>(new Set());
   const [message, setMessage] = useState<string | null>(null);
   async function uploadFile(kind: SimpleAssetKind, file: File) {
+    if (activeUploads.current.has(kind)) return;
+    activeUploads.current.add(kind);
     const filename = asciiUploadName(file.name);
     const contentType = file.type || "application/octet-stream";
     const validation = validateOttIngestFile({
@@ -287,6 +290,7 @@ function FilesPanel({
       contentType,
     });
     if (!validation.ok) {
+      activeUploads.current.delete(kind);
       setMessage(validation.message);
       return;
     }
@@ -303,23 +307,68 @@ function FilesPanel({
       });
       const uploadUrl = new URL(signed.url);
       uploadUrl.pathname = uploadUrl.pathname.split("/").map((part) => encodeURIComponent(decodeURIComponent(part))).join("/");
-      const put = await fetch(uploadUrl.toString(), {
-        method: signed.method,
-        body: file,
-        headers: { "content-type": contentType },
-      });
-      if (!put.ok) throw new Error(`Upload failed (${put.status})`);
-      await confirmAssetUpload({ data: { assetId: signed.assetId, expectedByteSize: file.size } });
+      const controller = new AbortController();
+      const uploadTimeout = window.setTimeout(() => controller.abort(), 60_000);
+      let put: Response;
+      try {
+        put = await fetch(uploadUrl.toString(), {
+          method: signed.method,
+          body: file,
+          headers: { "content-type": contentType },
+          signal: controller.signal,
+        });
+      } catch (error) {
+        if (controller.signal.aborted) {
+          setMessage("Upload timed out; the storage outcome is unknown. Refresh the asset list and reconcile storage before retrying.");
+          await onAssetsChanged();
+          return;
+        }
+        throw error;
+      } finally {
+        window.clearTimeout(uploadTimeout);
+      }
+      if (!put.ok) throw new Error(`Upload failed (${put.status}); asset remains unverified.`);
+
+      let confirmation: { verified?: boolean };
+      let confirmationTimedOut = false;
+      let timeoutId: number | undefined;
+      try {
+        confirmation = await Promise.race([
+          confirmAssetUpload({ data: { assetId: signed.assetId, expectedByteSize: file.size } }),
+          new Promise<never>((_, reject) => {
+            timeoutId = window.setTimeout(() => {
+              confirmationTimedOut = true;
+              reject(new Error("Verification timed out"));
+            }, 30_000);
+          }),
+        ]);
+      } catch (error) {
+        await onAssetsChanged();
+        if (confirmationTimedOut) {
+          setMessage("Upload reached storage, but verification is still unconfirmed. Refresh and reconcile the server asset record before retrying.");
+          return;
+        }
+        throw error;
+      } finally {
+        if (timeoutId !== undefined) window.clearTimeout(timeoutId);
+      }
+      if (confirmation.verified !== true) {
+        await onAssetsChanged();
+        setMessage("Storage verification is not confirmed. The asset remains unverified; refresh and reconcile before retrying.");
+        return;
+      }
       await onAssetsChanged();
-      setMessage(`${kind[0].toUpperCase() + kind.slice(1)} is ready.`);
+      setMessage(`${kind[0].toUpperCase() + kind.slice(1)} is verified by the server.`);
     } catch (error) {
-      const raw = error instanceof Error ? error.message : "Upload failed";
+      const raw = error instanceof Error ? error.message : "Upload outcome is unknown";
       setMessage(
         raw.includes("STORAGE_UNAVAILABLE")
-          ? "Storage service is currently unavailable. Please try again later."
-          : raw,
+          ? "Storage service is currently unavailable. The asset remains unverified."
+          : `${raw}. The asset has not been marked ready; refresh the asset list before retrying.`,
       );
+      try { await onAssetsChanged(); } catch { /* Keep the unresolved state visible. */ }
     } finally {
+      activeUploads.current.delete(kind);
       setUploading(null);
     }
   }
