@@ -26,6 +26,7 @@
     "test:oci-production-e2e": "node --experimental-strip-types scripts/oci-production-e2e.mjs",
     "check:bridge-app-url": "node scripts/check-bridge-app-url.mjs",
     "test:cra101": "node --test scripts/cra-101-auth-flow.test.mjs",
+    "test:cra102": "node --experimental-strip-types --test scripts/cra-102-auth-regression.test.mjs src/lib/auth/redirect-safety.test.ts",
     "test:workflow": "node --experimental-strip-types --test src/lib/bridge/workflow.test.ts"
   },
   "dependencies": {
