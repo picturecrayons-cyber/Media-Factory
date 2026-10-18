@@ -8,6 +8,7 @@ import {
   reviewTitleWorkflow,
 } from "@/lib/bridge/workflow";
 import { advanceTitle } from "@/lib/bridge/titles";
+import { listTitleAssets } from "@/lib/bridge/assets";
 import {
   authorizeLoopPublication,
   getLoopPublication,
@@ -38,6 +39,11 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
     queryKey: ["loop-pub", title.id],
     queryFn: () => getLoopPublication({ data: { bridgeTitleId: title.id } }),
     enabled: Boolean(actor.internalRole) || actor.accountType !== "buyer",
+  });
+  const qcAssets = useQuery({
+    queryKey: ["bridge-assets", title.id],
+    queryFn: () => listTitleAssets({ data: { titleId: title.id } }),
+    enabled: title.status === "PREPARING" && (Boolean(actor.internalRole) || actor.accountType !== "buyer"),
   });
   const canFinance = canOperateOnTitle(actor, title, "title.read_own", "finance.read");
   const revenue = useQuery({
@@ -97,12 +103,20 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
   }
   const grants = workflow.data?.grants ?? [];
   const valid = grants.find((g) => g.status === "VALID" && new Date(g.window_end) > new Date());
+  const qcAssetsReady = Boolean(
+    qcAssets.data?.assets.some((asset) =>
+      asset.verified && asset.kind === "master" && asset.key === title.masterKey,
+    ) &&
+    qcAssets.data?.assets.some((asset) =>
+      asset.verified && asset.kind === "poster" && asset.key === title.posterKey,
+    ),
+  );
   const pub = publication.data?.publication;
-  const button = (label: string, run: () => Promise<unknown>) => (
+  const button = (label: string, run: () => Promise<unknown>, disabled = false) => (
     <button
       type="button"
       className="rounded-lg border border-line px-4 py-2 text-sm disabled:opacity-50"
-      disabled={action.isPending}
+      disabled={action.isPending || disabled}
       onClick={() => action.mutate(run)}
     >
       {label}
@@ -154,8 +168,15 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
             <div className="space-y-3">
               <p>
                 Lifecycle: {title.status}. QC: {workflow.data?.qc?.status ?? "Not reviewed"}. Upload
-                verified master and artwork below before submitting.
+                and verify the canonical master and artwork before submitting.
               </p>
+              {title.status === "PREPARING" && !qcAssetsReady ? (
+                <p role="status" className="text-sm text-muted">
+                  {qcAssets.isError
+                    ? "Cannot confirm QC readiness because asset verification could not be loaded. Retry before submitting."
+                    : "QC submission is blocked until the canonical master and artwork are verified in storage."}
+                </p>
+              ) : null}
               {canOperateOnTitle(actor, title, "title.advance_upload", "title.ingest_internal") &&
               ["DRAFT", "UPLOADING", "PREPARING"].includes(title.status)
                 ? button(
@@ -176,6 +197,8 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                                 : "QC_REVIEW",
                         },
                       }),
+                    title.status === "PREPARING" &&
+                      (qcAssets.isPending || qcAssets.isError || !qcAssetsReady),
                   )
                 : null}
               {title.status === "QC_REVIEW" && hasPermission(actor, "title.qc_review") ? (
