@@ -257,18 +257,28 @@ export async function verifyObject(key: string, expectedContentType?: string | n
 
 async function pollWorkRequest(cfg: OciConfig, workRequestId: string) {
   const url = new URL(`/workRequests/${encodeURIComponent(workRequestId)}`, endpoint(cfg.region));
-  for (let i = 0; i < 30; i += 1) {
+  // OCI server-side copies can take longer than the old fixed 30-second window,
+  // especially for large masters. Keep the wait bounded but allow up to 5 minutes.
+  const deadline = Date.now() + 5 * 60 * 1000;
+  let attempt = 0;
+  while (Date.now() < deadline) {
     const headers = signHeaders({ cfg, method: "GET", url });
-    const res = await fetch(url, { method: "GET", headers });
+    const res = await fetch(url, {
+      method: "GET",
+      headers,
+      signal: AbortSignal.timeout(10_000),
+    });
     if (!res.ok) throw new Error(`OCI copy work-request lookup failed (${res.status})`);
     const body = (await res.json()) as { status?: string };
     if (body.status === "SUCCEEDED") return;
     if (body.status === "FAILED" || body.status === "CANCELED") {
       throw new Error(`OCI object copy ${body.status.toLowerCase()}`);
     }
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+    const delay = Math.min(5_000, 1_000 + attempt * 500);
+    await new Promise((resolve) => setTimeout(resolve, delay));
+    attempt += 1;
   }
-  throw new Error("OCI object copy did not complete in time");
+  throw new Error("OCI object copy is still pending after 5 minutes; retry verification before uploading again");
 }
 
 /** Copy a verified upload into an immutable destination key. */
