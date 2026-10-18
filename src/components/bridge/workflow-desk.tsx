@@ -139,7 +139,12 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
     <section className="space-y-4 rounded-2xl border border-line bg-surface p-5">
       <h2 className="font-display text-xl">Title operations</h2>
       <nav className="flex flex-wrap gap-2" aria-label="Operational workflow">
-        {(actor.internalRole === "super_admin" ? stages : (["Prepare"] as const)).map((s) => (
+        {(actor.internalRole === "super_admin"
+          ? stages
+          : canOperateOnTitle(actor, title, "title.update_own", "title.license")
+            ? (["Prepare", "Business"] as const)
+            : (["Prepare"] as const)
+        ).map((s) => (
           <button
             type="button"
             key={s}
