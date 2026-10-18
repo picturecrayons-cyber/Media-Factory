@@ -72,7 +72,7 @@ function Home() {
             <BrandMark />
           </div>
 
-          <div className="flex items-center gap-3 text-sm">
+          <div className="flex items-center gap-3 text-sm">\n            <a href="#pricing" className="hidden sm:inline text-muted transition-colors hover:text-fg">Pricing</a>
             <SignedOut>
               <Link to="/signup">
                 <Button size="sm" className="rounded-full px-4 py-1.5 text-xs font-semibold shadow-xs">
@@ -238,6 +238,95 @@ function Home() {
                 </div>
               </div>
             </div>
+          </div>
+        </section>
+
+        <section id="pricing" className="border-b border-line bg-surface py-14 sm:py-20">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6">
+            <div className="mx-auto max-w-3xl text-center">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">Pilot pricing proposal</p>
+              <h2 className="mt-3 font-display text-3xl font-semibold tracking-tight text-fg sm:text-4xl">
+                Straightforward pricing for every stage.
+              </h2>
+              <p className="mx-auto mt-4 max-w-2xl text-sm leading-6 text-muted sm:text-base">
+                Start free, add workflow tools as your catalog grows, and pay a clearly disclosed commission when a licence closes.
+              </p>
+              <p className="mt-3 text-xs leading-5 text-muted">
+                Proposed launch pricing only. Plans are not yet available for purchase; billing and checkout are not enabled by this page.
+              </p>
+            </div>
+
+            <div className="mt-10 grid gap-5 md:grid-cols-2 xl:grid-cols-4">
+              <article className="flex flex-col rounded-2xl border border-line bg-elevated p-6">
+                <h3 className="font-display text-xl font-semibold text-fg">Creator Free</h3>
+                <p className="mt-3"><span className="font-display text-3xl font-semibold text-fg">₹0</span><span className="text-sm text-muted"> / month</span></p>
+                <p className="mt-3 text-sm leading-6 text-muted">For creators preparing their first titles for the market.</p>
+                <ul className="mt-5 space-y-2 text-sm text-fg">
+                  <li>Basic profile and title listing</li>
+                  <li>Rights and metadata submission</li>
+                  <li>Standard workflow status</li>
+                </ul>
+                <div className="mt-auto pt-6">
+                  <Link to="/signup" search={{ role: "creator" }} className="text-sm font-semibold text-accent hover:underline">Create creator account →</Link>
+                </div>
+              </article>
+
+              <article className="flex flex-col rounded-2xl border border-accent/50 bg-elevated p-6 shadow-xs">
+                <p className="text-xs font-semibold uppercase tracking-wide text-accent">For growing catalogs</p>
+                <h3 className="mt-2 font-display text-xl font-semibold text-fg">Creator Plus</h3>
+                <p className="mt-3"><span className="font-display text-3xl font-semibold text-fg">₹799</span><span className="text-sm text-muted"> / month</span></p>
+                <p className="mt-3 text-sm leading-6 text-muted">A proposed paid tier for creators managing more active titles.</p>
+                <ul className="mt-5 space-y-2 text-sm text-fg">
+                  <li>Expanded active-title allowance</li>
+                  <li>Portfolio and analytics</li>
+                  <li>Delivery tracking and priority support</li>
+                </ul>
+                <div className="mt-auto pt-6 text-xs leading-5 text-muted">Paid plan activation is not available yet.</div>
+              </article>
+
+              <article className="flex flex-col rounded-2xl border border-line bg-elevated p-6">
+                <h3 className="font-display text-xl font-semibold text-fg">Studio</h3>
+                <p className="mt-3"><span className="font-display text-3xl font-semibold text-fg">₹2,999</span><span className="text-sm text-muted"> / month</span></p>
+                <p className="mt-3 text-sm leading-6 text-muted">For teams managing multiple titles and rights workflows.</p>
+                <ul className="mt-5 space-y-2 text-sm text-fg">
+                  <li>Team workspace</li>
+                  <li>Multi-title management</li>
+                  <li>QC and delivery dashboard</li>
+                  <li>Role-based team access</li>
+                </ul>
+                <div className="mt-auto pt-6">
+                  <Link to="/signup" search={{ role: "studio" }} className="text-sm font-semibold text-accent hover:underline">Create studio account →</Link>
+                </div>
+              </article>
+
+              <article className="flex flex-col rounded-2xl border border-line bg-elevated p-6">
+                <h3 className="font-display text-xl font-semibold text-fg">Enterprise</h3>
+                <p className="mt-3"><span className="font-display text-3xl font-semibold text-fg">Custom</span></p>
+                <p className="mt-3 text-sm leading-6 text-muted">For larger catalogs, negotiated volumes, and tailored service requirements.</p>
+                <ul className="mt-5 space-y-2 text-sm text-fg">
+                  <li>Negotiated title volumes</li>
+                  <li>Agreed support and service terms</li>
+                  <li>Custom integration and reporting scope</li>
+                </ul>
+                <div className="mt-auto pt-6">
+                  <Link to="/contact" className="text-sm font-semibold text-accent hover:underline">Discuss enterprise pricing →</Link>
+                </div>
+              </article>
+            </div>
+
+            <div className="mt-6 grid gap-5 lg:grid-cols-2">
+              <div className="rounded-2xl border border-line bg-white p-6">
+                <h3 className="font-display text-lg font-semibold text-fg">Buyer access</h3>
+                <p className="mt-2 text-sm leading-6 text-muted">Browsing and buyer account creation are proposed as free. A premium buyer workspace may be considered later based on customer demand.</p>
+              </div>
+              <div className="rounded-2xl border border-line bg-white p-6">
+                <h3 className="font-display text-lg font-semibold text-fg">Licensing and services</h3>
+                <p className="mt-2 text-sm leading-6 text-muted">Proposed marketplace commission: 10% of the agreed licence value, disclosed before the deal closes. QC, ingestion, storage, and special delivery are quoted separately where applicable. No buyer-side transaction fee is proposed for the pilot.</p>
+              </div>
+            </div>
+            <p className="mt-5 text-center text-xs leading-5 text-muted">
+              Prices are proposed in INR and exclude applicable taxes. Final features, limits, service fees, contract terms, and tax treatment must be confirmed before launch. Rights, territory, exploitation-model, approval, and QC checks remain mandatory regardless of plan.
+            </p>
           </div>
         </section>
 
