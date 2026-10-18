@@ -15,8 +15,8 @@ import {
 
 type JsonRecord = Record<string, unknown>;
 const GITHUB_REPOS = [
-  { name: "Bridge", repo: "picturecrayons-cyber/Media-Factory" },
-  { name: "Crayons Loop", repo: "picturecrayons-cyber/crayons-loop-streaming-platform" },
+  { repo: "picturecrayons-cyber/Media-Factory" },
+  { repo: "picturecrayons-cyber/crayons-loop-streaming-platform" },
 ] as const;
 const DOMAINS = [
   { domain: "crayonsloop.in", project: "crayonsloop" },
