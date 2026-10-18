@@ -1,4 +1,5 @@
 import test from "node:test";
+import { readImageDimensions } from "./image-dimensions.ts";
 import assert from "node:assert/strict";
 import { getOttIngestAccept, validateArtworkDimensions, validateOttIngestFile } from "./ott-ingest-spec.ts";
 
@@ -60,4 +61,22 @@ test("poster upload slots enforce portrait versus landscape dimensions", () => {
   assert.equal(validateArtworkDimensions("poster_horizontal", 1000, 1500).ok, false);
   assert.equal(validateArtworkDimensions("poster_vertical", 1000, 1000).ok, false);
   assert.equal(validateArtworkDimensions("poster_horizontal", 0, 1000).ok, false);
+});
+
+test("server image dimension parser reads PNG and WebP headers and rejects malformed bytes", () => {
+  const png = Buffer.alloc(24);
+  Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]).copy(png, 0);
+  png.write("IHDR", 12, "ascii");
+  png.writeUInt32BE(1200, 16);
+  png.writeUInt32BE(1800, 20);
+  assert.deepEqual(readImageDimensions(png), { width: 1200, height: 1800 });
+
+  const webp = Buffer.alloc(30);
+  webp.write("RIFF", 0, "ascii");
+  webp.write("WEBP", 8, "ascii");
+  webp.write("VP8X", 12, "ascii");
+  webp[24] = 191; webp[25] = 4; webp[26] = 0; // 1216 px
+  webp[27] = 7; webp[28] = 7; webp[29] = 0; // 1800 px
+  assert.deepEqual(readImageDimensions(webp), { width: 1216, height: 1800 });
+  assert.equal(readImageDimensions(Buffer.from("not an image")), null);
 });
