@@ -26,7 +26,7 @@ export function sanitizeBridgeNextPath(
     const base = new URL(origin);
     const target = new URL(candidate, base);
     if (target.origin !== base.origin) return null;
-    if (!ALLOWED_NEXT_PREFIXES.some((prefix) => target.pathname === prefix || target.pathname.startsWith(prefix))) {
+    if (!ALLOWED_NEXT_PREFIXES.some((prefix) => target.pathname === prefix || target.pathname.startsWith(prefix.endsWith("/") ? prefix : prefix + "/"))) {
       return null;
     }
     return target.pathname + target.search + target.hash;
