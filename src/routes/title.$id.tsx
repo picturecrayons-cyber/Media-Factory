@@ -283,6 +283,7 @@ function FilesPanel({
 }) {
   const [uploading, setUploading] = useState<SimpleAssetKind | null>(null);
   const uploadLock = useRef(false);
+  const activeUploadRequest = useRef<XMLHttpRequest | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [uploadStartedAt, setUploadStartedAt] = useState<number | null>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
@@ -291,7 +292,7 @@ function FilesPanel({
     loaded: number;
     total: number;
     percent: number | null;
-    stage: "preparing" | "uploading" | "verifying" | "complete" | "failed";
+    stage: "preparing" | "uploading" | "verifying" | "complete" | "failed" | "cancelled";
   } | null>(null);
 
   useEffect(() => {
@@ -358,6 +359,7 @@ function FilesPanel({
       setUploadProgress({ kind, loaded: 0, total: file.size, percent: null, stage: "uploading" });
       await new Promise<void>((resolve, reject) => {
         const request = new XMLHttpRequest();
+        activeUploadRequest.current = request;
         request.open(signed.method, uploadUrl.toString());
         request.setRequestHeader("content-type", contentType);
         request.upload.onprogress = (event) => {
@@ -392,13 +394,17 @@ function FilesPanel({
       setMessage(`${kind[0].toUpperCase() + kind.slice(1)} uploaded and storage-verified.`);
     } catch (error) {
       const raw = error instanceof Error ? error.message : "Upload failed";
-      setUploadProgress((current) => current ? { ...current, stage: "failed" } : current);
+      const wasCancelled = raw === "Upload was cancelled.";
+      setUploadProgress((current) => current ? { ...current, stage: wasCancelled ? "cancelled" : "failed" } : current);
       setMessage(
-        raw.includes("STORAGE_UNAVAILABLE")
-          ? "Storage service is currently unavailable. Please try again later."
-          : raw,
+        wasCancelled
+          ? "Upload cancelled. You can select the file again to retry."
+          : raw.includes("STORAGE_UNAVAILABLE")
+            ? "Storage service is currently unavailable. Please try again later."
+            : raw,
       );
     } finally {
+      activeUploadRequest.current = null;
       setUploading(null);
       setUploadStartedAt(null);
       uploadLock.current = false;
@@ -445,12 +451,24 @@ function FilesPanel({
             <p className="text-sm font-semibold">
               {uploadProgress.kind === "master" ? "Main Film" : uploadProgress.kind}
             </p>
-            <p className="text-xs text-muted">
-              {uploadProgress.stage === "preparing" ? "Preparing upload" :
-                uploadProgress.stage === "uploading" ? "Uploading" :
-                uploadProgress.stage === "verifying" ? "Verifying storage" :
-                uploadProgress.stage === "complete" ? "Complete — verified" : "Failed"}
-            </p>
+            <div className="flex items-center gap-3">
+              <p className="text-xs text-muted">
+                {uploadProgress.stage === "preparing" ? "Preparing upload" :
+                  uploadProgress.stage === "uploading" ? "Uploading" :
+                  uploadProgress.stage === "verifying" ? "Verifying storage" :
+                  uploadProgress.stage === "complete" ? "Complete — verified" :
+                  uploadProgress.stage === "cancelled" ? "Cancelled" : "Failed"}
+              </p>
+              {uploadProgress.stage === "uploading" ? (
+                <button
+                  type="button"
+                  onClick={() => activeUploadRequest.current?.abort()}
+                  className="rounded-full border border-line px-3 py-1.5 text-xs font-semibold hover:bg-fg/5"
+                >
+                  Cancel Upload
+                </button>
+              ) : null}
+            </div>
           </div>
           {uploadProgress.stage === "uploading" && uploadProgress.percent === null ? (
             <div className="mt-3 h-2 overflow-hidden rounded-full bg-elevated">
@@ -466,7 +484,7 @@ function FilesPanel({
               aria-valuenow={uploadProgress.percent ?? 0}
             >
               <div
-                className={`h-full rounded-full ${uploadProgress.stage === "failed" ? "bg-red-500" : "bg-accent"}`}
+                className={`h-full rounded-full ${uploadProgress.stage === "failed" ? "bg-red-500" : uploadProgress.stage === "cancelled" ? "bg-muted" : "bg-accent"}`}
                 style={{ width: `${uploadProgress.percent ?? 0}%` }}
               />
             </div>
