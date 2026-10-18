@@ -238,7 +238,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                 License to Crayons Loop · TVOD. A draft requires an independent legal reviewer
                 before publication.
               </p>
-              {canOperateOnTitle(actor, title, "title.update_own", "title.license") ? (
+              {["admin", "super_admin"].includes(actor.internalRole ?? "") ? (
                 <form
                   className="grid gap-3 sm:grid-cols-2"
                   onSubmit={(e) => {
@@ -291,7 +291,11 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                     Save license draft
                   </button>
                 </form>
-              ) : null}
+              ) : (
+                <p className="text-sm text-muted" role="status">
+                  License submission is restricted to Bridge admins and super admins. Title owners can provide agreement and ownership evidence for an authorized Bridge admin to submit.
+                </p>
+              )}
               {input("Legal review findings", note, setNote)}
               {grants.map((g) => (
                 <article key={g.id} className="space-y-2 rounded-lg border border-line p-3">
