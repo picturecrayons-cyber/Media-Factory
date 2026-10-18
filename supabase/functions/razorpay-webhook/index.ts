@@ -81,7 +81,7 @@ Deno.serve(async (req: Request) => {
 
     // The local provider_order_id is authoritative for Bridge. Razorpay payment webhooks do not reliably copy order notes.
     const { data: localPayment, error: lookupError } = await supabase.from("bridge_payments")
-      .select("id,user_id,title_id,purpose,status,provider_payment_id")
+      .select("id,user_id,title_id,package_id,purpose,status,provider_payment_id,amount_paise,currency")
       .eq("provider_order_id", payment.order_id).maybeSingle();
     if (lookupError) return await failEvent(supabase, id, "Bridge payment lookup failed");
     if (localPayment) surface = "bridge";
@@ -93,6 +93,10 @@ Deno.serve(async (req: Request) => {
         return new Response("Order linked to another payment", { status: 409 });
       }
       if (!localPayment.title_id) return await failEvent(supabase, id, "Bridge license order has no title");
+      if (payment.status !== "captured") return await failEvent(supabase, id, "Razorpay capture status is not captured");
+      if (Number(payment.amount) !== Number(localPayment.amount_paise) || payment.currency !== localPayment.currency || localPayment.currency !== "INR") {
+        return await failEvent(supabase, id, "Razorpay payment amount or currency mismatch");
+      }
 
       const now = new Date().toISOString();
       const { data: updated, error: updateError } = await supabase.from("bridge_payments")
@@ -100,26 +104,50 @@ Deno.serve(async (req: Request) => {
         .eq("id", localPayment.id).select("id").maybeSingle();
       if (updateError || !updated) return await failEvent(supabase, id, "Bridge payment update failed");
 
-      const { error: entitlementError } = await supabase.from("bridge_entitlements").upsert({
-        user_id: localPayment.user_id, title_id: localPayment.title_id, payment_id: localPayment.id, access_type: "license",
-      }, { onConflict: "user_id,title_id,access_type", ignoreDuplicates: true });
-      if (entitlementError) return await failEvent(supabase, id, "Bridge entitlement grant failed");
+      if (localPayment.package_id) {
+        const { data: licensePackage, error: packageLookupError } = await supabase.from("bridge_license_packages")
+          .select("id,title_id").eq("id", localPayment.package_id).eq("title_id", localPayment.title_id).maybeSingle();
+        if (packageLookupError || !licensePackage) return await failEvent(supabase, id, "Bridge license package lookup failed");
 
-      const { data: title, error: titleError } = await supabase.from("bridge_titles").select("status").eq("id", localPayment.title_id).maybeSingle();
-      if (titleError) return await failEvent(supabase, id, "Bridge title lookup failed");
-      if (title && (title.status === "LIVE_FOR_BUYERS" || title.status === "IN_NEGOTIATION")) {
-        const { error: transitionError } = await supabase.from("bridge_titles").update({ status: "LICENSED", updated_at: now }).eq("id", localPayment.title_id);
-        if (transitionError) return await failEvent(supabase, id, "Bridge title transition failed");
-        const { error: eventError } = await supabase.from("bridge_title_events").insert({
-          title_id: localPayment.title_id, from_status: title.status, to_status: "LICENSED", actor_user_id: localPayment.user_id, note: "razorpay captured webhook",
+        const { error: packageEntitlementError } = await supabase.from("bridge_package_entitlements").upsert({
+          package_id: licensePackage.id, title_id: localPayment.title_id,
+          buyer_user_id: localPayment.user_id, payment_id: localPayment.id,
+        }, { onConflict: "package_id,buyer_user_id", ignoreDuplicates: true });
+        if (packageEntitlementError) return await failEvent(supabase, id, "Bridge package entitlement grant failed");
+
+        const { error: packageUpdateError } = await supabase.from("bridge_license_packages").update({
+          status: "LICENSED", buyer_user_id: localPayment.user_id, payment_id: localPayment.id, updated_at: now,
+        }).eq("id", licensePackage.id);
+        if (packageUpdateError) return await failEvent(supabase, id, "Bridge license package update failed");
+
+        const { error: auditError } = await supabase.from("bridge_audit_logs").insert({
+          actor_user_id: localPayment.user_id, action: "licensing.language_package_licensed",
+          entity_type: "bridge_license_package", entity_id: licensePackage.id,
+          metadata: JSON.stringify({ titleId: localPayment.title_id, paymentId: localPayment.id, source: "razorpay-webhook" }),
         });
-        if (eventError) return await failEvent(supabase, id, "Bridge title event failed");
+        if (auditError) return await failEvent(supabase, id, "Bridge package audit write failed");
+      } else {
+        const { error: entitlementError } = await supabase.from("bridge_entitlements").upsert({
+          user_id: localPayment.user_id, title_id: localPayment.title_id, payment_id: localPayment.id, access_type: "license",
+        }, { onConflict: "user_id,title_id,access_type", ignoreDuplicates: true });
+        if (entitlementError) return await failEvent(supabase, id, "Bridge entitlement grant failed");
+
+        const { data: title, error: titleError } = await supabase.from("bridge_titles").select("status").eq("id", localPayment.title_id).maybeSingle();
+        if (titleError) return await failEvent(supabase, id, "Bridge title lookup failed");
+        if (title && (title.status === "LIVE_FOR_BUYERS" || title.status === "IN_NEGOTIATION")) {
+          const { error: transitionError } = await supabase.from("bridge_titles").update({ status: "LICENSED", updated_at: now }).eq("id", localPayment.title_id);
+          if (transitionError) return await failEvent(supabase, id, "Bridge title transition failed");
+          const { error: eventError } = await supabase.from("bridge_title_events").insert({
+            title_id: localPayment.title_id, from_status: title.status, to_status: "LICENSED", actor_user_id: localPayment.user_id, note: "razorpay captured webhook",
+          });
+          if (eventError) return await failEvent(supabase, id, "Bridge title event failed");
+        }
+        const { error: auditError } = await supabase.from("bridge_audit_logs").insert({
+          actor_user_id: localPayment.user_id, action: "payment.captured", entity_type: "bridge_payment", entity_id: localPayment.id,
+          metadata: JSON.stringify({ titleId: localPayment.title_id, source: "razorpay-webhook" }),
+        });
+        if (auditError) return await failEvent(supabase, id, "Bridge audit write failed");
       }
-      const { error: auditError } = await supabase.from("bridge_audit_logs").insert({
-        actor_user_id: localPayment.user_id, action: "payment.captured", entity_type: "bridge_payment", entity_id: localPayment.id,
-        metadata: JSON.stringify({ titleId: localPayment.title_id, source: "razorpay-webhook" }),
-      });
-      if (auditError) return await failEvent(supabase, id, "Bridge audit write failed");
     }
   }
 
