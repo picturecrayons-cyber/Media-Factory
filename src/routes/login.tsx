@@ -5,14 +5,10 @@ import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { BrandMark } from "@/components/bridge/shell";
 import { Button } from "@/components/ui/button";
 import { getBridgeSession } from "@/lib/bridge/session";
+import { isSafeInternalRedirect } from "@/lib/auth/redirect-safety";
 
 export const Route = createFileRoute("/login")({ component: Login });
 
-function isSafeRedirect(url: string | null): boolean {
-  if (!url) return false;
-  // Allow only safe relative internal paths starting with /
-  return url.startsWith("/") && !url.startsWith("//") && !url.includes("://");
-}
 
 function Login() {
   const { user, isPending } = useCurrentUserState();
@@ -32,7 +28,7 @@ function Login() {
           typeof window !== "undefined"
             ? new URLSearchParams(window.location.search).get("next")
             : null;
-        if (isSafeRedirect(nextParam)) {
+        if (isSafeInternalRedirect(nextParam)) {
           void navigate({ to: nextParam! });
         } else {
           void navigate({ to: s.home || "/dashboard" });
@@ -57,7 +53,7 @@ function Login() {
           ? new URLSearchParams(window.location.search).get("next")
           : null;
 
-      if (isSafeRedirect(nextParam)) {
+      if (isSafeInternalRedirect(nextParam)) {
         window.location.assign(nextParam!);
       } else if (s?.home) {
         window.location.assign(s.home);
