@@ -142,8 +142,10 @@ async function verifyEndToEndSmoke(): Promise<PublishingGatewayGate> {
     return gate("e2e-smoke", "End-to-end gateway smoke test", "BLOCKED", "Smoke-test URL must be a valid HTTPS URL.");
   }
   const result = await fetchJson(parsed.toString());
-  const passed = result?.status === "passed" && result?.gateway === "publishing-gateway";
-  return gate("e2e-smoke", "End-to-end gateway smoke test", passed ? "VERIFIED" : result ? "BLOCKED" : "UNVERIFIED", passed ? "The configured HTTPS smoke endpoint returned the publishing-gateway PASS contract." : "Expected JSON { status: 'passed', gateway: 'publishing-gateway' } was not verified.");
+  const reportedDomains = Array.isArray(result?.domains) ? result.domains as unknown[] : [];
+  const bothDomainsReported = ["crayonsloop.in", "crayonspictures.in"].every((domain) => reportedDomains.includes(domain));
+  const passed = result?.status === "passed" && result?.gateway === "publishing-gateway" && bothDomainsReported;
+  return gate("e2e-smoke", "End-to-end gateway smoke test", passed ? "VERIFIED" : result ? "BLOCKED" : "UNVERIFIED", passed ? "The configured HTTPS smoke endpoint returned the publishing-gateway PASS contract." : "Expected JSON { status: 'passed', gateway: 'publishing-gateway', domains: ['crayonsloop.in', 'crayonspictures.in'] } was not verified.");
 }
 
 async function collectChecks(): Promise<PublishingGatewayGate[]> {
