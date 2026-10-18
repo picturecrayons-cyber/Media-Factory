@@ -72,7 +72,8 @@ function Home() {
             <BrandMark />
           </div>
 
-          <div className="flex items-center gap-3 text-sm">\n            <a href="#pricing" className="hidden sm:inline text-muted transition-colors hover:text-fg">Pricing</a>
+          <div className="flex items-center gap-3 text-sm">
+            <a href="#pricing" className="hidden sm:inline text-muted transition-colors hover:text-fg">Pricing</a>
             <SignedOut>
               <Link to="/signup">
                 <Button size="sm" className="rounded-full px-4 py-1.5 text-xs font-semibold shadow-xs">
