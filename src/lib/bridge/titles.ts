@@ -498,7 +498,7 @@ export const advanceTitle = createServerFn({ method: "POST" })
       }>`select kind,s3_key from bridge_assets where title_id=${title.id} and byte_size>0`;
       if (
         !verified.some((a) => a.kind === "master" && a.s3_key === title.masterKey) ||
-        !verified.some((a) => a.kind === "poster" && a.s3_key === title.posterKey)
+        !verified.some((a) => a.kind === "poster_vertical" && a.s3_key === title.posterKey)
       )
         throw new Error("Verified master and artwork required before QC");
     }
