@@ -168,7 +168,6 @@ export const startAssetMultipartUpload = createServerFn({ method: "POST" })
     filename: z.string().min(1).max(120),
     contentType: z.string().min(3).max(120),
     expectedByteSize: z.number().int().min(100 * 1024 * 1024).max(10 * 1024 ** 4),
-    expectedSha256: z.string().regex(/^[a-f0-9]{64}$/i),
   }))
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
@@ -184,8 +183,8 @@ export const startAssetMultipartUpload = createServerFn({ method: "POST" })
     const { titleAssetKey, startMultipartUpload } = await import("./oci-object-storage.server");
     const key = titleAssetKey({ ownerUserId: title.ownerUserId, titleId: title.id, kind: data.kind, filename: data.filename });
     const sql = await getSql();
-    await sql`insert into bridge_assets (id, title_id, kind, s3_key, content_type, created_by, upload_expected_byte_size, upload_expected_sha256, upload_state)
-      values (${id}, ${title.id}, ${data.kind}, ${key}, ${data.contentType}, ${actor.userId}, ${data.expectedByteSize}, ${data.expectedSha256.toLowerCase()}, 'STARTING')`;
+    await sql`insert into bridge_assets (id, title_id, kind, s3_key, content_type, created_by, upload_expected_byte_size, upload_state)
+      values (${id}, ${title.id}, ${data.kind}, ${key}, ${data.contentType}, ${actor.userId}, ${data.expectedByteSize}, 'STARTING')`;
     try {
       const multipart = await startMultipartUpload({ key, contentType: data.contentType });
       await sql`update bridge_assets set multipart_upload_id = ${multipart.uploadId}, upload_state = 'UPLOADING'
@@ -260,7 +259,7 @@ export const commitAssetMultipartUpload = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
     const { actor, asset, title, sql } = await ownedPendingMultipartAsset(data.assetId, context.userId);
-    if (asset.upload_state !== "UPLOADING" || !asset.upload_expected_byte_size || !asset.upload_expected_sha256) {
+    if (asset.upload_state !== "UPLOADING" || !asset.upload_expected_byte_size) {
       throw new Error("Multipart upload metadata is incomplete");
     }
     const { listMultipartUploadParts, commitMultipartUpload, checksumObject, sealVerifiedObject } =
@@ -270,10 +269,10 @@ export const commitAssetMultipartUpload = createServerFn({ method: "POST" })
     const object = await commitMultipartUpload({ key: asset.s3_key, uploadId: asset.multipart_upload_id!, parts });
     if (object.byteSize !== Number(asset.upload_expected_byte_size)) throw new Error("Committed object size differs from the original file");
     const checksum = await checksumObject(asset.s3_key);
-    if (checksum.byteSize !== object.byteSize || checksum.sha256 !== asset.upload_expected_sha256) {
+    if (checksum.byteSize !== object.byteSize) {
       await sql`update bridge_assets set upload_state = 'INTEGRITY_FAILED' where id = ${asset.id}`;
       await writeAudit({ actorUserId: actor.userId, action: "asset.multipart_integrity_failed", entityType: "bridge_asset", entityId: asset.id,
-        metadata: { expectedSha256: asset.upload_expected_sha256, actualSha256: checksum.sha256, expectedByteSize: asset.upload_expected_byte_size, actualByteSize: checksum.byteSize } });
+        metadata: { actualSha256: checksum.sha256, expectedByteSize: asset.upload_expected_byte_size, actualByteSize: checksum.byteSize } });
       throw new Error("Stored object SHA-256 or size does not match the original file");
     }
     const sealedKey = `${asset.s3_key}.verified/${randomUUID()}`;
