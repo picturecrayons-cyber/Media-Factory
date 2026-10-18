@@ -210,11 +210,16 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
       name: string;
       status: string;
       language: string;
+      content_type: string | null;
+      owner_user_id: string;
+      owner_account_type: string;
       master_key: string | null;
       poster_key: string | null;
       synopsis: string;
       year: number | null;
       runtime_minutes: number | null;
+      qc_ok: boolean;
+      approved_legal_grant_ids: string[] | null;
       loop_title_id: string | null;
       authorization_status: string | null;
       window_start: string | Date | null;
