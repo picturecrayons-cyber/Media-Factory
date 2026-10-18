@@ -4,6 +4,7 @@ import { useState } from "react";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { listTitles } from "@/lib/bridge/titles";
+import { dedupeTitlesForDisplay } from "@/lib/bridge/dedupe-titles";
 import { hasPermission } from "@/lib/bridge/rbac";
 import type { Actor } from "@/lib/bridge/rbac";
 import {
@@ -116,7 +117,7 @@ function VendorJobs({ actor }: { actor: Actor }) {
 
 function DeliveryList() {
   const q = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles() });
-  const titles = q.data?.titles ?? [];
+  const titles = dedupeTitlesForDisplay(q.data?.titles ?? []);
   if (q.isError) return <p role="alert">Delivery data is unavailable. Refresh to retry.</p>;
   if (q.isPending) return <p className="text-sm text-muted">Loading deliveries…</p>;
   return (
