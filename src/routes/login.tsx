@@ -8,12 +8,6 @@ import { getBridgeSession } from "@/lib/bridge/session";
 
 export const Route = createFileRoute("/login")({ component: Login });
 
-function isSafeRedirect(url: string | null): boolean {
-  if (!url) return false;
-  // Allow only safe relative internal paths starting with /
-  return url.startsWith("/") && !url.startsWith("//") && !url.includes("://");
-}
-
 function Login() {
   const { user, isPending } = useCurrentUserState();
   const navigate = useNavigate();
@@ -32,8 +26,9 @@ function Login() {
           typeof window !== "undefined"
             ? new URLSearchParams(window.location.search).get("next")
             : null;
-        if (isSafeRedirect(nextParam)) {
-          void navigate({ to: nextParam! });
+        const safeNext = sanitizeBridgeNextPath(nextParam, window.location.origin);
+        if (safeNext) {
+          void navigate({ to: safeNext });
         } else {
           void navigate({ to: s.home || "/dashboard" });
         }
@@ -57,8 +52,9 @@ function Login() {
           ? new URLSearchParams(window.location.search).get("next")
           : null;
 
-      if (isSafeRedirect(nextParam)) {
-        window.location.assign(nextParam!);
+      const safeNext = sanitizeBridgeNextPath(nextParam, window.location.origin);
+      if (safeNext) {
+        window.location.assign(safeNext);
       } else if (s?.home) {
         window.location.assign(s.home);
       } else {
