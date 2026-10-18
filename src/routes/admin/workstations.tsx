@@ -134,7 +134,7 @@ function TitleQueue({ titles, review }: { titles: any[]; review: any }) {
 function TitleIdentityAudit({ titles }: { titles: any[] }) {
   const groups = buildTitleAuditGroups(titles);
   return (
-    <section className="space-y-3" aria-labelledby="title-identity-audit-heading">
+    <section className="space-y-3">
       <SectionHeader title="Canonical title identity audit" description="Read-only candidate discovery. Identity requires normalized title + language + release year; missing metadata stays in review. No records are merged, archived, or deleted here." />
       {!groups.length ? <Empty text="No duplicate identity candidates found in the current title inventory." /> : (
         <div className="space-y-3">
