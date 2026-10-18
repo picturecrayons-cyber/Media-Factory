@@ -33,7 +33,9 @@ export function downloadDecision(opts: {
   if (opts.actorIsOwner || opts.actorIsInternal) {
     return { allow: true, reason: "Owner or internal reviewer" };
   }
-  if (opts.kind === "poster") return { allow: true, reason: "Poster is readable with the title" };
+  if (opts.kind === "poster" || opts.kind === "poster_vertical") {
+    return { allow: true, reason: "Canonical poster is readable with the title" };
+  }
   if ((opts.kind === "screener" || opts.kind === "subtitle") && opts.hasLicenseEntitlement) {
     return { allow: true, reason: "Entitlement covers this non-master asset" };
   }
