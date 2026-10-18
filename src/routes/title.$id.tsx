@@ -4,7 +4,7 @@ import { WorkflowDesk } from "@/components/bridge/workflow-desk";
 import { publicationIsActive } from "@/lib/bridge/workflow-policy";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { getTitle, updateTitle } from "@/lib/bridge/titles";
@@ -278,6 +278,23 @@ function FilesPanel({
 }) {
   const [uploading, setUploading] = useState<SimpleAssetKind | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [uploadStartedAt, setUploadStartedAt] = useState<number | null>(null);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [uploadProgress, setUploadProgress] = useState<{
+    kind: SimpleAssetKind;
+    loaded: number;
+    total: number;
+    percent: number | null;
+    stage: "preparing" | "uploading" | "verifying" | "complete" | "failed";
+  } | null>(null);
+
+  useEffect(() => {
+    if (uploading === null || uploadStartedAt === null) return;
+    const timer = window.setInterval(() => {
+      setElapsedSeconds(Math.floor((Date.now() - uploadStartedAt) / 1000));
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [uploading, uploadStartedAt]);
   async function uploadFile(kind: SimpleAssetKind, file: File) {
     const filename = asciiUploadName(file.name);
     const contentType = file.type || "application/octet-stream";
@@ -291,6 +308,9 @@ function FilesPanel({
       return;
     }
     setUploading(kind);
+    setUploadStartedAt(Date.now());
+    setElapsedSeconds(0);
+    setUploadProgress({ kind, loaded: 0, total: file.size, percent: 0, stage: "preparing" });
     setMessage(`Preparing ${kind} upload…`);
     try {
       const signed = await requestAssetUpload({
@@ -303,17 +323,45 @@ function FilesPanel({
       });
       const uploadUrl = new URL(signed.url);
       uploadUrl.pathname = uploadUrl.pathname.split("/").map((part) => encodeURIComponent(decodeURIComponent(part))).join("/");
-      const put = await fetch(uploadUrl.toString(), {
-        method: signed.method,
-        body: file,
-        headers: { "content-type": contentType },
+      setMessage(`Uploading ${kind}…`);
+      setUploadProgress({ kind, loaded: 0, total: file.size, percent: null, stage: "uploading" });
+      await new Promise<void>((resolve, reject) => {
+        const request = new XMLHttpRequest();
+        request.open(signed.method, uploadUrl.toString());
+        request.setRequestHeader("content-type", contentType);
+        request.upload.onprogress = (event) => {
+          const total = event.lengthComputable ? event.total : file.size;
+          const loaded = Math.min(event.loaded, total);
+          setUploadProgress({
+            kind,
+            loaded,
+            total,
+            percent: event.lengthComputable && total > 0
+              ? Math.min(100, Math.round((loaded / total) * 100))
+              : null,
+            stage: "uploading",
+          });
+        };
+        request.onload = () => {
+          if (request.status >= 200 && request.status < 300) resolve();
+          else reject(new Error(`Upload failed (${request.status})`));
+        };
+        request.onerror = () => reject(new Error("Upload connection failed. Check your connection and retry."));
+        request.onabort = () => reject(new Error("Upload was cancelled."));
+        request.send(file);
       });
-      if (!put.ok) throw new Error(`Upload failed (${put.status})`);
-      await confirmAssetUpload({ data: { assetId: signed.assetId, expectedByteSize: file.size } });
+      setMessage("Upload sent. Verifying storage…");
+      setUploadProgress((current) => current ? { ...current, percent: 100, loaded: file.size, stage: "verifying" } : current);
+      const confirmation = await confirmAssetUpload({
+        data: { assetId: signed.assetId, expectedByteSize: file.size },
+      });
+      if (!confirmation.verified) throw new Error("Storage verification did not complete. Please retry verification.");
       await onAssetsChanged();
-      setMessage(`${kind[0].toUpperCase() + kind.slice(1)} is ready.`);
+      setUploadProgress((current) => current ? { ...current, stage: "complete" } : current);
+      setMessage(`${kind[0].toUpperCase() + kind.slice(1)} uploaded and storage-verified.`);
     } catch (error) {
       const raw = error instanceof Error ? error.message : "Upload failed";
+      setUploadProgress((current) => current ? { ...current, stage: "failed" } : current);
       setMessage(
         raw.includes("STORAGE_UNAVAILABLE")
           ? "Storage service is currently unavailable. Please try again later."
@@ -321,6 +369,7 @@ function FilesPanel({
       );
     } finally {
       setUploading(null);
+      setUploadStartedAt(null);
     }
   }
   async function download(id: string) {
@@ -358,7 +407,51 @@ function FilesPanel({
           />
         ))}
       </div>
-      {message ? <p className="mt-3 text-xs text-muted">{message}</p> : null}
+      {uploadProgress ? (
+        <div className="mt-4 rounded-xl border border-line p-4" aria-live="polite">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-sm font-semibold">
+              {uploadProgress.kind === "master" ? "Main Film" : uploadProgress.kind}
+            </p>
+            <p className="text-xs text-muted">
+              {uploadProgress.stage === "preparing" ? "Preparing upload" :
+                uploadProgress.stage === "uploading" ? "Uploading" :
+                uploadProgress.stage === "verifying" ? "Verifying storage" :
+                uploadProgress.stage === "complete" ? "Complete — verified" : "Failed"}
+            </p>
+          </div>
+          {uploadProgress.stage === "uploading" && uploadProgress.percent === null ? (
+            <div className="mt-3 h-2 overflow-hidden rounded-full bg-elevated">
+              <div className="h-full w-1/3 animate-pulse rounded-full bg-accent" />
+            </div>
+          ) : (
+            <div
+              className="mt-3 h-2 overflow-hidden rounded-full bg-elevated"
+              role="progressbar"
+              aria-label={`${uploadProgress.kind} upload progress`}
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={uploadProgress.percent ?? 0}
+            >
+              <div
+                className={`h-full rounded-full ${uploadProgress.stage === "failed" ? "bg-red-500" : "bg-accent"}`}
+                style={{ width: `${uploadProgress.percent ?? 0}%` }}
+              />
+            </div>
+          )}
+          <div className="mt-2 flex flex-wrap justify-between gap-2 text-xs text-muted">
+            <span>
+              {uploadProgress.percent === null ? "Measuring upload…" : `${uploadProgress.percent}%`}
+              {" · "}
+              {(uploadProgress.loaded / (1024 * 1024)).toFixed(1)} / {(uploadProgress.total / (1024 * 1024)).toFixed(1)} MB
+            </span>
+            <span>
+              Elapsed: {Math.floor(elapsedSeconds / 60)}:{String(elapsedSeconds % 60).padStart(2, "0")}
+            </span>
+          </div>
+        </div>
+      ) : null}
+      {message ? <p className="mt-3 text-xs text-muted" role="status">{message}</p> : null}
       <div className="mt-5 space-y-2">
         {assets.map((a) => (
           <div
