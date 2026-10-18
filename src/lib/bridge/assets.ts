@@ -243,3 +243,33 @@ export const listTitleAssets = createServerFn({ method: "GET" })
         })),
     };
   });
+
+export const requestAssetPreview = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .validator(z.object({ assetId: z.string().min(8), version: z.string().optional() }))
+  .handler(async ({ context, data }) => {
+    const actor = await requireVerifiedActor(context.userId);
+    const sql = await getSql();
+    const rows = await sql<{
+      id: string;
+      title_id: string;
+      kind: string;
+      s3_key: string;
+      content_type: string | null;
+      byte_size: number | null;
+    }>`select id, title_id, kind, s3_key, content_type, byte_size
+      from bridge_assets where id = ${data.assetId} and byte_size > 0 limit 1`;
+    const asset = rows[0];
+    if (!asset) throw new Error("Not found");
+    const title = await loadTitle(asset.title_id);
+    if (!title || !canReadTitle(actor, title)) throw new Error("Not found");
+    if (!["poster", "poster_vertical", "poster_horizontal", "thumbnail"].includes(asset.kind)) {
+      throw new Error("This asset is not title artwork");
+    }
+    if (data.version && !asset.s3_key.includes(data.version)) {
+      throw new Error("Artwork version is no longer active. Refresh the title.");
+    }
+    const { signDownload } = await import("./oci-object-storage.server");
+    const signed = await signDownload({ key: asset.s3_key, expiresIn: 300 });
+    return { ...signed, contentType: asset.content_type, version: data.version ?? null };
+  });

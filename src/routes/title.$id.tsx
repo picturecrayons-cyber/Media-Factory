@@ -4,7 +4,7 @@ import { WorkflowDesk } from "@/components/bridge/workflow-desk";
 import { publicationIsActive } from "@/lib/bridge/workflow-policy";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { getTitle, updateTitle } from "@/lib/bridge/titles";
@@ -13,6 +13,7 @@ import {
   confirmAssetUpload,
   listTitleAssets,
   requestAssetDownload,
+  requestAssetPreview,
   requestAssetUpload,
 } from "@/lib/bridge/assets";
 import { getLoopPublication } from "@/lib/bridge/loop-publication";
@@ -76,6 +77,22 @@ function TitlePage() {
 
 function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
   const [activeTab, setActiveTab] = useState<WorkspaceTab>("Overview");
+  const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
+  const [draft, setDraft] = useState<{ name: string; synopsis: string; language: string; year: string; runtimeMinutes: string } | null>(null);
+  const [metadataSaved, setMetadataSaved] = useState(false);
+  const queryClient = useQueryClient();
+  const titleEditMutation = useMutation({
+    mutationFn: (data: { name?: string; synopsis?: string; language?: string; year?: number | null; runtimeMinutes?: number | null }) => updateTitle({ data: { id, ...data } }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["bridge-title", id] });
+      setDraft(null);
+      setMetadataSaved(true);
+    },
+  });
+  const copyTitleId = async () => {
+    try { await navigator.clipboard.writeText(id); setCopyState("copied"); }
+    catch { setCopyState("failed"); }
+  };
 
   const titleQ = useQuery({
     queryKey: ["bridge-title", id],
@@ -125,15 +142,25 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
   return (
     <div className="space-y-5">
       <WorkflowDesk title={title} actor={actor} />
+      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-line bg-surface px-4 py-3">
+        <span className="text-xs font-semibold text-muted">Title ID</span>
+        <code className="min-w-0 break-all text-xs" data-testid="title-id">{title.id}</code>
+        <button type="button" onClick={() => void copyTitleId()} className="rounded-full border border-line px-3 py-1.5 text-xs font-semibold">Copy ID</button>
+        <span role="status" aria-live="polite" className="text-xs text-muted">{copyState === "copied" ? "Title ID copied." : copyState === "failed" ? "Copy failed. Select and copy the ID manually." : ""}</span>
+      </div>
+
       {assetsQ.isError ? <p role="alert">Assets unavailable: {assetsQ.error.message}</p> : null}
       <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
         <div className="grid gap-5 md:grid-cols-[180px_1fr]">
           <div className="aspect-[2/3] overflow-hidden rounded-xl border border-line bg-elevated">
-            <div className="grid h-full place-items-center px-4 text-center text-xs text-muted">
-              {assets.some((asset) => ["poster_vertical", "poster"].includes(asset.kind))
-                ? "Vertical poster ready"
-                : "Add vertical poster"}
-            </div>
+            {(() => {
+              const artwork = assets.find((asset) => ["poster_vertical", "poster", "thumbnail", "poster_horizontal"].includes(asset.kind) && asset.verified);
+              return artwork ? (
+                <ArtworkPreview assetId={artwork.id} version={artwork.key ? (artwork.key.split(".verified/")[1] || artwork.key) : ""} titleName={title.name} />
+              ) : (
+                <div className="grid h-full place-items-center px-4 text-center text-xs text-muted">Add vertical poster or thumbnail</div>
+              );
+            })()}
           </div>
           <div className="min-w-0">
             <div className="flex flex-wrap items-start justify-between gap-3">
@@ -226,6 +253,37 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
             <Metric label="Director" value={title.credits?.filter((c) => c.role === "Director").map((c) => c.name).join(", ") || "—"} />
             <Metric label="Producer" value={title.credits?.filter((c) => c.role === "Producer").map((c) => c.name).join(", ") || "—"} />
           </div>
+          {draft === null ? (
+            <button type="button" onClick={() => setDraft({
+              name: title.name,
+              synopsis: title.synopsis || "",
+              language: title.language || "Malayalam",
+              year: title.year == null ? "" : String(title.year),
+              runtimeMinutes: title.runtimeMinutes == null ? "" : String(title.runtimeMinutes),
+            })} className="mt-5 rounded-full border border-line px-4 py-2 text-xs font-semibold">Edit metadata</button>
+          ) : (
+            <form className="mt-5 space-y-3 rounded-xl border border-line p-4" onSubmit={(event) => {
+              event.preventDefault();
+              if (titleEditMutation.isPending) return;
+              const year = draft.year.trim() ? Number(draft.year) : null;
+              const runtimeMinutes = draft.runtimeMinutes.trim() ? Number(draft.runtimeMinutes) : null;
+              if (draft.year.trim() && !Number.isInteger(year)) return;
+              if (draft.runtimeMinutes.trim() && (!Number.isInteger(runtimeMinutes) || Number(runtimeMinutes) < 1)) return;
+              titleEditMutation.mutate({ name: draft.name.trim(), synopsis: draft.synopsis, language: draft.language.trim(), year, runtimeMinutes });
+            }}>
+              <label className="block text-sm">Title name<input required value={draft.name} disabled={titleEditMutation.isPending} onChange={(e) => setDraft({ ...draft, name: e.target.value })} className="mt-1 block w-full rounded-lg border border-line bg-elevated px-3 py-2" /></label>
+              <label className="block text-sm">Synopsis<textarea value={draft.synopsis} disabled={titleEditMutation.isPending} onChange={(e) => setDraft({ ...draft, synopsis: e.target.value })} className="mt-1 block w-full rounded-lg border border-line bg-elevated px-3 py-2" rows={3} /></label>
+              <div className="grid gap-3 sm:grid-cols-3">
+                <label className="block text-sm">Language<input required value={draft.language} disabled={titleEditMutation.isPending} onChange={(e) => setDraft({ ...draft, language: e.target.value })} className="mt-1 block w-full rounded-lg border border-line bg-elevated px-3 py-2" /></label>
+                <label className="block text-sm">Year<input inputMode="numeric" value={draft.year} disabled={titleEditMutation.isPending} onChange={(e) => setDraft({ ...draft, year: e.target.value })} className="mt-1 block w-full rounded-lg border border-line bg-elevated px-3 py-2" /></label>
+                <label className="block text-sm">Runtime (minutes)<input inputMode="numeric" value={draft.runtimeMinutes} disabled={titleEditMutation.isPending} onChange={(e) => setDraft({ ...draft, runtimeMinutes: e.target.value })} className="mt-1 block w-full rounded-lg border border-line bg-elevated px-3 py-2" /></label>
+              </div>
+              {titleEditMutation.isError ? <p role="alert" className="text-xs text-red-600">Save failed: {titleEditMutation.error instanceof Error ? titleEditMutation.error.message : "Please retry."}</p> : null}
+              {draft.name !== title.name || draft.synopsis !== (title.synopsis || "") || draft.language !== (title.language || "Malayalam") || draft.year !== (title.year == null ? "" : String(title.year)) || draft.runtimeMinutes !== (title.runtimeMinutes == null ? "" : String(title.runtimeMinutes)) ? <p role="status" className="text-xs text-muted">Unsaved changes</p> : <p className="text-xs text-muted">No unsaved changes</p>}
+              <div className="flex gap-2"><button type="submit" disabled={titleEditMutation.isPending || !(draft.name !== title.name || draft.synopsis !== (title.synopsis || "") || draft.language !== (title.language || "Malayalam") || draft.year !== (title.year == null ? "" : String(title.year)) || draft.runtimeMinutes !== (title.runtimeMinutes == null ? "" : String(title.runtimeMinutes)))} className="rounded-full bg-fg px-4 py-2 text-xs font-semibold text-bg">{titleEditMutation.isPending ? "Saving…" : "Save Changes"}</button><button type="button" disabled={titleEditMutation.isPending} onClick={() => { setDraft(null); titleEditMutation.reset(); }} className="rounded-full border border-line px-4 py-2 text-xs font-semibold">Cancel</button></div>
+            </form>
+          )}
+          {metadataSaved ? <p role="status" aria-live="polite" className="mt-3 text-xs text-muted">Metadata changes saved.</p> : null}
           <LaneStore key={title.contentType} titleId={title.id} stored={loopStageType(title.contentType)} locked={!actor.internalRole && !["DRAFT", "UPLOADING", "PREPARING"].includes(title.status)} />
           {title.synopsis ? <p className="mt-4 text-sm leading-6 text-muted">{title.synopsis}</p> : null}
           <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -249,6 +307,23 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
     </div>
   );
 }
+
+function ArtworkPreview({ assetId, version, titleName }: { assetId: string; version: string; titleName: string }) {
+  const previewQ = useQuery({
+    queryKey: ["bridge-artwork-preview", assetId, version],
+    queryFn: () => requestAssetPreview({ data: { assetId, version } }),
+    staleTime: 0,
+    gcTime: 0,
+    refetchOnMount: "always",
+  });
+  if (!previewQ.data?.url) {
+    return <div role={previewQ.isError ? "alert" : "status"} className="grid h-full place-items-center px-4 text-center text-xs text-muted">
+      {previewQ.isError ? "Artwork preview unavailable" : "Loading artwork…"}
+    </div>;
+  }
+  return <img src={previewQ.data.url} alt={`${titleName} artwork`} className="h-full w-full object-cover" loading="eager" />;
+}
+
 function Metric({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-xl border border-line bg-elevated/40 p-4">
@@ -258,7 +333,7 @@ function Metric({ label, value }: { label: string; value: string }) {
   );
 }
 
-type SimpleAssetKind = "master" | "poster_vertical" | "poster_horizontal" | "thumbnail" | "subtitle" | "screener" | "censor_certificate";
+type SimpleAssetKind = "master" | "poster" | "poster_vertical" | "poster_horizontal" | "thumbnail" | "subtitle" | "screener" | "censor_certificate";
 function FilesPanel({
   titleId,
   assets,
@@ -269,6 +344,7 @@ function FilesPanel({
   titleId: string;
   assets: Array<{
     id: string;
+    key?: string | null;
     kind: string;
     contentType: string | null;
     byteSize: number | null;
@@ -277,8 +353,13 @@ function FilesPanel({
   onAssetsChanged: () => Promise<unknown> | unknown;
 }) {
   const [uploading, setUploading] = useState<SimpleAssetKind | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<{ kind: SimpleAssetKind; percent: number; phase: "uploading" | "verifying" } | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+  const uploadLock = useRef(false);
   async function uploadFile(kind: SimpleAssetKind, file: File) {
+    if (uploadLock.current) return;
+    uploadLock.current = true;
     const filename = asciiUploadName(file.name);
     const contentType = file.type || "application/octet-stream";
     const validation = validateOttIngestFile({
@@ -288,9 +369,11 @@ function FilesPanel({
     });
     if (!validation.ok) {
       setMessage(validation.message);
+      uploadLock.current = false;
       return;
     }
     setUploading(kind);
+    setUploadProgress({ kind, percent: 0, phase: "uploading" });
     setMessage(`Preparing ${kind} upload…`);
     try {
       const signed = await requestAssetUpload({
@@ -303,15 +386,29 @@ function FilesPanel({
       });
       const uploadUrl = new URL(signed.url);
       uploadUrl.pathname = uploadUrl.pathname.split("/").map((part) => encodeURIComponent(decodeURIComponent(part))).join("/");
-      const put = await fetch(uploadUrl.toString(), {
-        method: signed.method,
-        body: file,
-        headers: { "content-type": contentType },
+      await new Promise<void>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open(signed.method, uploadUrl.toString());
+        xhr.setRequestHeader("content-type", contentType);
+        xhr.upload.onprogress = (event) => {
+          if (!event.lengthComputable || event.total <= 0) return;
+          const percent = Math.min(100, Math.round((event.loaded / event.total) * 100));
+          setUploadProgress({ kind, percent, phase: "uploading" });
+        };
+        xhr.onload = () => {
+          if (xhr.status >= 200 && xhr.status < 300) resolve();
+          else reject(new Error(`Upload failed (${xhr.status})`));
+        };
+        xhr.onerror = () => reject(new Error("Upload failed due to a network error"));
+        xhr.onabort = () => reject(new Error("Upload was cancelled"));
+        xhr.send(file);
       });
-      if (!put.ok) throw new Error(`Upload failed (${put.status})`);
+      setUploadProgress({ kind, percent: 100, phase: "verifying" });
+      setMessage(`${kind[0].toUpperCase() + kind.slice(1)} uploaded (100%). Verifying in storage…`);
       await confirmAssetUpload({ data: { assetId: signed.assetId, expectedByteSize: file.size } });
       await onAssetsChanged();
-      setMessage(`${kind[0].toUpperCase() + kind.slice(1)} is ready.`);
+      await queryClient.invalidateQueries({ queryKey: ["bridge-title", titleId] });
+      setMessage(`${kind[0].toUpperCase() + kind.slice(1)} verified and saved.`);
     } catch (error) {
       const raw = error instanceof Error ? error.message : "Upload failed";
       setMessage(
@@ -320,7 +417,9 @@ function FilesPanel({
           : raw,
       );
     } finally {
+      uploadLock.current = false;
       setUploading(null);
+      setUploadProgress(null);
     }
   }
   async function download(id: string) {
@@ -329,6 +428,7 @@ function FilesPanel({
   }
   const cards: [SimpleAssetKind, string, string][] = [
     ["master", "Main Film", "Required"],
+    ["poster", "Poster", "Add"],
     ["screener", "Trailer", "Add"],
     ["poster_vertical", "Vertical Poster", "Add"],
     ["poster_horizontal", "Horizontal Artwork", "Add"],
@@ -353,12 +453,13 @@ function FilesPanel({
             label={label}
             status={assets.some((a) => (a.kind === kind || (kind === "poster_vertical" && a.kind === "poster")) && a.verified) ? "Ready" : empty}
             busy={uploading === kind}
-            canUpload={canUpload}
+            progress={uploadProgress?.kind === kind ? uploadProgress : null}
+            canUpload={canUpload && uploading === null}
             onFile={(file) => void uploadFile(kind, file)}
           />
         ))}
       </div>
-      {message ? <p className="mt-3 text-xs text-muted">{message}</p> : null}
+      {message ? <p role={/failed|unavailable|error|forbidden|mismatch|retry|not found/i.test(message) ? "alert" : "status"} aria-live="polite" className="mt-3 text-xs text-muted">{message}</p> : null}
       <div className="mt-5 space-y-2">
         {assets.map((a) => (
           <div
@@ -388,6 +489,7 @@ function FileTypeCard({
   label,
   status,
   busy,
+  progress,
   onFile,
   canUpload,
 }: {
@@ -396,6 +498,7 @@ function FileTypeCard({
   label: string;
   status: string;
   busy: boolean;
+  progress: { kind: SimpleAssetKind; percent: number; phase: "uploading" | "verifying" } | null;
   onFile: (file: File) => void;
 }) {
   const spec = OTT_INGEST_SPEC[kind];
@@ -412,6 +515,8 @@ function FileTypeCard({
         <label className="cursor-pointer rounded-full border border-line px-3 py-1.5 text-xs font-semibold">
           {busy ? "Uploading…" : status === "Ready" ? "Replace" : "Upload"}
           <input
+            id={`asset-upload-${kind}`}
+            name={`assetUpload-${kind}`}
             className="sr-only"
             type="file"
             accept={getOttIngestAccept(kind)}
@@ -424,6 +529,28 @@ function FileTypeCard({
           />
         </label>
       </div>
+      {progress ? (
+        <div className="mt-3 space-y-1.5" aria-live="polite">
+          <div className="flex items-center justify-between gap-3 text-xs text-muted">
+            <span>{progress.phase === "uploading" ? "Uploading file…" : "Upload complete · verifying in storage…"}</span>
+            <span className="tabular-nums font-semibold">{progress.percent}%</span>
+          </div>
+          <div
+            role="progressbar"
+            aria-label={`${label} upload progress`}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={progress.percent}
+            aria-valuetext={progress.phase === "verifying" ? "Upload complete, verifying in storage" : `${progress.percent}% uploaded`}
+            className="h-2 w-full overflow-hidden rounded-full bg-elevated"
+          >
+            <div
+              className="h-full rounded-full bg-accent transition-[width] duration-150"
+              style={{ width: `${progress.percent}%` }}
+            />
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
