@@ -29,10 +29,13 @@ function gate(id: string, label: string, status: PublishingGatewayGate["status"]
 
 async function fetchJson(url: string, init?: RequestInit): Promise<JsonRecord | null> {
   try {
+    const token = process.env.GITHUB_TOKEN?.trim() || process.env.GH_TOKEN?.trim();
+    const headers = { ...((init?.headers ?? {}) as Record<string, string>) };
+    if (url.includes("api.github.com") && token) headers.authorization = `Bearer ${token}`;
     const response = await fetch(url, {
       ...init,
       signal: AbortSignal.timeout(8000),
-      headers: { accept: "application/json", ...(init?.headers ?? {}) },
+      headers: { accept: "application/json", ...headers },
     });
     if (!response.ok) return null;
     const data: unknown = await response.json();
@@ -83,10 +86,10 @@ function vercelConfig() {
   return token ? { token, teamId } : null;
 }
 
-async function verifyVercelProduction(project: string): Promise<PublishingGatewayGate> {
+async function verifyVercelProduction(project: string, projectId: string): Promise<PublishingGatewayGate> {
   const config = vercelConfig();
   if (!config) return gate(`vercel:${project}`, `${project} Vercel Production`, "UNVERIFIED", "VERCEL_TOKEN is not configured; deployment target cannot be verified.");
-  const query = new URLSearchParams({ projectId: project, target: "production", limit: "1" });
+  const query = new URLSearchParams({ projectId, target: "production", limit: "1" });
   if (config.teamId) query.set("teamId", config.teamId);
   const result = await fetchJson(`https://api.vercel.com/v6/deployments?${query.toString()}`, {
     headers: { authorization: `Bearer ${config.token}` },
@@ -145,7 +148,10 @@ async function verifyEndToEndSmoke(): Promise<PublishingGatewayGate> {
 
 async function collectChecks(): Promise<PublishingGatewayGate[]> {
   const github = await Promise.all(GITHUB_REPOS.map(({ repo }) => verifyGitHub(repo)));
-  const vercel = await Promise.all(["crayonsloop", "bridge"].map(verifyVercelProduction));
+  const vercel = await Promise.all([
+    verifyVercelProduction("crayonsloop", "prj_3plh37Oe141udF7V2LUPbB5cFNHH"),
+    verifyVercelProduction("bridge", "prj_fT7VTrZMcgP9NutDhPvMhDAPtXNo"),
+  ]);
   const domains = await Promise.all(DOMAINS.map(({ domain, project }) => verifyDomain(domain, project)));
   return [
     ...github.flatMap((item) => [item.workflow, item.artifacts]),
