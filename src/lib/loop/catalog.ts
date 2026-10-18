@@ -86,12 +86,19 @@ export const getLoopCatalog = createServerFn({ method: "GET" })
         p.authorization_status, p.window_start, p.window_end
       from loop_titles l
       join bridge_loop_publications p on p.loop_title_id = l.id
+      join bridge_rights_grants g
+        on g.id::text = p.metadata->>'rightsGrantId'
+        and g.status = 'VALID'
+        and (g.window_start is null or g.window_start <= now())
+        and (g.window_end is null or g.window_end > now())
       where p.authorization_status = 'authorized'
         and l.published = true
         and l.listed = true
         and l.status = 'approved'
-        and (p.window_start is null or p.window_start <= now())
-        and (p.window_end is null or p.window_end >= now())
+        and p.window_start is not null
+        and p.window_start <= now()
+        and p.window_end is not null
+        and p.window_end > now()
       order by l.featured desc, l.created_at desc
       limit 100
     `;
@@ -181,10 +188,20 @@ export const getLoopTitleDetails = createServerFn({ method: "GET" })
         p.authorization_status, p.window_start, p.window_end
       from loop_titles l
       join bridge_loop_publications p on p.loop_title_id = l.id
+      join bridge_rights_grants g
+        on g.id::text = p.metadata->>'rightsGrantId'
+        and g.status = 'VALID'
+        and (g.window_start is null or g.window_start <= now())
+        and (g.window_end is null or g.window_end > now())
       where (l.id = ${data.slugOrId} or l.slug = ${data.slugOrId})
         and p.authorization_status = 'authorized'
+        and l.listed = true
         and l.published = true
         and l.status = 'approved'
+        and p.window_start is not null
+        and p.window_start <= now()
+        and p.window_end is not null
+        and p.window_end > now()
       limit 1
     `;
 
@@ -206,9 +223,20 @@ export const getLoopTitleDetails = createServerFn({ method: "GET" })
         p.authorization_status, p.window_start, p.window_end
       from loop_titles l
       join bridge_loop_publications p on p.loop_title_id = l.id
+      join bridge_rights_grants g
+        on g.id::text = p.metadata->>'rightsGrantId'
+        and g.status = 'VALID'
+        and (g.window_start is null or g.window_start <= now())
+        and (g.window_end is null or g.window_end > now())
       where l.id != ${title.id}
         and p.authorization_status = 'authorized'
+        and l.listed = true
         and l.published = true
+        and l.status = 'approved'
+        and p.window_start is not null
+        and p.window_start <= now()
+        and p.window_end is not null
+        and p.window_end > now()
       limit 6
     `;
 
@@ -228,9 +256,28 @@ export const checkPlaybackEntitlement = createServerFn({ method: "GET" })
   .handler(async ({ context, data }): Promise<ConsumerEntitlement> => {
     const sql = await getSql();
 
-    // Check title access tier
+    // A consumer entitlement never overrides Bridge publication authorization.
+    // Require a currently authorized, listed, published title and a live underlying grant
+    // before checking FREE, SVOD, or TVOD access.
     const titles = await sql<{ id: string; access_tier: string }>`
-      select id, access_tier from loop_titles where id = ${data.loopTitleId} limit 1
+      select l.id, l.access_tier
+      from loop_titles l
+      join bridge_loop_publications p on p.loop_title_id = l.id
+      join bridge_rights_grants g
+        on g.id::text = p.metadata->>'rightsGrantId'
+        and g.status = 'VALID'
+        and (g.window_start is null or g.window_start <= now())
+        and (g.window_end is null or g.window_end > now())
+      where l.id = ${data.loopTitleId}
+        and p.authorization_status = 'authorized'
+        and l.listed = true
+        and l.published = true
+        and l.status = 'approved'
+        and p.window_start is not null
+        and p.window_start <= now()
+        and p.window_end is not null
+        and p.window_end > now()
+      limit 1
     `;
     const title = titles[0];
     if (!title) {
