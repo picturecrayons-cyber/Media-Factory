@@ -63,6 +63,25 @@ test("poster upload slots enforce portrait versus landscape dimensions", () => {
   assert.equal(validateArtworkDimensions("poster_horizontal", 0, 1000).ok, false);
 });
 
+test("opaque artwork MIME is provisionally accepted and image bytes remain authoritative", () => {
+  assert.equal(validateOttIngestFile({ kind: "poster_vertical", filename: "poster.jpg", contentType: "application/octet-stream" }).ok, true);
+  assert.equal(readImageDimensions(Buffer.from("not an image")), null);
+});
+
+test("JPEG dimensions account for EXIF orientation that rotates portrait and landscape", () => {
+  const exif = Buffer.from([
+    0x45, 0x78, 0x69, 0x66, 0, 0, // Exif\0\0
+    0x49, 0x49, 0x2a, 0, 0x08, 0, 0, 0, // little-endian TIFF header
+    0x01, 0, // one IFD entry
+    0x12, 0x01, 0x03, 0, 0x01, 0, 0, 0, 0x06, 0, 0, 0, // orientation=6 (rotate 90 CW)
+    0, 0, 0, 0, // next IFD
+  ]);
+  const app1 = Buffer.concat([Buffer.from([0xff, 0xe1, 0, exif.length + 2]), exif]);
+  const sof = Buffer.from([0xff, 0xc0, 0, 11, 8, 0x04, 0xb0, 0x07, 0x08, 1, 1, 0x11, 0]);
+  const jpeg = Buffer.concat([Buffer.from([0xff, 0xd8]), app1, sof, Buffer.from([0xff, 0xd9])]);
+  assert.deepEqual(readImageDimensions(jpeg), { width: 1200, height: 1800 });
+});
+
 test("server image dimension parser reads PNG and WebP headers and rejects malformed bytes", () => {
   const png = Buffer.alloc(24);
   Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]).copy(png, 0);
