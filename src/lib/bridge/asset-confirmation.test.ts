@@ -43,6 +43,22 @@ test("only a verified upload sets the master reference, once, with an audit even
     );
     assert.equal(audit.rows[0]?.action, "asset.upload_verified");
     assert.equal(JSON.parse(audit.rows[0]?.metadata ?? "{}").checksum, "etag-1");
+    await db.exec(`
+      insert into bridge_assets (id,title_id,kind,s3_key,content_type,created_by)
+      values ('posterasset123','title1234','poster_vertical','bridge/creator/title1234/poster_vertical/poster.jpg','image/jpeg','creator');
+    `);
+    assert.equal(await persistVerifiedAsset(sql, {
+      ...args,
+      assetId: "posterasset123",
+      kind: "poster_vertical",
+      contentType: "image/jpeg",
+      sourceKey: "bridge/creator/title1234/poster_vertical/poster.jpg",
+      sealedKey: "bridge/creator/title1234/poster_vertical/poster.jpg.verified/uuid-2",
+    }), true);
+    const poster = await db.query<{ poster_key: string | null }>(
+      "select poster_key from bridge_titles where id='title1234'",
+    );
+    assert.equal(poster.rows[0]?.poster_key, "bridge/creator/title1234/poster_vertical/poster.jpg.verified/uuid-2");
   } finally {
     await db.close();
   }
