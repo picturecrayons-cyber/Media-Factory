@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { getOttIngestAccept, validateOttIngestFile } from "./ott-ingest-spec.ts";
+import { getOttIngestAccept, validateArtworkDimensions, validateOttIngestFile } from "./ott-ingest-spec.ts";
 
 test("OTT ingest accepts expected master formats", () => {
   assert.equal(validateOttIngestFile({ kind: "master", filename: "feature.MP4", contentType: "video/mp4" }).ok, true);
@@ -51,4 +51,13 @@ test("picker accept filter includes extensions and MIME types", () => {
   assert.match(technical, /\.aml/);
   assert.match(technical, /\.xml/);
   assert.match(technical, /\.pkg/);
+});
+
+test("poster upload slots enforce portrait versus landscape dimensions", () => {
+  assert.deepEqual(validateArtworkDimensions("poster_vertical", 1000, 1500), { ok: true });
+  assert.deepEqual(validateArtworkDimensions("poster_horizontal", 1920, 1080), { ok: true });
+  assert.equal(validateArtworkDimensions("poster_vertical", 1920, 1080).ok, false);
+  assert.equal(validateArtworkDimensions("poster_horizontal", 1000, 1500).ok, false);
+  assert.equal(validateArtworkDimensions("poster_vertical", 1000, 1000).ok, false);
+  assert.equal(validateArtworkDimensions("poster_horizontal", 0, 1000).ok, false);
 });
