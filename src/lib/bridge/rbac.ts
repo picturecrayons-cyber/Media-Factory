@@ -1,3 +1,4 @@
+import { PERMISSIONS } from "./types.ts";
 import type { AccountType, InternalRole, Permission, TitleStatus } from "./types.ts";
 
 const INTERNAL_PERMISSIONS: Record<InternalRole, readonly Permission[]> = {
@@ -41,29 +42,7 @@ const INTERNAL_PERMISSIONS: Record<InternalRole, readonly Permission[]> = {
     "loop.revoke",
     "loop.certify_playback",
   ],
-  super_admin: [
-    "title.ingest_internal",
-    "title.create",
-    "title.read_catalog",
-    "title.advance_upload",
-    "title.qc_review",
-    "title.rights_review",
-    "title.license",
-    "title.negotiate",
-    "title.deliver",
-    "delivery.read",
-    "delivery.read_finance",
-    "asset.sign_download",
-    "entitlement.read_own",
-    "finance.read",
-    "finance.record_settlement",
-    "users.invite_internal",
-    "audit.read",
-    "loop.publish",
-    "loop.revoke",
-    "loop.certify_playback",
-    "asset.sign_upload",
-  ],
+  super_admin: PERMISSIONS,
 };
 
 const ACCOUNT_PERMISSIONS: Record<AccountType, readonly Permission[]> = {
