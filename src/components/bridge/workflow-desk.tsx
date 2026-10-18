@@ -108,7 +108,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
       asset.verified && asset.kind === "master" && asset.key === title.masterKey,
     ) &&
     qcAssets.data?.assets.some((asset) =>
-      asset.verified && asset.kind === "poster" && asset.key === title.posterKey,
+      asset.verified && asset.kind === "poster_vertical" && asset.key === title.posterKey,
     ),
   );
   const pub = publication.data?.publication;
@@ -168,13 +168,13 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
             <div className="space-y-3">
               <p>
                 Lifecycle: {title.status}. QC: {workflow.data?.qc?.status ?? "Not reviewed"}. Upload
-                and verify the canonical master and artwork before submitting.
+                and verify the canonical master and vertical poster before submitting to Bridge evaluation.
               </p>
               {title.status === "PREPARING" && !qcAssetsReady ? (
                 <p role="status" className="text-sm text-muted">
                   {qcAssets.isError
                     ? "Cannot confirm QC readiness because asset verification could not be loaded. Retry before submitting."
-                    : "QC submission is blocked until the canonical master and artwork are verified in storage."}
+                    : "Submission is blocked until the canonical master and vertical poster are verified in storage."}
                 </p>
               ) : null}
               {canOperateOnTitle(actor, title, "title.advance_upload", "title.ingest_internal") &&
@@ -184,7 +184,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                       ? "Start ingest"
                       : title.status === "UPLOADING"
                         ? "Prepare package"
-                        : "Submit for QC",
+                        : "Submit to Bridge for evaluation",
                     () =>
                       advanceTitle({
                         data: {
