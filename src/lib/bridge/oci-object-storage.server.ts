@@ -324,8 +324,8 @@ export async function listMultipartUploadParts(opts: { key: string; uploadId: st
   const path = `${multipartObjectPath(namespace, cfg.bucket, opts.key)}?uploadId=${encodeURIComponent(opts.uploadId)}`;
   const res = await signedFetch({ cfg, method: "GET", path });
   if (!res.ok) throw new Error(`OCI multipart part listing failed (${res.status})`);
-  const parsed = (await res.json()) as { parts?: Array<{ partNum?: number; etag?: string; size?: number }> };
-  return (parsed.parts ?? []).flatMap((part) =>
+  const parsed = (await res.json()) as { items?: Array<{ partNum?: number; etag?: string; size?: number }>; parts?: Array<{ partNum?: number; etag?: string; size?: number }> };
+  return (parsed.items ?? parsed.parts ?? []).flatMap((part) =>
     Number.isInteger(part.partNum) && part.partNum! > 0 && typeof part.etag === "string"
       ? [{ partNum: part.partNum!, etag: part.etag, ...(typeof part.size === "number" ? { size: part.size } : {}) }]
       : [],
