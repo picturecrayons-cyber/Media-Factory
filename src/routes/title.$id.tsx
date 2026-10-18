@@ -330,6 +330,7 @@ function FilesPanel({
   const activeUploadRequest = useRef<XMLHttpRequest | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [verifyingAssetId, setVerifyingAssetId] = useState<string | null>(null);
+  const [pendingVerification, setPendingVerification] = useState<{ assetId: string; expectedByteSize: number } | null>(null);
   const [uploadStartedAt, setUploadStartedAt] = useState<number | null>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [uploadProgress, setUploadProgress] = useState<{
@@ -390,6 +391,7 @@ function FilesPanel({
     setUploadProgress({ kind, loaded: 0, total: file.size, percent: 0, stage: "preparing" });
     setMessage(`Preparing ${kind} upload…`);
     let verificationStarted = false;
+    let verificationAsset: { assetId: string; expectedByteSize: number } | null = null;
     try {
       const signed = await requestAssetUpload({
         data: {
@@ -429,6 +431,7 @@ function FilesPanel({
         request.onabort = () => reject(new Error("Upload was cancelled."));
         request.send(file);
       });
+      verificationAsset = { assetId: signed.assetId, expectedByteSize: file.size };
       setMessage("Upload sent. Verifying storage…");
       setUploadProgress((current) => current ? { ...current, percent: 100, loaded: file.size, stage: "verifying" } : current);
       verificationStarted = true;
@@ -437,6 +440,8 @@ function FilesPanel({
         expectedByteSize: file.size,
       });
       if (!confirmation.verified) throw new Error("Storage verification did not complete. Please retry verification.");
+      verificationStarted = false;
+      setPendingVerification(null);
       await onAssetsChanged();
       setUploadProgress((current) => current ? { ...current, stage: "complete" } : current);
       setMessage(`${kind[0].toUpperCase() + kind.slice(1)} uploaded and storage-verified.`);
@@ -445,6 +450,7 @@ function FilesPanel({
       const wasCancelled = raw === "Upload was cancelled.";
       setUploadProgress((current) => current ? { ...current, stage: wasCancelled ? "cancelled" : "failed" } : current);
       if (verificationStarted) {
+        if (verificationAsset) setPendingVerification(verificationAsset);
         // The object may exist and the server may still be finishing verification.
         // Refresh and offer retry for the same asset; never re-upload automatically.
         try {
@@ -473,13 +479,17 @@ function FilesPanel({
       uploadLock.current = false;
     }
   }
-  async function retryVerification(assetId: string) {
+  async function retryVerification(assetId: string, expectedByteSize?: number) {
     if (uploadLock.current || verifyingAssetId) return;
     setVerifyingAssetId(assetId);
     setMessage("Retrying storage verification…");
     try {
-      const result = await confirmAssetUploadWithTimeout({ assetId });
+      const result = await confirmAssetUploadWithTimeout({
+        assetId,
+        ...(expectedByteSize === undefined ? {} : { expectedByteSize }),
+      });
       if (!result.verified) throw new Error("Storage verification is still pending. Retry again shortly.");
+      if (pendingVerification?.assetId === assetId) setPendingVerification(null);
       await onAssetsChanged();
       setMessage("Storage verified. The asset is now available in this title workspace.");
     } catch (error) {
@@ -609,7 +619,7 @@ function FilesPanel({
                 <button
                   type="button"
                   disabled={verifyingAssetId !== null || uploading !== null}
-                  onClick={() => void retryVerification(a.id)}
+                  onClick={() => void retryVerification(a.id, pendingVerification?.assetId === a.id ? pendingVerification.expectedByteSize : undefined)}
                   className="rounded-full border border-line px-4 py-2 text-xs font-semibold disabled:opacity-50"
                 >
                   {verifyingAssetId === a.id ? "Verifying…" : "Retry verification"}
