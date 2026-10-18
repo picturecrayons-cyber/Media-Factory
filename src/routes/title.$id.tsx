@@ -359,6 +359,7 @@ function FilesPanel({
       return;
     }
     cancelRequested.current = false;
+    setMultipartAssetId(null);
     setUploading(kind);
     setMessage(`Preparing ${kind} upload…`);
     try {
@@ -442,6 +443,7 @@ function FilesPanel({
       setMessage(raw.includes("STORAGE_UNAVAILABLE") ? "Storage service is currently unavailable. Please try again later." : raw);
     } finally {
       setUploading(null);
+      setMultipartAssetId(null);
     }
   }
   async function download(id: string) {
