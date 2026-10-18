@@ -292,6 +292,22 @@ function Metric({ label, value }: { label: string; value: string }) {
 }
 
 type SimpleAssetKind = "master" | "poster_vertical" | "poster_horizontal" | "thumbnail" | "subtitle" | "screener" | "censor_certificate";
+const ASSET_VERIFICATION_TIMEOUT_MS = 45_000;
+
+async function confirmAssetUploadWithTimeout(data: { assetId: string; expectedByteSize?: number }) {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      confirmAssetUpload({ data }),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error("VERIFICATION_TIMEOUT")), ASSET_VERIFICATION_TIMEOUT_MS);
+      }),
+    ]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
+}
+
 function FilesPanel({
   titleId,
   assets,
@@ -373,6 +389,7 @@ function FilesPanel({
     setElapsedSeconds(0);
     setUploadProgress({ kind, loaded: 0, total: file.size, percent: 0, stage: "preparing" });
     setMessage(`Preparing ${kind} upload…`);
+    let verificationStarted = false;
     try {
       const signed = await requestAssetUpload({
         data: {
@@ -414,8 +431,10 @@ function FilesPanel({
       });
       setMessage("Upload sent. Verifying storage…");
       setUploadProgress((current) => current ? { ...current, percent: 100, loaded: file.size, stage: "verifying" } : current);
-      const confirmation = await confirmAssetUpload({
-        data: { assetId: signed.assetId, expectedByteSize: file.size },
+      verificationStarted = true;
+      const confirmation = await confirmAssetUploadWithTimeout({
+        assetId: signed.assetId,
+        expectedByteSize: file.size,
       });
       if (!confirmation.verified) throw new Error("Storage verification did not complete. Please retry verification.");
       await onAssetsChanged();
