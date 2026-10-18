@@ -120,7 +120,11 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
     const { verifyObject, sealVerifiedObject, readObjectBytes } = await import("./oci-object-storage.server");
     const object = await verifyObject(asset.s3_key, asset.content_type);
     if (asset.kind === "poster_vertical" || asset.kind === "poster_horizontal") {
-      if (!object.contentType || !["image/png", "image/jpeg", "image/webp"].includes(object.contentType)) {
+      // Generic browser MIME is provisional only; the byte parser below must recognize the image.
+      if (
+        !object.contentType ||
+        !["image/png", "image/jpeg", "image/webp", "application/octet-stream"].includes(object.contentType)
+      ) {
         throw new Error("Artwork must be a valid PNG, JPEG, or WebP image");
       }
       const imageBytes = await readObjectBytes(asset.s3_key);
