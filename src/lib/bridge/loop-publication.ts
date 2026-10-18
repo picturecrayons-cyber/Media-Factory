@@ -257,30 +257,40 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
 
     return {
       titles: rows.map((r) => {
+        const titleGrants = grants.filter((grant) => grant.title_id === r.id);
         const coveringGrant = r.loop_title_id
-          ? findCoveringRightsGrant(
-              grants.filter((grant) => grant.title_id === r.id),
-              {
+          ? findCoveringRightsGrant(titleGrants, {
+              destination: "CRAYONS_LOOP",
+              territories: r.territories || [],
+              languages: r.languages || [],
+              exploitationModels: r.exploitation_models || [],
+              windowStart: iso(r.window_start),
+              windowEnd: iso(r.window_end),
+            })
+          : titleGrants.find((grant) =>
+              Boolean(grant.window_start && grant.window_end) &&
+              Boolean(findCoveringRightsGrant([grant], {
                 destination: "CRAYONS_LOOP",
-                territories: r.territories || [],
-                languages: r.languages || [],
-                exploitationModels: r.exploitation_models || [],
-                windowStart: iso(r.window_start),
-                windowEnd: iso(r.window_end),
-              },
-            )
-          : null;
+                territories: ["WORLDWIDE"],
+                languages: [r.language],
+                exploitationModels: ["TVOD"],
+                windowStart: iso(grant.window_start),
+                windowEnd: iso(grant.window_end),
+              })),
+            ) ?? null;
         const commercialTerms = (coveringGrant as (BridgeRightsGrant & { evidence?: Array<{ commercialTerms?: CommercialTermsSummary }> }) | null)?.evidence?.[0]?.commercialTerms;
         const hasCommercialTerms =
           Number.isInteger(commercialTerms?.rightsOwnerSharePct) &&
           Number.isInteger(commercialTerms?.distributorSharePct) &&
           (commercialTerms?.rightsOwnerSharePct ?? 0) + (commercialTerms?.distributorSharePct ?? 0) === 100;
         const legalApproved = Boolean(coveringGrant && r.approved_legal_grant_ids?.includes(coveringGrant.id));
-        const dimensionsReady = Boolean(
-          r.window_start && r.window_end &&
-          r.territories?.length === 1 && r.territories[0] === "WORLDWIDE" &&
-          r.exploitation_models?.length === 1 && r.exploitation_models[0] === "TVOD"
-        );
+        const dimensionsReady = r.loop_title_id
+          ? Boolean(
+              r.window_start && r.window_end &&
+              r.territories?.length === 1 && r.territories[0] === "WORLDWIDE" &&
+              r.exploitation_models?.length === 1 && r.exploitation_models[0] === "TVOD"
+            )
+          : Boolean(coveringGrant?.window_start && coveringGrant?.window_end);
         const statusReady = ["LICENSING_READY", "LIVE_FOR_BUYERS", "IN_NEGOTIATION", "LICENSED", "DELIVERED"].includes(r.status);
         const isReady = Boolean(coveringGrant) && statusReady && Boolean(r.master_key) && Boolean(r.poster_key) &&
           r.qc_ok && legalApproved && hasCommercialTerms && dimensionsReady &&
