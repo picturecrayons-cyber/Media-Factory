@@ -267,7 +267,7 @@ export async function sealVerifiedObject(sourceKey: string, destinationKey: stri
       | null;
     const safeCode = typeof errorBody?.code === "string" ? errorBody.code.slice(0, 80) : "";
     const safeMessage = typeof errorBody?.message === "string"
-      ? errorBody.message.replace(/[\\r\\n\\t]+/g, " ").slice(0, 240)
+      ? errorBody.message.replace(/[\r\n\t]+/g, " ").slice(0, 240)
       : "";
     const requestId = res.headers.get("opc-request-id") || res.headers.get("opc-work-request-id") || "";
     const detail = [safeCode, safeMessage, requestId ? `requestId=${requestId.slice(0, 120)}` : ""]
