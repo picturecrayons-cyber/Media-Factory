@@ -149,6 +149,9 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
                   {title.year ? ` · ${title.year}` : ""}
                   {title.runtimeMinutes ? ` · ${title.runtimeMinutes} min` : ""}
                 </p>
+                <p className="mt-2 break-all font-mono text-xs text-muted" aria-label="Canonical Bridge Title ID">
+                  Bridge Title ID: {title.id}
+                </p>
               </div>
               <span className="rounded-full border border-line bg-elevated px-3 py-1.5 text-xs font-semibold">
                 {title.status}
