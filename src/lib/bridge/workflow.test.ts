@@ -155,7 +155,8 @@ const license = {
 test("real SQL services persist QC, independently approved license, lifecycle and audit", async () => {
   const f = await fixture();
   try {
-    const saved = (await f.sql.transaction((tx) => f.save(tx, owner, license))) as {
+    const bridgeAdmin = { ...owner, userId: "admin", internalRole: "admin" as const };
+    const saved = (await f.sql.transaction((tx) => f.save(tx, bridgeAdmin, license))) as {
       grantId: string;
     };
     await f.sql.transaction((tx) =>
@@ -234,6 +235,19 @@ test("an audit failure rolls back review records and lifecycle", async () => {
     await f.db.close();
   }
 });
+test("creator accounts cannot submit Loop license drafts", async () => {
+  const f = await fixture();
+  try {
+    await assert.rejects(
+      f.sql.transaction((tx) => f.save(tx, owner, license)),
+      /Only Bridge admins and super admins/,
+    );
+    assert.equal((await f.sql.query("select * from bridge_rights_grants")).length, 0);
+  } finally {
+    await f.db.close();
+  }
+});
+
 test("license constraints reject unsupported territory, bad window and invalid share totals", () => {
   assert.equal(policy.loopLicenseInput.safeParse(license).success, true);
   for (const data of [
