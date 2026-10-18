@@ -61,24 +61,38 @@ function VendorJobs({ actor }: { actor: Actor }) {
         Dubbing, loudness, IMF, DCP, and human QC open as requested. No auto Dolby, IMF, or DCP master. Delivery only after sign-off.
       </p>
       {canRequest ? (
-        <div className="mt-4 flex flex-wrap gap-2">
-          <select
-            className="rounded-lg border border-line bg-transparent px-3 py-2 text-sm"
-            value={type}
-            onChange={(e) => setType(e.target.value as VendorJobType)}
-          >
-            {VENDOR_JOB_TYPES.map((jobType) => (
-              <option key={jobType} value={jobType}>
-                {LABELS[jobType]}
-              </option>
-            ))}
-          </select>
-          <input
-            className="rounded-lg border border-line bg-transparent px-3 py-2 text-sm"
-            placeholder="Title id"
-            value={titleId}
-            onChange={(e) => setTitleId(e.target.value)}
-          />
+        <div className="mt-4 flex flex-wrap items-end gap-2">
+          <div className="flex min-w-[12rem] flex-col gap-1">
+            <label htmlFor="vendor-job-type" className="text-sm font-medium">
+              Vendor Job Type
+            </label>
+            <select
+              id="vendor-job-type"
+              name="vendorJobType"
+              className="rounded-lg border border-line bg-transparent px-3 py-2 text-sm"
+              value={type}
+              onChange={(e) => setType(e.target.value as VendorJobType)}
+            >
+              {VENDOR_JOB_TYPES.map((jobType) => (
+                <option key={jobType} value={jobType}>
+                  {LABELS[jobType]}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="flex min-w-[12rem] flex-col gap-1">
+            <label htmlFor="vendor-job-title-id" className="text-sm font-medium">
+              Title ID
+            </label>
+            <input
+              id="vendor-job-title-id"
+              name="vendorJobTitleId"
+              className="rounded-lg border border-line bg-transparent px-3 py-2 text-sm"
+              placeholder="Title id"
+              value={titleId}
+              onChange={(e) => setTitleId(e.target.value)}
+            />
+          </div>
           <button type="button" className="rounded-lg border border-line px-3 py-2 text-sm" onClick={onRequest}>
             Request
           </button>
