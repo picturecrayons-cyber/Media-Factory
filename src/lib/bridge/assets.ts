@@ -181,7 +181,7 @@ export const startAssetMultipartUpload = createServerFn({ method: "POST" })
     const validation = validateOttIngestFile({ kind, filename: data.filename, contentType: data.contentType });
     if (!validation.ok) throw new Error(validation.message);
     const id = randomBytes(16).toString("hex");
-    const { titleAssetKey, startMultipartUpload, abortMultipartUpload } = await import("./oci-object-storage.server");
+    const { titleAssetKey, startMultipartUpload } = await import("./oci-object-storage.server");
     const key = titleAssetKey({ ownerUserId: title.ownerUserId, titleId: title.id, kind: data.kind, filename: data.filename });
     const sql = await getSql();
     await sql`insert into bridge_assets (id, title_id, kind, s3_key, content_type, created_by, upload_expected_byte_size, upload_expected_sha256, upload_state)
@@ -228,7 +228,7 @@ export const signAssetMultipartPart = createServerFn({ method: "POST" })
     const { asset } = await ownedPendingMultipartAsset(data.assetId, context.userId);
     if (asset.upload_state !== "UPLOADING") throw new Error("Multipart upload is not active");
     const { signMultipartPart } = await import("./oci-object-storage.server");
-    return signMultipartPart({ key: asset.s3_key, uploadId: asset.multipart_upload_id!, partNum: data.partNum });
+    return await signMultipartPart({ key: asset.s3_key, uploadId: asset.multipart_upload_id!, partNum: data.partNum });
   });
 
 export const listAssetMultipartParts = createServerFn({ method: "POST" })
