@@ -203,10 +203,10 @@ async function ownedPendingMultipartAsset(assetId: string, userId: string) {
   assertPermission(actor, actor.internalRole ? "title.ingest_internal" : "asset.sign_upload");
   const sql = await getSql();
   const rows = await sql<{
-    id: string; title_id: string; kind: string; s3_key: string; created_by: string;
+    id: string; title_id: string; kind: string; s3_key: string; created_by: string; content_type: string | null;
     multipart_upload_id: string | null; upload_expected_byte_size: number | null;
     upload_state: string | null; byte_size: number | null;
-  }>`select id, title_id, kind, s3_key, created_by, multipart_upload_id, upload_expected_byte_size,
+  }>`select id, title_id, kind, s3_key, created_by, content_type, multipart_upload_id, upload_expected_byte_size,
       upload_state, byte_size from bridge_assets where id = ${assetId} limit 1`;
   const asset = rows[0];
   if (!asset || (asset.created_by !== actor.userId && !hasStaffPermission(actor, "asset.sign_upload")) || asset.byte_size != null || !asset.multipart_upload_id) {
