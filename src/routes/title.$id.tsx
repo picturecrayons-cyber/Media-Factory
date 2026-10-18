@@ -4,12 +4,13 @@ import { WorkflowDesk } from "@/components/bridge/workflow-desk";
 import { publicationIsActive } from "@/lib/bridge/workflow-policy";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { getTitle, updateTitle } from "@/lib/bridge/titles";
 import { BRIDGE_LOOP_LANES, loopStageType } from "@/lib/bridge/loop-lanes";
 import {
+  cancelAssetMultipartUpload,
   commitAssetMultipartUpload,
   confirmAssetUpload,
   listAssetMultipartParts,
@@ -347,6 +348,8 @@ function FilesPanel({
 }) {
   const [uploading, setUploading] = useState<SimpleAssetKind | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [multipartAssetId, setMultipartAssetId] = useState<string | null>(null);
+  const cancelRequested = useRef(false);
   async function uploadFile(kind: SimpleAssetKind, file: File) {
     const filename = asciiUploadName(file.name);
     const contentType = file.type || "application/octet-stream";
@@ -355,6 +358,7 @@ function FilesPanel({
       setMessage(validation.message);
       return;
     }
+    cancelRequested.current = false;
     setUploading(kind);
     setMessage(`Preparing ${kind} upload…`);
     try {
@@ -382,11 +386,17 @@ function FilesPanel({
           session = { assetId: started.assetId, fileName: file.name, size: file.size, lastModified: file.lastModified, contentType };
           window.localStorage.setItem(storageKey, JSON.stringify(session));
         }
+        setMultipartAssetId(session.assetId);
         const partSize = 10 * 1024 * 1024;
         const partCount = Math.ceil(file.size / partSize);
         let uploaded = await listAssetMultipartParts({ data: { assetId: session.assetId } });
         const completed = new Map(uploaded.parts.map((part) => [part.partNum, part]));
         for (let partNum = 1; partNum <= partCount; partNum += 1) {
+          if (cancelRequested.current) {
+            await cancelAssetMultipartUpload({ data: { assetId: session.assetId } });
+            window.localStorage.removeItem(storageKey);
+            throw new Error("Upload canceled; temporary OCI parts were aborted.");
+          }
           const begin = (partNum - 1) * partSize;
           const part = file.slice(begin, Math.min(begin + partSize, file.size));
           if (completed.get(partNum)?.size === part.size) continue;
@@ -404,6 +414,11 @@ function FilesPanel({
             }
           }
           if (!succeeded) throw lastError instanceof Error ? lastError : new Error(`Part ${partNum} upload failed`);
+        }
+        if (cancelRequested.current) {
+          await cancelAssetMultipartUpload({ data: { assetId: session.assetId } });
+          window.localStorage.removeItem(storageKey);
+          throw new Error("Upload canceled; temporary OCI parts were aborted.");
         }
         uploaded = await listAssetMultipartParts({ data: { assetId: session.assetId } });
         if (uploaded.parts.length !== partCount) throw new Error("OCI part manifest is incomplete; retry the upload to resume missing parts");
@@ -466,6 +481,11 @@ function FilesPanel({
         ))}
       </div>
       {message ? <p className="mt-3 text-xs text-muted">{message}</p> : null}
+      {multipartAssetId && uploading ? (
+        <button type="button" onClick={() => { cancelRequested.current = true; setMessage("Cancel requested; the current part will finish before temporary parts are removed."); }} className="mt-2 rounded-full border border-line px-4 py-2 text-xs font-semibold">
+          Cancel multipart upload
+        </button>
+      ) : null}
       <div className="mt-5 space-y-2">
         {assets.map((a) => (
           <div
