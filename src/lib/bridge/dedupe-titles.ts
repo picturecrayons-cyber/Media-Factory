@@ -1,7 +1,7 @@
 import type { BridgeTitle } from "./types";
 
 function normalizeTitlePart(value: string | null | undefined): string {
-  return (value ?? "").normalize("NFKC").trim().replace(/\\s+/gu, " ").toLowerCase();
+  return (value ?? "").normalize("NFKC").trim().replace(/\s+/gu, " ").toLowerCase();
 }
 
 /**
