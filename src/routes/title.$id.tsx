@@ -426,7 +426,7 @@ function FilesPanel({
         const committed = await commitAssetMultipartUpload({ data: { assetId: session.assetId } });
         window.localStorage.removeItem(storageKey);
         await onAssetsChanged();
-        setMessage(`${kind[0].toUpperCase() + kind.slice(1)} stored and SHA-256 readback verified (${formatBytes(committed.byteSize)}).`);
+        setMessage(`${kind[0].toUpperCase() + kind.slice(1)} stored; sealed-copy SHA-256 matched after readback (${formatBytes(committed.byteSize)}).`);
         return;
       }
 
