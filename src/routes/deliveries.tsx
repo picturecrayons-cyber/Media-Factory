@@ -43,6 +43,8 @@ function VendorJobs({ actor }: { actor: Actor }) {
   const [type, setType] = useState<VendorJobType>("human_qc");
   const [titleId, setTitleId] = useState("");
   const [error, setError] = useState("");
+  const titlesQ = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles() });
+  const titles = titlesQ.data?.titles ?? [];
 
   function onRequest() {
     try {
@@ -73,19 +75,36 @@ function VendorJobs({ actor }: { actor: Actor }) {
               </option>
             ))}
           </select>
-          <input
-            className="rounded-lg border border-line bg-transparent px-3 py-2 text-sm"
-            placeholder="Title id"
+          <select
+            className="min-w-64 rounded-lg border border-line bg-transparent px-3 py-2 text-sm"
+            aria-label="Title for vendor job"
             value={titleId}
-            onChange={(e) => setTitleId(e.target.value)}
-          />
-          <button type="button" className="rounded-lg border border-line px-3 py-2 text-sm" onClick={onRequest}>
+            onChange={(e) => {
+              setTitleId(e.target.value);
+              setError("");
+            }}
+            disabled={titlesQ.isPending || titles.length === 0}
+          >
+            <option value="">
+              {titlesQ.isPending ? "Loading titles…" : titles.length ? "Choose a title…" : "No titles available"}
+            </option>
+            {titles.map((title) => (
+              <option key={title.id} value={title.id}>{title.name}</option>
+            ))}
+          </select>
+          <button
+            type="button"
+            className="rounded-lg border border-line px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-50"
+            onClick={onRequest}
+            disabled={!titleId.trim() || titlesQ.isPending}
+          >
             Request
           </button>
         </div>
       ) : (
         <p className="mt-3 text-sm text-muted">You can view jobs. Request needs delivery write.</p>
       )}
+      {titlesQ.isError ? <p className="mt-3 text-sm" role="alert">Could not load titles. Refresh and try again.</p> : null}
       {error ? <p className="mt-3 text-sm" role="alert">{error}</p> : null}
       <ul className="mt-4 divide-y divide-line rounded-xl border border-line">
         {jobs.map((job) => (
