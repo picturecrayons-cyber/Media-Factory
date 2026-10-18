@@ -66,7 +66,7 @@ function DashboardBody() {
           </div>
         ))}
       </div>
-      <div className="grid gap-3 sm:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         <Stat label="Licensed value" value={`₹${(revenue / 100).toLocaleString("en-IN")}`} />
         <Stat label="Live for buyers" value={String(live.length)} />
         <Stat label="Bridge inventory" value={String(titles.length)} />
