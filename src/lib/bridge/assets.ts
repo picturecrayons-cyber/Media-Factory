@@ -117,7 +117,7 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
     if (asset.byte_size != null)
       return { assetId: asset.id, byteSize: Number(asset.byte_size), verified: true };
 
-    const { verifyObject, sealVerifiedObject, readObjectBytes } = await import("./oci-object-storage.server");
+    const { verifyObject, sealVerifiedObject, readObjectBytes, deleteObject } = await import("./oci-object-storage.server");
     const object = await verifyObject(asset.s3_key, asset.content_type);
     if (asset.kind === "poster_vertical" || asset.kind === "poster_horizontal") {
       // Generic browser MIME is provisional only; the byte parser below must recognize the image.
@@ -166,6 +166,17 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
           and asset_kind = case when ${asset.kind} = 'screener' then 'TRAILER' else upper(${asset.kind}) end
           and status in ('UPLOADED', 'PENDING_REUPLOAD')
       `;
+      // The database now points at the verified immutable copy. Remove the temporary
+      // upload object to avoid paying for two full copies of every accepted master.
+      // Cleanup failure must not turn a verified upload into a failed user operation.
+      try {
+        await deleteObject(asset.s3_key);
+      } catch (cleanupError) {
+        console.warn("[bridge-storage] verified source cleanup failed", {
+          assetId: asset.id,
+          message: cleanupError instanceof Error ? cleanupError.message : "Unknown storage cleanup error",
+        });
+      }
     }
     if (!confirmed) {
       const current = await sql<{
@@ -246,11 +257,14 @@ export const listTitleAssets = createServerFn({ method: "GET" })
       created_at: string | Date;
     }>`
       select id, kind, s3_key, content_type, byte_size, created_at
-      from bridge_assets where title_id = ${title.id} and byte_size > 0 order by created_at desc
+      from bridge_assets where title_id = ${title.id} order by created_at desc
     `;
     return {
       assets: rows
-        .filter((r) => !buyer || !["master", "technical", "censor_certificate"].includes(r.kind))
+        .filter((r) =>
+          !buyer ||
+          (Number(r.byte_size) > 0 && !["master", "technical", "censor_certificate"].includes(r.kind)),
+        )
         .map((r) => ({
           id: r.id,
           kind: r.kind,
