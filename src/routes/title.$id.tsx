@@ -117,7 +117,6 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
   const rightsReady =
     reviewQ.data?.legal?.status === "APPROVED" &&
     reviewQ.data.grants.some((g) => g.status === "VALID" && new Date(g.window_end) > new Date());
-  const packageReady = Boolean(qcReady && legalReady);
   const distributionReady = Boolean(
     pub && publicationIsActive(pub.authorizationStatus, pub.windowStart, pub.windowEnd),
   );
