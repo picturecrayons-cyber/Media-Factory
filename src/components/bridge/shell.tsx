@@ -26,7 +26,7 @@ export function BrandMark({ className }: { className?: string }) {
     >
       <svg viewBox="0 0 168 48" aria-hidden="true" focusable="false" className="bridge-logo block h-[42px] w-auto sm:h-[46px] lg:h-[48px]">
         <text x="0" y="16" fill="#6f6f6f" fontFamily="ui-sans-serif, system-ui, sans-serif" fontSize="13" fontWeight="600" letterSpacing="0.5">crayons</text>
-        <text x="0" y="40" fill="#08b8e8" fontFamily="ui-sans-serif, system-ui, sans-serif" fontSize="26" fontWeight="700" letterSpacing="-0.5">bridge</text>
+        <text x="0" y="40" fill="#007291" fontFamily="ui-sans-serif, system-ui, sans-serif" fontSize="26" fontWeight="700" letterSpacing="-0.5">bridge</text>
       </svg>
     </Link>
   );
