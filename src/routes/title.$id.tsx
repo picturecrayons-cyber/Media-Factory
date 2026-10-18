@@ -439,7 +439,7 @@ function FilesPanel({
           // Keep the explicit unknown-outcome message if refresh is also unavailable.
         }
       }
-      const wasCancelled = raw === "Upload was cancelled.";
+      const wasCancelled = raw.startsWith("Upload was cancelled");
       setUploadProgress((current) => current ? { ...current, stage: wasCancelled ? "cancelled" : "failed" } : current);
       setMessage(
         wasCancelled
