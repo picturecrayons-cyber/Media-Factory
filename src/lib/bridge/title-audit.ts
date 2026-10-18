@@ -22,10 +22,10 @@ export function normalizeAuditTitle(value: string): string {
     .normalize("NFKC")
     .toLocaleLowerCase("en")
     .normalize("NFD")
-    .replace(/[\\u0300-\\u036f]/g, "")
-    .replace(/[^\\p{L}\\p{N}]+/gu, " ")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
     .trim()
-    .replace(/\\s+/g, " ");
+    .replace(/\s+/g, " ");
 }
 
 function normalizeLanguage(value: string | null | undefined): string | null {
