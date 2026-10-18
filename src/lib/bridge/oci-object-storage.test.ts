@@ -139,3 +139,46 @@ test("OCI object verification rejects an unexpected content type", async () => {
     }
   }
 });
+
+test("OCI copy failure includes bounded sanitized service diagnostics", async () => {
+  const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  const values = {
+    OCI_TENANCY_OCID: "test-tenancy",
+    OCI_USER_OCID: "test-user",
+    OCI_PRIVATE_KEY: privateKey.export({ type: "pkcs8", format: "pem" }).toString(),
+    OCI_FINGERPRINT: "test-fingerprint",
+    OCI_REGION: "ap-mumbai-1",
+    OCI_NAMESPACE: "test-namespace",
+    OCI_BUCKET_NAME: "test-bucket",
+  };
+  const saved = Object.fromEntries(Object.keys(values).map((key) => [key, process.env[key]]));
+  const originalFetch = globalThis.fetch;
+  Object.assign(process.env, values);
+  globalThis.fetch = async (_input, init) => {
+    assert.equal(init?.method, "POST");
+    return Response.json(
+      { code: "InsufficientServicePermissions", message: "copy denied\\nplease check policy" },
+      { status: 400, headers: { "opc-request-id": "req-test-123" } },
+    );
+  };
+  try {
+    await assert.rejects(
+      sealVerifiedObject("source-key", "sealed-key", "source-etag"),
+      (error: unknown) => {
+        assert.ok(error instanceof Error);
+        assert.match(error.message, /OCI object copy failed \(400\)/);
+        assert.match(error.message, /InsufficientServicePermissions/);
+        assert.match(error.message, /copy denied please check policy/);
+        assert.match(error.message, /requestId=req-test-123/);
+        assert.doesNotMatch(error.message, /\\n/);
+        return true;
+      },
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+    for (const [key, value] of Object.entries(saved)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+});
