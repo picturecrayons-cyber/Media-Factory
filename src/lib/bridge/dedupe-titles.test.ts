@@ -15,7 +15,11 @@ function title(overrides: Partial<{ id: string; name: string; language: string; 
 describe("display-only title deduplication", () => {
   it("hides case, Unicode-normalization, and whitespace variants with the same name, language, and year", () => {
     const first = title({ id: "first" });
-    const duplicate = title({ id: "duplicate", name: "  ＪＡＮＡＮＡＭ 1947   PRANAYAM THUDARUNNU " , language: " MALAYALAM " });
+    const duplicate = title({
+      id: "duplicate",
+      name: "  ＪＡＮＡＮＡＭ 1947   PRANAYAM THUDARUNNU ",
+      language: " MALAYALAM ",
+    });
 
     assert.deepEqual(dedupeTitlesForDisplay([first, duplicate]), [first]);
   });
