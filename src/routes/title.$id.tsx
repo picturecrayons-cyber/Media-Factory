@@ -373,6 +373,7 @@ function FilesPanel({
     setElapsedSeconds(0);
     setUploadProgress({ kind, loaded: 0, total: file.size, percent: 0, stage: "preparing" });
     setMessage(`Preparing ${kind} upload…`);
+    let signedAssetId: string | null = null;
     try {
       const signed = await requestAssetUpload({
         data: {
@@ -382,6 +383,7 @@ function FilesPanel({
           contentType,
         },
       });
+      signedAssetId = signed.assetId;
       const uploadUrl = new URL(signed.url);
       uploadUrl.pathname = uploadUrl.pathname.split("/").map((part) => encodeURIComponent(decodeURIComponent(part))).join("/");
       setMessage(`Uploading ${kind}…`);
@@ -390,6 +392,9 @@ function FilesPanel({
         const request = new XMLHttpRequest();
         activeUploadRequest.current = request;
         request.open(signed.method, uploadUrl.toString());
+        // The signed OCI upload URL expires after 15 minutes. Bound the browser wait
+        // so a stalled transfer becomes an explicit unknown outcome instead of hanging.
+        request.timeout = 10 * 60 * 1000;
         request.setRequestHeader("content-type", contentType);
         request.upload.onprogress = (event) => {
           const total = event.lengthComputable ? event.total : file.size;
@@ -408,8 +413,9 @@ function FilesPanel({
           if (request.status >= 200 && request.status < 300) resolve();
           else reject(new Error(`Upload failed (${request.status})`));
         };
-        request.onerror = () => reject(new Error("Upload connection failed. Check your connection and retry."));
-        request.onabort = () => reject(new Error("Upload was cancelled."));
+        request.onerror = () => reject(new Error("Upload connection failed; storage outcome is unknown. Refresh the asset list and retry verification before uploading again."));
+        request.ontimeout = () => reject(new Error("Upload timed out; storage outcome is unknown. Refresh the asset list and retry verification before uploading again."));
+        request.onabort = () => reject(new Error("Upload was cancelled; refresh the asset list before retrying verification."));
         request.send(file);
       });
       setMessage("Upload sent. Verifying storage…");
@@ -423,6 +429,16 @@ function FilesPanel({
       setMessage(`${kind[0].toUpperCase() + kind.slice(1)} uploaded and storage-verified.`);
     } catch (error) {
       const raw = error instanceof Error ? error.message : "Upload failed";
+      // A failed client request does not prove that storage rejected the object or
+      // that server-side verification did not finish. Refresh the persisted state;
+      // only the server's verified flag may make an asset ready.
+      if (signedAssetId) {
+        try {
+          await onAssetsChanged();
+        } catch {
+          // Keep the explicit unknown-outcome message if refresh is also unavailable.
+        }
+      }
       const wasCancelled = raw === "Upload was cancelled.";
       setUploadProgress((current) => current ? { ...current, stage: wasCancelled ? "cancelled" : "failed" } : current);
       setMessage(
@@ -449,6 +465,13 @@ function FilesPanel({
       await onAssetsChanged();
       setMessage("Storage verified. The asset is now available in this title workspace.");
     } catch (error) {
+      // The verification request may have failed after the server persisted success.
+      // Refresh and trust the persisted verified state rather than the client response.
+      try {
+        await onAssetsChanged();
+      } catch {
+        // Keep the original error visible when refresh is unavailable.
+      }
       setMessage(
         error instanceof Error
           ? `Verification retry failed: ${error.message}`
