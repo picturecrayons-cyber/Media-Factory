@@ -157,7 +157,7 @@ test("OCI copy failure includes bounded sanitized service diagnostics", async ()
   globalThis.fetch = async (_input, init) => {
     assert.equal(init?.method, "POST");
     return Response.json(
-      { code: "InsufficientServicePermissions", message: "copy denied\\nplease check policy" },
+      { code: "InsufficientServicePermissions", message: "copy denied\nplease check policy" },
       { status: 400, headers: { "opc-request-id": "req-test-123" } },
     );
   };
