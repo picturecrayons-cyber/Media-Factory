@@ -280,7 +280,7 @@ function FilesPanel({
   const activeUploads = useRef<Set<SimpleAssetKind>>(new Set());
   const [message, setMessage] = useState<string | null>(null);
   async function uploadFile(kind: SimpleAssetKind, file: File) {
-    if (activeUploads.current.has(kind)) return;
+    if (activeUploads.current.size > 0) return;
     activeUploads.current.add(kind);
     const filename = asciiUploadName(file.name);
     const contentType = file.type || "application/octet-stream";
@@ -402,7 +402,7 @@ function FilesPanel({
             label={label}
             status={assets.some((a) => (a.kind === kind || (kind === "poster_vertical" && a.kind === "poster")) && a.verified) ? "Ready" : empty}
             busy={uploading === kind}
-            canUpload={canUpload}
+            canUpload={canUpload && uploading === null}
             onFile={(file) => void uploadFile(kind, file)}
           />
         ))}
