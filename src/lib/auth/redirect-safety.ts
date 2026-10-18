@@ -20,7 +20,7 @@ export function sanitizeBridgeNextPath(
   origin: string,
 ): string | null {
   if (!candidate || !candidate.startsWith("/") || candidate.startsWith("//")) return null;
-  if (candidate.includes("\\\\") || /[\\u0000-\\u001f\\u007f]/.test(candidate)) return null;
+  if (candidate.includes("\\") || /[\u0000-\u001f\u007f]/.test(candidate)) return null;
 
   try {
     const base = new URL(origin);
@@ -29,7 +29,7 @@ export function sanitizeBridgeNextPath(
     if (!ALLOWED_NEXT_PREFIXES.some((prefix) => target.pathname === prefix || target.pathname.startsWith(prefix))) {
       return null;
     }
-    return `${target.pathname}${target.search}${target.hash}`;
+    return target.pathname + target.search + target.hash;
   } catch {
     return null;
   }
