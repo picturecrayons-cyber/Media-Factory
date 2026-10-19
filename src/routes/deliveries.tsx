@@ -1,18 +1,13 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { listTitles } from "@/lib/bridge/titles";
 import { hasPermission } from "@/lib/bridge/rbac";
+import { createPersistentVendorJob, listPersistentVendorJobs, transitionPersistentVendorJob } from "@/lib/bridge/streamvista";
 import type { Actor } from "@/lib/bridge/rbac";
-import {
-  VENDOR_JOB_TYPES,
-  canDeliver,
-  createVendorJob,
-  type VendorJob,
-  type VendorJobType,
-} from "@/lib/delivery/vendor-jobs";
+import { VENDOR_JOB_TYPES, type VendorJobType } from "@/lib/delivery/vendor-jobs";
 
 export const Route = createFileRoute("/deliveries")({ component: Deliveries });
 
@@ -40,6 +35,7 @@ function Deliveries() {
       {(actor) => (
         <BridgeShell actor={actor} title="Deliveries">
           <VendorJobs actor={actor} />
+          <HumanQcStandard />
           <DeliveryList />
         </BridgeShell>
       )}
@@ -49,28 +45,39 @@ function Deliveries() {
 
 function VendorJobs({ actor }: { actor: Actor }) {
   const canRequest = hasPermission(actor, "title.deliver") || hasPermission(actor, "title.create");
-  const [jobs, setJobs] = useState<VendorJob[]>([]);
+  const canReview = hasPermission(actor, "title.deliver") || hasPermission(actor, "title.qc_review");
+  const qc = useQueryClient();
   const [type, setType] = useState<VendorJobType>("human_qc");
   const [titleId, setTitleId] = useState("");
   const [error, setError] = useState("");
   const titlesQ = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles() });
+  const jobsQ = useQuery({ queryKey: ["bridge-vendor-jobs"], queryFn: () => listPersistentVendorJobs() });
   const titles = titlesQ.data?.titles ?? [];
-
-  function onRequest() {
-    try {
-      setJobs((prev) => [createVendorJob(type, titleId), ...prev]);
+  const jobs = jobsQ.data?.jobs ?? [];
+  const request = useMutation({
+    mutationFn: () => createPersistentVendorJob({ data: { type, titleId } }),
+    onSuccess: async () => {
       setError("");
       setTitleId("");
-    } catch {
-      setError("Title id required. Job stays requested until a reviewer signs off.");
-    }
-  }
+      await qc.invalidateQueries({ queryKey: ["bridge-vendor-jobs"] });
+    },
+    onError: (err) => setError(err instanceof Error ? err.message : "Vendor request could not be saved."),
+  });
+  const transition = useMutation({
+    mutationFn: ({ jobId, action }: { jobId: string; action: "start" | "submit_review" | "approve" | "reject" }) =>
+      transitionPersistentVendorJob({ data: { jobId, action } }),
+    onSuccess: async () => {
+      setError("");
+      await qc.invalidateQueries({ queryKey: ["bridge-vendor-jobs"] });
+    },
+    onError: (err) => setError(err instanceof Error ? err.message : "Job transition failed."),
+  });
 
   return (
     <section className="mb-6 rounded-2xl border border-line bg-surface p-5 sm:p-6">
       <h2 className="font-display text-xl font-semibold">Vendor jobs</h2>
       <p className="mt-1 text-sm text-muted">
-        Dubbing, loudness, IMF, DCP, and human QC open as requested. No auto Dolby, IMF, or DCP master. Delivery only after sign-off.
+        Requests are persisted and audited. A request is not approval; only an independent reviewer can sign off. No automatic Dolby, IMF, or DCP master is created.
       </p>
       {canRequest ? (
         <div className="mt-4 flex flex-wrap gap-2">
@@ -80,50 +87,72 @@ function VendorJobs({ actor }: { actor: Actor }) {
             onChange={(e) => setType(e.target.value as VendorJobType)}
           >
             {VENDOR_JOB_TYPES.map((jobType) => (
-              <option key={jobType} value={jobType}>
-                {LABELS[jobType]}
-              </option>
+              <option key={jobType} value={jobType}>{LABELS[jobType]}</option>
             ))}
           </select>
           <select
             className="min-w-64 rounded-lg border border-line bg-transparent px-3 py-2 text-sm"
             aria-label="Title for vendor job"
             value={titleId}
-            onChange={(e) => {
-              setTitleId(e.target.value);
-              setError("");
-            }}
+            onChange={(e) => { setTitleId(e.target.value); setError(""); }}
             disabled={titlesQ.isPending || titles.length === 0}
           >
             <option value="">
               {titlesQ.isPending ? "Loading titles…" : titles.length ? "Choose a title…" : "No titles available"}
             </option>
-            {titles.map((title) => (
-              <option key={title.id} value={title.id}>{title.name}</option>
-            ))}
+            {titles.map((title) => <option key={title.id} value={title.id}>{title.name}</option>)}
           </select>
           <button
             type="button"
             className="rounded-lg border border-line px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-50"
-            onClick={onRequest}
-            disabled={!titleId.trim() || titlesQ.isPending}
+            onClick={() => request.mutate()}
+            disabled={!titleId.trim() || titlesQ.isPending || request.isPending}
           >
-            Request
+            {request.isPending ? "Saving…" : "Request"}
           </button>
         </div>
       ) : (
-        <p className="mt-3 text-sm text-muted">You can view jobs. Request needs delivery write.</p>
+        <p className="mt-3 text-sm text-muted">You can view jobs. Requesting work requires title ownership or delivery permission.</p>
       )}
       {titlesQ.isError ? <p className="mt-3 text-sm" role="alert">Could not load titles. Refresh and try again.</p> : null}
+      {jobsQ.isError ? <p className="mt-3 text-sm" role="alert">Could not load persisted vendor jobs. Check your delivery permissions and retry.</p> : null}
       {error ? <p className="mt-3 text-sm" role="alert">{error}</p> : null}
       <ul className="mt-4 divide-y divide-line rounded-xl border border-line">
-        {jobs.map((job) => (
-          <li key={job.id} className="flex items-center justify-between gap-3 p-4 text-sm">
-            <span>{LABELS[job.type]} · {job.titleId}</span>
-            <span>{job.state}{canDeliver(job) ? " · download allowed" : " · no output"}</span>
-          </li>
-        ))}
-        {!jobs.length ? <li className="p-4 text-sm text-muted">No vendor jobs yet.</li> : null}
+        {jobs.map((job) => {
+          const typeKey = job.type as VendorJobType;
+          const canSignOff = job.type === "human_qc"
+            ? hasPermission(actor, "title.qc_review")
+            : hasPermission(actor, "title.deliver");
+          return (
+            <li key={job.id} className="flex flex-col gap-3 p-4 text-sm">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="font-semibold">{LABELS[typeKey] ?? job.type} · {job.titleName}</p>
+                  <p className="mt-1 break-all font-mono text-[11px] text-muted">Job {job.id} · Title {job.titleId}</p>
+                  <p className="mt-1 text-xs text-muted">
+                    Status: {job.status}{job.canDeliver ? " · independent sign-off recorded" : " · delivery output not authorized by this status alone"}
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {canReview && job.status === "queued" ? (
+                    <button type="button" className="rounded-lg border border-line px-3 py-1.5 text-xs" disabled={transition.isPending} onClick={() => transition.mutate({ jobId: job.id, action: "start" })}>Start work</button>
+                  ) : null}
+                  {canReview && job.status === "running" ? (
+                    <button type="button" className="rounded-lg border border-line px-3 py-1.5 text-xs" disabled={transition.isPending} onClick={() => transition.mutate({ jobId: job.id, action: "submit_review" })}>Submit for review</button>
+                  ) : null}
+                  {canSignOff && job.status === "needs_review" ? (
+                    <>
+                      <button type="button" className="rounded-lg border border-line px-3 py-1.5 text-xs" disabled={transition.isPending} onClick={() => transition.mutate({ jobId: job.id, action: "approve" })}>Sign off</button>
+                      <button type="button" className="rounded-lg border border-line px-3 py-1.5 text-xs" disabled={transition.isPending} onClick={() => transition.mutate({ jobId: job.id, action: "reject" })}>Reject</button>
+                    </>
+                  ) : null}
+                </div>
+              </div>
+            </li>
+          );
+        })}
+        {jobsQ.isPending ? <li className="p-4 text-sm text-muted">Loading persisted vendor jobs…</li> : null}
+        {!jobsQ.isPending && !jobsQ.isError && !jobs.length ? <li className="p-4 text-sm text-muted">No vendor jobs yet.</li> : null}
       </ul>
     </section>
   );
