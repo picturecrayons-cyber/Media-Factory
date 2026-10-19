@@ -198,37 +198,101 @@ export const createTitle = createServerFn({ method: "POST" })
     const id = randomBytes(16).toString("hex");
     const slug = slugify(data.name, id);
     const sql = await getSql();
-    await sql`
-      insert into bridge_titles (
-        id, slug, name, name_ml, owner_user_id, owner_account_type, status,
-        synopsis, language, year, runtime_minutes, licensing_fee_paise,
-        content_type, country_of_origin, release_date, credits
-      ) values (
-        ${id}, ${slug}, ${data.name}, ${data.nameMl ?? null}, ${actor.userId}, ${actor.accountType},
-        ${"DRAFT"}, ${data.synopsis ?? ""}, ${data.language ?? "Malayalam"},
-        ${data.year ?? null}, ${data.runtimeMinutes ?? null}, ${data.licensingFeePaise ?? 0},
-        ${loopStageType(data.contentType)}, ${data.countryOfOrigin ?? null},
-        ${data.releaseDate ?? null}, ${JSON.stringify([
-          ...(data.director ? [{ role: "Director", name: data.director }] : []),
-          ...(data.producer ? [{ role: "Producer", name: data.producer }] : []),
-          ...(data.cast ?? []).map((name) => ({ role: "Cast", name })),
-        ])}::jsonb
-      )
-    `;
-    const isPublicSubmission = Boolean((data as { publicSubmission?: boolean }).publicSubmission);
+    const hasRightsScope = Boolean(
+      data.territories?.length || data.rightsLanguages?.length || data.media?.length ||
+      data.windowStart || data.windowEnd || data.exclusivity || data.rightsBasis ||
+      data.authorizationAttested || data.intendedDestinations?.length,
+    );
+    const hasCompleteRightsScope = Boolean(
+      data.territories?.length && data.rightsLanguages?.length && data.media?.length &&
+      data.windowStart && data.windowEnd && data.exclusivity && data.rightsBasis &&
+      data.authorizationAttested === true && data.intendedDestinations?.length,
+    );
+    if (hasRightsScope && !hasCompleteRightsScope) {
+      throw new Error("Complete the rights package and authorization attestation before submitting");
+    }
+    let rightsGrantId: string | null = null;
+    await sql.transaction(async (tx) => {
+      await tx`
+        insert into bridge_titles (
+          id, slug, name, name_ml, original_title, owner_user_id, owner_account_type, status,
+          synopsis, language, year, runtime_minutes, licensing_fee_paise,
+          content_type, country_of_origin, release_date, credits, genres
+        ) values (
+          ${id}, ${slug}, ${data.name}, null, ${data.originalTitle ?? null},
+          ${actor.userId}, ${actor.accountType}, ${"DRAFT"},
+          ${data.synopsis ?? ""}, ${data.language ?? "Malayalam"},
+          ${data.year ?? null}, ${data.runtimeMinutes ?? null}, ${data.licensingFeePaise ?? 0},
+          ${loopStageType(data.contentType)}, ${data.countryOfOrigin ?? null},
+          ${data.releaseDate ?? null}, ${JSON.stringify([
+            ...(data.director ? [{ role: "Director", name: data.director }] : []),
+            ...(data.producer ? [{ role: "Producer", name: data.producer }] : []),
+            ...(data.cast ?? []).map((name) => ({ role: "Cast", name })),
+          ])}::jsonb, ${JSON.stringify((data.additionalLanguages ?? []).filter((item) => item !== data.language))}::jsonb
+        )
+      `;
+      if (!hasCompleteRightsScope) return;
+      const [grant] = await tx<{ id: string }>`
+        insert into bridge_rights_grants (
+          title_id, grant_type, territories, languages, media, window_start, window_end,
+          exclusivity, evidence, status, created_by
+        ) values (
+          ${id}, 'DISTRIBUTION', ${JSON.stringify(data.territories)}::jsonb,
+          ${JSON.stringify(data.rightsLanguages)}::jsonb, ${JSON.stringify(data.media)}::jsonb,
+          ${data.windowStart}, ${data.windowEnd}, ${data.exclusivity},
+          ${JSON.stringify([{
+            type: "SUBMISSION_ATTESTATION",
+            rightsBasis: data.rightsBasis,
+            authorizationAttested: data.authorizationAttested === true,
+            screenerAccess: data.screenerAccess ?? "SCREENER_PENDING",
+            intendedDestinations: data.intendedDestinations ?? [],
+            status: "PENDING_EVIDENCE_REVIEW",
+          }])}::jsonb, 'DRAFT', ${actor.userId}
+        ) returning id::text
+      `;
+      rightsGrantId = grant.id;
+      await tx`
+        insert into bridge_legal_cases (title_id, status, evidence)
+        values (
+          ${id}, 'PENDING',
+          ${JSON.stringify([{
+            grantId: grant.id,
+            rightsBasis: data.rightsBasis,
+            authorizationAttested: data.authorizationAttested === true,
+            status: "PENDING_EVIDENCE_REVIEW",
+          }])}::jsonb
+        )
+      `;
+      for (const destination of data.intendedDestinations ?? []) {
+        await tx`
+          insert into bridge_destination_packages (
+            title_id, destination, rights_grant_id, consumer_metadata, readiness_state
+          ) values (
+            ${id}, ${destination}, ${grant.id},
+            ${JSON.stringify({ intendedBySubmitter: true, screenerAccess: data.screenerAccess ?? "SCREENER_PENDING" })}::jsonb,
+            'HOLD'
+          )
+        `;
+      }
+    });
     await recordTransition({
       titleId: id,
       from: null,
       to: "DRAFT",
       actorUserId: actor.userId,
-      note: isPublicSubmission ? "public rights-ready submission received" : "created",
+      note: hasCompleteRightsScope ? "title and rights package submitted for review" : "created",
     });
     await writeAudit({
       actorUserId: actor.userId,
-      action: isPublicSubmission ? "title.public_submission" : "title.create",
+      action: hasCompleteRightsScope ? "title.intake_submission" : "title.create",
       entityType: "bridge_title",
       entityId: id,
-      metadata: { publicSubmission: isPublicSubmission },
+      metadata: {
+        rightsGrantId,
+        rightsScopeSubmitted: hasCompleteRightsScope,
+        screenerAccess: data.screenerAccess ?? null,
+        intendedDestinations: data.intendedDestinations ?? [],
+      },
     });
     const title = await loadTitle(id);
     if (!title) throw new Error("Title create failed");
