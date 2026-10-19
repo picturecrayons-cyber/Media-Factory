@@ -11,7 +11,6 @@ import { writeAudit } from "./audit";
 import { assertNotDevUser } from "./guards";
 import { persistVerifiedAsset } from "./asset-confirmation";
 import { canDownloadAsset, canReplaceAsset, canViewAsset } from "./asset-access-policy";
-import { canViewAsset } from "./asset-access-policy";
 import { validateOttIngestFile, type OttIngestKind } from "./ott-ingest-spec";
 
 const UPLOADABLE: ReadonlySet<string> = new Set(["DRAFT", "UPLOADING", "PREPARING"]);
@@ -43,6 +42,7 @@ export const requestAssetUpload = createServerFn({ method: "POST" })
     if (!title) throw new Error("Not found");
     if (title.ownerUserId !== actor.userId && !hasStaffPermission(actor, "asset.sign_upload")) throw new Error("Forbidden");
     if (!UPLOADABLE.has(title.status)) throw new Error("Uploads are closed for this status");
+    const sql = await getSql();
     const existingAssets = await sql<{ id: string }>`
       select id from bridge_assets
       where title_id = ${title.id} and kind = ${data.kind} and byte_size > 0
@@ -68,7 +68,6 @@ export const requestAssetUpload = createServerFn({ method: "POST" })
     });
     const signed = await signUpload({ key, contentType: data.contentType });
     const id = randomBytes(16).toString("hex");
-    const sql = await getSql();
     await sql`
       insert into bridge_assets (id, title_id, kind, s3_key, content_type, created_by)
       values (${id}, ${title.id}, ${data.kind}, ${key}, ${data.contentType}, ${actor.userId})
