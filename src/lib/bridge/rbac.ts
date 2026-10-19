@@ -70,8 +70,6 @@ const INTERNAL_PERMISSIONS: Record<InternalRole, readonly Permission[]> = {
     "asset.view",
     "asset.preview",
     "asset.replace",
-    "asset.delete",
-    "asset.submit_qc",
   ],
 };
 
