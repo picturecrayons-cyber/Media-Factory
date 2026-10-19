@@ -120,9 +120,10 @@ function VendorJobs({ actor }: { actor: Actor }) {
       <ul className="mt-4 divide-y divide-line rounded-xl border border-line">
         {jobs.map((job) => {
           const typeKey = job.type as VendorJobType;
-          const canSignOff = job.type === "human_qc"
+          const canOperateJob = job.type === "human_qc"
             ? hasPermission(actor, "title.qc_review")
             : hasPermission(actor, "title.deliver");
+          const canSignOff = canOperateJob;
           return (
             <li key={job.id} className="flex flex-col gap-3 p-4 text-sm">
               <div className="flex flex-wrap items-start justify-between gap-3">
@@ -134,10 +135,10 @@ function VendorJobs({ actor }: { actor: Actor }) {
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  {canReview && job.status === "queued" ? (
+                  {canOperateJob && job.status === "queued" ? (
                     <button type="button" className="rounded-lg border border-line px-3 py-1.5 text-xs" disabled={transition.isPending} onClick={() => transition.mutate({ jobId: job.id, action: "start" })}>Start work</button>
                   ) : null}
-                  {canReview && job.status === "running" ? (
+                  {canOperateJob && job.status === "running" ? (
                     <button type="button" className="rounded-lg border border-line px-3 py-1.5 text-xs" disabled={transition.isPending} onClick={() => transition.mutate({ jobId: job.id, action: "submit_review" })}>Submit for review</button>
                   ) : null}
                   {canSignOff && job.status === "needs_review" ? (
