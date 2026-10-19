@@ -4,7 +4,7 @@ import { WorkflowDesk } from "@/components/bridge/workflow-desk";
 import { publicationIsActive } from "@/lib/bridge/workflow-policy";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { getTitle, updateTitle } from "@/lib/bridge/titles";
@@ -278,51 +278,146 @@ function FilesPanel({
 }) {
   const [uploading, setUploading] = useState<SimpleAssetKind | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [progress, setProgress] = useState(0);
+  const activeUploadRef = useRef<{ xhrs: XMLHttpRequest[]; accessUri?: string; cancelled: boolean } | null>(null);
+
+  function uploadPart(
+    url: string,
+    body: Blob,
+    onProgress: (loaded: number) => void,
+    xhrs: XMLHttpRequest[],
+  ): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhrs.push(xhr);
+      xhr.open("PUT", url);
+      xhr.upload.onprogress = (event) => {
+        if (event.lengthComputable) onProgress(event.loaded);
+      };
+      xhr.onload = () => {
+        if (xhr.status < 200 || xhr.status >= 300) {
+          reject(new Error(`Part upload failed (${xhr.status})`));
+          return;
+        }
+        const etag = xhr.getResponseHeader("etag")?.replaceAll('"', "").trim();
+        if (!etag) {
+          reject(new Error("OCI did not expose the part ETag. Check the bucket CORS expose-headers configuration before retrying."));
+          return;
+        }
+        resolve(etag);
+      };
+      xhr.onerror = () => reject(new Error("Network error while uploading a part"));
+      xhr.onabort = () => reject(new DOMException("Upload cancelled", "AbortError"));
+      xhr.send(body);
+    });
+  }
+
+  async function cancelUpload() {
+    const active = activeUploadRef.current;
+    if (!active) return;
+    active.cancelled = true;
+    for (const xhr of active.xhrs) xhr.abort();
+    if (active.accessUri) {
+      try {
+        await fetch(active.accessUri, { method: "DELETE" });
+      } catch {
+        // Expiring PARs and OCI's multipart cleanup remain the final safety net.
+      }
+    }
+    setMessage("Upload cancelled. Incomplete OCI parts were asked to abort; you can select the file again to retry.");
+    setUploading(null);
+    setProgress(0);
+    activeUploadRef.current = null;
+  }
+
   async function uploadFile(kind: SimpleAssetKind, file: File) {
     const filename = asciiUploadName(file.name);
     const contentType = file.type || "application/octet-stream";
-    const validation = validateOttIngestFile({
-      kind,
-      filename,
-      contentType,
-    });
+    const validation = validateOttIngestFile({ kind, filename, contentType });
     if (!validation.ok) {
       setMessage(validation.message);
       return;
     }
+    if (activeUploadRef.current) return;
+    const active = { xhrs: [] as XMLHttpRequest[], accessUri: undefined as string | undefined, cancelled: false };
+    activeUploadRef.current = active;
     setUploading(kind);
-    setMessage(`Preparing ${kind} upload…`);
+    setProgress(0);
+    setMessage(`Preparing secure multipart upload for ${kind}…`);
     try {
-      const signed = await requestAssetUpload({
-        data: {
-          titleId,
-          kind,
-          filename,
-          contentType,
-        },
+      const multipart = await requestAssetUpload({
+        data: { titleId, kind, filename, contentType },
       });
-      const uploadUrl = new URL(signed.url);
-      uploadUrl.pathname = uploadUrl.pathname.split("/").map((part) => encodeURIComponent(decodeURIComponent(part))).join("/");
-      const put = await fetch(uploadUrl.toString(), {
-        method: signed.method,
-        body: file,
-        headers: { "content-type": contentType },
-      });
-      if (!put.ok) throw new Error(`Upload failed (${put.status})`);
-      await confirmAssetUpload({ data: { assetId: signed.assetId, expectedByteSize: file.size } });
+      active.accessUri = multipart.accessUri;
+      const chunkSize = 16 * 1024 * 1024;
+      const partCount = Math.ceil(file.size / chunkSize);
+      if (partCount < 1 || partCount > 10000) throw new Error("File size is outside OCI multipart upload limits");
+      const loadedByPart = new Array<number>(partCount).fill(0);
+      const etags = new Array<string>(partCount);
+      let nextPart = 0;
+      let firstError: unknown = null;
+      const worker = async () => {
+        while (!active.cancelled && !firstError) {
+          const index = nextPart++;
+          if (index >= partCount) return;
+          const start = index * chunkSize;
+          const chunk = file.slice(start, Math.min(file.size, start + chunkSize));
+          const partUrl = new URL(String(index + 1), multipart.accessUri).toString();
+          let lastError: unknown = null;
+          for (let attempt = 0; attempt < 3 && !active.cancelled; attempt += 1) {
+            try {
+              etags[index] = await uploadPart(partUrl, chunk, (loaded) => {
+                loadedByPart[index] = Math.min(loaded, chunk.size);
+                const total = loadedByPart.reduce((sum, value) => sum + value, 0);
+                setProgress(Math.min(99, Math.floor((total / file.size) * 100)));
+              }, active.xhrs);
+              lastError = null;
+              break;
+            } catch (error) {
+              lastError = error;
+              loadedByPart[index] = 0;
+              if (active.cancelled) return;
+            }
+          }
+          if (lastError) {
+            firstError = lastError;
+            return;
+          }
+        }
+      };
+      await Promise.all(Array.from({ length: Math.min(3, partCount) }, () => worker()));
+      if (active.cancelled) throw new DOMException("Upload cancelled", "AbortError");
+      if (firstError) throw firstError;
+      if (etags.some((etag) => !etag)) throw new Error("Multipart upload is missing one or more part ETags");
+      setMessage("All parts uploaded. Committing and verifying the object…");
+      const committed = await fetch(multipart.accessUri, { method: "POST" });
+      if (!committed.ok) throw new Error(`OCI multipart completion failed (${committed.status})`);
+      await confirmAssetUpload({ data: { assetId: multipart.assetId, expectedByteSize: file.size } });
+      setProgress(100);
       await onAssetsChanged();
-      setMessage(`${kind[0].toUpperCase() + kind.slice(1)} is ready.`);
+      setMessage(`${kind[0].toUpperCase() + kind.slice(1)} uploaded and verified.`);
     } catch (error) {
       const raw = error instanceof Error ? error.message : "Upload failed";
-      setMessage(
-        raw.includes("STORAGE_UNAVAILABLE")
+      if (active.cancelled || (error instanceof DOMException && error.name === "AbortError")) {
+        setMessage("Upload cancelled. Select the file again to retry.");
+      } else {
+        if (active.accessUri) {
+          try {
+            await fetch(active.accessUri, { method: "DELETE" });
+          } catch {
+            // The short-lived PAR expires; do not hide the original upload failure.
+          }
+        }
+        setMessage(raw.includes("STORAGE_UNAVAILABLE")
           ? "Storage service is currently unavailable. Please try again later."
-          : raw,
-      );
+          : `${raw}. Select the file again to retry.`);
+      }
     } finally {
+      if (activeUploadRef.current === active) activeUploadRef.current = null;
       setUploading(null);
     }
   }
+
   async function download(id: string) {
     const signed = await requestAssetDownload({ data: { assetId: id } });
     window.location.assign(signed.url);
@@ -358,22 +453,27 @@ function FilesPanel({
           />
         ))}
       </div>
-      {message ? <p className="mt-3 text-xs text-muted">{message}</p> : null}
+      {uploading ? (
+        <div className="mt-4 space-y-2" aria-live="polite">
+          <div className="flex items-center justify-between gap-3 text-xs text-muted">
+            <span>Multipart upload progress</span><span>{progress}%</span>
+          </div>
+          <progress className="h-2 w-full" max={100} value={progress} aria-label="Multipart upload progress" />
+          <button type="button" onClick={() => void cancelUpload()} className="rounded-full border border-line px-3 py-1.5 text-xs font-semibold">
+            Cancel upload
+          </button>
+        </div>
+      ) : null}
+      {message ? <p className="mt-3 text-xs text-muted" role="status">{message}</p> : null}
       <div className="mt-5 space-y-2">
         {assets.map((a) => (
-          <div
-            key={a.id}
-            className="flex items-center justify-between gap-3 rounded-xl border border-line p-4"
-          >
+          <div key={a.id} className="flex items-center justify-between gap-3 rounded-xl border border-line p-4">
             <div>
               <p className="text-sm font-semibold">{a.kind}</p>
               <p className="text-xs text-muted">{a.verified ? "Ready" : "Processing"}</p>
             </div>
             {a.verified ? (
-              <button
-                onClick={() => void download(a.id)}
-                className="rounded-full border border-line px-4 py-2 text-xs font-semibold"
-              >
+              <button onClick={() => void download(a.id)} className="rounded-full border border-line px-4 py-2 text-xs font-semibold">
                 Download
               </button>
             ) : null}
