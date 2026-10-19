@@ -8,7 +8,7 @@ import { createTitle, listTitles } from "@/lib/bridge/titles";
 import { BRIDGE_LOOP_LANES } from "@/lib/bridge/loop-lanes";
 
 export function TitleList({ empty, query = "" }: { empty: string; query?: string }) {
-  const titlesQ = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles() });
+  const titlesQ = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles(), staleTime: 30_000 });
   const titles = (titlesQ.data?.titles ?? []).filter((t) => !query || `${t.name} ${t.language} ${t.year ?? ""}`.toLowerCase().includes(query.toLowerCase()));
   if (titlesQ.isPending) return <p className="text-sm text-muted">Loading titles…</p>;
   if (titlesQ.isError) {
