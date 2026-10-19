@@ -49,7 +49,7 @@ export function BridgeShell({ actor, title, children }: { actor: BridgeActor; ti
       <main className="mx-auto max-w-[1440px] px-4 py-6 sm:px-6 lg:px-8">
         <div className="mb-5 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-accent">Crayons Bridge</p>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#006d8b]">Crayons Bridge</p>
             <h1 className="mt-1 font-display text-2xl font-semibold tracking-tight sm:text-3xl">{title}</h1>
           </div>
           <p className="text-xs text-muted">{actor.organizationName || actor.displayName}</p>
