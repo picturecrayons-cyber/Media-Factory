@@ -33,7 +33,7 @@ const SESSION_TIMEOUT_MS = 12_000;
 const SYNOPSIS_MAX_WORDS = 250;
 
 function countWords(value: string): number {
-  return value.trim() ? value.trim().split(/\\s+/).filter(Boolean).length : 0;
+  return value.trim() ? value.trim().split(/\s+/).filter(Boolean).length : 0;
 }
 
 function addYearsToLocalDateTime(value: string, years: number): string {
@@ -143,7 +143,8 @@ function Onboarding() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const submitInFlight = useRef(false);
-  const [retrying, setRetrying] = useState(false);\n  const [draftLoaded, setDraftLoaded] = useState(false);
+  const [retrying, setRetrying] = useState(false);
+  const [draftLoaded, setDraftLoaded] = useState(false);
 
   // Keep checkbox handlers stable so memoized groups that did not change do not
   // rebuild their option grids on every unrelated keystroke.
@@ -463,7 +464,7 @@ function Onboarding() {
                   </select>
                 </label>
                 <label className="text-sm font-medium">Original language *
-                  <select value={language} onChange={(e) => setLanguage(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5">{LANGUAGES.map((item) => <option key={item}>{item}</option>)}</select>
+                  <select value={language} onChange={(e) => { const nextLanguage = e.target.value; setLanguage(nextLanguage); setAdditionalLanguages((current) => current.filter((item) => item !== nextLanguage)); }} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5">{LANGUAGES.map((item) => <option key={item}>{item}</option>)}</select>
                 </label>
                 <label className="text-sm font-medium">Release year
                   <input type="number" min="1895" max={new Date().getFullYear()} value={year} onChange={(e) => setYear(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5" />
