@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { generateKeyPairSync, verify } from "node:crypto";
-import { initiateMultipartUpload, sealVerifiedObject, verifyObject } from "./oci-object-storage.server.ts";
+import { abortMultipartUpload, commitMultipartUpload, initiateMultipartUpload, sealVerifiedObject, verifyObject } from "./oci-object-storage.server.ts";
 
 test("OCI private key normalization accepts escaped and quoted PEM secrets", async () => {
   const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
