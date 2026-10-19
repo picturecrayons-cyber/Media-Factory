@@ -280,8 +280,8 @@ export function titleAssetKey(opts: { ownerUserId: string; titleId: string; kind
 export async function initiateMultipartUpload(opts: { key: string; contentType?: string }) {
   const cfg = config();
   const namespace = await resolveNamespace(cfg);
-  const path = "/n/" + encodeURIComponent(namespace) + "/b/" + encodeURIComponent(cfg.bucket) + "/u/" + encodedObjectName(opts.key);
-  const response = await signedFetch({ cfg, method: "POST", path, body: {} });
+  const path = "/n/" + encodeURIComponent(namespace) + "/b/" + encodeURIComponent(cfg.bucket) + "/u";
+  const response = await signedFetch({ cfg, method: "POST", path, body: { object: opts.key, contentType: opts.contentType || "application/octet-stream" } });
   if (!response.ok) throw new Error("OCI multipart initiation failed (" + response.status + ")");
   const payload = (await response.json()) as { uploadId?: string };
   if (!payload.uploadId) throw new Error("OCI multipart initiation returned no upload ID");
