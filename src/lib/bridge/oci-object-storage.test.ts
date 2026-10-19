@@ -171,6 +171,7 @@ test("OCI multipart initiation returns an object-scoped part and completion capa
     assert.equal(method, "PUT");
     assert.equal(url.pathname, "/p/par-token/n/test-namespace/b/test-bucket/o/bridge/test-owner/test-title/master/test.mp4");
     assert.equal(headers.get("opc-multipart"), "true");
+    assert.equal(headers.get("content-type"), undefined);
     return Response.json({
       uploadId: "upload-123",
       accessUri: "/p/par-token/n/test-namespace/b/test-bucket/u/bridge/test-owner/test-title/master/test.mp4/id/upload-123/",
