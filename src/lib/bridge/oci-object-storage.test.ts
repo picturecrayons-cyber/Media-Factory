@@ -141,57 +141,53 @@ test("OCI object verification rejects an unexpected content type", async () => {
 });
 
 
-test("OCI multipart initiation returns an object-scoped part and completion capability", async () => {
-  const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
-  const values = {
-    OCI_TENANCY_OCID: "test-tenancy",
-    OCI_USER_OCID: "test-user",
-    OCI_PRIVATE_KEY: privateKey.export({ type: "pkcs8", format: "pem" }).toString(),
-    OCI_FINGERPRINT: "test-fingerprint",
-    OCI_REGION: "ap-mumbai-1",
-    OCI_NAMESPACE: "test-namespace",
-    OCI_BUCKET_NAME: "test-bucket",
-  };
+test("OCI multipart uses native initiation, signed part requests, commit manifest, and abort", async () => {
+  const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  const values = { OCI_TENANCY_OCID: "test-tenancy", OCI_USER_OCID: "test-user", OCI_PRIVATE_KEY: privateKey.export({ type: "pkcs8", format: "pem" }).toString(), OCI_FINGERPRINT: "test-fingerprint", OCI_REGION: "ap-mumbai-1", OCI_NAMESPACE: "test-namespace", OCI_BUCKET_NAME: "test-bucket" };
   const saved = Object.fromEntries(Object.keys(values).map((key) => [key, process.env[key]]));
   const originalFetch = globalThis.fetch;
   Object.assign(process.env, values);
-  const calls: Array<{ url: URL; method: string; headers: Headers }> = [];
+  const calls: Array<{ url: URL; method: string; headers: Headers; body?: string }> = [];
   globalThis.fetch = async (input, init) => {
     const url = new URL(String(input));
     const method = init?.method || "GET";
     const headers = new Headers(init?.headers);
-    calls.push({ url, method, headers });
-    if (method === "POST") {
-      assert.equal(url.pathname, "/n/test-namespace/b/test-bucket/p/");
-      const body = JSON.parse(String(init?.body));
-      assert.equal(body.objectName, "bridge/test-owner/test-title/master/test.mp4");
-      assert.equal(body.accessType, "ObjectWrite");
-      return Response.json({ accessUri: "/p/par-token/n/test-namespace/b/test-bucket/o/bridge/test-owner/test-title/master/test.mp4" });
+    const body = init?.body === undefined ? undefined : String(init.body);
+    calls.push({ url, method, headers, body });
+    if (method === "POST" && url.pathname === "/n/test-namespace/b/test-bucket/u") {
+      const details = JSON.parse(body || "{}");
+      assert.equal(details.object, "bridge/test-owner/test-title/master/test.mp4");
+      assert.equal(details.contentType, "video/mp4");
+      return Response.json({ uploadId: "upload-123" });
     }
-    assert.equal(method, "PUT");
-    assert.equal(url.pathname, "/p/par-token/n/test-namespace/b/test-bucket/o/bridge/test-owner/test-title/master/test.mp4");
-    assert.equal(headers.get("opc-multipart"), "true");
-    assert.equal(headers.get("content-type"), "video/mp4");
-    return Response.json({
-      uploadId: "upload-123",
-      accessUri: "/p/par-token/n/test-namespace/b/test-bucket/u/bridge/test-owner/test-title/master/test.mp4/id/upload-123/",
-    });
+    if (method === "POST") {
+      assert.equal(url.pathname, "/n/test-namespace/b/test-bucket/u/bridge%2Ftest-owner%2Ftest-title%2Fmaster%2Ftest.mp4");
+      assert.equal(url.searchParams.get("uploadId"), "upload-123");
+      assert.deepEqual(JSON.parse(body || "{}"), { partsToCommit: [{ partNum: 1, etag: '"part-etag-1"' }, { partNum: 2, etag: '"part-etag-2"' }] });
+      return new Response(null, { status: 200 });
+    }
+    assert.equal(method, "DELETE");
+    assert.equal(url.searchParams.get("uploadId"), "upload-123");
+    return new Response(null, { status: 204 });
   };
   try {
-    const result = await initiateMultipartUpload({
-      key: "bridge/test-owner/test-title/master/test.mp4",
-      contentType: "video/mp4",
-      expiresIn: 900,
-    });
-    assert.equal(result.uploadId, "upload-123");
-    assert.equal(result.key, "bridge/test-owner/test-title/master/test.mp4");
-    assert.equal(result.accessUri, "https://objectstorage.ap-mumbai-1.oraclecloud.com/p/par-token/n/test-namespace/b/test-bucket/u/bridge/test-owner/test-title/master/test.mp4/id/upload-123/");
-    assert.deepEqual(calls.map((call) => call.method), ["POST", "PUT"]);
+    const key = "bridge/test-owner/test-title/master/test.mp4";
+    const upload = await initiateMultipartUpload({ key, contentType: "video/mp4" });
+    assert.equal(upload.uploadId, "upload-123");
+    const digest = Buffer.alloc(32, 7).toString("base64");
+    const signed = await (await import("./oci-object-storage.server.ts")).createMultipartPartRequest({ key, uploadId: upload.uploadId, partNum: 1, byteSize: 1024, sha256: digest });
+    const url = new URL(signed.url);
+    assert.equal(url.searchParams.get("uploadId"), "upload-123");
+    assert.equal(url.searchParams.get("uploadPartNum"), "1");
+    const signature = signed.headers.authorization.match(/signature="([^"]+)"/)?.[1];
+    assert.ok(signature);
+    const signedText = "(request-target): put " + url.pathname + url.search + "\nhost: " + url.host + "\ndate: " + signed.headers.date + "\ncontent-type: application/octet-stream\ncontent-length: 1024\nx-content-sha256: " + digest;
+    assert.ok(verify("RSA-SHA256", Buffer.from(signedText), publicKey, Buffer.from(signature, "base64")));
+    await commitMultipartUpload({ key, uploadId: upload.uploadId, parts: [{ partNum: 1, etag: '"part-etag-1"' }, { partNum: 2, etag: '"part-etag-2"' }] });
+    await abortMultipartUpload({ key, uploadId: upload.uploadId });
+    assert.deepEqual(calls.map((call) => call.method), ["POST", "POST", "DELETE"]);
   } finally {
     globalThis.fetch = originalFetch;
-    for (const [key, value] of Object.entries(saved)) {
-      if (value === undefined) delete process.env[key];
-      else process.env[key] = value;
-    }
+    for (const [key, value] of Object.entries(saved)) { if (value === undefined) delete process.env[key]; else process.env[key] = value; }
   }
 });
