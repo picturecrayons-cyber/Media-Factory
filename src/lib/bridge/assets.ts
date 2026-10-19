@@ -50,14 +50,14 @@ export const requestAssetUpload = createServerFn({ method: "POST" })
       contentType: data.contentType,
     });
     if (!ingestValidation.ok) throw new Error(ingestValidation.message);
-    const { signUpload, titleAssetKey } = await import("./oci-object-storage.server");
+    const { initiateMultipartUpload, titleAssetKey } = await import("./oci-object-storage.server");
     const key = titleAssetKey({
       ownerUserId: title.ownerUserId,
       titleId: title.id,
       kind: data.kind,
       filename: data.filename,
     });
-    const signed = await signUpload({ key, contentType: data.contentType });
+    const multipart = await initiateMultipartUpload({ key });
     const id = randomBytes(16).toString("hex");
     const sql = await getSql();
     await sql`
@@ -78,7 +78,7 @@ export const requestAssetUpload = createServerFn({ method: "POST" })
       entityId: id,
       metadata: { titleId: title.id, kind: data.kind },
     });
-    return { assetId: id, ...signed };
+    return { assetId: id, ...multipart };
   });
 
 export const confirmAssetUpload = createServerFn({ method: "POST" })
