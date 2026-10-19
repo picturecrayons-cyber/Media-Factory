@@ -44,3 +44,5 @@ export function canDownloadAsset(actor: Actor, title: AssetAccessTitle, kind: st
   if (actor.internalRole === "legal_reviewer") return LEGAL_KINDS.has(kind);
   return buyerCanRead(actor, title, kind, entitled);
 }
+
+export function canReplaceAsset(actor: Actor, title: AssetAccessTitle) { return actor.emailVerified && hasPermission(actor, "asset.replace") && (!actor.internalRole ? actor.userId === title.ownerUserId : actor.internalRole === "super_admin") && ["DRAFT", "UPLOADING", "PREPARING"].includes(title.status); }
