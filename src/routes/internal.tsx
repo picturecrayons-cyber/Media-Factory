@@ -150,40 +150,35 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
 
   // Authorization Form State
   const [selectedTitleId, setSelectedTitleId] = useState<string>("");
-  const [territories, setTerritories] = useState("IN");
-  const [languages, setLanguages] = useState("Malayalam");
+  const [territories, setTerritories] = useState("");
+  const [languages, setLanguages] = useState("");
   const [model] = useState<ExploitationModel>("TVOD");
   const [windowStart, setWindowStart] = useState("");
   const [windowEnd, setWindowEnd] = useState("");
-  const [rightsOwnerShare, setRightsOwnerShare] = useState<string>("80");
-  const [distributorShare, setDistributorShare] = useState<string>("20");
   const [extendTitleId, setExtendTitleId] = useState<string | null>(null);
   const [newExtendEnd, setNewExtendEnd] = useState<string>("");
 
   const publishMut = useMutation({
-    mutationFn: (bridgeTitleId: string) =>
-      authorizeLoopPublication({
+    mutationFn: (bridgeTitleId: string) => {
+      const territoryValues = territories.split(",").map((v) => v.trim()).filter(Boolean);
+      const languageValues = languages.split(",").map((v) => v.trim()).filter(Boolean);
+      if (!territoryValues.length) throw new Error("Enter the territory or territories stated in the signed rights grant.");
+      if (!languageValues.length) throw new Error("Enter the language or languages stated in the signed rights grant.");
+      if (!windowStart || !windowEnd) throw new Error("Enter both distribution window dates from the approved rights grant.");
+      if (new Date(windowEnd) <= new Date(windowStart)) throw new Error("Window end must be after window start.");
+      return authorizeLoopPublication({
         data: {
           bridgeTitleId,
           destination: "CRAYONS_LOOP",
-          territories: territories
-            .split(",")
-            .map((v) => v.trim())
-            .filter(Boolean),
-          languages: languages
-            .split(",")
-            .map((v) => v.trim())
-            .filter(Boolean),
+          territories: territoryValues,
+          languages: languageValues,
           exploitationModels: [model],
           accessTier: "TVOD",
           windowStart: windowStart ? new Date(windowStart).toISOString() : null,
           windowEnd: windowEnd ? new Date(windowEnd).toISOString() : null,
-          commercialTerms: {
-            rightsOwnerSharePct: Number(rightsOwnerShare) || 0,
-            distributorSharePct: Number(distributorShare) || 0,
-          },
         },
-      }),
+      });
+    },
     onSuccess: () => {
       toast.success("Title authorized and published to Crayons Loop");
       setSelectedTitleId("");
@@ -391,7 +386,7 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
                 value={territories}
                 onChange={(e) => setTerritories(e.target.value)}
                 className="h-9 w-full rounded-xl border border-line bg-elevated px-3 text-fg focus:outline-none"
-                placeholder="IN, AE, US"
+                placeholder="Enter exact rights territory, e.g. WORLDWIDE"
               />
             </label>
 
@@ -401,7 +396,7 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
                 value={languages}
                 onChange={(e) => setLanguages(e.target.value)}
                 className="h-9 w-full rounded-xl border border-line bg-elevated px-3 text-fg focus:outline-none"
-                placeholder="Malayalam, Tamil"
+                placeholder="Enter licensed language(s)"
               />
             </label>
 
@@ -425,30 +420,8 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
               />
             </label>
 
-            <label className="block space-y-1">
-              <span className="font-semibold text-muted">Rights-Owner Share (%)</span>
-              <input
-                type="number"
-                min="0"
-                max="100"
-                value={rightsOwnerShare}
-                onChange={(e) => setRightsOwnerShare(e.target.value)}
-                className="h-9 w-full rounded-xl border border-line bg-elevated px-3 text-fg focus:outline-none"
-              />
-            </label>
-
-            <label className="block space-y-1">
-              <span className="font-semibold text-muted">Distributor Share (%)</span>
-              <input
-                type="number"
-                min="0"
-                max="100"
-                value={distributorShare}
-                onChange={(e) => setDistributorShare(e.target.value)}
-                className="h-9 w-full rounded-xl border border-line bg-elevated px-3 text-fg focus:outline-none"
-              />
-            </label>
           </div>
+          <p className="text-xs text-muted">Territory, language and dates must match the active rights grant. Approved revenue shares are read from the grant and cannot be overridden here.</p>
 
           <div className="flex items-center gap-3 pt-2">
             <Button
