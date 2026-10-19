@@ -218,6 +218,8 @@ function Signup() {
           <label className="block text-sm font-medium text-fg">
             Full name
             <input
+              id="signup-name"
+              name="name"
               required
               autoComplete="name"
               type="text"
@@ -231,6 +233,8 @@ function Signup() {
           <label className="block text-sm font-medium text-fg">
             Email address
             <input
+              id="signup-email"
+              name="email"
               required
               autoComplete="email"
               type="email"
@@ -268,6 +272,8 @@ function Signup() {
           <label className="block text-sm font-medium text-fg">
             Password
             <input
+              id="signup-password"
+              name="password"
               required
               autoComplete="new-password"
               type="password"
@@ -282,6 +288,8 @@ function Signup() {
           <label className="block text-sm font-medium text-fg">
             Confirm password
             <input
+              id="signup-confirm-password"
+              name="confirmPassword"
               required
               autoComplete="new-password"
               type="password"
