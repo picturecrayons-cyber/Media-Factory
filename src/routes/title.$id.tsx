@@ -278,6 +278,9 @@ function FilesPanel({
 }) {
   const [uploading, setUploading] = useState<SimpleAssetKind | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [previewLoading, setPreviewLoading] = useState<string | null>(null);
+  const [previewAsset, setPreviewAsset] = useState<{ id: string; kind: string; contentType: string | null; url: string } | null>(null);
+  const [previewError, setPreviewError] = useState<string | null>(null);
   async function uploadFile(kind: SimpleAssetKind, file: File) {
     const filename = asciiUploadName(file.name);
     const contentType = file.type || "application/octet-stream";
@@ -323,9 +326,26 @@ function FilesPanel({
       setUploading(null);
     }
   }
+  async function previewAssetFile(asset: { id: string; kind: string; contentType: string | null }) {
+    setPreviewLoading(asset.id);
+    setPreviewError(null);
+    setPreviewAsset(null);
+    try {
+      const signed = await requestAssetDownload({ data: { assetId: asset.id } });
+      setPreviewAsset({ ...asset, url: signed.url });
+    } catch (error) {
+      setPreviewError(error instanceof Error ? error.message : "Preview unavailable.");
+    } finally {
+      setPreviewLoading(null);
+    }
+  }
   async function download(id: string) {
-    const signed = await requestAssetDownload({ data: { assetId: id } });
-    window.location.assign(signed.url);
+    try {
+      const signed = await requestAssetDownload({ data: { assetId: id } });
+      window.location.assign(signed.url);
+    } catch (error) {
+      setPreviewError(error instanceof Error ? error.message : "Download unavailable.");
+    }
   }
   const cards: [SimpleAssetKind, string, string][] = [
     ["master", "Main Film", "Required"],
@@ -359,27 +379,48 @@ function FilesPanel({
         ))}
       </div>
       {message ? <p className="mt-3 text-xs text-muted">{message}</p> : null}
+      {previewError ? <p role="alert" className="mt-3 text-sm text-muted">{previewError}</p> : null}
       <div className="mt-5 space-y-2">
         {assets.map((a) => (
-          <div
-            key={a.id}
-            className="flex items-center justify-between gap-3 rounded-xl border border-line p-4"
-          >
-            <div>
-              <p className="text-sm font-semibold">{a.kind}</p>
-              <p className="text-xs text-muted">{a.verified ? "Ready" : "Processing"}</p>
+          <div key={a.id} className="flex flex-col gap-3 rounded-xl border border-line p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <p className="break-words text-sm font-semibold">{a.kind.replaceAll("_", " ")}</p>
+              <p className="text-xs text-muted">{a.verified ? "Verified · Ready" : "Processing"}</p>
+              <p className="text-xs text-muted">{a.contentType || "File type unavailable"}{a.byteSize ? ` · ${(a.byteSize / (1024 * 1024)).toFixed(1)} MB` : ""}</p>
             </div>
             {a.verified ? (
-              <button
-                onClick={() => void download(a.id)}
-                className="rounded-full border border-line px-4 py-2 text-xs font-semibold"
-              >
-                Download
-              </button>
+              <div className="flex shrink-0 gap-2">
+                <button type="button" disabled={previewLoading === a.id} onClick={() => void previewAssetFile(a)} className="rounded-full border border-line px-4 py-2 text-xs font-semibold disabled:opacity-50">
+                  {previewLoading === a.id ? "Loading…" : "Preview"}
+                </button>
+                <button type="button" onClick={() => void download(a.id)} className="rounded-full border border-line px-4 py-2 text-xs font-semibold">Download</button>
+              </div>
             ) : null}
           </div>
         ))}
       </div>
+      {previewAsset ? (
+        <section aria-label={`Preview ${previewAsset.kind}`} className="mt-5 rounded-2xl border border-line bg-elevated/40 p-4 sm:p-6">
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <div><p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Asset preview</p><h3 className="mt-1 text-base font-semibold">{previewAsset.kind.replaceAll("_", " ")}</h3></div>
+            <button type="button" onClick={() => setPreviewAsset(null)} className="rounded-full border border-line px-4 py-2 text-xs font-semibold">Close preview</button>
+          </div>
+          {previewAsset.contentType?.startsWith("image/") ? (
+            <img src={previewAsset.url} alt={`${previewAsset.kind.replaceAll("_", " ")} preview`} loading="lazy" className="mx-auto max-h-[70vh] max-w-full rounded-lg object-contain" />
+          ) : previewAsset.contentType?.startsWith("video/") ? (
+            <video src={previewAsset.url} controls preload="metadata" className="max-h-[70vh] w-full rounded-lg bg-black" />
+          ) : previewAsset.contentType?.startsWith("audio/") ? (
+            <audio src={previewAsset.url} controls className="w-full" />
+          ) : previewAsset.contentType === "application/pdf" ? (
+            <iframe title={`${previewAsset.kind} PDF preview`} src={previewAsset.url} className="h-[70vh] w-full rounded-lg border border-line bg-surface" />
+          ) : (
+            <div className="rounded-xl border border-line bg-surface p-4">
+              <p className="text-sm text-muted">Inline preview is not supported for this file type. Open or download the secured file to inspect it.</p>
+              <a href={previewAsset.url} target="_blank" rel="noopener noreferrer" className="mt-3 inline-block rounded-full border border-line px-4 py-2 text-xs font-semibold">Open file</a>
+            </div>
+          )}
+        </section>
+      ) : null}
     </section>
   );
 }
