@@ -117,6 +117,10 @@ export function canAccessDashboard(actor: Actor): boolean {
   return actor.emailVerified && actor.internalRole === "super_admin";
 }
 
+export function canAccessAdminWorkstations(actor: Actor): boolean {
+  return actor.emailVerified && (actor.internalRole === "admin" || actor.internalRole === "super_admin");
+}
+
 const ROLE_GRANTS: Record<InternalRole, readonly InternalRole[]> = {
   viewer: [],
   qc_reviewer: [],
