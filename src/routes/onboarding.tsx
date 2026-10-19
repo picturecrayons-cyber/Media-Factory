@@ -30,6 +30,20 @@ const MEDIA = ["SVOD", "TVOD", "AVOD", "FAST", "Broadcast", "Theatrical", "Airli
 const DESTINATIONS = ["Crayons Loop", "External OTT", "Broadcast / TV", "TVOD / EST", "FAST", "Festival / Educational", "Buyer delivery"];
 
 const SESSION_TIMEOUT_MS = 12_000;
+const SYNOPSIS_MAX_WORDS = 250;
+
+function countWords(value: string): number {
+  return value.trim() ? value.trim().split(/\\s+/).filter(Boolean).length : 0;
+}
+
+function addYearsToLocalDateTime(value: string, years: number): string {
+  if (!value) return "";
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return "";
+  date.setFullYear(date.getFullYear() + years);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
 
 async function getBridgeSessionWithTimeout() {
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -129,7 +143,7 @@ function Onboarding() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const submitInFlight = useRef(false);
-  const [retrying, setRetrying] = useState(false);
+  const [retrying, setRetrying] = useState(false);\n  const [draftLoaded, setDraftLoaded] = useState(false);
 
   // Keep checkbox handlers stable so memoized groups that did not change do not
   // rebuild their option grids on every unrelated keystroke.
@@ -143,10 +157,10 @@ function Onboarding() {
   }, []);
   const toggleTerritories = useCallback((value: string, checked: boolean) => {
     setTerritories((current) => {
-      if (checked) {
-        return current.includes(value) ? current : [...current, value];
-      }
-      return current.filter((item) => item !== value);
+      if (!checked) return current.filter((item) => item !== value);
+      // Worldwide is mutually exclusive with individual territory selections.
+      if (value === "Worldwide") return ["Worldwide"];
+      return [...current.filter((item) => item !== "Worldwide"), ...(current.includes(value) ? [] : [value])];
     });
   }, []);
   const toggleRightsLanguages = useCallback((value: string, checked: boolean) => {
@@ -173,6 +187,70 @@ function Onboarding() {
       return current.filter((item) => item !== value);
     });
   }, []);
+
+  // Keep unfinished intake fields across refreshes in this tab only. Legal
+  // attestation is deliberately excluded and must be confirmed again after reload.
+  const draftKey = user?.id ? `bridge:title-intake-draft:${user.id}` : null;
+  useEffect(() => {
+    if (!draftKey) return;
+    try {
+      const raw = sessionStorage.getItem(draftKey);
+      if (raw) {
+        const draft = JSON.parse(raw) as Record<string, unknown>;
+        const setString = (key: string, setter: (value: string) => void) => {
+          if (typeof draft[key] === "string") setter(draft[key] as string);
+        };
+        const setStringArray = (key: string, setter: (value: string[]) => void) => {
+          if (Array.isArray(draft[key]) && (draft[key] as unknown[]).every((v) => typeof v === "string")) setter(draft[key] as string[]);
+        };
+        setString("displayName", setDisplayName);
+        setString("accountType", (v) => setAccountType(v as PublicAccountType));
+        setString("organizationName", setOrganizationName);
+        setString("titleName", setTitleName);
+        setString("originalTitle", setOriginalTitle);
+        setString("contentType", setContentType);
+        setString("language", setLanguage);
+        setStringArray("additionalLanguages", setAdditionalLanguages);
+        setString("year", setYear);
+        setString("runtimeMinutes", setRuntimeMinutes);
+        setString("synopsis", setSynopsis);
+        setString("countryOfOrigin", setCountryOfOrigin);
+        setString("releaseDate", setReleaseDate);
+        setString("director", setDirector);
+        setString("producer", setProducer);
+        setStringArray("territories", setTerritories);
+        setStringArray("rightsLanguages", setRightsLanguages);
+        setStringArray("media", setMedia);
+        setString("windowStart", setWindowStart);
+        setString("windowEnd", setWindowEnd);
+        if (draft.exclusivity === "EXCLUSIVE" || draft.exclusivity === "NON_EXCLUSIVE") setExclusivity(draft.exclusivity);
+        if (typeof draft.sublicensingAllowed === "boolean") setSublicensingAllowed(draft.sublicensingAllowed);
+        if (typeof draft.promotionalRights === "boolean") setPromotionalRights(draft.promotionalRights);
+        if (["OWNER", "EXCLUSIVE_LICENSEE", "AUTHORIZED_DISTRIBUTOR", "PRODUCER_AUTHORITY"].includes(String(draft.rightsBasis))) setRightsBasis(draft.rightsBasis as typeof rightsBasis);
+        if (draft.screenerAccess === "BRIDGE_PRIVATE_SCREENER" || draft.screenerAccess === "SCREENER_PENDING") setScreenerAccess(draft.screenerAccess);
+        setStringArray("destinations", setDestinations);
+      }
+    } catch {
+      // A damaged or unavailable tab-local draft must not prevent the form opening.
+    } finally {
+      setDraftLoaded(true);
+    }
+  }, [draftKey]);
+
+  useEffect(() => {
+    if (!draftLoaded || !draftKey || submittedTitleId) return;
+    try {
+      sessionStorage.setItem(draftKey, JSON.stringify({
+        displayName, accountType, organizationName, titleName, originalTitle, contentType,
+        language, additionalLanguages: additionalLanguages.filter((item) => item !== language),
+        year, runtimeMinutes, synopsis, countryOfOrigin, releaseDate, director, producer,
+        territories, rightsLanguages, media, windowStart, windowEnd, exclusivity,
+        sublicensingAllowed, promotionalRights, rightsBasis, screenerAccess, destinations,
+      }));
+    } catch {
+      // Storage may be disabled or full; the form remains usable in memory.
+    }
+  }, [draftLoaded, draftKey, submittedTitleId, displayName, accountType, organizationName, titleName, originalTitle, contentType, language, additionalLanguages, year, runtimeMinutes, synopsis, countryOfOrigin, releaseDate, director, producer, territories, rightsLanguages, media, windowStart, windowEnd, exclusivity, sublicensingAllowed, promotionalRights, rightsBasis, screenerAccess, destinations]);
 
   const home = sessionQ.data?.profile ? sessionQ.data.home : null;
 
@@ -258,6 +336,7 @@ function Onboarding() {
       if (accountType !== "buyer") {
         if (!titleName.trim()) throw new Error("Title name is required");
         if (synopsis.trim().length < 20) throw new Error("Add a synopsis of at least 20 characters");
+        if (countWords(synopsis) > SYNOPSIS_MAX_WORDS) throw new Error(`Keep the synopsis to ${SYNOPSIS_MAX_WORDS} words or fewer`);
         if (!territories.length || !rightsLanguages.length || !media.length || !destinations.length) {
           throw new Error("Select at least one value in each rights package group");
         }
@@ -314,7 +393,10 @@ function Onboarding() {
       });
 
       setSubmittedTitleId(result.title.id);
-      try { sessionStorage.removeItem("bridge-invite"); } catch { /* ignore */ }
+      try {
+        sessionStorage.removeItem("bridge-invite");
+        if (draftKey) sessionStorage.removeItem(draftKey);
+      } catch { /* ignore */ }
     } catch (err) {
       setError(publicOnboardingError(err));
     } finally {
@@ -384,19 +466,22 @@ function Onboarding() {
                   <select value={language} onChange={(e) => setLanguage(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5">{LANGUAGES.map((item) => <option key={item}>{item}</option>)}</select>
                 </label>
                 <label className="text-sm font-medium">Release year
-                  <input type="number" min="1895" max="2100" value={year} onChange={(e) => setYear(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5" />
+                  <input type="number" min="1895" max={new Date().getFullYear()} value={year} onChange={(e) => setYear(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5" />
                 </label>
                 <label className="text-sm font-medium">Runtime (minutes)
                   <input type="number" min="1" max="600" value={runtimeMinutes} onChange={(e) => setRuntimeMinutes(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5" />
                 </label>
               </div>
-              <CheckGroup label="Additional languages" values={LANGUAGES} selected={additionalLanguages} onChange={toggleAdditionalLanguages} />
-              <label className="block text-sm font-medium">Synopsis *
-                <textarea required minLength={20} maxLength={4000} rows={5} value={synopsis} onChange={(e) => setSynopsis(e.target.value)} className="mt-1.5 w-full rounded-xl border border-line-strong bg-elevated px-3.5 py-3" />
+              <CheckGroup label="Additional available audio languages" values={LANGUAGES.filter((item) => item !== language)} selected={additionalLanguages.filter((item) => item !== language)} onChange={toggleAdditionalLanguages} />
+              <p className="text-xs text-muted">The original language is excluded automatically. Select only other audio-language versions already available; subtitles can be recorded separately during asset preparation.</p>
+              <label className="block text-sm font-medium">Synopsis * <span className="font-normal text-muted">(maximum {SYNOPSIS_MAX_WORDS} words)</span>
+                <textarea required minLength={20} maxLength={2500} rows={5} value={synopsis} onChange={(e) => setSynopsis(e.target.value)} aria-describedby="synopsis-word-count" className="mt-1.5 w-full rounded-xl border border-line-strong bg-elevated px-3.5 py-3" />
+                <span id="synopsis-word-count" className={`mt-1 block text-xs ${countWords(synopsis) > SYNOPSIS_MAX_WORDS ? "text-red-600 dark:text-red-400" : "text-muted"}`}>{countWords(synopsis)} / {SYNOPSIS_MAX_WORDS} words</span>
               </label>
               <div className="grid gap-4 sm:grid-cols-3">
                 <label className="text-sm font-medium">Country of origin
-                  <input value={countryOfOrigin} onChange={(e) => setCountryOfOrigin(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5" />
+                  <input value={countryOfOrigin} onChange={(e) => setCountryOfOrigin(e.target.value)} placeholder="India or any other country" list="bridge-country-options" className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5" />
+                  <datalist id="bridge-country-options"><option value="India" /><option value="United States" /><option value="United Kingdom" /><option value="United Arab Emirates" /><option value="Sri Lanka" /><option value="Bangladesh" /><option value="Nepal" /><option value="Other" /></datalist>
                 </label>
                 <label className="text-sm font-medium">Release date
                   <input type="date" value={releaseDate} onChange={(e) => setReleaseDate(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5" />
@@ -417,12 +502,13 @@ function Onboarding() {
               <CheckGroup label="Exploitation / media" values={MEDIA} selected={media} onChange={toggleMedia} required />
               <div className="grid gap-4 sm:grid-cols-2">
                 <label className="text-sm font-medium">Rights window starts *
-                  <input required type="datetime-local" value={windowStart} onChange={(e) => setWindowStart(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5" />
+                  <input required type="datetime-local" value={windowStart} onChange={(e) => { setWindowStart(e.target.value); setWindowEnd(addYearsToLocalDateTime(e.target.value, 5)); }} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5" />
                 </label>
                 <label className="text-sm font-medium">Rights window ends *
                   <input required type="datetime-local" value={windowEnd} onChange={(e) => setWindowEnd(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5" />
                 </label>
               </div>
+              <p className="text-xs leading-relaxed text-muted">After you choose a start date, Bridge suggests an end date five years later. You can edit it; review both dates and the selected rights carefully before attesting. This is a form default, not a grant of rights.</p>
               <div className="grid gap-4 sm:grid-cols-3">
                 <label className="text-sm font-medium">Exclusivity *
                   <select value={exclusivity} onChange={(e) => setExclusivity(e.target.value as "EXCLUSIVE" | "NON_EXCLUSIVE")} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5"><option value="NON_EXCLUSIVE">Non-exclusive</option><option value="EXCLUSIVE">Exclusive</option></select>
@@ -452,10 +538,11 @@ function Onboarding() {
               </label>
               <label className="text-sm font-medium">Screener status *
                 <select value={screenerAccess} onChange={(e) => setScreenerAccess(e.target.value as typeof screenerAccess)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5">
-                  <option value="SCREENER_PENDING">I will upload a screener in Bridge after submission</option>
-                  <option value="BRIDGE_PRIVATE_SCREENER">Private Bridge screener is ready to upload</option>
+                  <option value="SCREENER_PENDING">I will upload a private screener after submission</option>
+                  <option value="BRIDGE_PRIVATE_SCREENER">A private screener is prepared and ready for upload</option>
                 </select>
               </label>
+              <p className="text-xs leading-relaxed text-muted">This choice records screener status only; it does not upload a video. After submission, open the title workspace and complete the private asset upload. The file must be verified separately before the title can progress to buyer readiness.</p>
               <CheckGroup label="Intended delivery destinations" values={DESTINATIONS} selected={destinations} onChange={toggleDestinations} required />
             </section>
           </>
