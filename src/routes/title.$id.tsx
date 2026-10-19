@@ -23,6 +23,7 @@ import {
   validateOttIngestFile,
 } from "@/lib/bridge/ott-ingest-spec";
 import { asciiUploadName } from "@/lib/bridge/latin1";
+import { requestAssetPreview } from "@/lib/bridge/asset-preview";
 
 export const Route = createFileRoute("/title/$id")({ component: TitlePage });
 
@@ -278,6 +279,8 @@ function FilesPanel({
 }) {
   const [uploading, setUploading] = useState<SimpleAssetKind | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [preview, setPreview] = useState<{ url: string; kind: string; contentType: string | null } | null>(null);
+  const [previewError, setPreviewError] = useState<string | null>(null);
   async function uploadFile(kind: SimpleAssetKind, file: File) {
     const filename = asciiUploadName(file.name);
     const contentType = file.type || "application/octet-stream";
@@ -327,6 +330,15 @@ function FilesPanel({
     const signed = await requestAssetDownload({ data: { assetId: id } });
     window.location.assign(signed.url);
   }
+  async function previewAsset(id: string) {
+    setPreviewError(null);
+    try {
+      const result = await requestAssetPreview({ data: { assetId: id } });
+      setPreview(result);
+    } catch (error) {
+      setPreviewError(error instanceof Error ? error.message : "Preview unavailable");
+    }
+  }
   const cards: [SimpleAssetKind, string, string][] = [
     ["master", "Main Film", "Required"],
     ["screener", "Trailer", "Add"],
@@ -359,6 +371,25 @@ function FilesPanel({
         ))}
       </div>
       {message ? <p className="mt-3 text-xs text-muted">{message}</p> : null}
+      {previewError ? <p role="alert" className="mt-3 text-xs text-muted">{previewError}</p> : null}
+      {preview ? (
+        <div className="mt-5 rounded-xl border border-line p-4">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <p className="text-sm font-semibold">Secure preview · {preview.kind}</p>
+            <button onClick={() => setPreview(null)} className="rounded-full border border-line px-3 py-1.5 text-xs">Close</button>
+          </div>
+          {preview.contentType?.startsWith("video/") ? (
+            <video controls preload="metadata" className="max-h-[70vh] w-full rounded-lg bg-black" src={preview.url}>Your browser does not support this video preview.</video>
+          ) : preview.contentType?.startsWith("image/") ? (
+            <img className="max-h-[70vh] max-w-full rounded-lg object-contain" src={preview.url} alt={preview.kind + " preview"} />
+          ) : preview.contentType === "application/pdf" ? (
+            <iframe title="Censor certificate preview" className="h-[70vh] w-full rounded-lg" src={preview.url} />
+          ) : (
+            <iframe title={preview.kind + " preview"} className="h-[50vh] w-full rounded-lg" src={preview.url} />
+          )}
+          <p className="mt-2 text-xs text-muted">This preview link expires after 60 seconds. Download access is checked separately.</p>
+        </div>
+      ) : null}
       <div className="mt-5 space-y-2">
         {assets.map((a) => (
           <div
@@ -370,12 +401,10 @@ function FilesPanel({
               <p className="text-xs text-muted">{a.verified ? "Ready" : "Processing"}</p>
             </div>
             {a.verified ? (
-              <button
-                onClick={() => void download(a.id)}
-                className="rounded-full border border-line px-4 py-2 text-xs font-semibold"
-              >
-                Download
-              </button>
+              <div className="flex flex-wrap gap-2">
+                <button onClick={() => void previewAsset(a.id)} className="rounded-full border border-line px-4 py-2 text-xs font-semibold">Preview</button>
+                <button onClick={() => void download(a.id)} className="rounded-full border border-line px-4 py-2 text-xs font-semibold">Download</button>
+              </div>
             ) : null}
           </div>
         ))}

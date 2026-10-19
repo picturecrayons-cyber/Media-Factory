@@ -10,7 +10,7 @@ import { loadTitle } from "./titles";
 import { writeAudit } from "./audit";
 import { assertNotDevUser } from "./guards";
 import { persistVerifiedAsset } from "./asset-confirmation";
-import { downloadDecision } from "./delivery-policy";
+import { canDownloadAsset, canReplaceAsset, canViewAsset } from "./asset-access-policy";
 import { validateOttIngestFile, type OttIngestKind } from "./ott-ingest-spec";
 
 const UPLOADABLE: ReadonlySet<string> = new Set(["DRAFT", "UPLOADING", "PREPARING"]);
@@ -42,6 +42,7 @@ export const requestAssetUpload = createServerFn({ method: "POST" })
     if (!title) throw new Error("Not found");
     if (title.ownerUserId !== actor.userId && !hasStaffPermission(actor, "asset.sign_upload")) throw new Error("Forbidden");
     if (!UPLOADABLE.has(title.status)) throw new Error("Uploads are closed for this status");
+    const sql = await getSql();
     if (!["master", "poster", "poster_vertical", "poster_horizontal", "thumbnail", "subtitle", "screener", "technical", "censor_certificate"].includes(data.kind))
       throw new Error("This asset kind is not supported by the OTT ingest uploader");
     const ingestValidation = validateOttIngestFile({
@@ -59,18 +60,42 @@ export const requestAssetUpload = createServerFn({ method: "POST" })
     });
     const signed = await signUpload({ key, contentType: data.contentType });
     const id = randomBytes(16).toString("hex");
-    const sql = await getSql();
-    await sql`
-      insert into bridge_assets (id, title_id, kind, s3_key, content_type, created_by)
-      values (${id}, ${title.id}, ${data.kind}, ${key}, ${data.contentType}, ${actor.userId})
-    `;
-    await sql`
-      update loop_media_migration_queue
-      set status = 'UPLOADED', target_path = ${key}, updated_at = now()
-      where title_id = ${title.id}
-        and asset_kind = case when ${data.kind} = 'screener' then 'TRAILER' else upper(${data.kind}) end
-        and status in ('PENDING_REUPLOAD', 'UPLOADED')
-    `;
+    await sql.transaction(async (tx) => {
+      // Serialize uploads for a title so concurrent requests cannot race the replacement check.
+      const currentTitles = await tx.query<{ owner_user_id: string; status: typeof title.status }>(
+        "select owner_user_id, status from bridge_titles where id = $1 for update",
+        [title.id],
+      );
+      const currentTitle = currentTitles[0];
+      if (!currentTitle) throw new Error("Not found");
+      const lockedTitle = {
+        ownerUserId: currentTitle.owner_user_id,
+        status: currentTitle.status,
+      };
+      if (lockedTitle.ownerUserId !== actor.userId && !hasStaffPermission(actor, "asset.sign_upload")) {
+        throw new Error("Forbidden");
+      }
+      if (!UPLOADABLE.has(lockedTitle.status)) throw new Error("Uploads are closed for this status");
+      const existingAssets = await tx.query<{ id: string }>(
+        "select id from bridge_assets where title_id = $1 and kind = $2 limit 1",
+        [title.id, data.kind],
+      );
+      if (existingAssets.length > 0 && !canReplaceAsset(actor, lockedTitle)) {
+        throw new Error("Replacing an existing asset requires separate permission");
+      }
+      await tx.query(
+        "insert into bridge_assets (id, title_id, kind, s3_key, content_type, created_by) values ($1, $2, $3, $4, $5, $6)",
+        [id, title.id, data.kind, key, data.contentType, actor.userId],
+      );
+      await tx.query(
+        `update loop_media_migration_queue
+         set status = 'UPLOADED', target_path = $1, updated_at = now()
+         where title_id = $2
+           and asset_kind = case when $3 = 'screener' then 'TRAILER' else upper($3) end
+           and status in ('PENDING_REUPLOAD', 'UPLOADED')`,
+        [key, title.id, data.kind],
+      );
+    });
     await writeAudit({
       actorUserId: actor.userId,
       action: "asset.upload_signed",
@@ -180,22 +205,15 @@ export const requestAssetDownload = createServerFn({ method: "POST" })
     const title = await loadTitle(asset.title_id);
     if (!title || !canReadTitle(actor, title)) throw new Error("Not found");
     const entitled = await hasLicenseEntitlement(actor.userId, title.id);
-    const decision = downloadDecision({
-      kind: asset.kind,
-      actorIsOwner: title.ownerUserId === actor.userId,
-      actorIsInternal: Boolean(actor.internalRole),
-      accountType: actor.accountType,
-      hasLicenseEntitlement: entitled,
-    });
-    if (!decision.allow) {
+    if (!canDownloadAsset(actor, title, asset.kind, entitled)) {
       await writeAudit({
         actorUserId: actor.userId,
         action: "asset.download_denied",
         entityType: "bridge_asset",
         entityId: asset.id,
-        metadata: { reason: decision.reason, kind: asset.kind },
+        metadata: { reason: "Role or entitlement does not allow this asset download", kind: asset.kind },
       });
-      throw new Error(decision.reason);
+      throw new Error("Forbidden");
     }
     const { signDownload } = await import("./oci-object-storage.server");
     const signed = await signDownload({ key: asset.s3_key });
@@ -217,6 +235,7 @@ export const listTitleAssets = createServerFn({ method: "GET" })
     if (!title || !canReadTitle(actor, title)) throw new Error("Not found");
     const sql = await getSql();
     const buyer = actor.accountType === "buyer" && !actor.internalRole;
+    const entitled = buyer ? await hasLicenseEntitlement(actor.userId, title.id) : false;
     const rows = await sql<{
       id: string;
       kind: string;
@@ -230,11 +249,11 @@ export const listTitleAssets = createServerFn({ method: "GET" })
     `;
     return {
       assets: rows
-        .filter((r) => !buyer || !["master", "technical", "censor_certificate"].includes(r.kind))
+        .filter((r) => canViewAsset(actor, title, r.kind, entitled))
         .map((r) => ({
           id: r.id,
           kind: r.kind,
-          key: buyer ? null : r.s3_key,
+          key: null,
           contentType: r.content_type,
           byteSize: r.byte_size,
           verified: Number(r.byte_size) > 0,

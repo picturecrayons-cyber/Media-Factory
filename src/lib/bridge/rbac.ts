@@ -2,10 +2,12 @@ import type { AccountType, InternalRole, Permission, TitleStatus } from "./types
 
 const INTERNAL_PERMISSIONS: Record<InternalRole, readonly Permission[]> = {
   viewer: ["title.read_catalog", "audit.read"],
-  qc_reviewer: ["title.read_catalog", "title.qc_review", "asset.sign_download", "audit.read"],
+  qc_reviewer: ["title.read_catalog", "title.qc_review", "asset.view", "asset.preview", "asset.sign_download", "audit.read"],
   legal_reviewer: [
     "title.read_catalog",
     "title.rights_review",
+    "asset.view",
+    "asset.preview",
     "asset.sign_download",
     "audit.read",
   ],
@@ -32,6 +34,8 @@ const INTERNAL_PERMISSIONS: Record<InternalRole, readonly Permission[]> = {
     "service.fulfill",
     "delivery.read",
     "delivery.read_finance",
+    "asset.view",
+    "asset.preview",
     "asset.sign_download",
     "finance.read",
     "finance.record_settlement",
@@ -63,6 +67,9 @@ const INTERNAL_PERMISSIONS: Record<InternalRole, readonly Permission[]> = {
     "loop.revoke",
     "loop.certify_playback",
     "asset.sign_upload",
+    "asset.view",
+    "asset.preview",
+    "asset.replace",
   ],
 };
 
@@ -76,6 +83,9 @@ const ACCOUNT_PERMISSIONS: Record<AccountType, readonly Permission[]> = {
     "service.order_create",
     "asset.sign_upload",
     "asset.sign_download",
+    "asset.view",
+    "asset.preview",
+    "asset.replace",
     "entitlement.read_own",
     "delivery.read",
     "delivery.read_finance",
@@ -89,6 +99,9 @@ const ACCOUNT_PERMISSIONS: Record<AccountType, readonly Permission[]> = {
     "service.order_create",
     "asset.sign_upload",
     "asset.sign_download",
+    "asset.view",
+    "asset.preview",
+    "asset.replace",
     "entitlement.read_own",
     "delivery.read",
     "delivery.read_finance",
@@ -98,6 +111,8 @@ const ACCOUNT_PERMISSIONS: Record<AccountType, readonly Permission[]> = {
     "payment.create_order",
     "entitlement.read_own",
     "asset.sign_download",
+    "asset.view",
+    "asset.preview",
   ],
   investor: [
     "entitlement.read_own",
