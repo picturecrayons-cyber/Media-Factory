@@ -208,6 +208,7 @@ export const createTitle = createServerFn({ method: "POST" })
       data.windowStart && data.windowEnd && data.exclusivity && data.rightsBasis &&
       data.authorizationAttested === true && data.intendedDestinations?.length,
     );
+    const isPublicSubmission = !actor.internalRole && hasCompleteRightsScope;
     if (hasRightsScope && !hasCompleteRightsScope) {
       throw new Error("Complete the rights package and authorization attestation before submitting");
     }
