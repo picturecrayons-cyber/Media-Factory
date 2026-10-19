@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { listTitles } from "@/lib/bridge/titles";
@@ -23,6 +23,16 @@ const LABELS: Record<VendorJobType, string> = {
   dcp_request: "DCP package request",
   human_qc: "Human QC",
 };
+
+function normalizeTitleName(value: string): string {
+  return value
+    .normalize("NFKD")
+    .replace(/[\\u0300-\\u036f]/g, "")
+    .toLocaleLowerCase()
+    .replace(/[^\\p{L}\\p{N}]+/gu, " ")
+    .trim()
+    .replace(/\\s+/g, " ");
+}
 
 function Deliveries() {
   return (
@@ -119,6 +129,54 @@ function VendorJobs({ actor }: { actor: Actor }) {
   );
 }
 
+function HumanQcStandard() {
+  return (
+    <section className="mb-6 rounded-2xl border border-line bg-surface p-5 sm:p-6" aria-labelledby="human-qc-standard">
+      <h2 id="human-qc-standard" className="font-display text-xl font-semibold">Human QC standard</h2>
+      <p className="mt-1 text-sm text-muted">
+        Human inspection is mandatory where specified. A request is not a pass, payment is not approval, and no master or delivery is auto-certified.
+      </p>
+      <div className="mt-4 grid gap-4 md:grid-cols-2">
+        <div className="rounded-xl border border-line p-4">
+          <h3 className="text-sm font-semibold">Reviewer qualification</h3>
+          <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-muted">
+            <li>Assign a reviewer competent for the asset and requested service (picture, sound, subtitles, packaging, or metadata).</li>
+            <li>Use current inspection guidance and reference examples; calibrate reviewers periodically against shared examples.</li>
+            <li>Escalate outside-scope, ambiguous, or untestable items instead of guessing.</li>
+          </ul>
+        </div>
+        <div className="rounded-xl border border-line p-4">
+          <h3 className="text-sm font-semibold">Inspection and acceptance</h3>
+          <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-muted">
+            <li>Inspect 100% of required delivery-critical checks; sampling is allowed only when the approved service specification explicitly defines it.</li>
+            <li>Record pass, fail, or blocked for each applicable check, with timecode/file reference and a defect code for failures.</li>
+            <li>Verify file identity, duration, audio layout/loudness where applicable, subtitle sync/readability, technical package integrity, and requested delivery specs.</li>
+          </ul>
+        </div>
+        <div className="rounded-xl border border-line p-4">
+          <h3 className="text-sm font-semibold">Severity and escalation</h3>
+          <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-muted">
+            <li><strong>Critical:</strong> wrong asset, corruption, missing/replaced content, rights/security concern, or a delivery-blocking defect. Stop delivery and require a second independent reviewer.</li>
+            <li><strong>Major:</strong> spec failure or material picture, sound, subtitle, or package defect. Reject or return for correction and re-inspection.</li>
+            <li><strong>Minor:</strong> non-blocking issue documented for disposition. Do not silently waive contractual requirements.</li>
+          </ul>
+        </div>
+        <div className="rounded-xl border border-line p-4">
+          <h3 className="text-sm font-semibold">Traceability and reviewer care</h3>
+          <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-muted">
+            <li>Capture reviewer identity, timestamp, asset/version, checklist outcome, defect severity, rationale, and correction/retest result in the approved audit record.</li>
+            <li>Use independent blind review for critical findings and resolve disagreements through a designated lead.</li>
+            <li>Take regular breaks, rotate high-focus tasks, and recalibrate when reviewer agreement falls below the team's approved threshold.</li>
+          </ul>
+        </div>
+      </div>
+      <p className="mt-4 text-xs text-muted">
+        This panel is the operational standard, not a persisted QC checklist or sign-off record. The title's approved workflow/audit trail remains authoritative; delivery stays blocked until required sign-off exists.
+      </p>
+    </section>
+  );
+}
+
 function DeliveryList() {
   const q = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles() });
   const titles = q.data?.titles ?? [];
@@ -130,6 +188,30 @@ function DeliveryList() {
       <p className="mt-1 text-sm text-muted">
         Open a title to review its canonical Delivery workspace. No rights or fulfilment rules are changed here.
       </p>
+      {duplicateGroups.length ? (
+        <section className="mb-5 rounded-xl border border-line p-4" aria-labelledby="duplicate-title-review">
+          <h3 id="duplicate-title-review" className="text-sm font-semibold">Possible duplicate titles · human review required</h3>
+          <p className="mt-1 text-xs text-muted">
+            Grouped by normalized title name, language, and year. These are review candidates only; no records have been merged or changed.
+          </p>
+          <ul className="mt-3 space-y-3">
+            {duplicateGroups.map((group) => (
+              <li key={group.key} className="rounded-lg border border-line p-3">
+                <p className="text-sm font-semibold">{group.normalizedName}</p>
+                <ul className="mt-2 space-y-2">
+                  {group.titles.map((t) => (
+                    <li key={t.id} className="flex flex-wrap items-center justify-between gap-2 text-sm">
+                      <span>{t.name} <span className="text-xs text-muted">· {t.language}{t.year ? ` · ${t.year}` : ""} · ID {t.id}</span></span>
+                      <Link to="/title/$id" params={{ id: t.id }} className="rounded-lg border border-line px-3 py-1 text-xs font-semibold">Compare record</Link>
+                    </li>
+                  ))}
+                </ul>
+                <p className="mt-2 text-xs text-muted">Before any future merge: confirm canonical identity, ownership, rights/contracts, asset versions, delivery history, and linked references; obtain authorized sign-off and preserve an auditable redirect/history.</p>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
       <div className="mt-5 divide-y divide-line rounded-xl border border-line">
         {titles.map((t) => (
           <Link
