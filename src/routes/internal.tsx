@@ -421,7 +421,7 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
             </label>
 
           </div>
-          <p className="text-xs text-muted">Territory, language and dates must match the active rights grant. Approved revenue shares are read from the grant and cannot be overridden here.</p>
+          <p className="text-xs text-muted">Loop preflight currently requires WORLDWIDE territory, TVOD, and explicit start/end dates. Enter WORLDWIDE only if the active signed rights grant covers it; other territories remain blocked by current policy. Territory, language, and dates must match the grant. Approved revenue shares are read from the grant and cannot be overridden here.</p>
 
           <div className="flex items-center gap-3 pt-2">
             <Button
