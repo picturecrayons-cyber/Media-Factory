@@ -134,39 +134,44 @@ function Onboarding() {
   // Keep checkbox handlers stable so memoized groups that did not change do not
   // rebuild their option grids on every unrelated keystroke.
   const toggleAdditionalLanguages = useCallback((value: string, checked: boolean) => {
-    setAdditionalLanguages((current) =>
-      checked
-        ? current.includes(value) ? current : [...current, value]
-        : current.filter((item) => item !== value),
-    );
+    setAdditionalLanguages((current) => {
+      if (checked) {
+        return current.includes(value) ? current : [...current, value];
+      }
+      return current.filter((item) => item !== value);
+    });
   }, []);
   const toggleTerritories = useCallback((value: string, checked: boolean) => {
-    setTerritories((current) =>
-      checked
-        ? current.includes(value) ? current : [...current, value]
-        : current.filter((item) => item !== value),
-    );
+    setTerritories((current) => {
+      if (checked) {
+        return current.includes(value) ? current : [...current, value];
+      }
+      return current.filter((item) => item !== value);
+    });
   }, []);
   const toggleRightsLanguages = useCallback((value: string, checked: boolean) => {
-    setRightsLanguages((current) =>
-      checked
-        ? current.includes(value) ? current : [...current, value]
-        : current.filter((item) => item !== value),
-    );
+    setRightsLanguages((current) => {
+      if (checked) {
+        return current.includes(value) ? current : [...current, value];
+      }
+      return current.filter((item) => item !== value);
+    });
   }, []);
   const toggleMedia = useCallback((value: string, checked: boolean) => {
-    setMedia((current) =>
-      checked
-        ? current.includes(value) ? current : [...current, value]
-        : current.filter((item) => item !== value),
-    );
+    setMedia((current) => {
+      if (checked) {
+        return current.includes(value) ? current : [...current, value];
+      }
+      return current.filter((item) => item !== value);
+    });
   }, []);
   const toggleDestinations = useCallback((value: string, checked: boolean) => {
-    setDestinations((current) =>
-      checked
-        ? current.includes(value) ? current : [...current, value]
-        : current.filter((item) => item !== value),
-    );
+    setDestinations((current) => {
+      if (checked) {
+        return current.includes(value) ? current : [...current, value];
+      }
+      return current.filter((item) => item !== value);
+    });
   }, []);
 
   const home = sessionQ.data?.profile ? sessionQ.data.home : null;
