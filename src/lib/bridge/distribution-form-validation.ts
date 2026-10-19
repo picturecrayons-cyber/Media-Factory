@@ -10,7 +10,8 @@ export function validateDistributionForm(input: DistributionFormInput): string[]
   const territories = input.territories.split(",").map((value) => value.trim()).filter(Boolean);
   const languages = input.languages.split(",").map((value) => value.trim()).filter(Boolean);
 
-  if (territories.length !== 1 || territories[0].toUpperCase() !== "WORLDWIDE") {
+  // Match the server preflight exactly: accepted territory must be uppercase WORLDWIDE.
+  if (territories.length !== 1 || territories[0] !== "WORLDWIDE") {
     errors.push("Current Crayons Loop preflight requires exactly WORLDWIDE territory. Confirm the signed rights grant covers it; do not use this value unless authorized.");
   }
   if (languages.length === 0) {
