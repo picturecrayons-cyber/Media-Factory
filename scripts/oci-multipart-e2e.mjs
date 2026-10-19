@@ -20,7 +20,7 @@ let sourceCommitted = false;
 let sealedCreated = false;
 
 try {
-  const upload = await initiateMultipartUpload({ key, expiresIn: 900 });
+  const upload = await initiateMultipartUpload({ key, contentType: "application/octet-stream", expiresIn: 900 });
   accessUri = upload.accessUri;
   const etags = [];
   for (const [index, part] of [
