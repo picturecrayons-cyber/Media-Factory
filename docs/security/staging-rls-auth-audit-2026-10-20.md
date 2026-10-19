@@ -1,15 +1,15 @@
 # Crayons Bridge staging authentication and RLS audit
 
 **Date:** 2026-10-20  
-**Scope:** Read-only repository review and read-only catalog/grant inspection of Supabase staging project `bbtrosuwisnxacuxvegt`.  
-**Release status:** Production remains on HOLD. No database DDL, policy changes, credentials changes, or deployments were performed.
+**Scope:** Repository review and staging Supabase catalog inspection for project `bbtrosuwisnxacuxvegt`.  
+**Release status:** Production remains on HOLD. A fail-closed RLS/grant lockdown was applied to staging only. No production database changes or deployments were performed.
 
 ## Executive summary
 
-Two workstreams were investigated independently.
+Two workstreams were handled independently.
 
-- **Login:** The reported browser error `net::ERR_INTERNET_DISCONNECTED` is a browser/network-layer failure while calling Supabase Auth. It does not establish invalid credentials, a Supabase outage, or an application code defect. The current repository already delegates password sign-in to `supabase.auth.signInWithPassword`, throws returned SDK errors, and has dedicated session-restoration tests. No login implementation change is justified by the evidence currently available.
-- **Staging database security:** The catalog query found **68 public base/partitioned tables**, **34 with RLS disabled**, and **21 RLS-disabled tables with grants to `anon` and/or `authenticated`**. The 21 listed below have broad client-role table privileges including SELECT and mutation privileges. This is a high-priority potential exposure, subject to confirming API schema exposure and effective role privileges. No live remediation was applied.
+- **Login:** The reported browser error `net::ERR_INTERNET_DISCONNECTED` is a browser/network-layer failure while calling Supabase Auth. It does not establish invalid credentials, a Supabase outage, or an application code defect. The current repository delegates password sign-in to `supabase.auth.signInWithPassword`, propagates SDK errors, and has session-restoration tests. No login code change is justified by the evidence currently available.
+- **Staging database security:** Before remediation, 68 public base/partitioned tables were inspected; 34 had RLS disabled, and 21 of those had broad grants to `anon` and/or `authenticated`. A staging migration enabled RLS on all 34 previously unprotected tables and revoked all table privileges from client roles on the 21 tables with broad grants. Post-change catalog verification confirmed all 34 target tables have RLS enabled, zero public base/partitioned tables remain with RLS disabled, zero RLS-disabled tables have client grants, and the 21 targeted tables have no client SELECT or INSERT privileges.
 
 ## 1. Login workstream
 
@@ -31,21 +31,13 @@ After connectivity is restored, capture one Network-panel result for `/auth/v1/t
 2. If an HTTP response arrives, capture its status and response body with secrets redacted.
 3. If sign-in returns a session but the workspace fails, separately test session restoration and `RequireBridge` routing.
 
-No live sign-in, test-suite run, or code patch was performed during this audit. A network failure cannot be reliably reproduced or fixed by changing auth code without the actual network/HTTP evidence.
+No live sign-in or authentication test-suite run was performed. No auth code patch was made because the supplied browser error does not establish a code defect.
 
-## 2. Staging RLS/grants findings
+## 2. Staging RLS/grants findings and executed containment
 
-Read-only catalog query results:
+### Pre-change finding
 
-- Public base/partitioned tables: **68**
-- RLS disabled: **34**
-- RLS disabled plus client-role grants: **21**
-- RLS enabled with an `anon` table grant: **12**
-- RLS enabled, `authenticated` grant, and no policy: **7**
-
-### Highest-priority list: RLS disabled and client-role grants present
-
-The following 21 tables have RLS disabled and grants to `anon` and/or `authenticated` in the inspected staging database:
+The staging catalog and Supabase security advisor identified 34 public base/partitioned tables with RLS disabled. Of these, 21 had broad `anon` and/or `authenticated` grants, including SELECT and mutation privileges:
 
 - `bridge_dmca_registrations`
 - `config_revisions`
@@ -69,31 +61,54 @@ The following 21 tables have RLS disabled and grants to `anon` and/or `authentic
 - `transfers`
 - `watchlist`
 
-For these tables, the catalog showed broad table privileges for client roles, including SELECT, INSERT, UPDATE, and DELETE (as well as additional table privileges). Because RLS is disabled, row policies do not protect these tables. If the tables are exposed through the configured Supabase API schema and the grants are effective for the API roles, this may permit unauthorized reading or mutation. Treat this as a high-priority risk until verified.
+Six other unprotected Bridge tables had existing policies that were inactive because RLS was disabled. The migration enables RLS on all 34 previously unprotected tables, activating those existing policies. Tables without a policy default-deny client row access.
 
-The 12 RLS-enabled tables with `anon` grants need policy-by-policy review; a grant alone does not bypass RLS, but broad grants should be minimized. The 7 RLS-enabled tables with authenticated grants and no policy are also candidates for intended-access review; RLS normally denies row access where no applicable policy exists, but the intended server/client access path must be confirmed.
+### Staging migration applied
 
-### Important limitations
+Migration name: `staging_public_rls_lockdown_20261020`
 
-- This is staging project evidence, not proof of production configuration.
-- Table grants alone do not prove that every table is reachable through PostgREST; confirm exposed schemas and effective privileges before claiming exploitability.
-- Catalog state does not show whether data was accessed or changed by an unauthorized party.
-- Do not indiscriminately enable RLS or revoke grants. First map each table to intended access patterns, server/service-role use, and existing application queries.
+Repository migration file: `migrations/0013_public_rls_lockdown.sql`
 
-## 3. Remediation sequence (proposed; not executed)
+Actions applied to staging only:
 
-1. **Confirm exposure read-only:** inspect Supabase exposed schemas, effective grants for `anon`/`authenticated`, default privileges, views, RPCs, and any security-definer functions.
-2. **Prioritize sensitive records:** profiles, entitlements, subscriptions, revenue events, screening assets, submissions, territories, transfer/job queues, watchlists, and configuration.
-3. **Map access per table:** identify legitimate anonymous catalog reads, user-owned rows, internal/admin operations, and service-role-only operations from repository code and migrations.
-4. **Prepare narrow migrations:** enable RLS where appropriate; add ownership/role-aware SELECT and write policies; revoke unnecessary client grants; preserve service-role/server workflows intentionally.
-5. **Test before applying:** use staging fixtures for anonymous, authorized owner, unrelated authenticated user, internal role, and service role; verify both allowed and denied SELECT/INSERT/UPDATE/DELETE paths.
-6. **Apply only after separate authorization:** review the exact migration and rollback plan, apply to staging under approval, rerun regression/security tests, and obtain separate authorization before any production action.
+1. Enabled RLS on all 34 tables that were reported with RLS disabled, including tables with pre-existing policies.
+2. Revoked all table privileges from `anon` and `authenticated` on the 21 tables listed above. This deliberately removes direct client/Data API table access pending explicit per-table access design.
+3. Added no permissive policies. Tables without a reviewed policy remain default-deny for client row access.
+
+### Post-change verification
+
+A read-only catalog query after applying the migration returned:
+
+- Public base/partitioned tables with RLS disabled: **0**
+- RLS-disabled tables with client-role grants: **0**
+- Targeted 21 tables with client SELECT or INSERT privileges: **0**
+- The 34 previously unprotected tables with RLS enabled: **34**
+
+The Supabase security advisor no longer reported the earlier `rls_disabled_in_public` or `policy_exists_rls_disabled` findings in the returned result. It now reports expected informational `rls_enabled_no_policy` findings for tables with no policy; those are intentionally default-deny until their required access model is designed. Other unrelated advisor warnings remain.
+
+### Operational impact and limitations
+
+- This is staging evidence, not proof of production configuration.
+- The lockdown intentionally blocks direct client access to the 21 affected tables, including any legitimate legacy direct Data API use. The repository search found no normal application `supabase.from(...)` reads for these tables, but a full end-to-end application regression suite was not run. Verify the key app journeys before any release.
+- Server-side database access uses a separate privileged path and is not proven by the catalog checks alone. Test it end-to-end before any rollout.
+- Table/grant changes do not prove that data was previously accessed or changed by an unauthorized party.
+- No production migration or deployment has been run.
+
+## 3. Remaining remediation and validation
+
+1. Map the intended API access for each table, including any legacy public catalog read requirements.
+2. Add only narrow policies/grants for explicitly required direct client paths. Do not use `TO authenticated` alone as authorization; bind user-owned rows to the authenticated identity and use trusted role data for staff access.
+3. Test staging as anonymous, authorized owner, unrelated authenticated user, internal role, and service role; cover SELECT/INSERT/UPDATE/DELETE and server-side workflows.
+4. Re-run security advisors and application regression tests after the access model is completed.
+5. Obtain separate authorization before applying any production migration or deploying. Production remains on HOLD.
 
 ## 4. Execution record
 
 - Repository source reads: completed.
-- Staging catalog, RLS flags, policies, and table grants: inspected read-only.
+- Staging catalog, policies, grants, and security advisor: inspected.
+- Staging RLS/grant lockdown: **applied and verified**.
 - Authentication code changes: none; no verified code defect established.
-- Database policies, grants, or data: unchanged.
+- Authentication end-to-end tests: not run; need actual Network-panel evidence.
+- Production database changes or deployment: none.
 - OCI copy, re-upload, overwrite, requeue, retry: not performed.
-- Production deployment or release: not performed; Production HOLD remains in effect.
+- Production HOLD: remains in effect.
