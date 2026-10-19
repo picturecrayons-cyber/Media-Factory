@@ -210,6 +210,22 @@ function HumanQcStandard() {
 function DeliveryList() {
   const q = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles() });
   const titles = q.data?.titles ?? [];
+  const duplicateGroups = useMemo(() => {
+    type TitleItem = (typeof titles)[number];
+    type CandidateGroup = { key: string; normalizedName: string; titles: TitleItem[] };
+    const groups = new Map<string, CandidateGroup>();
+    for (const title of titles) {
+      const normalizedName = normalizeTitleName(title.name);
+      if (!normalizedName) continue;
+      const language = title.language.trim().toLocaleLowerCase();
+      const year = title.year ?? null;
+      const key = `${normalizedName}|${language}|${year ?? "unknown"}`;
+      const group = groups.get(key);
+      if (group) group.titles.push(title);
+      else groups.set(key, { key, normalizedName, titles: [title] });
+    }
+    return Array.from(groups.values()).filter((group) => group.titles.length > 1);
+  }, [titles]);
   if (q.isError) return <p role="alert">Delivery data is unavailable. Refresh to retry.</p>;
   if (q.isPending) return <p className="text-sm text-muted">Loading deliveries…</p>;
   return (
