@@ -412,3 +412,46 @@ export async function ingestRazorpayWebhook(rawBody: string, signature: string |
     throw error;
   }
 }
+
+
+/** Finance dashboard uses recorded settlement ledger values, never asking prices as revenue. */
+export const getDashboardFinanceSummary = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    if (actor.internalRole !== "super_admin") throw new Error("Super admin access required");
+    assertPermission(actor, "finance.read");
+    const sql = await getSql();
+    const [row] = await sql<{
+      revenue_received_paise: string | number;
+      creator_payable_settled_paise: string | number;
+      investor_payable_settled_paise: string | number;
+      bridge_share_settled_paise: string | number;
+      settled_count: string | number;
+      pending_count: string | number;
+      on_hold_count: string | number;
+      currency_count: string | number;
+    }>`
+      select
+        coalesce(sum(case when status in ('PARTIAL','SETTLED') then revenue_received_paise else 0 end),0)::bigint as revenue_received_paise,
+        coalesce(sum(case when status='SETTLED' then creator_payable_paise else 0 end),0)::bigint as creator_payable_settled_paise,
+        coalesce(sum(case when status='SETTLED' then investor_payable_paise else 0 end),0)::bigint as investor_payable_settled_paise,
+        coalesce(sum(case when status='SETTLED' then bridge_share_paise else 0 end),0)::bigint as bridge_share_settled_paise,
+        count(*) filter (where status='SETTLED')::int as settled_count,
+        count(*) filter (where status='PENDING')::int as pending_count,
+        count(*) filter (where status='ON_HOLD')::int as on_hold_count,
+        count(distinct currency) filter (where status in ('PARTIAL','SETTLED'))::int as currency_count
+      from bridge_title_settlements
+    `;
+    return {
+      revenueReceivedPaise: String(row?.revenue_received_paise ?? "0"),
+      creatorPayableSettledPaise: String(row?.creator_payable_settled_paise ?? "0"),
+      investorPayableSettledPaise: String(row?.investor_payable_settled_paise ?? "0"),
+      bridgeShareSettledPaise: String(row?.bridge_share_settled_paise ?? "0"),
+      settledCount: Number(row?.settled_count ?? 0),
+      pendingCount: Number(row?.pending_count ?? 0),
+      onHoldCount: Number(row?.on_hold_count ?? 0),
+      currencyCount: Number(row?.currency_count ?? 0),
+    };
+  });
