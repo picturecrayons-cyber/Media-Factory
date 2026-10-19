@@ -250,19 +250,18 @@ export const transitionPersistentVendorJob = createServerFn({ method: "POST" })
         throw new Error("An independent reviewer must sign off; requester/title owner cannot approve");
       }
     }
-    const rows = (data.action === "approve" || data.action === "reject")
-      ? await sql<{ id: string; status: string }>`update streamvista_jobs set status=${transition.to},
-          reviewer_user_id=${actor.userId},reviewed_at=now()
-        where id=${job.id} and status=${transition.from} returning id,status`
-      : await sql<{ id: string; status: string }>`update streamvista_jobs set status=${transition.to}
-        where id=${job.id} and status=${transition.from} returning id,status`;
-    if (!rows[0]) throw new Error("Job changed concurrently; refresh and retry");
-    await writeAudit({
-      actorUserId: actor.userId,
-      action: `vendor.job.${data.action}`,
-      entityType: "vendor_job",
-      entityId: job.id,
-      metadata: { type, orderId: job.order_id, status: rows[0].status, note: data.note ?? null },
+    const updated = await sql.transaction(async (tx) => {
+      const rows = (data.action === "approve" || data.action === "reject")
+        ? await tx<{ id: string; status: string }>`update streamvista_jobs set status=${transition.to},
+            reviewer_user_id=${actor.userId},reviewed_at=now()
+          where id=${job.id} and status=${transition.from} returning id,status`
+        : await tx<{ id: string; status: string }>`update streamvista_jobs set status=${transition.to}
+          where id=${job.id} and status=${transition.from} returning id,status`;
+      if (!rows[0]) throw new Error("Job changed concurrently; refresh and retry");
+      await tx`insert into bridge_audit_logs (actor_user_id,action,entity_type,entity_id,metadata)
+        values (${actor.userId},${`vendor.job.${data.action}`},'vendor_job',${job.id},
+          ${JSON.stringify({ type, orderId: job.order_id, status: rows[0].status, note: data.note ?? null })}::jsonb)`;
+      return rows[0];
     });
-    return { id: rows[0].id, status: rows[0].status, canDeliver: rows[0].status === "passed" };
+    return { id: updated.id, status: updated.status, canDeliver: updated.status === "passed" };
   });
