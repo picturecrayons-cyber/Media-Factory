@@ -274,3 +274,53 @@ export function titleAssetKey(opts: { ownerUserId: string; titleId: string; kind
   const safe = opts.filename.replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 80);
   return `bridge/${opts.ownerUserId}/${opts.titleId}/${opts.kind}/${Date.now()}-${safe}`;
 }
+
+
+/**
+ * Start a real OCI multipart upload through an object-scoped write PAR.
+ * The returned access URI is a short-lived bearer capability and must never be logged.
+ */
+export async function initiateMultipartUpload(opts: {
+  key: string;
+  expiresIn?: number;
+}) {
+  const signed = await createPar({
+    key: opts.key,
+    accessType: "ObjectWrite",
+    expiresIn: opts.expiresIn ?? 900,
+  });
+  const response = await fetch(signed.url, {
+    method: "PUT",
+    headers: { "opc-multipart": "true" },
+  });
+  if (!response.ok) {
+    throw new Error(`OCI multipart initiation failed (${response.status})`);
+  }
+  const payload = (await response.json()) as {
+    uploadId?: string;
+    accessUri?: string;
+    object?: string;
+    bucket?: string;
+    namespace?: string;
+  };
+  if (!payload.uploadId || !payload.accessUri) {
+    throw new Error("OCI multipart initiation returned an incomplete response");
+  }
+  const accessUrl = new URL(payload.accessUri, endpoint(new URL(signed.url).hostname.split(".")[1] || ""));
+  // Keep the capability URL bound to the configured OCI region; don't trust the response host.
+  const cfg = config();
+  const canonicalAccessUrl = new URL(payload.accessUri, endpoint(cfg.region));
+  if (canonicalAccessUrl.origin !== endpoint(cfg.region)) {
+    throw new Error("OCI multipart access URI has an unexpected origin");
+  }
+  return {
+    accessUri: canonicalAccessUrl.toString().endsWith("/")
+      ? canonicalAccessUrl.toString()
+      : `${canonicalAccessUrl.toString()}/`,
+    uploadId: payload.uploadId,
+    key: opts.key,
+    bucket: signed.bucket,
+    namespace: signed.namespace,
+    expiresIn: opts.expiresIn ?? 900,
+  };
+}
