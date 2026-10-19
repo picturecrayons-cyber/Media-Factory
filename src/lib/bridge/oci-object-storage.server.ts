@@ -282,6 +282,7 @@ export function titleAssetKey(opts: { ownerUserId: string; titleId: string; kind
  */
 export async function initiateMultipartUpload(opts: {
   key: string;
+  contentType?: string;
   expiresIn?: number;
 }) {
   const signed = await createPar({
@@ -291,7 +292,10 @@ export async function initiateMultipartUpload(opts: {
   });
   const response = await fetch(signed.url, {
     method: "PUT",
-    headers: { "opc-multipart": "true" },
+    headers: {
+      "opc-multipart": "true",
+      ...(opts.contentType ? { "content-type": opts.contentType } : {}),
+    },
   });
   if (!response.ok) {
     throw new Error(`OCI multipart initiation failed (${response.status})`);
