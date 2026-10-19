@@ -374,6 +374,7 @@ function FilesPanel({
     setUploadProgress({ kind, loaded: 0, total: file.size, percent: 0, stage: "preparing" });
     setMessage(`Preparing ${kind} upload…`);
     let signedAssetId: string | null = null;
+    let multipartAccessUrl: URL | null = null;
     try {
       const signed = await requestAssetUpload({
         data: {
@@ -388,36 +389,100 @@ function FilesPanel({
       uploadUrl.pathname = uploadUrl.pathname.split("/").map((part) => encodeURIComponent(decodeURIComponent(part))).join("/");
       setMessage(`Uploading ${kind}…`);
       setUploadProgress({ kind, loaded: 0, total: file.size, percent: null, stage: "uploading" });
-      await new Promise<void>((resolve, reject) => {
+      const sendUploadRequest = (
+        url: string,
+        method: string,
+        body: Blob | null,
+        headers: Record<string, string>,
+        onProgress?: (loaded: number) => void,
+      ) => new Promise<string>((resolve, reject) => {
         const request = new XMLHttpRequest();
         activeUploadRequest.current = request;
-        request.open(signed.method, uploadUrl.toString());
-        // The signed OCI upload URL expires after 15 minutes. Bound the browser wait
-        // so a stalled transfer becomes an explicit unknown outcome instead of hanging.
+        request.open(method, url);
+        // Bound each request, not the entire large-file transfer. Multipart parts
+        // can continue for longer than a single 10-minute browser request.
         request.timeout = 10 * 60 * 1000;
-        request.setRequestHeader("content-type", contentType);
-        request.upload.onprogress = (event) => {
-          const total = event.lengthComputable ? event.total : file.size;
-          const loaded = Math.min(event.loaded, total);
-          setUploadProgress({
-            kind,
-            loaded,
-            total,
-            percent: event.lengthComputable && total > 0
-              ? Math.min(100, Math.round((loaded / total) * 100))
-              : null,
-            stage: "uploading",
-          });
-        };
+        for (const [name, value] of Object.entries(headers)) request.setRequestHeader(name, value);
+        request.upload.onprogress = (event) => onProgress?.(event.loaded);
         request.onload = () => {
-          if (request.status >= 200 && request.status < 300) resolve();
+          if (request.status >= 200 && request.status < 300) resolve(request.responseText);
           else reject(new Error(`Upload failed (${request.status})`));
         };
         request.onerror = () => reject(new Error("Upload connection failed; storage outcome is unknown. Refresh the asset list and retry verification before uploading again."));
         request.ontimeout = () => reject(new Error("Upload timed out; storage outcome is unknown. Refresh the asset list and retry verification before uploading again."));
         request.onabort = () => reject(new Error("Upload was cancelled; refresh the asset list before retrying verification."));
-        request.send(file);
+        request.send(body);
       });
+
+      const multipartThreshold = 100 * 1024 * 1024;
+      if (file.size > multipartThreshold) {
+        // OCI recommends multipart for large objects. A failed part can be retried
+        // without retransmitting the entire master file.
+        const responseText = await sendUploadRequest(
+          uploadUrl.toString(),
+          "PUT",
+          null,
+          { "content-type": contentType, "opc-multipart": "true" },
+        );
+        let multipart: { accessUri?: string };
+        try {
+          multipart = JSON.parse(responseText) as { accessUri?: string };
+        } catch {
+          throw new Error("Storage did not return a valid multipart upload response.");
+        }
+        if (!multipart.accessUri) throw new Error("Storage did not return a multipart upload URL.");
+        multipartAccessUrl = new URL(multipart.accessUri, uploadUrl.origin);
+        const partSize = 256 * 1024 * 1024;
+        let uploadedBytes = 0;
+        for (let offset = 0; offset < file.size; offset += partSize) {
+          const partNumber = Math.floor(offset / partSize) + 1;
+          const part = file.slice(offset, Math.min(offset + partSize, file.size));
+          const partUrl = new URL(String(partNumber), multipartAccessUrl).toString();
+          let lastError: unknown = null;
+          for (let attempt = 0; attempt < 3; attempt += 1) {
+            try {
+              await sendUploadRequest(partUrl, "PUT", part, { "content-type": contentType }, (loaded) => {
+                const totalLoaded = Math.min(uploadedBytes + loaded, file.size);
+                setUploadProgress({
+                  kind,
+                  loaded: totalLoaded,
+                  total: file.size,
+                  percent: Math.min(100, Math.round((totalLoaded / file.size) * 100)),
+                  stage: "uploading",
+                });
+              });
+              lastError = null;
+              break;
+            } catch (error) {
+              lastError = error;
+              if (error instanceof Error && error.message.startsWith("Upload was cancelled")) throw error;
+            }
+          }
+          if (lastError) {
+            throw new Error(`Upload part ${partNumber} failed after 3 attempts: ${lastError instanceof Error ? lastError.message : "Upload failed"}`);
+          }
+          uploadedBytes += part.size;
+          setUploadProgress({
+            kind,
+            loaded: uploadedBytes,
+            total: file.size,
+            percent: Math.min(100, Math.round((uploadedBytes / file.size) * 100)),
+            stage: "uploading",
+          });
+        }
+        await sendUploadRequest(multipartAccessUrl.toString(), "POST", null, {});
+        multipartAccessUrl = null;
+      } else {
+        await sendUploadRequest(uploadUrl.toString(), signed.method, file, { "content-type": contentType }, (loaded) => {
+          setUploadProgress({
+            kind,
+            loaded: Math.min(loaded, file.size),
+            total: file.size,
+            percent: Math.min(100, Math.round((Math.min(loaded, file.size) / file.size) * 100)),
+            stage: "uploading",
+          });
+        });
+      }
       setMessage("Upload sent. Verifying storage…");
       setUploadProgress((current) => current ? { ...current, percent: 100, loaded: file.size, stage: "verifying" } : current);
       const confirmation = await confirmAssetUpload({
@@ -428,6 +493,16 @@ function FilesPanel({
       setUploadProgress((current) => current ? { ...current, stage: "complete" } : current);
       setMessage(`${kind[0].toUpperCase() + kind.slice(1)} uploaded and storage-verified.`);
     } catch (error) {
+      if (multipartAccessUrl) {
+        // Best-effort cleanup avoids leaving abandoned multipart parts behind.
+        try {
+          const abortRequest = new XMLHttpRequest();
+          abortRequest.open("DELETE", multipartAccessUrl.toString());
+          abortRequest.send();
+        } catch {
+          // Preserve the original upload error.
+        }
+      }
       const raw = error instanceof Error ? error.message : "Upload failed";
       // A failed client request does not prove that storage rejected the object or
       // that server-side verification did not finish. Refresh the persisted state;
@@ -518,7 +593,8 @@ function FilesPanel({
                   : empty
             }
             busy={uploading === kind}
-            canUpload={canUpload && uploading === null}
+            uploadInProgress={uploading !== null}
+            canUpload={canUpload}
             onFile={(file) => void uploadFile(kind, file)}
           />
         ))}
@@ -625,6 +701,7 @@ function FileTypeCard({
   label,
   status,
   busy,
+  uploadInProgress,
   onFile,
   canUpload,
 }: {
@@ -633,6 +710,7 @@ function FileTypeCard({
   label: string;
   status: string;
   busy: boolean;
+  uploadInProgress: boolean;
   onFile: (file: File) => void;
 }) {
   const spec = OTT_INGEST_SPEC[kind];
@@ -646,13 +724,17 @@ function FileTypeCard({
             Allowed: {spec.extensions.map((ext) => ext.replace(".", "").toUpperCase()).join(", ")}
           </p>
         </div>
-        <label className="cursor-pointer rounded-full border border-line px-3 py-1.5 text-xs font-semibold">
-          {busy ? "Uploading…" : status === "Ready" ? "Replace" : "Upload"}
+        <label
+          aria-disabled={busy || uploadInProgress || !canUpload}
+          title={!canUpload ? "Uploads are unavailable for this role or title status." : uploadInProgress && !busy ? "Another upload is in progress." : undefined}
+          className={`rounded-full border border-line px-3 py-1.5 text-xs font-semibold ${busy || uploadInProgress || !canUpload ? "cursor-not-allowed opacity-50" : "cursor-pointer hover:bg-fg/5"}`}
+        >
+          {busy ? "Uploading…" : !canUpload ? "Unavailable" : uploadInProgress ? "Wait…" : status === "Ready" ? "Replace" : "Upload"}
           <input
             className="sr-only"
             type="file"
             accept={getOttIngestAccept(kind)}
-            disabled={busy || !canUpload}
+            disabled={busy || uploadInProgress || !canUpload}
             onChange={(e) => {
               const file = e.currentTarget.files?.[0];
               if (file) onFile(file);
