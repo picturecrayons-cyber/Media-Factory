@@ -18,7 +18,13 @@ export async function restoreSupabaseSession(
 
   // Let the SDK read the latest persisted token; never pass a captured
   // refresh token that could have rotated in another tab or auto-refresh.
-  const refreshed = await auth.refreshSession();
-  if (refreshed.error) return null;
-  return refreshed.data.session;
+  try {
+    const refreshed = await auth.refreshSession();
+    if (refreshed.error) return null;
+    return refreshed.data.session;
+  } catch {
+    // A transient network failure can reject instead of returning { error }.
+    // Do not fall back to the pre-refresh session: it may no longer be valid.
+    return null;
+  }
 }
