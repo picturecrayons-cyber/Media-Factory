@@ -11,6 +11,7 @@ import { writeAudit } from "./audit";
 import { assertNotDevUser } from "./guards";
 import { persistVerifiedAsset } from "./asset-confirmation";
 import { downloadDecision } from "./delivery-policy";
+import { canViewAsset } from "./asset-access-policy";
 import { validateOttIngestFile, type OttIngestKind } from "./ott-ingest-spec";
 
 const UPLOADABLE: ReadonlySet<string> = new Set(["DRAFT", "UPLOADING", "PREPARING"]);
@@ -217,6 +218,7 @@ export const listTitleAssets = createServerFn({ method: "GET" })
     if (!title || !canReadTitle(actor, title)) throw new Error("Not found");
     const sql = await getSql();
     const buyer = actor.accountType === "buyer" && !actor.internalRole;
+    const entitled = buyer ? await hasLicenseEntitlement(actor.userId, title.id) : false;
     const rows = await sql<{
       id: string;
       kind: string;
@@ -230,11 +232,11 @@ export const listTitleAssets = createServerFn({ method: "GET" })
     `;
     return {
       assets: rows
-        .filter((r) => !buyer || !["master", "technical", "censor_certificate"].includes(r.kind))
+        .filter((r) => canViewAsset(actor, title, r.kind, entitled))
         .map((r) => ({
           id: r.id,
           kind: r.kind,
-          key: buyer ? null : r.s3_key,
+          key: null,
           contentType: r.content_type,
           byteSize: r.byte_size,
           verified: Number(r.byte_size) > 0,
