@@ -112,7 +112,7 @@ test("OCI copy polling uses Object Storage and only verifies successful copies",
             : ["POST", "GET", "HEAD"]);
         } else {
           const message = outcome === "HTTP_ERROR"
-            ? /lookup failed \\(403\\)/
+            ? /lookup failed \(403\)/
             : outcome === "REQUEST_TIMEOUT"
               ? /work-request lookup timed out/
               : new RegExp(`copy ${outcome.toLowerCase()}`);
