@@ -407,7 +407,7 @@ function FilesPanel({
       let signed: Awaited<ReturnType<typeof requestAssetUpload>> | null = null;
       let uploadUrl: URL | null = null;
       if (!resumeRecord) {
-        signed = await requestAssetUpload({ data: { titleId, kind, filename, contentType } });
+        signed = await requestAssetUpload({ data: { titleId, kind, filename, contentType, fileSize: file.size } });
         signedAssetId = signed.assetId;
         uploadUrl = new URL(signed.url);
         uploadUrl.pathname = uploadUrl.pathname.split("/").map((part) => encodeURIComponent(decodeURIComponent(part))).join("/");
@@ -465,7 +465,7 @@ function FilesPanel({
             size: file.size,
             lastModified: file.lastModified,
             uploadedParts: [],
-            expiresAt: Date.now() + 14 * 60 * 1000,
+            expiresAt: Date.now() + 23 * 60 * 60 * 1000,
           };
           try { sessionStorage.setItem(resumeKey, JSON.stringify(resumeRecord)); } catch { /* resume is best effort */ }
         }
