@@ -57,7 +57,10 @@ function Forgot() {
             <label className="block text-sm font-medium text-fg">
               Email address
               <input
+                id="forgot-password-email"
+                name="email"
                 required
+                autoComplete="email"
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
