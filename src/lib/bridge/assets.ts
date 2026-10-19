@@ -10,7 +10,7 @@ import { loadTitle } from "./titles";
 import { writeAudit } from "./audit";
 import { assertNotDevUser } from "./guards";
 import { persistVerifiedAsset } from "./asset-confirmation";
-import { downloadDecision } from "./delivery-policy";
+import { canDownloadAsset, canViewAsset } from "./asset-access-policy";
 import { canViewAsset } from "./asset-access-policy";
 import { validateOttIngestFile, type OttIngestKind } from "./ott-ingest-spec";
 
@@ -181,22 +181,15 @@ export const requestAssetDownload = createServerFn({ method: "POST" })
     const title = await loadTitle(asset.title_id);
     if (!title || !canReadTitle(actor, title)) throw new Error("Not found");
     const entitled = await hasLicenseEntitlement(actor.userId, title.id);
-    const decision = downloadDecision({
-      kind: asset.kind,
-      actorIsOwner: title.ownerUserId === actor.userId,
-      actorIsInternal: Boolean(actor.internalRole),
-      accountType: actor.accountType,
-      hasLicenseEntitlement: entitled,
-    });
-    if (!decision.allow) {
+    if (!canDownloadAsset(actor, title, asset.kind, entitled)) {
       await writeAudit({
         actorUserId: actor.userId,
         action: "asset.download_denied",
         entityType: "bridge_asset",
         entityId: asset.id,
-        metadata: { reason: decision.reason, kind: asset.kind },
+        metadata: { reason: "Role or entitlement does not allow this asset download", kind: asset.kind },
       });
-      throw new Error(decision.reason);
+      throw new Error("Forbidden");
     }
     const { signDownload } = await import("./oci-object-storage.server");
     const signed = await signDownload({ key: asset.s3_key });
