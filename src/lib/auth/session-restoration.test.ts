@@ -104,6 +104,19 @@ test("expired refresh token cannot fall back to a stale authenticated session", 
   assert.equal(restored, null);
 });
 
+test("temporary network failure cannot fall back to a stale authenticated session", async () => {
+  const restored = await restoreSupabaseSession(
+    {
+      getSession: async () => result(confirmedSession),
+      refreshSession: async () => {
+        throw new TypeError("fetch failed");
+      },
+    },
+    { forceRefresh: true },
+  );
+  assert.equal(restored, null);
+});
+
 test("onboarding and workspace wait for restoration and scope cached profiles to identity", () => {
   for (const path of ["../../routes/onboarding.tsx", "../../components/bridge/gate.tsx"]) {
     const source = readFileSync(new URL(path, import.meta.url), "utf8");
