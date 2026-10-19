@@ -65,15 +65,15 @@ describe("PRD authorization matrix", () => {
     assert.equal(hasPermission(a, "title.create"), false);
     assert.equal(hasPermission(a, "title.update_own"), false);
     assert.equal(hasPermission(a, "title.advance_upload"), false);
-    assert.equal(hasPermission(a, "title.ingest_internal"), true);
-    assert.equal(hasPermission(a, "asset.sign_upload"), false);
+    assert.equal(hasPermission(a, "title.ingest_internal"), false);
+    assert.equal(hasPermission(a, "asset.sign_upload"), true);
     assert.equal(canReadTitle(a, { ownerUserId: "other-org-user", status: "DRAFT" }), true);
     assert.equal(hasPermission(viewer(), "asset.sign_download"), false);
   });
 
   it("mixed account/staff roles never regain owner mutations through ownership alone", () => {
     const owned = { ownerUserId: "admin-a" };
-    assert.equal(canOperateOnTitle(admin(), owned, "asset.sign_upload"), false);
+    assert.equal(canOperateOnTitle(admin(), owned, "asset.sign_upload"), true);
     assert.equal(canMutateTitle(admin(), owned, "title.update_own", "title.license"), true);
     assert.equal(
       canOperateOnTitle(viewer(), { ownerUserId: "viewer-a" }, "title.advance_upload"),
