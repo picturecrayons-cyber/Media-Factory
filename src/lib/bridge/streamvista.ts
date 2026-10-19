@@ -170,11 +170,11 @@ export const createPersistentVendorJob = createServerFn({ method: "POST" })
     const step = `vendor_${data.type}`;
     await sql.transaction(async (tx) => {
       await tx`insert into streamvista_orders (id,owner_user_id,service,lane,bridge_title_id)
-        values (${orderId},${title.owner_user_id},${vendorService[data.type]},"managed",${title.id})`;
+        values (${orderId},${title.owner_user_id},${vendorService[data.type]},'managed',${title.id})`;
       await tx`insert into streamvista_jobs (id,order_id,step,status)
-        values (${jobId},${orderId},${step},"queued")`;
+        values (${jobId},${orderId},${step},'queued')`;
       await tx`insert into bridge_audit_logs (actor_user_id,action,entity_type,entity_id,metadata)
-        values (${actor.userId},"vendor.job.request","vendor_job",${jobId},${JSON.stringify({ type: data.type, titleId: title.id, orderId })}::jsonb)`;
+        values (${actor.userId},'vendor.job.request','vendor_job',${jobId},${JSON.stringify({ type: data.type, titleId: title.id, orderId })}::jsonb)`;
     });
     return { id: jobId, orderId, titleId: title.id, type: data.type, status: "queued" as const };
   });
