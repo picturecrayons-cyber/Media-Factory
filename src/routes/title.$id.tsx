@@ -375,19 +375,44 @@ function FilesPanel({
     setMessage(`Preparing ${kind} upload…`);
     let signedAssetId: string | null = null;
     let multipartAccessUrl: URL | null = null;
+    const multipartThreshold = 100 * 1024 * 1024;
+    const resumeKey = `bridge:multipart-resume:${titleId}:${kind}`;
+    let resumedParts: number[] = [];
+    let resumeRecord: { assetId: string; accessUri: string; filename: string; size: number; lastModified: number; uploadedParts: number[]; expiresAt: number } | null = null;
     try {
-      const signed = await requestAssetUpload({
-        data: {
-          titleId,
-          kind,
-          filename,
-          contentType,
-        },
-      });
-      signedAssetId = signed.assetId;
-      const uploadUrl = new URL(signed.url);
-      uploadUrl.pathname = uploadUrl.pathname.split("/").map((part) => encodeURIComponent(decodeURIComponent(part))).join("/");
-      setMessage(`Uploading ${kind}…`);
+      if (file.size > multipartThreshold) {
+        try {
+          const raw = sessionStorage.getItem(resumeKey);
+          if (raw) {
+            const parsed = JSON.parse(raw) as typeof resumeRecord;
+            if (
+              parsed &&
+              parsed.filename === filename &&
+              parsed.size === file.size &&
+              parsed.lastModified === file.lastModified &&
+              parsed.expiresAt > Date.now() &&
+              Array.isArray(parsed.uploadedParts) &&
+              parsed.uploadedParts.every((part) => Number.isInteger(part) && part > 0)
+            ) {
+              resumeRecord = parsed;
+              signedAssetId = parsed.assetId;
+              multipartAccessUrl = new URL(parsed.accessUri);
+              resumedParts = parsed.uploadedParts;
+            }
+          }
+        } catch {
+          // Ignore stale or unavailable tab-local resume state and start a new upload.
+        }
+      }
+      let signed: Awaited<ReturnType<typeof requestAssetUpload>> | null = null;
+      let uploadUrl: URL | null = null;
+      if (!resumeRecord) {
+        signed = await requestAssetUpload({ data: { titleId, kind, filename, contentType } });
+        signedAssetId = signed.assetId;
+        uploadUrl = new URL(signed.url);
+        uploadUrl.pathname = uploadUrl.pathname.split("/").map((part) => encodeURIComponent(decodeURIComponent(part))).join("/");
+      }
+      setMessage(resumeRecord ? `Resuming ${kind} upload from completed parts…` : `Uploading ${kind}…`);
       setUploadProgress({ kind, loaded: 0, total: file.size, percent: null, stage: "uploading" });
       const sendUploadRequest = (
         url: string,
@@ -414,29 +439,46 @@ function FilesPanel({
         request.send(body);
       });
 
-      const multipartThreshold = 100 * 1024 * 1024;
       if (file.size > multipartThreshold) {
-        // OCI recommends multipart for large objects. A failed part can be retried
-        // without retransmitting the entire master file.
-        const responseText = await sendUploadRequest(
-          uploadUrl.toString(),
-          "PUT",
-          null,
-          { "content-type": contentType, "opc-multipart": "true" },
-        );
-        let multipart: { accessUri?: string };
-        try {
-          multipart = JSON.parse(responseText) as { accessUri?: string };
-        } catch {
-          throw new Error("Storage did not return a valid multipart upload response.");
+        // Keep multipart state in this tab so a refresh/reselection of the exact same
+        // file can continue without retransmitting parts already accepted by OCI.
+        if (!multipartAccessUrl) {
+          if (!uploadUrl || !signedAssetId) throw new Error("Could not initialize the large-file upload.");
+          const responseText = await sendUploadRequest(
+            uploadUrl.toString(),
+            "PUT",
+            null,
+            { "content-type": contentType, "opc-multipart": "true" },
+          );
+          let multipart: { accessUri?: string };
+          try {
+            multipart = JSON.parse(responseText) as { accessUri?: string };
+          } catch {
+            throw new Error("Storage did not return a valid multipart upload response.");
+          }
+          if (!multipart.accessUri) throw new Error("Storage did not return a multipart upload URL.");
+          multipartAccessUrl = new URL(multipart.accessUri, uploadUrl.origin);
+          resumeRecord = {
+            assetId: signedAssetId,
+            accessUri: multipartAccessUrl.toString(),
+            filename,
+            size: file.size,
+            lastModified: file.lastModified,
+            uploadedParts: [],
+            expiresAt: Date.now() + 14 * 60 * 1000,
+          };
+          try { sessionStorage.setItem(resumeKey, JSON.stringify(resumeRecord)); } catch { /* resume is best effort */ }
         }
-        if (!multipart.accessUri) throw new Error("Storage did not return a multipart upload URL.");
-        multipartAccessUrl = new URL(multipart.accessUri, uploadUrl.origin);
         const partSize = 256 * 1024 * 1024;
         let uploadedBytes = 0;
         for (let offset = 0; offset < file.size; offset += partSize) {
           const partNumber = Math.floor(offset / partSize) + 1;
           const part = file.slice(offset, Math.min(offset + partSize, file.size));
+          if (resumedParts.includes(partNumber)) {
+            uploadedBytes += part.size;
+            setUploadProgress({ kind, loaded: uploadedBytes, total: file.size, percent: Math.min(100, Math.round((uploadedBytes / file.size) * 100)), stage: "uploading" });
+            continue;
+          }
           const partUrl = new URL(String(partNumber), multipartAccessUrl).toString();
           let lastError: unknown = null;
           for (let attempt = 0; attempt < 3; attempt += 1) {
@@ -462,6 +504,11 @@ function FilesPanel({
             throw new Error(`Upload part ${partNumber} failed after 3 attempts: ${lastError instanceof Error ? lastError.message : "Upload failed"}`);
           }
           uploadedBytes += part.size;
+          resumedParts = [...new Set([...resumedParts, partNumber])].sort((a, b) => a - b);
+          if (resumeRecord) {
+            resumeRecord.uploadedParts = resumedParts;
+            try { sessionStorage.setItem(resumeKey, JSON.stringify(resumeRecord)); } catch { /* resume is best effort */ }
+          }
           setUploadProgress({
             kind,
             loaded: uploadedBytes,
@@ -472,7 +519,9 @@ function FilesPanel({
         }
         await sendUploadRequest(multipartAccessUrl.toString(), "POST", null, {});
         multipartAccessUrl = null;
+        try { sessionStorage.removeItem(resumeKey); } catch { /* ignore storage restrictions */ }
       } else {
+        if (!uploadUrl || !signed) throw new Error("Could not initialize the upload.");
         await sendUploadRequest(uploadUrl.toString(), signed.method, file, { "content-type": contentType }, (loaded) => {
           setUploadProgress({
             kind,
@@ -486,23 +535,15 @@ function FilesPanel({
       setMessage("Upload sent. Verifying storage…");
       setUploadProgress((current) => current ? { ...current, percent: 100, loaded: file.size, stage: "verifying" } : current);
       const confirmation = await confirmAssetUpload({
-        data: { assetId: signed.assetId, expectedByteSize: file.size },
+        data: { assetId: signedAssetId ?? "", expectedByteSize: file.size },
       });
       if (!confirmation.verified) throw new Error("Storage verification did not complete. Please retry verification.");
       await onAssetsChanged();
       setUploadProgress((current) => current ? { ...current, stage: "complete" } : current);
       setMessage(`${kind[0].toUpperCase() + kind.slice(1)} uploaded and storage-verified.`);
     } catch (error) {
-      if (multipartAccessUrl) {
-        // Best-effort cleanup avoids leaving abandoned multipart parts behind.
-        try {
-          const abortRequest = new XMLHttpRequest();
-          abortRequest.open("DELETE", multipartAccessUrl.toString());
-          abortRequest.send();
-        } catch {
-          // Preserve the original upload error.
-        }
-      }
+      // Preserve a live multipart session after failure so the same file can resume.
+      // Expired sessions are ignored on the next selection; no production objects are touched here.
       const raw = error instanceof Error ? error.message : "Upload failed";
       // A failed client request does not prove that storage rejected the object or
       // that server-side verification did not finish. Refresh the persisted state;
