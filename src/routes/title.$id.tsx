@@ -242,7 +242,7 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
       ) : activeTab === "Files" ? (
         <FilesPanel
           canUpload={
-            canOperateOnTitle(actor, title, "asset.sign_upload", "title.ingest_internal") &&
+            canOperateOnTitle(actor, title, "asset.sign_upload", "asset.sign_upload") &&
             ["DRAFT", "UPLOADING", "PREPARING"].includes(title.status)
           }
           titleId={id}
