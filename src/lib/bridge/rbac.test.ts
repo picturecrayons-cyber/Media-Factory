@@ -73,7 +73,7 @@ describe("PRD authorization matrix", () => {
 
   it("mixed account/staff roles never regain owner mutations through ownership alone", () => {
     const owned = { ownerUserId: "admin-a" };
-    assert.equal(canOperateOnTitle(admin(), owned, "asset.sign_upload"), true);
+    assert.equal(canOperateOnTitle(admin(), owned, "asset.sign_upload"), false);
     assert.equal(canMutateTitle(admin(), owned, "title.update_own", "title.license"), true);
     assert.equal(
       canOperateOnTitle(viewer(), { ownerUserId: "viewer-a" }, "title.advance_upload"),
@@ -121,7 +121,7 @@ describe("PRD authorization matrix", () => {
 
   it("cross-title staff capability must come from an explicit staff permission", () => {
     assert.equal(hasStaffPermission(actor("viewer-a", "independent_creator", "viewer"), "asset.sign_upload"), false);
-    assert.equal(hasStaffPermission(admin(), "asset.sign_upload"), false);
+    assert.equal(hasStaffPermission(admin(), "asset.sign_upload"), true);
     assert.equal(hasStaffPermission(superAdmin(), "asset.sign_upload"), true);
   });
 
