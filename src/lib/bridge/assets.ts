@@ -158,6 +158,154 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
     return { assetId: asset.id, byteSize: sealed.byteSize, verified: true };
   });
 
+
+// Multipart flow is used for large files; object bytes travel directly from the browser to OCI.
+export const startAssetMultipartUpload = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({
+    titleId: z.string().min(8),
+    kind: z.enum(ASSET_KINDS),
+    filename: z.string().min(1).max(120),
+    contentType: z.string().min(3).max(120),
+    expectedByteSize: z.number().int().min(100 * 1024 * 1024).max(10_000 * 10 * 1024 * 1024),
+  }))
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    assertPermission(actor, actor.internalRole ? "title.ingest_internal" : "asset.sign_upload");
+    const title = await loadTitle(data.titleId);
+    if (!title || (title.ownerUserId !== actor.userId && !hasStaffPermission(actor, "asset.sign_upload"))) throw new Error("Not found");
+    if (!UPLOADABLE.has(title.status)) throw new Error("Uploads are closed for this status");
+    const kind = data.kind as OttIngestKind;
+    const validation = validateOttIngestFile({ kind, filename: data.filename, contentType: data.contentType });
+    if (!validation.ok) throw new Error(validation.message);
+    const id = randomBytes(16).toString("hex");
+    const { titleAssetKey, startMultipartUpload, abortMultipartUpload } = await import("./oci-object-storage.server");
+    const key = titleAssetKey({ ownerUserId: title.ownerUserId, titleId: title.id, kind: data.kind, filename: data.filename });
+    const sql = await getSql();
+    await sql`insert into bridge_assets (id, title_id, kind, s3_key, content_type, created_by, upload_expected_byte_size, upload_state)
+      values (${id}, ${title.id}, ${data.kind}, ${key}, ${data.contentType}, ${actor.userId}, ${data.expectedByteSize}, 'STARTING')`;
+    let multipartUploadId: string | null = null;
+    try {
+      const multipart = await startMultipartUpload({ key, contentType: data.contentType });
+      multipartUploadId = multipart.uploadId;
+      await sql`update bridge_assets set multipart_upload_id = ${multipart.uploadId}, upload_state = 'UPLOADING'
+        where id = ${id} and created_by = ${actor.userId} and byte_size is null`;
+      await writeAudit({ actorUserId: actor.userId, action: "asset.multipart_started", entityType: "bridge_asset", entityId: id,
+        metadata: { titleId: title.id, kind: data.kind, expectedByteSize: data.expectedByteSize } });
+      return { assetId: id, uploadId: multipart.uploadId, partSize: 10 * 1024 * 1024, key };
+    } catch (error) {
+      if (multipartUploadId) {
+        try {
+          await abortMultipartUpload({ key, uploadId: multipartUploadId });
+        } catch {
+          // Keep the original start failure; a scheduled stale-upload cleanup is still required.
+        }
+      }
+      await sql`update bridge_assets set upload_state = 'FAILED' where id = ${id}`;
+      throw error;
+    }
+  });
+
+async function ownedPendingMultipartAsset(assetId: string, userId: string) {
+  const actor = await requireVerifiedActor(userId);
+  assertPermission(actor, actor.internalRole ? "title.ingest_internal" : "asset.sign_upload");
+  const sql = await getSql();
+  const rows = await sql<{
+    id: string; title_id: string; kind: string; s3_key: string; created_by: string; content_type: string | null;
+    multipart_upload_id: string | null; upload_expected_byte_size: number | null;
+    upload_state: string | null; byte_size: number | null;
+  }>`select id, title_id, kind, s3_key, created_by, content_type, multipart_upload_id, upload_expected_byte_size,
+      upload_state, byte_size from bridge_assets where id = ${assetId} limit 1`;
+  const asset = rows[0];
+  if (!asset || (asset.created_by !== actor.userId && !hasStaffPermission(actor, "asset.sign_upload")) || asset.byte_size != null || !asset.multipart_upload_id) {
+    throw new Error("Pending multipart asset not found");
+  }
+  const title = await loadTitle(asset.title_id);
+  if (!title || (title.ownerUserId !== actor.userId && !hasStaffPermission(actor, "asset.sign_upload")) || !UPLOADABLE.has(title.status)) {
+    throw new Error("Multipart upload is closed for this title");
+  }
+  return { actor, asset, title, sql };
+}
+
+export const signAssetMultipartPart = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({ assetId: z.string().min(8), partNum: z.number().int().min(1).max(10000) }))
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const { asset } = await ownedPendingMultipartAsset(data.assetId, context.userId);
+    if (asset.upload_state !== "UPLOADING") throw new Error("Multipart upload is not active");
+    const { signMultipartPart } = await import("./oci-object-storage.server");
+    return await signMultipartPart({ key: asset.s3_key, uploadId: asset.multipart_upload_id!, partNum: data.partNum });
+  });
+
+export const listAssetMultipartParts = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({ assetId: z.string().min(8) }))
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const { asset } = await ownedPendingMultipartAsset(data.assetId, context.userId);
+    const { listMultipartUploadParts } = await import("./oci-object-storage.server");
+    return { parts: await listMultipartUploadParts({ key: asset.s3_key, uploadId: asset.multipart_upload_id! }) };
+  });
+
+export const cancelAssetMultipartUpload = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({ assetId: z.string().min(8) }))
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const { actor, asset, sql } = await ownedPendingMultipartAsset(data.assetId, context.userId);
+    const { abortMultipartUpload } = await import("./oci-object-storage.server");
+    const result = await abortMultipartUpload({ key: asset.s3_key, uploadId: asset.multipart_upload_id! });
+    await sql`update bridge_assets set upload_state = 'CANCELED' where id = ${asset.id} and byte_size is null`;
+    await writeAudit({ actorUserId: actor.userId, action: "asset.multipart_canceled", entityType: "bridge_asset", entityId: asset.id });
+    return result;
+  });
+
+export const commitAssetMultipartUpload = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({ assetId: z.string().min(8) }))
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const { actor, asset, title, sql } = await ownedPendingMultipartAsset(data.assetId, context.userId);
+    if (asset.upload_state !== "UPLOADING" || !asset.upload_expected_byte_size) {
+      throw new Error("Multipart upload metadata is incomplete");
+    }
+    const { listMultipartUploadParts, commitMultipartUpload, checksumObject, sealVerifiedObject } =
+      await import("./oci-object-storage.server");
+    const parts = await listMultipartUploadParts({ key: asset.s3_key, uploadId: asset.multipart_upload_id! });
+    if (!parts.length || parts.some((part) => !part.size)) throw new Error("OCI has no complete multipart part manifest");
+    const object = await commitMultipartUpload({ key: asset.s3_key, uploadId: asset.multipart_upload_id!, parts });
+    if (object.byteSize !== Number(asset.upload_expected_byte_size)) throw new Error("Committed object size differs from the original file");
+    if (asset.content_type && object.contentType !== asset.content_type) throw new Error("Committed object content type differs from the asset record");
+    if (!object.etag) throw new Error("Committed OCI object has no ETag; immutable sealing is blocked");
+    const checksum = await checksumObject(asset.s3_key);
+    if (checksum.byteSize !== object.byteSize) {
+      await sql`update bridge_assets set upload_state = 'INTEGRITY_FAILED' where id = ${asset.id}`;
+      await writeAudit({ actorUserId: actor.userId, action: "asset.multipart_integrity_failed", entityType: "bridge_asset", entityId: asset.id,
+        metadata: { actualSha256: checksum.sha256, expectedByteSize: asset.upload_expected_byte_size, actualByteSize: checksum.byteSize } });
+      throw new Error("OCI byte readback size differs from the committed object size");
+    }
+    const sealedKey = `${asset.s3_key}.verified/${randomUUID()}`;
+    const sealed = await sealVerifiedObject(asset.s3_key, sealedKey, object.etag || "");
+    const sealedChecksum = await checksumObject(sealedKey);
+    if (sealed.byteSize !== checksum.byteSize || sealedChecksum.sha256 !== checksum.sha256) {
+      await sql`update bridge_assets set upload_state = 'INTEGRITY_FAILED' where id = ${asset.id}`;
+      throw new Error("Immutable sealed copy failed SHA-256 verification");
+    }
+    const confirmed = await persistVerifiedAsset(sql, {
+      assetId: asset.id, actorUserId: actor.userId, internalActor: Boolean(actor.internalRole), titleId: title.id,
+      kind: asset.kind, byteSize: sealed.byteSize, contentType: sealed.contentType, checksum: sealedChecksum.sha256,
+      sourceKey: asset.s3_key, sealedKey,
+    });
+    if (!confirmed) throw new Error("Asset state changed before multipart verification could be committed");
+    await sql`update bridge_assets set upload_state = 'VERIFIED', checksum_sha256 = ${sealedChecksum.sha256} where id = ${asset.id}`;
+    await sql`update loop_media_migration_queue set status = 'VERIFIED', target_path = ${sealedKey}, updated_at = now()
+      where title_id = ${title.id} and asset_kind = case when ${asset.kind} = 'screener' then 'TRAILER' else upper(${asset.kind}) end
+        and status in ('UPLOADED', 'PENDING_REUPLOAD')`;
+    return { assetId: asset.id, byteSize: sealed.byteSize, sha256: sealedChecksum.sha256, verified: true };
+  });
+
 export const requestAssetDownload = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(z.object({ assetId: z.string().min(8) }))

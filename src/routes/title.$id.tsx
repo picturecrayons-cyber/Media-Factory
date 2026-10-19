@@ -4,16 +4,21 @@ import { WorkflowDesk } from "@/components/bridge/workflow-desk";
 import { publicationIsActive } from "@/lib/bridge/workflow-policy";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { getTitle, updateTitle } from "@/lib/bridge/titles";
 import { BRIDGE_LOOP_LANES, loopStageType } from "@/lib/bridge/loop-lanes";
 import {
+  cancelAssetMultipartUpload,
+  commitAssetMultipartUpload,
   confirmAssetUpload,
+  listAssetMultipartParts,
   listTitleAssets,
   requestAssetDownload,
   requestAssetUpload,
+  signAssetMultipartPart,
+  startAssetMultipartUpload,
 } from "@/lib/bridge/assets";
 import { getLoopPublication } from "@/lib/bridge/loop-publication";
 import type { BridgeActor } from "@/lib/bridge/session";
@@ -117,7 +122,6 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
   const rightsReady =
     reviewQ.data?.legal?.status === "APPROVED" &&
     reviewQ.data.grants.some((g) => g.status === "VALID" && new Date(g.window_end) > new Date());
-  const packageReady = Boolean(qcReady && legalReady);
   const distributionReady = Boolean(
     pub && publicationIsActive(pub.authorizationStatus, pub.windowStart, pub.windowEnd),
   );
@@ -229,10 +233,10 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
           <LaneStore key={title.contentType} titleId={title.id} stored={loopStageType(title.contentType)} locked={!actor.internalRole && !["DRAFT", "UPLOADING", "PREPARING"].includes(title.status)} />
           {title.synopsis ? <p className="mt-4 text-sm leading-6 text-muted">{title.synopsis}</p> : null}
           <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <Metric label="QC" value={qcReady ? "READY" : "PENDING"} />
-            <Metric label="Rights" value={rightsReady ? "READY" : "PENDING"} />
-            <Metric label="Licensing" value={legalReady ? "READY" : "PENDING"} />
-            <Metric label="Publish" value={distributionReady ? "LIVE" : packageReady ? "READY" : "PENDING"} />
+            <Metric label="QC review" value={qcReady ? "Passed" : "Not confirmed"} />
+            <Metric label="Rights approval" value={rightsReady ? "Approved" : "Not confirmed"} />
+            <Metric label="Licensing stage" value={legalReady ? "Reached" : "Not reached"} />
+            <Metric label="Buyer publication" value={distributionReady ? "Active" : "Not active"} />
           </div>
         </section>
       ) : activeTab === "Files" ? (
@@ -249,6 +253,72 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
     </div>
   );
 }
+function formatBytes(bytes: number) {
+  if (!Number.isFinite(bytes) || bytes < 0) return "Size unavailable";
+  if (bytes < 1024) return `${bytes} B`;
+  const units = ["KB", "MB", "GB", "TB"];
+  let size = bytes / 1024;
+  let unit = 0;
+  while (size >= 1024 && unit < units.length - 1) {
+    size /= 1024;
+    unit += 1;
+  }
+  return `${size.toFixed(size >= 100 ? 0 : size >= 10 ? 1 : 2)} ${units[unit]}`;
+}
+
+function AssetReadinessReport({ assets }: { assets: Array<{ kind: string; verified: boolean; byteSize: number | null }> }) {
+  const isVerified = (kind: string) => assets.some((asset) =>
+    (asset.kind === kind || (kind === "poster_vertical" && asset.kind === "poster")) && asset.verified
+  );
+  const required = [
+    { kind: "master", label: "Main film" },
+    { kind: "poster_vertical", label: "Vertical poster" },
+  ];
+  const verifiedCount = assets.filter((asset) => asset.verified).length;
+  const missingRequired = required.filter((item) => !isVerified(item.kind));
+  const totalBytes = assets.reduce((sum, asset) => sum + (asset.byteSize ?? 0), 0);
+  return (
+    <section aria-labelledby="asset-readiness-title" className="mt-5 rounded-xl border border-line bg-elevated/40 p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h3 id="asset-readiness-title" className="text-sm font-semibold">Asset readiness report</h3>
+          <p className="mt-1 text-xs leading-5 text-muted">Compares required delivery assets with server-confirmed asset records.</p>
+        </div>
+        <span className="rounded-full border border-line px-3 py-1 text-xs font-semibold">
+          {missingRequired.length === 0 ? "Required records present" : `${missingRequired.length} required item${missingRequired.length === 1 ? "" : "s"} missing`}
+        </span>
+      </div>
+      <div className="mt-4 grid gap-3 sm:grid-cols-3">
+        <div className="rounded-lg border border-line p-3">
+          <p className="text-xs text-muted">Verified asset records</p>
+          <p className="mt-1 text-lg font-semibold">{verifiedCount} / {assets.length}</p>
+        </div>
+        <div className="rounded-lg border border-line p-3">
+          <p className="text-xs text-muted">Required records</p>
+          <p className="mt-1 text-lg font-semibold">{required.length - missingRequired.length} / {required.length}</p>
+        </div>
+        <div className="rounded-lg border border-line p-3">
+          <p className="text-xs text-muted">Known stored size</p>
+          <p className="mt-1 text-lg font-semibold">{formatBytes(totalBytes)}</p>
+        </div>
+      </div>
+      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+        {required.map((item) => (
+          <div key={item.kind} className="flex items-center justify-between gap-3 rounded-lg border border-line p-3">
+            <span className="text-sm">{item.label}</span>
+            <span className={`text-xs font-semibold ${isVerified(item.kind) ? "text-fg" : "text-muted"}`}>
+              {isVerified(item.kind) ? "Record verified" : "Required · missing"}
+            </span>
+          </div>
+        ))}
+      </div>
+      <p role="note" className="mt-3 text-xs leading-5 text-muted">
+        Important: “Record verified” means the Bridge backend accepted the asset verification record. It does not independently prove object-storage readback, checksum equality, successful download, QC approval, rights clearance, or buyer publication. Those checks must be recorded separately.
+      </p>
+    </section>
+  );
+}
+
 function Metric({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-xl border border-line bg-elevated/40 p-4">
@@ -278,49 +348,102 @@ function FilesPanel({
 }) {
   const [uploading, setUploading] = useState<SimpleAssetKind | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [multipartAssetId, setMultipartAssetId] = useState<string | null>(null);
+  const cancelRequested = useRef(false);
   async function uploadFile(kind: SimpleAssetKind, file: File) {
     const filename = asciiUploadName(file.name);
     const contentType = file.type || "application/octet-stream";
-    const validation = validateOttIngestFile({
-      kind,
-      filename,
-      contentType,
-    });
+    const validation = validateOttIngestFile({ kind, filename, contentType });
     if (!validation.ok) {
       setMessage(validation.message);
       return;
     }
+    cancelRequested.current = false;
+    setMultipartAssetId(null);
     setUploading(kind);
     setMessage(`Preparing ${kind} upload…`);
     try {
-      const signed = await requestAssetUpload({
-        data: {
-          titleId,
-          kind,
-          filename,
-          contentType,
-        },
-      });
+      // OCI recommends multipart for large media. Parts are uploaded directly to OCI,
+      // while the server persists the upload ID and reconstructs the part manifest.
+      if (file.size >= 100 * 1024 * 1024) {
+        const storageKey = `crayons-bridge-upload:${titleId}:${kind}`;
+        type UploadSession = { assetId: string; fileName: string; size: number; lastModified: number; contentType: string };
+        let session: UploadSession | null = null;
+        try {
+          const saved = window.localStorage.getItem(storageKey);
+          if (saved) {
+            const parsed = JSON.parse(saved) as UploadSession;
+            if (parsed.fileName === file.name && parsed.size === file.size && parsed.lastModified === file.lastModified && parsed.contentType === contentType) {
+              session = parsed;
+            }
+          }
+        } catch {
+          session = null;
+        }
+        if (!session) {
+          const started = await startAssetMultipartUpload({
+            data: { titleId, kind, filename, contentType, expectedByteSize: file.size },
+          });
+          session = { assetId: started.assetId, fileName: file.name, size: file.size, lastModified: file.lastModified, contentType };
+          window.localStorage.setItem(storageKey, JSON.stringify(session));
+        }
+        setMultipartAssetId(session.assetId);
+        const partSize = 10 * 1024 * 1024;
+        const partCount = Math.ceil(file.size / partSize);
+        let uploaded = await listAssetMultipartParts({ data: { assetId: session.assetId } });
+        const completed = new Map(uploaded.parts.map((part) => [part.partNum, part]));
+        for (let partNum = 1; partNum <= partCount; partNum += 1) {
+          if (cancelRequested.current) {
+            await cancelAssetMultipartUpload({ data: { assetId: session.assetId } });
+            window.localStorage.removeItem(storageKey);
+            throw new Error("Upload canceled; temporary OCI parts were aborted.");
+          }
+          const begin = (partNum - 1) * partSize;
+          const part = file.slice(begin, Math.min(begin + partSize, file.size));
+          if (completed.get(partNum)?.size === part.size) continue;
+          let succeeded = false;
+          let lastError: unknown;
+          for (let attempt = 1; attempt <= 3 && !succeeded; attempt += 1) {
+            try {
+              setMessage(`Uploading ${kind}: part ${partNum} of ${partCount} (attempt ${attempt}/3)…`);
+              const signed = await signAssetMultipartPart({ data: { assetId: session.assetId, partNum } });
+              const response = await fetch(signed.url, { method: "PUT", body: part, headers: signed.headers, signal: AbortSignal.timeout(120_000) });
+              if (!response.ok) throw new Error(`Part ${partNum} upload failed (${response.status})`);
+              succeeded = true;
+            } catch (error) {
+              lastError = error;
+            }
+          }
+          if (!succeeded) throw lastError instanceof Error ? lastError : new Error(`Part ${partNum} upload failed`);
+        }
+        if (cancelRequested.current) {
+          await cancelAssetMultipartUpload({ data: { assetId: session.assetId } });
+          window.localStorage.removeItem(storageKey);
+          throw new Error("Upload canceled; temporary OCI parts were aborted.");
+        }
+        uploaded = await listAssetMultipartParts({ data: { assetId: session.assetId } });
+        if (uploaded.parts.length !== partCount) throw new Error("OCI part manifest is incomplete; retry the upload to resume missing parts");
+        const committed = await commitAssetMultipartUpload({ data: { assetId: session.assetId } });
+        window.localStorage.removeItem(storageKey);
+        await onAssetsChanged();
+        setMessage(`${kind[0].toUpperCase() + kind.slice(1)} stored; sealed-copy SHA-256 matched after readback (${formatBytes(committed.byteSize)}).`);
+        return;
+      }
+
+      const signed = await requestAssetUpload({ data: { titleId, kind, filename, contentType } });
       const uploadUrl = new URL(signed.url);
       uploadUrl.pathname = uploadUrl.pathname.split("/").map((part) => encodeURIComponent(decodeURIComponent(part))).join("/");
-      const put = await fetch(uploadUrl.toString(), {
-        method: signed.method,
-        body: file,
-        headers: { "content-type": contentType },
-      });
+      const put = await fetch(uploadUrl.toString(), { method: signed.method, body: file, headers: { "content-type": contentType } });
       if (!put.ok) throw new Error(`Upload failed (${put.status})`);
       await confirmAssetUpload({ data: { assetId: signed.assetId, expectedByteSize: file.size } });
       await onAssetsChanged();
       setMessage(`${kind[0].toUpperCase() + kind.slice(1)} is ready.`);
     } catch (error) {
       const raw = error instanceof Error ? error.message : "Upload failed";
-      setMessage(
-        raw.includes("STORAGE_UNAVAILABLE")
-          ? "Storage service is currently unavailable. Please try again later."
-          : raw,
-      );
+      setMessage(raw.includes("STORAGE_UNAVAILABLE") ? "Storage service is currently unavailable. Please try again later." : raw);
     } finally {
       setUploading(null);
+      setMultipartAssetId(null);
     }
   }
   async function download(id: string) {
@@ -345,13 +468,14 @@ function FilesPanel({
         </div>
         <span className="text-xs text-muted">Ready / Missing</span>
       </div>
+      <AssetReadinessReport assets={assets} />
       <div className="mt-5 grid gap-3 sm:grid-cols-2">
         {cards.map(([kind, label, empty]) => (
           <FileTypeCard
             key={kind}
             kind={kind}
             label={label}
-            status={assets.some((a) => (a.kind === kind || (kind === "poster_vertical" && a.kind === "poster")) && a.verified) ? "Ready" : empty}
+            status={assets.some((a) => (a.kind === kind || (kind === "poster_vertical" && a.kind === "poster")) && a.verified) ? "Verified record" : empty}
             busy={uploading === kind}
             canUpload={canUpload}
             onFile={(file) => void uploadFile(kind, file)}
@@ -359,6 +483,11 @@ function FilesPanel({
         ))}
       </div>
       {message ? <p className="mt-3 text-xs text-muted">{message}</p> : null}
+      {multipartAssetId && uploading ? (
+        <button type="button" onClick={() => { cancelRequested.current = true; setMessage("Cancel requested; the current part will finish before temporary parts are removed."); }} className="mt-2 rounded-full border border-line px-4 py-2 text-xs font-semibold">
+          Cancel multipart upload
+        </button>
+      ) : null}
       <div className="mt-5 space-y-2">
         {assets.map((a) => (
           <div
@@ -367,7 +496,7 @@ function FilesPanel({
           >
             <div>
               <p className="text-sm font-semibold">{a.kind}</p>
-              <p className="text-xs text-muted">{a.verified ? "Ready" : "Processing"}</p>
+              <p className="text-xs text-muted">{a.verified ? "Server-confirmed record" : "Verification pending"}{a.byteSize != null ? ` · ${formatBytes(a.byteSize)}` : ""}</p>
             </div>
             {a.verified ? (
               <button
@@ -410,7 +539,7 @@ function FileTypeCard({
           </p>
         </div>
         <label className="cursor-pointer rounded-full border border-line px-3 py-1.5 text-xs font-semibold">
-          {busy ? "Uploading…" : status === "Ready" ? "Replace" : "Upload"}
+          {busy ? "Uploading…" : status === "Verified record" ? "Replace" : "Upload"}
           <input
             className="sr-only"
             type="file"

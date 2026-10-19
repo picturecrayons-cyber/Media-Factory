@@ -94,14 +94,16 @@ function signHeaders(opts: {
   url: URL;
   body?: string;
   contentType?: string;
+  dateHeader?: "date" | "x-date";
 }) {
   const method = opts.method.toLowerCase();
   const date = new Date().toUTCString();
+  const dateHeader = opts.dateHeader ?? "date";
   const host = opts.url.host;
   const requestTarget = `${method} ${opts.url.pathname}${opts.url.search}`;
-  const lines = [`(request-target): ${requestTarget}`, `host: ${host}`, `date: ${date}`];
-  const signedHeaders = ["(request-target)", "host", "date"];
-  const headers: Record<string, string> = { host, date };
+  const lines = [`(request-target): ${requestTarget}`, `host: ${host}`, `${dateHeader}: ${date}`];
+  const signedHeaders = ["(request-target)", "host", dateHeader];
+  const headers: Record<string, string> = { host, [dateHeader]: date };
 
   if (opts.body !== undefined) {
     const contentType = opts.contentType || "application/json";
@@ -273,4 +275,117 @@ export async function deleteObject(key: string) {
 export function titleAssetKey(opts: { ownerUserId: string; titleId: string; kind: string; filename: string }) {
   const safe = opts.filename.replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 80);
   return `bridge/${opts.ownerUserId}/${opts.titleId}/${opts.kind}/${Date.now()}-${safe}`;
+}
+
+
+export type MultipartPart = { partNum: number; etag: string; size?: number };
+
+function multipartObjectPath(namespace: string, bucket: string, key: string) {
+  return `/n/${encodeURIComponent(namespace)}/b/${encodeURIComponent(bucket)}/u/${encodedObjectName(key)}`;
+}
+
+/** Start an OCI multipart upload. Upload IDs are opaque and must be kept server-side. */
+export async function startMultipartUpload(opts: { key: string; contentType: string }) {
+  const cfg = config();
+  const namespace = await resolveNamespace(cfg);
+  const path = `/n/${encodeURIComponent(namespace)}/b/${encodeURIComponent(cfg.bucket)}/u?objectName=${encodeURIComponent(opts.key)}`;
+  const res = await signedFetch({
+    cfg,
+    method: "POST",
+    path,
+    body: { object: { name: opts.key, contentType: opts.contentType } },
+  });
+  if (!res.ok) throw new Error(`OCI multipart initiation failed (${res.status})`);
+  const parsed = (await res.json()) as { uploadId?: string };
+  if (!parsed.uploadId) throw new Error("OCI multipart initiation returned no upload ID");
+  return { uploadId: parsed.uploadId, key: opts.key, namespace, bucket: cfg.bucket };
+}
+
+/** Create a short-lived OCI request signature for one part; object bytes go directly from browser to OCI. */
+export async function signMultipartPart(opts: { key: string; uploadId: string; partNum: number }) {
+  if (!Number.isInteger(opts.partNum) || opts.partNum < 1 || opts.partNum > 10000) {
+    throw new Error("Multipart part number must be between 1 and 10000");
+  }
+  const cfg = config();
+  const namespace = await resolveNamespace(cfg);
+  const path = `${multipartObjectPath(namespace, cfg.bucket, opts.key)}?uploadId=${encodeURIComponent(opts.uploadId)}&uploadPartNum=${opts.partNum}`;
+  const url = new URL(path, endpoint(cfg.region));
+  const headers = signHeaders({ cfg, method: "PUT", url, dateHeader: "x-date" });
+  return {
+    url: url.toString(),
+    headers: { authorization: headers.authorization, "x-date": headers["x-date"] },
+  };
+}
+
+/** Return server-observed part ETags for recovery after a browser refresh or dropped connection. */
+export async function listMultipartUploadParts(opts: { key: string; uploadId: string }) {
+  const cfg = config();
+  const namespace = await resolveNamespace(cfg);
+  const path = `${multipartObjectPath(namespace, cfg.bucket, opts.key)}?uploadId=${encodeURIComponent(opts.uploadId)}`;
+  const res = await signedFetch({ cfg, method: "GET", path });
+  if (!res.ok) throw new Error(`OCI multipart part listing failed (${res.status})`);
+  const parsed = (await res.json()) as { items?: Array<{ partNum?: number; etag?: string; size?: number }>; parts?: Array<{ partNum?: number; etag?: string; size?: number }> };
+  return (parsed.items ?? parsed.parts ?? []).flatMap((part) =>
+    Number.isInteger(part.partNum) && part.partNum! > 0 && typeof part.etag === "string"
+      ? [{ partNum: part.partNum!, etag: part.etag, ...(typeof part.size === "number" ? { size: part.size } : {}) }]
+      : [],
+  );
+}
+
+/** Commit only the explicit, validated set of uploaded parts. */
+export async function commitMultipartUpload(opts: { key: string; uploadId: string; parts: MultipartPart[] }) {
+  if (!opts.parts.length || opts.parts.length > 10000) throw new Error("Multipart upload requires 1 to 10000 parts");
+  const sorted = [...opts.parts].sort((a, b) => a.partNum - b.partNum);
+  const seen = new Set<number>();
+  for (const part of sorted) {
+    if (!Number.isInteger(part.partNum) || part.partNum < 1 || part.partNum > 10000 || !part.etag || seen.has(part.partNum)) {
+      throw new Error("Multipart part manifest is invalid");
+    }
+    seen.add(part.partNum);
+  }
+  const cfg = config();
+  const namespace = await resolveNamespace(cfg);
+  const path = `${multipartObjectPath(namespace, cfg.bucket, opts.key)}?uploadId=${encodeURIComponent(opts.uploadId)}`;
+  const res = await signedFetch({
+    cfg,
+    method: "POST",
+    path,
+    body: { partsToCommit: sorted.map(({ partNum, etag }) => ({ partNum, etag })) },
+  });
+  if (!res.ok) throw new Error(`OCI multipart commit failed (${res.status})`);
+  return verifyObject(opts.key);
+}
+
+/** Abort an unfinished upload so orphaned parts do not remain billable indefinitely. */
+export async function abortMultipartUpload(opts: { key: string; uploadId: string }) {
+  const cfg = config();
+  const namespace = await resolveNamespace(cfg);
+  const path = `${multipartObjectPath(namespace, cfg.bucket, opts.key)}?uploadId=${encodeURIComponent(opts.uploadId)}`;
+  const res = await signedFetch({ cfg, method: "DELETE", path });
+  if (!res.ok && res.status !== 404) throw new Error(`OCI multipart abort failed (${res.status})`);
+  return { aborted: res.status !== 404 };
+}
+
+
+/** Compute a real SHA-256 over object bytes; ETags are not treated as content checksums. */
+export async function checksumObject(key: string) {
+  const cfg = config();
+  const namespace = await resolveNamespace(cfg);
+  const path = `/n/${encodeURIComponent(namespace)}/b/${encodeURIComponent(cfg.bucket)}/o/${encodedObjectName(key)}`;
+  const res = await signedFetch({ cfg, method: "GET", path });
+  if (!res.ok || !res.body) throw new Error(`OCI object readback failed (${res.status})`);
+  const hash = createHash("sha256");
+  let byteSize = 0;
+  const reader = res.body.getReader();
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      hash.update(value);
+      byteSize += value.byteLength;
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  return { sha256: hash.digest("hex"), byteSize };
 }
