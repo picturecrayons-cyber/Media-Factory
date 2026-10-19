@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { memo, useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { RedirectToSignIn } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
@@ -49,7 +49,7 @@ function goHome(home: string | null | undefined, navigate: ReturnType<typeof use
   void navigate({ to: (home || "/dashboard") as any, replace: true });
 }
 
-function CheckGroup({
+const CheckGroup = memo(function CheckGroup({
   label,
   values,
   selected,
@@ -82,7 +82,7 @@ function CheckGroup({
       </div>
     </fieldset>
   );
-}
+});
 
 function Onboarding() {
   const { user, isPending } = useCurrentUserState();
@@ -130,6 +130,44 @@ function Onboarding() {
   const [busy, setBusy] = useState(false);
   const submitInFlight = useRef(false);
   const [retrying, setRetrying] = useState(false);
+
+  // Keep checkbox handlers stable so memoized groups that did not change do not
+  // rebuild their option grids on every unrelated keystroke.
+  const toggleAdditionalLanguages = useCallback((value: string, checked: boolean) => {
+    setAdditionalLanguages((current) =>
+      checked
+        ? current.includes(value) ? current : [...current, value]
+        : current.filter((item) => item !== value),
+    );
+  }, []);
+  const toggleTerritories = useCallback((value: string, checked: boolean) => {
+    setTerritories((current) =>
+      checked
+        ? current.includes(value) ? current : [...current, value]
+        : current.filter((item) => item !== value),
+    );
+  }, []);
+  const toggleRightsLanguages = useCallback((value: string, checked: boolean) => {
+    setRightsLanguages((current) =>
+      checked
+        ? current.includes(value) ? current : [...current, value]
+        : current.filter((item) => item !== value),
+    );
+  }, []);
+  const toggleMedia = useCallback((value: string, checked: boolean) => {
+    setMedia((current) =>
+      checked
+        ? current.includes(value) ? current : [...current, value]
+        : current.filter((item) => item !== value),
+    );
+  }, []);
+  const toggleDestinations = useCallback((value: string, checked: boolean) => {
+    setDestinations((current) =>
+      checked
+        ? current.includes(value) ? current : [...current, value]
+        : current.filter((item) => item !== value),
+    );
+  }, []);
 
   const home = sessionQ.data?.profile ? sessionQ.data.home : null;
 
@@ -199,10 +237,6 @@ function Onboarding() {
     );
   }
 
-  function toggle(setter: (next: string[]) => void, current: string[], value: string, checked: boolean) {
-    setter(checked ? [...current, value] : current.filter((item) => item !== value));
-  }
-
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     if (submitInFlight.current) return;
@@ -213,6 +247,23 @@ function Onboarding() {
     try {
       let inviteToken: string | undefined;
       try { inviteToken = sessionStorage.getItem("bridge-invite") ?? undefined; } catch { /* ignore */ }
+
+      // Validate creator/studio title data before persisting onboarding. This avoids
+      // completing the profile when the title form is invalid.
+      if (accountType !== "buyer") {
+        if (!titleName.trim()) throw new Error("Title name is required");
+        if (synopsis.trim().length < 20) throw new Error("Add a synopsis of at least 20 characters");
+        if (!territories.length || !rightsLanguages.length || !media.length || !destinations.length) {
+          throw new Error("Select at least one value in each rights package group");
+        }
+        if (!windowStart || !windowEnd) throw new Error("Rights window start and end are required");
+        if (!authorizationAttested) throw new Error("Confirm that you have authority to license the submitted rights");
+        const startMs = new Date(windowStart).getTime();
+        const endMs = new Date(windowEnd).getTime();
+        if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) {
+          throw new Error("Rights window end must be after start");
+        }
+      }
 
       await completeOnboarding({
         data: {
@@ -227,15 +278,6 @@ function Onboarding() {
         void navigate({ to: "/buyer", replace: true });
         return;
       }
-
-      if (!titleName.trim()) throw new Error("Title name is required");
-      if (synopsis.trim().length < 20) throw new Error("Add a synopsis of at least 20 characters");
-      if (!territories.length || !rightsLanguages.length || !media.length || !destinations.length) {
-        throw new Error("Select at least one value in each rights package group");
-      }
-      if (!windowStart || !windowEnd) throw new Error("Rights window start and end are required");
-      if (!authorizationAttested) throw new Error("Confirm that you have authority to license the submitted rights");
-      if (new Date(windowEnd) <= new Date(windowStart)) throw new Error("Rights window end must be after start");
 
       const result = await createTitle({
         data: {
@@ -343,7 +385,7 @@ function Onboarding() {
                   <input type="number" min="1" max="600" value={runtimeMinutes} onChange={(e) => setRuntimeMinutes(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5" />
                 </label>
               </div>
-              <CheckGroup label="Additional languages" values={LANGUAGES} selected={additionalLanguages} onChange={(v, c) => toggle(setAdditionalLanguages, additionalLanguages, v, c)} />
+              <CheckGroup label="Additional languages" values={LANGUAGES} selected={additionalLanguages} onChange={toggleAdditionalLanguages} />
               <label className="block text-sm font-medium">Synopsis *
                 <textarea required minLength={20} maxLength={4000} rows={5} value={synopsis} onChange={(e) => setSynopsis(e.target.value)} className="mt-1.5 w-full rounded-xl border border-line-strong bg-elevated px-3.5 py-3" />
               </label>
@@ -365,9 +407,9 @@ function Onboarding() {
 
             <section className="space-y-4 rounded-2xl border border-line p-5">
               <div><h2 className="font-display text-xl font-semibold">3. Rights package</h2><p className="mt-1 text-xs text-muted">These controls define what a buyer may license. No open-ended rights description is accepted.</p></div>
-              <CheckGroup label="Territories" values={TERRITORIES} selected={territories} onChange={(v, c) => toggle(setTerritories, territories, v, c)} required />
-              <CheckGroup label="Rights languages" values={LANGUAGES} selected={rightsLanguages} onChange={(v, c) => toggle(setRightsLanguages, rightsLanguages, v, c)} required />
-              <CheckGroup label="Exploitation / media" values={MEDIA} selected={media} onChange={(v, c) => toggle(setMedia, media, v, c)} required />
+              <CheckGroup label="Territories" values={TERRITORIES} selected={territories} onChange={toggleTerritories} required />
+              <CheckGroup label="Rights languages" values={LANGUAGES} selected={rightsLanguages} onChange={toggleRightsLanguages} required />
+              <CheckGroup label="Exploitation / media" values={MEDIA} selected={media} onChange={toggleMedia} required />
               <div className="grid gap-4 sm:grid-cols-2">
                 <label className="text-sm font-medium">Rights window starts *
                   <input required type="datetime-local" value={windowStart} onChange={(e) => setWindowStart(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5" />
@@ -409,7 +451,7 @@ function Onboarding() {
                   <option value="BRIDGE_PRIVATE_SCREENER">Private Bridge screener is ready to upload</option>
                 </select>
               </label>
-              <CheckGroup label="Intended delivery destinations" values={DESTINATIONS} selected={destinations} onChange={(v, c) => toggle(setDestinations, destinations, v, c)} required />
+              <CheckGroup label="Intended delivery destinations" values={DESTINATIONS} selected={destinations} onChange={toggleDestinations} required />
             </section>
           </>
         )}
