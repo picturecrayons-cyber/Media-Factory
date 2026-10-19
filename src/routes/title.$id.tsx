@@ -23,6 +23,7 @@ import {
   validateOttIngestFile,
 } from "@/lib/bridge/ott-ingest-spec";
 import { asciiUploadName } from "@/lib/bridge/latin1";
+import { assertMultipartEtags, multipartPartCount } from "@/lib/bridge/multipart-upload";
 
 export const Route = createFileRoute("/title/$id")({ component: TitlePage });
 
@@ -350,8 +351,7 @@ function FilesPanel({
       });
       active.accessUri = multipart.accessUri;
       const chunkSize = 16 * 1024 * 1024;
-      const partCount = Math.ceil(file.size / chunkSize);
-      if (partCount < 1 || partCount > 10000) throw new Error("File size is outside OCI multipart upload limits");
+      const partCount = multipartPartCount(file.size, chunkSize);
       const loadedByPart = new Array<number>(partCount).fill(0);
       const etags = new Array<string>(partCount);
       let nextPart = 0;
@@ -388,7 +388,7 @@ function FilesPanel({
       await Promise.all(Array.from({ length: Math.min(3, partCount) }, () => worker()));
       if (active.cancelled) throw new DOMException("Upload cancelled", "AbortError");
       if (firstError) throw firstError;
-      if (etags.some((etag) => !etag)) throw new Error("Multipart upload is missing one or more part ETags");
+      assertMultipartEtags(etags, partCount);
       setMessage("All parts uploaded. Committing and verifying the object…");
       const committed = await fetch(multipart.accessUri, { method: "POST" });
       if (!committed.ok) throw new Error(`OCI multipart completion failed (${committed.status})`);
