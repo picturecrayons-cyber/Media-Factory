@@ -221,20 +221,45 @@ export async function verifyObject(key: string, expectedContentType?: string | n
   };
 }
 
+const COPY_POLL_DEADLINE_MS = 60_000;
+const COPY_STATUS_REQUEST_TIMEOUT_MS = 8_000;
+const COPY_POLL_INTERVAL_MS = 1_000;
+
 async function pollWorkRequest(cfg: OciConfig, workRequestId: string) {
   const url = new URL(`/workRequests/${encodeURIComponent(workRequestId)}`, endpoint(cfg.region));
-  for (let i = 0; i < 30; i += 1) {
+  const deadline = Date.now() + COPY_POLL_DEADLINE_MS;
+  let lastStatus = "NOT_YET_RECEIVED";
+
+  while (Date.now() < deadline) {
     const headers = signHeaders({ cfg, method: "GET", url });
-    const res = await fetch(url, { method: "GET", headers });
+    let res: Response;
+    try {
+      res = await fetch(url, {
+        method: "GET",
+        headers,
+        signal: AbortSignal.timeout(COPY_STATUS_REQUEST_TIMEOUT_MS),
+      });
+    } catch (error) {
+      if (error instanceof Error && error.name === "TimeoutError") {
+        throw new Error("OCI copy work-request lookup timed out");
+      }
+      throw new Error("OCI copy work-request lookup failed due to a network error");
+    }
+
     if (!res.ok) throw new Error(`OCI copy work-request lookup failed (${res.status})`);
     const body = (await res.json()) as { status?: string };
-    if (body.status === "SUCCEEDED") return;
-    if (body.status === "FAILED" || body.status === "CANCELED") {
-      throw new Error(`OCI object copy ${body.status.toLowerCase()}`);
+    lastStatus = body.status || "UNKNOWN";
+    if (lastStatus === "SUCCEEDED") return;
+    if (lastStatus === "FAILED" || lastStatus === "CANCELED") {
+      throw new Error(`OCI object copy ${lastStatus.toLowerCase()}`);
     }
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) break;
+    await new Promise((resolve) => setTimeout(resolve, Math.min(COPY_POLL_INTERVAL_MS, remaining)));
   }
-  throw new Error("OCI object copy did not complete in time");
+
+  throw new Error(`OCI object copy did not complete in time (last status: ${lastStatus})`);
 }
 
 /** Copy a verified upload into an immutable destination key. */
