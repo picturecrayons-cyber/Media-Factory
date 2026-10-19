@@ -12,6 +12,7 @@ import { assertNotDevUser } from "./guards";
 import { persistVerifiedAsset } from "./asset-confirmation";
 import { downloadDecision } from "./delivery-policy";
 import { validateOttIngestFile, type OttIngestKind } from "./ott-ingest-spec";
+import { assertExpectedUploadSize } from "./multipart-upload";
 
 const UPLOADABLE: ReadonlySet<string> = new Set(["DRAFT", "UPLOADING", "PREPARING"]);
 
@@ -117,9 +118,7 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
 
     const { verifyObject, sealVerifiedObject } = await import("./oci-object-storage.server");
     const object = await verifyObject(asset.s3_key, asset.content_type);
-    if (data.expectedByteSize != null && object.byteSize !== data.expectedByteSize) {
-      throw new Error("Uploaded object size does not match the file that was sent");
-    }
+    assertExpectedUploadSize(object.byteSize, data.expectedByteSize);
     if (!object.etag) throw new Error("Object ETag is required for immutable verification");
     const sealedKey = `${asset.s3_key}.verified/${randomUUID()}`;
     const sealed = await sealVerifiedObject(asset.s3_key, sealedKey, object.etag);
