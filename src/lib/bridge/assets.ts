@@ -58,7 +58,7 @@ export const requestAssetUpload = createServerFn({ method: "POST" })
       kind: data.kind,
       filename: data.filename,
     });
-    const multipart = await initiateMultipartUpload({ key });
+    const multipart = await initiateMultipartUpload({ key, contentType: data.contentType });
     const id = randomBytes(16).toString("hex");
     const sql = await getSql();
     await sql`
