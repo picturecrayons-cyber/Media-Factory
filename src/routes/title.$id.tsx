@@ -407,7 +407,7 @@ function FilesPanel({
             try {
               setMessage(`Uploading ${kind}: part ${partNum} of ${partCount} (attempt ${attempt}/3)…`);
               const signed = await signAssetMultipartPart({ data: { assetId: session.assetId, partNum } });
-              const response = await fetch(signed.url, { method: "PUT", body: part, headers: signed.headers });
+              const response = await fetch(signed.url, { method: "PUT", body: part, headers: signed.headers, signal: AbortSignal.timeout(120_000) });
               if (!response.ok) throw new Error(`Part ${partNum} upload failed (${response.status})`);
               succeeded = true;
             } catch (error) {
