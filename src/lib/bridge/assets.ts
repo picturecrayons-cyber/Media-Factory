@@ -180,19 +180,28 @@ export const startAssetMultipartUpload = createServerFn({ method: "POST" })
     const validation = validateOttIngestFile({ kind, filename: data.filename, contentType: data.contentType });
     if (!validation.ok) throw new Error(validation.message);
     const id = randomBytes(16).toString("hex");
-    const { titleAssetKey, startMultipartUpload } = await import("./oci-object-storage.server");
+    const { titleAssetKey, startMultipartUpload, abortMultipartUpload } = await import("./oci-object-storage.server");
     const key = titleAssetKey({ ownerUserId: title.ownerUserId, titleId: title.id, kind: data.kind, filename: data.filename });
     const sql = await getSql();
     await sql`insert into bridge_assets (id, title_id, kind, s3_key, content_type, created_by, upload_expected_byte_size, upload_state)
       values (${id}, ${title.id}, ${data.kind}, ${key}, ${data.contentType}, ${actor.userId}, ${data.expectedByteSize}, 'STARTING')`;
+    let multipartUploadId: string | null = null;
     try {
       const multipart = await startMultipartUpload({ key, contentType: data.contentType });
+      multipartUploadId = multipart.uploadId;
       await sql`update bridge_assets set multipart_upload_id = ${multipart.uploadId}, upload_state = 'UPLOADING'
         where id = ${id} and created_by = ${actor.userId} and byte_size is null`;
       await writeAudit({ actorUserId: actor.userId, action: "asset.multipart_started", entityType: "bridge_asset", entityId: id,
         metadata: { titleId: title.id, kind: data.kind, expectedByteSize: data.expectedByteSize } });
       return { assetId: id, uploadId: multipart.uploadId, partSize: 10 * 1024 * 1024, key };
     } catch (error) {
+      if (multipartUploadId) {
+        try {
+          await abortMultipartUpload({ key, uploadId: multipartUploadId });
+        } catch {
+          // Keep the original start failure; a scheduled stale-upload cleanup is still required.
+        }
+      }
       await sql`update bridge_assets set upload_state = 'FAILED' where id = ${id}`;
       throw error;
     }
