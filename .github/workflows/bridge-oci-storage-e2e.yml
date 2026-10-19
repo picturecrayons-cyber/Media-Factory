@@ -13,9 +13,13 @@ on:
       - "package.json"
       - "package-lock.json"
 
+permissions:
+  contents: read
+
 jobs:
   storage-e2e:
     runs-on: ubuntu-latest
+    environment: bridge-preview-storage
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
@@ -24,15 +28,15 @@ jobs:
           node-version: "24"
           cache: npm
       - run: npm ci
-      - name: Run production OCI → Bridge persistence round-trip
+      - name: Run non-production OCI → Bridge persistence round-trip
         env:
-          OCI_TENANCY_OCID: ${{ secrets.OCI_TENANCY_OCID }}
-          OCI_USER_OCID: ${{ secrets.OCI_USER_OCID }}
-          OCI_FINGERPRINT: ${{ secrets.OCI_FINGERPRINT }}
-          OCI_PRIVATE_KEY: ${{ secrets.OCI_PRIVATE_KEY }}
-          OCI_REGION: ${{ secrets.OCI_REGION }}
-          OCI_NAMESPACE: ${{ secrets.OCI_NAMESPACE }}
-          OCI_BUCKET_NAME: ${{ secrets.OCI_BUCKET_NAME }}
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          OCI_TENANCY_OCID: ${{ secrets.BRIDGE_E2E_OCI_TENANCY_OCID }}
+          OCI_USER_OCID: ${{ secrets.BRIDGE_E2E_OCI_USER_OCID }}
+          OCI_FINGERPRINT: ${{ secrets.BRIDGE_E2E_OCI_FINGERPRINT }}
+          OCI_PRIVATE_KEY: ${{ secrets.BRIDGE_E2E_OCI_PRIVATE_KEY }}
+          OCI_REGION: ${{ secrets.BRIDGE_E2E_OCI_REGION }}
+          OCI_NAMESPACE: ${{ secrets.BRIDGE_E2E_OCI_NAMESPACE }}
+          OCI_BUCKET_NAME: ${{ secrets.BRIDGE_E2E_OCI_BUCKET_NAME }}
+          DATABASE_URL: ${{ secrets.BRIDGE_PREVIEW_DATABASE_URL }}
           BRIDGE_E2E_ASSET_ID: ${{ secrets.BRIDGE_E2E_ASSET_ID }}
         run: node scripts/oci-storage-e2e.mjs
