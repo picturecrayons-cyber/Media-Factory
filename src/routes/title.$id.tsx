@@ -11,6 +11,9 @@ import { getTitle, updateTitle } from "@/lib/bridge/titles";
 import { BRIDGE_LOOP_LANES, loopStageType } from "@/lib/bridge/loop-lanes";
 import {
   confirmAssetUpload,
+  requestAssetPartUpload,
+  commitAssetMultipartUpload,
+  abortAssetMultipartUpload,
   listTitleAssets,
   requestAssetDownload,
   requestAssetUpload,
@@ -280,18 +283,20 @@ function FilesPanel({
   const [uploading, setUploading] = useState<SimpleAssetKind | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
-  const activeUploadRef = useRef<{ xhrs: XMLHttpRequest[]; accessUri?: string; cancelled: boolean } | null>(null);
+  const activeUploadRef = useRef<{ xhrs: XMLHttpRequest[]; assetId?: string; uploadId?: string; cancelled: boolean } | null>(null);
 
   function uploadPart(
     url: string,
     body: Blob,
     onProgress: (loaded: number) => void,
     xhrs: XMLHttpRequest[],
+    headers: Record<string, string>,
   ): Promise<string> {
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
       xhrs.push(xhr);
       xhr.open("PUT", url);
+      for (const [name, value] of Object.entries(headers)) xhr.setRequestHeader(name, value);
       xhr.upload.onprogress = (event) => {
         if (event.lengthComputable) onProgress(event.loaded);
       };
@@ -300,7 +305,7 @@ function FilesPanel({
           reject(new Error(`Part upload failed (${xhr.status})`));
           return;
         }
-        const etag = xhr.getResponseHeader("etag")?.replaceAll('"', "").trim();
+        const etag = xhr.getResponseHeader("etag")?.trim();
         if (!etag) {
           reject(new Error("OCI did not expose the part ETag. Check the bucket CORS expose-headers configuration before retrying."));
           return;
@@ -318,13 +323,7 @@ function FilesPanel({
     if (!active) return;
     active.cancelled = true;
     for (const xhr of active.xhrs) xhr.abort();
-    if (active.accessUri) {
-      try {
-        await fetch(active.accessUri, { method: "DELETE" });
-      } catch {
-        // Expiring PARs and OCI's multipart cleanup remain the final safety net.
-      }
-    }
+    if (active.assetId && active.uploadId) await abortAssetMultipartUpload({ data: { assetId: active.assetId, uploadId: active.uploadId } }).catch(() => undefined);
     setMessage("Upload cancelled. Incomplete OCI parts were asked to abort; you can select the file again to retry.");
     setUploading(null);
     setProgress(0);
@@ -340,7 +339,7 @@ function FilesPanel({
       return;
     }
     if (activeUploadRef.current) return;
-    const active = { xhrs: [] as XMLHttpRequest[], accessUri: undefined as string | undefined, cancelled: false };
+    const active = { xhrs: [] as XMLHttpRequest[], assetId: undefined as string | undefined, uploadId: undefined as string | undefined, cancelled: false };
     activeUploadRef.current = active;
     setUploading(kind);
     setProgress(0);
@@ -349,7 +348,8 @@ function FilesPanel({
       const multipart = await requestAssetUpload({
         data: { titleId, kind, filename, contentType },
       });
-      active.accessUri = multipart.accessUri;
+      active.assetId = multipart.assetId;
+      active.uploadId = multipart.uploadId;
       const chunkSize = 16 * 1024 * 1024;
       const partCount = multipartPartCount(file.size, chunkSize);
       const loadedByPart = new Array<number>(partCount).fill(0);
@@ -362,15 +362,17 @@ function FilesPanel({
           if (index >= partCount) return;
           const start = index * chunkSize;
           const chunk = file.slice(start, Math.min(file.size, start + chunkSize));
-          const partUrl = new URL(String(index + 1), multipart.accessUri).toString();
           let lastError: unknown = null;
           for (let attempt = 0; attempt < 3 && !active.cancelled; attempt += 1) {
             try {
-              etags[index] = await uploadPart(partUrl, chunk, (loaded) => {
+              const digest = await crypto.subtle.digest("SHA-256", await chunk.arrayBuffer());
+              const sha256 = btoa(String.fromCharCode(...new Uint8Array(digest)));
+              const partRequest = await requestAssetPartUpload({ data: { assetId: multipart.assetId, uploadId: multipart.uploadId, partNum: index + 1, byteSize: chunk.size, sha256 } });
+              etags[index] = await uploadPart(partRequest.url, chunk, (loaded) => {
                 loadedByPart[index] = Math.min(loaded, chunk.size);
                 const total = loadedByPart.reduce((sum, value) => sum + value, 0);
                 setProgress(Math.min(99, Math.floor((total / file.size) * 100)));
-              }, active.xhrs);
+              }, active.xhrs, partRequest.headers);
               lastError = null;
               break;
             } catch (error) {
@@ -390,8 +392,7 @@ function FilesPanel({
       if (firstError) throw firstError;
       assertMultipartEtags(etags, partCount);
       setMessage("All parts uploaded. Committing and verifying the object…");
-      const committed = await fetch(multipart.accessUri, { method: "POST" });
-      if (!committed.ok) throw new Error(`OCI multipart completion failed (${committed.status})`);
+      await commitAssetMultipartUpload({ data: { assetId: multipart.assetId, uploadId: multipart.uploadId, parts: etags.map((etag, index) => ({ partNum: index + 1, etag })) } });
       await confirmAssetUpload({ data: { assetId: multipart.assetId, expectedByteSize: file.size } });
       setProgress(100);
       await onAssetsChanged();
@@ -401,13 +402,7 @@ function FilesPanel({
       if (active.cancelled || (error instanceof DOMException && error.name === "AbortError")) {
         setMessage("Upload cancelled. Select the file again to retry.");
       } else {
-        if (active.accessUri) {
-          try {
-            await fetch(active.accessUri, { method: "DELETE" });
-          } catch {
-            // The short-lived PAR expires; do not hide the original upload failure.
-          }
-        }
+        if (active.assetId && active.uploadId) await abortAssetMultipartUpload({ data: { assetId: active.assetId, uploadId: active.uploadId } }).catch(() => undefined);
         setMessage(raw.includes("STORAGE_UNAVAILABLE")
           ? "Storage service is currently unavailable. Please try again later."
           : `${raw}. Select the file again to retry.`);
