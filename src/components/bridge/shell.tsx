@@ -22,11 +22,11 @@ export function BrandMark({ className }: { className?: string }) {
     <Link
       to="/"
       className={cn("inline-flex items-center shrink-0", className)}
-      aria-label="Crayons Bridge home"
+      aria-label="crayons bridge"
     >
       <svg viewBox="0 0 168 48" role="img" aria-label="Crayons Bridge" className="bridge-logo block h-[42px] w-auto sm:h-[46px] lg:h-[48px]">
         <text x="0" y="16" fill="#6f6f6f" fontFamily="ui-sans-serif, system-ui, sans-serif" fontSize="13" fontWeight="600" letterSpacing="0.5">crayons</text>
-        <text x="0" y="40" fill="#08b8e8" fontFamily="ui-sans-serif, system-ui, sans-serif" fontSize="26" fontWeight="700" letterSpacing="-0.5">bridge</text>
+        <text x="0" y="40" fill="#006884" fontFamily="ui-sans-serif, system-ui, sans-serif" fontSize="26" fontWeight="700" letterSpacing="-0.5">bridge</text>
       </svg>
     </Link>
   );
@@ -49,7 +49,7 @@ export function BridgeShell({ actor, title, children }: { actor: BridgeActor; ti
       <main className="mx-auto max-w-[1440px] px-4 py-6 sm:px-6 lg:px-8">
         <div className="mb-5 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-accent">Crayons Bridge</p>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-fg">Crayons Bridge</p>
             <h1 className="mt-1 font-display text-2xl font-semibold tracking-tight sm:text-3xl">{title}</h1>
           </div>
           <p className="text-xs text-muted">{actor.organizationName || actor.displayName}</p>

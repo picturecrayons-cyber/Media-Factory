@@ -343,12 +343,15 @@ export const authorizeLoopPublication = createServerFn({ method: "POST" })
     const actor = await requireVerifiedActor(context.userId);
     assertPermission(actor, "loop.publish");
 
+    if (!data.windowStart || !data.windowEnd) {
+      throw new Error("Distribution Authorization Blocked: explicit start and end dates are required.");
+    }
     if (
-      data.windowStart &&
-      data.windowEnd &&
+      !Number.isFinite(new Date(data.windowStart).getTime()) ||
+      !Number.isFinite(new Date(data.windowEnd).getTime()) ||
       new Date(data.windowEnd) <= new Date(data.windowStart)
     ) {
-      throw new Error("Distribution window end date must be strictly after window start date.");
+      throw new Error("Distribution Authorization Blocked: window end must be a valid date strictly after window start.");
     }
 
     if (!data.exploitationModels.includes(data.accessTier)) {
