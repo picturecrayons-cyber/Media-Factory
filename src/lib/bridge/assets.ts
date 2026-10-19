@@ -43,14 +43,6 @@ export const requestAssetUpload = createServerFn({ method: "POST" })
     if (title.ownerUserId !== actor.userId && !hasStaffPermission(actor, "asset.sign_upload")) throw new Error("Forbidden");
     if (!UPLOADABLE.has(title.status)) throw new Error("Uploads are closed for this status");
     const sql = await getSql();
-    const existingAssets = await sql<{ id: string }>`
-      select id from bridge_assets
-      where title_id = ${title.id} and kind = ${data.kind} and byte_size > 0
-      order by created_at desc limit 1
-    `;
-    if (existingAssets.length > 0 && !canReplaceAsset(actor, title)) {
-      throw new Error("Replacing an existing asset requires separate permission");
-    }
     if (!["master", "poster", "poster_vertical", "poster_horizontal", "thumbnail", "subtitle", "screener", "technical", "censor_certificate"].includes(data.kind))
       throw new Error("This asset kind is not supported by the OTT ingest uploader");
     const ingestValidation = validateOttIngestFile({
@@ -68,17 +60,42 @@ export const requestAssetUpload = createServerFn({ method: "POST" })
     });
     const signed = await signUpload({ key, contentType: data.contentType });
     const id = randomBytes(16).toString("hex");
-    await sql`
-      insert into bridge_assets (id, title_id, kind, s3_key, content_type, created_by)
-      values (${id}, ${title.id}, ${data.kind}, ${key}, ${data.contentType}, ${actor.userId})
-    `;
-    await sql`
-      update loop_media_migration_queue
-      set status = 'UPLOADED', target_path = ${key}, updated_at = now()
-      where title_id = ${title.id}
-        and asset_kind = case when ${data.kind} = 'screener' then 'TRAILER' else upper(${data.kind}) end
-        and status in ('PENDING_REUPLOAD', 'UPLOADED')
-    `;
+    await sql.transaction(async (tx) => {
+      // Serialize uploads for a title so concurrent requests cannot race the replacement check.
+      const currentTitles = await tx.query<{ owner_user_id: string; status: typeof title.status }>(
+        "select owner_user_id, status from bridge_titles where id = $1 for update",
+        [title.id],
+      );
+      const currentTitle = currentTitles[0];
+      if (!currentTitle) throw new Error("Not found");
+      const lockedTitle = {
+        ownerUserId: currentTitle.owner_user_id,
+        status: currentTitle.status,
+      };
+      if (lockedTitle.ownerUserId !== actor.userId && !hasStaffPermission(actor, "asset.sign_upload")) {
+        throw new Error("Forbidden");
+      }
+      if (!UPLOADABLE.has(lockedTitle.status)) throw new Error("Uploads are closed for this status");
+      const existingAssets = await tx.query<{ id: string }>(
+        "select id from bridge_assets where title_id = $1 and kind = $2 limit 1",
+        [title.id, data.kind],
+      );
+      if (existingAssets.length > 0 && !canReplaceAsset(actor, lockedTitle)) {
+        throw new Error("Replacing an existing asset requires separate permission");
+      }
+      await tx.query(
+        "insert into bridge_assets (id, title_id, kind, s3_key, content_type, created_by) values ($1, $2, $3, $4, $5, $6)",
+        [id, title.id, data.kind, key, data.contentType, actor.userId],
+      );
+      await tx.query(
+        `update loop_media_migration_queue
+         set status = 'UPLOADED', target_path = $1, updated_at = now()
+         where title_id = $2
+           and asset_kind = case when $3 = 'screener' then 'TRAILER' else upper($3) end
+           and status in ('PENDING_REUPLOAD', 'UPLOADED')`,
+        [key, title.id, data.kind],
+      );
+    });
     await writeAudit({
       actorUserId: actor.userId,
       action: "asset.upload_signed",
