@@ -276,54 +276,62 @@ export function titleAssetKey(opts: { ownerUserId: string; titleId: string; kind
 }
 
 
-/**
- * Start a real OCI multipart upload through an object-scoped write PAR.
- * The returned access URI is a short-lived bearer capability and must never be logged.
- */
-export async function initiateMultipartUpload(opts: {
-  key: string;
-  contentType?: string;
-  expiresIn?: number;
-}) {
-  const signed = await createPar({
-    key: opts.key,
-    accessType: "ObjectWrite",
-    expiresIn: opts.expiresIn ?? 900,
-  });
-  const response = await fetch(signed.url, {
-    method: "PUT",
-    headers: {
-      "opc-multipart": "true",
-      ...(opts.contentType ? { "content-type": opts.contentType } : {}),
-    },
-  });
-  if (!response.ok) {
-    throw new Error(`OCI multipart initiation failed (${response.status})`);
-  }
-  const payload = (await response.json()) as {
-    uploadId?: string;
-    accessUri?: string;
-    object?: string;
-    bucket?: string;
-    namespace?: string;
-  };
-  if (!payload.uploadId || !payload.accessUri) {
-    throw new Error("OCI multipart initiation returned an incomplete response");
-  }
-  // Keep the capability URL bound to the configured OCI region; don't trust the response host.
+/** Start multipart upload through OCI native Object Storage API. */
+export async function initiateMultipartUpload(opts: { key: string; contentType?: string }) {
   const cfg = config();
-  const canonicalAccessUrl = new URL(payload.accessUri, endpoint(cfg.region));
-  if (canonicalAccessUrl.origin !== endpoint(cfg.region)) {
-    throw new Error("OCI multipart access URI has an unexpected origin");
+  const namespace = await resolveNamespace(cfg);
+  const path = "/n/" + encodeURIComponent(namespace) + "/b/" + encodeURIComponent(cfg.bucket) + "/u/" + encodedObjectName(opts.key);
+  const response = await signedFetch({ cfg, method: "POST", path, body: {} });
+  if (!response.ok) throw new Error("OCI multipart initiation failed (" + response.status + ")");
+  const payload = (await response.json()) as { uploadId?: string };
+  if (!payload.uploadId) throw new Error("OCI multipart initiation returned no upload ID");
+  return { uploadId: payload.uploadId, key: opts.key, bucket: cfg.bucket, namespace };
+}
+
+export type MultipartPart = { partNum: number; etag: string };
+
+/** Create a narrowly scoped signature for a single UploadPart request. */
+export async function createMultipartPartRequest(opts: { key: string; uploadId: string; partNum: number; byteSize: number; sha256: string }) {
+  if (!Number.isInteger(opts.partNum) || opts.partNum < 1 || opts.partNum > 10_000) throw new Error("Invalid OCI multipart part number");
+  if (!Number.isSafeInteger(opts.byteSize) || opts.byteSize <= 0) throw new Error("Invalid OCI multipart part size");
+  if (!/^[A-Za-z0-9+/]{43}=$/.test(opts.sha256)) throw new Error("Invalid SHA-256 digest");
+  const cfg = config();
+  const namespace = await resolveNamespace(cfg);
+  const path = "/n/" + encodeURIComponent(namespace) + "/b/" + encodeURIComponent(cfg.bucket) + "/u/" + encodedObjectName(opts.key);
+  const url = new URL(path, endpoint(cfg.region));
+  url.searchParams.set("uploadId", opts.uploadId);
+  url.searchParams.set("uploadPartNum", String(opts.partNum));
+  const date = new Date().toUTCString();
+  const contentType = "application/octet-stream";
+  const contentLength = String(opts.byteSize);
+  const names = ["(request-target)", "host", "date", "content-type", "content-length", "x-content-sha256"];
+  const lines = ["(request-target): put " + url.pathname + url.search, "host: " + url.host, "date: " + date, "content-type: " + contentType, "content-length: " + contentLength, "x-content-sha256: " + opts.sha256];
+  const signer = createSign("RSA-SHA256");
+  signer.update(lines.join("\n"));
+  signer.end();
+  const signature = signer.sign(cfg.privateKey, "base64");
+  const authorization = 'Signature version="1",keyId="' + cfg.tenancy + "/" + cfg.user + "/" + cfg.fingerprint + '",algorithm="rsa-sha256",headers="' + names.join(" ") + '",signature="' + signature + '"';
+  return { url: url.toString(), headers: { authorization, date, "content-type": contentType, "x-content-sha256": opts.sha256 } };
+}
+
+export async function commitMultipartUpload(opts: { key: string; uploadId: string; parts: MultipartPart[] }) {
+  if (!opts.parts.length || opts.parts.length > 10_000) throw new Error("Invalid OCI multipart completion manifest");
+  for (let i = 0; i < opts.parts.length; i += 1) {
+    if (opts.parts[i]!.partNum !== i + 1 || !opts.parts[i]!.etag.trim()) throw new Error("OCI multipart completion manifest must contain ordered part numbers and ETags");
   }
-  return {
-    accessUri: canonicalAccessUrl.toString().endsWith("/")
-      ? canonicalAccessUrl.toString()
-      : `${canonicalAccessUrl.toString()}/`,
-    uploadId: payload.uploadId,
-    key: opts.key,
-    bucket: signed.bucket,
-    namespace: signed.namespace,
-    expiresIn: opts.expiresIn ?? 900,
-  };
+  const cfg = config();
+  const namespace = await resolveNamespace(cfg);
+  const path = "/n/" + encodeURIComponent(namespace) + "/b/" + encodeURIComponent(cfg.bucket) + "/u/" + encodedObjectName(opts.key) + "?uploadId=" + encodeURIComponent(opts.uploadId);
+  const response = await signedFetch({ cfg, method: "POST", path, body: { partsToCommit: opts.parts.map(({ partNum, etag }) => ({ partNum, etag })) } });
+  if (!response.ok) throw new Error("OCI multipart completion failed (" + response.status + ")");
+  return { committed: true, key: opts.key };
+}
+
+export async function abortMultipartUpload(opts: { key: string; uploadId: string }) {
+  const cfg = config();
+  const namespace = await resolveNamespace(cfg);
+  const path = "/n/" + encodeURIComponent(namespace) + "/b/" + encodeURIComponent(cfg.bucket) + "/u/" + encodedObjectName(opts.key) + "?uploadId=" + encodeURIComponent(opts.uploadId);
+  const response = await signedFetch({ cfg, method: "DELETE", path });
+  if (!response.ok && response.status !== 404) throw new Error("OCI multipart abort failed (" + response.status + ")");
+  return { aborted: response.status !== 404, key: opts.key };
 }
