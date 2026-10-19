@@ -34,6 +34,8 @@ export const requestAssetUpload = createServerFn({ method: "POST" })
       kind: z.enum(ASSET_KINDS),
       filename: z.string().min(1).max(120),
       contentType: z.string().min(3).max(120),
+      // Used only to choose a longer-lived, object-scoped PAR for large uploads.
+      fileSize: z.number().int().positive().max(10995116277760).optional(),
     }),
   )
   .handler(async ({ context, data }) => {
@@ -59,7 +61,13 @@ export const requestAssetUpload = createServerFn({ method: "POST" })
       kind: data.kind,
       filename: data.filename,
     });
-    const signed = await signUpload({ key, contentType: data.contentType });
+    const signed = await signUpload({
+      key,
+      contentType: data.contentType,
+      // Large masters can take longer than the default 15-minute PAR lifetime.
+      // The PAR remains scoped to this one object and expires after 24 hours.
+      expiresIn: (data.fileSize ?? 0) > 100 * 1024 * 1024 ? 86400 : 900,
+    });
     const id = randomBytes(16).toString("hex");
     const sql = await getSql();
     await sql`
