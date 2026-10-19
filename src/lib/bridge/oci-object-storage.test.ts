@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { generateKeyPairSync, verify } from "node:crypto";
-import { sealVerifiedObject, verifyObject } from "./oci-object-storage.server.ts";
+import { initiateMultipartUpload, sealVerifiedObject, verifyObject } from "./oci-object-storage.server.ts";
 
 test("OCI private key normalization accepts escaped and quoted PEM secrets", async () => {
   const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
@@ -136,6 +136,60 @@ test("OCI object verification rejects an unexpected content type", async () => {
     globalThis.fetch = originalFetch;
     for (const [key, value] of Object.entries(saved)) {
       if (value === undefined) delete process.env[key]; else process.env[key] = value;
+    }
+  }
+});
+
+
+test("OCI multipart initiation returns an object-scoped part and completion capability", async () => {
+  const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  const values = {
+    OCI_TENANCY_OCID: "test-tenancy",
+    OCI_USER_OCID: "test-user",
+    OCI_PRIVATE_KEY: privateKey.export({ type: "pkcs8", format: "pem" }).toString(),
+    OCI_FINGERPRINT: "test-fingerprint",
+    OCI_REGION: "ap-mumbai-1",
+    OCI_NAMESPACE: "test-namespace",
+    OCI_BUCKET_NAME: "test-bucket",
+  };
+  const saved = Object.fromEntries(Object.keys(values).map((key) => [key, process.env[key]]));
+  const originalFetch = globalThis.fetch;
+  Object.assign(process.env, values);
+  const calls: Array<{ url: URL; method: string; headers: Headers }> = [];
+  globalThis.fetch = async (input, init) => {
+    const url = new URL(String(input));
+    const method = init?.method || "GET";
+    const headers = new Headers(init?.headers);
+    calls.push({ url, method, headers });
+    if (method === "POST") {
+      assert.equal(url.pathname, "/n/test-namespace/b/test-bucket/p/");
+      const body = JSON.parse(String(init?.body));
+      assert.equal(body.objectName, "bridge/test-owner/test-title/master/test.mp4");
+      assert.equal(body.accessType, "ObjectWrite");
+      return Response.json({ accessUri: "/p/par-token/n/test-namespace/b/test-bucket/o/bridge/test-owner/test-title/master/test.mp4" });
+    }
+    assert.equal(method, "PUT");
+    assert.equal(url.pathname, "/p/par-token/n/test-namespace/b/test-bucket/o/bridge/test-owner/test-title/master/test.mp4");
+    assert.equal(headers.get("opc-multipart"), "true");
+    return Response.json({
+      uploadId: "upload-123",
+      accessUri: "/p/par-token/n/test-namespace/b/test-bucket/u/bridge/test-owner/test-title/master/test.mp4/id/upload-123/",
+    });
+  };
+  try {
+    const result = await initiateMultipartUpload({
+      key: "bridge/test-owner/test-title/master/test.mp4",
+      expiresIn: 900,
+    });
+    assert.equal(result.uploadId, "upload-123");
+    assert.equal(result.key, "bridge/test-owner/test-title/master/test.mp4");
+    assert.equal(result.accessUri, "https://objectstorage.ap-mumbai-1.oraclecloud.com/p/par-token/n/test-namespace/b/test-bucket/u/bridge/test-owner/test-title/master/test.mp4/id/upload-123/");
+    assert.deepEqual(calls.map((call) => call.method), ["POST", "PUT"]);
+  } finally {
+    globalThis.fetch = originalFetch;
+    for (const [key, value] of Object.entries(saved)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
     }
   }
 });
