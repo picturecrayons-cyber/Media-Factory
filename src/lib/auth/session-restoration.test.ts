@@ -162,3 +162,47 @@ test("PKCE exchange persists a session and forced refresh returns the rotated be
   assert.match(requests[0], /grant_type=pkce/);
   assert.match(requests[1], /grant_type=refresh_token/);
 });
+
+
+test("explicit invalid refresh-token rejection clears only the local session", async () => {
+  let localSignOuts = 0;
+  const restored = await restoreSupabaseSession(
+    {
+      getSession: async () => result(confirmedSession),
+      refreshSession: async () =>
+        result(null, {
+          name: "AuthApiError",
+          status: 400,
+          code: "refresh_token_not_found",
+          message: "Invalid Refresh Token: Refresh Token Not Found",
+        }),
+      signOut: async (options) => {
+        assert.deepEqual(options, { scope: "local" });
+        localSignOuts++;
+      },
+    },
+    { forceRefresh: true },
+  );
+  assert.equal(restored, null);
+  assert.equal(localSignOuts, 1);
+});
+
+test("network refresh failure never clears local auth state or falls back to stale session", async () => {
+  let localSignOuts = 0;
+  const restored = await restoreSupabaseSession(
+    {
+      getSession: async () => result(confirmedSession),
+      refreshSession: async () =>
+        result(null, {
+          name: "AuthRetryableFetchError",
+          message: "Failed to fetch",
+        }),
+      signOut: async () => {
+        localSignOuts++;
+      },
+    },
+    { forceRefresh: true },
+  );
+  assert.equal(restored, null);
+  assert.equal(localSignOuts, 0);
+});
