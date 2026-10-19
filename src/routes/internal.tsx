@@ -18,6 +18,7 @@ import {
 } from "@/lib/bridge/loop-publication";
 import { INTERNAL_ROLES } from "@/lib/bridge/types";
 import { hasPermission } from "@/lib/bridge/rbac";
+import { validateDistributionForm } from "@/lib/bridge/distribution-form-validation";
 
 export const Route = createFileRoute("/internal")({ component: Internal });
 
@@ -150,13 +151,12 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
 
   // Authorization Form State
   const [selectedTitleId, setSelectedTitleId] = useState<string>("");
-  const [territories, setTerritories] = useState("IN");
-  const [languages, setLanguages] = useState("Malayalam");
+  const [territories, setTerritories] = useState("");
+  const [languages, setLanguages] = useState("");
   const [model] = useState<ExploitationModel>("TVOD");
   const [windowStart, setWindowStart] = useState("");
   const [windowEnd, setWindowEnd] = useState("");
-  const [rightsOwnerShare, setRightsOwnerShare] = useState<string>("80");
-  const [distributorShare, setDistributorShare] = useState<string>("20");
+  const [formErrors, setFormErrors] = useState<string[]>([]);
   const [extendTitleId, setExtendTitleId] = useState<string | null>(null);
   const [newExtendEnd, setNewExtendEnd] = useState<string>("");
 
@@ -178,15 +178,12 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
           accessTier: "TVOD",
           windowStart: windowStart ? new Date(windowStart).toISOString() : null,
           windowEnd: windowEnd ? new Date(windowEnd).toISOString() : null,
-          commercialTerms: {
-            rightsOwnerSharePct: Number(rightsOwnerShare) || 0,
-            distributorSharePct: Number(distributorShare) || 0,
-          },
         },
       }),
     onSuccess: () => {
       toast.success("Title authorized and published to Crayons Loop");
       setSelectedTitleId("");
+      setFormErrors([]);
       void qc.invalidateQueries({ queryKey: ["loop-publication-readiness"] });
       void qc.invalidateQueries({ queryKey: ["bridge-audit"] });
     },
@@ -386,12 +383,12 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
 
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 text-xs">
             <label className="block space-y-1">
-              <span className="font-semibold text-muted">Territories (comma-separated)</span>
+              <span className="font-semibold text-muted">Territories (comma-separated; signed grant only)</span>
               <input
                 value={territories}
                 onChange={(e) => setTerritories(e.target.value)}
                 className="h-9 w-full rounded-xl border border-line bg-elevated px-3 text-fg focus:outline-none"
-                placeholder="IN, AE, US"
+                placeholder="WORLDWIDE (only if granted)"
               />
             </label>
 
@@ -401,7 +398,7 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
                 value={languages}
                 onChange={(e) => setLanguages(e.target.value)}
                 className="h-9 w-full rounded-xl border border-line bg-elevated px-3 text-fg focus:outline-none"
-                placeholder="Malayalam, Tamil"
+                placeholder="Languages in the signed grant"
               />
             </label>
 
@@ -425,36 +422,25 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
               />
             </label>
 
-            <label className="block space-y-1">
-              <span className="font-semibold text-muted">Rights-Owner Share (%)</span>
-              <input
-                type="number"
-                min="0"
-                max="100"
-                value={rightsOwnerShare}
-                onChange={(e) => setRightsOwnerShare(e.target.value)}
-                className="h-9 w-full rounded-xl border border-line bg-elevated px-3 text-fg focus:outline-none"
-              />
-            </label>
-
-            <label className="block space-y-1">
-              <span className="font-semibold text-muted">Distributor Share (%)</span>
-              <input
-                type="number"
-                min="0"
-                max="100"
-                value={distributorShare}
-                onChange={(e) => setDistributorShare(e.target.value)}
-                className="h-9 w-full rounded-xl border border-line bg-elevated px-3 text-fg focus:outline-none"
-              />
-            </label>
           </div>
 
+          <p className="text-xs text-muted">
+            The current server preflight requires WORLDWIDE territory and TVOD with explicit dates. Enter only dimensions supported by the signed rights grant. Revenue shares are read from the approved grant, not from this form.
+          </p>
+          {formErrors.length ? (
+            <ul className="space-y-1 rounded-xl border border-amber-500/30 bg-amber-500/5 p-3 text-xs text-amber-700" role="alert">
+              {formErrors.map((error) => <li key={error}>{error}</li>)}
+            </ul>
+          ) : null}
           <div className="flex items-center gap-3 pt-2">
             <Button
               type="button"
               disabled={publishMut.isPending}
-              onClick={() => publishMut.mutate(selectedTitleId)}
+              onClick={() => {
+                const errors = validateDistributionForm({ territories, languages, windowStart, windowEnd });
+                setFormErrors(errors);
+                if (errors.length === 0) publishMut.mutate(selectedTitleId);
+              }}
               className="rounded-full px-5 text-xs font-semibold"
             >
               {publishMut.isPending
