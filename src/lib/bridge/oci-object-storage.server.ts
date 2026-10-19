@@ -223,18 +223,34 @@ export async function verifyObject(key: string, expectedContentType?: string | n
 
 async function pollWorkRequest(cfg: OciConfig, workRequestId: string) {
   const url = new URL(`/workRequests/${encodeURIComponent(workRequestId)}`, endpoint(cfg.region));
-  for (let i = 0; i < 30; i += 1) {
+  const startedAt = Date.now();
+  const timeoutMs = 45_000;
+  let lastStatus = "UNKNOWN";
+  let attempt = 0;
+
+  while (Date.now() - startedAt < timeoutMs) {
     const headers = signHeaders({ cfg, method: "GET", url });
     const res = await fetch(url, { method: "GET", headers });
     if (!res.ok) throw new Error(`OCI copy work-request lookup failed (${res.status})`);
     const body = (await res.json()) as { status?: string };
-    if (body.status === "SUCCEEDED") return;
-    if (body.status === "FAILED" || body.status === "CANCELED") {
-      throw new Error(`OCI object copy ${body.status.toLowerCase()}`);
+    lastStatus = body.status || "UNKNOWN";
+    if (lastStatus === "SUCCEEDED") return;
+    if (lastStatus === "FAILED" || lastStatus === "CANCELED") {
+      throw new Error(`OCI object copy ${lastStatus.toLowerCase()}`);
     }
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+
+    // Avoid hammering the OCI work-request endpoint while allowing slower copies
+    // more time than the previous fixed 30-second polling window.
+    const delayMs = Math.min(1_000 + attempt * 250, 3_000);
+    const remainingMs = timeoutMs - (Date.now() - startedAt);
+    if (remainingMs <= 0) break;
+    await new Promise((resolve) => setTimeout(resolve, Math.min(delayMs, remainingMs)));
+    attempt += 1;
   }
-  throw new Error("OCI object copy did not complete in time");
+
+  throw new Error(
+    `OCI object copy did not complete within ${Math.round((Date.now() - startedAt) / 1000)}s (last status: ${lastStatus})`,
+  );
 }
 
 /** Copy a verified upload into an immutable destination key. */
