@@ -10,7 +10,7 @@ import { loadTitle } from "./titles";
 import { writeAudit } from "./audit";
 import { assertNotDevUser } from "./guards";
 import { persistVerifiedAsset } from "./asset-confirmation";
-import { canDownloadAsset, canViewAsset } from "./asset-access-policy";
+import { canDownloadAsset, canReplaceAsset, canViewAsset } from "./asset-access-policy";
 import { canViewAsset } from "./asset-access-policy";
 import { validateOttIngestFile, type OttIngestKind } from "./ott-ingest-spec";
 
@@ -43,6 +43,14 @@ export const requestAssetUpload = createServerFn({ method: "POST" })
     if (!title) throw new Error("Not found");
     if (title.ownerUserId !== actor.userId && !hasStaffPermission(actor, "asset.sign_upload")) throw new Error("Forbidden");
     if (!UPLOADABLE.has(title.status)) throw new Error("Uploads are closed for this status");
+    const existingAssets = await sql<{ id: string }>`
+      select id from bridge_assets
+      where title_id = ${title.id} and kind = ${data.kind} and byte_size > 0
+      order by created_at desc limit 1
+    `;
+    if (existingAssets.length > 0 && !canReplaceAsset(actor, title)) {
+      throw new Error("Replacing an existing asset requires separate permission");
+    }
     if (!["master", "poster", "poster_vertical", "poster_horizontal", "thumbnail", "subtitle", "screener", "technical", "censor_certificate"].includes(data.kind))
       throw new Error("This asset kind is not supported by the OTT ingest uploader");
     const ingestValidation = validateOttIngestFile({
