@@ -65,6 +65,7 @@ function BuyerBody() {
   const qc = useQueryClient();
   const [tab, setTab] = useState<"discover" | "listing" | "licenses">("discover");
   const [query, setQuery] = useState("");
+  const [checkoutKeys, setCheckoutKeys] = useState<Record<string, string>>({});
   const titlesQ = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles() });
   const entQ = useQuery({
     queryKey: ["bridge-entitlements"],
@@ -72,9 +73,9 @@ function BuyerBody() {
   });
   const entitled = new Set(entQ.data?.entitlements.map((e) => e.titleId));
   const order = useMutation({
-    mutationFn: async (titleId: string) => {
+    mutationFn: async ({ titleId, idempotencyKey }: { titleId: string; idempotencyKey: string }) => {
       const created = await createLicenseOrder({
-        data: { titleId, idempotencyKey: `lic-${titleId}-${Date.now()}` },
+        data: { titleId, idempotencyKey },
       });
       const Razorpay = await loadRazorpay();
       await new Promise<void>((resolve, reject) => {
@@ -98,7 +99,12 @@ function BuyerBody() {
         ck.open();
       });
     },
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
+      setCheckoutKeys((previous) => {
+        const next = { ...previous };
+        delete next[variables.titleId];
+        return next;
+      });
       toast("Payment captured — entitlement recorded");
       void qc.invalidateQueries({ queryKey: ["bridge-titles"] });
       void qc.invalidateQueries({ queryKey: ["bridge-entitlements"] });
@@ -106,6 +112,12 @@ function BuyerBody() {
     },
     onError: (err) => toast(err instanceof Error ? err.message : "Payment did not complete"),
   });
+
+  function startLicense(titleId: string) {
+    const idempotencyKey = checkoutKeys[titleId] ?? `lic-${titleId}-${crypto.randomUUID()}`;
+    setCheckoutKeys((previous) => previous[titleId] ? previous : { ...previous, [titleId]: idempotencyKey });
+    order.mutate({ titleId, idempotencyKey });
+  }
 
   const titles = titlesQ.data?.titles ?? [];
   const needle = query.trim().toLowerCase();
@@ -140,9 +152,9 @@ function BuyerBody() {
       {!titles.length ? (
         <p className="text-sm text-muted">No live titles yet. Nothing is for sale until licensing-ready clears.</p>
       ) : tab === "licenses" ? (
-        <TitleList titles={licensed} entitled={entitled} order={order} empty="No licenses yet. Discover a title and complete payment." />
+        <TitleList titles={licensed} entitled={entitled} orderPending={order.isPending} onLicense={startLicense} empty="No licenses yet. Discover a title and complete payment." />
       ) : (
-        <TitleList titles={visible} entitled={entitled} order={order} empty="No titles match this search." />
+        <TitleList titles={visible} entitled={entitled} orderPending={order.isPending} onLicense={startLicense} empty="No titles match this search." />
       )}
     </div>
   );
@@ -158,7 +170,7 @@ function Stat({ label, value, note }: { label: string; value: string; note: stri
   );
 }
 
-function TitleList({ titles, entitled, order, empty }: { titles: Array<{ id: string; name: string; language: string; licensingFeePaise: number; status: string }>; entitled: Set<string>; order: { isPending: boolean; mutate: (id: string) => void }; empty: string }) {
+function TitleList({ titles, entitled, orderPending, onLicense, empty }: { titles: Array<{ id: string; name: string; language: string; licensingFeePaise: number; status: string }>; entitled: Set<string>; orderPending: boolean; onLicense: (titleId: string) => void; empty: string }) {
   if (!titles.length) return <p className="text-sm text-muted">{empty}</p>;
   return (
     <ul className="divide-y divide-line rounded-sm border border-line">
@@ -170,7 +182,7 @@ function TitleList({ titles, entitled, order, empty }: { titles: Array<{ id: str
           </div>
           <div className="flex items-center gap-3">
             <StatusChip status={t.status as never} />
-            {entitled.has(t.id) ? <span className="text-sm text-accent">Licensed</span> : <Button disabled={order.isPending || t.licensingFeePaise <= 0} onClick={() => order.mutate(t.id)}>License</Button>}
+            {entitled.has(t.id) ? <span className="text-sm text-accent">Licensed</span> : <Button disabled={orderPending || t.licensingFeePaise <= 0} onClick={() => onLicense(t.id)}>License</Button>}
           </div>
         </li>
       ))}

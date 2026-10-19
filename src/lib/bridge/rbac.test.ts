@@ -2,6 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { assertPermission, canAccessDashboard, canGrantInternalRole, canMutateTitle, canOperateOnTitle, canReadTitle, hasPermission, hasStaffPermission, permissionForTransition, workspaceHome } from "./rbac.ts";
 import type { Actor } from "./rbac.ts";
+import { PERMISSIONS } from "./types.ts";
 
 const actor = (
   userId: string,
@@ -98,6 +99,9 @@ describe("PRD authorization matrix", () => {
     assert.equal(hasPermission(a, "asset.sign_upload"), true);
     assert.equal(hasPermission(a, "users.invite_internal"), true);
     assert.equal(hasPermission(a, "title.license"), true);
+    for (const permission of PERMISSIONS) {
+      assert.equal(hasPermission(a, permission), true, `Super Admin missing ${permission}`);
+    }
   });
 
   it("viewer, reviewer and finance roles cannot inherit creator mutation powers from account type", () => {

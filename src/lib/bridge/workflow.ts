@@ -20,6 +20,9 @@ export async function saveLoopLicense(
   data: z.infer<typeof loopLicenseInput>,
 ) {
   data = loopLicenseInput.parse(data);
+  if (!actor.emailVerified || !["admin", "super_admin"].includes(actor.internalRole ?? "")) {
+    throw new Error("Only Bridge admins and super admins can submit Loop license drafts");
+  }
   const [title] = await tx<{
     owner_user_id: string;
     status: string;
@@ -88,9 +91,13 @@ export async function reviewWorkflow(tx: Sql, actor: Actor, data: z.infer<typeof
     if (
       data.decision === "APPROVE" &&
       (!assets.some((a) => a.kind === "master" && a.s3_key === title.master_key) ||
-        !assets.some((a) => a.kind === "poster" && a.s3_key === title.poster_key))
+        !assets.some(
+          (a) =>
+            (a.kind === "poster_vertical" || a.kind === "poster") &&
+            a.s3_key === title.poster_key,
+        ))
     )
-      throw new Error("Verified current master and artwork are required");
+      throw new Error("Verified current master and artwork (poster_vertical or legacy poster) are required");
     await tx`insert into bridge_qc_cases(title_id,status,reviewer_findings,reviewed_by,reviewed_at)
       values (${data.titleId},${data.decision === "APPROVE" ? "PASSED" : "ACTION_REQUIRED"},
       ${JSON.stringify([{ note: data.note, masterKey: title.master_key, posterKey: title.poster_key }])}::jsonb,${actor.userId},now())`;

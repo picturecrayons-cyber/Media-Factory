@@ -54,4 +54,23 @@ describe("master download denial", () => {
       hasLicenseEntitlement: false,
     }).allow, false);
   });
+
+  it("lets a buyer read the canonical vertical poster but not the master", () => {
+    const poster = downloadDecision({
+      kind: "poster_vertical",
+      actorIsOwner: false,
+      actorIsInternal: false,
+      accountType: "buyer",
+      hasLicenseEntitlement: false,
+    });
+    assert.equal(poster.allow, true);
+    const master = downloadDecision({
+      kind: "master",
+      actorIsOwner: false,
+      actorIsInternal: false,
+      accountType: "buyer",
+      hasLicenseEntitlement: true,
+    });
+    assert.equal(master.allow, false);
+  });
 });

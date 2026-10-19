@@ -39,7 +39,9 @@ function Login() {
         }
       })
       .catch(() => {
-        void navigate({ to: "/onboarding" });
+        // Do not misroute a valid signed-in user to onboarding when the
+        // profile lookup/database is temporarily unavailable.
+        setError("You are signed in, but Bridge could not load your workspace profile. Refresh and try again; if this continues, contact support.");
       });
   }, [isPending, user, navigate]);
 
@@ -52,6 +54,12 @@ function Login() {
       await signInWithEmail(email.trim(), password);
       // Session established; let the useEffect resolve profile or route
       const s = await getBridgeSession().catch(() => null);
+      if (!s) {
+        setError("Sign-in succeeded, but Bridge could not load your workspace profile. Please refresh and try again; if this continues, contact support. Do not create another account.");
+        setBusy(false);
+        return;
+      }
+
       const nextParam =
         typeof window !== "undefined"
           ? new URLSearchParams(window.location.search).get("next")
@@ -59,10 +67,10 @@ function Login() {
 
       if (isSafeRedirect(nextParam)) {
         window.location.assign(nextParam!);
-      } else if (s?.home) {
-        window.location.assign(s.home);
+      } else if (!s.profile || s.home === "/onboarding") {
+        window.location.assign("/onboarding");
       } else {
-        window.location.assign("/dashboard");
+        window.location.assign(s.home || "/workspace");
       }
     } catch (err: unknown) {
       console.error("[Login error]", err);
@@ -100,6 +108,8 @@ function Login() {
           <label className="block text-sm font-medium text-fg">
             Email
             <input
+              id="login-email"
+              name="email"
               required
               autoComplete="email"
               type="email"
@@ -122,6 +132,8 @@ function Login() {
             </span>
             <div className="relative mt-1.5">
               <input
+                id="login-password"
+                name="password"
                 required
                 autoComplete="current-password"
                 type={showPassword ? "text" : "password"}

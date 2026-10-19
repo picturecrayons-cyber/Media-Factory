@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button";
 import { listTitles, listAuditLogs } from "@/lib/bridge/titles";
 import { listLoopPublicationReadiness } from "@/lib/bridge/loop-publication";
 import { listAdminProfiles } from "@/lib/bridge/profiles";
+import { ACCOUNT_TYPES, INTERNAL_ROLES, PERMISSIONS } from "@/lib/bridge/types";
+import { permissionsFor } from "@/lib/bridge/rbac";
 
 export const Route = createFileRoute("/admin")({ component: AdminControlPlane });
 
@@ -124,6 +126,71 @@ function AdminBody({ actor }: { actor: any }) {
           </div>
           <div className="mt-4"><Link to="/internal"><Button variant="outline">Invite internal user</Button></Link></div>
         </details>
+
+        {actor.internalRole === "super_admin" ? (
+          <details className="rounded-2xl border border-line bg-surface p-5">
+            <summary className="cursor-pointer font-semibold">
+              RBAC permission matrix <span className="ml-2 text-sm font-normal text-muted">Super Admin only · {PERMISSIONS.length} permissions</span>
+            </summary>
+            <p className="mt-2 text-sm text-muted">
+              Effective permissions are role-defined and checked on the server. Assign internal roles through the invitation flow; this matrix is read-only and does not bypass audit or approval gates.
+            </p>
+            <div className="mt-4 grid gap-4 lg:grid-cols-2">
+              {INTERNAL_ROLES.map((role) => {
+                const granted = permissionsFor({
+                  userId: "rbac-matrix",
+                  emailVerified: true,
+                  accountType: "independent_creator",
+                  internalRole: role,
+                });
+                return (
+                  <section key={role} className="rounded-xl border border-line p-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <h3 className="font-semibold">{role.replaceAll("_", " ")}</h3>
+                      <span className="text-xs text-muted">{granted.size}/{PERMISSIONS.length} permissions</span>
+                    </div>
+                    <ul className="mt-3 flex flex-wrap gap-2">
+                      {PERMISSIONS.map((permission) => (
+                        <li
+                          key={permission}
+                          className={`rounded-full border px-2.5 py-1 text-xs ${granted.has(permission) ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300" : "border-line text-muted opacity-70"}`}
+                        >
+                          {granted.has(permission) ? "✓ " : "— "}{permission}
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                );
+              })}
+              {ACCOUNT_TYPES.map((accountType) => {
+                const granted = permissionsFor({
+                  userId: "rbac-matrix",
+                  emailVerified: true,
+                  accountType,
+                  internalRole: null,
+                });
+                return (
+                  <section key={accountType} className="rounded-xl border border-line p-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <h3 className="font-semibold">{accountType.replaceAll("_", " ")}</h3>
+                      <span className="text-xs text-muted">{granted.size}/{PERMISSIONS.length} permissions</span>
+                    </div>
+                    <ul className="mt-3 flex flex-wrap gap-2">
+                      {PERMISSIONS.map((permission) => (
+                        <li
+                          key={permission}
+                          className={`rounded-full border px-2.5 py-1 text-xs ${granted.has(permission) ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300" : "border-line text-muted opacity-70"}`}
+                        >
+                          {granted.has(permission) ? "✓ " : "— "}{permission}
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                );
+              })}
+            </div>
+          </details>
+        ) : null}
 
         <details className="rounded-2xl border border-line bg-surface p-5">
           <summary className="cursor-pointer font-semibold">Recent operator activity</summary>

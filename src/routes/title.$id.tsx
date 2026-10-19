@@ -4,7 +4,7 @@ import { WorkflowDesk } from "@/components/bridge/workflow-desk";
 import { publicationIsActive } from "@/lib/bridge/workflow-policy";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { getTitle, updateTitle } from "@/lib/bridge/titles";
@@ -20,13 +20,14 @@ import type { BridgeActor } from "@/lib/bridge/session";
 import {
   OTT_INGEST_SPEC,
   getOttIngestAccept,
+  validateArtworkDimensions,
   validateOttIngestFile,
 } from "@/lib/bridge/ott-ingest-spec";
 import { asciiUploadName } from "@/lib/bridge/latin1";
 
 export const Route = createFileRoute("/title/$id")({ component: TitlePage });
 
-const WORKSPACE_TABS = ["Overview", "Files"] as const;
+const WORKSPACE_TABS = ["Overview", "Files", "Workflow"] as const;
 type WorkspaceTab = (typeof WORKSPACE_TABS)[number];
 
 function LaneStore({ titleId, stored, locked }: { titleId: string; stored: string; locked: boolean }) {
@@ -98,6 +99,26 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
   const title = titleQ.data?.title;
   const assets = assetsQ.data?.assets ?? [];
   const pub = pubQ.data?.publication;
+  const [posterPreviewUrl, setPosterPreviewUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    const poster = assets.find((asset) => asset.verified && ["poster_vertical", "poster"].includes(asset.kind));
+    if (!poster) {
+      setPosterPreviewUrl(null);
+      return;
+    }
+    let cancelled = false;
+    requestAssetDownload({ data: { assetId: poster.id } })
+      .then((signed) => {
+        if (!cancelled) setPosterPreviewUrl(signed.url);
+      })
+      .catch(() => {
+        if (!cancelled) setPosterPreviewUrl(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [assets]);
 
   if (titleQ.isPending) return <p className="text-sm text-muted">Loading title workspace…</p>;
   if (titleQ.isError)
@@ -124,16 +145,23 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
 
   return (
     <div className="space-y-5">
-      <WorkflowDesk title={title} actor={actor} />
       {assetsQ.isError ? <p role="alert">Assets unavailable: {assetsQ.error.message}</p> : null}
       <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
         <div className="grid gap-5 md:grid-cols-[180px_1fr]">
           <div className="aspect-[2/3] overflow-hidden rounded-xl border border-line bg-elevated">
-            <div className="grid h-full place-items-center px-4 text-center text-xs text-muted">
-              {assets.some((asset) => ["poster_vertical", "poster"].includes(asset.kind))
-                ? "Vertical poster ready"
-                : "Add vertical poster"}
-            </div>
+            {posterPreviewUrl ? (
+              <img
+                src={posterPreviewUrl}
+                alt={`${title.name} vertical poster preview`}
+                className="h-full w-full object-contain"
+              />
+            ) : (
+              <div className="grid h-full place-items-center px-4 text-center text-xs text-muted">
+                {assets.some((asset) => asset.verified && ["poster_vertical", "poster"].includes(asset.kind))
+                  ? "Poster verified · preview unavailable"
+                  : "Add vertical poster"}
+              </div>
+            )}
           </div>
           <div className="min-w-0">
             <div className="flex flex-wrap items-start justify-between gap-3">
@@ -148,6 +176,9 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
                   {title.language}
                   {title.year ? ` · ${title.year}` : ""}
                   {title.runtimeMinutes ? ` · ${title.runtimeMinutes} min` : ""}
+                </p>
+                <p className="mt-2 break-all font-mono text-xs text-muted" aria-label="Canonical Bridge Title ID">
+                  Bridge Title ID: {title.id}
                 </p>
               </div>
               <span className="rounded-full border border-line bg-elevated px-3 py-1.5 text-xs font-semibold">
@@ -194,7 +225,7 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
         aria-label="Title Workspace Sections"
         className="flex gap-1 overflow-x-auto border-b border-line pb-3"
       >
-        {WORKSPACE_TABS.map((tab) => (
+        {(actor.accountType === "buyer" && !actor.internalRole ? (["Overview"] as const) : WORKSPACE_TABS).map((tab) => (
           <button
             key={tab}
             type="button"
@@ -245,6 +276,8 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
           assets={assets}
           onAssetsChanged={() => assetsQ.refetch()}
         />
+      ) : activeTab === "Workflow" ? (
+        <WorkflowDesk title={title} actor={actor} />
       ) : null}
     </div>
   );
@@ -257,6 +290,16 @@ function Metric({ label, value }: { label: string; value: string }) {
     </div>
   );
 }
+
+type MultipartResumeRecord = {
+  assetId: string;
+  accessUri: string;
+  filename: string;
+  size: number;
+  lastModified: number;
+  uploadedParts: number[];
+  expiresAt: number;
+};
 
 type SimpleAssetKind = "master" | "poster_vertical" | "poster_horizontal" | "thumbnail" | "subtitle" | "screener" | "censor_certificate";
 function FilesPanel({
@@ -277,8 +320,52 @@ function FilesPanel({
   onAssetsChanged: () => Promise<unknown> | unknown;
 }) {
   const [uploading, setUploading] = useState<SimpleAssetKind | null>(null);
+  const uploadLock = useRef(false);
+  const activeUploadRequest = useRef<XMLHttpRequest | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [verifyingAssetId, setVerifyingAssetId] = useState<string | null>(null);
+  const [uploadStartedAt, setUploadStartedAt] = useState<number | null>(null);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [uploadProgress, setUploadProgress] = useState<{
+    kind: SimpleAssetKind;
+    loaded: number;
+    total: number;
+    percent: number | null;
+    stage: "preparing" | "uploading" | "verifying" | "complete" | "failed" | "cancelled";
+  } | null>(null);
+
+  useEffect(() => {
+    if (uploading === null || uploadStartedAt === null) return;
+    const timer = window.setInterval(() => {
+      setElapsedSeconds(Math.floor((Date.now() - uploadStartedAt) / 1000));
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [uploading, uploadStartedAt]);
+  async function validateArtworkOrientation(kind: SimpleAssetKind, file: File): Promise<string | null> {
+    if (kind !== "poster_vertical" && kind !== "poster_horizontal") return null;
+    let image: ImageBitmap;
+    try {
+      image = await createImageBitmap(file);
+    } catch {
+      return "Could not read image dimensions. Please choose a valid PNG, JPG, or WebP image.";
+    }
+    const { width, height } = image;
+    image.close();
+    const result = validateArtworkDimensions(kind, width, height);
+    return result.ok ? null : result.message;
+  }
+
   async function uploadFile(kind: SimpleAssetKind, file: File) {
+    // Serialize transfers so a shared progress panel and elapsed timer can never be
+    // overwritten or cleared by another asset's request.
+    if (uploadLock.current) return;
+    uploadLock.current = true;
+    const orientationError = await validateArtworkOrientation(kind, file);
+    if (orientationError) {
+      setMessage(orientationError);
+      uploadLock.current = false;
+      return;
+    }
     const filename = asciiUploadName(file.name);
     const contentType = file.type || "application/octet-stream";
     const validation = validateOttIngestFile({
@@ -288,41 +375,239 @@ function FilesPanel({
     });
     if (!validation.ok) {
       setMessage(validation.message);
+      uploadLock.current = false;
       return;
     }
     setUploading(kind);
+    setUploadStartedAt(Date.now());
+    setElapsedSeconds(0);
+    setUploadProgress({ kind, loaded: 0, total: file.size, percent: 0, stage: "preparing" });
     setMessage(`Preparing ${kind} upload…`);
+    let signedAssetId: string | null = null;
+    let multipartAccessUrl: URL | null = null;
+    const multipartThreshold = 100 * 1024 * 1024;
+    const resumeKey = `bridge:multipart-resume:${titleId}:${kind}`;
+    let resumedParts: number[] = [];
+    let resumeRecord: MultipartResumeRecord | null = null;
     try {
-      const signed = await requestAssetUpload({
-        data: {
-          titleId,
-          kind,
-          filename,
-          contentType,
-        },
+      if (file.size > multipartThreshold) {
+        try {
+          const raw = sessionStorage.getItem(resumeKey);
+          if (raw) {
+            const parsed = JSON.parse(raw) as MultipartResumeRecord | null;
+            if (
+              parsed &&
+              parsed.filename === filename &&
+              parsed.size === file.size &&
+              parsed.lastModified === file.lastModified &&
+              parsed.expiresAt > Date.now() &&
+              Array.isArray(parsed.uploadedParts) &&
+              parsed.uploadedParts.every((part) => Number.isInteger(part) && part > 0)
+            ) {
+              resumeRecord = parsed;
+              signedAssetId = parsed.assetId;
+              multipartAccessUrl = new URL(parsed.accessUri);
+              resumedParts = parsed.uploadedParts;
+            }
+          }
+        } catch {
+          // Ignore stale or unavailable tab-local resume state and start a new upload.
+        }
+      }
+      let signed: Awaited<ReturnType<typeof requestAssetUpload>> | null = null;
+      let uploadUrl: URL | null = null;
+      if (!resumeRecord) {
+        signed = await requestAssetUpload({ data: { titleId, kind, filename, contentType, fileSize: file.size } });
+        signedAssetId = signed.assetId;
+        uploadUrl = new URL(signed.url);
+        uploadUrl.pathname = uploadUrl.pathname.split("/").map((part) => encodeURIComponent(decodeURIComponent(part))).join("/");
+      }
+      setMessage(resumeRecord ? `Resuming ${kind} upload from completed parts…` : `Uploading ${kind}…`);
+      setUploadProgress({ kind, loaded: 0, total: file.size, percent: null, stage: "uploading" });
+      const sendUploadRequest = (
+        url: string,
+        method: string,
+        body: Blob | null,
+        headers: Record<string, string>,
+        onProgress?: (loaded: number) => void,
+      ) => new Promise<string>((resolve, reject) => {
+        const request = new XMLHttpRequest();
+        activeUploadRequest.current = request;
+        request.open(method, url);
+        // Bound each request, not the entire large-file transfer. Multipart parts
+        // can continue for longer than a single 10-minute browser request.
+        request.timeout = 10 * 60 * 1000;
+        for (const [name, value] of Object.entries(headers)) request.setRequestHeader(name, value);
+        request.upload.onprogress = (event) => onProgress?.(event.loaded);
+        request.onload = () => {
+          if (request.status >= 200 && request.status < 300) resolve(request.responseText);
+          else reject(new Error(`Upload failed (${request.status})`));
+        };
+        request.onerror = () => reject(new Error("Upload connection failed; storage outcome is unknown. Refresh the asset list and retry verification before uploading again."));
+        request.ontimeout = () => reject(new Error("Upload timed out; storage outcome is unknown. Refresh the asset list and retry verification before uploading again."));
+        request.onabort = () => reject(new Error("Upload was cancelled; refresh the asset list before retrying verification."));
+        request.send(body);
       });
-      const uploadUrl = new URL(signed.url);
-      uploadUrl.pathname = uploadUrl.pathname.split("/").map((part) => encodeURIComponent(decodeURIComponent(part))).join("/");
-      const put = await fetch(uploadUrl.toString(), {
-        method: signed.method,
-        body: file,
-        headers: { "content-type": contentType },
+
+      if (file.size > multipartThreshold) {
+        // Keep multipart state in this tab so a refresh/reselection of the exact same
+        // file can continue without retransmitting parts already accepted by OCI.
+        if (!multipartAccessUrl) {
+          if (!uploadUrl || !signedAssetId) throw new Error("Could not initialize the large-file upload.");
+          const responseText = await sendUploadRequest(
+            uploadUrl.toString(),
+            "PUT",
+            null,
+            { "content-type": contentType, "opc-multipart": "true" },
+          );
+          let multipart: { accessUri?: string };
+          try {
+            multipart = JSON.parse(responseText) as { accessUri?: string };
+          } catch {
+            throw new Error("Storage did not return a valid multipart upload response.");
+          }
+          if (!multipart.accessUri) throw new Error("Storage did not return a multipart upload URL.");
+          multipartAccessUrl = new URL(multipart.accessUri, uploadUrl.origin);
+          resumeRecord = {
+            assetId: signedAssetId,
+            accessUri: multipartAccessUrl.toString(),
+            filename,
+            size: file.size,
+            lastModified: file.lastModified,
+            uploadedParts: [],
+            expiresAt: Date.now() + 23 * 60 * 60 * 1000,
+          };
+          try { sessionStorage.setItem(resumeKey, JSON.stringify(resumeRecord)); } catch { /* resume is best effort */ }
+        }
+        const partSize = 256 * 1024 * 1024;
+        let uploadedBytes = 0;
+        for (let offset = 0; offset < file.size; offset += partSize) {
+          const partNumber = Math.floor(offset / partSize) + 1;
+          const part = file.slice(offset, Math.min(offset + partSize, file.size));
+          if (resumedParts.includes(partNumber)) {
+            uploadedBytes += part.size;
+            setUploadProgress({ kind, loaded: uploadedBytes, total: file.size, percent: Math.min(100, Math.round((uploadedBytes / file.size) * 100)), stage: "uploading" });
+            continue;
+          }
+          const partUrl = new URL(String(partNumber), multipartAccessUrl).toString();
+          let lastError: unknown = null;
+          for (let attempt = 0; attempt < 3; attempt += 1) {
+            try {
+              await sendUploadRequest(partUrl, "PUT", part, { "content-type": contentType }, (loaded) => {
+                const totalLoaded = Math.min(uploadedBytes + loaded, file.size);
+                setUploadProgress({
+                  kind,
+                  loaded: totalLoaded,
+                  total: file.size,
+                  percent: Math.min(100, Math.round((totalLoaded / file.size) * 100)),
+                  stage: "uploading",
+                });
+              });
+              lastError = null;
+              break;
+            } catch (error) {
+              lastError = error;
+              if (error instanceof Error && error.message.startsWith("Upload was cancelled")) throw error;
+            }
+          }
+          if (lastError) {
+            throw new Error(`Upload part ${partNumber} failed after 3 attempts: ${lastError instanceof Error ? lastError.message : "Upload failed"}`);
+          }
+          uploadedBytes += part.size;
+          resumedParts = [...new Set([...resumedParts, partNumber])].sort((a, b) => a - b);
+          if (resumeRecord) {
+            resumeRecord.uploadedParts = resumedParts;
+            try { sessionStorage.setItem(resumeKey, JSON.stringify(resumeRecord)); } catch { /* resume is best effort */ }
+          }
+          setUploadProgress({
+            kind,
+            loaded: uploadedBytes,
+            total: file.size,
+            percent: Math.min(100, Math.round((uploadedBytes / file.size) * 100)),
+            stage: "uploading",
+          });
+        }
+        await sendUploadRequest(multipartAccessUrl.toString(), "POST", null, {});
+        multipartAccessUrl = null;
+        try { sessionStorage.removeItem(resumeKey); } catch { /* ignore storage restrictions */ }
+      } else {
+        if (!uploadUrl || !signed) throw new Error("Could not initialize the upload.");
+        await sendUploadRequest(uploadUrl.toString(), signed.method, file, { "content-type": contentType }, (loaded) => {
+          setUploadProgress({
+            kind,
+            loaded: Math.min(loaded, file.size),
+            total: file.size,
+            percent: Math.min(100, Math.round((Math.min(loaded, file.size) / file.size) * 100)),
+            stage: "uploading",
+          });
+        });
+      }
+      setMessage("Upload sent. Verifying storage…");
+      setUploadProgress((current) => current ? { ...current, percent: 100, loaded: file.size, stage: "verifying" } : current);
+      const confirmation = await confirmAssetUpload({
+        data: { assetId: signedAssetId ?? "", expectedByteSize: file.size },
       });
-      if (!put.ok) throw new Error(`Upload failed (${put.status})`);
-      await confirmAssetUpload({ data: { assetId: signed.assetId, expectedByteSize: file.size } });
+      if (!confirmation.verified) throw new Error("Storage verification did not complete. Please retry verification.");
       await onAssetsChanged();
-      setMessage(`${kind[0].toUpperCase() + kind.slice(1)} is ready.`);
+      setUploadProgress((current) => current ? { ...current, stage: "complete" } : current);
+      setMessage(`${kind[0].toUpperCase() + kind.slice(1)} uploaded and storage-verified.`);
     } catch (error) {
+      // Preserve a live multipart session after failure so the same file can resume.
+      // Expired sessions are ignored on the next selection; no production objects are touched here.
       const raw = error instanceof Error ? error.message : "Upload failed";
+      // A failed client request does not prove that storage rejected the object or
+      // that server-side verification did not finish. Refresh the persisted state;
+      // only the server's verified flag may make an asset ready.
+      if (signedAssetId) {
+        try {
+          await onAssetsChanged();
+        } catch {
+          // Keep the explicit unknown-outcome message if refresh is also unavailable.
+        }
+      }
+      const wasCancelled = raw.startsWith("Upload was cancelled");
+      setUploadProgress((current) => current ? { ...current, stage: wasCancelled ? "cancelled" : "failed" } : current);
       setMessage(
-        raw.includes("STORAGE_UNAVAILABLE")
-          ? "Storage service is currently unavailable. Please try again later."
-          : raw,
+        wasCancelled
+          ? "Upload cancelled. You can select the file again to retry."
+          : raw.includes("STORAGE_UNAVAILABLE")
+            ? "Storage service is currently unavailable. Please try again later."
+            : raw,
       );
     } finally {
+      activeUploadRequest.current = null;
       setUploading(null);
+      setUploadStartedAt(null);
+      uploadLock.current = false;
     }
   }
+  async function retryVerification(assetId: string) {
+    if (uploadLock.current || verifyingAssetId) return;
+    setVerifyingAssetId(assetId);
+    setMessage("Retrying storage verification…");
+    try {
+      const result = await confirmAssetUpload({ data: { assetId } });
+      if (!result.verified) throw new Error("Storage verification is still pending. Retry again shortly.");
+      await onAssetsChanged();
+      setMessage("Storage verified. The asset is now available in this title workspace.");
+    } catch (error) {
+      // The verification request may have failed after the server persisted success.
+      // Refresh and trust the persisted verified state rather than the client response.
+      try {
+        await onAssetsChanged();
+      } catch {
+        // Keep the original error visible when refresh is unavailable.
+      }
+      setMessage(
+        error instanceof Error
+          ? `Verification retry failed: ${error.message}`
+          : "Verification retry failed. Check storage connectivity and retry.",
+      );
+    } finally {
+      setVerifyingAssetId(null);
+    }
+  }
+
   async function download(id: string) {
     const signed = await requestAssetDownload({ data: { assetId: id } });
     window.location.assign(signed.url);
@@ -351,32 +636,111 @@ function FilesPanel({
             key={kind}
             kind={kind}
             label={label}
-            status={assets.some((a) => (a.kind === kind || (kind === "poster_vertical" && a.kind === "poster")) && a.verified) ? "Ready" : empty}
+            status={
+              assets.some((a) => a.kind === kind && a.verified)
+                ? "Ready"
+                : assets.some((a) => a.kind === kind)
+                  ? "Verifying"
+                  : empty
+            }
             busy={uploading === kind}
+            uploadInProgress={uploading !== null}
             canUpload={canUpload}
             onFile={(file) => void uploadFile(kind, file)}
           />
         ))}
       </div>
-      {message ? <p className="mt-3 text-xs text-muted">{message}</p> : null}
+      {uploadProgress ? (
+        <div className="mt-4 rounded-xl border border-line p-4" aria-live="polite">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-sm font-semibold">
+              {uploadProgress.kind === "master" ? "Main Film" : uploadProgress.kind}
+            </p>
+            <div className="flex items-center gap-3">
+              <p className="text-xs text-muted">
+                {uploadProgress.stage === "preparing" ? "Preparing upload" :
+                  uploadProgress.stage === "uploading" ? "Uploading" :
+                  uploadProgress.stage === "verifying" ? "Verifying storage" :
+                  uploadProgress.stage === "complete" ? "Complete — verified" :
+                  uploadProgress.stage === "cancelled" ? "Cancelled" : "Failed"}
+              </p>
+              {uploadProgress.stage === "uploading" ? (
+                <button
+                  type="button"
+                  onClick={() => activeUploadRequest.current?.abort()}
+                  className="rounded-full border border-line px-3 py-1.5 text-xs font-semibold hover:bg-fg/5"
+                >
+                  Cancel Upload
+                </button>
+              ) : null}
+            </div>
+          </div>
+          {uploadProgress.stage === "uploading" && uploadProgress.percent === null ? (
+            <div className="mt-3 h-2 overflow-hidden rounded-full bg-elevated">
+              <div className="h-full w-1/3 animate-pulse rounded-full bg-accent" />
+            </div>
+          ) : (
+            <div
+              className="mt-3 h-2 overflow-hidden rounded-full bg-elevated"
+              role="progressbar"
+              aria-label={`${uploadProgress.kind} upload progress`}
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={uploadProgress.percent ?? 0}
+            >
+              <div
+                className={`h-full rounded-full ${uploadProgress.stage === "failed" ? "bg-red-500" : uploadProgress.stage === "cancelled" ? "bg-muted" : "bg-accent"}`}
+                style={{ width: `${uploadProgress.percent ?? 0}%` }}
+              />
+            </div>
+          )}
+          <div className="mt-2 flex flex-wrap justify-between gap-2 text-xs text-muted">
+            <span>
+              {uploadProgress.percent === null ? "Measuring upload…" : `${uploadProgress.percent}%`}
+              {" · "}
+              {(uploadProgress.loaded / (1024 * 1024)).toFixed(1)} / {(uploadProgress.total / (1024 * 1024)).toFixed(1)} MB
+            </span>
+            <span>
+              Elapsed: {Math.floor(elapsedSeconds / 60)}:{String(elapsedSeconds % 60).padStart(2, "0")}
+            </span>
+          </div>
+        </div>
+      ) : null}
+      {message ? <p className="mt-3 text-xs text-muted" role="status">{message}</p> : null}
       <div className="mt-5 space-y-2">
         {assets.map((a) => (
           <div
             key={a.id}
-            className="flex items-center justify-between gap-3 rounded-xl border border-line p-4"
+            className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line p-4"
           >
-            <div>
+            <div className="min-w-0">
               <p className="text-sm font-semibold">{a.kind}</p>
-              <p className="text-xs text-muted">{a.verified ? "Ready" : "Processing"}</p>
+              <p className="text-xs text-muted">
+                {a.verified ? "Storage-verified" : "Uploaded record · awaiting storage verification"}
+                {a.byteSize ? ` · ${(a.byteSize / (1024 * 1024)).toFixed(1)} MB` : ""}
+              </p>
             </div>
-            {a.verified ? (
-              <button
-                onClick={() => void download(a.id)}
-                className="rounded-full border border-line px-4 py-2 text-xs font-semibold"
-              >
-                Download
-              </button>
-            ) : null}
+            <div className="flex flex-wrap gap-2">
+              {!a.verified && canUpload ? (
+                <button
+                  type="button"
+                  disabled={verifyingAssetId !== null || uploading !== null}
+                  onClick={() => void retryVerification(a.id)}
+                  className="rounded-full border border-line px-4 py-2 text-xs font-semibold disabled:opacity-50"
+                >
+                  {verifyingAssetId === a.id ? "Verifying…" : "Retry verification"}
+                </button>
+              ) : null}
+              {a.verified ? (
+                <button
+                  type="button"
+                  onClick={() => void download(a.id)}
+                  className="rounded-full border border-line px-4 py-2 text-xs font-semibold"
+                >
+                  Preview / Download
+                </button>
+              ) : null}
+            </div>
           </div>
         ))}
       </div>
@@ -388,6 +752,7 @@ function FileTypeCard({
   label,
   status,
   busy,
+  uploadInProgress,
   onFile,
   canUpload,
 }: {
@@ -396,6 +761,7 @@ function FileTypeCard({
   label: string;
   status: string;
   busy: boolean;
+  uploadInProgress: boolean;
   onFile: (file: File) => void;
 }) {
   const spec = OTT_INGEST_SPEC[kind];
@@ -409,13 +775,17 @@ function FileTypeCard({
             Allowed: {spec.extensions.map((ext) => ext.replace(".", "").toUpperCase()).join(", ")}
           </p>
         </div>
-        <label className="cursor-pointer rounded-full border border-line px-3 py-1.5 text-xs font-semibold">
-          {busy ? "Uploading…" : status === "Ready" ? "Replace" : "Upload"}
+        <label
+          aria-disabled={busy || uploadInProgress || !canUpload}
+          title={!canUpload ? "Uploads are unavailable for this role or title status." : uploadInProgress && !busy ? "Another upload is in progress." : undefined}
+          className={`rounded-full border border-line px-3 py-1.5 text-xs font-semibold ${busy || uploadInProgress || !canUpload ? "cursor-not-allowed opacity-50" : "cursor-pointer hover:bg-fg/5"}`}
+        >
+          {busy ? "Uploading…" : !canUpload ? "Unavailable" : uploadInProgress ? "Wait…" : status === "Ready" ? "Replace" : "Upload"}
           <input
             className="sr-only"
             type="file"
             accept={getOttIngestAccept(kind)}
-            disabled={busy || !canUpload}
+            disabled={busy || uploadInProgress || !canUpload}
             onChange={(e) => {
               const file = e.currentTarget.files?.[0];
               if (file) onFile(file);

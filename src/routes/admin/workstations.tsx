@@ -20,7 +20,7 @@ const STATUS_LABELS: Record<string, string> = {
 
 function AdminWorkstations() {
   return (
-    <RequireBridge allow="internal">
+    <RequireBridge allow="admin">
       {(actor) => <BridgeShell actor={actor} title="Admin"><WorkstationBody /></BridgeShell>}
     </RequireBridge>
   );

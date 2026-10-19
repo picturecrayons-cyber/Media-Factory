@@ -202,6 +202,40 @@ export async function signDownload(opts: { key: string; expiresIn?: number }) {
   return { url: signed.url, key: opts.key, bucket: signed.bucket, method: "GET" as const };
 }
 
+/** Fetch a bounded object body for server-side inspection of small artwork assets. */
+export async function readObjectBytes(key: string, maxBytes = 25 * 1024 * 1024): Promise<Buffer> {
+  const cfg = config();
+  const namespace = await resolveNamespace(cfg);
+  const path = `/n/${encodeURIComponent(namespace)}/b/${encodeURIComponent(cfg.bucket)}/o/${encodedObjectName(key)}`;
+  const res = await signedFetch({ cfg, method: "GET", path });
+  if (!res.ok) throw new Error(`OCI object read failed (${res.status})`);
+  const declaredLength = Number(res.headers.get("content-length") || 0);
+  if (!Number.isSafeInteger(declaredLength) || declaredLength <= 0 || declaredLength > maxBytes) {
+    await res.body?.cancel();
+    throw new Error("Artwork file is empty or exceeds the server-side inspection limit");
+  }
+  if (!res.body) throw new Error("OCI object body is unavailable for artwork inspection");
+  const reader = res.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > maxBytes || total > declaredLength) {
+        await reader.cancel();
+        throw new Error("Artwork file exceeds the server-side inspection limit");
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  if (total !== declaredLength) throw new Error("Artwork body length did not match object metadata");
+  return Buffer.concat(chunks.map((chunk) => Buffer.from(chunk)), total);
+}
+
 export async function verifyObject(key: string, expectedContentType?: string | null) {
   const cfg = config();
   const namespace = await resolveNamespace(cfg);
@@ -223,18 +257,28 @@ export async function verifyObject(key: string, expectedContentType?: string | n
 
 async function pollWorkRequest(cfg: OciConfig, workRequestId: string) {
   const url = new URL(`/workRequests/${encodeURIComponent(workRequestId)}`, endpoint(cfg.region));
-  for (let i = 0; i < 30; i += 1) {
+  // OCI server-side copies can take longer than the old fixed 30-second window,
+  // especially for large masters. Keep the wait bounded but allow up to 5 minutes.
+  const deadline = Date.now() + 5 * 60 * 1000;
+  let attempt = 0;
+  while (Date.now() < deadline) {
     const headers = signHeaders({ cfg, method: "GET", url });
-    const res = await fetch(url, { method: "GET", headers });
+    const res = await fetch(url, {
+      method: "GET",
+      headers,
+      signal: AbortSignal.timeout(10_000),
+    });
     if (!res.ok) throw new Error(`OCI copy work-request lookup failed (${res.status})`);
     const body = (await res.json()) as { status?: string };
     if (body.status === "SUCCEEDED") return;
     if (body.status === "FAILED" || body.status === "CANCELED") {
       throw new Error(`OCI object copy ${body.status.toLowerCase()}`);
     }
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+    const delay = Math.min(5_000, 1_000 + attempt * 500);
+    await new Promise((resolve) => setTimeout(resolve, delay));
+    attempt += 1;
   }
-  throw new Error("OCI object copy did not complete in time");
+  throw new Error("OCI object copy is still pending after 5 minutes; retry verification before uploading again");
 }
 
 /** Copy a verified upload into an immutable destination key. */

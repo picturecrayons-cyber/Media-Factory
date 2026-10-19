@@ -1,6 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { randomBytes, randomUUID } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import { ASSET_KINDS } from "./types";
@@ -12,6 +12,8 @@ import { assertNotDevUser } from "./guards";
 import { persistVerifiedAsset } from "./asset-confirmation";
 import { downloadDecision } from "./delivery-policy";
 import { validateOttIngestFile, type OttIngestKind } from "./ott-ingest-spec";
+import { validateArtworkDimensions } from "./ott-ingest-spec";
+import { readImageDimensions } from "./image-dimensions";
 
 const UPLOADABLE: ReadonlySet<string> = new Set(["DRAFT", "UPLOADING", "PREPARING"]);
 
@@ -32,6 +34,8 @@ export const requestAssetUpload = createServerFn({ method: "POST" })
       kind: z.enum(ASSET_KINDS),
       filename: z.string().min(1).max(120),
       contentType: z.string().min(3).max(120),
+      // Used only to choose a longer-lived, object-scoped PAR for large uploads.
+      fileSize: z.number().int().positive().max(10995116277760).optional(),
     }),
   )
   .handler(async ({ context, data }) => {
@@ -57,7 +61,13 @@ export const requestAssetUpload = createServerFn({ method: "POST" })
       kind: data.kind,
       filename: data.filename,
     });
-    const signed = await signUpload({ key, contentType: data.contentType });
+    const signed = await signUpload({
+      key,
+      contentType: data.contentType,
+      // Large masters can take longer than the default 15-minute PAR lifetime.
+      // The PAR remains scoped to this one object and expires after 24 hours.
+      expiresIn: (data.fileSize ?? 0) > 100 * 1024 * 1024 ? 86400 : 900,
+    });
     const id = randomBytes(16).toString("hex");
     const sql = await getSql();
     await sql`
@@ -115,13 +125,31 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
     if (asset.byte_size != null)
       return { assetId: asset.id, byteSize: Number(asset.byte_size), verified: true };
 
-    const { verifyObject, sealVerifiedObject } = await import("./oci-object-storage.server");
+    const { verifyObject, sealVerifiedObject, readObjectBytes, deleteObject } = await import("./oci-object-storage.server");
     const object = await verifyObject(asset.s3_key, asset.content_type);
+    if (asset.kind === "poster_vertical" || asset.kind === "poster_horizontal") {
+      // Generic browser MIME is provisional only; the byte parser below must recognize the image.
+      if (
+        !object.contentType ||
+        !["image/png", "image/jpeg", "image/webp", "application/octet-stream"].includes(object.contentType)
+      ) {
+        throw new Error("Artwork must be a valid PNG, JPEG, or WebP image");
+      }
+      const imageBytes = await readObjectBytes(asset.s3_key);
+      const dimensions = readImageDimensions(imageBytes);
+      if (!dimensions) throw new Error("Could not read valid artwork dimensions from uploaded image bytes");
+      const orientation = validateArtworkDimensions(
+        asset.kind,
+        dimensions.width,
+        dimensions.height,
+      );
+      if (!orientation.ok) throw new Error(orientation.message);
+    }
     if (data.expectedByteSize != null && object.byteSize !== data.expectedByteSize) {
       throw new Error("Uploaded object size does not match the file that was sent");
     }
     if (!object.etag) throw new Error("Object ETag is required for immutable verification");
-    const sealedKey = `${asset.s3_key}.verified/${randomUUID()}`;
+    const sealedKey = `${asset.s3_key}.verified/${asset.id}`;
     const sealed = await sealVerifiedObject(asset.s3_key, sealedKey, object.etag);
     if (sealed.byteSize !== object.byteSize || !sealed.etag) {
       throw new Error("Verified copy differs from the uploaded object");
@@ -146,6 +174,17 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
           and asset_kind = case when ${asset.kind} = 'screener' then 'TRAILER' else upper(${asset.kind}) end
           and status in ('UPLOADED', 'PENDING_REUPLOAD')
       `;
+      // The database now points at the verified immutable copy. Remove the temporary
+      // upload object to avoid paying for two full copies of every accepted master.
+      // Cleanup failure must not turn a verified upload into a failed user operation.
+      try {
+        await deleteObject(asset.s3_key);
+      } catch (cleanupError) {
+        console.warn("[bridge-storage] verified source cleanup failed", {
+          assetId: asset.id,
+          message: cleanupError instanceof Error ? cleanupError.message : "Unknown storage cleanup error",
+        });
+      }
     }
     if (!confirmed) {
       const current = await sql<{
@@ -226,11 +265,14 @@ export const listTitleAssets = createServerFn({ method: "GET" })
       created_at: string | Date;
     }>`
       select id, kind, s3_key, content_type, byte_size, created_at
-      from bridge_assets where title_id = ${title.id} and byte_size > 0 order by created_at desc
+      from bridge_assets where title_id = ${title.id} order by created_at desc
     `;
     return {
       assets: rows
-        .filter((r) => !buyer || !["master", "technical", "censor_certificate"].includes(r.kind))
+        .filter((r) =>
+          !buyer ||
+          (Number(r.byte_size) > 0 && !["master", "technical", "censor_certificate"].includes(r.kind)),
+        )
         .map((r) => ({
           id: r.id,
           kind: r.kind,

@@ -11,6 +11,8 @@ test("only a verified upload sets the master reference, once, with an audit even
     await db.waitReady;
     await db.exec("create role anon; create role authenticated;");
     await db.exec(readFileSync(join(process.cwd(), "migrations/0004_bridge.sql"), "utf8"));
+    await db.exec(readFileSync(join(process.cwd(), "supabase/migrations/20261004_bridge_assets_add_censor_certificate.sql"), "utf8"));
+    await db.exec(readFileSync(join(process.cwd(), "migrations/0005_bridge_poster_vertical.sql"), "utf8"));
     await db.exec(`insert into bridge_titles (id,slug,name,owner_user_id,owner_account_type)
       values ('title1234','title','Title','creator','independent_creator');
       insert into bridge_assets (id,title_id,kind,s3_key,content_type,created_by)
@@ -43,6 +45,22 @@ test("only a verified upload sets the master reference, once, with an audit even
     );
     assert.equal(audit.rows[0]?.action, "asset.upload_verified");
     assert.equal(JSON.parse(audit.rows[0]?.metadata ?? "{}").checksum, "etag-1");
+    await db.exec(`
+      insert into bridge_assets (id,title_id,kind,s3_key,content_type,created_by)
+      values ('posterasset123','title1234','poster_vertical','bridge/creator/title1234/poster_vertical/poster.jpg','image/jpeg','creator');
+    `);
+    assert.equal(await persistVerifiedAsset(sql, {
+      ...args,
+      assetId: "posterasset123",
+      kind: "poster_vertical",
+      contentType: "image/jpeg",
+      sourceKey: "bridge/creator/title1234/poster_vertical/poster.jpg",
+      sealedKey: "bridge/creator/title1234/poster_vertical/poster.jpg.verified/uuid-2",
+    }), true);
+    const poster = await db.query<{ poster_key: string | null }>(
+      "select poster_key from bridge_titles where id='title1234'",
+    );
+    assert.equal(poster.rows[0]?.poster_key, "bridge/creator/title1234/poster_vertical/poster.jpg.verified/uuid-2");
   } finally {
     await db.close();
   }

@@ -129,6 +129,26 @@ export function getOttIngestAccept(kind: OttIngestKind): string {
   return [...rule.extensions, ...rule.mimeTypes].join(",");
 }
 
+export function validateArtworkDimensions(
+  kind: "poster_vertical" | "poster_horizontal",
+  width: number,
+  height: number,
+): { ok: true } | { ok: false; message: string } {
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+    return { ok: false, message: "Could not read valid artwork dimensions." };
+  }
+  if (width === height) {
+    return { ok: false, message: "Artwork must be landscape or portrait; square images are not accepted for these slots." };
+  }
+  if (kind === "poster_vertical" && height <= width) {
+    return { ok: false, message: "Vertical Poster must be portrait (height greater than width)." };
+  }
+  if (kind === "poster_horizontal" && width <= height) {
+    return { ok: false, message: "Horizontal Artwork must be landscape (width greater than height)." };
+  }
+  return { ok: true };
+}
+
 export function validateOttIngestFile(args: {
   kind: OttIngestKind;
   filename: string;
