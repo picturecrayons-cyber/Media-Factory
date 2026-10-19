@@ -291,6 +291,16 @@ function Metric({ label, value }: { label: string; value: string }) {
   );
 }
 
+type MultipartResumeRecord = {
+  assetId: string;
+  accessUri: string;
+  filename: string;
+  size: number;
+  lastModified: number;
+  uploadedParts: number[];
+  expiresAt: number;
+};
+
 type SimpleAssetKind = "master" | "poster_vertical" | "poster_horizontal" | "thumbnail" | "subtitle" | "screener" | "censor_certificate";
 function FilesPanel({
   titleId,
@@ -378,13 +388,13 @@ function FilesPanel({
     const multipartThreshold = 100 * 1024 * 1024;
     const resumeKey = `bridge:multipart-resume:${titleId}:${kind}`;
     let resumedParts: number[] = [];
-    let resumeRecord: { assetId: string; accessUri: string; filename: string; size: number; lastModified: number; uploadedParts: number[]; expiresAt: number } | null = null;
+    let resumeRecord: MultipartResumeRecord | null = null;
     try {
       if (file.size > multipartThreshold) {
         try {
           const raw = sessionStorage.getItem(resumeKey);
           if (raw) {
-            const parsed = JSON.parse(raw) as typeof resumeRecord;
+            const parsed = JSON.parse(raw) as MultipartResumeRecord | null;
             if (
               parsed &&
               parsed.filename === filename &&
