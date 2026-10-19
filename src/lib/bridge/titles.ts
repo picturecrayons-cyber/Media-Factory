@@ -211,6 +211,13 @@ export const createTitle = createServerFn({ method: "POST" })
     if (hasRightsScope && !hasCompleteRightsScope) {
       throw new Error("Complete the rights package and authorization attestation before submitting");
     }
+    if (hasCompleteRightsScope) {
+      const startMs = Date.parse(data.windowStart ?? "");
+      const endMs = Date.parse(data.windowEnd ?? "");
+      if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) {
+        throw new Error("Rights window end must be after a valid rights window start");
+      }
+    }
     let rightsGrantId: string | null = null;
     await sql.transaction(async (tx) => {
       await tx`
@@ -237,12 +244,12 @@ export const createTitle = createServerFn({ method: "POST" })
           title_id, grant_type, territories, languages, media, window_start, window_end,
           exclusivity, evidence, status, created_by
         ) values (
-          ${id}, 'DISTRIBUTION', ${JSON.stringify(data.territories)}::jsonb,
-          ${JSON.stringify(data.rightsLanguages)}::jsonb, ${JSON.stringify(data.media)}::jsonb,
-          ${data.windowStart}, ${data.windowEnd}, ${data.exclusivity},
+          ${id}, 'DISTRIBUTION', ${JSON.stringify(data.territories ?? [])}::jsonb,
+          ${JSON.stringify(data.rightsLanguages ?? [])}::jsonb, ${JSON.stringify(data.media ?? [])}::jsonb,
+          ${data.windowStart!}, ${data.windowEnd!}, ${data.exclusivity!},
           ${JSON.stringify([{
             type: "SUBMISSION_ATTESTATION",
-            rightsBasis: data.rightsBasis,
+            rightsBasis: data.rightsBasis ?? "OWNER",
             authorizationAttested: data.authorizationAttested === true,
             screenerAccess: data.screenerAccess ?? "SCREENER_PENDING",
             intendedDestinations: data.intendedDestinations ?? [],
@@ -257,7 +264,7 @@ export const createTitle = createServerFn({ method: "POST" })
           ${id}, 'PENDING',
           ${JSON.stringify([{
             grantId: grant.id,
-            rightsBasis: data.rightsBasis,
+            rightsBasis: data.rightsBasis ?? "OWNER",
             authorizationAttested: data.authorizationAttested === true,
             status: "PENDING_EVIDENCE_REVIEW",
           }])}::jsonb
