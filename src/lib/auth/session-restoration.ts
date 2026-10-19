@@ -37,7 +37,9 @@ export async function restoreSupabaseSession(
     if (isDefinitelyInvalidRefreshToken(refreshed.error)) {
       // Local-only cleanup: don't make a remote request while recovering from
       // an invalid token, and never fall back to a stale authenticated session.
-      await auth.signOut?.({ scope: "local" }).catch(() => undefined);
+      if (auth.signOut) {
+        await auth.signOut({ scope: "local" }).catch(() => undefined);
+      }
     }
     return null;
   }
