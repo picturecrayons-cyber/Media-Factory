@@ -283,7 +283,6 @@ function FilesPanel({
 }) {
   const [uploading, setUploading] = useState<SimpleAssetKind | null>(null);
   const [message, setMessage] = useState<string | null>(null);
-  const [progress, setProgress] = useState(0);
   const [queueItems, setQueueItems] = useState<UploadQueueItem[]>([]);
   const queueRef = useRef<UploadQueueItem[]>([]);
   const queueRunningRef = useRef(false);
@@ -300,7 +299,6 @@ function FilesPanel({
   }
 
   function updateProgress(value: number) {
-    setProgress(value);
     if (currentQueueIdRef.current) updateQueueItem(currentQueueIdRef.current, { progress: value });
   }
 
@@ -345,7 +343,6 @@ function FilesPanel({
     if (active.assetId && active.uploadId) await abortAssetMultipartUpload({ data: { assetId: active.assetId, uploadId: active.uploadId } }).catch(() => undefined);
     setMessage("Upload cancelled. Incomplete OCI parts were asked to abort; you can select the file again to retry.");
     setUploading(null);
-    setProgress(0);
     if (currentQueueIdRef.current) updateQueueItem(currentQueueIdRef.current, { status: "Cancelled", message: "Cancelled by user" });
     activeUploadRef.current = null;
   }
