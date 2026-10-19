@@ -89,8 +89,6 @@ export const PERMISSIONS = [
   "asset.view",
   "asset.preview",
   "asset.replace",
-  "asset.delete",
-  "asset.submit_qc",
   "payment.create_order",
   "service.quote_create",
   "service.order_create",
