@@ -434,14 +434,14 @@ export const getDashboardFinanceSummary = createServerFn({ method: "GET" })
       currency_count: string | number;
     }>`
       select
-        coalesce(sum(case when status in ('PARTIAL','SETTLED') then revenue_received_paise else 0 end),0)::bigint as revenue_received_paise,
-        coalesce(sum(case when status='SETTLED' then creator_payable_paise else 0 end),0)::bigint as creator_payable_settled_paise,
-        coalesce(sum(case when status='SETTLED' then investor_payable_paise else 0 end),0)::bigint as investor_payable_settled_paise,
-        coalesce(sum(case when status='SETTLED' then bridge_share_paise else 0 end),0)::bigint as bridge_share_settled_paise,
+        coalesce(sum(case when status in ('PARTIAL','SETTLED') and currency='INR' then revenue_received_paise else 0 end),0)::bigint as revenue_received_paise,
+        coalesce(sum(case when status='SETTLED' and currency='INR' then creator_payable_paise else 0 end),0)::bigint as creator_payable_settled_paise,
+        coalesce(sum(case when status='SETTLED' and currency='INR' then investor_payable_paise else 0 end),0)::bigint as investor_payable_settled_paise,
+        coalesce(sum(case when status='SETTLED' and currency='INR' then bridge_share_paise else 0 end),0)::bigint as bridge_share_settled_paise,
         count(*) filter (where status='SETTLED')::int as settled_count,
         count(*) filter (where status='PENDING')::int as pending_count,
         count(*) filter (where status='ON_HOLD')::int as on_hold_count,
-        count(distinct currency) filter (where status in ('PARTIAL','SETTLED'))::int as currency_count
+        count(distinct currency) filter (where status in ('PARTIAL','SETTLED') and currency <> 'INR')::int as currency_count
       from bridge_title_settlements
     `;
     return {
