@@ -38,7 +38,7 @@ export const requestAssetUpload = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
-    assertPermission(actor, actor.internalRole ? "title.ingest_internal" : "asset.sign_upload");
+    assertPermission(actor, "asset.sign_upload");
     const title = await loadTitle(data.titleId);
     if (!title) throw new Error("Not found");
     if (title.ownerUserId !== actor.userId && !hasStaffPermission(actor, "asset.sign_upload")) throw new Error("Forbidden");
@@ -90,7 +90,7 @@ export const requestAssetUpload = createServerFn({ method: "POST" })
 async function loadAuthorizedUploadAsset(contextUserId: string, assetId: string) {
   assertNotDevUser(contextUserId);
   const actor = await requireVerifiedActor(contextUserId);
-  assertPermission(actor, actor.internalRole ? "title.ingest_internal" : "asset.sign_upload");
+  assertPermission(actor, "asset.sign_upload");
   const sql = await getSql();
   const rows = await sql<{ id: string; title_id: string; s3_key: string; created_by: string }>`
     select id, title_id, s3_key, created_by from bridge_assets where id = ${assetId} limit 1
@@ -140,7 +140,7 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
-    assertPermission(actor, actor.internalRole ? "title.ingest_internal" : "asset.sign_upload");
+    assertPermission(actor, "asset.sign_upload");
     const sql = await getSql();
     const rows = await sql<{
       id: string;
