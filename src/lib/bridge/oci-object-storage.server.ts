@@ -306,7 +306,6 @@ export async function initiateMultipartUpload(opts: {
   if (!payload.uploadId || !payload.accessUri) {
     throw new Error("OCI multipart initiation returned an incomplete response");
   }
-  const accessUrl = new URL(payload.accessUri, endpoint(new URL(signed.url).hostname.split(".")[1] || ""));
   // Keep the capability URL bound to the configured OCI region; don't trust the response host.
   const cfg = config();
   const canonicalAccessUrl = new URL(payload.accessUri, endpoint(cfg.region));
