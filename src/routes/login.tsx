@@ -67,13 +67,21 @@ function Login() {
     } catch (err: unknown) {
       console.error("[Login error]", err);
       const message = err instanceof Error ? err.message : String(err);
+      const errorName = err instanceof Error ? err.name : "";
 
-      if (message.includes("Invalid login credentials") || message.includes("invalid_grant")) {
+      if (
+        (typeof navigator !== "undefined" && !navigator.onLine) ||
+        /AuthRetryableFetchError|ERR_INTERNET_DISCONNECTED|failed to fetch|networkerror|network request failed/i.test(
+          `${errorName} ${message}`,
+        )
+      ) {
+        setError(
+          "Crayons Bridge cannot reach Supabase right now. Restore your internet connection and try again. Your account has not been changed.",
+        );
+      } else if (message.includes("Invalid login credentials") || message.includes("invalid_grant")) {
         setError("Invalid email or password.");
       } else if (message.includes("Email not confirmed")) {
         setError("Email not verified. Please check your inbox for the confirmation link.");
-      } else if (message.includes("fetch") || message.includes("NetworkError")) {
-        setError("Network failure. Please check your connection and try again.");
       } else if (message.includes("Supabase") || message.includes("configured") || message.includes("configuration")) {
         setError("Sign in is temporarily unavailable. Please try again shortly.");
       } else {
