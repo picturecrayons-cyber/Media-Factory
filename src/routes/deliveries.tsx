@@ -62,7 +62,9 @@ function VendorJobs({ actor }: { actor: Actor }) {
       </p>
       {canRequest ? (
         <div className="mt-4 flex flex-wrap gap-2">
+          <label className="sr-only" htmlFor="vendor-job-type">Vendor job type</label>
           <select
+            id="vendor-job-type"
             className="rounded-lg border border-line bg-transparent px-3 py-2 text-sm"
             value={type}
             onChange={(e) => setType(e.target.value as VendorJobType)}
@@ -73,7 +75,9 @@ function VendorJobs({ actor }: { actor: Actor }) {
               </option>
             ))}
           </select>
+          <label className="sr-only" htmlFor="vendor-title-id">Title ID</label>
           <input
+            id="vendor-title-id"
             className="rounded-lg border border-line bg-transparent px-3 py-2 text-sm"
             placeholder="Title id"
             value={titleId}
