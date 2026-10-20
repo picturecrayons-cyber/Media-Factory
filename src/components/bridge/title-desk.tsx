@@ -9,7 +9,7 @@ import { listTitleAssets, requestAssetDownload } from "@/lib/bridge/assets";
 import type { BridgeTitle } from "@/lib/bridge/types";
 import { BRIDGE_LOOP_LANES } from "@/lib/bridge/loop-lanes";
 
-export function TitleList({ empty, query = "", canManage = false }: { empty: string; query?: string; canManage?: boolean }) {
+export function TitleList({ empty, query = "", canManage = false, canSeeInternalId = false }: { empty: string; query?: string; canManage?: boolean; canSeeInternalId?: boolean }) {
   const titlesQ = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles() });
   const titles = (titlesQ.data?.titles ?? []).filter((t) => !query || `${t.name} ${t.language} ${t.year ?? ""}`.toLowerCase().includes(query.toLowerCase()));
   if (titlesQ.isPending) return <p className="text-sm text-muted">Loading titles…</p>;
@@ -25,16 +25,24 @@ export function TitleList({ empty, query = "", canManage = false }: { empty: str
   return (
     <ul className="divide-y divide-line rounded-sm border border-line">
       {titles.map((t) => (
-        <li key={t.id}><TitleListItem title={t} canManage={canManage} /></li>
+        <li key={t.id}><TitleListItem title={t} canManage={canManage} canSeeInternalId={canSeeInternalId} /></li>
       ))}
     </ul>
   );
 }
 
 
-function TitleListItem({ title, canManage }: { title: BridgeTitle; canManage: boolean }) {
+function TitleListItem({ title, canManage, canSeeInternalId }: { title: BridgeTitle; canManage: boolean; canSeeInternalId: boolean }) {
   const qc = useQueryClient();
   const [editing, setEditing] = useState(false);
+  const copyTitleId = async () => {
+    try {
+      await navigator.clipboard.writeText(title.id);
+      toast("Title ID copied");
+    } catch {
+      toast.error("Could not copy Title ID. Check browser clipboard permissions.");
+    }
+  };
   const [name, setName] = useState(title.name);
   const [language, setLanguage] = useState(title.language);
   const [year, setYear] = useState(title.year ? String(title.year) : "");
@@ -97,6 +105,14 @@ function TitleListItem({ title, canManage }: { title: BridgeTitle; canManage: bo
               {title.language}
               {title.year ? " · " + title.year : ""}
             </p>
+            {canSeeInternalId ? (
+              <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted">
+                <span className="font-mono" title={title.id}>ID: {title.id}</span>
+                <Button type="button" variant="outline" className="h-7 gap-1 px-2 text-[11px]" onClick={(event) => { event.preventDefault(); event.stopPropagation(); void copyTitleId(); }} aria-label={`Copy title ID for ${title.name}`}>
+                  Copy ID
+                </Button>
+              </div>
+            ) : null}
           </div>
         </Link>
         <StatusChip status={title.status} />
