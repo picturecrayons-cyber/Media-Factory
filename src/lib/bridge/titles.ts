@@ -408,7 +408,8 @@ export async function assertLicensingReady(titleId: string, transaction?: Sql) {
           and r.status = 'VALID'
           and exists (
             select 1 from jsonb_array_elements(r.evidence) e
-            where coalesce(e->>'type', '') not in ('RIGHTS_BASIS', 'AUTHORIZATION_ATTESTATION')
+            where nullif(trim(coalesce(e->>'type', '')), '') is not null
+              and coalesce(e->>'type', '') not in ('RIGHTS_BASIS', 'AUTHORIZATION_ATTESTATION')
           )
       ) as rights_evidence_ok,
       exists (
@@ -421,7 +422,8 @@ export async function assertLicensingReady(titleId: string, transaction?: Sql) {
           and l.status = 'APPROVED'
           and exists (
             select 1 from jsonb_array_elements(l.evidence) e
-            where coalesce(e->>'type', '') not in ('AUTHORIZATION_ATTESTATION', 'RIGHTS_BASIS')
+            where nullif(trim(coalesce(e->>'type', '')), '') is not null
+              and coalesce(e->>'type', '') not in ('AUTHORIZATION_ATTESTATION', 'RIGHTS_BASIS')
           )
       ) as legal_evidence_ok,
       exists (
