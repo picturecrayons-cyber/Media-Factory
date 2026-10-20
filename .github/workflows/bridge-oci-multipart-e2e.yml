@@ -1,0 +1,53 @@
+name: Bridge OCI Multipart E2E
+
+on:
+  # Manual-only: this test creates and deletes synthetic objects in the preview bucket.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bridge-preview-oci-multipart-e2e
+  cancel-in-progress: false
+
+jobs:
+  multipart-e2e:
+    runs-on: ubuntu-26.04
+    environment: bridge-preview-storage
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: npm
+      - run: npm ci
+      - name: Verify preview-only OCI credentials are present
+        env:
+          OCI_TENANCY_OCID: ${{ secrets.BRIDGE_E2E_OCI_TENANCY_OCID }}
+          OCI_USER_OCID: ${{ secrets.BRIDGE_E2E_OCI_USER_OCID }}
+          OCI_FINGERPRINT: ${{ secrets.BRIDGE_E2E_OCI_FINGERPRINT }}
+          OCI_PRIVATE_KEY: ${{ secrets.BRIDGE_E2E_OCI_PRIVATE_KEY }}
+          OCI_REGION: ${{ secrets.BRIDGE_E2E_OCI_REGION }}
+          OCI_NAMESPACE: ${{ secrets.BRIDGE_E2E_OCI_NAMESPACE }}
+          OCI_BUCKET_NAME: ${{ secrets.BRIDGE_E2E_OCI_BUCKET_NAME }}
+        run: |
+          set -eu
+          for name in OCI_TENANCY_OCID OCI_USER_OCID OCI_FINGERPRINT OCI_PRIVATE_KEY OCI_REGION OCI_NAMESPACE OCI_BUCKET_NAME; do
+            if [ -z "$(printenv "$name")" ]; then
+              echo "::error::Missing required bridge-preview-storage environment secret for $name"
+              exit 2
+            fi
+          done
+          echo "Preview-only OCI secret presence verified; values are not printed."
+      - name: Run synthetic OCI multipart, integrity, and cleanup test
+        env:
+          OCI_TENANCY_OCID: ${{ secrets.BRIDGE_E2E_OCI_TENANCY_OCID }}
+          OCI_USER_OCID: ${{ secrets.BRIDGE_E2E_OCI_USER_OCID }}
+          OCI_FINGERPRINT: ${{ secrets.BRIDGE_E2E_OCI_FINGERPRINT }}
+          OCI_PRIVATE_KEY: ${{ secrets.BRIDGE_E2E_OCI_PRIVATE_KEY }}
+          OCI_REGION: ${{ secrets.BRIDGE_E2E_OCI_REGION }}
+          OCI_NAMESPACE: ${{ secrets.BRIDGE_E2E_OCI_NAMESPACE }}
+          OCI_BUCKET_NAME: ${{ secrets.BRIDGE_E2E_OCI_BUCKET_NAME }}
+        run: node --experimental-strip-types scripts/oci-multipart-e2e.mjs
