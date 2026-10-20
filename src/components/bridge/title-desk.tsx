@@ -90,7 +90,8 @@ function TitleListItem({ title, canManage, canSeeInternalId }: { title: BridgeTi
   return (
     <div className="px-3 py-3 sm:px-4">
       <div className="flex items-center gap-3 sm:gap-4">
-        <Link to="/title/$id" params={{ id: title.id }} className="flex min-w-0 flex-1 items-center gap-3 hover:text-accent sm:gap-4">
+        <div className="min-w-0 flex-1">
+        <Link to="/title/$id" params={{ id: title.id }} className="flex min-w-0 items-center gap-3 hover:text-accent sm:gap-4">
           <div className="grid h-16 w-12 shrink-0 place-items-center overflow-hidden rounded-md border border-line bg-elevated sm:h-20 sm:w-14">
             {previewQ.data ? (
               <img src={previewQ.data} alt="" loading="lazy" className="h-full w-full object-cover" />
@@ -105,16 +106,17 @@ function TitleListItem({ title, canManage, canSeeInternalId }: { title: BridgeTi
               {title.language}
               {title.year ? " · " + title.year : ""}
             </p>
-            {canSeeInternalId ? (
-              <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted">
-                <span className="font-mono" title={title.id}>ID: {title.id}</span>
-                <Button type="button" variant="outline" className="h-7 gap-1 px-2 text-[11px]" onClick={(event) => { event.preventDefault(); event.stopPropagation(); void copyTitleId(); }} aria-label={`Copy title ID for ${title.name}`}>
-                  Copy ID
-                </Button>
-              </div>
-            ) : null}
           </div>
         </Link>
+        {canSeeInternalId ? (
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted">
+            <span className="font-mono" title={title.id}>ID: {title.id}</span>
+            <Button type="button" variant="outline" className="h-7 px-2 text-[11px]" onClick={() => void copyTitleId()} aria-label={`Copy title ID for ${title.name}`}>
+              Copy ID
+            </Button>
+          </div>
+        ) : null}
+        </div>
         <StatusChip status={title.status} />
         {canManage ? (
           <div className="flex shrink-0 items-center gap-1">
