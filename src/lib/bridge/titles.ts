@@ -266,14 +266,32 @@ export const listTitles = createServerFn({ method: "GET" })
       assertPermission(actor, "title.read_own");
       rows = await listOwned(sql, actor.userId, actor.accountType === "studio" ? actor.organizationName : null);
     }
-    return { titles: rows.flatMap((row) => {
-      try {
-        return [mapTitle(row)];
-      } catch (error) {
-        console.error("[bridge] skipped unreadable title", row?.id, error);
-        return [];
-      }
-    }) };
+    const deletableTitleIds = actor.internalRole && hasPermission(actor, "title.delete_draft")
+      ? (await sql<{ id: string }>`
+          select t.id
+          from bridge_titles t
+          where t.status = 'DRAFT'
+            and not exists (select 1 from bridge_assets a where a.title_id = t.id)
+            and not exists (select 1 from bridge_entitlements e where e.title_id = t.id)
+            and not exists (select 1 from bridge_payments p where p.title_id = t.id)
+            and not exists (select 1 from bridge_rights_grants r where r.title_id = t.id)
+            and not exists (select 1 from bridge_qc_cases q where q.title_id = t.id)
+            and not exists (select 1 from bridge_legal_cases l where l.title_id = t.id)
+            and not exists (select 1 from bridge_destination_packages d where d.title_id = t.id)
+            and not exists (select 1 from bridge_loop_publications lp where lp.bridge_title_id = t.id)
+        `).map((row) => row.id)
+      : [];
+    return {
+      titles: rows.flatMap((row) => {
+        try {
+          return [mapTitle(row)];
+        } catch (error) {
+          console.error("[bridge] skipped unreadable title", row?.id, error);
+          return [];
+        }
+      }),
+      deletableTitleIds,
+    };
   });
 
 export const getTitle = createServerFn({ method: "GET" })
