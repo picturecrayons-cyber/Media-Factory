@@ -97,6 +97,20 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
   });
   const title = titleQ.data?.title;
   const assets = assetsQ.data?.assets ?? [];
+  const posterQ = useQuery({
+    queryKey: ["bridge-title-poster-preview", id],
+    queryFn: async () => {
+      const result = await listTitleAssets({ data: { titleId: id } });
+      const asset = ["poster_vertical", "poster"]
+        .map((kind) => result.assets.find((item) => item.kind === kind && item.verified))
+        .find(Boolean);
+      if (!asset) return null;
+      const signed = await requestAssetDownload({ data: { assetId: asset.id } });
+      return signed.url;
+    },
+    retry: false,
+    staleTime: 4 * 60 * 1000,
+  });
   const pub = pubQ.data?.publication;
 
   if (titleQ.isPending) return <p className="text-sm text-muted">Loading title workspace…</p>;
@@ -128,11 +142,13 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
       <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
         <div className="grid gap-4 md:grid-cols-[112px_1fr]">
           <div className="aspect-[2/3] max-h-44 overflow-hidden rounded-lg border border-line bg-elevated">
-            <div className="grid h-full place-items-center px-4 text-center text-xs text-muted">
-              {assets.some((asset) => ["poster_vertical", "poster"].includes(asset.kind))
-                ? "Vertical poster ready"
-                : "Add vertical poster"}
-            </div>
+            {posterQ.data ? (
+              <img src={posterQ.data} alt={`${title.name} poster`} loading="lazy" className="h-full w-full object-cover" />
+            ) : (
+              <div className="grid h-full place-items-center px-3 text-center text-xs text-muted">
+                {posterQ.isError ? "Poster preview unavailable" : "Add vertical poster"}
+              </div>
+            )}
           </div>
           <div className="min-w-0">
             <div className="flex flex-wrap items-start justify-between gap-3">
