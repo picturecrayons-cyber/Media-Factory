@@ -26,6 +26,12 @@ test("captured Bridge payment is resolved from provider_order_id, not only notes
   assert.match(source, /if \(localPayment\) surface = "bridge"/);
 });
 
+test("webhook deliveries are atomically claimed before side effects", () => {
+  assert.match(source, /update\(\{ status: "processing" \}\)/);
+  assert.match(source, /\.in\("status", \["received", "failed"\]\)/);
+  assert.match(source, /if \(!claimed\) return new Response\("Event is already processing", \{ status: 503 \}\)/);
+});
+
 test("unmatched Bridge capture remains retriable", () => {
   assert.match(source, /if \(!localPayment\) return await failEvent\(supabase, id, "Bridge order not persisted yet"\)/);
   assert.match(source, /new Response\(message, \{ status: 503 \}\)/);
