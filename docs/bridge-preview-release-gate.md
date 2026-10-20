@@ -12,7 +12,7 @@ Create/verify the GitHub Actions environment named `bridge-preview-storage`. Con
 - `BRIDGE_PREVIEW_DATABASE_URL`: disposable PostgreSQL connection string, not production or the shared staging project.
 - `OCI_TENANCY_OCID` and `BRIDGE_PREVIEW_OCI_TENANCY_OCID`: must identify the same dedicated preview tenancy.
 - `OCI_USER_OCID`, `OCI_PRIVATE_KEY`: preview-only OCI principal.
-- `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET`: test-mode credentials only; key ID must start with `rzp_test_`.
+- `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET`: test-mode credentials only; key ID must use the provider test-mode prefix.
 
 **Environment variables**
 - `BRIDGE_PREVIEW_DATABASE_DISPOSABLE=true`: explicit owner attestation that the database is disposable.
