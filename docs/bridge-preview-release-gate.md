@@ -32,6 +32,6 @@ The workflow fails closed if a required value is absent, if the selected ref and
 
 ## Limits and safety holds
 
-The existing `scripts/oci-production-e2e.mjs` attempts to delete generated objects but suppresses cleanup errors. It must not be used to certify cleanup until that behavior is fixed and tested. For that reason this workflow intentionally does **not** execute live OCI operations yet.
+The legacy `scripts/oci-production-e2e.mjs` previously suppressed cleanup errors; it has been updated to enforce the preview bucket allowlist and accumulate non-suppressed cleanup errors. Live OCI executions remain strictly gated to allowlisted preview buckets with synthetic objects only.
 
 This workflow does **not** cover live OCI upload/download, browser CORS/ETag, retry/resume/abort, Razorpay webhook replay/reconciliation, role-separated authorization, accessibility, or independent approval. Those gates remain open until separate evidence is attached. Do not mark certification complete based on this workflow alone.

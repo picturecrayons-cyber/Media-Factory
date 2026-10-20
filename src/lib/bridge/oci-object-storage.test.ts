@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { generateKeyPairSync, verify } from "node:crypto";
-import { abortMultipartUpload, commitMultipartUpload, initiateMultipartUpload, sealVerifiedObject, verifyObject } from "./oci-object-storage.server.ts";
+import { abortMultipartUpload, commitMultipartUpload, deleteObject, initiateMultipartUpload, sealVerifiedObject, verifyObject } from "./oci-object-storage.server.ts";
 
 test("OCI private key normalization accepts escaped and quoted PEM secrets", async () => {
   const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
@@ -190,4 +190,86 @@ test("OCI multipart uses native initiation, signed part requests, commit manifes
     globalThis.fetch = originalFetch;
     for (const [key, value] of Object.entries(saved)) { if (value === undefined) delete process.env[key]; else process.env[key] = value; }
   }
+});
+
+test("OCI deleteObject and abortMultipartUpload handle 404 cleanly and throw on non-404 errors", async () => {
+  const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  const values = {
+    OCI_TENANCY_OCID: "test-tenancy",
+    OCI_USER_OCID: "test-user",
+    OCI_PRIVATE_KEY: privateKey.export({ type: "pkcs8", format: "pem" }).toString(),
+    OCI_FINGERPRINT: "test-fingerprint",
+    OCI_REGION: "ap-mumbai-1",
+    OCI_NAMESPACE: "test-namespace",
+    OCI_BUCKET_NAME: "test-bucket",
+  };
+  const saved = Object.fromEntries(Object.keys(values).map((key) => [key, process.env[key]]));
+  const originalFetch = globalThis.fetch;
+  Object.assign(process.env, values);
+
+  try {
+    // 1. deleteObject with 204 No Content
+    globalThis.fetch = async () => new Response(null, { status: 204 });
+    const del204 = await deleteObject("test-key-204");
+    assert.deepEqual(del204, { deleted: true, key: "test-key-204" });
+
+    // 2. deleteObject with 404 Not Found (idempotent, does not throw)
+    globalThis.fetch = async () => new Response(null, { status: 404 });
+    const del404 = await deleteObject("test-key-404");
+    assert.deepEqual(del404, { deleted: false, key: "test-key-404" });
+
+    // 3. deleteObject with 500 Internal Server Error (must throw)
+    globalThis.fetch = async () => new Response(null, { status: 500 });
+    await assert.rejects(deleteObject("test-key-500"), /OCI object deletion failed \(500\)/);
+
+    // 4. abortMultipartUpload with 204 No Content
+    globalThis.fetch = async () => new Response(null, { status: 204 });
+    const abort204 = await abortMultipartUpload({ key: "test-key", uploadId: "up-204" });
+    assert.deepEqual(abort204, { aborted: true, key: "test-key" });
+
+    // 5. abortMultipartUpload with 404 Not Found (idempotent, does not throw)
+    globalThis.fetch = async () => new Response(null, { status: 404 });
+    const abort404 = await abortMultipartUpload({ key: "test-key", uploadId: "up-404" });
+    assert.deepEqual(abort404, { aborted: false, key: "test-key" });
+
+    // 6. abortMultipartUpload with 500 Internal Server Error (must throw)
+    globalThis.fetch = async () => new Response(null, { status: 500 });
+    await assert.rejects(
+      abortMultipartUpload({ key: "test-key", uploadId: "up-500" }),
+      /OCI multipart abort failed \(500\)/,
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+    for (const [key, value] of Object.entries(saved)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+});
+
+test("cleanup error accumulation detects teardown failures without suppressed exceptions", async () => {
+  const cleanupErrors: string[] = [];
+  const fakeTeardown = async (task: () => Promise<void>, name: string) => {
+    try {
+      await task();
+    } catch (err) {
+      cleanupErrors.push(`${name}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  };
+
+  await fakeTeardown(async () => {
+    throw new Error("HTTP 502 Bad Gateway during delete");
+  }, "delete sealedKey");
+
+  await fakeTeardown(async () => {
+    // success
+  }, "delete sourceKey");
+
+  assert.equal(cleanupErrors.length, 1);
+  assert.match(cleanupErrors[0]!, /HTTP 502/);
+  assert.throws(() => {
+    if (cleanupErrors.length > 0) {
+      throw new Error(`OCI E2E cleanup failed: ${cleanupErrors.join("; ")}`);
+    }
+  }, /OCI E2E cleanup failed: delete sealedKey: HTTP 502 Bad Gateway during delete/);
 });
