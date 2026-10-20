@@ -5,6 +5,8 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { StatusChip } from "@/components/bridge/status-rail";
 import { createTitle, listTitles } from "@/lib/bridge/titles";
+import { listTitleAssets, requestAssetDownload } from "@/lib/bridge/assets";
+import type { BridgeTitle } from "@/lib/bridge/types";
 import { BRIDGE_LOOP_LANES } from "@/lib/bridge/loop-lanes";
 
 export function TitleList({ empty, query = "" }: { empty: string; query?: string }) {
@@ -23,25 +25,53 @@ export function TitleList({ empty, query = "" }: { empty: string; query?: string
   return (
     <ul className="divide-y divide-line rounded-sm border border-line">
       {titles.map((t) => (
-        <li key={t.id}>
-          <Link
-            to="/title/$id"
-            params={{ id: t.id }}
-            className="flex flex-wrap items-center justify-between gap-3 px-4 py-4 hover:bg-fg/5"
-          >
-            <div>
-              <p className="font-medium">{t.name}</p>
-              <p className="text-sm text-muted">
-                {t.contentType ? `${t.contentType} · ` : ""}
-                {t.language}
-                {t.year ? ` · ${t.year}` : ""}
-              </p>
-            </div>
-            <StatusChip status={t.status} />
-          </Link>
-        </li>
+        <li key={t.id}><TitleListItem title={t} /></li>
       ))}
     </ul>
+  );
+}
+
+
+function TitleListItem({ title }: { title: BridgeTitle }) {
+  const previewQ = useQuery({
+    queryKey: ["bridge-title-list-thumbnail", title.id],
+    queryFn: async () => {
+      const result = await listTitleAssets({ data: { titleId: title.id } });
+      const priority = ["thumbnail", "poster_vertical", "poster", "poster_horizontal"];
+      const asset = priority
+        .map((kind) => result.assets.find((item) => item.kind === kind && item.verified))
+        .find(Boolean);
+      if (!asset) return null;
+      const signed = await requestAssetDownload({ data: { assetId: asset.id } });
+      return signed.url;
+    },
+    retry: false,
+    staleTime: 4 * 60 * 1000,
+  });
+
+  return (
+    <Link
+      to="/title/$id"
+      params={{ id: title.id }}
+      className="flex items-center gap-3 px-3 py-3 hover:bg-fg/5 sm:gap-4 sm:px-4"
+    >
+      <div className="grid h-16 w-12 shrink-0 place-items-center overflow-hidden rounded-md border border-line bg-elevated sm:h-20 sm:w-14">
+        {previewQ.data ? (
+          <img src={previewQ.data} alt="" loading="lazy" className="h-full w-full object-cover" />
+        ) : (
+          <span aria-hidden="true" className="text-[9px] font-semibold tracking-wide text-muted">POSTER</span>
+        )}
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="truncate font-medium">{title.name}</p>
+        <p className="mt-1 text-sm text-muted">
+          {title.contentType ? title.contentType + " · " : ""}
+          {title.language}
+          {title.year ? " · " + title.year : ""}
+        </p>
+      </div>
+      <StatusChip status={title.status} />
+    </Link>
   );
 }
 
