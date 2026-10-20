@@ -13,6 +13,7 @@ import { ProceedToQcModal } from "@/components/bridge/proceed-to-qc-modal";
 import { ArchiveTitleModal } from "@/components/bridge/archive-title-modal";
 import { BRIDGE_LOOP_LANES, loopStageType } from "@/lib/bridge/loop-lanes";
 import {
+  cancelAssetUpload,
   confirmAssetUpload,
   deleteTitleAsset,
   requestAssetPartUpload,
@@ -499,12 +500,15 @@ function FilesPanel({
     if (active.assetId && active.uploadId) {
       await abortAssetMultipartUpload({ data: { assetId: active.assetId, uploadId: active.uploadId } }).catch(() => undefined);
     }
+    if (active.assetId) {
+      await cancelAssetUpload({ data: { assetId: active.assetId } }).catch(() => undefined);
+      await onAssetsChanged();
+    }
     setMessage("Upload cancelled. Incomplete OCI parts were asked to abort; you can select the file again to retry.");
     setUploading(null);
     if (currentQueueIdRef.current) updateQueueItem(currentQueueIdRef.current, { status: "Cancelled", message: "Cancelled by user" });
     activeUploadRef.current = null;
   }
-
   async function uploadFile(kind: SimpleAssetKind, file: File) {
     if (activeUploads.current.size > 0) return false;
     activeUploads.current.add(kind);
@@ -530,6 +534,7 @@ function FilesPanel({
       active.uploadId = multipart.uploadId;
       if (active.cancelled) {
         await abortAssetMultipartUpload({ data: { assetId: multipart.assetId, uploadId: multipart.uploadId } }).catch(() => undefined);
+        await cancelAssetUpload({ data: { assetId: multipart.assetId } }).catch(() => undefined);
         throw new DOMException("Upload cancelled", "AbortError");
       }
       const chunkSize = 16 * 1024 * 1024;
@@ -593,7 +598,20 @@ function FilesPanel({
     } catch (error) {
       const raw = error instanceof Error ? error.message : "Upload failed";
       if (active.cancelled || (error instanceof DOMException && error.name === "AbortError")) {
-        setMessage("Upload cancelled. Select the file again to retry.");
+        let cleanupFailure: string | null = null;
+        if (active.assetId) {
+          try {
+            await cancelAssetUpload({ data: { assetId: active.assetId } });
+            await onAssetsChanged();
+          } catch (cleanupError) {
+            cleanupFailure = cleanupError instanceof Error ? cleanupError.message : "cleanup failed";
+          }
+        }
+        setMessage(
+          cleanupFailure
+            ? `Upload cancelled, but pending asset cleanup needs retry: ${cleanupFailure}`
+            : "Upload cancelled. Select the file again to retry.",
+        );
       } else {
         if (active.assetId && active.uploadId) {
           await abortAssetMultipartUpload({ data: { assetId: active.assetId, uploadId: active.uploadId } }).catch(() => undefined);

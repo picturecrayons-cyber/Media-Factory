@@ -9,15 +9,29 @@ test("external Razorpay function disables Supabase gateway JWT verification", ()
   assert.match(config, /\[functions\.razorpay-webhook\][\s\S]*verify_jwt\s*=\s*false/);
 });
 
-test("fallback event ID awaits the body hash", () => {
-  assert.match(source, /`\$\{e\}:\$\{await sha256\(raw\)\}`/);
-  assert.doesNotMatch(source, /\$\{awaitHash\(raw\)\}/);
+test("Razorpay delivery ID is the canonical webhook idempotency key", () => {
+  assert.ok(source.includes("async function eventId(payload: any, raw: string, providerEventId?: string | null)"));
+  assert.ok(source.includes('req.headers.get("x-razorpay-event-id")'));
+  assert.ok(source.includes("return `razorpay:${deliveryId}`"));
+  assert.ok(source.includes("deliveryId.length <= 255"));
+});
+
+test("fallback event ID awaits the body hash when no provider ID is present", () => {
+  assert.ok(source.includes("`${e}:${await sha256(raw)}`"));
+  assert.doesNotMatch(source, /\\$\\{awaitHash\\(raw\\)\\}/);
 });
 
 test("captured Bridge payment is resolved from provider_order_id, not only notes", () => {
   assert.match(source, /from\("bridge_payments"\)[\s\S]*eq\("provider_order_id", payment\.order_id\)/);
   assert.match(source, /if \(localPayment\) surface = "bridge"/);
 });
+
+test("webhook deliveries are atomically claimed before side effects", () => {
+  assert.match(source, /update\(\{ status: "processing" \}\)/);
+  assert.match(source, /\.in\("status", \["received", "failed"\]\)/);
+  assert.match(source, /if \(!claimed\) return new Response\("Event is already processing", \{ status: 503 \}\)/);
+});
+
 
 test("unmatched Bridge capture remains retriable", () => {
   assert.match(source, /if \(!localPayment\) return await failEvent\(supabase, id, "Bridge order not persisted yet"\)/);

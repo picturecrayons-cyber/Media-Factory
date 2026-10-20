@@ -139,6 +139,58 @@ export const abortAssetMultipartUpload = createServerFn({ method: "POST" })
     return abortMultipartUpload({ key: asset.s3_key, uploadId: data.uploadId });
   });
 
+
+/** Remove an abandoned, unverified upload owned by the authenticated uploader. */
+export const cancelAssetUpload = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({ assetId: z.string().min(8) }))
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    assertPermission(actor, actor.internalRole ? "title.ingest_internal" : "asset.sign_upload");
+    const sql = await getSql();
+    const rows = await sql<{
+      id: string;
+      title_id: string;
+      kind: string;
+      s3_key: string;
+      created_by: string;
+      byte_size: number | null;
+    }>`
+      select id, title_id, kind, s3_key, created_by, byte_size
+      from bridge_assets where id = ${data.assetId} limit 1
+    `;
+    const asset = rows[0];
+    if (!asset) return { assetId: data.assetId, cleaned: true };
+    if (asset.created_by !== actor.userId && !hasStaffPermission(actor, "asset.sign_upload")) {
+      throw new Error("Asset not found");
+    }
+    if (asset.byte_size != null) throw new Error("A verified asset cannot be cancelled");
+    const title = await loadTitle(asset.title_id);
+    if (!title || (title.ownerUserId !== actor.userId && !hasStaffPermission(actor, "asset.sign_upload"))) {
+      throw new Error("Asset not found");
+    }
+
+    // Delete the possibly uploaded object before removing its pending database row.
+    // OCI DELETE is idempotent for a missing object; on failure keep the row so cleanup can be retried.
+    const { deleteObject } = await import("./oci-object-storage.server");
+    await deleteObject(asset.s3_key);
+    await sql`delete from bridge_assets where id = ${asset.id} and byte_size is null`;
+    await sql`
+      update loop_media_migration_queue
+      set status = 'PENDING_REUPLOAD', target_path = null, updated_at = now()
+      where title_id = ${title.id} and target_path = ${asset.s3_key} and status = 'UPLOADED'
+    `;
+    await writeAudit({
+      actorUserId: actor.userId,
+      action: "asset.upload_cancelled",
+      entityType: "bridge_asset",
+      entityId: asset.id,
+      metadata: { titleId: title.id, kind: asset.kind },
+    });
+    return { assetId: asset.id, cleaned: true };
+  });
+
 export const confirmAssetUpload = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(
