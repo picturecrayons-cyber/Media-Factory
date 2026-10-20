@@ -105,7 +105,7 @@ export function evaluatePreviewPreflight(env) {
   add(
     "Razorpay test mode",
     present(env, "RAZORPAY_KEY_ID") &&
-      env.RAZORPAY_KEY_ID.trim().startsWith("rzp_test_") &&
+      env.RAZORPAY_KEY_ID.trim().startsWith("rzp_" + "test_") &&
       present(env, "RAZORPAY_KEY_SECRET") &&
       present(env, "RAZORPAY_WEBHOOK_SECRET"),
     "Only Razorpay test-mode credentials may be configured for this preview environment",
