@@ -343,18 +343,20 @@ function FilesPanel({
       setMessage(`${kind[0].toUpperCase() + kind.slice(1)} is ready.`);
     } catch (error) {
       const raw = error instanceof Error ? error.message : "Upload failed";
+      let cleanupFailure: string | null = null;
       if (error instanceof DOMException && error.name === "AbortError" && pendingAssetId) {
         try {
           await cancelAssetUpload({ data: { assetId: pendingAssetId } });
           await onAssetsChanged();
         } catch (cleanupError) {
-          const cleanupMessage = cleanupError instanceof Error ? cleanupError.message : "cleanup failed";
-          setMessage(`Upload cancelled, but pending asset cleanup needs retry: ${cleanupMessage}`);
+          cleanupFailure = cleanupError instanceof Error ? cleanupError.message : "cleanup failed";
         }
       }
       setMessage(
-        error instanceof DOMException && error.name === "AbortError"
-          ? "Upload cancelled. You can retry this file."
+        cleanupFailure
+          ? `Upload cancelled, but pending asset cleanup needs retry: ${cleanupFailure}`
+          : error instanceof DOMException && error.name === "AbortError"
+          ? "Upload cancelled and pending asset cleanup was requested. You can retry this file."
           : raw.includes("STORAGE_UNAVAILABLE")
             ? "Storage service is currently unavailable. Please retry this file later."
             : raw,
