@@ -314,6 +314,7 @@ function FilesPanel({
 }) {
   const [uploading, setUploading] = useState<SimpleAssetKind | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [filesView, setFilesView] = useState<"upload" | "gallery">("upload");
   async function uploadFile(kind: SimpleAssetKind, file: File) {
     const filename = asciiUploadName(file.name);
     const contentType = file.type || "application/octet-stream";
@@ -372,30 +373,78 @@ function FilesPanel({
     ["subtitle", "Subtitle", "Optional"],
     ["censor_certificate", "Censor Certificate", "Optional"],
   ];
+  const readyCount = cards.filter(([kind]) =>
+    assets.some((asset) =>
+      (asset.kind === kind || (kind === "poster_vertical" && asset.kind === "poster")) &&
+      asset.verified,
+    ),
+  ).length;
+
   return (
-    <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Media</p>
-          <h2 className="mt-1 font-display text-xl font-semibold">OTT package</h2>
+    <section className="space-y-4">
+      <div className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Media library</p>
+            <h2 className="mt-1 font-display text-xl font-semibold">Title files</h2>
+            <p className="mt-1 max-w-2xl text-sm text-muted">
+              Upload or replace delivery assets, then review secure previews and downloads in the gallery.
+            </p>
+          </div>
+          <div className="rounded-xl border border-line bg-elevated/40 px-4 py-3">
+            <p className="text-xs text-muted">Package readiness</p>
+            <p className="mt-1 text-lg font-semibold tabular-nums">{readyCount}<span className="text-sm font-normal text-muted"> / {cards.length} assets</span></p>
+          </div>
         </div>
-        <span className="text-xs text-muted">Ready / Missing</span>
+        <div className="mt-5 flex flex-wrap gap-2 border-t border-line pt-4" role="tablist" aria-label="Title files views">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={filesView === "upload"}
+            onClick={() => setFilesView("upload")}
+            className={`rounded-full px-4 py-2 text-sm font-semibold ${filesView === "upload" ? "bg-fg text-bg" : "border border-line text-muted hover:bg-elevated hover:text-fg"}`}
+          >
+            Upload & Replace
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={filesView === "gallery"}
+            onClick={() => setFilesView("gallery")}
+            className={`rounded-full px-4 py-2 text-sm font-semibold ${filesView === "gallery" ? "bg-fg text-bg" : "border border-line text-muted hover:bg-elevated hover:text-fg"}`}
+          >
+            Media Gallery <span className="ml-1 opacity-75">({assets.length})</span>
+          </button>
+        </div>
       </div>
-      <div className="mt-5 grid gap-3 sm:grid-cols-2">
-        {cards.map(([kind, label, empty]) => (
-          <FileTypeCard
-            key={kind}
-            kind={kind}
-            label={label}
-            status={assets.some((a) => (a.kind === kind || (kind === "poster_vertical" && a.kind === "poster")) && a.verified) ? "Ready" : empty}
-            busy={uploading === kind}
-            canUpload={canUpload}
-            onFile={(file) => void uploadFile(kind, file)}
-          />
-        ))}
-      </div>
-      {message ? <p className="mt-3 text-xs text-muted">{message}</p> : null}
-      <TitleAssetPreviewGallery assets={assets} onDownload={(id) => void download(id)} onAssetsChanged={onAssetsChanged} canManage={canManage} />
+
+      {filesView === "upload" ? (
+        <div className="rounded-2xl border border-line bg-surface p-4 sm:p-5">
+          <div className="mb-4">
+            <h3 className="font-display text-lg font-semibold">Upload & replace assets</h3>
+            <p className="mt-1 text-sm text-muted">Required and optional files are listed separately with accepted formats.</p>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {cards.map(([kind, label, empty]) => (
+              <FileTypeCard
+                key={kind}
+                kind={kind}
+                label={label}
+                status={assets.some((a) => (a.kind === kind || (kind === "poster_vertical" && a.kind === "poster")) && a.verified) ? "Ready" : empty}
+                busy={uploading === kind}
+                canUpload={canUpload}
+                onFile={(file) => void uploadFile(kind, file)}
+              />
+            ))}
+          </div>
+          {message ? <p role="status" className="mt-3 rounded-lg bg-elevated/50 p-3 text-sm text-muted">{message}</p> : null}
+          {!canUpload ? <p className="mt-3 text-xs text-muted">Uploads are unavailable for your role or while this title is outside an editable preparation state.</p> : null}
+        </div>
+      ) : (
+        <div className="rounded-2xl border border-line bg-surface p-4 sm:p-5">
+          <TitleAssetPreviewGallery assets={assets} onDownload={(id) => void download(id)} onAssetsChanged={onAssetsChanged} canManage={canManage} />
+        </div>
+      )}
     </section>
   );
 }
