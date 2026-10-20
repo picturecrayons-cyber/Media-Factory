@@ -12,6 +12,7 @@ import { BRIDGE_LOOP_LANES } from "@/lib/bridge/loop-lanes";
 export function TitleList({ empty, query = "", canManage = false, canSeeInternalId = false }: { empty: string; query?: string; canManage?: boolean; canSeeInternalId?: boolean }) {
   const titlesQ = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles() });
   const titles = (titlesQ.data?.titles ?? []).filter((t) => !query || `${t.name} ${t.language} ${t.year ?? ""}`.toLowerCase().includes(query.toLowerCase()));
+  const deletableTitleIds = titlesQ.data?.deletableTitleIds ?? [];
   if (titlesQ.isPending) return <p className="text-sm text-muted">Loading titles…</p>;
   if (titlesQ.isError) {
     return (
@@ -25,14 +26,14 @@ export function TitleList({ empty, query = "", canManage = false, canSeeInternal
   return (
     <ul className="divide-y divide-line rounded-sm border border-line">
       {titles.map((t) => (
-        <li key={t.id}><TitleListItem title={t} canManage={canManage} canSeeInternalId={canSeeInternalId} /></li>
+        <li key={t.id}><TitleListItem title={t} canManage={canManage} canSeeInternalId={canSeeInternalId} canDeleteDraft={deletableTitleIds.includes(t.id)} /></li>
       ))}
     </ul>
   );
 }
 
 
-function TitleListItem({ title, canManage, canSeeInternalId }: { title: BridgeTitle; canManage: boolean; canSeeInternalId: boolean }) {
+function TitleListItem({ title, canManage, canSeeInternalId, canDeleteDraft }: { title: BridgeTitle; canManage: boolean; canSeeInternalId: boolean; canDeleteDraft: boolean }) {
   const qc = useQueryClient();
   const [editing, setEditing] = useState(false);
   const copyTitleId = async () => {
@@ -123,8 +124,10 @@ function TitleListItem({ title, canManage, canSeeInternalId }: { title: BridgeTi
             <Button type="button" variant="outline" className="h-8 px-2 text-xs" onClick={() => { setName(title.name); setLanguage(title.language); setYear(title.year ? String(title.year) : ""); setEditing((v) => !v); }}>
               {editing ? "Cancel" : "Edit"}
             </Button>
-            {title.status === "DRAFT" ? (
+            {title.status === "DRAFT" && canDeleteDraft ? (
               <Button type="button" variant="outline" className="h-8 px-2 text-xs text-destructive" onClick={() => setConfirmDelete(true)}>Delete</Button>
+            ) : title.status === "DRAFT" ? (
+              <Link to="/title/$id" params={{ id: title.id }} className="inline-flex h-8 items-center rounded-md border border-line px-2 text-xs text-muted hover:text-fg" aria-label={`Review linked records for ${title.name}`}>Review</Link>
             ) : null}
           </div>
         ) : null}
