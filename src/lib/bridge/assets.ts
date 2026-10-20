@@ -20,6 +20,7 @@ import {
   getAssetPermissions,
 } from "./asset-policy";
 import { validateOttIngestFile, type OttIngestKind } from "./ott-ingest-spec";
+import { assertExpectedUploadSize } from "./multipart-upload";
 
 const UPLOADABLE: ReadonlySet<string> = new Set(["DRAFT", "UPLOADING", "PREPARING"]);
 
@@ -45,7 +46,7 @@ export const requestAssetUpload = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
-    assertPermission(actor, actor.internalRole ? "title.ingest_internal" : "asset.sign_upload");
+    assertPermission(actor, "asset.sign_upload");
     const title = await loadTitle(data.titleId);
     if (!title) throw new Error("Not found");
     const uploadDecisionResult = assetUploadDecision(actor, title, data.kind);
@@ -60,20 +61,25 @@ export const requestAssetUpload = createServerFn({ method: "POST" })
       contentType: data.contentType,
     });
     if (!ingestValidation.ok) throw new Error(ingestValidation.message);
-    const { signUpload, titleAssetKey } = await import("./oci-object-storage.server");
+    const { initiateMultipartUpload, titleAssetKey, abortMultipartUpload } = await import("./oci-object-storage.server");
     const key = titleAssetKey({
       ownerUserId: title.ownerUserId,
       titleId: title.id,
       kind: data.kind,
       filename: data.filename,
     });
-    const signed = await signUpload({ key, contentType: data.contentType });
+    const multipart = await initiateMultipartUpload({ key, contentType: data.contentType });
     const id = randomBytes(16).toString("hex");
     const sql = await getSql();
-    await sql`
-      insert into bridge_assets (id, title_id, kind, s3_key, content_type, created_by)
-      values (${id}, ${title.id}, ${data.kind}, ${key}, ${data.contentType}, ${actor.userId})
-    `;
+    try {
+      await sql`
+        insert into bridge_assets (id, title_id, kind, s3_key, content_type, created_by)
+        values (${id}, ${title.id}, ${data.kind}, ${key}, ${data.contentType}, ${actor.userId})
+      `;
+    } catch (error) {
+      await abortMultipartUpload({ key, uploadId: multipart.uploadId }).catch(() => undefined);
+      throw error;
+    }
     await sql`
       update loop_media_migration_queue
       set status = 'UPLOADED', target_path = ${key}, updated_at = now()
@@ -88,7 +94,49 @@ export const requestAssetUpload = createServerFn({ method: "POST" })
       entityId: id,
       metadata: { titleId: title.id, kind: data.kind },
     });
-    return { assetId: id, ...signed };
+    return { assetId: id, uploadId: multipart.uploadId };
+  });
+
+async function loadAuthorizedUploadAsset(contextUserId: string, assetId: string) {
+  assertNotDevUser(contextUserId);
+  const actor = await requireVerifiedActor(contextUserId);
+  assertPermission(actor, "asset.sign_upload");
+  const sql = await getSql();
+  const rows = await sql<{ id: string; title_id: string; s3_key: string; created_by: string }>`
+    select id, title_id, s3_key, created_by from bridge_assets where id = ${assetId} limit 1
+  `;
+  const asset = rows[0];
+  if (!asset || (asset.created_by !== actor.userId && !hasStaffPermission(actor, "asset.sign_upload"))) throw new Error("Asset not found");
+  const title = await loadTitle(asset.title_id);
+  if (!title || (title.ownerUserId !== actor.userId && !hasStaffPermission(actor, "asset.sign_upload")) || !UPLOADABLE.has(title.status)) throw new Error("Upload confirmation is closed for this title");
+  return { actor, asset };
+}
+
+export const requestAssetPartUpload = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({ assetId: z.string().min(8), uploadId: z.string().min(1).max(2048), partNum: z.number().int().min(1).max(10_000), byteSize: z.number().int().positive().max(50 * 1024 * 1024 * 1024), sha256: z.string().regex(/^[A-Za-z0-9+/]{43}=$/) }))
+  .handler(async ({ context, data }) => {
+    const { asset } = await loadAuthorizedUploadAsset(context.userId, data.assetId);
+    const { createMultipartPartRequest } = await import("./oci-object-storage.server");
+    return createMultipartPartRequest({ key: asset.s3_key, ...data });
+  });
+
+export const commitAssetMultipartUpload = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({ assetId: z.string().min(8), uploadId: z.string().min(1).max(2048), parts: z.array(z.object({ partNum: z.number().int().min(1).max(10_000), etag: z.string().min(1).max(256) })).min(1).max(10_000) }))
+  .handler(async ({ context, data }) => {
+    const { asset } = await loadAuthorizedUploadAsset(context.userId, data.assetId);
+    const { commitMultipartUpload } = await import("./oci-object-storage.server");
+    return commitMultipartUpload({ key: asset.s3_key, uploadId: data.uploadId, parts: data.parts });
+  });
+
+export const abortAssetMultipartUpload = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({ assetId: z.string().min(8), uploadId: z.string().min(1).max(2048) }))
+  .handler(async ({ context, data }) => {
+    const { asset } = await loadAuthorizedUploadAsset(context.userId, data.assetId);
+    const { abortMultipartUpload } = await import("./oci-object-storage.server");
+    return abortMultipartUpload({ key: asset.s3_key, uploadId: data.uploadId });
   });
 
 export const confirmAssetUpload = createServerFn({ method: "POST" })
@@ -102,7 +150,7 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
-    assertPermission(actor, actor.internalRole ? "title.ingest_internal" : "asset.sign_upload");
+    assertPermission(actor, "asset.sign_upload");
     const sql = await getSql();
     const rows = await sql<{
       id: string;
@@ -127,9 +175,7 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
 
     const { verifyObject, sealVerifiedObject } = await import("./oci-object-storage.server");
     const object = await verifyObject(asset.s3_key, asset.content_type);
-    if (data.expectedByteSize != null && object.byteSize !== data.expectedByteSize) {
-      throw new Error("Uploaded object size does not match the file that was sent");
-    }
+    assertExpectedUploadSize(object.byteSize, data.expectedByteSize);
     if (!object.etag) throw new Error("Object ETag is required for immutable verification");
     const sealedKey = `${asset.s3_key}.verified/${randomUUID()}`;
     const sealed = await sealVerifiedObject(asset.s3_key, sealedKey, object.etag);

@@ -15,6 +15,9 @@ import { BRIDGE_LOOP_LANES, loopStageType } from "@/lib/bridge/loop-lanes";
 import {
   confirmAssetUpload,
   deleteTitleAsset,
+  requestAssetPartUpload,
+  commitAssetMultipartUpload,
+  abortAssetMultipartUpload,
   listTitleAssets,
   requestAssetDownload,
   requestAssetPreview,
@@ -28,6 +31,7 @@ import {
   validateOttIngestFile,
 } from "@/lib/bridge/ott-ingest-spec";
 import { asciiUploadName } from "@/lib/bridge/latin1";
+import { assertMultipartEtags, multipartPartCount } from "@/lib/bridge/multipart-upload";
 
 export const Route = createFileRoute("/title/$id")({ component: TitlePage });
 
@@ -322,7 +326,7 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
       ) : activeTab === "Files" ? (
         <FilesPanel
           canUpload={
-            canOperateOnTitle(actor, title, "asset.sign_upload", "title.ingest_internal") &&
+            canOperateOnTitle(actor, title, "asset.sign_upload", "asset.sign_upload") &&
             ["DRAFT", "UPLOADING", "PREPARING"].includes(title.status)
           }
           titleId={id}
@@ -384,6 +388,15 @@ type SimpleAssetKind =
   | "screener"
   | "censor_certificate";
 
+type UploadQueueItem = {
+  id: string;
+  kind: SimpleAssetKind;
+  file: File;
+  progress: number;
+  status: "Queued" | "Uploading" | "Completed" | "Failed" | "Cancelled";
+  message?: string;
+};
+
 function FilesPanel({
   titleId,
   assets,
@@ -415,6 +428,7 @@ function FilesPanel({
   const [uploading, setUploading] = useState<SimpleAssetKind | null>(null);
   const activeUploads = useRef<Set<SimpleAssetKind>>(new Set());
   const [message, setMessage] = useState<string | null>(null);
+
   const [activePreview, setActivePreview] = useState<{
     id: string;
     kind: string;
@@ -425,114 +439,238 @@ function FilesPanel({
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [actionPending, setActionPending] = useState<string | null>(null);
 
+  const [queueItems, setQueueItems] = useState<UploadQueueItem[]>([]);
+  const queueRef = useRef<UploadQueueItem[]>([]);
+  const queueRunningRef = useRef(false);
+  const currentQueueIdRef = useRef<string | null>(null);
+  const activeUploadRef = useRef<{ xhrs: XMLHttpRequest[]; assetId?: string; uploadId?: string; cancelled: boolean } | null>(null);
+
+  function replaceQueue(items: UploadQueueItem[]) {
+    queueRef.current = items;
+    setQueueItems(items);
+  }
+
+  function updateQueueItem(id: string, patch: Partial<UploadQueueItem>) {
+    replaceQueue(queueRef.current.map((item) => (item.id === id ? { ...item, ...patch } : item)));
+  }
+
+  function updateProgress(value: number) {
+    if (currentQueueIdRef.current) updateQueueItem(currentQueueIdRef.current, { progress: value });
+  }
+
+  function uploadPart(
+    url: string,
+    body: Blob,
+    onProgress: (loaded: number) => void,
+    xhrs: XMLHttpRequest[],
+    headers: Record<string, string>,
+  ): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhrs.push(xhr);
+      xhr.open("PUT", url);
+      for (const [name, value] of Object.entries(headers)) xhr.setRequestHeader(name, value);
+      xhr.upload.onprogress = (event) => {
+        if (event.lengthComputable) onProgress(event.loaded);
+      };
+      xhr.onload = () => {
+        if (xhr.status < 200 || xhr.status >= 300) {
+          reject(new Error(`Part upload failed (${xhr.status})`));
+          return;
+        }
+        const etag = xhr.getResponseHeader("etag")?.trim();
+        if (!etag) {
+          reject(new Error("OCI did not expose the part ETag. Check the bucket CORS expose-headers configuration before retrying."));
+          return;
+        }
+        resolve(etag);
+      };
+      xhr.onerror = () => reject(new Error("Network error while uploading a part"));
+      xhr.onabort = () => reject(new DOMException("Upload cancelled", "AbortError"));
+      xhr.send(body);
+    });
+  }
+
+  async function cancelUpload() {
+    const active = activeUploadRef.current;
+    if (!active) return;
+    active.cancelled = true;
+    for (const xhr of active.xhrs) xhr.abort();
+    if (active.assetId && active.uploadId) {
+      await abortAssetMultipartUpload({ data: { assetId: active.assetId, uploadId: active.uploadId } }).catch(() => undefined);
+    }
+    setMessage("Upload cancelled. Incomplete OCI parts were asked to abort; you can select the file again to retry.");
+    setUploading(null);
+    if (currentQueueIdRef.current) updateQueueItem(currentQueueIdRef.current, { status: "Cancelled", message: "Cancelled by user" });
+    activeUploadRef.current = null;
+  }
+
   async function uploadFile(kind: SimpleAssetKind, file: File) {
-    if (activeUploads.current.size > 0) return;
+    if (activeUploads.current.size > 0) return false;
     activeUploads.current.add(kind);
     const filename = asciiUploadName(file.name);
     const contentType = file.type || "application/octet-stream";
-    const validation = validateOttIngestFile({
-      kind,
-      filename,
-      contentType,
-    });
+    const validation = validateOttIngestFile({ kind, filename, contentType });
     if (!validation.ok) {
       activeUploads.current.delete(kind);
       setMessage(validation.message);
-      return;
+      return false;
     }
+    if (activeUploadRef.current) return false;
+    const active = { xhrs: [] as XMLHttpRequest[], assetId: undefined as string | undefined, uploadId: undefined as string | undefined, cancelled: false };
+    activeUploadRef.current = active;
     setUploading(kind);
-    setMessage(`Preparing ${kind} upload…`);
+    updateProgress(0);
+    setMessage(`Preparing secure multipart upload for ${kind}…`);
     try {
-      const signed = await requestAssetUpload({
-        data: {
-          titleId,
-          kind,
-          filename,
-          contentType,
-        },
+      const multipart = await requestAssetUpload({
+        data: { titleId, kind, filename, contentType },
       });
-      const uploadUrl = new URL(signed.url);
-      uploadUrl.pathname = uploadUrl.pathname
-        .split("/")
-        .map((part) => encodeURIComponent(decodeURIComponent(part)))
-        .join("/");
-
-      const controller = new AbortController();
-      const uploadTimeout = window.setTimeout(() => controller.abort(), 60_000);
-      let put: Response;
-      try {
-        put = await fetch(uploadUrl.toString(), {
-          method: signed.method,
-          body: file,
-          headers: { "content-type": contentType },
-          signal: controller.signal,
-        });
-      } catch (error) {
-        if (controller.signal.aborted) {
-          setMessage(
-            "Upload timed out; the storage outcome is unknown. Refresh the asset list and reconcile storage before retrying.",
-          );
-          await onAssetsChanged();
-          return;
+      active.assetId = multipart.assetId;
+      active.uploadId = multipart.uploadId;
+      if (active.cancelled) {
+        await abortAssetMultipartUpload({ data: { assetId: multipart.assetId, uploadId: multipart.uploadId } }).catch(() => undefined);
+        throw new DOMException("Upload cancelled", "AbortError");
+      }
+      const chunkSize = 16 * 1024 * 1024;
+      const partCount = multipartPartCount(file.size, chunkSize);
+      const loadedByPart = new Array<number>(partCount).fill(0);
+      const etags = new Array<string>(partCount);
+      let nextPart = 0;
+      let firstError: unknown = null;
+      const worker = async () => {
+        while (!active.cancelled && !firstError) {
+          const index = nextPart++;
+          if (index >= partCount) return;
+          const start = index * chunkSize;
+          const chunk = file.slice(start, Math.min(file.size, start + chunkSize));
+          let lastError: unknown = null;
+          for (let attempt = 0; attempt < 3 && !active.cancelled; attempt += 1) {
+            try {
+              const digest = await crypto.subtle.digest("SHA-256", await chunk.arrayBuffer());
+              const sha256 = btoa(String.fromCharCode(...new Uint8Array(digest)));
+              const partRequest = await requestAssetPartUpload({
+                data: { assetId: multipart.assetId, uploadId: multipart.uploadId, partNum: index + 1, byteSize: chunk.size, sha256 },
+              });
+              etags[index] = await uploadPart(
+                partRequest.url,
+                chunk,
+                (loaded) => {
+                  loadedByPart[index] = Math.min(loaded, chunk.size);
+                  const total = loadedByPart.reduce((sum, value) => sum + value, 0);
+                  updateProgress(Math.min(99, Math.floor((total / file.size) * 100)));
+                },
+                active.xhrs,
+                partRequest.headers,
+              );
+              lastError = null;
+              break;
+            } catch (error) {
+              lastError = error;
+              loadedByPart[index] = 0;
+              if (active.cancelled) return;
+            }
+          }
+          if (lastError) {
+            firstError = lastError;
+            return;
+          }
         }
-        throw error;
-      } finally {
-        window.clearTimeout(uploadTimeout);
-      }
-      if (!put.ok)
-        throw new Error(`Upload failed (${put.status}); asset remains unverified.`);
-
-      let confirmation: { verified?: boolean };
-      let confirmationTimedOut = false;
-      let timeoutId: number | undefined;
-      try {
-        confirmation = await Promise.race([
-          confirmAssetUpload({ data: { assetId: signed.assetId, expectedByteSize: file.size } }),
-          new Promise<never>((_, reject) => {
-            timeoutId = window.setTimeout(() => {
-              confirmationTimedOut = true;
-              reject(new Error("Verification timed out"));
-            }, 30_000);
-          }),
-        ]);
-      } catch (error) {
-        await onAssetsChanged();
-        if (confirmationTimedOut) {
-          setMessage(
-            "Upload reached storage, but verification is still unconfirmed. Refresh and reconcile the server asset record before retrying.",
-          );
-          return;
-        }
-        throw error;
-      } finally {
-        if (timeoutId !== undefined) window.clearTimeout(timeoutId);
-      }
-      if (confirmation.verified !== true) {
-        await onAssetsChanged();
-        setMessage(
-          "Storage verification is not confirmed. The asset remains unverified; refresh and reconcile before retrying.",
-        );
-        return;
-      }
+      };
+      await Promise.all(Array.from({ length: Math.min(3, partCount) }, () => worker()));
+      if (active.cancelled) throw new DOMException("Upload cancelled", "AbortError");
+      if (firstError) throw firstError;
+      assertMultipartEtags(etags, partCount);
+      setMessage("All parts uploaded. Committing and verifying the object…");
+      await commitAssetMultipartUpload({
+        data: { assetId: multipart.assetId, uploadId: multipart.uploadId, parts: etags.map((etag, index) => ({ partNum: index + 1, etag })) },
+      });
+      await confirmAssetUpload({ data: { assetId: multipart.assetId, expectedByteSize: file.size } });
+      updateProgress(100);
       await onAssetsChanged();
-      setMessage(`${kind[0].toUpperCase() + kind.slice(1)} is verified by the server.`);
+      setMessage(`${kind[0].toUpperCase() + kind.slice(1)} uploaded and verified.`);
+      return true;
     } catch (error) {
-      const raw = error instanceof Error ? error.message : "Upload outcome is unknown";
-      setMessage(
-        raw.includes("STORAGE_UNAVAILABLE")
-          ? "Storage service is currently unavailable. The asset remains unverified."
-          : `${raw}. The asset has not been marked ready; refresh the asset list before retrying.`,
-      );
-      try {
-        await onAssetsChanged();
-      } catch {
-        /* Keep unresolved state visible */
+      const raw = error instanceof Error ? error.message : "Upload failed";
+      if (active.cancelled || (error instanceof DOMException && error.name === "AbortError")) {
+        setMessage("Upload cancelled. Select the file again to retry.");
+      } else {
+        if (active.assetId && active.uploadId) {
+          await abortAssetMultipartUpload({ data: { assetId: active.assetId, uploadId: active.uploadId } }).catch(() => undefined);
+        }
+        setMessage(
+          raw.includes("STORAGE_UNAVAILABLE")
+            ? "Storage service is currently unavailable. Please try again later."
+            : `${raw}. Select the file again to retry.`,
+        );
       }
+      return false;
     } finally {
+      if (activeUploadRef.current === active) activeUploadRef.current = null;
       activeUploads.current.delete(kind);
       setUploading(null);
     }
   }
+
+  function enqueueFiles(kind: SimpleAssetKind, files: File[]) {
+    const added = files.map((file) => ({
+      id: crypto.randomUUID(),
+      kind,
+      file,
+      progress: 0,
+      status: "Queued" as const,
+      message: "Waiting for the next upload slot",
+    }));
+    replaceQueue([...queueRef.current, ...added]);
+    void processQueue();
+  }
+
+  function retryQueueItem(id: string) {
+    const item = queueRef.current.find((candidate) => candidate.id === id);
+    if (!item || !["Failed", "Cancelled"].includes(item.status)) return;
+    updateQueueItem(id, { status: "Queued", progress: 0, message: "Retry queued" });
+    void processQueue();
+  }
+
+  function cancelQueuedItem(id: string) {
+    const item = queueRef.current.find((candidate) => candidate.id === id);
+    if (!item || item.status !== "Queued") return;
+    updateQueueItem(id, { status: "Cancelled", message: "Removed from pending queue" });
+  }
+
+  async function processQueue() {
+    if (queueRunningRef.current) return;
+    queueRunningRef.current = true;
+    try {
+      while (true) {
+        const item = queueRef.current.find((candidate) => candidate.status === "Queued");
+        if (!item) break;
+        currentQueueIdRef.current = item.id;
+        updateQueueItem(item.id, { status: "Uploading", message: "Uploading and verifying…" });
+        const ok = await uploadFile(item.kind, item.file);
+        const latest = queueRef.current.find((candidate) => candidate.id === item.id);
+        if (latest?.status !== "Cancelled") {
+          updateQueueItem(item.id, {
+            status: ok ? "Completed" : "Failed",
+            progress: ok ? 100 : latest?.progress ?? 0,
+            message: ok ? "Uploaded and verified" : message || "Upload failed; select the file again to retry",
+          });
+        }
+        currentQueueIdRef.current = null;
+      }
+    } finally {
+      queueRunningRef.current = false;
+      if (queueRef.current.some((item) => item.status === "Queued")) void processQueue();
+    }
+  }
+
+  const batchProgress = queueItems.length
+    ? Math.floor(
+        (queueItems.reduce((total, item) => total + (item.file.size * item.progress) / 100, 0) /
+          Math.max(1, queueItems.reduce((total, item) => total + item.file.size, 0))) *
+          100,
+      )
+    : 0;
 
   async function handlePreview(asset: { id: string; kind: string; contentType: string | null }) {
     setPreviewLoading(asset.id);
@@ -615,8 +753,8 @@ function FilesPanel({
                 label={label}
                 status={isReady ? "Ready" : empty}
                 busy={uploading === kind}
-                canUpload={canUploadCard && uploading === null}
-                onFile={(file) => void uploadFile(kind, file)}
+                canUpload={canUploadCard}
+                onFiles={(files) => enqueueFiles(kind, files)}
               />
             );
           })}
@@ -627,10 +765,66 @@ function FilesPanel({
         </div>
       )}
 
-      {message ? <p className="mt-3 text-xs text-muted">{message}</p> : null}
+      {queueItems.length ? (
+        <section className="mt-5 space-y-3" aria-label="Upload queue">
+          <div className="flex items-center justify-between gap-3 text-sm">
+            <h3 className="font-semibold">Upload queue ({queueItems.length} files)</h3>
+            <span className="text-xs text-muted">Overall progress: {batchProgress}%</span>
+          </div>
+          <progress className="h-2 w-full" max={100} value={batchProgress} aria-label="Overall upload batch progress" />
+          <div className="space-y-3">
+            {queueItems.map((item) => (
+              <div key={item.id} className="rounded-xl border border-line p-3">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="break-all text-sm font-semibold">{item.file.name}</p>
+                    <p className="text-xs text-muted">
+                      {item.kind} · {(item.file.size / (1024 * 1024)).toFixed(1)} MB · {item.status}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs tabular-nums text-muted">{item.progress}%</span>
+                    {["Failed", "Cancelled"].includes(item.status) ? (
+                      <button
+                        type="button"
+                        onClick={() => retryQueueItem(item.id)}
+                        className="rounded-full border border-line px-3 py-1 text-xs font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+                      >
+                        Retry
+                      </button>
+                    ) : null}
+                    {item.status === "Queued" ? (
+                      <button
+                        type="button"
+                        onClick={() => cancelQueuedItem(item.id)}
+                        className="rounded-full border border-line px-3 py-1 text-xs font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+                      >
+                        Remove
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+                <progress className="mt-2 h-2 w-full" max={100} value={item.progress} aria-label={`${item.file.name} upload progress`} />
+                {item.message ? <p className="mt-1 text-xs text-muted" role="status">{item.message}</p> : null}
+              </div>
+            ))}
+          </div>
+          {uploading ? (
+            <button
+              type="button"
+              onClick={() => void cancelUpload()}
+              className="rounded-full border border-line px-3 py-1.5 text-xs font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+            >
+              Cancel current upload
+            </button>
+          ) : null}
+        </section>
+      ) : null}
+
+      {message ? <p className="mt-3 text-xs text-muted" role="status">{message}</p> : null}
       {previewError ? <p role="alert" className="mt-3 text-xs text-red-400">{previewError}</p> : null}
 
-      {/* Active Secure Inline Preview Modal / Container */}
+      {/* Active Secure Inline Preview Container */}
       {activePreview ? (
         <div className="mt-5 rounded-2xl border border-accent/40 bg-surface/90 p-5 shadow-xl">
           <div className="flex items-center justify-between border-b border-line pb-3">
@@ -794,7 +988,7 @@ function FileTypeCard({
   label,
   status,
   busy,
-  onFile,
+  onFiles,
   canUpload,
 }: {
   canUpload: boolean;
@@ -802,7 +996,7 @@ function FileTypeCard({
   label: string;
   status: string;
   busy: boolean;
-  onFile: (file: File) => void;
+  onFiles: (files: File[]) => void;
 }) {
   const spec = OTT_INGEST_SPEC[kind];
   return (
@@ -820,11 +1014,12 @@ function FileTypeCard({
           <input
             className="sr-only"
             type="file"
+            multiple
             accept={getOttIngestAccept(kind)}
             disabled={busy || !canUpload}
             onChange={(e) => {
-              const file = e.currentTarget.files?.[0];
-              if (file) onFile(file);
+              const files = Array.from(e.currentTarget.files ?? []);
+              if (files.length) onFiles(files);
               e.currentTarget.value = "";
             }}
           />
