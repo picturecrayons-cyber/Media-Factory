@@ -23,7 +23,7 @@ jobs:
           node-version: "24"
           cache: npm
       - run: npm ci
-      - name: Verify preview-only OCI credentials are present
+      - name: Verify preview-only OCI credentials and bucket
         env:
           OCI_TENANCY_OCID: ${{ secrets.BRIDGE_E2E_OCI_TENANCY_OCID }}
           OCI_USER_OCID: ${{ secrets.BRIDGE_E2E_OCI_USER_OCID }}
@@ -40,7 +40,15 @@ jobs:
               exit 2
             fi
           done
-          echo "Preview-only OCI secret presence verified; values are not printed."
+          bucket="$(printf '%s' "$OCI_BUCKET_NAME" | tr '[:upper:]' '[:lower:]')"
+          case "$bucket" in
+            *preview*|*e2e*|*test*|*sandbox*|*staging*) ;;
+            *)
+              echo "::error::Refusing OCI E2E: bucket name must clearly identify a non-production preview/test bucket."
+              exit 2
+              ;;
+          esac
+          echo "Preview-only OCI secret presence and non-production bucket naming verified; values are not printed."
       - name: Run synthetic OCI multipart, integrity, and cleanup test
         env:
           OCI_TENANCY_OCID: ${{ secrets.BRIDGE_E2E_OCI_TENANCY_OCID }}
