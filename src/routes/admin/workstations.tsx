@@ -1,15 +1,18 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { listAdminWorkstations, reviewAdminTitle, setBuyerPublicationGate } from "@/lib/bridge/admin-workstations";
 import { listDuplicateReviews, openDuplicateReview, decideDuplicateReview } from "@/lib/bridge/duplicate-reconciliation";
+import { detectDuplicateGroups } from "@/lib/bridge/duplicate-policy";
+import { DuplicateMergeModal } from "@/components/bridge/duplicate-merge-modal";
+import type { BridgeActor } from "@/lib/bridge/session";
 
 export const Route = createFileRoute("/admin/workstations")({ component: AdminWorkstations });
 
-const TABS = ["Titles", "QC", "Rights", "Assets", "Buyers", "Deliveries", "Audit"] as const;
+const TABS = ["Titles", "Deduplication", "QC", "Rights", "Assets", "Buyers", "Deliveries", "Audit"] as const;
 type Tab = (typeof TABS)[number];
 
 const STATUS_LABELS: Record<string, string> = {
@@ -21,12 +24,12 @@ const STATUS_LABELS: Record<string, string> = {
 function AdminWorkstations() {
   return (
     <RequireBridge allow="internal">
-      {(actor) => <BridgeShell actor={actor} title="Admin"><WorkstationBody /></BridgeShell>}
+      {(actor) => <BridgeShell actor={actor} title="Admin"><WorkstationBody actor={actor} /></BridgeShell>}
     </RequireBridge>
   );
 }
 
-function WorkstationBody() {
+function WorkstationBody({ actor }: { actor: BridgeActor }) {
   const qc = useQueryClient();
   const query = useQuery({ queryKey: ["admin-workstations"], queryFn: () => listAdminWorkstations() });
   const review = useMutation({
@@ -72,6 +75,8 @@ function WorkstationBody() {
 
       {activeTab === "Titles" ? (
         <TitleQueue titles={data.titles} review={review} />
+      ) : activeTab === "Deduplication" ? (
+        <DeduplicationWorkstation titles={data.titles} actor={actor} />
       ) : activeTab === "QC" ? (
         <ReviewQueue title="QC Review" description="Review technical quality before rights review." titles={qcQueue}
           actions={[["PASS", "Approve → Rights"], ["FAIL", "Fail QC"]]} mutation={review} />
@@ -122,6 +127,152 @@ function TitleQueue({ titles, review }: { titles: any[]; review: any }) {
         )) : <Empty text="No titles in the Bridge catalog." />}
       </div>
     </section>
+  );
+}
+
+function DeduplicationWorkstation({ titles, actor }: { titles: any[]; actor: BridgeActor }) {
+  const qc = useQueryClient();
+  const [selectedPair, setSelectedPair] = useState<{ canonicalId: string; retiringId: string } | null>(null);
+
+  const groups = useMemo(() => {
+    const raw = detectDuplicateGroups(
+      titles.map((t) => ({
+        id: String(t.id),
+        name: String(t.name),
+        language: String(t.language),
+        year: t.year ? Number(t.year) : null,
+        contentType: String(t.content_type ?? t.contentType ?? "FEATURE"),
+        status: String(t.status),
+      })),
+    );
+    return Array.from(raw.entries()).map(([normalizedKey, records]) => ({
+      normalizedKey,
+      records,
+    }));
+  }, [titles]);
+
+  return (
+    <div className="space-y-6">
+      <section className="space-y-3">
+        <SectionHeader
+          title="Automated Duplicate Detection & Safe Merge"
+          description="Identify potential duplicate title records using diacritic/whitespace/case-normalized text, language, year, and content type. Dry-run merges protect buyer visibility and delivery integrity."
+        />
+
+        {groups.length === 0 ? (
+          <Empty text="No duplicate title groups detected in current catalog." />
+        ) : (
+          <div className="space-y-4">
+            {groups.map((group) => {
+              const canonical = group.records[0];
+              return (
+                <div key={group.normalizedKey} className="rounded-2xl border border-line bg-surface p-5 space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-line pb-3">
+                    <div>
+                      <span className="text-[10px] font-semibold uppercase tracking-wider text-accent bg-accent/10 px-2.5 py-0.5 rounded-full">
+                        {group.records.length} Records in Group
+                      </span>
+                      <h4 className="font-display text-lg font-semibold mt-1">
+                        {group.records[0].name}
+                      </h4>
+                      <p className="text-xs text-muted">
+                        Key: <code className="font-mono text-fg">{group.normalizedKey}</code> · Language: {group.records[0].language} · Year: {group.records[0].year ?? "—"}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="grid gap-3">
+                    {group.records.map((rec, idx) => {
+                      const isCanonical = idx === 0;
+                      const isProtected = rec.status === "LIVE_FOR_BUYERS";
+                      return (
+                        <div
+                          key={rec.id}
+                          className={`flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-xl border ${
+                            isCanonical
+                              ? "border-accent/40 bg-accent/5"
+                              : isProtected
+                                ? "border-amber-500/40 bg-amber-500/5"
+                                : "border-line bg-elevated/40"
+                          }`}
+                        >
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium text-sm">{rec.name}</span>
+                              <span className="font-mono text-[10px] text-muted">({rec.id})</span>
+                              {isCanonical ? (
+                                <span className="bg-accent/20 text-accent text-[10px] font-semibold px-2 py-0.5 rounded-full">
+                                  Proposed Canonical
+                                </span>
+                              ) : isProtected ? (
+                                <span className="bg-amber-500/20 text-amber-300 text-[10px] font-semibold px-2 py-0.5 rounded-full">
+                                  🛡️ Protected Live Record
+                                </span>
+                              ) : (
+                                <span className="bg-zinc-700 text-zinc-300 text-[10px] font-semibold px-2 py-0.5 rounded-full">
+                                  Duplicate Candidate
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-xs text-muted mt-1">
+                              Status: <span className="font-semibold text-fg">{rec.status}</span> · Type: {rec.contentType}
+                            </p>
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            <Link
+                              to="/title/$id"
+                              params={{ id: rec.id }}
+                              className="rounded-full border border-line px-3 py-1.5 text-xs text-muted hover:text-fg"
+                            >
+                              Inspect
+                            </Link>
+                            {!isCanonical ? (
+                              isProtected ? (
+                                <span className="text-xs text-amber-300/80 italic px-2">
+                                  Cannot auto-merge live buyer title
+                                </span>
+                              ) : (
+                                <Button
+                                  size="sm"
+                                  onClick={() =>
+                                    setSelectedPair({
+                                      canonicalId: canonical.id,
+                                      retiringId: rec.id,
+                                    })
+                                  }
+                                >
+                                  Dry-Run & Merge
+                                </Button>
+                              )
+                            ) : null}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
+
+      <DuplicateReviewSection />
+
+      {selectedPair ? (
+        <DuplicateMergeModal
+          canonicalId={selectedPair.canonicalId}
+          retiringId={selectedPair.retiringId}
+          isOpen={Boolean(selectedPair)}
+          onClose={() => setSelectedPair(null)}
+          onMerged={() => {
+            setSelectedPair(null);
+            void qc.invalidateQueries({ queryKey: ["admin-workstations"] });
+          }}
+        />
+      ) : null}
+    </div>
   );
 }
 
