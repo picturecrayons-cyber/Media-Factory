@@ -21,7 +21,11 @@ async function sha256(raw: string) {
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-async function eventId(payload: any, raw: string) {
+async function eventId(payload: any, raw: string, providerEventId?: string | null) {
+  // Razorpay's delivery ID is the canonical idempotency key when supplied.
+  // Entity-derived fallback keeps older/manual payloads retryable.
+  const deliveryId = providerEventId?.trim();
+  if (deliveryId && deliveryId.length <= 255) return `razorpay:${deliveryId}`;
   const e = payload?.event ?? "unknown";
   const p = payload?.payload?.payment?.entity;
   const o = payload?.payload?.order?.entity;
@@ -63,7 +67,7 @@ Deno.serve(async (req: Request) => {
   try { payload = JSON.parse(raw); } catch { return new Response("Invalid JSON", { status: 400 }); }
 
   const hash = await sha256(raw);
-  const id = await eventId(payload, raw);
+  const id = await eventId(payload, raw, req.headers.get("x-razorpay-event-id"));
   const eventName = String(payload?.event ?? "unknown");
   let surface = detectSurface(payload);
   const supabase = createClient(supabaseUrl, serviceRole, { auth: { persistSession: false } });
@@ -74,6 +78,17 @@ Deno.serve(async (req: Request) => {
   if (readError || !existing) return new Response("Persistence failure", { status: 503 });
   if (existing.payload_hash !== hash) return new Response("Event collision", { status: 409 });
   if (existing.status === "processed") return Response.json({ ok: true, duplicate: true });
+
+  // Atomically claim the event. Concurrent deliveries must not both grant access
+  // or write lifecycle transitions; an in-flight duplicate receives a retryable 503.
+  const { data: claimed, error: claimError } = await supabase.from("bridge_webhook_events")
+    .update({ status: "processing" })
+    .eq("event_id", id)
+    .in("status", ["received", "failed"])
+    .select("event_id")
+    .maybeSingle();
+  if (claimError) return new Response("Persistence failure", { status: 503 });
+  if (!claimed) return new Response("Event is already processing", { status: 503 });
 
   if (eventName === "payment.captured") {
     const payment = payload?.payload?.payment?.entity;
