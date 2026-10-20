@@ -11,7 +11,6 @@ const key = "bridge/_e2e/multipart-" + Date.now() + "-" + runId + ".bin";
 const sealedKey = key + ".verified/" + runId;
 let uploadId;
 let sourceCommitted = false;
-let sealedCreated = false;
 try {
   const upload = await initiateMultipartUpload({ key, contentType: "application/octet-stream" });
   uploadId = upload.uploadId;
@@ -31,7 +30,6 @@ try {
   assert.equal(verified.byteSize, payload.byteLength);
   assert.ok(verified.etag, "Committed multipart object ETag missing");
   const sealed = await sealVerifiedObject(key, sealedKey, verified.etag);
-  sealedCreated = true;
   assert.equal(sealed.byteSize, payload.byteLength);
   assert.ok(sealed.etag, "Sealed object ETag missing");
   const download = await signDownload({ key: sealedKey });
@@ -40,7 +38,25 @@ try {
   assert.deepEqual(Buffer.from(await response.arrayBuffer()), payload);
   console.log(JSON.stringify({ status: "PASS", provider: "oracle-oci-object-storage", region: process.env.OCI_REGION, byteSize: payload.byteLength, partCount: parts.length, checks: ["multipart-initiation", "part-etags", "multipart-completion-manifest", "size-verification", "immutable-seal", "download-integrity"] }, null, 2));
 } finally {
-  if (uploadId && !sourceCommitted) await abortMultipartUpload({ key, uploadId }).catch(() => undefined);
-  if (sealedCreated) await deleteObject(sealedKey).catch(() => undefined);
-  if (sourceCommitted) await deleteObject(key).catch(() => undefined);
+  // Attempt every cleanup action. A failed cleanup must fail the workflow rather
+  // than being silently swallowed and leaving synthetic objects or multipart state.
+  const cleanupErrors = [];
+  if (uploadId && !sourceCommitted) {
+    try {
+      await abortMultipartUpload({ key, uploadId });
+    } catch (error) {
+      cleanupErrors.push("multipart abort: " + (error instanceof Error ? error.message : String(error)));
+    }
+  }
+  for (const cleanupKey of [sealedKey, key]) {
+    try {
+      await deleteObject(cleanupKey);
+    } catch (error) {
+      cleanupErrors.push("object cleanup: " + (error instanceof Error ? error.message : String(error)));
+    }
+  }
+  if (cleanupErrors.length) {
+    console.error("OCI E2E cleanup did not complete:", cleanupErrors.join("; "));
+    throw new Error("OCI E2E cleanup failed");
+  }
 }
