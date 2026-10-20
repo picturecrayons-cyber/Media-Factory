@@ -367,6 +367,10 @@ function FilesPanel({
       });
       active.assetId = multipart.assetId;
       active.uploadId = multipart.uploadId;
+      if (active.cancelled) {
+        await abortAssetMultipartUpload({ data: { assetId: multipart.assetId, uploadId: multipart.uploadId } }).catch(() => undefined);
+        throw new DOMException("Upload cancelled", "AbortError");
+      }
       const chunkSize = 16 * 1024 * 1024;
       const partCount = multipartPartCount(file.size, chunkSize);
       const loadedByPart = new Array<number>(partCount).fill(0);
@@ -443,6 +447,19 @@ function FilesPanel({
     }));
     replaceQueue([...queueRef.current, ...added]);
     void processQueue();
+  }
+
+  function retryQueueItem(id: string) {
+    const item = queueRef.current.find((candidate) => candidate.id === id);
+    if (!item || !["Failed", "Cancelled"].includes(item.status)) return;
+    updateQueueItem(id, { status: "Queued", progress: 0, message: "Retry queued" });
+    void processQueue();
+  }
+
+  function cancelQueuedItem(id: string) {
+    const item = queueRef.current.find((candidate) => candidate.id === id);
+    if (!item || item.status !== "Queued") return;
+    updateQueueItem(id, { status: "Cancelled", message: "Removed from pending queue" });
   }
 
   async function processQueue() {
@@ -526,7 +543,15 @@ function FilesPanel({
                     <p className="break-all text-sm font-semibold">{item.file.name}</p>
                     <p className="text-xs text-muted">{item.kind} · {(item.file.size / (1024 * 1024)).toFixed(1)} MB · {item.status}</p>
                   </div>
-                  <span className="text-xs tabular-nums text-muted">{item.progress}%</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs tabular-nums text-muted">{item.progress}%</span>
+                    {["Failed", "Cancelled"].includes(item.status) ? (
+                      <button type="button" onClick={() => retryQueueItem(item.id)} className="rounded-full border border-line px-3 py-1 text-xs font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2">Retry</button>
+                    ) : null}
+                    {item.status === "Queued" ? (
+                      <button type="button" onClick={() => cancelQueuedItem(item.id)} className="rounded-full border border-line px-3 py-1 text-xs font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2">Remove</button>
+                    ) : null}
+                  </div>
                 </div>
                 <progress className="mt-2 h-2 w-full" max={100} value={item.progress} aria-label={`${item.file.name} upload progress`} />
                 {item.message ? <p className="mt-1 text-xs text-muted" role="status">{item.message}</p> : null}
