@@ -9,7 +9,7 @@ import { listDuplicateReviews, openDuplicateReview, decideDuplicateReview } from
 
 export const Route = createFileRoute("/admin/workstations")({ component: AdminWorkstations });
 
-const TABS = ["Titles", "QC", "Rights", "Assets", "Buyers", "Deliveries", "Audit"] as const;
+const TABS = ["Titles", "QC", "Rights", "Assets", "Buyers", "Deliveries", "Duplicates", "Audit"] as const;
 type Tab = (typeof TABS)[number];
 
 const STATUS_LABELS: Record<string, string> = {
@@ -93,6 +93,8 @@ function WorkstationBody() {
           <SimpleTable title="Bridge Publications" description={data.publications.length + " persisted authorization records"}
             rows={data.publications} titleName={titleName} fields={["bridge_title_id", "authorization_status", "territories", "languages", "window_end"]} />
         </div>
+      ) : activeTab === "Duplicates" ? (
+        <DuplicateReviewSection />
       ) : (
         <SimpleTable title="Audit History" description="Persisted operator activity. No UI-only decisions."
           rows={data.audit} fields={["action", "entity_type", "entity_id", "actor_user_id", "created_at"]} />
