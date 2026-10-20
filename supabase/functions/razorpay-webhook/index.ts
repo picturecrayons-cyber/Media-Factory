@@ -79,6 +79,17 @@ Deno.serve(async (req: Request) => {
   if (existing.payload_hash !== hash) return new Response("Event collision", { status: 409 });
   if (existing.status === "processed") return Response.json({ ok: true, duplicate: true });
 
+  // Atomically claim the event. Concurrent deliveries must not both grant access
+  // or write lifecycle transitions; an in-flight duplicate receives a retryable 503.
+  const { data: claimed, error: claimError } = await supabase.from("bridge_webhook_events")
+    .update({ status: "processing" })
+    .eq("event_id", id)
+    .in("status", ["received", "failed"])
+    .select("event_id")
+    .maybeSingle();
+  if (claimError) return new Response("Persistence failure", { status: 503 });
+  if (!claimed) return new Response("Event is already processing", { status: 503 });
+
   if (eventName === "payment.captured") {
     const payment = payload?.payload?.payment?.entity;
     if (!payment?.order_id || !payment?.id) return await failEvent(supabase, id, "Capture missing payment identifiers");
