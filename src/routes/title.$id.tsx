@@ -301,9 +301,9 @@ function FilesPanel({
           contentType,
         },
       });
-      const uploadUrl = new URL(signed.url);
-      uploadUrl.pathname = uploadUrl.pathname.split("/").map((part) => encodeURIComponent(decodeURIComponent(part))).join("/");
-      const put = await fetch(uploadUrl.toString(), {
+      // OCI returns a pre-authenticated URL; use it verbatim because rewriting its
+      // encoded object path can change the target object and cause browser PUT failures.
+      const put = await fetch(signed.url, {
         method: signed.method,
         body: file,
         headers: { "content-type": contentType },
@@ -314,11 +314,13 @@ function FilesPanel({
       setMessage(`${kind[0].toUpperCase() + kind.slice(1)} is ready.`);
     } catch (error) {
       const raw = error instanceof Error ? error.message : "Upload failed";
-      setMessage(
-        raw.includes("STORAGE_UNAVAILABLE")
-          ? "Storage service is currently unavailable. Please try again later."
-          : raw,
-      );
+      if (raw.includes("STORAGE_UNAVAILABLE")) {
+        setMessage("Storage service is currently unavailable. Please try again later.");
+      } else if (error instanceof TypeError) {
+        setMessage("The browser could not reach OCI storage. Check the OCI bucket CORS rule for this site's origin, PUT method and Content-Type header, then request a fresh upload URL.");
+      } else {
+        setMessage(raw);
+      }
     } finally {
       setUploading(null);
     }
