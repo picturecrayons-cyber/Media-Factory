@@ -4,7 +4,7 @@ import { WorkflowDesk } from "@/components/bridge/workflow-desk";
 import { publicationIsActive } from "@/lib/bridge/workflow-policy";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { getTitle, updateTitle } from "@/lib/bridge/titles";
@@ -359,27 +359,7 @@ function FilesPanel({
         ))}
       </div>
       {message ? <p className="mt-3 text-xs text-muted">{message}</p> : null}
-      <div className="mt-5 space-y-2">
-        {assets.map((a) => (
-          <div
-            key={a.id}
-            className="flex items-center justify-between gap-3 rounded-xl border border-line p-4"
-          >
-            <div>
-              <p className="text-sm font-semibold">{a.kind}</p>
-              <p className="text-xs text-muted">{a.verified ? "Ready" : "Processing"}</p>
-            </div>
-            {a.verified ? (
-              <button
-                onClick={() => void download(a.id)}
-                className="rounded-full border border-line px-4 py-2 text-xs font-semibold"
-              >
-                Download
-              </button>
-            ) : null}
-          </div>
-        ))}
-      </div>
+      <TitleAssetPreviewGallery assets={assets} onDownload={(id) => void download(id)} />
     </section>
   );
 }
@@ -425,5 +405,178 @@ function FileTypeCard({
         </label>
       </div>
     </div>
+  );
+}
+
+
+type PreviewAsset = {
+  id: string;
+  kind: string;
+  contentType: string | null;
+  byteSize: number | null;
+  verified: boolean;
+};
+
+const IMAGE_ASSET_KINDS = new Set(["poster", "poster_vertical", "poster_horizontal", "thumbnail"]);
+
+function TitleAssetPreviewGallery({
+  assets,
+  onDownload,
+}: {
+  assets: PreviewAsset[];
+  onDownload: (id: string) => void;
+}) {
+  const labelFor = (kind: string) =>
+    ({
+      master: "Main Film / Original Master",
+      screener: "Trailer / Screener",
+      poster: "Poster",
+      poster_vertical: "Vertical Poster",
+      poster_horizontal: "Horizontal Artwork",
+      thumbnail: "Thumbnail",
+      subtitle: "Subtitle",
+      censor_certificate: "Censor Certificate",
+      technical: "Technical Package",
+    })[kind] ?? kind.replaceAll("_", " ");
+
+  return (
+    <section aria-label="Title Assets — Preview Gallery" className="mt-6">
+      <div className="mb-4">
+        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Files / Media</p>
+        <h3 className="mt-1 font-display text-lg font-semibold">Title Assets — Preview Gallery</h3>
+        <p className="mt-1 text-xs text-muted">Previews use authenticated, short-lived links. Download remains available.</p>
+      </div>
+      {assets.length === 0 ? (
+        <p className="rounded-xl border border-dashed border-line p-5 text-sm text-muted">No verified assets are available to preview yet.</p>
+      ) : (
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          {assets.map((asset) => (
+            <PreviewAssetCard key={asset.id} asset={asset} label={labelFor(asset.kind)} onDownload={onDownload} />
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function PreviewAssetCard({
+  asset,
+  label,
+  onDownload,
+}: {
+  asset: PreviewAsset;
+  label: string;
+  onDownload: (id: string) => void;
+}) {
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewText, setPreviewText] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState(false);
+  const isImage = IMAGE_ASSET_KINDS.has(asset.kind);
+  const isVideo = asset.kind === "master" || asset.kind === "screener";
+  const isCertificate = asset.kind === "censor_certificate";
+  const isSubtitle = asset.kind === "subtitle";
+  const isPdf = asset.contentType?.toLowerCase().includes("pdf") ?? false;
+  const sizeLabel = asset.byteSize ? `${(asset.byteSize / (1024 * 1024)).toFixed(1)} MB` : "Size unavailable";
+
+  const loadPreview = useCallback(async () => {
+    if (!asset.verified) {
+      setError("This asset has not been verified yet.");
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      // This existing server function enforces title access, entitlement, and master restrictions
+      // before issuing a short-lived OCI Object Storage read URL.
+      const signed = await requestAssetDownload({ data: { assetId: asset.id } });
+      setPreviewUrl(signed.url);
+      if (isSubtitle) {
+        const response = await fetch(signed.url);
+        if (!response.ok) throw new Error(`Subtitle preview failed (${response.status})`);
+        const text = await response.text();
+        setPreviewText(text.slice(0, 200_000));
+      }
+    } catch (cause) {
+      setPreviewUrl(null);
+      setPreviewText(null);
+      setError(cause instanceof Error ? cause.message : "Preview unavailable. Please retry.");
+    } finally {
+      setLoading(false);
+    }
+  }, [asset.id, asset.verified, isSubtitle]);
+
+  useEffect(() => {
+    if (isImage && asset.verified) void loadPreview();
+  }, [asset.verified, isImage, loadPreview]);
+
+  return (
+    <article className="min-w-0 overflow-hidden rounded-xl border border-line bg-surface">
+      <div className="flex items-start justify-between gap-3 border-b border-line p-4">
+        <div className="min-w-0">
+          <h4 className="text-sm font-semibold">{label}</h4>
+          <p className="mt-1 text-xs text-muted">{asset.verified ? "Ready" : "Processing"} · {sizeLabel}</p>
+        </div>
+        <span className="shrink-0 rounded-full border border-line px-2 py-1 text-[10px] font-semibold">
+          {asset.contentType?.split(";")[0] || asset.kind}
+        </span>
+      </div>
+      <div className="p-3">
+        {!asset.verified ? (
+          <div className="grid min-h-36 place-items-center rounded-lg bg-elevated p-4 text-center text-xs text-muted">Preview will be available after verification.</div>
+        ) : loading && !previewUrl ? (
+          <div role="status" className="grid min-h-36 place-items-center rounded-lg bg-elevated p-4 text-xs text-muted">Loading secure preview…</div>
+        ) : error ? (
+          <div className="grid min-h-36 place-items-center rounded-lg bg-elevated p-4 text-center">
+            <p role="alert" className="text-xs text-muted">{error}</p>
+            <button type="button" onClick={() => void loadPreview()} className="mt-3 rounded-full border border-line px-3 py-1.5 text-xs font-semibold">Retry preview</button>
+          </div>
+        ) : isImage && previewUrl ? (
+          <button type="button" onClick={() => setExpanded(true)} className="group block w-full overflow-hidden rounded-lg bg-elevated text-left" aria-label={`Open original ${label} preview`}>
+            <img src={previewUrl} alt={label} loading="lazy" className={asset.kind === "poster_vertical" || asset.kind === "poster" ? "mx-auto max-h-72 w-auto object-contain" : "h-44 w-full object-contain"} />
+            <span className="block px-3 py-2 text-xs text-muted group-hover:text-fg">Click to view original dimensions</span>
+          </button>
+        ) : isVideo && previewUrl ? (
+          <div className="space-y-2">
+            <video src={previewUrl} controls preload="metadata" className="aspect-video w-full rounded-lg bg-black" onError={() => setError("This file or codec may not be supported by the browser. Download remains available.")}>
+              Your browser cannot play this media format.
+            </video>
+            {asset.kind === "master" ? <p className="text-[11px] text-muted">Master access is restricted by the server to the title owner or authorized internal staff.</p> : null}
+          </div>
+        ) : isSubtitle && previewUrl && previewText !== null ? (
+          <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-elevated p-3 text-xs leading-5">{previewText || "Subtitle file is empty."}</pre>
+        ) : isCertificate && previewUrl && isPdf ? (
+          <iframe title={`${label} PDF preview`} src={previewUrl} className="h-64 w-full rounded-lg border border-line bg-white" />
+        ) : isCertificate && previewUrl && asset.contentType?.startsWith("image/") ? (
+          <button type="button" onClick={() => setExpanded(true)} className="block w-full rounded-lg bg-elevated p-2">
+            <img src={previewUrl} alt={label} className="mx-auto max-h-64 object-contain" />
+            <span className="mt-2 block text-xs text-muted">Click to view original</span>
+          </button>
+        ) : previewUrl ? (
+          <div className="grid min-h-36 place-items-center rounded-lg bg-elevated p-4 text-center">
+            <p className="text-xs text-muted">Inline preview may not be supported for this file type.</p>
+            <button type="button" onClick={() => window.open(previewUrl, "_blank", "noopener,noreferrer")} className="mt-2 rounded-full border border-line px-3 py-1.5 text-xs font-semibold">Open preview</button>
+          </div>
+        ) : (
+          <div className="grid min-h-36 place-items-center rounded-lg bg-elevated p-4 text-center">
+            <p className="text-xs text-muted">{isVideo ? "Play supported video formats directly in this gallery." : isSubtitle ? "View SRT/VTT text inline." : isCertificate ? "Preview PDF or image certificates inline." : "Secure preview available on request."}</p>
+            <button type="button" onClick={() => void loadPreview()} className="mt-3 rounded-full border border-line px-3 py-1.5 text-xs font-semibold">{loading ? "Loading…" : "Load preview"}</button>
+          </div>
+        )}
+      </div>
+      <div className="flex items-center justify-between gap-3 border-t border-line p-3">
+        <span className="text-[11px] text-muted">Secure preview</span>
+        {asset.verified ? <button type="button" onClick={() => onDownload(asset.id)} className="rounded-full border border-line px-3 py-1.5 text-xs font-semibold hover:bg-elevated">Download</button> : null}
+      </div>
+      {expanded && previewUrl ? (
+        <div role="dialog" aria-modal="true" aria-label={`Original preview: ${label}`} className="fixed inset-0 z-50 grid place-items-center bg-black/80 p-4" onClick={() => setExpanded(false)}>
+          <div className="relative flex max-h-[95vh] max-w-[95vw] flex-col items-center" onClick={(event) => event.stopPropagation()}>
+            <button type="button" onClick={() => setExpanded(false)} className="mb-3 self-end rounded-full bg-white px-4 py-2 text-sm font-semibold text-black">Close preview</button>
+            <img src={previewUrl} alt={`${label} original dimensions`} className="max-h-[82vh] max-w-[92vw] object-contain" />
+          </div>
+        </div>
+      ) : null}
+    </article>
   );
 }
