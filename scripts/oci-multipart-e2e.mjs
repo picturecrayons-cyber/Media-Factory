@@ -11,6 +11,7 @@ const key = "bridge/_e2e/multipart-" + Date.now() + "-" + runId + ".bin";
 const sealedKey = key + ".verified/" + runId;
 let uploadId;
 let sourceCommitted = false;
+let result;
 try {
   const upload = await initiateMultipartUpload({ key, contentType: "application/octet-stream" });
   uploadId = upload.uploadId;
@@ -36,7 +37,7 @@ try {
   const response = await fetch(download.url);
   assert.ok(response.ok, "OCI sealed-object download failed: " + response.status);
   assert.deepEqual(Buffer.from(await response.arrayBuffer()), payload);
-  console.log(JSON.stringify({ status: "PASS", provider: "oracle-oci-object-storage", region: process.env.OCI_REGION, byteSize: payload.byteLength, partCount: parts.length, checks: ["multipart-initiation", "part-etags", "multipart-completion-manifest", "size-verification", "immutable-seal", "download-integrity"] }, null, 2));
+  result = { status: "PASS", provider: "oracle-oci-object-storage", region: process.env.OCI_REGION, byteSize: payload.byteLength, partCount: parts.length, checks: ["multipart-initiation", "part-etags", "multipart-completion-manifest", "size-verification", "immutable-seal", "download-integrity", "cleanup"] };
 } finally {
   // Attempt every cleanup action. A failed cleanup must fail the workflow rather
   // than being silently swallowed and leaving synthetic objects or multipart state.
@@ -60,3 +61,4 @@ try {
     throw new Error("OCI E2E cleanup failed");
   }
 }
+console.log(JSON.stringify(result, null, 2));
