@@ -56,6 +56,9 @@ jobs:
       - name: Install locked dependencies
         run: npm ci
 
+      - name: Test fail-closed preflight logic
+        run: node --test scripts/preview-release-preflight.test.mjs
+
       - name: Run fail-closed preview isolation preflight
         run: node scripts/preview-release-preflight.mjs
 
