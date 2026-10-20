@@ -11,7 +11,7 @@ import { requireVerifiedActor } from "./session";
 import { writeAudit } from "./audit";
 import { assertNotDevUser } from "./guards";
 import { loopStageType } from "./loop-lanes";
-import { assertBuyerPublishable, getBuyerGateStatus } from "./buyer-visibility";
+import { assertBuyerPublishable } from "./buyer-visibility";
 
 type TitleRow = {
   id: string;
