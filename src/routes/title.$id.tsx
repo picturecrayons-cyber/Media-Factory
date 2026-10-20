@@ -254,6 +254,7 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
           }
           titleId={id}
           assets={assets}
+          canManage={actor.internalRole === "admin" || actor.internalRole === "super_admin"}
           onAssetsChanged={() => assetsQ.refetch()}
         />
       ) : activeTab === "Operations" ? (
@@ -277,8 +278,10 @@ function FilesPanel({
   assets,
   onAssetsChanged,
   canUpload,
+  canManage,
 }: {
   canUpload: boolean;
+  canManage: boolean;
   titleId: string;
   assets: Array<{
     id: string;
@@ -372,7 +375,7 @@ function FilesPanel({
         ))}
       </div>
       {message ? <p className="mt-3 text-xs text-muted">{message}</p> : null}
-      <TitleAssetPreviewGallery assets={assets} onDownload={(id) => void download(id)} />
+      <TitleAssetPreviewGallery assets={assets} onDownload={(id) => void download(id)} onAssetsChanged={onAssetsChanged} canManage={canManage} />
     </section>
   );
 }
@@ -435,9 +438,13 @@ const IMAGE_ASSET_KINDS = new Set(["poster", "poster_vertical", "poster_horizont
 function TitleAssetPreviewGallery({
   assets,
   onDownload,
+  onAssetsChanged,
+  canManage,
 }: {
   assets: PreviewAsset[];
   onDownload: (id: string) => void;
+  onAssetsChanged: () => Promise<unknown> | unknown;
+  canManage: boolean;
 }) {
   const labelFor = (kind: string) =>
     ({
@@ -464,7 +471,7 @@ function TitleAssetPreviewGallery({
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {assets.map((asset) => (
-            <PreviewAssetCard key={asset.id} asset={asset} label={labelFor(asset.kind)} onDownload={onDownload} />
+            <PreviewAssetCard key={asset.id} asset={asset} label={labelFor(asset.kind)} onDownload={onDownload} onAssetsChanged={onAssetsChanged} canManage={canManage} />
           ))}
         </div>
       )}
@@ -476,16 +483,31 @@ function PreviewAssetCard({
   asset,
   label,
   onDownload,
+  onAssetsChanged,
+  canManage,
 }: {
   asset: PreviewAsset;
   label: string;
   onDownload: (id: string) => void;
+  onAssetsChanged: () => Promise<unknown> | unknown;
+  canManage: boolean;
 }) {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewText, setPreviewText] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
+  const [removeConfirm, setRemoveConfirm] = useState(false);
+  const [removeMessage, setRemoveMessage] = useState<string | null>(null);
+  const removeMutation = useMutation({
+    mutationFn: () => removeIncompleteAsset({ data: { assetId: asset.id } }),
+    onSuccess: async () => {
+      setRemoveConfirm(false);
+      setRemoveMessage("Incomplete upload removed.");
+      await onAssetsChanged();
+    },
+    onError: (cause) => setRemoveMessage(cause instanceof Error ? cause.message : "Could not remove incomplete upload"),
+  });
   const isImage = IMAGE_ASSET_KINDS.has(asset.kind);
   const isVideo = asset.kind === "master" || asset.kind === "screener";
   const isCertificate = asset.kind === "censor_certificate";
@@ -580,8 +602,21 @@ function PreviewAssetCard({
       </div>
       <div className="flex items-center justify-between gap-3 border-t border-line p-3">
         <span className="text-[11px] text-muted">Secure preview</span>
-        {asset.verified ? <button type="button" onClick={() => onDownload(asset.id)} className="rounded-full border border-line px-3 py-1.5 text-xs font-semibold hover:bg-elevated">Download</button> : null}
+        <div className="flex items-center gap-2">
+          {canManage && !asset.verified ? <button type="button" onClick={() => { setRemoveMessage(null); setRemoveConfirm(true); }} className="rounded-full border border-line px-3 py-1.5 text-xs font-semibold text-destructive hover:bg-elevated">Remove</button> : null}
+          {asset.verified ? <button type="button" onClick={() => onDownload(asset.id)} className="rounded-full border border-line px-3 py-1.5 text-xs font-semibold hover:bg-elevated">Download</button> : null}
+        </div>
       </div>
+      {removeConfirm ? (
+        <div role="dialog" aria-modal="true" aria-label="Remove incomplete asset" className="border-t border-line bg-elevated p-3">
+          <p className="text-xs text-muted">Remove this incomplete upload and clean up its temporary storage object?</p>
+          <div className="mt-2 flex gap-2">
+            <button type="button" onClick={() => setRemoveConfirm(false)} className="rounded-full border border-line px-3 py-1.5 text-xs">Cancel</button>
+            <button type="button" disabled={removeMutation.isPending} onClick={() => removeMutation.mutate()} className="rounded-full border border-line px-3 py-1.5 text-xs font-semibold text-destructive">{removeMutation.isPending ? "Removing…" : "Confirm remove"}</button>
+          </div>
+        </div>
+      ) : null}
+      {removeMessage ? <p role={removeMutation.isError ? "alert" : "status"} className="px-3 pb-3 text-xs text-muted">{removeMessage}</p> : null}
       {expanded && previewUrl ? (
         <div role="dialog" aria-modal="true" aria-label={`Original preview: ${label}`} className="fixed inset-0 z-50 grid place-items-center bg-black/80 p-4" onClick={() => setExpanded(false)}>
           <div className="relative flex max-h-[95vh] max-w-[95vw] flex-col items-center" onClick={(event) => event.stopPropagation()}>
