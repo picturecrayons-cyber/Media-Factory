@@ -4,7 +4,7 @@ import { WorkflowDesk } from "@/components/bridge/workflow-desk";
 import { publicationIsActive } from "@/lib/bridge/workflow-policy";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { getTitle, updateTitle } from "@/lib/bridge/titles";
@@ -277,7 +277,10 @@ function FilesPanel({
   onAssetsChanged: () => Promise<unknown> | unknown;
 }) {
   const [uploading, setUploading] = useState<SimpleAssetKind | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  const [retryUpload, setRetryUpload] = useState<{ kind: SimpleAssetKind; file: File } | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const activeUpload = useRef<XMLHttpRequest | null>(null);
   async function uploadFile(kind: SimpleAssetKind, file: File) {
     const filename = asciiUploadName(file.name);
     const contentType = file.type || "application/octet-stream";
@@ -291,7 +294,10 @@ function FilesPanel({
       return;
     }
     setUploading(kind);
+    setUploadProgress(0);
+    setRetryUpload({ kind, file });
     setMessage(`Preparing ${kind} upload…`);
+    let completed = false;
     try {
       const signed = await requestAssetUpload({
         data: {
@@ -303,24 +309,48 @@ function FilesPanel({
       });
       const uploadUrl = new URL(signed.url);
       uploadUrl.pathname = uploadUrl.pathname.split("/").map((part) => encodeURIComponent(decodeURIComponent(part))).join("/");
-      const put = await fetch(uploadUrl.toString(), {
-        method: signed.method,
-        body: file,
-        headers: { "content-type": contentType },
+      await new Promise<void>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        activeUpload.current = xhr;
+        xhr.open(signed.method, uploadUrl.toString());
+        xhr.setRequestHeader("content-type", contentType);
+        xhr.upload.onprogress = (event) => {
+          if (event.lengthComputable) setUploadProgress(Math.min(99, Math.round((event.loaded / event.total) * 100)));
+        };
+        xhr.onload = () => {
+          activeUpload.current = null;
+          if (xhr.status >= 200 && xhr.status < 300) resolve();
+          else reject(new Error(`Upload failed (${xhr.status})`));
+        };
+        xhr.onerror = () => {
+          activeUpload.current = null;
+          reject(new Error("Network error during upload"));
+        };
+        xhr.onabort = () => {
+          activeUpload.current = null;
+          reject(new DOMException("Upload cancelled", "AbortError"));
+        };
+        xhr.send(file);
       });
-      if (!put.ok) throw new Error(`Upload failed (${put.status})`);
       await confirmAssetUpload({ data: { assetId: signed.assetId, expectedByteSize: file.size } });
       await onAssetsChanged();
+      completed = true;
+      setUploadProgress(100);
+      setRetryUpload(null);
       setMessage(`${kind[0].toUpperCase() + kind.slice(1)} is ready.`);
     } catch (error) {
       const raw = error instanceof Error ? error.message : "Upload failed";
       setMessage(
-        raw.includes("STORAGE_UNAVAILABLE")
-          ? "Storage service is currently unavailable. Please try again later."
-          : raw,
+        error instanceof DOMException && error.name === "AbortError"
+          ? "Upload cancelled. You can retry this file."
+          : raw.includes("STORAGE_UNAVAILABLE")
+            ? "Storage service is currently unavailable. Please retry this file later."
+            : raw,
       );
     } finally {
+      activeUpload.current = null;
       setUploading(null);
+      if (!completed) setUploadProgress(null);
     }
   }
   async function download(id: string) {
@@ -358,7 +388,32 @@ function FilesPanel({
           />
         ))}
       </div>
-      {message ? <p className="mt-3 text-xs text-muted">{message}</p> : null}
+      {uploading ? (
+        <div className="mt-4 space-y-2" aria-live="polite">
+          <div className="flex items-center justify-between text-xs">
+            <span>{uploading} upload progress</span>
+            <span>{uploadProgress ?? 0}%</span>
+          </div>
+          <progress className="h-2 w-full" max={100} value={uploadProgress ?? 0} aria-label={`${uploading} upload progress`} />
+          <button
+            type="button"
+            onClick={() => activeUpload.current?.abort()}
+            className="rounded-full border border-line px-3 py-1.5 text-xs font-semibold"
+          >
+            Cancel upload
+          </button>
+        </div>
+      ) : null}
+      {message ? <p className="mt-3 text-xs text-muted" role="status">{message}</p> : null}
+      {!uploading && retryUpload ? (
+        <button
+          type="button"
+          onClick={() => void uploadFile(retryUpload.kind, retryUpload.file)}
+          className="mt-3 rounded-full border border-line px-4 py-2 text-xs font-semibold"
+        >
+          Retry {retryUpload.kind} upload
+        </button>
+      ) : null}
       <div className="mt-5 space-y-2">
         {assets.map((a) => (
           <div
