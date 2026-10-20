@@ -12,6 +12,7 @@ import { BRIDGE_LOOP_LANES, loopStageType } from "@/lib/bridge/loop-lanes";
 import {
   confirmAssetUpload,
   listTitleAssets,
+  removeIncompleteAsset,
   requestAssetDownload,
   requestAssetUpload,
 } from "@/lib/bridge/assets";
