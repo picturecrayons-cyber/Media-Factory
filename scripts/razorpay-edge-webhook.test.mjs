@@ -10,10 +10,10 @@ test("external Razorpay function disables Supabase gateway JWT verification", ()
 });
 
 test("Razorpay delivery ID is the canonical webhook idempotency key", () => {
-  assert.match(source, /async function eventId\\(payload: any, raw: string, providerEventId\\?: string \\| null\\)/);
-  assert.match(source, /req\\.headers\\.get\\("x-razorpay-event-id"\\)/);
-  assert.match(source, /return `razorpay:\\$\\{deliveryId\\}`/);
-  assert.match(source, /deliveryId\\.length <= 255/);
+  assert.ok(source.includes("async function eventId(payload: any, raw: string, providerEventId?: string | null)"));
+  assert.ok(source.includes('req.headers.get("x-razorpay-event-id")'));
+  assert.ok(source.includes("return `razorpay:${deliveryId}`"));
+  assert.ok(source.includes("deliveryId.length <= 255"));
 });
 
 test("fallback event ID awaits the body hash when no provider ID is present", () => {
@@ -30,6 +30,12 @@ test("webhook deliveries are atomically claimed before side effects", () => {
   assert.match(source, /update\(\{ status: "processing" \}\)/);
   assert.match(source, /\.in\("status", \["received", "failed"\]\)/);
   assert.match(source, /if \(!claimed\) return new Response\("Event is already processing", \{ status: 503 \}\)/);
+});
+
+test("webhook deliveries are atomically claimed before side effects", () => {
+  assert.ok(source.includes('update({ status: "processing" })'));
+  assert.ok(source.includes('.in("status", ["received", "failed"])'));
+  assert.ok(source.includes('if (!claimed) return new Response("Event is already processing", { status: 503 })'));
 });
 
 test("unmatched Bridge capture remains retriable", () => {
