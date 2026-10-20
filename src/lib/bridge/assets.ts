@@ -208,6 +208,40 @@ export const requestAssetDownload = createServerFn({ method: "POST" })
     return signed;
   });
 
+export const removeIncompleteAsset = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({ assetId: z.string().min(8) }))
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    assertPermission(actor, "asset.delete");
+    const sql = await getSql();
+    const rows = await sql<{
+      id: string; title_id: string; kind: string; s3_key: string; byte_size: number | null;
+    }>`select id, title_id, kind, s3_key, byte_size from bridge_assets where id = ${data.assetId} limit 1`;
+    const asset = rows[0];
+    if (!asset) throw new Error("Asset not found");
+    if (asset.byte_size != null) throw new Error("Verified assets are retained. Use the approved asset replacement workflow.");
+    const title = await loadTitle(asset.title_id);
+    if (!title || !["DRAFT", "UPLOADING", "PREPARING"].includes(title.status)) {
+      throw new Error("Incomplete asset cleanup is available only before title review");
+    }
+    if (asset.s3_key === title.masterKey || asset.s3_key === title.posterKey) {
+      throw new Error("This asset is referenced by the title record and cannot be removed here");
+    }
+    const { deleteObject } = await import("./oci-object-storage.server");
+    await deleteObject(asset.s3_key);
+    await sql`delete from bridge_assets where id = ${asset.id} and byte_size is null`;
+    await writeAudit({
+      actorUserId: actor.userId,
+      action: "asset.remove_incomplete",
+      entityType: "bridge_asset",
+      entityId: asset.id,
+      metadata: { titleId: title.id, kind: asset.kind },
+    });
+    return { deleted: true, id: asset.id };
+  });
+
 export const listTitleAssets = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .validator(z.object({ titleId: z.string().min(8) }))
