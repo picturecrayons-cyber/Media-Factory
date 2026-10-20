@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This workflow is a preview-only safety gate. It does not deploy, merge, mutate production data, or certify a release. It checks explicit isolation markers and then runs the existing synthetic OCI round-trip test, which uploads a random test object and attempts cleanup.
+This workflow is a preview-only **configuration preflight**. It does not deploy, merge, mutate production data, or contact OCI, Supabase, or Razorpay APIs. It checks explicit isolation markers and exact candidate SHA before a live test is authorized.
 
 ## Required GitHub configuration
 
@@ -27,9 +27,11 @@ The workflow fails closed if a required value is absent, if the selected ref and
 1. Verify the environment name, variable names, and secret names in GitHub Settings. Do not expose values.
 2. Dispatch **Bridge Preview Release Gate** on the exact candidate branch/ref.
 3. Supply the full SHA of that ref as `candidate_sha`.
-4. Inspect the run and confirm the synthetic OCI object was cleaned up. If cleanup is incomplete, stop and remove only the test object after confirming its generated key in the redacted logs.
+4. Confirm the workflow reports all preflight checks as PASS. This is configuration evidence only, not an OCI test result.
 5. Attach the run URL, tested SHA, result, and redacted logs to GitHub Issue #314.
 
-## Limits
+## Limits and safety holds
 
-This first workflow covers configuration preflight plus synthetic OCI upload/verify/download/cleanup only. It does **not** cover browser CORS/ETag, retry/resume/abort, Razorpay webhook replay/reconciliation, role-separated authorization, accessibility, or independent approval. Those gates remain open until separate evidence is attached. Do not mark the certification complete based on this workflow alone.
+The existing `scripts/oci-production-e2e.mjs` attempts to delete generated objects but suppresses cleanup errors. It must not be used to certify cleanup until that behavior is fixed and tested. For that reason this workflow intentionally does **not** execute live OCI operations yet.
+
+This workflow does **not** cover live OCI upload/download, browser CORS/ETag, retry/resume/abort, Razorpay webhook replay/reconciliation, role-separated authorization, accessibility, or independent approval. Those gates remain open until separate evidence is attached. Do not mark certification complete based on this workflow alone.
