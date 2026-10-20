@@ -8,6 +8,8 @@ import {
   reviewTitleWorkflow,
 } from "@/lib/bridge/workflow";
 import { advanceTitle } from "@/lib/bridge/titles";
+import { proceedToQc } from "@/lib/bridge/qc-workflow";
+import { getLoopHandoffDetails, initiateLoopHandoff } from "@/lib/bridge/loop-handoff";
 import {
   authorizeLoopPublication,
   getLoopPublication,
@@ -45,6 +47,11 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
     queryFn: () => getTitleRevenue({ data: { titleId: title.id } }),
     enabled: stage === "Revenue" && canFinance,
   });
+  const loopHandoff = useQuery({
+    queryKey: ["loop-handoff-details", title.id],
+    queryFn: () => getLoopHandoffDetails({ data: { titleId: title.id } }),
+    enabled: stage === "Distribution" && (Boolean(actor.internalRole) || actor.accountType !== "buyer"),
+  });
   const action = useMutation({
     mutationFn: async (run: () => Promise<unknown>) => run(),
     onSuccess: async () => {
@@ -57,6 +64,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
         qc.invalidateQueries({ queryKey: ["loop-publication-readiness"] }),
         qc.invalidateQueries({ queryKey: ["bridge-audit"] }),
         qc.invalidateQueries({ queryKey: ["title-revenue", title.id] }),
+        qc.invalidateQueries({ queryKey: ["loop-handoff-details", title.id] }),
       ]);
     },
     onError: (e) => setError(e instanceof Error ? e.message : "Action failed"),
@@ -165,17 +173,14 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                         ? "Prepare package"
                         : "Submit for QC",
                     () =>
-                      advanceTitle({
-                        data: {
-                          id: title.id,
-                          to:
-                            title.status === "DRAFT"
-                              ? "UPLOADING"
-                              : title.status === "UPLOADING"
-                                ? "PREPARING"
-                                : "QC_REVIEW",
-                        },
-                      }),
+                      title.status === "PREPARING"
+                        ? proceedToQc({ data: { titleId: title.id } })
+                        : advanceTitle({
+                            data: {
+                              id: title.id,
+                              to: title.status === "DRAFT" ? "UPLOADING" : "PREPARING",
+                            },
+                          }),
                   )
                 : null}
               {title.status === "QC_REVIEW" && hasPermission(actor, "title.qc_review") ? (
@@ -327,24 +332,57 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                 Publish copies the approved title metadata, artwork and media reference into the
                 shared Loop catalog. Catalog publication alone does not prove consumer playback.
               </p>
-              {valid && hasPermission(actor, "loop.publish")
-                ? button("Publish approved license to Loop", () =>
-                    authorizeLoopPublication({
-                      data: {
-                        bridgeTitleId: title.id,
-                        destination: "CRAYONS_LOOP",
-                        territories: valid.territories,
-                        languages: valid.languages,
-                        exploitationModels: ["TVOD"],
-                        accessTier: "TVOD",
-                        windowStart: valid.window_start,
-                        windowEnd: valid.window_end,
-                        commercialTerms: valid.evidence[0]?.commercialTerms,
-                      },
-                    }),
-                  )
-                : null}
-              {!valid ? <p>Blocked: approved, unexpired Loop license required.</p> : null}
+              {loopHandoff.data ? (
+                <div className="rounded-xl border border-line bg-elevated/40 p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs uppercase font-semibold text-accent">Legal / License to Loop Handoff</p>
+                      <p className="text-sm font-medium">Crayons Loop Synchronization</p>
+                    </div>
+                    <span
+                      className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                        loopHandoff.data.state === "ACKNOWLEDGED"
+                          ? "bg-green-500/20 text-green-400"
+                          : loopHandoff.data.state === "READY_FOR_REVIEW"
+                            ? "bg-blue-500/20 text-blue-400"
+                            : loopHandoff.data.state === "SUBMITTED"
+                              ? "bg-purple-500/20 text-purple-400"
+                              : loopHandoff.data.state === "FAILED"
+                                ? "bg-red-500/20 text-red-400"
+                                : "bg-amber-500/20 text-amber-400"
+                      }`}
+                    >
+                      {loopHandoff.data.state.replaceAll("_", " ")}
+                    </span>
+                  </div>
+
+                  {loopHandoff.data.blockers.length > 0 ? (
+                    <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-300">
+                      <p className="font-semibold text-amber-200">Handoff Blockers:</p>
+                      <ul className="mt-1 list-disc pl-4 space-y-0.5">
+                        {loopHandoff.data.blockers.map((b, i) => (
+                          <li key={i}>{b}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : loopHandoff.data.state === "READY_FOR_REVIEW" ? (
+                    <p className="text-xs text-blue-300">
+                      ✓ QC passed and distribution rights grant verified. Ready to initiate authorized license handoff to Loop.
+                    </p>
+                  ) : loopHandoff.data.state === "ACKNOWLEDGED" ? (
+                    <p className="text-xs text-green-300">
+                      ✓ License acknowledged and synchronized with Crayons Loop (Loop ID: {loopHandoff.data.loopTitleId}).
+                    </p>
+                  ) : null}
+
+                  {loopHandoff.data.canInitiate ? (
+                    button("Initiate License / Legal Handoff to Loop", () =>
+                      initiateLoopHandoff({ data: { bridgeTitleId: title.id } }),
+                    )
+                  ) : null}
+                </div>
+              ) : null}
+
               {pub && hasPermission(actor, "loop.revoke") ? (
                 <div className="flex gap-2">
                   {button("Suspend", () =>
@@ -359,12 +397,12 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
               ) : null}
               {pub ? (
                 <a
-                  className="text-accent underline"
+                  className="text-accent underline text-sm"
                   href={`https://crayonsloop.in/title/${title.slug}`}
                   target="_blank"
                   rel="noreferrer"
                 >
-                  Inspect consumer title
+                  Inspect consumer title on Loop →
                 </a>
               ) : null}
             </div>

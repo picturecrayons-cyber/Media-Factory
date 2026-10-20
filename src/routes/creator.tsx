@@ -25,7 +25,7 @@ function Creator() {
               <h2 className="text-lg font-semibold">Your titles</h2>
               <Link to="/account" className="text-sm text-muted">Account</Link>
             </div>
-            <TitleList empty="No titles yet. Create a draft to start." />
+            <TitleList empty="No titles yet. Create a draft to start." actor={actor} />
           </section>
         </BridgeShell>
       )}

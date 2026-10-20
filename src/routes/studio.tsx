@@ -25,7 +25,7 @@ function Studio() {
             </section>
             <section>
               <h2 className="text-lg font-semibold">Studio slate</h2>
-              <div className="mt-3"><TitleList empty="No titles yet. Add the first title." /></div>
+              <div className="mt-3"><TitleList empty="No titles yet. Add the first title." actor={actor} /></div>
             </section>
             <section>
               <h2 className="text-lg font-semibold">Production services</h2>

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { evaluateDuplicateTitleMerge } from "./duplicate-title-merge";
+import { evaluateDuplicateTitleMerge } from "./duplicate-policy.ts";
 
 const title = (id: string) => ({
   id, name: "Film", slug: id, language: "Malayalam", status: "DRAFT",
