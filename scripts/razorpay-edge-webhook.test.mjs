@@ -17,7 +17,7 @@ test("Razorpay delivery ID is the canonical webhook idempotency key", () => {
 });
 
 test("fallback event ID awaits the body hash when no provider ID is present", () => {
-  assert.match(source, /`\\$\\{e\\}:\\$\\{await sha256\\(raw\\)\\}`/);
+  assert.ok(source.includes("`${e}:${await sha256(raw)}`"));
   assert.doesNotMatch(source, /\\$\\{awaitHash\\(raw\\)\\}/);
 });
 
@@ -32,11 +32,6 @@ test("webhook deliveries are atomically claimed before side effects", () => {
   assert.match(source, /if \(!claimed\) return new Response\("Event is already processing", \{ status: 503 \}\)/);
 });
 
-test("webhook deliveries are atomically claimed before side effects", () => {
-  assert.ok(source.includes('update({ status: "processing" })'));
-  assert.ok(source.includes('.in("status", ["received", "failed"])'));
-  assert.ok(source.includes('if (!claimed) return new Response("Event is already processing", { status: 503 })'));
-});
 
 test("unmatched Bridge capture remains retriable", () => {
   assert.match(source, /if \(!localPayment\) return await failEvent\(supabase, id, "Bridge order not persisted yet"\)/);
