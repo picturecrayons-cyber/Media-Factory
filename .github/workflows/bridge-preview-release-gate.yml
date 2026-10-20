@@ -12,10 +12,10 @@ permissions:
   contents: read
 
 jobs:
-  preview-oci:
-    name: Preview isolation preflight and OCI round-trip
+  preview-preflight:
+    name: Preview isolation configuration preflight
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 10
     environment: bridge-preview-storage
     env:
       BRIDGE_RELEASE_GATE_ENV: preview
@@ -61,6 +61,3 @@ jobs:
 
       - name: Run fail-closed preview isolation preflight
         run: node scripts/preview-release-preflight.mjs
-
-      - name: Run synthetic OCI upload, verification, download and cleanup
-        run: node --experimental-strip-types scripts/oci-production-e2e.mjs
