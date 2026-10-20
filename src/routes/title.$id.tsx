@@ -5,6 +5,7 @@ import { publicationIsActive } from "@/lib/bridge/workflow-policy";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { useCallback, useEffect, useState } from "react";
+import { toast } from "sonner";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { getTitle, updateTitle } from "@/lib/bridge/titles";
@@ -119,6 +120,15 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
     return <p role="alert">Title workspace unavailable: {titleQ.error.message}</p>;
   if (!title) return <p className="text-sm text-muted">Title not found.</p>;
 
+  const copyTitleId = async () => {
+    try {
+      await navigator.clipboard.writeText(title.id);
+      toast("Title ID copied");
+    } catch {
+      toast.error("Could not copy Title ID. Check browser clipboard permissions.");
+    }
+  };
+
   const qcReady =
     reviewQ.data?.qc?.status === "PASSED" &&
     reviewQ.data.qc.reviewer_findings[0]?.masterKey === title.masterKey;
@@ -165,6 +175,15 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
                   {title.year ? ` · ${title.year}` : ""}
                   {title.runtimeMinutes ? ` · ${title.runtimeMinutes} min` : ""}
                 </p>
+                {actor.internalRole ? (
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <span className="text-xs text-muted">Title ID</span>
+                    <code className="max-w-full break-all rounded-md border border-line bg-elevated px-2 py-1 text-xs">{title.id}</code>
+                    <button type="button" onClick={() => void copyTitleId()} className="rounded-full border border-line px-3 py-1.5 text-xs font-semibold hover:bg-elevated" aria-label={`Copy title ID for ${title.name}`}>
+                      Copy ID
+                    </button>
+                  </div>
+                ) : null}
               </div>
               <span className="rounded-full border border-line bg-elevated px-3 py-1.5 text-xs font-semibold">
                 {title.status}
