@@ -10,6 +10,7 @@ import { BridgeShell } from "@/components/bridge/shell";
 import { getTitle, updateTitle } from "@/lib/bridge/titles";
 import { BRIDGE_LOOP_LANES, loopStageType } from "@/lib/bridge/loop-lanes";
 import {
+  cancelAssetUpload,
   confirmAssetUpload,
   listTitleAssets,
   requestAssetDownload,
@@ -298,6 +299,7 @@ function FilesPanel({
     setRetryUpload({ kind, file });
     setMessage(`Preparing ${kind} upload…`);
     let completed = false;
+    let pendingAssetId: string | null = null;
     try {
       const signed = await requestAssetUpload({
         data: {
@@ -307,6 +309,7 @@ function FilesPanel({
           contentType,
         },
       });
+      pendingAssetId = signed.assetId;
       const uploadUrl = new URL(signed.url);
       uploadUrl.pathname = uploadUrl.pathname.split("/").map((part) => encodeURIComponent(decodeURIComponent(part))).join("/");
       await new Promise<void>((resolve, reject) => {
@@ -340,6 +343,15 @@ function FilesPanel({
       setMessage(`${kind[0].toUpperCase() + kind.slice(1)} is ready.`);
     } catch (error) {
       const raw = error instanceof Error ? error.message : "Upload failed";
+      if (error instanceof DOMException && error.name === "AbortError" && pendingAssetId) {
+        try {
+          await cancelAssetUpload({ data: { assetId: pendingAssetId } });
+          await onAssetsChanged();
+        } catch (cleanupError) {
+          const cleanupMessage = cleanupError instanceof Error ? cleanupError.message : "cleanup failed";
+          setMessage(`Upload cancelled, but pending asset cleanup needs retry: ${cleanupMessage}`);
+        }
+      }
       setMessage(
         error instanceof DOMException && error.name === "AbortError"
           ? "Upload cancelled. You can retry this file."
