@@ -1,0 +1,72 @@
+name: Bridge OCI Multipart E2E
+
+on:
+  # Manual-only: this test creates and deletes synthetic objects in the preview bucket.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bridge-preview-oci-multipart-e2e
+  cancel-in-progress: false
+
+jobs:
+  multipart-e2e:
+    runs-on: ubuntu-26.04
+    environment: bridge-preview-storage
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: npm
+      - run: npm ci
+      - name: Verify preview-only OCI credentials and browser origin
+        env:
+          OCI_TENANCY_OCID: ${{ secrets.BRIDGE_E2E_OCI_TENANCY_OCID }}
+          OCI_USER_OCID: ${{ secrets.BRIDGE_E2E_OCI_USER_OCID }}
+          OCI_FINGERPRINT: ${{ secrets.BRIDGE_E2E_OCI_FINGERPRINT }}
+          OCI_PRIVATE_KEY: ${{ secrets.BRIDGE_E2E_OCI_PRIVATE_KEY }}
+          OCI_REGION: ${{ secrets.BRIDGE_E2E_OCI_REGION }}
+          OCI_NAMESPACE: ${{ secrets.BRIDGE_E2E_OCI_NAMESPACE }}
+          OCI_BUCKET_NAME: ${{ secrets.BRIDGE_E2E_OCI_BUCKET_NAME }}
+          BRIDGE_E2E_BROWSER_ORIGIN: ${{ secrets.BRIDGE_E2E_BROWSER_ORIGIN }}
+        run: |
+          set -eu
+          for name in OCI_TENANCY_OCID OCI_USER_OCID OCI_FINGERPRINT OCI_PRIVATE_KEY OCI_REGION OCI_NAMESPACE OCI_BUCKET_NAME BRIDGE_E2E_BROWSER_ORIGIN; do
+            if [ -z "$(printenv "$name")" ]; then
+              echo "::error::Missing required bridge-preview-storage environment secret for $name"
+              exit 2
+            fi
+          done
+          bucket="$(printf '%s' "$OCI_BUCKET_NAME" | tr '[:upper:]' '[:lower:]')"
+          case "$bucket" in
+            *preview*|*e2e*|*test*|*sandbox*|*staging*) ;;
+            *)
+              echo "::error::Refusing OCI E2E: bucket name must clearly identify a non-production preview/test bucket."
+              exit 2
+              ;;
+          esac
+          node --input-type=module -e '
+            const u = new URL(process.env.BRIDGE_E2E_BROWSER_ORIGIN);
+            if (u.protocol !== "https:" || !u.hostname.endsWith(".vercel.app") || u.hostname === "vercel.app" || u.username || u.password || u.pathname !== "/" || u.search || u.hash) {
+              console.error("::error::Browser origin must be an HTTPS Vercel preview origin with no path or credentials.");
+              process.exit(2);
+            }
+          '
+          echo "Preview-only OCI secret presence, bucket naming, and browser origin verified; secret values are not printed."
+      - name: Install Chromium for real browser-origin CORS validation
+        run: npx playwright install --with-deps chromium
+      - name: Run synthetic OCI multipart, browser CORS, integrity, and cleanup test
+        env:
+          OCI_TENANCY_OCID: ${{ secrets.BRIDGE_E2E_OCI_TENANCY_OCID }}
+          OCI_USER_OCID: ${{ secrets.BRIDGE_E2E_OCI_USER_OCID }}
+          OCI_FINGERPRINT: ${{ secrets.BRIDGE_E2E_OCI_FINGERPRINT }}
+          OCI_PRIVATE_KEY: ${{ secrets.BRIDGE_E2E_OCI_PRIVATE_KEY }}
+          OCI_REGION: ${{ secrets.BRIDGE_E2E_OCI_REGION }}
+          OCI_NAMESPACE: ${{ secrets.BRIDGE_E2E_OCI_NAMESPACE }}
+          OCI_BUCKET_NAME: ${{ secrets.BRIDGE_E2E_OCI_BUCKET_NAME }}
+          BRIDGE_E2E_BROWSER_ORIGIN: ${{ secrets.BRIDGE_E2E_BROWSER_ORIGIN }}
+        run: node --experimental-strip-types scripts/oci-multipart-e2e.mjs
