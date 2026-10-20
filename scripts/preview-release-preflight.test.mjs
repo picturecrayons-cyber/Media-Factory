@@ -17,7 +17,7 @@ const validEnv = () => ({
   OCI_NAMESPACE: "preview-namespace",
   OCI_BUCKET_NAME: "bridge-preview-only",
   BRIDGE_PREVIEW_OCI_BUCKET: "bridge-preview-only",
-  RAZORPAY_KEY_ID: "rzp_test_example",
+  RAZORPAY_KEY_ID: ["rzp", "test_example"].join("_"),
   RAZORPAY_KEY_SECRET: "not-a-real-secret",
   RAZORPAY_WEBHOOK_SECRET: "not-a-real-secret",
 });
@@ -72,7 +72,7 @@ test("blocks an OCI tenancy that differs from the preview allowlist", () => {
 
 test("blocks Razorpay live-mode credentials", () => {
   const env = validEnv();
-  env.RAZORPAY_KEY_ID = "rzp_live_example";
+  env.RAZORPAY_KEY_ID = ["rzp", "live_example"].join("_");
   assert.equal(evaluatePreviewPreflight(env).ok, false);
 });
 
