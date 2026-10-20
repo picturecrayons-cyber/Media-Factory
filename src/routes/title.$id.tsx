@@ -26,7 +26,7 @@ import { asciiUploadName } from "@/lib/bridge/latin1";
 
 export const Route = createFileRoute("/title/$id")({ component: TitlePage });
 
-const WORKSPACE_TABS = ["Overview", "Files"] as const;
+const WORKSPACE_TABS = ["Overview", "Files", "Operations"] as const;
 type WorkspaceTab = (typeof WORKSPACE_TABS)[number];
 
 function LaneStore({ titleId, stored, locked }: { titleId: string; stored: string; locked: boolean }) {
@@ -124,11 +124,10 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
 
   return (
     <div className="space-y-5">
-      <WorkflowDesk title={title} actor={actor} />
       {assetsQ.isError ? <p role="alert">Assets unavailable: {assetsQ.error.message}</p> : null}
       <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
-        <div className="grid gap-5 md:grid-cols-[180px_1fr]">
-          <div className="aspect-[2/3] overflow-hidden rounded-xl border border-line bg-elevated">
+        <div className="grid gap-4 md:grid-cols-[112px_1fr]">
+          <div className="aspect-[2/3] max-h-44 overflow-hidden rounded-lg border border-line bg-elevated">
             <div className="grid h-full place-items-center px-4 text-center text-xs text-muted">
               {assets.some((asset) => ["poster_vertical", "poster"].includes(asset.kind))
                 ? "Vertical poster ready"
@@ -207,15 +206,12 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
       </nav>
 
       {activeTab === "Overview" ? (
-        <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Metadata</p>
-              <h2 className="mt-1 font-display text-xl font-semibold">OTT title details</h2>
-            </div>
-            <span className="rounded-full border border-line px-3 py-1 text-xs font-semibold">{title.status}</span>
+        <section className="rounded-2xl border border-line bg-surface p-4 sm:p-5">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Overview</p>
+            <h2 className="mt-1 font-display text-lg font-semibold">Title details & readiness</h2>
           </div>
-          <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
             <Metric label="Original title" value={title.nameMl || "—"} />
             <Metric label="Content type" value={loopStageType(title.contentType)} />
             <Metric label="Language" value={title.language || "—"} />
@@ -227,7 +223,6 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
             <Metric label="Producer" value={title.credits?.filter((c) => c.role === "Producer").map((c) => c.name).join(", ") || "—"} />
           </div>
           <LaneStore key={title.contentType} titleId={title.id} stored={loopStageType(title.contentType)} locked={!actor.internalRole && !["DRAFT", "UPLOADING", "PREPARING"].includes(title.status)} />
-          {title.synopsis ? <p className="mt-4 text-sm leading-6 text-muted">{title.synopsis}</p> : null}
           <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <Metric label="QC" value={qcReady ? "READY" : "PENDING"} />
             <Metric label="Rights" value={rightsReady ? "READY" : "PENDING"} />
@@ -245,13 +240,15 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
           assets={assets}
           onAssetsChanged={() => assetsQ.refetch()}
         />
+      ) : activeTab === "Operations" ? (
+        <WorkflowDesk title={title} actor={actor} />
       ) : null}
     </div>
   );
 }
 function Metric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border border-line bg-elevated/40 p-4">
+    <div className="rounded-lg border border-line bg-elevated/30 p-3">
       <p className="text-xs text-muted">{label}</p>
       <p className="mt-1 text-sm font-semibold">{value}</p>
     </div>
