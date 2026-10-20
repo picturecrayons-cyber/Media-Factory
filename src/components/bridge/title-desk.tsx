@@ -4,12 +4,12 @@ import { useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { StatusChip } from "@/components/bridge/status-rail";
-import { createTitle, listTitles } from "@/lib/bridge/titles";
+import { createTitle, deleteEmptyDraftTitle, listTitles, updateTitle } from "@/lib/bridge/titles";
 import { listTitleAssets, requestAssetDownload } from "@/lib/bridge/assets";
 import type { BridgeTitle } from "@/lib/bridge/types";
 import { BRIDGE_LOOP_LANES } from "@/lib/bridge/loop-lanes";
 
-export function TitleList({ empty, query = "" }: { empty: string; query?: string }) {
+export function TitleList({ empty, query = "", canManage = false }: { empty: string; query?: string; canManage?: boolean }) {
   const titlesQ = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles() });
   const titles = (titlesQ.data?.titles ?? []).filter((t) => !query || `${t.name} ${t.language} ${t.year ?? ""}`.toLowerCase().includes(query.toLowerCase()));
   if (titlesQ.isPending) return <p className="text-sm text-muted">Loading titles…</p>;
@@ -25,14 +25,20 @@ export function TitleList({ empty, query = "" }: { empty: string; query?: string
   return (
     <ul className="divide-y divide-line rounded-sm border border-line">
       {titles.map((t) => (
-        <li key={t.id}><TitleListItem title={t} /></li>
+        <li key={t.id}><TitleListItem title={t} canManage={canManage} /></li>
       ))}
     </ul>
   );
 }
 
 
-function TitleListItem({ title }: { title: BridgeTitle }) {
+function TitleListItem({ title, canManage }: { title: BridgeTitle; canManage: boolean }) {
+  const qc = useQueryClient();
+  const [editing, setEditing] = useState(false);
+  const [name, setName] = useState(title.name);
+  const [language, setLanguage] = useState(title.language);
+  const [year, setYear] = useState(title.year ? String(title.year) : "");
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const previewQ = useQuery({
     queryKey: ["bridge-title-list-thumbnail", title.id],
     queryFn: async () => {
@@ -48,30 +54,83 @@ function TitleListItem({ title }: { title: BridgeTitle }) {
     retry: false,
     staleTime: 4 * 60 * 1000,
   });
+  const save = useMutation({
+    mutationFn: () => updateTitle({ data: {
+      id: title.id,
+      name: name.trim(),
+      language: language.trim(),
+      year: year.trim() ? Number(year) : null,
+    } }),
+    onSuccess: () => {
+      toast("Title details updated");
+      setEditing(false);
+      void qc.invalidateQueries({ queryKey: ["bridge-titles"] });
+      void qc.invalidateQueries({ queryKey: ["bridge-title", title.id] });
+    },
+    onError: (error) => toast(error instanceof Error ? error.message : "Could not update title"),
+  });
+  const remove = useMutation({
+    mutationFn: () => deleteEmptyDraftTitle({ data: { id: title.id, confirmName: title.name } }),
+    onSuccess: () => {
+      toast("Empty draft title deleted");
+      setConfirmDelete(false);
+      void qc.invalidateQueries({ queryKey: ["bridge-titles"] });
+    },
+    onError: (error) => toast(error instanceof Error ? error.message : "Could not delete title"),
+  });
 
   return (
-    <Link
-      to="/title/$id"
-      params={{ id: title.id }}
-      className="flex items-center gap-3 px-3 py-3 hover:bg-fg/5 sm:gap-4 sm:px-4"
-    >
-      <div className="grid h-16 w-12 shrink-0 place-items-center overflow-hidden rounded-md border border-line bg-elevated sm:h-20 sm:w-14">
-        {previewQ.data ? (
-          <img src={previewQ.data} alt="" loading="lazy" className="h-full w-full object-cover" />
-        ) : (
-          <span aria-hidden="true" className="text-[9px] font-semibold tracking-wide text-muted">POSTER</span>
-        )}
+    <div className="px-3 py-3 sm:px-4">
+      <div className="flex items-center gap-3 sm:gap-4">
+        <Link to="/title/$id" params={{ id: title.id }} className="flex min-w-0 flex-1 items-center gap-3 hover:text-accent sm:gap-4">
+          <div className="grid h-16 w-12 shrink-0 place-items-center overflow-hidden rounded-md border border-line bg-elevated sm:h-20 sm:w-14">
+            {previewQ.data ? (
+              <img src={previewQ.data} alt="" loading="lazy" className="h-full w-full object-cover" />
+            ) : (
+              <span aria-hidden="true" className="text-[9px] font-semibold tracking-wide text-muted">POSTER</span>
+            )}
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="truncate font-medium">{title.name}</p>
+            <p className="mt-1 text-sm text-muted">
+              {title.contentType ? title.contentType + " · " : ""}
+              {title.language}
+              {title.year ? " · " + title.year : ""}
+            </p>
+          </div>
+        </Link>
+        <StatusChip status={title.status} />
+        {canManage ? (
+          <div className="flex shrink-0 items-center gap-1">
+            <Button type="button" variant="outline" className="h-8 px-2 text-xs" onClick={() => { setName(title.name); setLanguage(title.language); setYear(title.year ? String(title.year) : ""); setEditing((v) => !v); }}>
+              {editing ? "Cancel" : "Edit"}
+            </Button>
+            {title.status === "DRAFT" ? (
+              <Button type="button" variant="outline" className="h-8 px-2 text-xs text-destructive" onClick={() => setConfirmDelete(true)}>Delete</Button>
+            ) : null}
+          </div>
+        ) : null}
       </div>
-      <div className="min-w-0 flex-1">
-        <p className="truncate font-medium">{title.name}</p>
-        <p className="mt-1 text-sm text-muted">
-          {title.contentType ? title.contentType + " · " : ""}
-          {title.language}
-          {title.year ? " · " + title.year : ""}
-        </p>
-      </div>
-      <StatusChip status={title.status} />
-    </Link>
+      {editing && canManage ? (
+        <form className="mt-3 grid gap-2 rounded-lg border border-line bg-elevated/40 p-3 sm:grid-cols-[2fr_1fr_100px_auto]" onSubmit={(event) => { event.preventDefault(); if (!name.trim() || !language.trim() || (year && (!Number.isInteger(Number(year)) || Number(year) < 1895 || Number(year) > 2100))) { toast("Check title, language and year"); return; } save.mutate(); }}>
+          <label className="text-xs text-muted">Title<input value={name} onChange={(event) => setName(event.target.value)} required maxLength={160} className="mt-1 h-9 w-full rounded-md border border-line-strong bg-surface px-2 text-sm text-fg" /></label>
+          <label className="text-xs text-muted">Language<input value={language} onChange={(event) => setLanguage(event.target.value)} required maxLength={40} className="mt-1 h-9 w-full rounded-md border border-line-strong bg-surface px-2 text-sm text-fg" /></label>
+          <label className="text-xs text-muted">Year<input value={year} onChange={(event) => setYear(event.target.value)} inputMode="numeric" className="mt-1 h-9 w-full rounded-md border border-line-strong bg-surface px-2 text-sm text-fg" /></label>
+          <div className="flex items-end"><Button type="submit" disabled={save.isPending} className="h-9 px-3 text-xs">{save.isPending ? "Saving…" : "Save"}</Button></div>
+        </form>
+      ) : null}
+      {confirmDelete ? (
+        <div role="dialog" aria-modal="true" aria-label="Delete empty draft title" className="mt-3 rounded-lg border border-red-300/50 bg-elevated p-3">
+          <p className="text-sm font-semibold">Delete “{title.name}”?</p>
+          <p className="mt-1 text-xs text-muted">Only an empty DRAFT with no assets or linked business records can be deleted. Titles with history must be retained and reviewed.</p>
+          <div className="mt-3 flex gap-2">
+            <Button type="button" variant="outline" className="h-8 px-3 text-xs" onClick={() => setConfirmDelete(false)}>Cancel</Button>
+            <Button type="button" className="h-8 px-3 text-xs" disabled={remove.isPending} onClick={() => remove.mutate()}>{remove.isPending ? "Deleting…" : "Confirm delete"}</Button>
+          </div>
+          {remove.isError ? <p role="alert" className="mt-2 text-xs text-muted">{remove.error instanceof Error ? remove.error.message : "Deletion blocked"}</p> : null}
+        </div>
+      ) : null}
+    </div>
   );
 }
 
