@@ -1,11 +1,13 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
+import { toast } from "sonner";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { Button } from "@/components/ui/button";
 import { listTitles, listAuditLogs } from "@/lib/bridge/titles";
 import { listLoopPublicationReadiness } from "@/lib/bridge/loop-publication";
-import { listAdminProfiles } from "@/lib/bridge/profiles";
+import { listAdminProfiles, updateAdminProfile } from "@/lib/bridge/profiles";
 
 export const Route = createFileRoute("/admin")({ component: AdminControlPlane });
 
@@ -102,23 +104,17 @@ function AdminBody({ actor }: { actor: any }) {
 
         <details className="rounded-2xl border border-line bg-surface p-5">
           <summary className="cursor-pointer font-semibold">Users & organizations <span className="ml-2 text-sm font-normal text-muted">({profiles.length})</span></summary>
-          <p className="mt-2 text-sm text-muted">Authoritative Bridge profiles only. Role changes remain invite/onboarding controlled.</p>
+          <p className="mt-2 text-sm text-muted">Edit profile details here. Internal roles remain invitation-controlled; account deletion is intentionally not exposed because it must be coordinated with the identity provider and audit history.</p>
           <div className="mt-4 overflow-x-auto">
             <table className="w-full min-w-[680px] text-left text-sm">
               <thead className="border-b border-line text-xs uppercase tracking-wider text-muted">
-                <tr><th className="px-3 py-3">User</th><th className="px-3 py-3">Account</th><th className="px-3 py-3">Organization</th><th className="px-3 py-3">Internal role</th><th className="px-3 py-3">Verified</th></tr>
+                <tr><th className="px-3 py-3">User</th><th className="px-3 py-3">Account</th><th className="px-3 py-3">Organization</th><th className="px-3 py-3">Internal role</th><th className="px-3 py-3">Verified</th><th className="px-3 py-3">Actions</th></tr>
               </thead>
               <tbody className="divide-y divide-line">
                 {profiles.slice(0, 50).map((profile) => (
-                  <tr key={profile.userId}>
-                    <td className="px-3 py-3"><p className="font-medium">{profile.displayName}</p><p className="text-xs text-muted">{profile.email}</p></td>
-                    <td className="px-3 py-3">{profile.accountType.replaceAll("_", " ")}</td>
-                    <td className="px-3 py-3">{profile.organizationName ?? "—"}</td>
-                    <td className="px-3 py-3">{profile.internalRole?.replaceAll("_", " ") ?? "—"}</td>
-                    <td className="px-3 py-3">{profile.emailVerified ? "Yes" : "No"}</td>
-                  </tr>
+                  <AdminProfileRow key={profile.userId} profile={profile} />
                 ))}
-                {!profiles.length ? <tr><td colSpan={5} className="px-3 py-8 text-center text-muted">No Bridge profiles found.</td></tr> : null}
+                {!profiles.length ? <tr><td colSpan={6} className="px-3 py-8 text-center text-muted">No Bridge profiles found.</td></tr> : null}
               </tbody>
             </table>
           </div>
@@ -141,6 +137,62 @@ function AdminBody({ actor }: { actor: any }) {
         </details>
       </div>
     </BridgeShell>
+  );
+}
+
+type AdminProfile = {
+  userId: string;
+  email: string;
+  displayName: string;
+  accountType: string;
+  organizationName: string | null;
+  internalRole: string | null;
+  emailVerified: boolean;
+};
+
+function AdminProfileRow({ profile }: { profile: AdminProfile }) {
+  const qc = useQueryClient();
+  const [editing, setEditing] = useState(false);
+  const [displayName, setDisplayName] = useState(profile.displayName);
+  const [organizationName, setOrganizationName] = useState(profile.organizationName ?? "");
+  const mutation = useMutation({
+    mutationFn: () => updateAdminProfile({
+      data: {
+        userId: profile.userId,
+        displayName: displayName.trim(),
+        organizationName: organizationName.trim() || null,
+      },
+    }),
+    onSuccess: async () => {
+      toast("User profile updated");
+      setEditing(false);
+      await qc.invalidateQueries({ queryKey: ["bridge-admin-profiles"] });
+    },
+    onError: (error) => toast(error instanceof Error ? error.message : "Could not update user"),
+  });
+  return (
+    <>
+      <tr>
+        <td className="px-3 py-3"><p className="font-medium">{profile.displayName}</p><p className="text-xs text-muted">{profile.email}</p></td>
+        <td className="px-3 py-3">{profile.accountType.replaceAll("_", " ")}</td>
+        <td className="px-3 py-3">{profile.organizationName ?? "—"}</td>
+        <td className="px-3 py-3">{profile.internalRole?.replaceAll("_", " ") ?? "—"}</td>
+        <td className="px-3 py-3">{profile.emailVerified ? "Yes" : "No"}</td>
+        <td className="px-3 py-3"><Button type="button" variant="outline" className="h-8 px-3 text-xs" onClick={() => { setDisplayName(profile.displayName); setOrganizationName(profile.organizationName ?? ""); setEditing((value) => !value); }}>{editing ? "Cancel" : "Edit"}</Button></td>
+      </tr>
+      {editing ? (
+        <tr>
+          <td colSpan={6} className="bg-elevated/30 px-3 py-3">
+            <form className="grid gap-3 sm:grid-cols-[1fr_1fr_auto]" onSubmit={(event) => { event.preventDefault(); mutation.mutate(); }}>
+              <label className="text-xs text-muted">Display name<input value={displayName} onChange={(event) => setDisplayName(event.target.value)} required maxLength={80} className="mt-1 h-9 w-full rounded-md border border-line-strong bg-surface px-2 text-sm text-fg" /></label>
+              <label className="text-xs text-muted">Organization<input value={organizationName} onChange={(event) => setOrganizationName(event.target.value)} maxLength={120} className="mt-1 h-9 w-full rounded-md border border-line-strong bg-surface px-2 text-sm text-fg" /></label>
+              <div className="flex items-end"><Button type="submit" className="h-9 px-3 text-xs" disabled={mutation.isPending}>{mutation.isPending ? "Saving…" : "Save changes"}</Button></div>
+            </form>
+            {mutation.isError ? <p role="alert" className="mt-2 text-xs text-muted">{mutation.error instanceof Error ? mutation.error.message : "Update failed"}</p> : null}
+          </td>
+        </tr>
+      ) : null}
+    </>
   );
 }
 
