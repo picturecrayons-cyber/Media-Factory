@@ -33,8 +33,7 @@ jobs:
         run: |
           set -eu
           for name in OCI_TENANCY_OCID OCI_USER_OCID OCI_FINGERPRINT OCI_PRIVATE_KEY OCI_REGION OCI_NAMESPACE OCI_BUCKET_NAME DATABASE_URL BRIDGE_E2E_ASSET_ID; do
-            eval "value=\${$name-}"
-            if [ -z "$value" ]; then
+            if [ -z "$(printenv "$name")" ]; then
               echo "::error::Missing required bridge-preview-storage environment secret for $name"
               exit 2
             fi
