@@ -206,3 +206,11 @@ test("atomic state transition: migration queue and title master/poster only adva
     await db.close();
   }
 });
+
+
+test("verification timeout warns that server-side work may still complete and requires refresh before retry", () => {
+  const route = readFileSync(join(process.cwd(), "src/routes/title.$id.tsx"), "utf8");
+  assert.match(route, /Stored-object verification timed out/);
+  assert.match(route, /The server may still be finishing verification/);
+  assert.match(route, /Refresh the asset list and check its status before retrying/);
+});
