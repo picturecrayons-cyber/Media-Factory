@@ -36,7 +36,7 @@ function createRequestSupabaseClient() {
  * getUser() validates the cookie session against Supabase Auth; getSession()
  * alone would only read untrusted cookie contents.
  */
-export const getCookieAuthStatus = createServerFn({ method: "GET" }).handler(async () => {
+export const getCookieAuthStatus = createServerFn({ method: "POST" }).handler(async () => {
   const client = createRequestSupabaseClient();
   const { data, error } = await client.auth.getUser();
   return { authenticated: !error && Boolean(data.user) };
