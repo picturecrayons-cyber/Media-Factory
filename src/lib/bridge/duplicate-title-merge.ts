@@ -187,27 +187,31 @@ export function evaluateDuplicateTitleMerge(input: MergeEvaluationInput): {
 
 async function loadMergeState(sql: any, titleId: string) {
   const [
-    title,
-    rights,
-    buyers,
-    assets,
-    deliveries,
-    publications,
+    title, rights, buyers, assets, assetRecords, deliveries, publications,
+    qcCases, legalCases, events, payments, serviceOrders, serviceQuotes, loopTitles,
+    migrationQueue, rentalEntitlements,
   ] = await Promise.all([
     sql<MergeTitle>`select id,name,slug,language,status,owner_user_id,year,runtime_minutes,original_language from public.bridge_titles where id=${titleId} limit 1`,
     sql<MergeRights>`select id,territories,languages,window_start,window_end,exclusivity,status from public.bridge_rights_grants where title_id=${titleId} order by created_at`,
     sql`select * from public.bridge_buyer_title_access where title_id=${titleId} order by buyer_user_id`,
     sql`select id,asset_group,asset_type,version,language,codec,s3_key,checksum_sha256,processing_state from public.bridge_asset_versions where title_id=${titleId} order by asset_group,asset_type,version,language`,
+    sql`select * from public.bridge_assets where title_id=${titleId} order by created_at,id`,
     sql`select id,destination,package_version,rights_grant_id,qc_case_id,asset_version_ids,readiness_state,authorized_at from public.bridge_destination_packages where title_id=${titleId} order by destination,package_version`,
     sql`select id,bridge_title_id,loop_title_id,authorization_status,territories,languages,exploitation_models,window_start,window_end,approved_at,revoked_at from public.bridge_loop_publications where bridge_title_id=${titleId}`,
+    sql`select * from public.bridge_qc_cases where title_id=${titleId} order by created_at,id`,
+    sql`select * from public.bridge_legal_cases where title_id=${titleId} order by created_at,id`,
+    sql`select * from public.bridge_title_events where title_id=${titleId} order by created_at,id`,
+    sql`select * from public.bridge_payments where title_id=${titleId} order by created_at,id`,
+    sql`select * from public.bridge_service_orders where title_id=${titleId} order by created_at,id`,
+    sql`select * from public.bridge_service_quotes where title_id=${titleId} order by created_at,id`,
+    sql`select * from public.loop_titles where bridge_title_id=${titleId} order by id`,
+    sql`select * from public.loop_media_migration_queue where title_id=${titleId} order by created_at,id`,
+    sql`select e.* from public.loop_user_tvod_entitlements e join public.loop_titles l on l.id::text=e.title_id::text where l.bridge_title_id=${titleId} order by e.created_at,id`,
   ]);
   return {
-    title: title[0] ?? null,
-    rights,
-    buyers,
-    assets,
-    deliveries,
-    publications,
+    title: title[0] ?? null, rights, buyers, assets, assetRecords, deliveries, publications,
+    qcCases, legalCases, events, payments, serviceOrders, serviceQuotes, loopTitles,
+    migrationQueue, rentalEntitlements,
   };
 }
 
@@ -235,8 +239,8 @@ export const previewDuplicateTitleMerge = createServerFn({ method: "POST" })
       retiringAssets: retiring.assets,
       canonicalDeliveries: canonical.deliveries,
       retiringDeliveries: retiring.deliveries,
-      canonicalLoopPublications: canonical.publications,
-      retiringLoopPublications: retiring.publications,
+      canonicalLoopPublications: [...canonical.publications, ...canonical.loopTitles, ...canonical.migrationQueue, ...canonical.rentalEntitlements],
+      retiringLoopPublications: [...retiring.publications, ...retiring.loopTitles, ...retiring.migrationQueue, ...retiring.rentalEntitlements],
     });
     return {
       canonicalTitleId: data.canonicalTitleId,
@@ -280,8 +284,8 @@ export const mergeDuplicateTitle = createServerFn({ method: "POST" })
         retiringAssets: retiring.assets,
         canonicalDeliveries: canonical.deliveries,
         retiringDeliveries: retiring.deliveries,
-        canonicalLoopPublications: canonical.publications,
-        retiringLoopPublications: retiring.publications,
+        canonicalLoopPublications: [...canonical.publications, ...canonical.loopTitles, ...canonical.migrationQueue, ...canonical.rentalEntitlements],
+        retiringLoopPublications: [...retiring.publications, ...retiring.loopTitles, ...retiring.migrationQueue, ...retiring.rentalEntitlements],
       });
 
       if (decision.decision !== data.expectedDecision) {
@@ -373,7 +377,7 @@ export const rollbackDuplicateTitleMerge = createServerFn({ method: "POST" })
         canonical_title_id: string;
         retiring_title_id: string;
         decision: string;
-        pre_merge_state: { retiring?: { title?: { id?: string } } };
+        pre_merge_state: { retiring?: { title?: { id?: string; status?: string } } };
       }>(
         "select merge_id,canonical_title_id,retiring_title_id,decision,pre_merge_state from public.bridge_title_merge_audits where merge_id=$1 for update",
         [data.mergeId],
@@ -392,7 +396,7 @@ export const rollbackDuplicateTitleMerge = createServerFn({ method: "POST" })
       const state = audit.pre_merge_state as Record<string, unknown>;
       const retiringState = (state.retiring ?? {}) as Record<string, unknown>;
       const tableKeys: Array<[string, string]> = [
-        ["bridge_assets", "assets"],
+        ["bridge_assets", "assetRecords"],
         ["bridge_asset_versions", "assets"],
         ["bridge_qc_cases", "qcCases"],
         ["bridge_legal_cases", "legalCases"],
@@ -412,14 +416,16 @@ export const rollbackDuplicateTitleMerge = createServerFn({ method: "POST" })
         }
       }
 
+      const originalStatus = retiring.title.status;
+      if (!originalStatus) throw new Error("MERGE_ROLLBACK_SNAPSHOT_INVALID:status");
       await tx.query(
-        "update public.bridge_titles set merged_into_title_id=null, merged_at=null, updated_at=now() where id=$1",
-        [audit.retiring_title_id],
+        "update public.bridge_titles set status=$1, merged_into_title_id=null, merged_at=null, updated_at=now() where id=$2",
+        [originalStatus, audit.retiring_title_id],
       );
 
       await tx.query(
-        "update public.bridge_title_merge_aliases set retiring_title_id=retiring_title_id where retiring_title_id=$1",
-        [audit.retiring_title_id],
+        "delete from public.bridge_title_merge_aliases where retiring_title_id=$1 and merge_id=$2",
+        [audit.retiring_title_id, data.mergeId],
       );
 
       await tx.query(
