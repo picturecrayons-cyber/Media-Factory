@@ -7,6 +7,7 @@ import {
   signUpload,
   verifyObject,
 } from "../src/lib/bridge/oci-object-storage.server.ts";
+import { runWithCleanup } from "./oci-e2e-cleanup.mjs";
 
 const runId = randomUUID();
 const payload = Buffer.from(`CRAYONS-BRIDGE-OCI-E2E:${runId}`, "utf8");
@@ -15,65 +16,50 @@ const sealedKey = `${key}.verified/${runId}`;
 
 let sourceUploaded = false;
 let sealedCreated = false;
-let runError;
-const cleanupErrors = [];
 
-try {
-  const upload = await signUpload({ key, contentType: "text/plain" });
-  assert.equal(upload.method, "PUT");
-  const put = await fetch(upload.url, {
-    method: "PUT",
-    headers: { "content-type": "text/plain" },
-    body: payload,
-  });
-  assert.ok(put.ok, `OCI upload failed: ${put.status}`);
-  sourceUploaded = true;
+await runWithCleanup(
+  async () => {
+    const upload = await signUpload({ key, contentType: "text/plain" });
+    assert.equal(upload.method, "PUT");
+    const put = await fetch(upload.url, {
+      method: "PUT",
+      headers: { "content-type": "text/plain" },
+      body: payload,
+    });
+    assert.ok(put.ok, `OCI upload failed: ${put.status}`);
+    sourceUploaded = true;
 
-  const verified = await verifyObject(key, "text/plain");
-  assert.equal(verified.byteSize, payload.byteLength);
-  assert.ok(verified.etag, "OCI source ETag missing");
+    const verified = await verifyObject(key, "text/plain");
+    assert.equal(verified.byteSize, payload.byteLength);
+    assert.ok(verified.etag, "OCI source ETag missing");
 
-  const sealed = await sealVerifiedObject(key, sealedKey, verified.etag);
-  sealedCreated = true;
-  assert.equal(sealed.byteSize, payload.byteLength);
-  assert.ok(sealed.etag, "OCI sealed ETag missing");
+    const sealed = await sealVerifiedObject(key, sealedKey, verified.etag);
+    sealedCreated = true;
+    assert.equal(sealed.byteSize, payload.byteLength);
+    assert.ok(sealed.etag, "OCI sealed ETag missing");
 
-  const download = await signDownload({ key: sealedKey });
-  assert.equal(download.method, "GET");
-  const get = await fetch(download.url);
-  assert.ok(get.ok, `OCI download failed: ${get.status}`);
-  const downloaded = Buffer.from(await get.arrayBuffer());
-  assert.deepEqual(downloaded, payload, "OCI round-trip payload mismatch");
-} catch (error) {
-  runError = error;
-} finally {
-  // Attempt both deletions even if the first cleanup operation fails.
-  if (sealedCreated) {
-    try {
-      await deleteObject(sealedKey);
-    } catch (error) {
-      cleanupErrors.push(new Error(`Failed to delete sealed OCI test object ${sealedKey}`, { cause: error }));
-    }
-  }
-  if (sourceUploaded) {
-    try {
-      await deleteObject(key);
-    } catch (error) {
-      cleanupErrors.push(new Error(`Failed to delete source OCI test object ${key}`, { cause: error }));
-    }
-  }
-}
-
-if (runError && cleanupErrors.length > 0) {
-  throw new AggregateError(
-    [runError, ...cleanupErrors],
-    "OCI E2E failed and one or more test objects could not be cleaned up",
-  );
-}
-if (runError) throw runError;
-if (cleanupErrors.length > 0) {
-  throw new AggregateError(cleanupErrors, "OCI E2E cleanup failed");
-}
+    const download = await signDownload({ key: sealedKey });
+    assert.equal(download.method, "GET");
+    const get = await fetch(download.url);
+    assert.ok(get.ok, `OCI download failed: ${get.status}`);
+    const downloaded = Buffer.from(await get.arrayBuffer());
+    assert.deepEqual(downloaded, payload, "OCI round-trip payload mismatch");
+  },
+  () => [
+    ...(sealedCreated
+      ? [{
+          label: `Failed to delete sealed OCI test object ${sealedKey}`,
+          run: () => deleteObject(sealedKey),
+        }]
+      : []),
+    ...(sourceUploaded
+      ? [{
+          label: `Failed to delete source OCI test object ${key}`,
+          run: () => deleteObject(key),
+        }]
+      : []),
+  ],
+);
 
 console.log(JSON.stringify({
   status: "PASS",
