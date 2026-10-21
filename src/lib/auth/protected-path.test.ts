@@ -4,7 +4,7 @@ import { requiresServerAuth } from "./protected-path.ts";
 
 describe("requiresServerAuth", () => {
   it("protects Bridge workspace routes and nested title routes", () => {
-    for (const path of ["/creator", "/studio", "/buyer", "/investor", "/dashboard", "/workspace", "/title/123", "/deliveries", "/onboarding"]) {
+    for (const path of ["/creator", "/studio", "/buyer", "/investor", "/dashboard", "/workspace", "/title/123", "/deliveries", "/onboarding", "/admin", "/admin-cms", "/cms", "/submit-film"]) {
       assert.equal(requiresServerAuth(path), true, path);
     }
   });
