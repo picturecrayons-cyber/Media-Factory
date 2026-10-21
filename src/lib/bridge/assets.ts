@@ -208,8 +208,14 @@ export const resumeAssetMultipartUpload = createServerFn({ method: "POST" })
     if (["ABORTED", "FAILED"].includes(session.status)) throw new Error("This upload session is no longer resumable");
     if (session.status === "ACTIVE" && new Date(session.expires_at).getTime() <= Date.now()) {
       const { abortMultipartUploadById } = await import("./oci-object-storage.server");
-      try { await abortMultipartUploadById(session.object_key, session.upload_id); } catch { /* best-effort expiry cleanup */ }
-      await sql`update bridge_asset_upload_sessions set status = 'ABORTED', updated_at = now() where id = ${session.id} and status = 'ACTIVE'`;
+      let cleaned = false;
+      try {
+        await abortMultipartUploadById(session.object_key, session.upload_id);
+        cleaned = true;
+      } catch { /* leave the expired session retryable if OCI cleanup is unavailable */ }
+      if (cleaned) {
+        await sql`update bridge_asset_upload_sessions set status = 'ABORTED', updated_at = now() where id = ${session.id} and status = 'ACTIVE'`;
+      }
       throw new Error("Upload session expired; restart the upload");
     }
     const partRows = await sql<{ part_number: number; etag: string; checksum: string; byte_size: number | string }>`
