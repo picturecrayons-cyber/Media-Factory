@@ -104,8 +104,12 @@ function WorkstationBody() {
             rows={data.publications} titleName={titleName} fields={["bridge_title_id", "authorization_status", "territories", "languages", "window_end"]} />
         </div>
       ) : (
-        <SimpleTable title="Audit History" description="Persisted operator activity. No UI-only decisions."
-          rows={data.audit} fields={["action", "entity_type", "entity_id", "actor_user_id", "created_at"]} />
+        <div className="space-y-8">
+          <SimpleTable title="Audit History" description="Persisted operator activity. No UI-only decisions."
+            rows={data.audit} fields={["action", "entity_type", "entity_id", "actor_user_id", "created_at"]} />
+          <TitleIdentityAudit titles={data.titles} />
+          <DuplicateReviewSection />
+        </div>
       )}
 
       {review.isError || gate.isError ? <p className="rounded-xl border border-line p-4 text-sm">Action failed: {String(review.error ?? gate.error)}</p> : null}
