@@ -17,6 +17,7 @@ const base = () => ({
   canonicalRights: [rights()], retiringRights: [rights()],
   canonicalBuyers: [] as unknown[], retiringBuyers: [] as unknown[], canonicalAssets: [] as unknown[], retiringAssets: [] as unknown[],
   canonicalDeliveries: [] as unknown[], retiringDeliveries: [] as unknown[], canonicalLoopPublications: [] as unknown[], retiringLoopPublications: [] as unknown[],
+  canonicalLegacyDependencies: [] as unknown[], retiringLegacyDependencies: [] as unknown[],
 });
 
 test("safe exact duplicate", () => {
@@ -131,4 +132,12 @@ test("holds even when both records are buyer-facing", () => {
   const result = evaluateDuplicateTitleMerge(input);
   assert.equal(result.decision, "HOLD");
   assert.ok(result.reasons.includes("BUYER_LIFECYCLE_REQUIRES_REVIEW"));
+});
+
+test("blocks when legacy media migration or rental entitlement remains", () => {
+  const input = base();
+  input.retiringLegacyDependencies = [{ kind: "pending_master_migration" }, { kind: "rental_entitlement" }];
+  const result = evaluateDuplicateTitleMerge(input);
+  assert.equal(result.decision, "BLOCK");
+  assert.ok(result.reasons.includes("LEGACY_DEPENDENCY_CONFLICT"));
 });
