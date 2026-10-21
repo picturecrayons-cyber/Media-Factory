@@ -78,6 +78,10 @@ function WorkstationBody() {
       ) : activeTab === "Rights" ? (
         <ReviewQueue title="Rights Review" description="Clear ownership, territory, language and window before licensing." titles={rightsQueue}
           actions={[["APPROVE", "Approve → Licensing"], ["REJECT", "Reject"]]} mutation={review} />
+      ) : activeTab === "OTT Ready" ? (
+        <SimpleTable title="OTT / Loop readiness" description="Readiness inventory only; this view does not publish titles." rows={ready} fields={["name", "id", "status", "language", "year", "content_type", "updated_at"]} />
+      ) : activeTab === "Packaging & Localization" ? (
+        <div className="space-y-4"><SimpleTable title="Package status" description="Review persisted package evidence; no automatic conversion is implied." rows={data.packages} fields={["title_id", "destination", "package_version", "readiness_state", "rights_grant_id", "qc_case_id", "legal_case_id"]} /><p className="text-sm text-muted">Dubbing, loudness checks, IMF/DCP requests and human QC require explicit vendor request and sign-off.</p><Link to="/deliveries" className="text-sm font-semibold text-accent hover:underline">Open Delivery & vendor request desk →</Link></div>
       ) : activeTab === "Assets" ? (
         <SimpleTable title="Assets" description={data.assets.length + " base assets · " + data.assetVersions.length + " versioned assets"}
           rows={data.assets} fields={["kind", "s3_key", "content_type", "byte_size"]} />
