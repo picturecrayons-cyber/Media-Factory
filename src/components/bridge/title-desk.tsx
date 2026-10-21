@@ -23,22 +23,26 @@ export function TitleList({ empty, query = "" }: { empty: string; query?: string
   return (
     <ul className="divide-y divide-line rounded-sm border border-line">
       {titles.map((t) => (
-        <li key={t.id}>
-          <Link
-            to="/title/$id"
-            params={{ id: t.id }}
-            className="flex flex-wrap items-center justify-between gap-3 px-4 py-4 hover:bg-fg/5"
-          >
-            <div>
-              <p className="font-medium">{t.name}</p>
-              <p className="text-sm text-muted">
-                {t.contentType ? `${t.contentType} · ` : ""}
-                {t.language}
-                {t.year ? ` · ${t.year}` : ""}
-              </p>
-            </div>
+        <li key={t.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-4 hover:bg-fg/5">
+          <div className="min-w-0 flex-1">
+            <p className="font-medium">{t.name}</p>
+            <p className="text-sm text-muted">
+              {t.contentType ? `${t.contentType} · ` : ""}
+              {t.language}
+              {t.year ? ` · ${t.year}` : ""}
+            </p>
+          </div>
+          <div className="flex shrink-0 items-center gap-3">
             <StatusChip status={t.status} />
-          </Link>
+            <Link
+              to="/title/$id"
+              params={{ id: t.id }}
+              aria-label={`Edit ${t.name}`}
+              className="inline-flex h-9 items-center justify-center rounded-full border border-line-strong px-4 text-sm font-medium hover:bg-elevated focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
+            >
+              Edit
+            </Link>
+          </div>
         </li>
       ))}
     </ul>
