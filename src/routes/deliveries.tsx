@@ -101,7 +101,7 @@ function VendorJobs({ actor }: { actor: Actor }) {
             </option>
             {titles.map((title) => (
               <option key={title.id} value={title.id}>
-                {title.name}{title.year ? ` · ${title.year}` : ""} — ${title.id}
+                {title.name}{title.year ? ` · ${title.year}` : ""} — {title.id}
               </option>
             ))}
           </select>
