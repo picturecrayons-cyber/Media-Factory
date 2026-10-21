@@ -161,6 +161,9 @@ export const requestAssetMultipartUpload = createServerFn({ method: "POST" })
       `;
     } catch (error) {
       try { await abortMultipartUpload(multipart.encryptedAccessUri); } catch { /* best-effort cleanup */ }
+      try {
+        await sql`delete from bridge_assets where id = ${assetId} and created_by = ${actor.userId} and byte_size is null`;
+      } catch { /* preserve the original failure; cleanup can be audited separately */ }
       throw error;
     }
     await writeAudit({
