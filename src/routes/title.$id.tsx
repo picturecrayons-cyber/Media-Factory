@@ -85,7 +85,7 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
 
   const titleQ = useQuery({
     queryKey: ["bridge-title", id],
-    queryFn: () => getTitle({ data: { id } }),
+    queryFn: () => getTitle({ data: { id, includeEvents: false } }),
   });
   const assetsQ = useQuery({
     queryKey: ["bridge-assets", id],
@@ -568,6 +568,8 @@ function FileTypeCard({
           {busy ? `Uploading ${progress}%…` : status === "Ready" ? "Replace" : "Upload"}
           <input
             className="sr-only"
+            id={`asset-upload-${kind}`}
+            name={`asset-${kind}`}
             type="file"
             accept={getOttIngestAccept(kind)}
             disabled={busy || !canUpload}
