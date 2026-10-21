@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -7,6 +7,7 @@ import { BridgeShell } from "@/components/bridge/shell";
 import { StatusChip } from "@/components/bridge/status-rail";
 import { Button } from "@/components/ui/button";
 import { listTitles } from "@/lib/bridge/titles";
+import { listTitleAssets, requestAssetDownload } from "@/lib/bridge/assets";
 import {
   createLicenseOrder,
   listOwnEntitlements,
@@ -161,19 +162,73 @@ function Stat({ label, value, note }: { label: string; value: string; note: stri
 function TitleList({ titles, entitled, order, empty }: { titles: Array<{ id: string; name: string; language: string; licensingFeePaise: number; status: string }>; entitled: Set<string>; order: { isPending: boolean; mutate: (id: string) => void }; empty: string }) {
   if (!titles.length) return <p className="text-sm text-muted">{empty}</p>;
   return (
-    <ul className="divide-y divide-line rounded-sm border border-line">
-      {titles.map((t) => (
-        <li key={t.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-4">
-          <div>
-            <Link to="/title/$id" params={{ id: t.id }} className="font-medium hover:text-accent">{t.name}</Link>
-            <p className="text-sm text-muted">{t.language}{t.licensingFeePaise > 0 ? ` · ₹${(t.licensingFeePaise / 100).toFixed(0)}` : " · fee unset"}</p>
-          </div>
-          <div className="flex items-center gap-3">
-            <StatusChip status={t.status as never} />
-            {entitled.has(t.id) ? <span className="text-sm text-accent">Licensed</span> : <Button disabled={order.isPending || t.licensingFeePaise <= 0} onClick={() => order.mutate(t.id)}>License</Button>}
-          </div>
-        </li>
+    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+      {titles.map((title) => (
+        <BuyerTitleCard key={title.id} title={title} licensed={entitled.has(title.id)} order={order} />
       ))}
-    </ul>
+    </div>
+  );
+}
+
+function BuyerTitleCard({
+  title,
+  licensed,
+  order,
+}: {
+  title: { id: string; name: string; language: string; licensingFeePaise: number; status: string };
+  licensed: boolean;
+  order: { isPending: boolean; mutate: (id: string) => void };
+}) {
+  const assetsQ = useQuery({
+    queryKey: ["buyer-title-artwork", title.id],
+    queryFn: () => listTitleAssets({ data: { titleId: title.id } }),
+    staleTime: 60_000,
+  });
+  const poster = (assetsQ.data?.assets ?? []).find((asset) => asset.verified && asset.kind === "poster_vertical")
+    ?? (assetsQ.data?.assets ?? []).find((asset) => asset.verified && asset.kind === "poster")
+    ?? (assetsQ.data?.assets ?? []).find((asset) => asset.verified && asset.kind === "thumbnail");
+  const [posterUrl, setPosterUrl] = useState<string | null>(null);
+  const [posterUnavailable, setPosterUnavailable] = useState(false);
+
+  useEffect(() => {
+    let current = true;
+    setPosterUrl(null);
+    setPosterUnavailable(false);
+    if (!poster) return () => { current = false; };
+    void requestAssetDownload({ data: { assetId: poster.id } })
+      .then((signed) => { if (current) setPosterUrl(signed.url); })
+      .catch(() => { if (current) setPosterUnavailable(true); });
+    return () => { current = false; };
+  }, [poster?.id]);
+
+  return (
+    <article className="overflow-hidden rounded-2xl border border-line bg-surface">
+      <Link to="/title/$id" params={{ id: title.id }} className="group block">
+        <div className="relative aspect-[2/3] max-h-[420px] overflow-hidden bg-elevated">
+          {posterUrl ? (
+            <img src={posterUrl} alt={`${title.name} poster`} loading="lazy" className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.02]" />
+          ) : (
+            <div className="grid h-full place-items-center p-6 text-center">
+              <div>
+                <div className="mx-auto grid size-14 place-items-center rounded-full border border-line text-2xl" aria-hidden="true">▧</div>
+                <p className="mt-3 text-sm font-semibold">{title.name}</p>
+                <p className="mt-1 text-xs text-muted">{posterUnavailable ? "Artwork preview unavailable" : assetsQ.isPending ? "Loading poster…" : "Poster not uploaded"}</p>
+              </div>
+            </div>
+          )}
+          <span className="absolute left-3 top-3 rounded-full border border-line bg-surface/90 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider">{title.status.replaceAll("_", " ")}</span>
+        </div>
+      </Link>
+      <div className="space-y-3 p-4">
+        <div className="min-h-16">
+          <Link to="/title/$id" params={{ id: title.id }} className="font-display text-lg font-semibold hover:text-accent">{title.name}</Link>
+          <p className="mt-1 text-sm text-muted">{title.language}{title.licensingFeePaise > 0 ? ` · ₹${(title.licensingFeePaise / 100).toFixed(0)}` : " · fee unset"}</p>
+        </div>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <StatusChip status={title.status as never} />
+          {licensed ? <span className="text-sm font-semibold text-accent">Licensed</span> : <Button disabled={order.isPending || title.licensingFeePaise <= 0} onClick={() => order.mutate(title.id)}>License</Button>}
+        </div>
+      </div>
+    </article>
   );
 }
