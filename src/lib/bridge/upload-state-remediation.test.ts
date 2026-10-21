@@ -220,3 +220,11 @@ test("verification timeout warns that server-side work may still complete and re
   assert.match(route, /The server may still be finishing verification/);
   assert.match(route, /Refresh the asset list and check its status before retrying/);
 });
+
+
+test("legacy Loop migration queue is optional in isolated Preview schemas", () => {
+  const assets = readFileSync(join(process.cwd(), "src/lib/bridge/assets.ts"), "utf8");
+  assert.match(assets, /to_regclass\('public\\.loop_media_migration_queue'\)/);
+  assert.match(assets, /if \(queueTable\[0\]\?\.present\)/);
+  assert.match(assets, /confirmed && queueTable\[0\]\?\.present/);
+});
