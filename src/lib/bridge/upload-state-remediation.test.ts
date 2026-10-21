@@ -208,6 +208,12 @@ test("atomic state transition: migration queue and title master/poster only adva
 });
 
 
+test("duplicate upload confirmations derive the same sealed key from the asset row ID", () => {
+  const assets = readFileSync(join(process.cwd(), "src/lib/bridge/assets.ts"), "utf8");
+  assert.match(assets, /const sealedKey = `\$\{asset\\.s3_key\}\\.verified\/\$\{asset\\.id\}`;/);
+  assert.doesNotMatch(assets, /randomUUID/);
+});
+
 test("verification timeout warns that server-side work may still complete and requires refresh before retry", () => {
   const route = readFileSync(join(process.cwd(), "src/routes/title.$id.tsx"), "utf8");
   assert.match(route, /Stored-object verification timed out/);
