@@ -1,6 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { randomBytes, randomUUID } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import { ASSET_KINDS } from "./types";
@@ -114,7 +114,10 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
       throw new Error("Uploaded object size does not match the file that was sent");
     }
     if (!object.etag) throw new Error("Object ETag is required for immutable verification");
-    const sealedKey = `${asset.s3_key}.verified/${randomUUID()}`;
+    // Use the immutable asset row ID, not a per-request UUID. If a browser timeout
+    // leads to a duplicate confirmation while the first server call is still running,
+    // both attempts target the same sealed object instead of creating orphan copies.
+    const sealedKey = `${asset.s3_key}.verified/${asset.id}`;
     const sealed = await sealVerifiedObject(asset.s3_key, sealedKey, object.etag);
     if (sealed.byteSize !== object.byteSize || !sealed.etag) {
       throw new Error("Verified copy differs from the uploaded object");
