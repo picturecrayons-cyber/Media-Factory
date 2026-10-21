@@ -139,6 +139,26 @@ function TitleQueue({ titles, review }: { titles: any[]; review: any }) {
   );
 }
 
+function TitleIdentityAudit({ titles }: { titles: any[] }) {
+  const groups = buildTitleAuditGroups(titles);
+  const byId = new Map(titles.map((title) => [title.id, title]));
+  const watchIds = ["f15e0a5385aaf8365f6ad730de747da0", "8dd4886567a00fe97379ab8514fffa87"];
+  const watch = watchIds.map((id) => byId.get(id)).filter(Boolean);
+  return <section className="space-y-4">
+    <SectionHeader title="Canonical title identity audit" description="Read-only discovery. Exact normalized title + language + year are required for identity candidates. Missing metadata needs manual review; no title is merged, archived, deleted or hidden." />
+    <div className="rounded-2xl border border-line bg-surface p-4">
+      <p className="font-semibold">Previously flagged records — compare manually</p>
+      <p className="mt-1 text-sm text-muted">These records are not declared duplicates. Review their full metadata and linked records before deciding.</p>
+      {watch.length ? watch.map((title: any) => <div key={title.id} className="flex flex-col gap-2 border-b border-line py-3 last:border-0 sm:flex-row sm:items-center sm:justify-between"><div><p className="font-medium">{title.name}</p><p className="text-xs text-muted">{title.content_type ?? "Type unknown"} · {title.language ?? title.original_language ?? "Language unknown"} · {title.year ?? "Year unknown"} · {title.status}</p><p className="break-all font-mono text-xs text-muted">{title.id}</p></div><Link to="/title/$id" params={{ id: title.id }} className="text-sm font-semibold text-accent hover:underline">Inspect record →</Link></div>) : <Empty text="Flagged records are not in the current title inventory response. Check inventory coverage before concluding they are absent." />}
+    </div>
+    {!groups.length ? <Empty text="No exact identity candidate groups or incomplete-metadata groups found. This does not rule out differently named duplicates." /> : groups.map((group) => <div key={group.key} className="rounded-2xl border border-line bg-surface p-4">
+      <div className="flex flex-wrap items-center gap-2"><p className="font-semibold">{group.records[0]?.name}</p><span className="rounded-full border border-line px-2 py-1 text-xs">{group.classification === "MATCHED_IDENTITY_CANDIDATES" ? "Identity candidates · review" : "Metadata review"}</span><span className="text-xs text-muted">{group.language ?? "Language unknown"} · {group.year ?? "Year unknown"} · {group.records.length} record(s)</span></div>
+      {group.records.map((record) => <div key={record.id} className="flex flex-col gap-1 border-t border-line py-3 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-sm">{record.name} · {record.status ?? "Status unknown"}</p><p className="break-all font-mono text-xs text-muted">{record.id}</p></div><Link to="/title/$id" params={{ id: record.id }} className="text-sm font-semibold text-accent hover:underline">Inspect record →</Link></div>)}
+    </div>)}
+    <p className="text-xs text-muted">Audit is non-destructive. Different names/languages/years are not automatically matched; compare full metadata, assets, rights, buyer mappings and deliveries before any decision.</p>
+  </section>;
+}
+
 function DuplicateReviewSection() {
   const qc = useQueryClient();
   const query = useQuery({ queryKey: ["duplicate-reviews"], queryFn: () => listDuplicateReviews() });
