@@ -4,7 +4,7 @@ import { WorkflowDesk } from "@/components/bridge/workflow-desk";
 import { publicationIsActive } from "@/lib/bridge/workflow-policy";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { getTitle, updateTitle } from "@/lib/bridge/titles";
@@ -278,6 +278,16 @@ function FilesPanel({
 }) {
   const [uploading, setUploading] = useState<SimpleAssetKind | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [progress, setProgress] = useState<{
+    kind: SimpleAssetKind;
+    loaded: number;
+    total: number;
+    percent: number;
+    elapsedSeconds: number;
+    remainingSeconds: number | null;
+    samples: number[];
+  } | null>(null);
+  const activeXhr = useRef<XMLHttpRequest | null>(null);
   async function uploadFile(kind: SimpleAssetKind, file: File) {
     const filename = asciiUploadName(file.name);
     const contentType = file.type || "application/octet-stream";
@@ -303,12 +313,66 @@ function FilesPanel({
       });
       const uploadUrl = new URL(signed.url);
       uploadUrl.pathname = uploadUrl.pathname.split("/").map((part) => encodeURIComponent(decodeURIComponent(part))).join("/");
-      const put = await fetch(uploadUrl.toString(), {
-        method: signed.method,
-        body: file,
-        headers: { "content-type": contentType },
+      const startedAt = Date.now();
+      setProgress({
+        kind,
+        loaded: 0,
+        total: file.size,
+        percent: 0,
+        elapsedSeconds: 0,
+        remainingSeconds: null,
+        samples: [0],
       });
-      if (!put.ok) throw new Error(`Upload failed (${put.status})`);
+      await new Promise<void>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        activeXhr.current = xhr;
+        xhr.open(signed.method, uploadUrl.toString());
+        xhr.setRequestHeader("content-type", contentType);
+        xhr.upload.onprogress = (event) => {
+          const loaded = Math.min(event.loaded, file.size);
+          const elapsedSeconds = Math.max((Date.now() - startedAt) / 1000, 0.1);
+          const percent = Math.min(100, Math.round((loaded / Math.max(file.size, 1)) * 100));
+          const bytesPerSecond = loaded / elapsedSeconds;
+          const remainingSeconds = bytesPerSecond > 0
+            ? Math.max(0, Math.ceil((file.size - loaded) / bytesPerSecond))
+            : null;
+          setProgress((current) => current && current.kind === kind
+            ? {
+                ...current,
+                loaded,
+                total: file.size,
+                percent,
+                elapsedSeconds,
+                remainingSeconds,
+                samples: [...current.samples, percent].slice(-24),
+              }
+            : current);
+        };
+        xhr.onload = () => {
+          activeXhr.current = null;
+          if (xhr.status >= 200 && xhr.status < 300) resolve();
+          else reject(new Error(`Upload failed (${xhr.status})`));
+        };
+        xhr.onerror = () => {
+          activeXhr.current = null;
+          reject(new Error("Network error during upload. Retry the upload; the stored object has not been verified."));
+        };
+        xhr.onabort = () => {
+          activeXhr.current = null;
+          reject(new Error("Upload cancelled. The object was not marked verified."));
+        };
+        xhr.send(file);
+      });
+      setProgress((current) => current ? {
+        ...current,
+        loaded: file.size,
+        total: file.size,
+        percent: 100,
+        elapsedSeconds: Math.max((Date.now() - startedAt) / 1000, 0.1),
+        remainingSeconds: 0,
+        samples: [...current.samples, 100].slice(-24),
+      } : current);
+      setMessage("Upload transferred. Verifying stored bytes and immutable integrity…");
       await confirmAssetUpload({ data: { assetId: signed.assetId, expectedByteSize: file.size } });
       await onAssetsChanged();
       setMessage(`${kind[0].toUpperCase() + kind.slice(1)} is ready.`);
@@ -320,7 +384,9 @@ function FilesPanel({
           : raw,
       );
     } finally {
+      activeXhr.current = null;
       setUploading(null);
+      setProgress(null);
     }
   }
   async function download(id: string) {
@@ -358,7 +424,39 @@ function FilesPanel({
           />
         ))}
       </div>
-      {message ? <p className="mt-3 text-xs text-muted">{message}</p> : null}
+      {progress ? (
+        <div className="mt-4 rounded-xl border border-line bg-elevated/50 p-4" aria-live="polite">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-sm font-semibold">{progress.kind.replaceAll("_", " ")} upload</p>
+            <p className="font-mono text-sm font-semibold tabular-nums">{progress.percent}%</p>
+          </div>
+          <div
+            role="progressbar"
+            aria-label="File upload progress"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={progress.percent}
+            className="mt-3 h-2.5 overflow-hidden rounded-full bg-line"
+          >
+            <div className="h-full rounded-full bg-accent transition-[width]" style={{ width: `${progress.percent}%` }} />
+          </div>
+          <div className="mt-3 grid grid-cols-2 gap-3 text-xs sm:grid-cols-4">
+            <div><p className="text-muted">Transferred</p><p className="mt-1 font-semibold tabular-nums">{formatBytes(progress.loaded)} / {formatBytes(progress.total)}</p></div>
+            <div><p className="text-muted">Elapsed</p><p className="mt-1 font-semibold tabular-nums">{formatDuration(progress.elapsedSeconds)}</p></div>
+            <div><p className="text-muted">Estimated remaining</p><p className="mt-1 font-semibold tabular-nums">{progress.remainingSeconds === null ? "Calculating…" : formatDuration(progress.remainingSeconds)}</p></div>
+            <div><p className="text-muted">Stage</p><p className="mt-1 font-semibold">{progress.percent === 100 ? "Verifying" : "Uploading"}</p></div>
+          </div>
+          <div className="mt-4 flex h-10 items-end gap-1" role="img" aria-label="Recent upload progress graph">
+            {progress.samples.map((sample, index) => (
+              <span key={index} title={`${sample}%`} className="min-w-1 flex-1 rounded-t bg-accent/80" style={{ height: `${Math.max(8, sample)}%` }} />
+            ))}
+          </div>
+          <div className="mt-3 flex justify-end">
+            <button type="button" onClick={() => activeXhr.current?.abort()} disabled={!activeXhr.current} className="rounded-full border border-line px-3 py-1.5 text-xs font-semibold disabled:opacity-40">Cancel upload</button>
+          </div>
+        </div>
+      ) : null}
+      {message ? <p className="mt-3 text-xs text-muted" role="status">{message}</p> : null}
       <div className="mt-5 space-y-2">
         {assets.map((a) => (
           <div
@@ -382,6 +480,20 @@ function FilesPanel({
       </div>
     </section>
   );
+}
+function formatBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  const tier = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+  return `${(bytes / 1024 ** tier).toFixed(tier === 0 ? 0 : 1)} ${units[tier]}`;
+}
+function formatDuration(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds < 0) return "—";
+  const whole = Math.round(seconds);
+  const hours = Math.floor(whole / 3600);
+  const minutes = Math.floor((whole % 3600) / 60);
+  const secs = whole % 60;
+  return hours > 0 ? `${hours}h ${minutes}m` : minutes > 0 ? `${minutes}m ${secs}s` : `${secs}s`;
 }
 function FileTypeCard({
   kind,
