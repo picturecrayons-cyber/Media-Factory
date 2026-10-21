@@ -209,8 +209,8 @@ export const resumeAssetMultipartUpload = createServerFn({ method: "POST" })
       await sql`update bridge_asset_upload_sessions set status = 'ABORTED', updated_at = now() where id = ${session.id} and status = 'ACTIVE'`;
       throw new Error("Upload session expired; restart the upload");
     }
-    const partRows = await sql<{ part_number: number; etag: string; byte_size: number | string }>`
-      select part_number, etag, byte_size from bridge_asset_upload_parts
+    const partRows = await sql<{ part_number: number; etag: string; checksum: string; byte_size: number | string }>`
+      select part_number, etag, checksum, byte_size from bridge_asset_upload_parts
       where session_id = ${session.id} order by part_number asc
     `;
     const { decryptMultipartAccessUri } = await import("./oci-object-storage.server");
@@ -224,6 +224,7 @@ export const resumeAssetMultipartUpload = createServerFn({ method: "POST" })
       parts: partRows.map((part) => ({
         partNumber: part.part_number,
         etag: part.etag,
+        checksum: part.checksum,
         byteSize: Number(part.byte_size),
       })),
     };
@@ -236,6 +237,7 @@ export const recordAssetMultipartPart = createServerFn({ method: "POST" })
     sessionId: z.string().min(16).max(128),
     partNumber: z.number().int().min(1).max(10_000),
     etag: z.string().min(1).max(256),
+    checksum: z.string().regex(/^[a-f0-9]{64}$/),
     byteSize: z.number().int().positive(),
   }))
   .handler(async ({ context, data }) => {
@@ -263,10 +265,10 @@ export const recordAssetMultipartPart = createServerFn({ method: "POST" })
     const etag = data.etag.replaceAll('"', "");
     if (!etag || /[\r\n]/.test(etag)) throw new Error("Invalid part ETag");
     await sql`
-      insert into bridge_asset_upload_parts (session_id, part_number, etag, byte_size)
-      values (${session.id}, ${data.partNumber}, ${etag}, ${data.byteSize})
+      insert into bridge_asset_upload_parts (session_id, part_number, etag, checksum, byte_size)
+      values (${session.id}, ${data.partNumber}, ${etag}, ${data.checksum}, ${data.byteSize})
       on conflict (session_id, part_number) do update
-        set etag = excluded.etag, byte_size = excluded.byte_size, updated_at = now()
+        set etag = excluded.etag, checksum = excluded.checksum, byte_size = excluded.byte_size, updated_at = now()
     `;
     return { recorded: true, partNumber: data.partNumber };
   });
@@ -300,8 +302,8 @@ export const finalizeAssetMultipartUpload = createServerFn({ method: "POST" })
     const fileSize = Number(session.file_size);
     const partSize = Number(session.part_size);
     const totalParts = Math.ceil(fileSize / partSize);
-    const partRows = await sql<{ part_number: number; etag: string; byte_size: number | string }>`
-      select part_number, etag, byte_size from bridge_asset_upload_parts
+    const partRows = await sql<{ part_number: number; etag: string; checksum: string; byte_size: number | string }>`
+      select part_number, etag, checksum, byte_size from bridge_asset_upload_parts
       where session_id = ${session.id} order by part_number asc
     `;
     if (partRows.length !== totalParts) throw new Error("Upload is incomplete; retry missing parts before finalizing");
