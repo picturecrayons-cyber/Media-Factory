@@ -79,6 +79,17 @@ function AdminBody({ actor }: { actor: any }) {
         </section>
 
         <section className="rounded-3xl border border-line bg-surface p-5 sm:p-6">
+          <h3 className="font-display text-xl font-semibold">Discovery tools</h3>
+          <p className="mt-1 text-sm text-muted">Open the right workspace by task. Audit and review first; no automatic approval, deletion, merge or publication.</p>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <Link to="/workspace" className="rounded-xl border border-line p-4 hover:bg-elevated/50"><p className="font-semibold">Title library</p><p className="mt-1 text-xs text-muted">Search titles, inspect canonical IDs and open full records.</p></Link>
+            <Link to="/admin/workstations" className="rounded-xl border border-line p-4 hover:bg-elevated/50"><p className="font-semibold">Curation / QC / Rights</p><p className="mt-1 text-xs text-muted">Review submissions, evidence, assets and audit trail.</p></Link>
+            <Link to="/deliveries" className="rounded-xl border border-line p-4 hover:bg-elevated/50"><p className="font-semibold">Packaging & vendor jobs</p><p className="mt-1 text-xs text-muted">Inspect delivery status and request specialist work.</p></Link>
+            <Link to="/account" className="rounded-xl border border-line p-4 hover:bg-elevated/50"><p className="font-semibold">Organization profile</p><p className="mt-1 text-xs text-muted">Review Super Admin organization details.</p></Link>
+          </div>
+        </section>
+
+        <section className="rounded-3xl border border-line bg-surface p-5 sm:p-6">
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">Action queue</p>
