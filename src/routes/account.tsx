@@ -75,6 +75,26 @@ function Account() {
   );
 }
 
+function OrganizationEditor({ userId, displayName, organizationName }: { userId: string; displayName: string; organizationName: string | null }) {
+  const [organization, setOrganization] = useState(organizationName ?? "StreamVista OPC PVT LTD");
+  const mutation = useMutation({
+    mutationFn: () => updateAdminProfile({ data: { userId, displayName, organizationName: organization.trim() || null } }),
+    onSuccess: () => {
+      toast.success("Organization updated. Refreshing profile…");
+      window.location.reload();
+    },
+    onError: (error) => toast.error(error instanceof Error ? error.message : "Could not update organization"),
+  });
+  return <div className="mt-4 rounded-xl border border-line bg-elevated/30 p-4">
+    <p className="text-sm font-semibold">Super Admin · Organization</p>
+    <p className="mt-1 text-xs text-muted">Update the organization on this verified profile. Saving is audited; this does not change title ownership or permissions.</p>
+    <form className="mt-3 flex flex-col gap-2 sm:flex-row" onSubmit={(event) => { event.preventDefault(); mutation.mutate(); }}>
+      <label className="flex-1 text-xs text-muted">Organization name<input value={organization} onChange={(event) => setOrganization(event.target.value)} required maxLength={120} className="mt-1 h-10 w-full rounded-lg border border-line-strong bg-surface px-3 text-sm text-fg" /></label>
+      <div className="flex items-end"><Button type="submit" disabled={mutation.isPending} className="h-10">{mutation.isPending ? "Saving…" : "Save organization"}</Button></div>
+    </form>
+  </div>;
+}
+
 function ResendVerify() {
   const mut = useMutation({
     mutationFn: () => requestEmailVerification(),
