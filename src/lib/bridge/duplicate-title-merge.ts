@@ -46,6 +46,8 @@ export type MergeEvaluationInput = {
   retiringDeliveries: unknown[];
   canonicalLoopPublications: unknown[];
   retiringLoopPublications: unknown[];
+  canonicalLegacyDependencies: unknown[];
+  retiringLegacyDependencies: unknown[];
 };
 
 function setOf(value: unknown): Set<string> {
@@ -179,9 +181,12 @@ export function evaluateDuplicateTitleMerge(input: MergeEvaluationInput): {
   if (input.canonicalLoopPublications.length || input.retiringLoopPublications.length) {
     reasons.push("LOOP_PUBLICATION_CONFLICT");
   }
+  if (input.canonicalLegacyDependencies.length || input.retiringLegacyDependencies.length) {
+    reasons.push("LEGACY_DEPENDENCY_CONFLICT");
+  }
 
-  const loopBlock = reasons.includes("LOOP_PUBLICATION_CONFLICT");
-  const decision: MergeDecision = loopBlock ? "BLOCK" : reasons.length ? "HOLD" : "SAFE";
+  const hardBlock = reasons.includes("LOOP_PUBLICATION_CONFLICT") || reasons.includes("LEGACY_DEPENDENCY_CONFLICT");
+  const decision: MergeDecision = hardBlock ? "BLOCK" : reasons.length ? "HOLD" : "SAFE";
   return { decision, reasons, collisions };
 }
 
@@ -239,8 +244,10 @@ export const previewDuplicateTitleMerge = createServerFn({ method: "POST" })
       retiringAssets: retiring.assets,
       canonicalDeliveries: canonical.deliveries,
       retiringDeliveries: retiring.deliveries,
-      canonicalLoopPublications: [...canonical.publications, ...canonical.loopTitles, ...canonical.migrationQueue, ...canonical.rentalEntitlements],
-      retiringLoopPublications: [...retiring.publications, ...retiring.loopTitles, ...retiring.migrationQueue, ...retiring.rentalEntitlements],
+      canonicalLoopPublications: [...canonical.publications, ...canonical.loopTitles],
+      retiringLoopPublications: [...retiring.publications, ...retiring.loopTitles],
+      canonicalLegacyDependencies: [...canonical.migrationQueue, ...canonical.rentalEntitlements],
+      retiringLegacyDependencies: [...retiring.migrationQueue, ...retiring.rentalEntitlements],
     });
     return {
       canonicalTitleId: data.canonicalTitleId,
@@ -284,8 +291,10 @@ export const mergeDuplicateTitle = createServerFn({ method: "POST" })
         retiringAssets: retiring.assets,
         canonicalDeliveries: canonical.deliveries,
         retiringDeliveries: retiring.deliveries,
-        canonicalLoopPublications: [...canonical.publications, ...canonical.loopTitles, ...canonical.migrationQueue, ...canonical.rentalEntitlements],
-        retiringLoopPublications: [...retiring.publications, ...retiring.loopTitles, ...retiring.migrationQueue, ...retiring.rentalEntitlements],
+        canonicalLoopPublications: [...canonical.publications, ...canonical.loopTitles],
+        retiringLoopPublications: [...retiring.publications, ...retiring.loopTitles],
+        canonicalLegacyDependencies: [...canonical.migrationQueue, ...canonical.rentalEntitlements],
+        retiringLegacyDependencies: [...retiring.migrationQueue, ...retiring.rentalEntitlements],
       });
 
       if (decision.decision !== data.expectedDecision) {
