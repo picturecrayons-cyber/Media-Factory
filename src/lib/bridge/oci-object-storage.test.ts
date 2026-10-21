@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { generateKeyPairSync, verify } from "node:crypto";
-import { sealVerifiedObject, verifyObject } from "./oci-object-storage.server.ts";
+import { decryptMultipartAccessUri, encryptMultipartAccessUri, sealVerifiedObject, verifyObject } from "./oci-object-storage.server.ts";
 
 test("OCI private key normalization accepts escaped and quoted PEM secrets", async () => {
   const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
@@ -136,6 +136,35 @@ test("OCI object verification rejects an unexpected content type", async () => {
     globalThis.fetch = originalFetch;
     for (const [key, value] of Object.entries(saved)) {
       if (value === undefined) delete process.env[key]; else process.env[key] = value;
+    }
+  }
+});
+
+
+test("multipart PAR URLs are encrypted at rest and validated when restored", () => {
+  const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  const values = {
+    OCI_TENANCY_OCID: "test-tenancy",
+    OCI_USER_OCID: "test-user",
+    OCI_PRIVATE_KEY: privateKey.export({ type: "pkcs8", format: "pem" }).toString(),
+    OCI_FINGERPRINT: "test-fingerprint",
+    OCI_REGION: "ap-mumbai-1",
+    OCI_NAMESPACE: "test-namespace",
+    OCI_BUCKET_NAME: "test-bucket",
+  };
+  const saved = Object.fromEntries(Object.keys(values).map((key) => [key, process.env[key]]));
+  Object.assign(process.env, values);
+  try {
+    const url = "https://objectstorage.ap-mumbai-1.oraclecloud.com/p/secret-token/n/test-namespace/b/test-bucket/u/bridge%2Ftitle%2Fmaster.mov/id/upload-123/";
+    const encrypted = encryptMultipartAccessUri(url);
+    assert.notEqual(encrypted, url);
+    assert.equal(encrypted.includes("secret-token"), false);
+    assert.equal(decryptMultipartAccessUri(encrypted), url);
+    assert.throws(() => encryptMultipartAccessUri("https://evil.example/p/token/n/ns/b/b/u/object/id/upload/"));
+  } finally {
+    for (const [key, value] of Object.entries(saved)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
     }
   }
 });

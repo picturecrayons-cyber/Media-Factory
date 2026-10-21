@@ -1,6 +1,9 @@
 import {
+  createCipheriv,
+  createDecipheriv,
   createHash,
   createPrivateKey,
+  randomBytes,
   createPublicKey,
   createSign,
 } from "node:crypto";
@@ -259,6 +262,117 @@ export async function sealVerifiedObject(sourceKey: string, destinationKey: stri
   const workRequestId = res.headers.get("opc-work-request-id");
   if (workRequestId) await pollWorkRequest(cfg, workRequestId);
   return verifyObject(destinationKey);
+}
+
+
+/**
+ * Start an OCI multipart upload through a single-object PAR. The PAR URL is a
+ * bearer secret, so only an authenticated server session may receive it again.
+ * Persist its encrypted form; never store the clear URL in browser storage or DB.
+ */
+export async function startMultipartUpload(opts: {
+  key: string;
+  contentType: string;
+  expiresIn?: number;
+}) {
+  const signed = await createPar({
+    key: opts.key,
+    accessType: "ObjectWrite",
+    expiresIn: opts.expiresIn ?? 24 * 60 * 60,
+  });
+  const response = await fetch(signed.url, {
+    method: "PUT",
+    headers: {
+      "opc-multipart": "true",
+      "content-type": opts.contentType,
+    },
+  });
+  if (!response.ok) {
+    throw new Error(`OCI multipart initiation failed (${response.status})`);
+  }
+  const payload = (await response.json()) as { uploadId?: string; accessUri?: string };
+  if (!payload.uploadId || !payload.accessUri) {
+    throw new Error("OCI multipart initiation returned incomplete session metadata");
+  }
+  const uploadUrl = new URL(payload.accessUri, endpoint(config().region)).toString();
+  return {
+    uploadId: payload.uploadId,
+    uploadUrl,
+    encryptedAccessUri: encryptMultipartAccessUri(uploadUrl),
+    key: opts.key,
+    expiresAt: new Date(Date.now() + (opts.expiresIn ?? 24 * 60 * 60) * 1000).toISOString(),
+  };
+}
+
+function multipartCipherKey() {
+  const cfg = config();
+  // The server-side OCI private key is already a required secret. Derive a
+  // purpose-specific key so the durable session table never stores a bearer URL.
+  const key = createHash("sha256")
+    .update("crayons-bridge-multipart-session-v1\0")
+    .update(cfg.privateKey)
+    .update("\0")
+    .update(cfg.tenancy)
+    .digest();
+  return { cfg, key };
+}
+
+export function encryptMultipartAccessUri(url: string) {
+  const { cfg, key } = multipartCipherKey();
+  const parsed = new URL(url);
+  if (parsed.origin !== endpoint(cfg.region) || !/\/u\/.+\/id\/[^/]+\/$/.test(parsed.pathname)) {
+    throw new Error("Invalid OCI multipart access URI");
+  }
+  const iv = randomBytes(12);
+  const cipher = createCipheriv("aes-256-gcm", key, iv);
+  const ciphertext = Buffer.concat([cipher.update(url, "utf8"), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return [iv, ciphertext, tag].map((part) => part.toString("base64url")).join(".");
+}
+
+export function decryptMultipartAccessUri(encrypted: string) {
+  const { cfg, key } = multipartCipherKey();
+  const [ivPart, ciphertextPart, tagPart, extra] = encrypted.split(".");
+  if (!ivPart || !ciphertextPart || !tagPart || extra) throw new Error("Invalid stored multipart session");
+  const decipher = createDecipheriv("aes-256-gcm", key, Buffer.from(ivPart, "base64url"));
+  decipher.setAuthTag(Buffer.from(tagPart, "base64url"));
+  const url = Buffer.concat([
+    decipher.update(Buffer.from(ciphertextPart, "base64url")),
+    decipher.final(),
+  ]).toString("utf8");
+  const parsed = new URL(url);
+  if (parsed.origin !== endpoint(cfg.region) || !/\/u\/.+\/id\/[^/]+\/$/.test(parsed.pathname)) {
+    throw new Error("Stored OCI multipart session is invalid");
+  }
+  return url;
+}
+
+export async function commitMultipartUpload(encryptedAccessUri: string) {
+  const url = decryptMultipartAccessUri(encryptedAccessUri);
+  const response = await fetch(url, { method: "POST" });
+  if (!response.ok) throw new Error(`OCI multipart commit failed (${response.status})`);
+  return { committed: true };
+}
+
+export async function abortMultipartUpload(encryptedAccessUri: string) {
+  const url = decryptMultipartAccessUri(encryptedAccessUri);
+  const response = await fetch(url, { method: "DELETE" });
+  if (!response.ok && response.status !== 404) {
+    throw new Error(`OCI multipart abort failed (${response.status})`);
+  }
+  return { aborted: true };
+}
+
+/** Abort a multipart upload with OCI API credentials when the PAR has expired. */
+export async function abortMultipartUploadById(key: string, uploadId: string) {
+  const cfg = config();
+  const namespace = await resolveNamespace(cfg);
+  const path = `/n/${encodeURIComponent(namespace)}/b/${encodeURIComponent(cfg.bucket)}/u/${encodedObjectName(key)}?uploadId=${encodeURIComponent(uploadId)}`;
+  const response = await signedFetch({ cfg, method: "DELETE", path });
+  if (!response.ok && response.status !== 404) {
+    throw new Error(`OCI multipart cleanup failed (${response.status})`);
+  }
+  return { aborted: true };
 }
 
 export async function deleteObject(key: string) {

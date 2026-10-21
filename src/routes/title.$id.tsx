@@ -4,16 +4,22 @@ import { WorkflowDesk } from "@/components/bridge/workflow-desk";
 import { publicationIsActive } from "@/lib/bridge/workflow-policy";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { getTitle, updateTitle } from "@/lib/bridge/titles";
 import { BRIDGE_LOOP_LANES, loopStageType } from "@/lib/bridge/loop-lanes";
 import {
+  abortAssetMultipartUpload,
+  completeAssetMultipartUpload,
   confirmAssetUpload,
+  finalizeAssetMultipartUpload,
   listTitleAssets,
+  recordAssetMultipartPart,
   requestAssetDownload,
+  requestAssetMultipartUpload,
   requestAssetUpload,
+  resumeAssetMultipartUpload,
 } from "@/lib/bridge/assets";
 import { getLoopPublication } from "@/lib/bridge/loop-publication";
 import type { BridgeActor } from "@/lib/bridge/session";
@@ -79,7 +85,7 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
 
   const titleQ = useQuery({
     queryKey: ["bridge-title", id],
-    queryFn: () => getTitle({ data: { id } }),
+    queryFn: () => getTitle({ data: { id, includeEvents: false } }),
   });
   const assetsQ = useQuery({
     queryKey: ["bridge-assets", id],
@@ -278,48 +284,216 @@ function FilesPanel({
 }) {
   const [uploading, setUploading] = useState<SimpleAssetKind | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [canCancelUpload, setCanCancelUpload] = useState(false);
+  const activeXhr = useRef<XMLHttpRequest | null>(null);
+  const activeSessionId = useRef<string | null>(null);
+  const cancelRequested = useRef(false);
+  const MULTIPART_THRESHOLD = 100 * 1024 * 1024;
+
+  function uploadPart(url: string, chunk: Blob, onProgress: (loaded: number) => void) {
+    return new Promise<string>((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      activeXhr.current = xhr;
+      xhr.open("PUT", url);
+      xhr.setRequestHeader("content-type", "application/octet-stream");
+      xhr.upload.onprogress = (event) => {
+        if (event.lengthComputable) onProgress(event.loaded);
+      };
+      xhr.onload = () => {
+        activeXhr.current = null;
+        if (xhr.status < 200 || xhr.status >= 300) {
+          reject(new Error(`Part upload failed (${xhr.status})`));
+          return;
+        }
+        const etag = xhr.getResponseHeader("etag")?.replaceAll('"', "");
+        if (!etag) {
+          reject(new Error("Upload part succeeded but ETag was not readable. Check OCI CORS expose-headers for ETag."));
+          return;
+        }
+        resolve(etag);
+      };
+      xhr.onerror = () => {
+        activeXhr.current = null;
+        reject(new Error("Browser could not complete the upload request (status 0). Check OCI bucket CORS, network access, and session expiry."));
+      };
+      xhr.onabort = () => {
+        activeXhr.current = null;
+        reject(new Error("Upload cancelled"));
+      };
+      xhr.send(chunk);
+    });
+  }
+
+  async function checksumChunk(chunk: Blob) {
+    const digest = await window.crypto.subtle.digest("SHA-256", await chunk.arrayBuffer());
+    return Array.from(new Uint8Array(digest), (value) => value.toString(16).padStart(2, "0")).join("");
+  }
+
+  async function cancelUpload() {
+    cancelRequested.current = true;
+    activeXhr.current?.abort();
+    const sessionId = activeSessionId.current;
+    if (sessionId) {
+      try {
+        await abortAssetMultipartUpload({ data: { sessionId } });
+      } catch (error) {
+        setMessage(error instanceof Error ? `Cancel requested; cleanup needs retry: ${error.message}` : "Cancel requested; upload cleanup needs retry.");
+      }
+    }
+    if (typeof window !== "undefined") window.localStorage.removeItem(`bridge-upload:${titleId}`);
+    activeSessionId.current = null;
+    setMessage("Upload cancelled. Incomplete multipart parts were scheduled for cleanup.");
+  }
+
   async function uploadFile(kind: SimpleAssetKind, file: File) {
     const filename = asciiUploadName(file.name);
     const contentType = file.type || "application/octet-stream";
-    const validation = validateOttIngestFile({
-      kind,
-      filename,
-      contentType,
-    });
+    const validation = validateOttIngestFile({ kind, filename, contentType });
     if (!validation.ok) {
       setMessage(validation.message);
       return;
     }
     setUploading(kind);
+    setUploadProgress(0);
+    setCanCancelUpload(false);
+    cancelRequested.current = false;
     setMessage(`Preparing ${kind} upload…`);
     try {
-      const signed = await requestAssetUpload({
-        data: {
-          titleId,
-          kind,
-          filename,
-          contentType,
-        },
-      });
-      const uploadUrl = new URL(signed.url);
-      uploadUrl.pathname = uploadUrl.pathname.split("/").map((part) => encodeURIComponent(decodeURIComponent(part))).join("/");
-      const put = await fetch(uploadUrl.toString(), {
-        method: signed.method,
-        body: file,
-        headers: { "content-type": contentType },
-      });
-      if (!put.ok) throw new Error(`Upload failed (${put.status})`);
-      await confirmAssetUpload({ data: { assetId: signed.assetId, expectedByteSize: file.size } });
+      if (file.size < MULTIPART_THRESHOLD) {
+        const savedSession = window.localStorage.getItem(`bridge-upload:${titleId}`);
+        if (savedSession) {
+          try {
+            const previous = JSON.parse(savedSession) as { sessionId?: string };
+            if (previous.sessionId) await abortAssetMultipartUpload({ data: { sessionId: previous.sessionId } });
+          } catch { /* stale sessions are cleaned up by expiry recovery */ }
+          window.localStorage.removeItem(`bridge-upload:${titleId}`);
+        }
+        const signed = await requestAssetUpload({
+          data: { titleId, kind, filename, contentType },
+        });
+        const uploadUrl = new URL(signed.url);
+        uploadUrl.pathname = uploadUrl.pathname.split("/").map((part) => encodeURIComponent(decodeURIComponent(part))).join("/");
+        const put = await fetch(uploadUrl.toString(), {
+          method: signed.method,
+          body: file,
+          headers: { "content-type": contentType },
+        });
+        if (!put.ok) throw new Error(`Upload failed (${put.status})`);
+        await confirmAssetUpload({ data: { assetId: signed.assetId, expectedByteSize: file.size } });
+        await onAssetsChanged();
+        setUploadProgress(100);
+        setMessage(`${kind[0].toUpperCase() + kind.slice(1)} is ready.`);
+        return;
+      }
+
+      const storageKey = `bridge-upload:${titleId}`;
+      const fingerprint = { titleId, kind, filename, fileSize: file.size, lastModified: file.lastModified };
+      let session: Awaited<ReturnType<typeof resumeAssetMultipartUpload>> | Awaited<ReturnType<typeof requestAssetMultipartUpload>> | null = null;
+      let previous: { sessionId?: string; kind?: string; filename?: string; fileSize?: number; lastModified?: number } | null = null;
+      try {
+        const saved = window.localStorage.getItem(storageKey);
+        if (saved) previous = JSON.parse(saved);
+      } catch {
+        previous = null;
+      }
+
+      const matches = previous?.sessionId && previous.kind === kind &&
+        previous.filename === filename && previous.fileSize === file.size &&
+        previous.lastModified === file.lastModified;
+      if (matches && previous?.sessionId) {
+        try {
+          session = await resumeAssetMultipartUpload({ data: { sessionId: previous.sessionId } });
+        } catch (error) {
+          const reason = error instanceof Error ? error.message : "";
+          if (/expired; restart the upload|Upload session not found|no longer resumable/i.test(reason)) {
+            window.localStorage.removeItem(storageKey);
+            session = null;
+          } else {
+            throw error;
+          }
+        }
+      } else if (previous?.sessionId) {
+        try { await abortAssetMultipartUpload({ data: { sessionId: previous.sessionId } }); } catch { /* stale session cleanup is best effort */ }
+        window.localStorage.removeItem(storageKey);
+      }
+
+      if (!session) {
+        session = await requestAssetMultipartUpload({
+          data: { titleId, kind, filename, contentType, fileSize: file.size },
+        });
+        window.localStorage.setItem(storageKey, JSON.stringify({ ...fingerprint, sessionId: session.sessionId }));
+      }
+      activeSessionId.current = session.sessionId;
+      setCanCancelUpload(session.status === "ACTIVE");
+
+      if (session.status === "COMMITTED" || session.status === "COMPLETED") {
+        await confirmAssetUpload({ data: { assetId: session.assetId, expectedByteSize: file.size } });
+        await completeAssetMultipartUpload({ data: { sessionId: session.sessionId } });
+        window.localStorage.removeItem(storageKey);
+        await onAssetsChanged();
+        setUploadProgress(100);
+        setMessage(`${kind[0].toUpperCase() + kind.slice(1)} is ready.`);
+        return;
+      }
+      if (!session.uploadUrl) throw new Error("Upload session has no active upload URL. Restart the upload.");
+
+      const existingParts = new Map(session.parts.map((part) => [part.partNumber, part]));
+      let completedBytes = session.parts.reduce((sum, part) => sum + part.byteSize, 0);
+      const totalParts = Math.ceil(file.size / session.partSize);
+      for (let partNumber = 1; partNumber <= totalParts; partNumber += 1) {
+        if (cancelRequested.current) throw new Error("Upload cancelled");
+        const start = (partNumber - 1) * session.partSize;
+        const end = Math.min(file.size, start + session.partSize);
+        const chunk = file.slice(start, end);
+        const checksum = await checksumChunk(chunk);
+        const existing = existingParts.get(partNumber);
+        if (existing && existing.byteSize === chunk.size && existing.checksum === checksum && existing.etag) continue;
+
+        let etag = "";
+        let lastError: unknown;
+        for (let attempt = 1; attempt <= 3; attempt += 1) {
+          try {
+            etag = await uploadPart(`${session.uploadUrl}${partNumber}`, chunk, (loaded) => {
+              const totalLoaded = Math.min(file.size, completedBytes + loaded);
+              setUploadProgress(Math.floor((totalLoaded / file.size) * 100));
+              setMessage(`Uploading ${kind}: ${Math.round(totalLoaded / 1024 / 1024)} MB of ${Math.ceil(file.size / 1024 / 1024)} MB (part ${partNumber}/${totalParts})…`);
+            });
+            break;
+          } catch (error) {
+            lastError = error;
+            if (cancelRequested.current || attempt === 3) throw error;
+            setMessage(`Retrying part ${partNumber} (attempt ${attempt + 1}/3)…`);
+            await new Promise((resolve) => setTimeout(resolve, attempt * 800));
+          }
+        }
+        if (!etag) throw lastError instanceof Error ? lastError : new Error("Part upload failed");
+        await recordAssetMultipartPart({
+          data: { sessionId: session.sessionId, partNumber, etag, checksum, byteSize: chunk.size },
+        });
+        completedBytes += chunk.size;
+        setUploadProgress(Math.floor((completedBytes / file.size) * 100));
+      }
+
+      setCanCancelUpload(false);
+      setMessage("Finalizing upload and verifying the stored object…");
+      const finalized = await finalizeAssetMultipartUpload({ data: { sessionId: session.sessionId } });
+      await confirmAssetUpload({ data: { assetId: finalized.assetId, expectedByteSize: finalized.expectedByteSize } });
+      await completeAssetMultipartUpload({ data: { sessionId: session.sessionId } });
+      window.localStorage.removeItem(storageKey);
+      activeSessionId.current = null;
       await onAssetsChanged();
-      setMessage(`${kind[0].toUpperCase() + kind.slice(1)} is ready.`);
+      setUploadProgress(100);
+      setMessage(`${kind[0].toUpperCase() + kind.slice(1)} is ready and verified.`);
     } catch (error) {
       const raw = error instanceof Error ? error.message : "Upload failed";
-      setMessage(
-        raw.includes("STORAGE_UNAVAILABLE")
-          ? "Storage service is currently unavailable. Please try again later."
-          : raw,
-      );
+      setMessage(cancelRequested.current ? "Upload cancelled." : raw.includes("STORAGE_UNAVAILABLE")
+        ? "Storage service is currently unavailable. Please try again later."
+        : raw);
     } finally {
+      activeXhr.current = null;
+      activeSessionId.current = null;
+      setCanCancelUpload(false);
       setUploading(null);
     }
   }
@@ -353,7 +527,10 @@ function FilesPanel({
             label={label}
             status={assets.some((a) => (a.kind === kind || (kind === "poster_vertical" && a.kind === "poster")) && a.verified) ? "Ready" : empty}
             busy={uploading === kind}
+            progress={uploading === kind ? uploadProgress : 0}
+            canCancel={uploading === kind && canCancelUpload}
             canUpload={canUpload}
+            onCancel={() => void cancelUpload()}
             onFile={(file) => void uploadFile(kind, file)}
           />
         ))}
@@ -388,6 +565,9 @@ function FileTypeCard({
   label,
   status,
   busy,
+  progress,
+  canCancel,
+  onCancel,
   onFile,
   canUpload,
 }: {
@@ -396,6 +576,9 @@ function FileTypeCard({
   label: string;
   status: string;
   busy: boolean;
+  progress: number;
+  canCancel: boolean;
+  onCancel: () => void;
   onFile: (file: File) => void;
 }) {
   const spec = OTT_INGEST_SPEC[kind];
@@ -410,9 +593,11 @@ function FileTypeCard({
           </p>
         </div>
         <label className="cursor-pointer rounded-full border border-line px-3 py-1.5 text-xs font-semibold">
-          {busy ? "Uploading…" : status === "Ready" ? "Replace" : "Upload"}
+          {busy ? `Uploading ${progress}%…` : status === "Ready" ? "Replace" : "Upload"}
           <input
             className="sr-only"
+            id={`asset-upload-${kind}`}
+            name={`asset-${kind}`}
             type="file"
             accept={getOttIngestAccept(kind)}
             disabled={busy || !canUpload}
@@ -423,7 +608,9 @@ function FileTypeCard({
             }}
           />
         </label>
+        {canCancel ? <button type="button" onClick={onCancel} className="rounded-full border border-line px-3 py-1.5 text-xs font-semibold">Cancel</button> : null}
       </div>
+      {busy ? <div className="mt-3 h-2 overflow-hidden rounded-full bg-elevated" role="progressbar" aria-label={`${label} upload progress`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress}><div className="h-full bg-accent-strong transition-[width]" style={{ width: `${progress}%` }} /></div> : null}
     </div>
   );
 }
