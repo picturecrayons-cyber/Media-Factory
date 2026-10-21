@@ -77,6 +77,7 @@ function TitlePage() {
 }
 
 function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
+  const qc = useQueryClient();
   const [activeTab, setActiveTab] = useState<WorkspaceTab>("Overview");
 
   const titleQ = useQuery({
@@ -275,7 +276,10 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
           titleId={id}
           assets={assets}
           canManage={actor.internalRole === "admin" || actor.internalRole === "super_admin"}
-          onAssetsChanged={() => assetsQ.refetch()}
+          onAssetsChanged={async () => {
+            await assetsQ.refetch();
+            await qc.invalidateQueries({ queryKey: ["bridge-titles"] });
+          }}
         />
       ) : activeTab === "Operations" ? (
         <WorkflowDesk title={title} actor={actor} />
