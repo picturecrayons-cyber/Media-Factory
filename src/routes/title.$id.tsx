@@ -456,19 +456,25 @@ function FilesPanel({
                     {previewUrls[a.id] ? "Refresh preview" : "Secure preview"}
                   </button>
                 ) : null}
-                {a.verified || isSuperAdmin ? (
+                {a.verified ? (
+                  <button type="button" disabled={assetAction === a.id} onClick={() => void download(a.id)} className="rounded-full border border-line px-3 py-2 text-xs font-semibold disabled:opacity-50">
+                    {assetAction === a.id ? "Preparing…" : "Download"}
+                  </button>
+                ) : null}
+                {!a.verified && isSuperAdmin ? (
                   <button
                     type="button"
                     disabled={assetAction === a.id}
                     onClick={() => {
-                      if (!a.verified && !window.confirm("This source file has not passed storage verification. Download the temporary source object only if you need to recover or inspect it?")) return;
+                      if (!window.confirm("This source file has not passed storage verification. Download the temporary source object only if you need to recover or inspect it?")) return;
                       void download(a.id);
                     }}
                     className="rounded-full border border-line px-3 py-2 text-xs font-semibold disabled:opacity-50"
                   >
-                    {assetAction === a.id ? "Preparing…" : a.verified ? "Download" : "Download unverified source"}
+                    {assetAction === a.id ? "Preparing…" : "Download unverified source"}
                   </button>
-                ) : canUpload ? (
+                ) : null}
+                {!a.verified && canUpload ? (
                   <button type="button" disabled={assetAction === a.id} onClick={() => void retryVerification(a.id)} className="rounded-full border border-line px-3 py-2 text-xs font-semibold disabled:opacity-50">
                     {assetAction === a.id ? "Verifying…" : "Retry verification"}
                   </button>
