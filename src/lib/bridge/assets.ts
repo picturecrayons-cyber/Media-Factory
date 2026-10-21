@@ -4,7 +4,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import { ASSET_KINDS } from "./types";
-import { assertPermission, canReadTitle, hasStaffPermission } from "./rbac";
+import { assertPermission, canReadTitle, hasPermission, hasStaffPermission } from "./rbac";
 import { requireVerifiedActor } from "./session";
 import { loadTitle } from "./titles";
 import { writeAudit } from "./audit";
@@ -251,6 +251,7 @@ export const listTitleAssets = createServerFn({ method: "GET" })
     if (!title || !canReadTitle(actor, title)) throw new Error("Not found");
     const sql = await getSql();
     const buyer = actor.accountType === "buyer" && !actor.internalRole;
+    const includeIncomplete = Boolean(actor.internalRole && hasPermission(actor, "asset.delete"));
     const rows = await sql<{
       id: string;
       kind: string;
@@ -260,7 +261,10 @@ export const listTitleAssets = createServerFn({ method: "GET" })
       created_at: string | Date;
     }>`
       select id, kind, s3_key, content_type, byte_size, created_at
-      from bridge_assets where title_id = ${title.id} and byte_size > 0 order by created_at desc
+      from bridge_assets
+      where title_id = ${title.id}
+        and (byte_size > 0 or (${includeIncomplete} and byte_size is null))
+      order by created_at desc
     `;
     return {
       assets: rows
