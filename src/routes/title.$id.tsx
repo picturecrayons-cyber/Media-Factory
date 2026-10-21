@@ -312,7 +312,7 @@ function FilesPanel({
   const [notificationPermission, setNotificationPermission] = useState<"default" | "granted" | "denied" | "unsupported">(() =>
     typeof window === "undefined" || !("Notification" in window) ? "unsupported" : Notification.permission,
   );
-  const [progress, setProgress = useState<UploadProgress | null>(null);
+  const [progress, setProgress] = useState<UploadProgress | null>(null);
   const uploadXhrRef = useRef<XMLHttpRequest | null>(null);
   const cancelRequestedRef = useRef(false);
 
