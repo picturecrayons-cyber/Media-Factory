@@ -105,7 +105,7 @@ function TitleListItem({ title, canManage, canSeeInternalId, canDeleteDraft }: {
     <div className="px-3 py-3 sm:px-4">
       <div className="flex items-center gap-3 sm:gap-4">
         <div className="min-w-0 flex-1">
-        <Link to="/title/$id" params={{ id: title.id }} className="flex min-w-0 items-center gap-3 hover:text-accent sm:gap-4" onMouseEnter={() => { if (!previewQ.data && !previewQ.isFetching) void previewQ.refetch(); }} onFocus={() => { if (!previewQ.data && !previewQ.isFetching) void previewQ.refetch(); }}>
+        <Link to="/title/$id" params={{ id: title.id }} className="flex min-w-0 items-center gap-3 hover:text-accent sm:gap-4" onMouseEnter={() => { if (!previewQ.isFetched && !previewQ.isFetching) void previewQ.refetch(); }} onFocus={() => { if (!previewQ.data && !previewQ.isFetching) void previewQ.refetch(); }}>
           <div className="grid h-16 w-12 shrink-0 place-items-center overflow-hidden rounded-md border border-line bg-elevated sm:h-20 sm:w-14">
             {previewQ.data ? (
               <img src={previewQ.data} alt="" loading="lazy" className="h-full w-full object-cover" />
