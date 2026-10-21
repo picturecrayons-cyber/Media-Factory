@@ -119,6 +119,15 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
     if (sealed.byteSize !== object.byteSize || !sealed.etag) {
       throw new Error("Verified copy differs from the uploaded object");
     }
+    // Only mark the migration queue as UPLOADED after the immutable copy succeeds
+    // and destination object's size, content type, and ETag have been verified.
+    await sql`
+      update loop_media_migration_queue
+      set status = 'UPLOADED', target_path = ${sealedKey}, updated_at = now()
+      where title_id = ${title.id}
+        and asset_kind = case when ${asset.kind} = 'screener' then 'TRAILER' else upper(${asset.kind}) end
+        and status in ('PENDING_REUPLOAD', 'UPLOADED')
+    `;
     const confirmed = await persistVerifiedAsset(sql, {
       assetId: asset.id,
       actorUserId: actor.userId,

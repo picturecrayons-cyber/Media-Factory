@@ -132,6 +132,21 @@ test("atomic state transition: migration queue and title master/poster only adva
 
     const sql = { query: async <T>(query: string, params: unknown[]) => (await db.query<T>(query, params)).rows };
     const sealedKey = "bridge/owner-1/title-pass-test/screener/raw.mp4.verified/sealed-uuid";
+    // After successful sealing and destination verification, queue transitions to UPLOADED
+    await db.query(
+      `update loop_media_migration_queue
+       set status = 'UPLOADED', target_path = $1, updated_at = now()
+       where title_id = 'title-pass-test'
+         and asset_kind = 'TRAILER'
+         and status in ('PENDING_REUPLOAD', 'UPLOADED')`,
+      [sealedKey],
+    );
+
+    const postSealingQueue = (await db.query<{ status: string; target_path: string | null }>(
+      "select status, target_path from loop_media_migration_queue where title_id = 'title-pass-test'",
+    )).rows;
+    assert.equal(postSealingQueue[0]?.status, "UPLOADED");
+    assert.equal(postSealingQueue[0]?.target_path, sealedKey);
 
     // Call persistVerifiedAsset
     const confirmed = await persistVerifiedAsset(sql, {
