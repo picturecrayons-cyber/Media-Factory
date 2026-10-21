@@ -440,6 +440,8 @@ function FilesPanel({
       setProgress(null);
       announce(`${kind[0].toUpperCase() + kind.slice(1)} is ready after storage verification.`, "success", true);
     } catch (error) {
+      // A cancelled/superseded attempt must not overwrite the status of a newer upload.
+      if (uploadAttemptRef.current !== attemptId) return;
       const raw = error instanceof Error ? error.message : "Upload failed";
       setProgress(null);
       const cancelled = cancelRequestedRef.current;
@@ -514,9 +516,9 @@ function FilesPanel({
                 // Invalidate this attempt so a late URL-preparation result cannot start a PUT.
                 uploadAttemptRef.current += 1;
                 uploadXhrRef.current?.abort();
+                setProgress(null);
+                announce("Upload cancelled. Any pending preparation result will be ignored; no new transfer will start from this attempt.", "error", true);
                 if (!uploadXhrRef.current) {
-                  setProgress(null);
-                  announce("Upload cancelled. If secure URL preparation was still running, wait for it to finish before retrying.", "error", true);
                   setUploading(null);
                 }
               }}
