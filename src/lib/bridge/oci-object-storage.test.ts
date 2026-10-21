@@ -82,7 +82,7 @@ test("OCI copy polling uses Object Storage and only verifies successful copies",
             return new Response(null, { status: 202, headers: { "opc-work-request-id": "copy/id" } });
           }
           if (method === "GET") {
-            assert.equal(url.pathname, "/workRequests/copy%2Fid");
+            assert.equal(url.pathname, "/n/test-namespace/workRequests/copy%2Fid");
             const headers = new Headers(init?.headers);
             const signature = headers.get("authorization")?.match(/signature="([^"]+)"/)?.[1];
             assert.ok(signature);
