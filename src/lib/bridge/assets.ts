@@ -1,6 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { randomBytes, randomUUID } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import { ASSET_KINDS } from "./types";
@@ -64,13 +64,6 @@ export const requestAssetUpload = createServerFn({ method: "POST" })
       insert into bridge_assets (id, title_id, kind, s3_key, content_type, created_by)
       values (${id}, ${title.id}, ${data.kind}, ${key}, ${data.contentType}, ${actor.userId})
     `;
-    await sql`
-      update loop_media_migration_queue
-      set status = 'UPLOADED', target_path = ${key}, updated_at = now()
-      where title_id = ${title.id}
-        and asset_kind = case when ${data.kind} = 'screener' then 'TRAILER' else upper(${data.kind}) end
-        and status in ('PENDING_REUPLOAD', 'UPLOADED')
-    `;
     await writeAudit({
       actorUserId: actor.userId,
       action: "asset.upload_signed",
@@ -121,11 +114,23 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
       throw new Error("Uploaded object size does not match the file that was sent");
     }
     if (!object.etag) throw new Error("Object ETag is required for immutable verification");
-    const sealedKey = `${asset.s3_key}.verified/${randomUUID()}`;
+    // Use the immutable asset row ID, not a per-request UUID. If a browser timeout
+    // leads to a duplicate confirmation while the first server call is still running,
+    // both attempts target the same sealed object instead of creating orphan copies.
+    const sealedKey = `${asset.s3_key}.verified/${asset.id}`;
     const sealed = await sealVerifiedObject(asset.s3_key, sealedKey, object.etag);
     if (sealed.byteSize !== object.byteSize || !sealed.etag) {
       throw new Error("Verified copy differs from the uploaded object");
     }
+    // Only mark the migration queue as UPLOADED after the immutable copy succeeds
+    // and destination object's size, content type, and ETag have been verified.
+    await sql`
+      update loop_media_migration_queue
+      set status = 'UPLOADED', target_path = ${sealedKey}, updated_at = now()
+      where title_id = ${title.id}
+        and asset_kind = case when ${asset.kind} = 'screener' then 'TRAILER' else upper(${asset.kind}) end
+        and status in ('PENDING_REUPLOAD', 'UPLOADED')
+    `;
     const confirmed = await persistVerifiedAsset(sql, {
       assetId: asset.id,
       actorUserId: actor.userId,
