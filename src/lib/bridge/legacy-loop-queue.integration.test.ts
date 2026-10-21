@@ -16,7 +16,7 @@ test("Bridge asset verification persists successfully when the optional legacy L
       insert into bridge_titles (id, slug, name, owner_user_id, owner_account_type, status)
       values ('synthetic-title-queue-absent', 'synthetic-queue-absent', 'Synthetic queue-absent', 'synthetic-owner', 'independent_creator', 'PREPARING');
       insert into bridge_assets (id, title_id, kind, s3_key, content_type, created_by)
-      values ('synthetic-asset-queue-absent', 'synthetic-title-queue-absent', 'poster_vertical', 'synthetic/source.jpg', 'image/jpeg', 'synthetic-owner');
+      values ('synthetic-asset-queue-absent', 'synthetic-title-queue-absent', 'poster', 'synthetic/source.jpg', 'image/jpeg', 'synthetic-owner');
     `);
 
     const presence = await db.query<{ present: boolean }>(
