@@ -4,7 +4,7 @@ import { WorkflowDesk } from "@/components/bridge/workflow-desk";
 import { publicationIsActive } from "@/lib/bridge/workflow-policy";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
@@ -326,8 +326,15 @@ function FilesPanel({
   const [uploading, setUploading] = useState<SimpleAssetKind | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadEta, setUploadEta] = useState<string | null>(null);
+  const [uploadPhase, setUploadPhase] = useState<"preparing" | "transferring" | "verifying" | "refreshing" | null>(null);
+  const uploadXhrRef = useRef<XMLHttpRequest | null>(null);
+  const [notificationPermission, setNotificationPermission] = useState<"default" | "granted" | "denied" | "unsupported">(() =>
+    typeof window === "undefined" || !("Notification" in window) ? "unsupported" : Notification.permission,
+  );
   const [filesView, setFilesView] = useState<"upload" | "gallery">("upload");
   async function uploadFile(kind: SimpleAssetKind, file: File) {
+    if (uploading) return;
     const filename = asciiUploadName(file.name);
     const contentType = file.type || "application/octet-stream";
     const validation = validateOttIngestFile({
@@ -341,6 +348,8 @@ function FilesPanel({
     }
     setUploading(kind);
     setUploadProgress(0);
+    setUploadEta(null);
+    setUploadPhase("preparing");
     setMessage(`Preparing ${kind} upload…`);
     try {
       const signed = await requestAssetUpload({
@@ -352,30 +361,44 @@ function FilesPanel({
         },
       });
       // Use the provider-issued PAR URL verbatim; rewriting its encoded path can target a different object.
+      setUploadPhase("transferring");
       await new Promise<void>((resolve, reject) => {
         const xhr = new XMLHttpRequest();
+        uploadXhrRef.current = xhr;
+        const startedAt = Date.now();
         xhr.open(signed.method, signed.url);
         xhr.setRequestHeader("content-type", contentType);
         xhr.upload.onprogress = (event) => {
           if (!event.lengthComputable) return;
           const percent = Math.min(99, Math.floor((event.loaded / event.total) * 100));
           setUploadProgress(percent);
-          setMessage(`Uploading ${kind}: ${(event.loaded / (1024 * 1024)).toFixed(1)} of ${(file.size / (1024 * 1024)).toFixed(1)} MB (${percent}%)…`);
+          const elapsedSeconds = Math.max((Date.now() - startedAt) / 1000, 0.25);
+          const bytesPerSecond = event.loaded / elapsedSeconds;
+          const secondsRemaining = bytesPerSecond > 0 ? Math.max(0, (event.total - event.loaded) / bytesPerSecond) : null;
+          const eta = secondsRemaining == null ? "Calculating time remaining…" : secondsRemaining < 60 ? `About ${Math.ceil(secondsRemaining)} sec remaining` : `About ${Math.floor(secondsRemaining / 60)} min ${Math.ceil(secondsRemaining % 60)} sec remaining`;
+          setUploadEta(eta);
+          setMessage(`Uploading ${kind}: ${(event.loaded / (1024 * 1024)).toFixed(1)} of ${(file.size / (1024 * 1024)).toFixed(1)} MB (${percent}%) · ${eta}`);
         };
         xhr.onload = () => {
+          uploadXhrRef.current = null;
           if (xhr.status >= 200 && xhr.status < 300) resolve();
           else reject(new Error(`Upload failed (${xhr.status})`));
         };
-        xhr.onerror = () => reject(new Error("Browser could not reach OCI storage (status 0). Check bucket CORS, network access, and upload URL expiry."));
-        xhr.onabort = () => reject(new Error("Upload cancelled."));
+        xhr.onerror = () => { uploadXhrRef.current = null; reject(new Error("Browser could not reach OCI storage (status 0). Check bucket CORS, network access, and upload URL expiry.")); };
+        xhr.onabort = () => { uploadXhrRef.current = null; reject(new Error("Upload cancelled. The asset was not marked Ready; select the file again to retry.")); };
         xhr.send(file);
       });
+      setUploadPhase("verifying");
+      setUploadEta(null);
       setMessage("Upload transferred. Verifying stored file…");
       await confirmAssetUpload({ data: { assetId: signed.assetId, expectedByteSize: file.size } });
+      setUploadPhase("refreshing");
+      setMessage("Storage verification passed. Refreshing the asset list…");
       await onAssetsChanged();
       setUploadProgress(100);
       setMessage(`${kind[0].toUpperCase() + kind.slice(1)} is ready and verified.`);
       toast.success(`${kind[0].toUpperCase() + kind.slice(1)} uploaded and verified`);
+      if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") new Notification("Crayons Bridge · Upload", { body: `${kind[0].toUpperCase() + kind.slice(1)} uploaded and verified.` });
     } catch (error) {
       const raw = error instanceof Error ? error.message : "Upload failed";
       const detail = raw.includes("STORAGE_UNAVAILABLE")
@@ -383,7 +406,11 @@ function FilesPanel({
         : raw;
       setMessage(detail);
       toast.error(detail);
+      if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") new Notification("Crayons Bridge · Upload failed", { body: detail });
     } finally {
+      uploadXhrRef.current = null;
+      setUploadPhase(null);
+      setUploadEta(null);
       setUploading(null);
     }
   }
@@ -465,7 +492,24 @@ function FilesPanel({
               />
             ))}
           </div>
-          {message ? <p role="status" className="mt-3 rounded-lg bg-elevated/50 p-3 text-sm text-muted">{message}</p> : null}
+          {uploading ? (
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-line bg-elevated/40 p-3" aria-live="polite">
+              <div>
+                <p className="text-sm font-semibold">{uploading.replaceAll("_", " ")} · {uploadPhase === "preparing" ? "Preparing secure upload" : uploadPhase === "transferring" ? "Uploading" : uploadPhase === "verifying" ? "Verifying stored file" : "Refreshing assets"}</p>
+                <p className="mt-1 text-xs text-muted">{uploadPhase === "transferring" ? `${uploadProgress}% transferred${uploadEta ? ` · ${uploadEta}` : ""}` : uploadPhase === "preparing" ? "Requesting a secure upload URL…" : uploadPhase === "verifying" ? "Checking stored object before marking Ready…" : "Updating the verified asset list…"}</p>
+              </div>
+              {uploadPhase === "transferring" ? (
+                <button type="button" onClick={() => uploadXhrRef.current?.abort()} className="rounded-full border border-line px-3 py-1.5 text-xs font-semibold">Cancel upload</button>
+              ) : null}
+            </div>
+          ) : null}
+          {message ? <p role="status" aria-live="polite" className="mt-3 rounded-lg bg-elevated/50 p-3 text-sm text-muted">{message}</p> : null}
+          <div className="mt-2 flex flex-wrap items-center gap-3">
+            <p className="text-xs text-muted">Upload success and failure notifications appear here.</p>
+            {notificationPermission === "default" ? (
+              <button type="button" onClick={() => { if ("Notification" in window) void Notification.requestPermission().then((permission) => { setNotificationPermission(permission); if (permission === "granted") toast.success("Desktop upload notifications enabled"); }); }} className="rounded-full border border-line px-3 py-1.5 text-xs font-semibold">Enable desktop notifications</button>
+            ) : notificationPermission === "granted" ? <span className="text-xs text-muted">Desktop notifications enabled</span> : null}
+          </div>
           {!canUpload ? <p className="mt-3 text-xs text-muted">Uploads are unavailable for your role or while this title is outside an editable preparation state.</p> : null}
         </div>
       ) : (
