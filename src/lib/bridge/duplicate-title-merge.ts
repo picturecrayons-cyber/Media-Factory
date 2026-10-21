@@ -211,7 +211,7 @@ async function loadMergeState(sql: any, titleId: string) {
     sql`select * from public.bridge_service_quotes where title_id=${titleId} order by created_at,id`,
     sql`select * from public.loop_titles where bridge_title_id=${titleId} order by id`,
     sql`select * from public.loop_media_migration_queue where title_id=${titleId} order by created_at,id`,
-    sql`select e.* from public.loop_user_tvod_entitlements e join public.loop_titles l on l.id::text=e.title_id::text where l.bridge_title_id=${titleId} order by e.created_at,id`,
+    sql`select e.* from public.loop_user_tvod_entitlements e join public.loop_titles l on l.id::text=e.title_id::text where l.bridge_title_id=${titleId} order by e.id`,
   ]);
   return {
     title: title[0] ?? null, rights, buyers, assets, assetRecords, deliveries, publications,
