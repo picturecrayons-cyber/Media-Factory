@@ -69,7 +69,7 @@ function harness(
   const output = transpileModule(source, {
     compilerOptions: { module: ModuleKind.CommonJS },
   }).outputText;
-  const exports: Record<string, (args: unknown) => Promise<unknown>> = {};
+  const exports: Record<string, (...args: unknown[]) => Promise<unknown>> = {};
   runInNewContext(output, {
     exports,
     require: (name: string) => {
