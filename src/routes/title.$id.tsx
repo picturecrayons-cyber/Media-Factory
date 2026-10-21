@@ -329,6 +329,10 @@ function FilesPanel({
 }) {
   const [uploading, setUploading] = useState<SimpleAssetKind | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [appNotifications, setAppNotifications] = useState<Array<{ id: number; tone: "success" | "error" | "info"; text: string; at: string }>>([]);
+  const notify = useCallback((tone: "success" | "error" | "info", text: string) => {
+    setAppNotifications((items) => [{ id: Date.now(), tone, text, at: new Date().toLocaleTimeString() }, ...items].slice(0, 6));
+  }, []);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadEta, setUploadEta] = useState<string | null>(null);
   const [uploadPhase, setUploadPhase] = useState<"preparing" | "transferring" | "verifying" | "refreshing" | null>(null);
@@ -401,6 +405,7 @@ function FilesPanel({
       await onAssetsChanged();
       setUploadProgress(100);
       setMessage(`${kind[0].toUpperCase() + kind.slice(1)} is ready and verified.`);
+      notify("success", `${kind[0].toUpperCase() + kind.slice(1)} uploaded and verified.`);
       toast.success(`${kind[0].toUpperCase() + kind.slice(1)} uploaded and verified`);
       if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") new Notification("Crayons Bridge · Upload", { body: `${kind[0].toUpperCase() + kind.slice(1)} uploaded and verified.` });
     } catch (error) {
@@ -409,6 +414,7 @@ function FilesPanel({
         ? "Storage service is currently unavailable. Please try again later."
         : raw;
       setMessage(detail);
+      notify("error", `${kind.replaceAll("_", " ")} upload failed: ${detail}`);
       toast.error(detail);
       if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") new Notification("Crayons Bridge · Upload failed", { body: detail });
     } finally {
@@ -514,8 +520,13 @@ function FilesPanel({
             </div>
           ) : null}
           {message ? <p role="status" aria-live="polite" className="mt-3 rounded-lg bg-elevated/50 p-3 text-sm text-muted">{message}</p> : null}
+          {appNotifications.length ? (
+            <div className="mt-4 rounded-lg border border-line bg-elevated/30 p-3" aria-label="In-app notifications" aria-live="polite">
+              <div className="mb-2 flex items-center justify-between gap-2"><p className="text-xs font-semibold">Recent in-app notifications</p><button type="button" onClick={() => setAppNotifications([])} className="text-xs text-muted underline">Clear</button></div>
+              <ul className="space-y-2">{appNotifications.map((item) => <li key={item.id} className="flex gap-2 text-xs"><span className={item.tone === "error" ? "font-semibold text-destructive" : item.tone === "success" ? "font-semibold text-accent" : "font-semibold text-muted"}>{item.tone === "error" ? "Failed" : item.tone === "success" ? "Success" : "Info"}</span><span className="min-w-0 flex-1 break-words">{item.text}</span><time className="shrink-0 text-muted">{item.at}</time></li>)}</ul>
+            </div>
+          ) : <p className="mt-3 text-xs text-muted">Upload results and failures will appear here while this workspace is open.</p>}
           <div className="mt-2 flex flex-wrap items-center gap-3">
-            <p className="text-xs text-muted">Upload success and failure notifications appear here.</p>
             {notificationPermission === "default" ? (
               <button type="button" onClick={() => { if ("Notification" in window) void Notification.requestPermission().then((permission) => { setNotificationPermission(permission); if (permission === "granted") toast.success("Desktop upload notifications enabled"); }); }} className="rounded-full border border-line px-3 py-1.5 text-xs font-semibold">Enable desktop notifications</button>
             ) : notificationPermission === "granted" ? <span className="text-xs text-muted">Desktop notifications enabled</span> : null}
@@ -754,10 +765,6 @@ function PreviewAssetCard({
     }
   }, [asset.id, asset.verified, isSubtitle]);
 
-  useEffect(() => {
-    if (isImage && asset.verified) void loadPreview();
-  }, [asset.verified, isImage, loadPreview]);
-
   return (
     <article className="min-w-0 overflow-hidden rounded-xl border border-line bg-surface">
       <div className="flex items-start justify-between gap-3 border-b border-line p-4">
@@ -778,6 +785,11 @@ function PreviewAssetCard({
           <div className="grid min-h-36 place-items-center rounded-lg bg-elevated p-4 text-center">
             <p role="alert" className="text-xs text-muted">{error}</p>
             <button type="button" onClick={() => void loadPreview()} className="mt-3 rounded-full border border-line px-3 py-1.5 text-xs font-semibold">Retry preview</button>
+          </div>
+        ) : isImage && !previewUrl ? (
+          <div className="grid min-h-36 place-items-center rounded-lg bg-elevated p-4 text-center">
+            <p className="text-xs text-muted">Preview loads only when requested, keeping large galleries responsive.</p>
+            <button type="button" onClick={() => void loadPreview()} className="mt-3 rounded-full border border-line px-3 py-1.5 text-xs font-semibold">{loading ? "Loading…" : "Load preview"}</button>
           </div>
         ) : isImage && previewUrl ? (
           <button type="button" onClick={() => setExpanded(true)} className="group block w-full overflow-hidden rounded-lg bg-elevated text-left" aria-label={`Open original ${label} preview`}>
