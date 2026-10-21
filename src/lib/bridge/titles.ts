@@ -272,6 +272,7 @@ export const listTitles = createServerFn({ method: "GET" })
           from bridge_titles t
           where t.status = 'DRAFT'
             and not exists (select 1 from bridge_assets a where a.title_id = t.id)
+            and not exists (select 1 from bridge_asset_versions av where av.title_id = t.id)
             and not exists (select 1 from bridge_entitlements e where e.title_id = t.id)
             and not exists (select 1 from bridge_payments p where p.title_id = t.id)
             and not exists (select 1 from bridge_rights_grants r where r.title_id = t.id)
@@ -407,6 +408,7 @@ export const deleteEmptyDraftTitle = createServerFn({ method: "POST" })
       const dependencies = await tx<{ blocked: boolean }>`
         select (
           exists(select 1 from bridge_assets where title_id = ${title.id})
+          or exists(select 1 from bridge_asset_versions where title_id = ${title.id})
           or exists(select 1 from bridge_entitlements where title_id = ${title.id})
           or exists(select 1 from bridge_payments where title_id = ${title.id})
           or exists(select 1 from bridge_rights_grants where title_id = ${title.id})
