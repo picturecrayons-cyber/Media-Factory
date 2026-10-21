@@ -246,7 +246,7 @@ async function pollWorkRequest(cfg: OciConfig, workRequestId: string) {
     } catch {
       throw new Error(`OCI copy work-request lookup timed out (last status: ${lastStatus})`);
     }
-    if (!res.ok) throw new Error(`OCI copy work-request lookup failed (${res.status}; last status: ${lastStatus})`);
+    if (!res.ok) throw new Error(`OCI copy work-request lookup failed (${res.status}) (last status: ${lastStatus})`);
     const body = (await res.json()) as { status?: string };
     lastStatus = body.status || "unknown";
     if (lastStatus === "SUCCEEDED") return;
