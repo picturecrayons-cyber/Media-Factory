@@ -15,6 +15,8 @@ const sealedKey = `${key}.verified/${runId}`;
 
 let sourceUploaded = false;
 let sealedCreated = false;
+let runError;
+const cleanupErrors = [];
 
 try {
   const upload = await signUpload({ key, contentType: "text/plain" });
@@ -42,18 +44,44 @@ try {
   assert.ok(get.ok, `OCI download failed: ${get.status}`);
   const downloaded = Buffer.from(await get.arrayBuffer());
   assert.deepEqual(downloaded, payload, "OCI round-trip payload mismatch");
-
-  console.log(JSON.stringify({
-    status: "PASS",
-    provider: "oracle-oci-object-storage",
-    region: process.env.OCI_REGION,
-    bucketConfigured: Boolean(process.env.OCI_BUCKET_NAME),
-    sourceKey: key,
-    sealedKey,
-    byteSize: payload.byteLength,
-    checks: ["signed-upload", "object-verification", "immutable-seal", "signed-download", "payload-integrity"],
-  }, null, 2));
+} catch (error) {
+  runError = error;
 } finally {
-  if (sealedCreated) await deleteObject(sealedKey).catch(() => undefined);
-  if (sourceUploaded) await deleteObject(key).catch(() => undefined);
+  // Attempt both deletions even if the first cleanup operation fails.
+  if (sealedCreated) {
+    try {
+      await deleteObject(sealedKey);
+    } catch (error) {
+      cleanupErrors.push(new Error(`Failed to delete sealed OCI test object ${sealedKey}`, { cause: error }));
+    }
+  }
+  if (sourceUploaded) {
+    try {
+      await deleteObject(key);
+    } catch (error) {
+      cleanupErrors.push(new Error(`Failed to delete source OCI test object ${key}`, { cause: error }));
+    }
+  }
 }
+
+if (runError && cleanupErrors.length > 0) {
+  throw new AggregateError(
+    [runError, ...cleanupErrors],
+    "OCI E2E failed and one or more test objects could not be cleaned up",
+  );
+}
+if (runError) throw runError;
+if (cleanupErrors.length > 0) {
+  throw new AggregateError(cleanupErrors, "OCI E2E cleanup failed");
+}
+
+console.log(JSON.stringify({
+  status: "PASS",
+  provider: "oracle-oci-object-storage",
+  region: process.env.OCI_REGION,
+  bucketConfigured: Boolean(process.env.OCI_BUCKET_NAME),
+  sourceKey: key,
+  sealedKey,
+  byteSize: payload.byteLength,
+  checks: ["signed-upload", "object-verification", "immutable-seal", "signed-download", "payload-integrity", "cleanup"],
+}, null, 2));
