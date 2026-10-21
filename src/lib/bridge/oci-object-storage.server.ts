@@ -230,18 +230,35 @@ export async function verifyObject(key: string, expectedContentType?: string | n
 
 async function pollWorkRequest(cfg: OciConfig, workRequestId: string) {
   const url = new URL(`/workRequests/${encodeURIComponent(workRequestId)}`, endpoint(cfg.region));
-  for (let i = 0; i < 30; i += 1) {
+  const deadline = Date.now() + 45_000;
+  let lastStatus = "unknown";
+
+  while (Date.now() < deadline) {
+    const remainingMs = deadline - Date.now();
     const headers = signHeaders({ cfg, method: "GET", url });
-    const res = await fetch(url, { method: "GET", headers });
-    if (!res.ok) throw new Error(`OCI copy work-request lookup failed (${res.status})`);
-    const body = (await res.json()) as { status?: string };
-    if (body.status === "SUCCEEDED") return;
-    if (body.status === "FAILED" || body.status === "CANCELED") {
-      throw new Error(`OCI object copy ${body.status.toLowerCase()}`);
+    let res: Response;
+    try {
+      res = await fetch(url, {
+        method: "GET",
+        headers,
+        signal: AbortSignal.timeout(Math.min(8_000, Math.max(1, remainingMs))),
+      });
+    } catch {
+      throw new Error(`OCI copy work-request lookup timed out (last status: ${lastStatus})`);
     }
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+    if (!res.ok) throw new Error(`OCI copy work-request lookup failed (${res.status}; last status: ${lastStatus})`);
+    const body = (await res.json()) as { status?: string };
+    lastStatus = body.status || "unknown";
+    if (lastStatus === "SUCCEEDED") return;
+    if (lastStatus === "FAILED" || lastStatus === "CANCELED") {
+      throw new Error(`OCI object copy ${lastStatus.toLowerCase()}`);
+    }
+    const remainingAfterPoll = deadline - Date.now();
+    if (remainingAfterPoll > 0) {
+      await new Promise((resolve) => setTimeout(resolve, Math.min(1000, remainingAfterPoll)));
+    }
   }
-  throw new Error("OCI object copy did not complete in time");
+  throw new Error(`OCI object copy did not complete within 45 seconds (last status: ${lastStatus})`);
 }
 
 /** Copy a verified upload into an immutable destination key. */
