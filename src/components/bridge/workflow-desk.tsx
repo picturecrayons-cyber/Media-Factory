@@ -98,6 +98,19 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
   const grants = workflow.data?.grants ?? [];
   const valid = grants.find((g) => g.status === "VALID" && new Date(g.window_end) > new Date());
   const pub = publication.data?.publication;
+  const qcStatus = workflow.data?.qc?.status ?? "NOT REVIEWED";
+  const legalStatus =
+    workflow.data?.legal?.status ??
+    (valid ? "LICENSE VALID" : grants.length ? "DRAFT — REVIEW REQUIRED" : "NOT RECORDED");
+  const distributionStatus = pub?.authorizationStatus ?? "NOT AUTHORIZED";
+  const playbackStatus = "NOT VERIFIED";
+  const statusItem = (label: string, value: string, detail: string) => (
+    <article className="min-w-0 rounded-lg border border-line p-3" key={label}>
+      <p className="text-xs uppercase tracking-wide text-muted">{label}</p>
+      <p className="mt-1 break-words text-sm font-semibold">{value}</p>
+      <p className="mt-1 text-xs text-muted">{detail}</p>
+    </article>
+  );
   const button = (label: string, run: () => Promise<unknown>) => (
     <button
       type="button"
@@ -124,6 +137,13 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
   return (
     <section className="space-y-4 rounded-2xl border border-line bg-surface p-5">
       <h2 className="font-display text-xl">Title operations</h2>
+      <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5" aria-label="Independent workflow statuses">
+        {statusItem("Preparation & QC", `${title.status} · QC ${qcStatus}`, "Verified current master and artwork are required for QC approval.")}
+        {statusItem("License & legal", legalStatus, "Draft/evidence does not equal independent legal approval.")}
+        {statusItem("Loop distribution", distributionStatus, "Publication authorization is separate from legal approval and playback.")}
+        {statusItem("Consumer playback", playbackStatus, "Catalog visibility is not proof of successful authenticated playback.")}
+        {statusItem("Revenue & settlement", revenue.data ? (revenue.data.settlementEvidence.length ? "EXTERNAL EVIDENCE — UNVERIFIED" : "NO SETTLEMENT EVIDENCE") : canFinance ? "OPEN REVENUE TO CHECK" : "RESTRICTED", "Captured receipts are not a payout; evidence recording never transfers funds.")}
+      </div>
       <nav className="flex flex-wrap gap-2" aria-label="Operational workflow">
         {stages.map((s) => (
           <button
@@ -215,6 +235,28 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                   className="grid gap-3 sm:grid-cols-2"
                   onSubmit={(e) => {
                     e.preventDefault();
+                    const startDate = new Date(start);
+                    const endDate = new Date(end);
+                    const share = Number(ownerShare);
+                    if (
+                      !start ||
+                      !end ||
+                      !Number.isFinite(startDate.getTime()) ||
+                      !Number.isFinite(endDate.getTime()) ||
+                      endDate <= startDate ||
+                      endDate <= new Date()
+                    ) {
+                      setError("Enter a valid license window. The end must be after the start and in the future (local times are converted to UTC).");
+                      return;
+                    }
+                    if (ownerShare.trim() === "" || !Number.isInteger(share) || share < 0 || share > 100) {
+                      setError("Rights owner share must be a whole percentage from 0 to 100.");
+                      return;
+                    }
+                    if (!agreement.trim() || agreement.trim().length < 8 || !ownership.trim() || ownership.trim().length < 8) {
+                      setError("Enter executed-agreement and ownership-evidence references (at least 8 characters each).");
+                      return;
+                    }
                     action.mutate(() =>
                       submitLoopLicense({
                         data: {
@@ -227,13 +269,13 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                             .split(",")
                             .map((v) => v.trim())
                             .filter(Boolean),
-                          windowStart: new Date(start).toISOString(),
-                          windowEnd: new Date(end).toISOString(),
+                          windowStart: startDate.toISOString(),
+                          windowEnd: endDate.toISOString(),
                           exclusivity: exclusive ? "EXCLUSIVE" : "NON_EXCLUSIVE",
                           agreementReference: agreement,
                           ownershipReference: ownership,
-                          rightsOwnerSharePct: Number(ownerShare),
-                          distributorSharePct: 100 - Number(ownerShare),
+                          rightsOwnerSharePct: share,
+                          distributorSharePct: 100 - share,
                         },
                       }),
                     );
@@ -392,13 +434,14 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                     Export receipt statement CSV
                   </button>
                   <div className="overflow-x-auto">
-                    <table className="w-full min-w-[600px] text-left text-sm">
+                    <table className="w-full min-w-[760px] text-left text-sm">
                       <thead>
                         <tr>
                           <th>Payment</th>
                           <th>Date</th>
                           <th>Captured amount</th>
-                          <th>Gross producer share · reconciliation pending</th>
+                          <th>Gross producer share</th>
+                          <th>Reconciliation</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -416,6 +459,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                                 ? "Amount/agreement evidence missing"
                                 : `₹${(r.grossProducerSharePaise / 100).toFixed(2)}`}
                             </td>
+                            <td>{r.amountPaise === null || r.grossProducerSharePaise === null ? "Evidence incomplete" : "Gross only — fees, tax and refunds pending"}</td>
                           </tr>
                         ))}
                       </tbody>

@@ -278,6 +278,14 @@ function FilesPanel({
 }) {
   const [uploading, setUploading] = useState<SimpleAssetKind | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<{
+    kind: SimpleAssetKind;
+    loaded: number;
+    total: number;
+    percent: number;
+    remainingSeconds: number | null;
+    stage: "preparing" | "uploading" | "verifying";
+  } | null>(null);
   async function uploadFile(kind: SimpleAssetKind, file: File) {
     const filename = asciiUploadName(file.name);
     const contentType = file.type || "application/octet-stream";
@@ -291,6 +299,14 @@ function FilesPanel({
       return;
     }
     setUploading(kind);
+    setUploadProgress({
+      kind,
+      loaded: 0,
+      total: file.size,
+      percent: 0,
+      remainingSeconds: null,
+      stage: "preparing",
+    });
     setMessage(`Preparing ${kind} upload…`);
     try {
       const signed = await requestAssetUpload({
@@ -303,12 +319,44 @@ function FilesPanel({
       });
       const uploadUrl = new URL(signed.url);
       uploadUrl.pathname = uploadUrl.pathname.split("/").map((part) => encodeURIComponent(decodeURIComponent(part))).join("/");
-      const put = await fetch(uploadUrl.toString(), {
-        method: signed.method,
-        body: file,
-        headers: { "content-type": contentType },
+      setUploadProgress((current) =>
+        current ? { ...current, stage: "uploading" } : current,
+      );
+      const startedAt = performance.now();
+      await new Promise<void>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open(signed.method, uploadUrl.toString());
+        xhr.timeout = 120_000;
+        xhr.setRequestHeader("content-type", contentType);
+        xhr.upload.onprogress = (event) => {
+          if (!event.lengthComputable) return;
+          const elapsedSeconds = Math.max((performance.now() - startedAt) / 1000, 0.25);
+          const bytesPerSecond = event.loaded / elapsedSeconds;
+          const remainingBytes = Math.max(event.total - event.loaded, 0);
+          const remainingSeconds =
+            bytesPerSecond > 0 ? Math.ceil(remainingBytes / bytesPerSecond) : null;
+          setUploadProgress({
+            kind,
+            loaded: event.loaded,
+            total: event.total,
+            percent: Math.min(100, Math.round((event.loaded / event.total) * 100)),
+            remainingSeconds,
+            stage: "uploading",
+          });
+        };
+        xhr.onerror = () => reject(new Error("Upload connection failed. Check your connection and retry."));
+        xhr.ontimeout = () => reject(new Error("Upload timed out after 2 minutes. Check your connection and retry."));
+        xhr.onabort = () => reject(new Error("Upload cancelled."));
+        xhr.onload = () => {
+          if (xhr.status >= 200 && xhr.status < 300) resolve();
+          else reject(new Error(`Upload failed (${xhr.status})`));
+        };
+        xhr.send(file);
       });
-      if (!put.ok) throw new Error(`Upload failed (${put.status})`);
+      setUploadProgress((current) =>
+        current ? { ...current, loaded: file.size, total: file.size, percent: 100, remainingSeconds: null, stage: "verifying" } : current,
+      );
+      setMessage(`Verifying ${kind} upload…`);
       await confirmAssetUpload({ data: { assetId: signed.assetId, expectedByteSize: file.size } });
       await onAssetsChanged();
       setMessage(`${kind[0].toUpperCase() + kind.slice(1)} is ready.`);
@@ -321,6 +369,7 @@ function FilesPanel({
       );
     } finally {
       setUploading(null);
+      setUploadProgress(null);
     }
   }
   async function download(id: string) {
@@ -358,7 +407,58 @@ function FilesPanel({
           />
         ))}
       </div>
-      {message ? <p className="mt-3 text-xs text-muted">{message}</p> : null}
+      {uploadProgress ? (
+        <div
+          className="mt-5 rounded-xl border border-line bg-elevated/40 p-4"
+          aria-live="polite"
+          aria-atomic="true"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-sm font-semibold">
+              {uploadProgress.stage === "preparing"
+                ? `Preparing ${uploadProgress.kind.replaceAll("_", " ")} upload`
+                : uploadProgress.stage === "verifying"
+                  ? "Upload complete · verifying asset"
+                  : `Uploading ${uploadProgress.kind.replaceAll("_", " ")}`}
+            </p>
+            <span className="text-sm font-semibold tabular-nums">
+              {uploadProgress.percent}%
+            </span>
+          </div>
+          <div
+            className="mt-3 h-2.5 overflow-hidden rounded-full bg-line"
+            role="progressbar"
+            aria-label="Asset upload progress"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={uploadProgress.percent}
+          >
+            <div
+              className={`h-full rounded-full bg-accent transition-[width] duration-150 ${uploadProgress.stage === "preparing" ? "w-[35%] animate-pulse" : ""}`}
+              style={uploadProgress.stage === "preparing" ? undefined : { width: `${uploadProgress.percent}%` }}
+            />
+          </div>
+          <div className="mt-2 flex flex-wrap justify-between gap-2 text-xs text-muted">
+            <span>
+              {uploadProgress.stage === "preparing"
+                ? "Requesting secure upload URL…"
+                : uploadProgress.stage === "verifying"
+                  ? `${formatUploadBytes(uploadProgress.total)} sent · checking storage integrity`
+                  : `${formatUploadBytes(uploadProgress.loaded)} of ${formatUploadBytes(uploadProgress.total)}`}
+            </span>
+            <span>
+              {uploadProgress.stage === "verifying"
+                ? "Usually a short final check"
+                : uploadProgress.stage === "preparing"
+                  ? "Time estimate starts when transfer begins"
+                  : uploadProgress.remainingSeconds == null
+                    ? "Estimating time remaining…"
+                    : `${formatUploadDuration(uploadProgress.remainingSeconds)} remaining`}
+            </span>
+          </div>
+        </div>
+      ) : null}
+      {message ? <p className="mt-3 text-xs text-muted" role="status">{message}</p> : null}
       <div className="mt-5 space-y-2">
         {assets.map((a) => (
           <div
@@ -383,6 +483,28 @@ function FilesPanel({
     </section>
   );
 }
+function formatUploadBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  const units = ["KB", "MB", "GB", "TB"];
+  let value = bytes / 1024;
+  let unit = 0;
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024;
+    unit += 1;
+  }
+  return `${value.toFixed(value >= 100 ? 0 : value >= 10 ? 1 : 2)} ${units[unit]}`;
+}
+
+function formatUploadDuration(seconds: number): string {
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = seconds % 60;
+  if (minutes < 60) return remainingSeconds ? `${minutes}m ${remainingSeconds}s` : `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  return remainingMinutes ? `${hours}h ${remainingMinutes}m` : `${hours}h`;
+}
+
 function FileTypeCard({
   kind,
   label,
