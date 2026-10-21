@@ -1,7 +1,6 @@
-import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
-import { getAdminTitlePreview, type AdminPreviewChecklist } from "@/lib/bridge/admin-preview";
+import { getAdminTitlePreview } from "@/lib/bridge/admin-preview";
 
 export function AdminPreviewModal({
   titleId,
@@ -14,13 +13,13 @@ export function AdminPreviewModal({
   onClose: () => void;
   onProceedToQc?: () => void;
 }) {
-  if (!isOpen) return null;
-
   const previewQ = useQuery({
     queryKey: ["admin-title-preview", titleId],
     queryFn: () => getAdminTitlePreview({ data: { titleId } }),
     enabled: isOpen,
   });
+
+  if (!isOpen) return null;
 
   const preview = previewQ.data;
   const checklist = preview?.checklist;
