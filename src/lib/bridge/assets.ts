@@ -10,6 +10,7 @@ import { loadTitle } from "./titles";
 import { writeAudit } from "./audit";
 import { assertNotDevUser } from "./guards";
 import { persistVerifiedAsset } from "./asset-confirmation";
+import { markLegacyLoopQueueUploaded, markLegacyLoopQueueVerified } from "./legacy-loop-queue";
 import { downloadDecision } from "./delivery-policy";
 import { validateOttIngestFile, type OttIngestKind } from "./ott-ingest-spec";
 
@@ -128,16 +129,15 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
     const queueTable = await sql<{ present: boolean }>`
       select to_regclass('public.loop_media_migration_queue') is not null as present
     `;
-    if (queueTable[0]?.present) {
-      // Only mark the queue UPLOADED after the immutable copy and its metadata are verified.
-      await sql`
-        update loop_media_migration_queue
-        set status = 'UPLOADED', target_path = ${sealedKey}, updated_at = now()
-        where title_id = ${title.id}
-          and asset_kind = case when ${asset.kind} = 'screener' then 'TRAILER' else upper(${asset.kind}) end
-          and status in ('PENDING_REUPLOAD', 'UPLOADED')
-      `;
-    }
+    const queuePresent = Boolean(queueTable[0]?.present);
+    // Only mark the queue UPLOADED after the immutable copy and its metadata are verified.
+    await markLegacyLoopQueueUploaded(queuePresent, async () => sql`
+      update loop_media_migration_queue
+      set status = 'UPLOADED', target_path = ${sealedKey}, updated_at = now()
+      where title_id = ${title.id}
+        and asset_kind = case when ${asset.kind} = 'screener' then 'TRAILER' else upper(${asset.kind}) end
+        and status in ('PENDING_REUPLOAD', 'UPLOADED')
+    `);
     const confirmed = await persistVerifiedAsset(sql, {
       assetId: asset.id,
       actorUserId: actor.userId,
@@ -150,15 +150,13 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
       sourceKey: asset.s3_key,
       sealedKey,
     });
-    if (confirmed && queueTable[0]?.present) {
-      await sql`
-        update loop_media_migration_queue
-        set status = 'VERIFIED', target_path = ${sealedKey}, updated_at = now()
-        where title_id = ${title.id}
-          and asset_kind = case when ${asset.kind} = 'screener' then 'TRAILER' else upper(${asset.kind}) end
-          and status in ('UPLOADED', 'PENDING_REUPLOAD')
-      `;
-    }
+    await markLegacyLoopQueueVerified(queuePresent, confirmed, async () => sql`
+      update loop_media_migration_queue
+      set status = 'VERIFIED', target_path = ${sealedKey}, updated_at = now()
+      where title_id = ${title.id}
+        and asset_kind = case when ${asset.kind} = 'screener' then 'TRAILER' else upper(${asset.kind}) end
+        and status in ('UPLOADED', 'PENDING_REUPLOAD')
+    `);
     if (!confirmed) {
       const current = await sql<{
         byte_size: number | null;
