@@ -9,7 +9,7 @@ import { listDuplicateReviews, openDuplicateReview, decideDuplicateReview } from
 
 export const Route = createFileRoute("/admin/workstations")({ component: AdminWorkstations });
 
-const TABS = ["Titles", "QC", "Rights", "Assets", "Buyers", "Deliveries", "Audit"] as const;
+const TABS = ["Titles", "QC", "Rights", "OTT Ready", "Packaging & Localization", "Assets", "Buyers", "Deliveries", "Audit"] as const;
 type Tab = (typeof TABS)[number];
 
 const STATUS_LABELS: Record<string, string> = {
