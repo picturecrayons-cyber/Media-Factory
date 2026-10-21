@@ -450,8 +450,12 @@ function FilesPanel({
         detail = "Storage service is currently unavailable. Check the isolated Preview configuration, then select the file again to retry.";
       } else if (error instanceof TypeError) {
         detail = "The browser could not reach OCI storage. Check the OCI bucket CORS rule for this Preview origin, PUT method and Content-Type header, then select the file again to retry.";
+      } else if (raw.includes("Stored-object verification timed out")) {
+        // A browser timeout cannot cancel server-side verification. Avoid claiming
+        // the asset is unverified or encouraging a blind retry while that request runs.
+        detail = `${raw} The server may still be finishing verification. Refresh the asset list and check its status before retrying.`;
       } else if (!cancelled && !raw.includes("No Ready status")) {
-        detail = `${raw} No Ready status was set by this client flow; select the file again to retry.`;
+        detail = `${raw} Refresh the asset list to confirm its status before retrying.`;
       }
       announce(detail, "error", true);
     } finally {
