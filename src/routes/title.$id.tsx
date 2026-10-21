@@ -23,6 +23,7 @@ import {
   validateOttIngestFile,
 } from "@/lib/bridge/ott-ingest-spec";
 import { asciiUploadName } from "@/lib/bridge/latin1";
+import { AssetGallery, UploadStatusMessage } from "@/components/bridge/asset-gallery";
 
 export const Route = createFileRoute("/title/$id")({ component: TitlePage });
 
@@ -357,26 +358,8 @@ function FilesPanel({
             onFile={(file) => void uploadFile(kind, file)}
           />
         ))}
-      </div>
-      {message ? <p className="mt-3 text-xs text-muted">{message}</p> : null}
-      <div className="mt-5 space-y-2">
-        {assets.map((a) => (
-          <div
-            key={a.id}
-            className="flex items-center justify-between gap-3 rounded-xl border border-line p-4"
-          >
-            <div>
-              <p className="text-sm font-semibold">{a.kind}</p>
-              <p className="text-xs text-muted">{a.verified ? "Ready" : "Processing"}</p>
-            </div>
-            {a.verified ? (
-              <button
-                onClick={() => void download(a.id)}
-                className="rounded-full border border-line px-4 py-2 text-xs font-semibold"
-              >
-                Download
-              </button>
-            ) : null}
+          <AssetGallery assets={assets} onDownload={(assetId) => void download(assetId)} />
+     ) : null}
           </div>
         ))}
       </div>
