@@ -18,7 +18,6 @@ const INTERNAL_PERMISSIONS: Record<InternalRole, readonly Permission[]> = {
   ],
   admin: [
     "title.read_catalog",
-    "asset.sign_upload",
     "service.quote_create",
     "service.order_create",
     "service.fulfill",
