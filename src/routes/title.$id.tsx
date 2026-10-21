@@ -13,6 +13,7 @@ import {
   confirmAssetUpload,
   listTitleAssets,
   requestAssetDownload,
+  requestAssetPreview,
   requestAssetUpload,
 } from "@/lib/bridge/assets";
 import { getLoopPublication } from "@/lib/bridge/loop-publication";
@@ -243,6 +244,7 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
           }
           titleId={id}
           assets={assets}
+          isSuperAdmin={actor.internalRole === "super_admin"}
           onAssetsChanged={() => assetsQ.refetch()}
         />
       ) : null}
@@ -264,8 +266,10 @@ function FilesPanel({
   assets,
   onAssetsChanged,
   canUpload,
+  isSuperAdmin,
 }: {
   canUpload: boolean;
+  isSuperAdmin: boolean;
   titleId: string;
   assets: Array<{
     id: string;
@@ -273,11 +277,14 @@ function FilesPanel({
     contentType: string | null;
     byteSize: number | null;
     verified: boolean;
+    createdAt: string;
   }>;
   onAssetsChanged: () => Promise<unknown> | unknown;
 }) {
   const [uploading, setUploading] = useState<SimpleAssetKind | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [previewUrls, setPreviewUrls] = useState<Record<string, string>>({});
+  const [assetAction, setAssetAction] = useState<string | null>(null);
   async function uploadFile(kind: SimpleAssetKind, file: File) {
     const filename = asciiUploadName(file.name);
     const contentType = file.type || "application/octet-stream";
@@ -324,8 +331,63 @@ function FilesPanel({
     }
   }
   async function download(id: string) {
-    const signed = await requestAssetDownload({ data: { assetId: id } });
-    window.location.assign(signed.url);
+    setAssetAction(id);
+    try {
+      const signed = await requestAssetDownload({ data: { assetId: id } });
+      window.location.assign(signed.url);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Download could not be prepared.");
+    } finally {
+      setAssetAction(null);
+    }
+  }
+  async function retryVerification(id: string) {
+    setAssetAction(id);
+    setMessage("Retrying storage verification…");
+    try {
+      await confirmAssetUpload({ data: { assetId: id } });
+      await onAssetsChanged();
+      setMessage("Asset verification completed.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Asset verification failed.");
+    } finally {
+      setAssetAction(null);
+    }
+  }
+  async function preview(id: string) {
+    setAssetAction(id);
+    try {
+      const result = await requestAssetPreview({ data: { assetId: id } });
+      setPreviewUrls((current) => ({ ...current, [id]: result.url }));
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Preview could not be prepared.");
+    } finally {
+      setAssetAction(null);
+    }
+  }
+  function downloadManifest() {
+    const manifest = {
+      titleId,
+      generatedAt: new Date().toISOString(),
+      storageVerification: "Metadata-only manifest; verify file bytes before certification.",
+      assets: assets.map((asset) => ({
+        assetId: asset.id,
+        kind: asset.kind,
+        filename: `${asset.kind}-${asset.id}`,
+        mimeType: asset.contentType,
+        byteSize: asset.byteSize,
+        checksum: null,
+        storageVerified: asset.verified,
+        createdAt: asset.createdAt,
+      })),
+    };
+    const blob = new Blob([JSON.stringify(manifest, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `crayons-bridge-${titleId}-asset-manifest.json`;
+    anchor.click();
+    URL.revokeObjectURL(url);
   }
   const cards: [SimpleAssetKind, string, string][] = [
     ["master", "Main Film", "Required"],
@@ -359,26 +421,68 @@ function FilesPanel({
         ))}
       </div>
       {message ? <p className="mt-3 text-xs text-muted">{message}</p> : null}
-      <div className="mt-5 space-y-2">
-        {assets.map((a) => (
-          <div
-            key={a.id}
-            className="flex items-center justify-between gap-3 rounded-xl border border-line p-4"
-          >
-            <div>
-              <p className="text-sm font-semibold">{a.kind}</p>
-              <p className="text-xs text-muted">{a.verified ? "Ready" : "Processing"}</p>
-            </div>
-            {a.verified ? (
-              <button
-                onClick={() => void download(a.id)}
-                className="rounded-full border border-line px-4 py-2 text-xs font-semibold"
-              >
-                Download
-              </button>
-            ) : null}
-          </div>
-        ))}
+      <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h3 className="font-display text-lg font-semibold">Media Gallery ({assets.length})</h3>
+          <p className="text-xs text-muted">Only verified assets can be downloaded. Previews use short-lived authorized links.</p>
+        </div>
+        {isSuperAdmin ? (
+          <button type="button" onClick={downloadManifest} className="rounded-full border border-line px-4 py-2 text-xs font-semibold">
+            Download asset manifest
+          </button>
+        ) : null}
+      </div>
+      <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        {assets.map((a) => {
+          const isImage = Boolean(a.contentType?.startsWith("image/")) &&
+            ["poster", "poster_vertical", "poster_horizontal", "thumbnail"].includes(a.kind);
+          return (
+            <article key={a.id} className="min-w-0 rounded-xl border border-line bg-elevated/30 p-4">
+              {previewUrls[a.id] ? (
+                <div className="mb-3 grid min-h-32 place-items-center overflow-hidden rounded-lg bg-elevated">
+                  <img src={previewUrls[a.id]} alt={`${a.kind} preview`} loading="lazy" className="max-h-64 w-full object-contain" />
+                </div>
+              ) : null}
+              <p className="break-words text-sm font-semibold">{a.kind.replaceAll("_", " ")}</p>
+              <p className="mt-1 text-xs text-muted">
+                {a.verified ? "Verified" : "Processing · Size unavailable"}
+                {a.verified && a.byteSize != null ? ` · ${(a.byteSize / (1024 * 1024)).toFixed(2)} MB` : ""}
+              </p>
+              <p className="mt-1 break-all text-[11px] text-muted">{a.contentType || "MIME type unavailable"}</p>
+              <p className="mt-1 text-[11px] text-muted">{new Date(a.createdAt).toLocaleString()}</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {isSuperAdmin && isImage && a.verified ? (
+                  <button type="button" disabled={assetAction === a.id} onClick={() => void preview(a.id)} className="rounded-full border border-line px-3 py-2 text-xs font-semibold disabled:opacity-50">
+                    {previewUrls[a.id] ? "Refresh preview" : "Secure preview"}
+                  </button>
+                ) : null}
+                {a.verified ? (
+                  <button type="button" disabled={assetAction === a.id} onClick={() => void download(a.id)} className="rounded-full border border-line px-3 py-2 text-xs font-semibold disabled:opacity-50">
+                    {assetAction === a.id ? "Preparing…" : "Download"}
+                  </button>
+                ) : null}
+                {!a.verified && isSuperAdmin ? (
+                  <button
+                    type="button"
+                    disabled={assetAction === a.id}
+                    onClick={() => {
+                      if (!window.confirm("This source file has not passed storage verification. Download the temporary source object only if you need to recover or inspect it?")) return;
+                      void download(a.id);
+                    }}
+                    className="rounded-full border border-line px-3 py-2 text-xs font-semibold disabled:opacity-50"
+                  >
+                    {assetAction === a.id ? "Preparing…" : "Download unverified source"}
+                  </button>
+                ) : null}
+                {!a.verified && canUpload ? (
+                  <button type="button" disabled={assetAction === a.id} onClick={() => void retryVerification(a.id)} className="rounded-full border border-line px-3 py-2 text-xs font-semibold disabled:opacity-50">
+                    {assetAction === a.id ? "Verifying…" : "Retry verification"}
+                  </button>
+                ) : null}
+              </div>
+            </article>
+          );
+        })}
       </div>
     </section>
   );

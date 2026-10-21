@@ -222,7 +222,13 @@ export async function verifyObject(key: string, expectedContentType?: string | n
 }
 
 async function pollWorkRequest(cfg: OciConfig, workRequestId: string) {
-  const url = new URL(`/workRequests/${encodeURIComponent(workRequestId)}`, endpoint(cfg.region));
+  // Object Storage work requests are namespaced. Poll the same namespace used
+  // by the copy request, rather than the generic /workRequests path.
+  const namespace = await resolveNamespace(cfg);
+  const url = new URL(
+    `/n/${encodeURIComponent(namespace)}/workRequests/${encodeURIComponent(workRequestId)}`,
+    endpoint(cfg.region),
+  );
   for (let i = 0; i < 30; i += 1) {
     const headers = signHeaders({ cfg, method: "GET", url });
     const res = await fetch(url, { method: "GET", headers });
