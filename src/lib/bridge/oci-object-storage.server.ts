@@ -146,7 +146,12 @@ async function signedFetch(opts: {
   const safeHeaders = Object.fromEntries(
     Object.entries(headers).map(([key, value]) => [toLatin1(key), toLatin1(value)]),
   );
-  return fetch(url, { method: opts.method, headers: safeHeaders, body });
+  return fetch(url, {
+    method: opts.method,
+    headers: safeHeaders,
+    body,
+    signal: AbortSignal.timeout(15_000),
+  });
 }
 
 async function resolveNamespace(cfg: OciConfig) {
@@ -177,8 +182,23 @@ async function createPar(opts: {
   if (!res.ok) throw new Error(`OCI pre-authenticated request failed (${res.status})`);
   const parsed = (await res.json()) as { accessUri?: string };
   if (!parsed.accessUri) throw new Error("OCI pre-authenticated request returned no access URI");
+
+  // PAR URLs are bearer capabilities. Never return an unexpected host or scheme
+  // to the browser, even if a proxy or compromised response supplies one.
+  const parUrl = new URL(parsed.accessUri, endpoint(cfg.region));
+  const expectedHost = new URL(endpoint(cfg.region)).host;
+  if (
+    parUrl.protocol !== "https:" ||
+    parUrl.host !== expectedHost ||
+    parUrl.username ||
+    parUrl.password ||
+    parUrl.hash
+  ) {
+    throw new Error("OCI pre-authenticated request returned an unexpected URL");
+  }
+
   return {
-    url: new URL(parsed.accessUri, endpoint(cfg.region)).toString(),
+    url: parUrl.toString(),
     bucket: cfg.bucket,
     namespace,
   };
@@ -223,18 +243,37 @@ export async function verifyObject(key: string, expectedContentType?: string | n
 
 async function pollWorkRequest(cfg: OciConfig, workRequestId: string) {
   const url = new URL(`/workRequests/${encodeURIComponent(workRequestId)}`, endpoint(cfg.region));
-  for (let i = 0; i < 30; i += 1) {
+  const deadline = Date.now() + 45_000;
+  let lastStatus = "unknown";
+
+  while (Date.now() < deadline) {
+    const remainingMs = deadline - Date.now();
     const headers = signHeaders({ cfg, method: "GET", url });
-    const res = await fetch(url, { method: "GET", headers });
-    if (!res.ok) throw new Error(`OCI copy work-request lookup failed (${res.status})`);
-    const body = (await res.json()) as { status?: string };
-    if (body.status === "SUCCEEDED") return;
-    if (body.status === "FAILED" || body.status === "CANCELED") {
-      throw new Error(`OCI object copy ${body.status.toLowerCase()}`);
+    let res: Response;
+    try {
+      res = await fetch(url, {
+        method: "GET",
+        headers,
+        signal: AbortSignal.timeout(Math.min(8_000, Math.max(1, remainingMs))),
+      });
+    } catch {
+      throw new Error(`OCI copy work-request lookup timed out (last status: ${lastStatus})`);
     }
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+    if (!res.ok) {
+      throw new Error(`OCI copy work-request lookup failed (${res.status}) (last status: ${lastStatus})`);
+    }
+    const body = (await res.json()) as { status?: string };
+    lastStatus = body.status || "unknown";
+    if (lastStatus === "SUCCEEDED") return;
+    if (lastStatus === "FAILED" || lastStatus === "CANCELED") {
+      throw new Error(`OCI object copy ${lastStatus.toLowerCase()}`);
+    }
+    const remainingAfterPoll = deadline - Date.now();
+    if (remainingAfterPoll > 0) {
+      await new Promise((resolve) => setTimeout(resolve, Math.min(1000, remainingAfterPoll)));
+    }
   }
-  throw new Error("OCI object copy did not complete in time");
+  throw new Error(`OCI object copy did not complete within 45 seconds (last status: ${lastStatus})`);
 }
 
 /** Copy a verified upload into an immutable destination key. */
@@ -257,7 +296,12 @@ export async function sealVerifiedObject(sourceKey: string, destinationKey: stri
   });
   if (res.status !== 202 && !res.ok) throw new Error(`OCI object copy failed (${res.status})`);
   const workRequestId = res.headers.get("opc-work-request-id");
+  if (res.status === 202 && !workRequestId) {
+    throw new Error("OCI object copy returned no work-request ID");
+  }
   if (workRequestId) await pollWorkRequest(cfg, workRequestId);
+  // Only report a sealed object after OCI confirms terminal copy success and the
+  // destination object can be independently read through authenticated metadata.
   return verifyObject(destinationKey);
 }
 
@@ -273,4 +317,65 @@ export async function deleteObject(key: string) {
 export function titleAssetKey(opts: { ownerUserId: string; titleId: string; kind: string; filename: string }) {
   const safe = opts.filename.replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 80);
   return `bridge/${opts.ownerUserId}/${opts.titleId}/${opts.kind}/${Date.now()}-${safe}`;
+}
+
+
+/** Start multipart upload through OCI native Object Storage API. */
+export async function initiateMultipartUpload(opts: { key: string; contentType?: string }) {
+  const cfg = config();
+  const namespace = await resolveNamespace(cfg);
+  const path = "/n/" + encodeURIComponent(namespace) + "/b/" + encodeURIComponent(cfg.bucket) + "/u";
+  const response = await signedFetch({ cfg, method: "POST", path, body: { object: opts.key, contentType: opts.contentType || "application/octet-stream" } });
+  if (!response.ok) throw new Error("OCI multipart initiation failed (" + response.status + ")");
+  const payload = (await response.json()) as { uploadId?: string };
+  if (!payload.uploadId) throw new Error("OCI multipart initiation returned no upload ID");
+  return { uploadId: payload.uploadId, key: opts.key, bucket: cfg.bucket, namespace };
+}
+
+export type MultipartPart = { partNum: number; etag: string };
+
+/** Create a narrowly scoped signature for a single UploadPart request. */
+export async function createMultipartPartRequest(opts: { key: string; uploadId: string; partNum: number; byteSize: number; sha256: string }) {
+  if (!Number.isInteger(opts.partNum) || opts.partNum < 1 || opts.partNum > 10_000) throw new Error("Invalid OCI multipart part number");
+  if (!Number.isSafeInteger(opts.byteSize) || opts.byteSize <= 0) throw new Error("Invalid OCI multipart part size");
+  if (!/^[A-Za-z0-9+/]{43}=$/.test(opts.sha256)) throw new Error("Invalid SHA-256 digest");
+  const cfg = config();
+  const namespace = await resolveNamespace(cfg);
+  const path = "/n/" + encodeURIComponent(namespace) + "/b/" + encodeURIComponent(cfg.bucket) + "/u/" + encodedObjectName(opts.key);
+  const url = new URL(path, endpoint(cfg.region));
+  url.searchParams.set("uploadId", opts.uploadId);
+  url.searchParams.set("uploadPartNum", String(opts.partNum));
+  const date = new Date().toUTCString();
+  const contentType = "application/octet-stream";
+  const contentLength = String(opts.byteSize);
+  const names = ["(request-target)", "host", "date", "content-type", "content-length", "x-content-sha256"];
+  const lines = ["(request-target): put " + url.pathname + url.search, "host: " + url.host, "date: " + date, "content-type: " + contentType, "content-length: " + contentLength, "x-content-sha256: " + opts.sha256];
+  const signer = createSign("RSA-SHA256");
+  signer.update(lines.join("\n"));
+  signer.end();
+  const signature = signer.sign(cfg.privateKey, "base64");
+  const authorization = 'Signature version="1",keyId="' + cfg.tenancy + "/" + cfg.user + "/" + cfg.fingerprint + '",algorithm="rsa-sha256",headers="' + names.join(" ") + '",signature="' + signature + '"';
+  return { url: url.toString(), headers: { authorization, date, "content-type": contentType, "x-content-sha256": opts.sha256 } };
+}
+
+export async function commitMultipartUpload(opts: { key: string; uploadId: string; parts: MultipartPart[] }) {
+  if (!opts.parts.length || opts.parts.length > 10_000) throw new Error("Invalid OCI multipart completion manifest");
+  for (let i = 0; i < opts.parts.length; i += 1) {
+    if (opts.parts[i]!.partNum !== i + 1 || !opts.parts[i]!.etag.trim()) throw new Error("OCI multipart completion manifest must contain ordered part numbers and ETags");
+  }
+  const cfg = config();
+  const namespace = await resolveNamespace(cfg);
+  const path = "/n/" + encodeURIComponent(namespace) + "/b/" + encodeURIComponent(cfg.bucket) + "/u/" + encodedObjectName(opts.key) + "?uploadId=" + encodeURIComponent(opts.uploadId);
+  const response = await signedFetch({ cfg, method: "POST", path, body: { partsToCommit: opts.parts.map(({ partNum, etag }) => ({ partNum, etag })) } });
+  if (!response.ok) throw new Error("OCI multipart completion failed (" + response.status + ")");
+  return { committed: true, key: opts.key };
+}
+
+export async function abortMultipartUpload(opts: { key: string; uploadId: string }) {
+  const cfg = config();
+  const namespace = await resolveNamespace(cfg);
+  const path = "/n/" + encodeURIComponent(namespace) + "/b/" + encodeURIComponent(cfg.bucket) + "/u/" + encodedObjectName(opts.key) + "?uploadId=" + encodeURIComponent(opts.uploadId);
+  const response = await signedFetch({ cfg, method: "DELETE", path });
+  if (!response.ok && response.status !== 404) throw new Error("OCI multipart abort failed (" + response.status + ")");
+  return { aborted: response.status !== 404, key: opts.key };
 }

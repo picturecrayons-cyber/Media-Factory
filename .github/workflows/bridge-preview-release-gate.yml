@@ -1,0 +1,63 @@
+name: Bridge Preview Release Gate
+
+on:
+  workflow_dispatch:
+    inputs:
+      candidate_sha:
+        description: Full commit SHA to test (must be the selected workflow ref's exact commit)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  preview-preflight:
+    name: Preview isolation configuration preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: bridge-preview-storage
+    env:
+      BRIDGE_RELEASE_GATE_ENV: preview
+      BRIDGE_CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+      BRIDGE_PREVIEW_DATABASE_URL: ${{ secrets.BRIDGE_PREVIEW_DATABASE_URL }}
+      BRIDGE_PREVIEW_DATABASE_DISPOSABLE: ${{ vars.BRIDGE_PREVIEW_DATABASE_DISPOSABLE }}
+      VITE_SUPABASE_URL: ${{ vars.BRIDGE_PREVIEW_SUPABASE_URL }}
+      OCI_TENANCY_OCID: ${{ secrets.OCI_TENANCY_OCID }}
+      BRIDGE_PREVIEW_OCI_TENANCY_OCID: ${{ secrets.BRIDGE_PREVIEW_OCI_TENANCY_OCID }}
+      OCI_USER_OCID: ${{ secrets.OCI_USER_OCID }}
+      OCI_PRIVATE_KEY: ${{ secrets.OCI_PRIVATE_KEY }}
+      OCI_REGION: ${{ vars.OCI_REGION }}
+      OCI_NAMESPACE: ${{ vars.OCI_NAMESPACE }}
+      OCI_BUCKET_NAME: ${{ vars.OCI_BUCKET_NAME }}
+      BRIDGE_PREVIEW_OCI_BUCKET: ${{ vars.BRIDGE_PREVIEW_OCI_BUCKET }}
+      RAZORPAY_KEY_ID: ${{ secrets.RAZORPAY_KEY_ID }}
+      RAZORPAY_KEY_SECRET: ${{ secrets.RAZORPAY_KEY_SECRET }}
+      RAZORPAY_WEBHOOK_SECRET: ${{ secrets.RAZORPAY_WEBHOOK_SECRET }}
+    steps:
+      - name: Checkout exact candidate
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.candidate_sha }}
+          persist-credentials: false
+
+      - name: Verify checkout matches requested candidate
+        env:
+          CHECKED_OUT_SHA: ${{ github.sha }}
+        run: |
+          test "$(git rev-parse HEAD)" = "${BRIDGE_CANDIDATE_SHA}"
+          test "$(git rev-parse HEAD)" = "${CHECKED_OUT_SHA}"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Test fail-closed preflight logic
+        run: node --test scripts/preview-release-preflight.test.mjs
+
+      - name: Run fail-closed preview isolation preflight
+        run: node scripts/preview-release-preflight.mjs
