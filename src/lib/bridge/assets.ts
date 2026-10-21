@@ -193,10 +193,10 @@ export const resumeAssetMultipartUpload = createServerFn({ method: "POST" })
     const rows = await sql<{
       id: string; asset_id: string; title_id: string; created_by: string; status: string;
       file_size: number | string; part_size: number | string; encrypted_access_uri: string;
-      expires_at: string | Date; object_key: string; content_type: string;
+      expires_at: string | Date; object_key: string; content_type: string; upload_id: string;
     }>`
       select id, asset_id, title_id, created_by, status, file_size, part_size,
-             encrypted_access_uri, expires_at, object_key, content_type
+             encrypted_access_uri, expires_at, object_key, content_type, upload_id
       from bridge_asset_upload_sessions where id = ${data.sessionId} limit 1
     `;
     const session = rows[0];
@@ -204,6 +204,9 @@ export const resumeAssetMultipartUpload = createServerFn({ method: "POST" })
     await requireUploadSessionAccess(session, actor);
     if (["ABORTED", "FAILED"].includes(session.status)) throw new Error("This upload session is no longer resumable");
     if (session.status === "ACTIVE" && new Date(session.expires_at).getTime() <= Date.now()) {
+      const { abortMultipartUploadById } = await import("./oci-object-storage.server");
+      try { await abortMultipartUploadById(session.object_key, session.upload_id); } catch { /* best-effort expiry cleanup */ }
+      await sql`update bridge_asset_upload_sessions set status = 'ABORTED', updated_at = now() where id = ${session.id} and status = 'ACTIVE'`;
       throw new Error("Upload session expired; restart the upload");
     }
     const partRows = await sql<{ part_number: number; etag: string; byte_size: number | string }>`
@@ -377,8 +380,8 @@ export const abortAssetMultipartUpload = createServerFn({ method: "POST" })
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
     const sql = await getSql();
-    const rows = await sql<{ id: string; asset_id: string; title_id: string; created_by: string; status: string; encrypted_access_uri: string }>`
-      select id, asset_id, title_id, created_by, status, encrypted_access_uri
+    const rows = await sql<{ id: string; asset_id: string; title_id: string; created_by: string; status: string; encrypted_access_uri: string; object_key: string; upload_id: string }>`
+      select id, asset_id, title_id, created_by, status, encrypted_access_uri, object_key, upload_id
       from bridge_asset_upload_sessions where id = ${data.sessionId} limit 1
     `;
     const session = rows[0];
@@ -388,8 +391,12 @@ export const abortAssetMultipartUpload = createServerFn({ method: "POST" })
     if (["COMMITTED", "COMPLETED"].includes(session.status)) {
       throw new Error("A committed upload cannot be aborted; verify or replace the asset instead");
     }
-    const { abortMultipartUpload } = await import("./oci-object-storage.server");
-    await abortMultipartUpload(session.encrypted_access_uri);
+    const { abortMultipartUpload, abortMultipartUploadById } = await import("./oci-object-storage.server");
+    try {
+      await abortMultipartUpload(session.encrypted_access_uri);
+    } catch {
+      await abortMultipartUploadById(session.object_key, session.upload_id);
+    }
     await sql`
       update bridge_asset_upload_sessions set status = 'ABORTED', updated_at = now()
       where id = ${session.id} and status in ('ACTIVE','COMMITTING')
