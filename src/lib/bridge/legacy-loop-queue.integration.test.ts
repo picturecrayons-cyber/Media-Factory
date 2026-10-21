@@ -57,6 +57,11 @@ test("Bridge asset verification persists successfully when the optional legacy L
     assert.equal(Number(asset.rows[0]?.byte_size), 2048);
     assert.equal(asset.rows[0]?.s3_key, sealedKey);
 
+    const title = await db.query<{ status: string }>(
+      "select status from bridge_titles where id = 'synthetic-title-queue-absent'",
+    );
+    assert.equal(title.rows[0]?.status, "PREPARING", "synthetic verification must not publish the title");
+
     const audit = await db.query<{ action: string }>(
       "select action from bridge_audit_logs where entity_id = 'synthetic-asset-queue-absent'",
     );
