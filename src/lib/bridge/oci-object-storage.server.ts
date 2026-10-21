@@ -363,6 +363,18 @@ export async function abortMultipartUpload(encryptedAccessUri: string) {
   return { aborted: true };
 }
 
+/** Abort a multipart upload with OCI API credentials when the PAR has expired. */
+export async function abortMultipartUploadById(key: string, uploadId: string) {
+  const cfg = config();
+  const namespace = await resolveNamespace(cfg);
+  const path = `/n/${encodeURIComponent(namespace)}/b/${encodeURIComponent(cfg.bucket)}/u/${encodedObjectName(key)}?uploadId=${encodeURIComponent(uploadId)}`;
+  const response = await signedFetch({ cfg, method: "DELETE", path });
+  if (!response.ok && response.status !== 404) {
+    throw new Error(`OCI multipart cleanup failed (${response.status})`);
+  }
+  return { aborted: true };
+}
+
 export async function deleteObject(key: string) {
   const cfg = config();
   const namespace = await resolveNamespace(cfg);
