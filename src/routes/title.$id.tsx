@@ -315,6 +315,8 @@ function FilesPanel({
   const [progress, setProgress] = useState<UploadProgress | null>(null);
   const uploadXhrRef = useRef<XMLHttpRequest | null>(null);
   const cancelRequestedRef = useRef(false);
+  // Invalidates any in-flight preparation/confirmation continuation after cancel or a newer attempt.
+  const uploadAttemptRef = useRef(0);
 
   function announce(text: string, kind: "status" | "success" | "error" = "status", desktop = false) {
     setMessage(text);
@@ -393,6 +395,12 @@ function FilesPanel({
     }
 
     cancelRequestedRef.current = false;
+    const attemptId = ++uploadAttemptRef.current;
+    const assertAttemptActive = () => {
+      if (cancelRequestedRef.current || uploadAttemptRef.current !== attemptId) {
+        throw new Error("Upload cancelled. No further transfer or confirmation will be started by this attempt.");
+      }
+    };
     setUploading(kind);
     setProgress({ kind, phase: "preparing", percent: null, etaSeconds: null, loaded: 0, total: file.size });
     announce(`Preparing ${kind} upload. You can follow progress here.`);
@@ -404,25 +412,31 @@ function FilesPanel({
         "Upload URL preparation",
       );
 
+      // Cancellation can happen while URL preparation is pending. Never start a PUT for a stale attempt.
+      assertAttemptActive();
       // Use the OCI pre-authenticated URL verbatim; rewriting its encoded path can invalidate it.
       setProgress({ kind, phase: "transferring", percent: 0, etaSeconds: null, loaded: 0, total: file.size });
       announce(`Uploading ${kind}…`);
       transferTimer = setTimeout(() => uploadXhrRef.current?.abort(), 120_000);
       await transferWithProgress(kind, signed.url, signed.method, file, contentType);
+      assertAttemptActive();
       if (transferTimer !== undefined) clearTimeout(transferTimer);
       transferTimer = undefined;
 
       setProgress({ kind, phase: "verifying", percent: null, etaSeconds: null, loaded: file.size, total: file.size });
       announce(`Upload transferred. Verifying stored ${kind} before marking it Ready…`);
+      assertAttemptActive();
       await withTimeout(
         confirmAssetUpload({ data: { assetId: signed.assetId, expectedByteSize: file.size } }),
         55_000,
         "Stored-object verification",
       );
+      assertAttemptActive();
 
       setProgress({ kind, phase: "refreshing", percent: null, etaSeconds: null, loaded: file.size, total: file.size });
       announce("Storage verified. Refreshing the asset list…");
       await withTimeout(Promise.resolve(onAssetsChanged()), 15_000, "Asset refresh");
+      assertAttemptActive();
       setProgress(null);
       announce(`${kind[0].toUpperCase() + kind.slice(1)} is ready after storage verification.`, "success", true);
     } catch (error) {
@@ -440,9 +454,11 @@ function FilesPanel({
       announce(detail, "error", true);
     } finally {
       if (transferTimer !== undefined) clearTimeout(transferTimer);
-      uploadXhrRef.current = null;
-      cancelRequestedRef.current = false;
-      setUploading(null);
+      if (uploadAttemptRef.current === attemptId) {
+        uploadXhrRef.current = null;
+        cancelRequestedRef.current = false;
+        setUploading(null);
+      }
     }
   }
 
@@ -495,6 +511,8 @@ function FilesPanel({
               type="button"
               onClick={() => {
                 cancelRequestedRef.current = true;
+                // Invalidate this attempt so a late URL-preparation result cannot start a PUT.
+                uploadAttemptRef.current += 1;
                 uploadXhrRef.current?.abort();
                 if (!uploadXhrRef.current) {
                   setProgress(null);
