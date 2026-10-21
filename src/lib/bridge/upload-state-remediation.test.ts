@@ -210,7 +210,7 @@ test("atomic state transition: migration queue and title master/poster only adva
 
 test("duplicate upload confirmations derive the same sealed key from the asset row ID", () => {
   const assets = readFileSync(join(process.cwd(), "src/lib/bridge/assets.ts"), "utf8");
-  assert.match(assets, /const sealedKey = `\$\{asset\\.s3_key\}\\.verified\/\$\{asset\\.id\}`;/);
+  assert.ok(assets.includes('const sealedKey = `${asset.s3_key}.verified/${asset.id}`;'));
   assert.doesNotMatch(assets, /randomUUID/);
 });
 
