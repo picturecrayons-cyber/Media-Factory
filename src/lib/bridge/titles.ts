@@ -280,9 +280,29 @@ export const getTitle = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .validator(z.object({ id: z.string().min(8), includeEvents: z.boolean().optional() }))
   .handler(async ({ context, data }) => {
+    const traceEnabled = process.env.BRIDGE_PERF_TRACE === "1";
+    const totalStarted = performance.now();
+    let stageStarted = totalStarted;
+    const timings: Record<string, number> = {};
+    const mark = (name: string) => {
+      const now = performance.now();
+      timings[name] = Math.round((now - stageStarted) * 10) / 10;
+      stageStarted = now;
+    };
+    const report = () => {
+      if (traceEnabled) {
+        console.info("[bridge-perf] title-read", {
+          ...timings,
+          total_ms: Math.round((performance.now() - totalStarted) * 10) / 10,
+          includes_events: data.includeEvents !== false,
+        });
+      }
+    };
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
+    mark("actor_ms");
     const title = await loadTitle(data.id);
+    mark("title_load_ms");
     if (!title) throw new Error("Not found");
     const sql = await getSql();
     if (actor.accountType === "investor" && !actor.internalRole) {
@@ -293,7 +313,11 @@ export const getTitle = createServerFn({ method: "GET" })
       if (actor.accountType !== "buyer") throw new Error("Not found");
       await assertBuyerPublishable(title.id);
     }
-    if (data.includeEvents === false) return { title, events: [] };
+    mark("access_check_ms");
+    if (data.includeEvents === false) {
+      report();
+      return { title, events: [] };
+    }
     const events = await sql<{
       from_status: string | null;
       to_status: string;
@@ -304,6 +328,8 @@ export const getTitle = createServerFn({ method: "GET" })
       select from_status, to_status, actor_user_id, note, created_at
       from bridge_title_events where title_id = ${title.id} order by created_at asc
     `;
+    mark("events_query_ms");
+    report();
     return {
       title,
       events: events.map((e) => ({
