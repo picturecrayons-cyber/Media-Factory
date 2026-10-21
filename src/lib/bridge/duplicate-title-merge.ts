@@ -147,6 +147,14 @@ export function evaluateDuplicateTitleMerge(input: MergeEvaluationInput): {
     return { decision: "BLOCK", reasons: ["TITLE_IDENTITY_UNCERTAIN"], collisions: {} };
   }
 
+  // These are identity/authority gates, not fields to be silently reconciled.
+  if (input.canonical.owner_user_id !== input.retiring.owner_user_id) reasons.push("TITLE_OWNER_CONFLICT");
+  if (input.canonical.status !== input.retiring.status) reasons.push("TITLE_STATUS_CONFLICT");
+  if (input.canonical.runtime_minutes !== input.retiring.runtime_minutes) reasons.push("RUNTIME_CONFLICT");
+  if (input.canonical.status === "LIVE_FOR_BUYERS" || input.retiring.status === "LIVE_FOR_BUYERS") {
+    reasons.push("BUYER_LIFECYCLE_REQUIRES_REVIEW");
+  }
+
   const titleLanguageConflict =
     Boolean(input.canonical.language && input.retiring.language) &&
     input.canonical.language!.trim().toUpperCase() !== input.retiring.language!.trim().toUpperCase();
@@ -205,7 +213,7 @@ async function loadMergeState(sql: any, titleId: string) {
 
 export const previewDuplicateTitleMerge = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .validator(z.object({ canonicalTitleId: z.string().min(8), retiringTitleId: z.string().min(8) }))
+  .validator(z.object({ canonicalTitleId: z.string().min(8), retiringTitleId: z.string().min(8), identityCertain: z.boolean().default(false) }))
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
@@ -216,7 +224,7 @@ export const previewDuplicateTitleMerge = createServerFn({ method: "POST" })
     const retiring = await loadMergeState(sql, data.retiringTitleId);
     if (!canonical.title || !retiring.title) throw new Error("Both title records must exist.");
     const result = evaluateDuplicateTitleMerge({
-      identityCertain: true,
+      identityCertain: data.identityCertain,
       canonical: canonical.title,
       retiring: retiring.title,
       canonicalRights: canonical.rights,
@@ -245,6 +253,7 @@ export const mergeDuplicateTitle = createServerFn({ method: "POST" })
   .validator(z.object({
     canonicalTitleId: z.string().min(8),
     retiringTitleId: z.string().min(8),
+    identityAttested: z.literal(true),
     expectedDecision: z.literal("SAFE"),
   }))
   .handler(async ({ context, data }) => {
@@ -260,7 +269,7 @@ export const mergeDuplicateTitle = createServerFn({ method: "POST" })
       if (!canonical.title || !retiring.title) throw new Error("Both title records must exist.");
 
       const decision = evaluateDuplicateTitleMerge({
-        identityCertain: true,
+        identityCertain: data.identityAttested,
         canonical: canonical.title,
         retiring: retiring.title,
         canonicalRights: canonical.rights,
