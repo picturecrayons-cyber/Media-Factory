@@ -171,9 +171,11 @@ export const requestAssetDownload = createServerFn({ method: "POST" })
       title_id: string;
       kind: string;
       s3_key: string;
+      content_type: string | null;
       byte_size: number | null;
     }>`
-      select id, title_id, kind, s3_key, byte_size from bridge_assets where id = ${data.assetId} and byte_size > 0 limit 1
+      select id, title_id, kind, s3_key, content_type, byte_size
+      from bridge_assets where id = ${data.assetId} limit 1
     `;
     const asset = rows[0];
     if (!asset) throw new Error("Not found");
@@ -197,13 +199,38 @@ export const requestAssetDownload = createServerFn({ method: "POST" })
       });
       throw new Error(decision.reason);
     }
-    const { signDownload } = await import("./oci-object-storage.server");
-    const signed = await signDownload({ key: asset.s3_key });
+    const { signDownload, verifyObject } = await import("./oci-object-storage.server");
+    if (asset.byte_size == null) {
+      if (actor.internalRole !== "super_admin") {
+        await writeAudit({
+          actorUserId: actor.userId,
+          action: "asset.download_denied",
+          entityType: "bridge_asset",
+          entityId: asset.id,
+          metadata: { reason: "Asset has not passed storage verification", kind: asset.kind },
+        });
+        throw new Error("This asset has not passed storage verification");
+      }
+      try {
+        await verifyObject(asset.s3_key, asset.content_type);
+      } catch (cause) {
+        await writeAudit({
+          actorUserId: actor.userId,
+          action: "asset.download_unverified_failed",
+          entityType: "bridge_asset",
+          entityId: asset.id,
+          metadata: { kind: asset.kind, reason: cause instanceof Error ? cause.message : "Source object verification failed" },
+        });
+        throw new Error("Unverified source object is unavailable in storage");
+      }
+    }
+    const signed = await signDownload({ key: asset.s3_key, expiresIn: 300 });
     await writeAudit({
       actorUserId: actor.userId,
-      action: "asset.download_signed",
+      action: asset.byte_size == null ? "asset.download_unverified_signed" : "asset.download_signed",
       entityType: "bridge_asset",
       entityId: asset.id,
+      metadata: { kind: asset.kind, storageVerified: asset.byte_size != null },
     });
     return { url: signed.url, method: signed.method, expiresIn: 300 };
   });
