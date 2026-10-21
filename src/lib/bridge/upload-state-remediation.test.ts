@@ -224,7 +224,7 @@ test("verification timeout warns that server-side work may still complete and re
 
 test("legacy Loop migration queue is optional in isolated Preview schemas", () => {
   const assets = readFileSync(join(process.cwd(), "src/lib/bridge/assets.ts"), "utf8");
-  assert.match(assets, /to_regclass\('public\\.loop_media_migration_queue'\)/);
+  assert.match(assets, /to_regclass\('public\.loop_media_migration_queue'\)/);
   assert.match(assets, /if \(queueTable\[0\]\?\.present\)/);
   assert.match(assets, /confirmed && queueTable\[0\]\?\.present/);
 });
