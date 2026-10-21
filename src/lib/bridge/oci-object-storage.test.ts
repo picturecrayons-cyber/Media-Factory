@@ -68,7 +68,7 @@ test("OCI copy polling uses Object Storage and only verifies successful copies",
   const originalFetch = globalThis.fetch;
   Object.assign(process.env, values);
   try {
-    for (const outcome of ["SUCCEEDED", "FAILED", "CANCELED", "HTTP_ERROR"]) {
+    for (const outcome of ["SUCCEEDED", "FAILED", "CANCELED", "HTTP_ERROR", "WORK_REQUEST_404"]) {
       await t.test(outcome, async () => {
         const calls: Array<{ url: URL; method: string }> = [];
         globalThis.fetch = async (input, init) => {
@@ -90,15 +90,17 @@ test("OCI copy polling uses Object Storage and only verifies successful copies",
             assert.ok(verify("RSA-SHA256", Buffer.from(signed), publicKey, Buffer.from(signature, "base64")));
             return outcome === "HTTP_ERROR"
               ? new Response(null, { status: 403 })
-              : Response.json({ status: outcome });
+              : outcome === "WORK_REQUEST_404"
+                ? new Response(null, { status: 404 })
+                : Response.json({ status: outcome });
           }
           assert.equal(method, "HEAD");
           assert.equal(url.pathname, "/n/test-namespace/b/test-bucket/o/sealed-key");
           return new Response(null, { headers: { "content-length": "12", etag: '"sealed-etag"' } });
         };
-        if (outcome === "SUCCEEDED") {
+        if (outcome === "SUCCEEDED" || outcome === "WORK_REQUEST_404") {
           assert.equal((await sealVerifiedObject("source-key", "sealed-key", "source-etag")).byteSize, 12);
-          assert.deepEqual(calls.map((call) => call.method), ["POST", "GET", "HEAD"]);
+          assert.deepEqual(calls.map((call) => call.method), outcome === "SUCCEEDED" ? ["POST", "GET", "HEAD"] : ["POST", "GET", "HEAD"]);
         } else {
           const message = outcome === "HTTP_ERROR" ? /lookup failed \(403\)/ : new RegExp(`copy ${outcome.toLowerCase()}`);
           await assert.rejects(sealVerifiedObject("source-key", "sealed-key", "source-etag"), message);
