@@ -6,7 +6,10 @@ import { listTitles } from "@/lib/bridge/titles";
 import { BRIDGE_LOOP_LANES, loopStageType } from "@/lib/bridge/loop-lanes";
 import { getDashboardSession } from "@/lib/bridge/session";
 
-export const Route = createFileRoute("/dashboard")({ component: Dashboard });
+export const Route = createFileRoute("/dashboard")({
+  head: () => ({ meta: [{ name: "robots", content: "noindex, nofollow" }] }),
+  component: Dashboard,
+});
 
 function Dashboard() {
   return (
