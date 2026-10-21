@@ -61,6 +61,11 @@ function WorkstationBody() {
         </div>
       </section>
 
+      <section className="rounded-2xl border border-line bg-surface p-4">
+        <h3 className="font-semibold">Workflow discovery</h3>
+        <p className="mt-1 text-sm text-muted">Curation → QC → legal and rights → OTT readiness → packaging and localization. Each stage is a review workspace; nothing is auto-approved or published.</p>
+        <p className="mt-2 text-xs text-muted">Use the tabs below to inspect canonical title records, evidence, assets, buyer gates, package status and audit history.</p>
+      </section>
       <nav className="flex gap-2 overflow-x-auto border-b border-line pb-2">
         {TABS.map((tab) => (
           <button key={tab} type="button" onClick={() => setActiveTab(tab)}
