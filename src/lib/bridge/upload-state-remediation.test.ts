@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { PGlite } from "@electric-sql/pglite";
 import { ASSET_KINDS, type AssetKind } from "./types.ts";
 import { persistVerifiedAsset } from "./asset-confirmation.ts";
+import { markLegacyLoopQueueUploaded, markLegacyLoopQueueVerified } from "./legacy-loop-queue.ts";
 import { validateOttIngestFile } from "./ott-ingest-spec.ts";
 
 test("all 9 supported asset types are valid in OTT ingest specification", () => {
@@ -222,9 +223,91 @@ test("verification timeout warns that server-side work may still complete and re
 });
 
 
-test("legacy Loop migration queue is optional in isolated Preview schemas", () => {
-  const assets = readFileSync(join(process.cwd(), "src/lib/bridge/assets.ts"), "utf8");
-  assert.match(assets, /to_regclass\('public\.loop_media_migration_queue'\)/);
-  assert.match(assets, /if \(queueTable\[0\]\?\.present\)/);
-  assert.match(assets, /confirmed && queueTable\[0\]\?\.present/);
+test("missing legacy Loop queue skips both status updates without failing", async () => {
+  const db = new PGlite();
+  try {
+    await db.waitReady;
+    const presence = await db.query<{ present: boolean }>(
+      "select to_regclass('public.loop_media_migration_queue') is not null as present",
+    );
+    assert.equal(presence.rows[0]?.present, false);
+
+    await markLegacyLoopQueueUploaded(presence.rows[0]!.present, async () => {
+      await db.query("update loop_media_migration_queue set status = 'UPLOADED'");
+    });
+    await markLegacyLoopQueueVerified(presence.rows[0]!.present, true, async () => {
+      await db.query("update loop_media_migration_queue set status = 'VERIFIED'");
+    });
+
+    const after = await db.query<{ present: boolean }>(
+      "select to_regclass('public.loop_media_migration_queue') is not null as present",
+    );
+    assert.equal(after.rows[0]?.present, false);
+  } finally {
+    await db.close();
+  }
+});
+
+test("present legacy Loop queue transitions to UPLOADED then VERIFIED only after confirmation", async () => {
+  const db = new PGlite();
+  try {
+    await db.waitReady;
+    await db.exec(`
+      create table loop_media_migration_queue (
+        title_id text not null,
+        asset_kind text not null,
+        status text not null,
+        target_path text,
+        updated_at timestamptz not null default now()
+      );
+      insert into loop_media_migration_queue (title_id, asset_kind, status)
+      values ('synthetic-title', 'TRAILER', 'PENDING_REUPLOAD');
+    `);
+
+    const presence = await db.query<{ present: boolean }>(
+      "select to_regclass('public.loop_media_migration_queue') is not null as present",
+    );
+    assert.equal(presence.rows[0]?.present, true);
+    const sealedKey = "synthetic/title/screener.verified/synthetic-asset";
+
+    await markLegacyLoopQueueUploaded(presence.rows[0]!.present, async () => {
+      await db.query(
+        `update loop_media_migration_queue
+         set status = 'UPLOADED', target_path = $1, updated_at = now()
+         where title_id = 'synthetic-title' and asset_kind = 'TRAILER'
+           and status in ('PENDING_REUPLOAD', 'UPLOADED')`,
+        [sealedKey],
+      );
+    });
+    let state = await db.query<{ status: string; target_path: string }>(
+      "select status, target_path from loop_media_migration_queue where title_id = 'synthetic-title'",
+    );
+    assert.equal(state.rows[0]?.status, "UPLOADED");
+    assert.equal(state.rows[0]?.target_path, sealedKey);
+
+    await markLegacyLoopQueueVerified(presence.rows[0]!.present, false, async () => {
+      await db.query("update loop_media_migration_queue set status = 'VERIFIED'");
+    });
+    state = await db.query(
+      "select status, target_path from loop_media_migration_queue where title_id = 'synthetic-title'",
+    );
+    assert.equal(state.rows[0]?.status, "UPLOADED");
+
+    await markLegacyLoopQueueVerified(presence.rows[0]!.present, true, async () => {
+      await db.query(
+        `update loop_media_migration_queue
+         set status = 'VERIFIED', target_path = $1, updated_at = now()
+         where title_id = 'synthetic-title' and asset_kind = 'TRAILER'
+           and status in ('UPLOADED', 'PENDING_REUPLOAD')`,
+        [sealedKey],
+      );
+    });
+    state = await db.query(
+      "select status, target_path from loop_media_migration_queue where title_id = 'synthetic-title'",
+    );
+    assert.equal(state.rows[0]?.status, "VERIFIED");
+    assert.equal(state.rows[0]?.target_path, sealedKey);
+  } finally {
+    await db.close();
+  }
 });
