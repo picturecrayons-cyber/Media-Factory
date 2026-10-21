@@ -17,6 +17,7 @@ export type MergeTitle = {
   language: string | null;
   status: string;
   owner_user_id: string | null;
+  owner_account_type?: string | null;
   year: number | null;
   runtime_minutes: number | null;
   original_language?: string | null;
@@ -150,7 +151,7 @@ export function evaluateDuplicateTitleMerge(input: MergeEvaluationInput): {
   }
 
   // These are identity/authority gates, not fields to be silently reconciled.
-  if (input.canonical.owner_user_id !== input.retiring.owner_user_id) reasons.push("TITLE_OWNER_CONFLICT");
+  if (input.canonical.owner_user_id !== input.retiring.owner_user_id || (input.canonical.owner_account_type && input.retiring.owner_account_type && input.canonical.owner_account_type !== input.retiring.owner_account_type)) reasons.push("TITLE_OWNER_CONFLICT");
   if (input.canonical.status !== input.retiring.status) reasons.push("TITLE_STATUS_CONFLICT");
   if (input.canonical.runtime_minutes !== input.retiring.runtime_minutes) reasons.push("RUNTIME_CONFLICT");
   if (input.canonical.status === "LIVE_FOR_BUYERS" || input.retiring.status === "LIVE_FOR_BUYERS") {
@@ -196,7 +197,7 @@ async function loadMergeState(sql: any, titleId: string) {
     qcCases, legalCases, events, payments, serviceOrders, serviceQuotes, loopTitles,
     migrationQueue, rentalEntitlements,
   ] = await Promise.all([
-    sql<MergeTitle>`select id,name,slug,language,status,owner_user_id,year,runtime_minutes,original_language from public.bridge_titles where id=${titleId} limit 1`,
+    sql<MergeTitle>`select id,name,slug,language,status,owner_user_id,owner_account_type,year,runtime_minutes,original_language from public.bridge_titles where id=${titleId} limit 1`,
     sql<MergeRights>`select id,territories,languages,window_start,window_end,exclusivity,status from public.bridge_rights_grants where title_id=${titleId} order by created_at`,
     sql`select * from public.bridge_buyer_title_access where title_id=${titleId} order by buyer_user_id`,
     sql`select id,asset_group,asset_type,version,language,codec,s3_key,checksum_sha256,processing_state from public.bridge_asset_versions where title_id=${titleId} order by asset_group,asset_type,version,language`,
@@ -270,7 +271,7 @@ export const mergeDuplicateTitle = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
-    assertPermission(actor, "title.update_own");
+    assertPermission(actor, "title.merge_duplicate");
     if (data.canonicalTitleId === data.retiringTitleId) throw new Error("A title cannot merge into itself.");
 
     const sql = await getSql();
