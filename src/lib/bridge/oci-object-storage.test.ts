@@ -139,3 +139,179 @@ test("OCI object verification rejects an unexpected content type", async () => {
     }
   }
 });
+
+test("OCI copy work-request handles transient 404 propagation delay and recovers", async () => {
+  const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  const values = {
+    OCI_TENANCY_OCID: "test-tenancy",
+    OCI_USER_OCID: "test-user",
+    OCI_PRIVATE_KEY: privateKey.export({ type: "pkcs8", format: "pem" }).toString(),
+    OCI_FINGERPRINT: "test-fingerprint",
+    OCI_REGION: "ap-mumbai-1",
+    OCI_NAMESPACE: "test-namespace",
+    OCI_BUCKET_NAME: "test-bucket",
+  };
+  const saved = Object.fromEntries(Object.keys(values).map((key) => [key, process.env[key]]));
+  const originalFetch = globalThis.fetch;
+  Object.assign(process.env, values);
+
+  try {
+    let getAttempts = 0;
+    globalThis.fetch = async (input, init) => {
+      const url = new URL(String(input));
+      const method = init?.method || "GET";
+      if (method === "POST") {
+        return new Response(null, { status: 202, headers: { "opc-work-request-id": "wr-transient-1" } });
+      }
+      if (method === "GET") {
+        getAttempts += 1;
+        // First attempt returns 404 (temporary not-yet-visible during propagation window)
+        if (getAttempts === 1) {
+          return new Response(null, { status: 404 });
+        }
+        // Second attempt returns SUCCEEDED
+        return Response.json({ status: "SUCCEEDED" });
+      }
+      // HEAD on destination object
+      return new Response(null, { headers: { "content-length": "42", etag: '"sealed-etag"' } });
+    };
+
+    const sealed = await sealVerifiedObject("src", "dst", "etag", {
+      propagationGracePeriodMs: 5_000,
+      pollIntervalMs: 5,
+    });
+    assert.equal(sealed.byteSize, 42);
+    assert.equal(getAttempts, 2);
+  } finally {
+    globalThis.fetch = originalFetch;
+    for (const [key, value] of Object.entries(saved)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+});
+
+test("OCI copy work-request fails closed on persistent 404 after propagation grace period", async () => {
+  const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  const values = {
+    OCI_TENANCY_OCID: "test-tenancy",
+    OCI_USER_OCID: "test-user",
+    OCI_PRIVATE_KEY: privateKey.export({ type: "pkcs8", format: "pem" }).toString(),
+    OCI_FINGERPRINT: "test-fingerprint",
+    OCI_REGION: "ap-mumbai-1",
+    OCI_NAMESPACE: "test-namespace",
+    OCI_BUCKET_NAME: "test-bucket",
+  };
+  const saved = Object.fromEntries(Object.keys(values).map((key) => [key, process.env[key]]));
+  const originalFetch = globalThis.fetch;
+  Object.assign(process.env, values);
+
+  try {
+    globalThis.fetch = async (input, init) => {
+      const method = init?.method || "GET";
+      if (method === "POST") {
+        return new Response(null, { status: 202, headers: { "opc-work-request-id": "wr-persistent-404" } });
+      }
+      if (method === "GET") {
+        return new Response(null, { status: 404 });
+      }
+      return new Response(null, { headers: { "content-length": "42", etag: '"sealed-etag"' } });
+    };
+
+    await assert.rejects(
+      sealVerifiedObject("src", "dst", "etag", {
+        propagationGracePeriodMs: 20,
+        pollIntervalMs: 5,
+      }),
+      /lookup failed \(404\)/,
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+    for (const [key, value] of Object.entries(saved)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+});
+
+test("OCI copy fails when destination object is missing after copy completion", async () => {
+  const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  const values = {
+    OCI_TENANCY_OCID: "test-tenancy",
+    OCI_USER_OCID: "test-user",
+    OCI_PRIVATE_KEY: privateKey.export({ type: "pkcs8", format: "pem" }).toString(),
+    OCI_FINGERPRINT: "test-fingerprint",
+    OCI_REGION: "ap-mumbai-1",
+    OCI_NAMESPACE: "test-namespace",
+    OCI_BUCKET_NAME: "test-bucket",
+  };
+  const saved = Object.fromEntries(Object.keys(values).map((key) => [key, process.env[key]]));
+  const originalFetch = globalThis.fetch;
+  Object.assign(process.env, values);
+
+  try {
+    globalThis.fetch = async (input, init) => {
+      const method = init?.method || "GET";
+      if (method === "POST") {
+        return new Response(null, { status: 202, headers: { "opc-work-request-id": "wr-ok" } });
+      }
+      if (method === "GET") {
+        return Response.json({ status: "SUCCEEDED" });
+      }
+      // Destination HEAD returns 404
+      return new Response(null, { status: 404 });
+    };
+
+    await assert.rejects(
+      sealVerifiedObject("src", "dst", "etag", {
+        propagationGracePeriodMs: 50,
+        pollIntervalMs: 5,
+      }),
+      /verification failed \(404\)/,
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+    for (const [key, value] of Object.entries(saved)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+});
+
+test("OCI copy fails closed when copyObject returns precondition error 412", async () => {
+  const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  const values = {
+    OCI_TENANCY_OCID: "test-tenancy",
+    OCI_USER_OCID: "test-user",
+    OCI_PRIVATE_KEY: privateKey.export({ type: "pkcs8", format: "pem" }).toString(),
+    OCI_FINGERPRINT: "test-fingerprint",
+    OCI_REGION: "ap-mumbai-1",
+    OCI_NAMESPACE: "test-namespace",
+    OCI_BUCKET_NAME: "test-bucket",
+  };
+  const saved = Object.fromEntries(Object.keys(values).map((key) => [key, process.env[key]]));
+  const originalFetch = globalThis.fetch;
+  Object.assign(process.env, values);
+
+  try {
+    globalThis.fetch = async (input, init) => {
+      const method = init?.method || "GET";
+      if (method === "POST") {
+        return new Response(null, { status: 412 });
+      }
+      return new Response(null, { status: 500 });
+    };
+
+    await assert.rejects(
+      sealVerifiedObject("src", "dst", "mismatched-etag"),
+      /copy failed \(412\)/,
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+    for (const [key, value] of Object.entries(saved)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+});
+

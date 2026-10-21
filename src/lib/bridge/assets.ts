@@ -114,15 +114,6 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
       throw new Error("Uploaded object size does not match the file that was sent");
     }
     if (!object.etag) throw new Error("Object ETag is required for immutable verification");
-    // Only mark the migration queue as uploaded after OCI confirms that the object exists,
-    // has the expected size/type, and exposes an ETag. Signing a URL is not an upload.
-    await sql`
-      update loop_media_migration_queue
-      set status = 'UPLOADED', target_path = ${asset.s3_key}, updated_at = now()
-      where title_id = ${title.id}
-        and asset_kind = case when ${asset.kind} = 'screener' then 'TRAILER' else upper(${asset.kind}) end
-        and status in ('PENDING_REUPLOAD', 'UPLOADED')
-    `;
     const sealedKey = `${asset.s3_key}.verified/${randomUUID()}`;
     const sealed = await sealVerifiedObject(asset.s3_key, sealedKey, object.etag);
     if (sealed.byteSize !== object.byteSize || !sealed.etag) {
