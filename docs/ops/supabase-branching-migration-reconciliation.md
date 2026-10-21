@@ -12,58 +12,58 @@ The table is complete for the Production migration-history rows returned by Supa
 
 | Remote version | Remote migration name | Exact `supabase/migrations/<version>_*.sql` | Existing source candidate | Status |
 |---|---|---|---|---|
-| `20260925141006` | `create_legacy_import_schema` | **None** | None established | **MISSING exact timestamped local file** |
-| `20260925170237` | `bridge_auth_schema` | **None** | migrations/0001_auth.sql (semantic only) | **MISSING exact timestamped local file** |
-| `20260925170239` | `bridge_operational_schema` | **None** | migrations/0004_bridge.sql (semantic only) | **MISSING exact timestamped local file** |
-| `20260925170241` | `bridge_webhook_retry` | **None** | migrations/0005_bridge_webhook_retry.sql (semantic only) | **MISSING exact timestamped local file** |
-| `20260925170308` | `bridge_fk_indexes` | **None** | None established | **MISSING exact timestamped local file** |
-| `20260925193451` | `bridge_webhook_processing_token` | **None** | None established | **MISSING exact timestamped local file** |
-| `20260925214917` | `loop_canonical_runtime_baseline` | **None** | migrations/0006_loop_canonical.sql (semantic only) | **MISSING exact timestamped local file** |
-| `20260925214936` | `loop_runtime_rls_and_plans` | **None** | migrations/0006_loop_canonical.sql (possible overlap; unverified) | **MISSING exact timestamped local file** |
-| `20260925220714` | `bridge_loop_verified_identity_links` | **None** | migrations/0007a_identity_links.sql (semantic only) | **MISSING exact timestamped local file** |
-| `20260926045625` | `loop_payment_events_own_read_policy` | **None** | None established | **MISSING exact timestamped local file** |
-| `20260926054626` | `add_poster_studio_schema` | **None** | None established | **MISSING exact timestamped local file** |
-| `20260927094608` | `harden_server_only_grants_and_fk_indexes` | **None** | None established | **MISSING exact timestamped local file** |
-| `20260927114947` | `streamvista_media_os_service_pipeline` | **None** | migrations/0007_streamvista_media_os.sql (semantic only) | **MISSING exact timestamped local file** |
-| `20260927215559` | `bridge_data_api_lockdown` | **None** | migrations/0008_bridge_data_api_lockdown.sql (semantic only) | **MISSING exact timestamped local file** |
-| `20260927215742` | `bridge_buyer_title_access` | **None** | migrations/0009_buyer_title_access.sql (semantic only) | **MISSING exact timestamped local file** |
-| `20260927215758` | `bridge_buyer_title_access_20260928` | **None** | migrations/0009_buyer_title_access.sql (variant; unverified) | **MISSING exact timestamped local file** |
-| `20260928102539` | `bridge_profile_welcome_email_marker` | **None** | None established | **MISSING exact timestamped local file** |
-| `20260928120120` | `bridge_prd_phase1` | **None** | migrations/0010_bridge_prd_phase1.sql (semantic only) | **MISSING exact timestamped local file** |
-| `20260928154653` | `bridge_auth_protected_read_policies` | **None** | None established | **MISSING exact timestamped local file** |
-| `20260929154225` | `bind_bridge_rls_identity_and_read_scope` | **None** | migrations/0012_bridge_rls_identity_binding.sql (semantic only) | **MISSING exact timestamped local file** |
-| `20260929162737` | `harden_bridge_rls_helpers_rpc_surface` | **None** | migrations/0013_harden_bridge_rls_helpers.sql (semantic only) | **MISSING exact timestamped local file** |
-| `20260930092721` | `grant_authenticated_bridge_current_internal_role` | **None** | None established | **MISSING exact timestamped local file** |
-| `20261002171708` | `loop_release_safety` | **None** | migrations/0020_duplicate_title_merge_gate.sql (possible overlap; unverified) | **MISSING exact timestamped local file** |
-| `20261004051643` | `loop_semantic_search` | **None** | None established | **MISSING exact timestamped local file** |
-| `20261004052641` | `move_vector_to_extensions_schema` | **None** | None established | **MISSING exact timestamped local file** |
-| `20261004052646` | `rebind_loop_semantic_rpc_vector_schema` | **None** | None established | **MISSING exact timestamped local file** |
-| `20261004102348` | `delivery_trace_finance` | **None** | migrations/0015_delivery_trace_finance.sql (semantic only) | **MISSING exact timestamped local file** |
-| `20261005112318` | `investor_account_type_20261005` | **None** | migrations/0016_investor_account_type.sql (semantic only) | **MISSING exact timestamped local file** |
-| `20261005124904` | `bridge_dmca` | **None** | migrations/0011_bridge_dmca.sql (semantic only) | **MISSING exact timestamped local file** |
-| `20261005125643` | `lock_down_bridge_client_grants` | **None** | None established | **MISSING exact timestamped local file** |
-| `20261005125847` | `explicit_deny_policies_for_internal_tables` | **None** | None established | **MISSING exact timestamped local file** |
-| `20261006100425` | `allow_bridge_supabase_auth_onboarding_verification` | **None** | None established | **MISSING exact timestamped local file** |
-| `20261006152111` | `bridge_buyer_publication_gates` | **None** | migrations/0017_bridge_buyer_publication_gates.sql (semantic only) | **MISSING exact timestamped local file** |
-| `20261006154551` | `harden_authz_server_only_surfaces_20261006` | **None** | None established | **MISSING exact timestamped local file** |
-| `20261006154553` | `legacy_creator_intake_20261006` | **None** | None established | **MISSING exact timestamped local file** |
-| `20261006185556` | `bridge_commercial_engine_20261006230000` | **None** | supabase/migrations/20261006230000_bridge_commercial_engine.sql; migrations/0018_bridge_service_revenue_engine.sql (timestamp differs; unverified) | **MISSING exact timestamped local file** |
-| `20261006185640` | `harden_bridge_commercial_server_only_20261007000000` | **None** | None established | **MISSING exact timestamped local file** |
-| `20261006195531` | `bridge_commercial_control_plane_20261007013000` | **None** | supabase/migrations/20261007013000_bridge_commercial_control_plane.sql (timestamp differs; unverified) | **MISSING exact timestamped local file** |
-| `20261006195536` | `bridge_financial_reversal_hardening_20261007020000` | **None** | supabase/migrations/20261007020000_bridge_financial_reversal_hardening.sql (timestamp differs; unverified) | **MISSING exact timestamped local file** |
-| `20261006195607` | `bridge_commercial_performance_indexes_20261007023000` | **None** | supabase/migrations/20261007023000_bridge_commercial_performance_indexes.sql (timestamp differs; unverified) | **MISSING exact timestamped local file** |
-| `20261006231321` | `deep_clean_server_only_rls_20261007` | **None** | None established | **MISSING exact timestamped local file** |
-| `20261008031103` | `loop_watchlists_20261008` | **None** | None established | **MISSING exact timestamped local file** |
-| `20261008050017` | `p0_bridge_catalog_deal_room_reconciliation_20261008` | **None** | None established | **MISSING exact timestamped local file** |
-| `20261008053655` | `p0_bridge_catalog_deal_room_reconciliation_v2` | **None** | None established | **MISSING exact timestamped local file** |
-| `20261008053658` | `p0_bridge_title_catalog_columns_v2` | **None** | None established | **MISSING exact timestamped local file** |
-| `20261008053700` | `p0_loop_catalog_pranayam_visibility_v2` | **None** | None established | **MISSING exact timestamped local file** |
-| `20261008113911` | `reconcile_duplicate_title_merge_gate_20261008` | **None** | supabase/migrations/20261006170000_reconcile_duplicate_bridge_titles.sql; migrations/0020_duplicate_title_merge_gate.sql (possible overlap; unverified) | **MISSING exact timestamped local file** |
-| `20261008122836` | `enable_merge_table_rls` | **None** | None established | **MISSING exact timestamped local file** |
-| `20261009210503` | `bridge_rights_ready_submission` | **None** | migrations/0018_bridge_rights_ready_submission.sql; migrations/0018_rights_ready_public_submission.sql (two candidates; no canonical match) | **MISSING exact timestamped local file** |
-| `20261009210645` | `bridge_submission_intake_server_only` | **None** | migrations/0018_bridge_rights_ready_submission.sql; migrations/0018_rights_ready_public_submission.sql (possible related source; unverified) | **MISSING exact timestamped local file** |
-| `20261011041046` | `bridge_storage_economics_20261011` | **None** | migrations/0018_bridge_service_revenue_engine.sql; migrations/0019_bridge_service_tax_rates.sql (unverified; no same-name SQL) | **MISSING exact timestamped local file** |
-| `20261016161255` | `bridge_assets_kind_constraint_20261016` | **None** | None established | **MISSING exact timestamped local file** |
+| `20260925141006` | `create_legacy_import_schema` | **None** | None established | **SOURCE NOT RECOVERED** — no exact timestamped local file; original applied SQL payload and SHA-256 not recovered. |
+| `20260925170237` | `bridge_auth_schema` | **None** | migrations/0001_auth.sql (semantic only) | **SOURCE NOT RECOVERED** — no exact timestamped local file; original applied SQL payload and SHA-256 not recovered. |
+| `20260925170239` | `bridge_operational_schema` | **None** | migrations/0004_bridge.sql (semantic only) | **SOURCE NOT RECOVERED** — no exact timestamped local file; original applied SQL payload and SHA-256 not recovered. |
+| `20260925170241` | `bridge_webhook_retry` | **None** | migrations/0005_bridge_webhook_retry.sql (semantic only) | **SOURCE NOT RECOVERED** — no exact timestamped local file; original applied SQL payload and SHA-256 not recovered. |
+| `20260925170308` | `bridge_fk_indexes` | **None** | None established | **SOURCE NOT RECOVERED** — no exact timestamped local file; original applied SQL payload and SHA-256 not recovered. |
+| `20260925193451` | `bridge_webhook_processing_token` | **None** | None established | **SOURCE NOT RECOVERED** — no exact timestamped local file; original applied SQL payload and SHA-256 not recovered. |
+| `20260925214917` | `loop_canonical_runtime_baseline` | **None** | migrations/0006_loop_canonical.sql (semantic only) | **SOURCE NOT RECOVERED** — no exact timestamped local file; original applied SQL payload and SHA-256 not recovered. |
+| `20260925214936` | `loop_runtime_rls_and_plans` | **None** | migrations/0006_loop_canonical.sql (possible overlap; unverified) | **SOURCE NOT RECOVERED** — no exact timestamped local file; original applied SQL payload and SHA-256 not recovered. |
+| `20260925220714` | `bridge_loop_verified_identity_links` | **None** | migrations/0007a_identity_links.sql (semantic only) | **SOURCE NOT RECOVERED** — no exact timestamped local file; original applied SQL payload and SHA-256 not recovered. |
+| `20260926045625` | `loop_payment_events_own_read_policy` | **None** | None established | **SOURCE NOT RECOVERED** — no exact timestamped local file; original applied SQL payload and SHA-256 not recovered. |
+| `20260926054626` | `add_poster_studio_schema` | **None** | None established | **SOURCE NOT RECOVERED** — no exact timestamped local file; original applied SQL payload and SHA-256 not recovered. |
+| `20260927094608` | `harden_server_only_grants_and_fk_indexes` | **None** | None established | **SOURCE NOT RECOVERED** — no exact timestamped local file; original applied SQL payload and SHA-256 not recovered. |
+| `20260927114947` | `streamvista_media_os_service_pipeline` | **None** | migrations/0007_streamvista_media_os.sql (semantic only) | **SOURCE NOT RECOVERED** — no exact timestamped local file; original applied SQL payload and SHA-256 not recovered. |
+| `20260927215559` | `bridge_data_api_lockdown` | **None** | migrations/0008_bridge_data_api_lockdown.sql (semantic only) | **SOURCE NOT RECOVERED** — no exact timestamped local file; original applied SQL payload and SHA-256 not recovered. |
+| `20260927215742` | `bridge_buyer_title_access` | **None** | migrations/0009_buyer_title_access.sql (semantic only) | **SOURCE NOT RECOVERED** — no exact timestamped local file; original applied SQL payload and SHA-256 not recovered. |
+| `20260927215758` | `bridge_buyer_title_access_20260928` | **None** | migrations/0009_buyer_title_access.sql (variant; unverified) | **SOURCE NOT RECOVERED** — no exact timestamped local file; original applied SQL payload and SHA-256 not recovered. |
+| `20260928102539` | `bridge_profile_welcome_email_marker` | **None** | None established | **SOURCE NOT RECOVERED** — no exact timestamped local file; original applied SQL payload and SHA-256 not recovered. |
+| `20260928120120` | `bridge_prd_phase1` | **None** | migrations/0010_bridge_prd_phase1.sql (semantic only) | **SOURCE NOT RECOVERED** — no exact timestamped local file; original applied SQL payload and SHA-256 not recovered. |
+| `20260928154653` | `bridge_auth_protected_read_policies` | **None** | None established | **SOURCE NOT RECOVERED** — no exact timestamped local file; original applied SQL payload and SHA-256 not recovered. |
+| `20260929154225` | `bind_bridge_rls_identity_and_read_scope` | **None** | migrations/0012_bridge_rls_identity_binding.sql (semantic only) | **SOURCE NOT RECOVERED** — no exact timestamped local file; original applied SQL payload and SHA-256 not recovered. |
+| `20260929162737` | `harden_bridge_rls_helpers_rpc_surface` | **None** | migrations/0013_harden_bridge_rls_helpers.sql (semantic only) | **SOURCE NOT RECOVERED** — no exact timestamped local file; original applied SQL payload and SHA-256 not recovered. |
+| `20260930092721` | `grant_authenticated_bridge_current_internal_role` | **None** | None established | **SOURCE NOT RECOVERED** — no exact timestamped local file; original applied SQL payload and SHA-256 not recovered. |
+| `20261002171708` | `loop_release_safety` | **None** | migrations/0020_duplicate_title_merge_gate.sql (possible overlap; unverified) | **SOURCE NOT RECOVERED** — no exact timestamped local file; original applied SQL payload and SHA-256 not recovered. |
+| `20261004051643` | `loop_semantic_search` | **None** | None established | **SOURCE NOT RECOVERED** — no exact timestamped local file; original applied SQL payload and SHA-256 not recovered. |
+| `20261004052641` | `move_vector_to_extensions_schema` | **None** | None established | **SOURCE NOT RECOVERED** — no exact timestamped local file; original applied SQL payload and SHA-256 not recovered. |
+| `20261004052646` | `rebind_loop_semantic_rpc_vector_schema` | **None** | None established | **SOURCE NOT RECOVERED** — no exact timestamped local file; original applied SQL payload and SHA-256 not recovered. |
+| `20261004102348` | `delivery_trace_finance` | **None** | migrations/0015_delivery_trace_finance.sql (semantic only) | **SOURCE NOT RECOVERED** — no exact timestamped local file; original applied SQL payload and SHA-256 not recovered. |
+| `20261005112318` | `investor_account_type_20261005` | **None** | migrations/0016_investor_account_type.sql (semantic only) | **SOURCE NOT RECOVERED** — no exact timestamped local file; original applied SQL payload and SHA-256 not recovered. |
+| `20261005124904` | `bridge_dmca` | **None** | migrations/0011_bridge_dmca.sql (semantic only) | **SOURCE NOT RECOVERED** — no exact timestamped local file; original applied SQL payload and SHA-256 not recovered. |
+| `20261005125643` | `lock_down_bridge_client_grants` | **None** | None established | **SOURCE NOT RECOVERED** — no exact timestamped local file; original applied SQL payload and SHA-256 not recovered. |
+| `20261005125847` | `explicit_deny_policies_for_internal_tables` | **None** | None established | **SOURCE NOT RECOVERED** — no exact timestamped local file; original applied SQL payload and SHA-256 not recovered. |
+| `20261006100425` | `allow_bridge_supabase_auth_onboarding_verification` | **None** | None established | **SOURCE NOT RECOVERED** — no exact timestamped local file; original applied SQL payload and SHA-256 not recovered. |
+| `20261006152111` | `bridge_buyer_publication_gates` | **None** | migrations/0017_bridge_buyer_publication_gates.sql (semantic only) | **SOURCE NOT RECOVERED** — no exact timestamped local file; original applied SQL payload and SHA-256 not recovered. |
+| `20261006154551` | `harden_authz_server_only_surfaces_20261006` | **None** | None established | **SOURCE NOT RECOVERED** — no exact timestamped local file; original applied SQL payload and SHA-256 not recovered. |
+| `20261006154553` | `legacy_creator_intake_20261006` | **None** | None established | **SOURCE NOT RECOVERED** — no exact timestamped local file; original applied SQL payload and SHA-256 not recovered. |
+| `20261006185556` | `bridge_commercial_engine_20261006230000` | **None** | supabase/migrations/20261006230000_bridge_commercial_engine.sql; migrations/0018_bridge_service_revenue_engine.sql (timestamp differs; unverified) | **SOURCE NOT RECOVERED** — no exact timestamped local file; original applied SQL payload and SHA-256 not recovered. |
+| `20261006185640` | `harden_bridge_commercial_server_only_20261007000000` | **None** | None established | **SOURCE NOT RECOVERED** — no exact timestamped local file; original applied SQL payload and SHA-256 not recovered. |
+| `20261006195531` | `bridge_commercial_control_plane_20261007013000` | **None** | supabase/migrations/20261007013000_bridge_commercial_control_plane.sql (timestamp differs; unverified) | **SOURCE NOT RECOVERED** — no exact timestamped local file; original applied SQL payload and SHA-256 not recovered. |
+| `20261006195536` | `bridge_financial_reversal_hardening_20261007020000` | **None** | supabase/migrations/20261007020000_bridge_financial_reversal_hardening.sql (timestamp differs; unverified) | **SOURCE NOT RECOVERED** — no exact timestamped local file; original applied SQL payload and SHA-256 not recovered. |
+| `20261006195607` | `bridge_commercial_performance_indexes_20261007023000` | **None** | supabase/migrations/20261007023000_bridge_commercial_performance_indexes.sql (timestamp differs; unverified) | **SOURCE NOT RECOVERED** — no exact timestamped local file; original applied SQL payload and SHA-256 not recovered. |
+| `20261006231321` | `deep_clean_server_only_rls_20261007` | **None** | None established | **SOURCE NOT RECOVERED** — no exact timestamped local file; original applied SQL payload and SHA-256 not recovered. |
+| `20261008031103` | `loop_watchlists_20261008` | **None** | None established | **SOURCE NOT RECOVERED** — no exact timestamped local file; original applied SQL payload and SHA-256 not recovered. |
+| `20261008050017` | `p0_bridge_catalog_deal_room_reconciliation_20261008` | **None** | None established | **SOURCE NOT RECOVERED** — no exact timestamped local file; original applied SQL payload and SHA-256 not recovered. |
+| `20261008053655` | `p0_bridge_catalog_deal_room_reconciliation_v2` | **None** | None established | **SOURCE NOT RECOVERED** — no exact timestamped local file; original applied SQL payload and SHA-256 not recovered. |
+| `20261008053658` | `p0_bridge_title_catalog_columns_v2` | **None** | None established | **SOURCE NOT RECOVERED** — no exact timestamped local file; original applied SQL payload and SHA-256 not recovered. |
+| `20261008053700` | `p0_loop_catalog_pranayam_visibility_v2` | **None** | None established | **SOURCE NOT RECOVERED** — no exact timestamped local file; original applied SQL payload and SHA-256 not recovered. |
+| `20261008113911` | `reconcile_duplicate_title_merge_gate_20261008` | **None** | supabase/migrations/20261006170000_reconcile_duplicate_bridge_titles.sql; migrations/0020_duplicate_title_merge_gate.sql (possible overlap; unverified) | **SOURCE NOT RECOVERED** — no exact timestamped local file; original applied SQL payload and SHA-256 not recovered. |
+| `20261008122836` | `enable_merge_table_rls` | **None** | None established | **SOURCE NOT RECOVERED** — no exact timestamped local file; original applied SQL payload and SHA-256 not recovered. |
+| `20261009210503` | `bridge_rights_ready_submission` | **None** | migrations/0018_bridge_rights_ready_submission.sql; migrations/0018_rights_ready_public_submission.sql (two candidates; no canonical match) | **SOURCE NOT RECOVERED** — no exact timestamped local file; original applied SQL payload and SHA-256 not recovered. |
+| `20261009210645` | `bridge_submission_intake_server_only` | **None** | migrations/0018_bridge_rights_ready_submission.sql; migrations/0018_rights_ready_public_submission.sql (possible related source; unverified) | **SOURCE NOT RECOVERED** — no exact timestamped local file; original applied SQL payload and SHA-256 not recovered. |
+| `20261011041046` | `bridge_storage_economics_20261011` | **None** | migrations/0018_bridge_service_revenue_engine.sql; migrations/0019_bridge_service_tax_rates.sql (unverified; no same-name SQL) | **SOURCE NOT RECOVERED** — no exact timestamped local file; original applied SQL payload and SHA-256 not recovered. |
+| `20261016161255` | `bridge_assets_kind_constraint_20261016` | **None** | None established | **SOURCE NOT RECOVERED** — no exact timestamped local file; original applied SQL payload and SHA-256 not recovered. |
 
 ## Existing source files
 
