@@ -323,6 +323,7 @@ function FilesPanel({
     contentType: string | null;
     byteSize: number | null;
     verified: boolean;
+    createdAt: string;
   }>;
   onAssetsChanged: () => Promise<unknown> | unknown;
 }) {
@@ -665,7 +666,7 @@ function TitleAssetPreviewGallery({
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {assets.map((asset) => (
-            <PreviewAssetCard key={asset.id} asset={asset} label={labelFor(asset.kind)} onDownload={onDownload} onAssetsChanged={onAssetsChanged} canManage={canManage} />
+            <PreviewAssetCard key={asset.id} asset={asset} label={labelFor(asset.kind)} onDownload={onDownload} onAssetsChanged={onAssetsChanged} canManage={canManage} isSuperAdmin={isSuperAdmin} />
           ))}
         </div>
       )}
@@ -679,12 +680,14 @@ function PreviewAssetCard({
   onDownload,
   onAssetsChanged,
   canManage,
+  isSuperAdmin,
 }: {
   asset: PreviewAsset;
   label: string;
   onDownload: (id: string) => void;
   onAssetsChanged: () => Promise<unknown> | unknown;
   canManage: boolean;
+  isSuperAdmin: boolean;
 }) {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewText, setPreviewText] = useState<string | null>(null);
