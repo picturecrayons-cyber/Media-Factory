@@ -1,11 +1,14 @@
-export async function advanceLegacyLoopQueueStatus(options: {
-  queuePresent: boolean;
-  confirmed: boolean;
-  markUploaded: () => Promise<unknown>;
-  markVerified: () => Promise<unknown>;
-}): Promise<void> {
-  if (!options.queuePresent) return;
+export async function markLegacyLoopQueueUploaded(
+  queuePresent: boolean,
+  update: () => Promise<unknown>,
+): Promise<void> {
+  if (queuePresent) await update();
+}
 
-  await options.markUploaded();
-  if (options.confirmed) await options.markVerified();
+export async function markLegacyLoopQueueVerified(
+  queuePresent: boolean,
+  confirmed: boolean,
+  update: () => Promise<unknown>,
+): Promise<void> {
+  if (queuePresent && confirmed) await update();
 }
