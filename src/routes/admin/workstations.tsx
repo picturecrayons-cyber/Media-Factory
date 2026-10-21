@@ -126,7 +126,7 @@ function TitleQueue({ titles, review }: { titles: any[]; review: any }) {
           <div key={title.id} className="flex flex-col gap-3 border-b border-line p-4 last:border-b-0 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="font-medium">{title.name}</p><p className="break-all font-mono text-[11px] text-muted">{title.id}</p>
-              <p className="mt-1 text-xs text-muted">{STATUS_LABELS[title.status] ?? title.status} · {title.language}</p>
+              <p className="mt-1 text-xs text-muted">{STATUS_LABELS[title.status] ?? title.status} · {title.content_type ?? "Type unknown"} · {title.language ?? title.original_language ?? "Language unknown"}{title.year ? " · " + title.year : ""}</p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
               {title.status === "PREPARING" ? <ActionButton label="Accept → QC" onClick={() => review.mutate({ data: { titleId: title.id, decision: "ACCEPT" } })} disabled={review.isPending} /> : null}
