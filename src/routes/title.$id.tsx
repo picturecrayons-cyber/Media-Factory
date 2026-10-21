@@ -404,9 +404,14 @@ function FilesPanel({
       if (matches && previous?.sessionId) {
         try {
           session = await resumeAssetMultipartUpload({ data: { sessionId: previous.sessionId } });
-        } catch {
-          window.localStorage.removeItem(storageKey);
-          session = null;
+        } catch (error) {
+          const reason = error instanceof Error ? error.message : "";
+          if (/expired; restart the upload|Upload session not found|no longer resumable/i.test(reason)) {
+            window.localStorage.removeItem(storageKey);
+            session = null;
+          } else {
+            throw error;
+          }
         }
       } else if (previous?.sessionId) {
         try { await abortAssetMultipartUpload({ data: { sessionId: previous.sessionId } }); } catch { /* stale session cleanup is best effort */ }
