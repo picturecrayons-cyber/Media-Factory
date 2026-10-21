@@ -1,0 +1,13 @@
+# Robots policy for the public Crayons Pictures domain.
+# This is a crawler hint, not an access-control mechanism.
+User-agent: *
+Allow: /
+
+# Keep application and account workflows out of search results.
+Disallow: /dashboard
+Disallow: /onboarding
+Disallow: /title/
+Disallow: /admin
+Disallow: /_serverFn/
+Disallow: /api/
+
