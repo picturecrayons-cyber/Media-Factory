@@ -325,3 +325,35 @@ Documentation commit `b9f8d987d3384906aaf38ce78f4f79e3edbed0a2` CI run [#1352](h
 - Latest CI for the preceding report commit `783f699823f5ddb861bbf07d67bed0f4886782f5` started as run #1353 and was still `in_progress` at the time of this check. Do not call that report commit CI-passed until run #1353 is complete.
 
 This evidence strengthens the incident diagnosis but does not recover original migration payloads or clear the release gate. Production remains **NO-GO / NOT CERTIFIED**.
+
+
+---
+
+## Execution gate update — 2026-10-22
+
+This append-only update records the latest authorized execution attempt. It does not certify the database incident as resolved.
+
+### Verified repository state
+- PR #340 remains open, Draft, and unmerged.
+- Observed head before this update: `6161b6f16cd19ff9f05a075c26656d5e50471736`.
+- Base: `9c56a25e4eba2de63c4c261503112c8945b2dd5a`.
+- Evidence-lock comment: https://github.com/picturecrayons-cyber/Media-Factory/pull/340#issuecomment-6328013538
+- Follow-up gate comment: https://github.com/picturecrayons-cyber/Media-Factory/pull/340#issuecomment-6328045726
+- Latest inspected review list was empty: independent approval remains pending.
+- Latest inspected repository rulesets endpoint returned an empty list. Branch protection could not be read/configured by the connected GitHub integration (403 permission error). Treat protection as unverified; a repository owner/admin must configure and verify it.
+
+### Exact Production payload gate
+- `20261009210503 bridge_rights_ready_submission`: original applied SQL bytes not recovered; source remains **NOT VERIFIED**.
+- `20261009210645 bridge_submission_intake_server_only`: original applied SQL bytes not recovered; related repository candidate timestamp differs; source remains **NOT VERIFIED**.
+- SHA-256 values of candidate files, if recorded elsewhere, identify those candidate files only. They are not hashes of the original Production payloads.
+- Do not reconstruct, rename, mark repaired, or apply migrations to Production based on topic/name similarity.
+
+### Duplicate-prefix and isolated validation gate
+- The two files with prefix `20261006230000` remain an unresolved collision.
+- No rename or migration-order change is made by this documentation update.
+- Further validation must use an existing disposable PostgreSQL CI environment with no Production credentials. Do not create paid branches/resources or apply migrations to Production or the shared Staging database as a substitute for disposable replay.
+
+### Scope and disposition
+- This commit changes documentation only.
+- No Production or Staging database/migration-ledger changes, no deployment/promotion, no Razorpay access or changes, and no paid service usage are authorized or performed by this update.
+- Certification remains **NOT CERTIFIED / Production NO-GO** until original payload provenance, isolated migration ordering/replay, repository protections, and independent review are evidenced.
