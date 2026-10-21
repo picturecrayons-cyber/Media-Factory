@@ -285,6 +285,7 @@ function FilesPanel({
   const [uploading, setUploading] = useState<SimpleAssetKind | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [canCancelUpload, setCanCancelUpload] = useState(false);
   const activeXhr = useRef<XMLHttpRequest | null>(null);
   const activeSessionId = useRef<string | null>(null);
   const cancelRequested = useRef(false);
@@ -350,6 +351,7 @@ function FilesPanel({
     }
     setUploading(kind);
     setUploadProgress(0);
+    setCanCancelUpload(false);
     cancelRequested.current = false;
     setMessage(`Preparing ${kind} upload…`);
     try {
@@ -413,6 +415,7 @@ function FilesPanel({
         window.localStorage.setItem(storageKey, JSON.stringify({ ...fingerprint, sessionId: session.sessionId }));
       }
       activeSessionId.current = session.sessionId;
+      setCanCancelUpload(session.status === "ACTIVE");
 
       if (session.status === "COMMITTED" || session.status === "COMPLETED") {
         await confirmAssetUpload({ data: { assetId: session.assetId, expectedByteSize: file.size } });
@@ -477,6 +480,7 @@ function FilesPanel({
     } finally {
       activeXhr.current = null;
       activeSessionId.current = null;
+      setCanCancelUpload(false);
       setUploading(null);
     }
   }
@@ -511,6 +515,7 @@ function FilesPanel({
             status={assets.some((a) => (a.kind === kind || (kind === "poster_vertical" && a.kind === "poster")) && a.verified) ? "Ready" : empty}
             busy={uploading === kind}
             progress={uploading === kind ? uploadProgress : 0}
+            canCancel={uploading === kind && canCancelUpload}
             canUpload={canUpload}
             onCancel={() => void cancelUpload()}
             onFile={(file) => void uploadFile(kind, file)}
@@ -548,6 +553,7 @@ function FileTypeCard({
   status,
   busy,
   progress,
+  canCancel,
   onCancel,
   onFile,
   canUpload,
@@ -558,6 +564,7 @@ function FileTypeCard({
   status: string;
   busy: boolean;
   progress: number;
+  canCancel: boolean;
   onCancel: () => void;
   onFile: (file: File) => void;
 }) {
@@ -588,7 +595,7 @@ function FileTypeCard({
             }}
           />
         </label>
-        {busy ? <button type="button" onClick={onCancel} className="rounded-full border border-line px-3 py-1.5 text-xs font-semibold">Cancel</button> : null}
+        {canCancel ? <button type="button" onClick={onCancel} className="rounded-full border border-line px-3 py-1.5 text-xs font-semibold">Cancel</button> : null}
       </div>
       {busy ? <div className="mt-3 h-2 overflow-hidden rounded-full bg-elevated" role="progressbar" aria-label={`${label} upload progress`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress}><div className="h-full bg-accent-strong transition-[width]" style={{ width: `${progress}%` }} /></div> : null}
     </div>
