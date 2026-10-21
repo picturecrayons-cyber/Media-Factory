@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createRootRoute, HeadContent, Outlet, Scripts, redirect } from "@tanstack/react-router";
-import { getCookieAuthStatus } from "@/lib/auth/ssr.server";
+import { getCookieAuthStatus } from "@/lib/auth/ssr";
 import { requiresServerAuth } from "@/lib/auth/protected-path";
 import { AuthProvider } from "@/lib/auth/provider";
 import { Toaster } from "sonner";
