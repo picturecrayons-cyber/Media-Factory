@@ -125,7 +125,7 @@ function TitleQueue({ titles, review }: { titles: any[]; review: any }) {
         {titles.length ? titles.slice(0, 100).map((title) => (
           <div key={title.id} className="flex flex-col gap-3 border-b border-line p-4 last:border-b-0 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <p className="font-medium">{title.name}</p>
+              <p className="font-medium">{title.name}</p><p className="break-all font-mono text-[11px] text-muted">{title.id}</p>
               <p className="mt-1 text-xs text-muted">{STATUS_LABELS[title.status] ?? title.status} · {title.language}</p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
