@@ -142,7 +142,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
         {statusItem("License & legal", legalStatus, "Draft/evidence does not equal independent legal approval.")}
         {statusItem("Loop distribution", distributionStatus, "Publication authorization is separate from legal approval and playback.")}
         {statusItem("Consumer playback", playbackStatus, "Catalog visibility is not proof of successful authenticated playback.")}
-        {statusItem("Revenue & settlement", revenue.data?.settlementEvidence?.length ? "EXTERNAL EVIDENCE — UNVERIFIED" : "NO SETTLEMENT EVIDENCE", "Captured receipts are not a payout; evidence recording never transfers funds.")}
+        {statusItem("Revenue & settlement", revenue.data ? (revenue.data.settlementEvidence.length ? "EXTERNAL EVIDENCE — UNVERIFIED" : "NO SETTLEMENT EVIDENCE") : canFinance ? "OPEN REVENUE TO CHECK" : "RESTRICTED", "Captured receipts are not a payout; evidence recording never transfers funds.")}
       </div>
       <nav className="flex flex-wrap gap-2" aria-label="Operational workflow">
         {stages.map((s) => (
