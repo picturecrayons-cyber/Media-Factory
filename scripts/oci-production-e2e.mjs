@@ -8,6 +8,10 @@ import {
   verifyObject,
 } from "../src/lib/bridge/oci-object-storage.server.ts";
 import { runWithCleanup } from "./oci-e2e-cleanup.mjs";
+import { assertNonProductionOciE2E } from "./oci-e2e-environment.mjs";
+
+// This guard prevents accidental execution against an unconfirmed target.
+assertNonProductionOciE2E();
 
 const runId = randomUUID();
 const payload = Buffer.from(`CRAYONS-BRIDGE-OCI-E2E:${runId}`, "utf8");
