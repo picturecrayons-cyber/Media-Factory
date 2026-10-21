@@ -38,7 +38,7 @@ export function TitleList({
   actor?: BridgeActor;
 }) {
   const titlesQ = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles() });
-  const allTitles = titlesQ.data?.titles ?? [];
+  const allTitles = useMemo(() => titlesQ.data?.titles ?? [], [titlesQ.data?.titles]);
 
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
   const [duplicatesOnly, setDuplicatesOnly] = useState<boolean>(false);
@@ -324,7 +324,7 @@ export function TitleList({
   );
 }
 
-export function CreateTitleForm({ concise = false }: { concise?: boolean } = {}) {
+export function CreateTitleForm({ concise: _concise = false }: { concise?: boolean } = {}) {
   const qc = useQueryClient();
   const navigate = useNavigate();
   const [name, setName] = useState("");
@@ -332,10 +332,10 @@ export function CreateTitleForm({ concise = false }: { concise?: boolean } = {})
   const [synopsis, setSynopsis] = useState("");
   const [language, setLanguage] = useState("Malayalam");
   const [contentType, setContentType] = useState("Film");
-  const [country, setCountry] = useState("India");
-  const [releaseDate, setReleaseDate] = useState("");
+  const [country, _setCountry] = useState("India");
+  const [releaseDate, _setReleaseDate] = useState("");
   const [runtimeMinutes, setRuntimeMinutes] = useState("");
-  const [director, setDirector] = useState("");
+  const [director, _setDirector] = useState("");
   const [producer, setProducer] = useState("");
   const [cast, setCast] = useState("");
   const [year, setYear] = useState("");
