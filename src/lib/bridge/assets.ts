@@ -285,10 +285,10 @@ export const finalizeAssetMultipartUpload = createServerFn({ method: "POST" })
     const rows = await sql<{
       id: string; asset_id: string; title_id: string; created_by: string; status: string;
       file_size: number | string; part_size: number | string; encrypted_access_uri: string;
-      object_key: string; content_type: string;
+      object_key: string; content_type: string; updated_at: string | Date;
     }>`
       select id, asset_id, title_id, created_by, status, file_size, part_size,
-             encrypted_access_uri, object_key, content_type
+             encrypted_access_uri, object_key, content_type, updated_at
       from bridge_asset_upload_sessions where id = ${data.sessionId} limit 1
     `;
     const session = rows[0];
@@ -298,9 +298,24 @@ export const finalizeAssetMultipartUpload = createServerFn({ method: "POST" })
     if (session.status === "COMMITTED" || session.status === "COMPLETED") {
       return { assetId: session.asset_id, expectedByteSize: Number(session.file_size), committed: true };
     }
-    if (session.status !== "ACTIVE") throw new Error("Upload session is not ready to commit");
     const fileSize = Number(session.file_size);
     const partSize = Number(session.part_size);
+    const { commitMultipartUpload, verifyObject } = await import("./oci-object-storage.server");
+    if (session.status === "COMMITTING") {
+      const committingForMs = Date.now() - new Date(session.updated_at).getTime();
+      if (committingForMs < 120_000) throw new Error("Upload session is already being finalized; retry shortly");
+      try {
+        const object = await verifyObject(session.object_key, session.content_type);
+        if (object.byteSize === fileSize) {
+          await sql`update bridge_asset_upload_sessions set status = 'COMMITTED', updated_at = now() where id = ${session.id} and status = 'COMMITTING'`;
+          return { assetId: session.asset_id, expectedByteSize: fileSize, committed: true };
+        }
+      } catch { /* Object absent or incomplete; safely retry the durable part ledger. */ }
+      await sql`update bridge_asset_upload_sessions set status = 'ACTIVE', updated_at = now() where id = ${session.id} and status = 'COMMITTING'`;
+    }
+    if (session.status !== "ACTIVE" && session.status !== "COMMITTING") {
+      throw new Error("Upload session is not ready to commit");
+    }
     const totalParts = Math.ceil(fileSize / partSize);
     const partRows = await sql<{ part_number: number; etag: string; checksum: string; byte_size: number | string }>`
       select part_number, etag, checksum, byte_size from bridge_asset_upload_parts
@@ -320,7 +335,6 @@ export const finalizeAssetMultipartUpload = createServerFn({ method: "POST" })
       returning id
     `;
     if (!claimed[0]) throw new Error("Upload session is already being finalized; retry shortly");
-    const { commitMultipartUpload, verifyObject } = await import("./oci-object-storage.server");
     try {
       await commitMultipartUpload(session.encrypted_access_uri);
     } catch (error) {
