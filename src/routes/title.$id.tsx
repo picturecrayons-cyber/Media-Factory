@@ -358,11 +358,9 @@ function FilesPanel({
             onFile={(file) => void uploadFile(kind, file)}
           />
         ))}
-          <AssetGallery assets={assets} onDownload={(assetId) => void download(assetId)} />
-     ) : null}
-          </div>
-        ))}
       </div>
+      <UploadStatusMessage message={message} />
+      <AssetGallery assets={assets} onDownload={(assetId) => void download(assetId)} />
     </section>
   );
 }
