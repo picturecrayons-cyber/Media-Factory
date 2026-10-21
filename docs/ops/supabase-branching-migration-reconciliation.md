@@ -246,3 +246,42 @@ This pass inspected the two rights-ready feature commits directly, including the
 ### Next recovery targets
 
 Prioritize the remaining versions with no candidate, then the versions with plausible candidates. Search source-control history and CI/deployment artifacts for the original SQL payloads and record exact artifact provenance. If the original payload cannot be recovered, preserve that as an explicit unresolved gap rather than manufacturing a timestamped migration.
+
+
+## Source-recovery pass 2 — current ledger and candidate artifact identity (2026-10-22)
+
+### Current read-only ledger recheck
+
+A fresh read through the connected Supabase migration-list operation returned the same version inventory counts and records as the earlier snapshot:
+
+- Production project `mlmgugivsyoxzdgwkbpu`: **52** migration records, latest listed version `20261016161255`.
+- Staging project `bbtrosuwisnxacuxvegt`: **33** migration records, latest listed version `20261021220723`.
+- Staging has later staging-specific hardening entries that are not in the Production ledger. The histories are different and must not be reconciled by copying one ledger over the other.
+
+This was a read-only metadata check; no SQL was executed and no migration operation was invoked.
+
+### Candidate Git blob identities
+
+The following are current `main` branch file identities, captured from GitHub's contents API. A Git blob SHA identifies the exact Git blob object, not the SHA-256 checksum of a remote migration payload. These identities help pin the candidates under review; they **do not** establish that the remote payload matches.
+
+| Candidate file | Git blob SHA | Character count returned | Candidate relationship |
+|---|---|---:|---|
+| `migrations/0001_auth.sql` | `08c6b01fef9b46e72470fb66ea967d5f84e9bdb5` | 2733 | Semantic candidate for `20260925170237 bridge_auth_schema`; not an exact source match |
+| `migrations/0004_bridge.sql` | `3ddc50742490c102e08e8a123aec203ef0188d8d` | 4599 | Semantic candidate for `20260925170239 bridge_operational_schema`; not an exact source match |
+| `migrations/0005_bridge_webhook_retry.sql` | `a6c3cda87d8293fb4e2b881f5636cc9dd77a4146` | 309 | Semantic candidate for `20260925170241 bridge_webhook_retry`; not an exact source match |
+| `migrations/0018_bridge_rights_ready_submission.sql` | `b788e9ab35ac1d61d98f644f268a4708b31e6ffd` | 1477 | Repository source candidate; exact Production payload unresolved |
+| `migrations/0018_rights_ready_public_submission.sql` | `ae50b68b123cfea470da0b68d939b828f2a74d1a` | 970 | Distinct repository source candidate; exact Production payload unresolved |
+| `supabase/migrations/20261006230000_bridge_commercial_engine.sql` | `cd303761295770ec63ec9421b403a65e804db66a` | 28612 | Timestamp does not equal Production version `20261006185556`; not an exact match |
+| `supabase/migrations/20261007013000_bridge_commercial_control_plane.sql` | `e5710413945137ac471319ada82d1a129e0545e0` | 6907 | Timestamp does not equal Production version `20261006195531`; not an exact match |
+| `supabase/migrations/20261007020000_bridge_financial_reversal_hardening.sql` | `f05972a592ca4569d161ddd8f6c43cc0517f69d5` | 702 | Timestamp does not equal Production version `20261006195536`; not an exact match |
+| `supabase/migrations/20261007023000_bridge_commercial_performance_indexes.sql` | `2f2fd8b30ade126891a0e4a1621ad7084727c182` | 809 | Timestamp does not equal Production version `20261006195607`; not an exact match |
+
+### Historical search result and boundary
+
+Targeted Git commit searches and repository file searches for the names of migrations without a candidate (including legacy import schema, FK indexes, webhook processing token, poster studio schema, semantic search/vector changes, merge-table RLS, storage economics, and asset-kind constraint) returned no matching source results through the connected search interface in this pass. This is **not proof that the SQL never existed**; it means the source has not been recovered by those searches. Deployment artifacts or another authoritative history source may still contain it.
+
+No SHA-256 checksums of original remote migration payloads can be supplied until those payloads are recovered. Do not substitute Git blob IDs for SHA-256 checksums, and do not promote a semantic candidate to an exact match without comparing the authoritative payload.
+
+### Current gate
+
+**Source reconciliation remains INCOMPLETE. Production remains NO-GO / NOT CERTIFIED.** No Production or Staging database writes, migration-ledger changes, branch reset/rebase/merge, or Branching workflow retry were performed in this pass.
