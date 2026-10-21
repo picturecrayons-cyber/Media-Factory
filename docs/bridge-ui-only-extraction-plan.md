@@ -26,7 +26,8 @@ Working branch: `ui/bridge-gallery-progress-isolation-20261022`.
 ## Initial gate
 
 - Source/dependency reconnaissance: complete.
-- Actual UI extraction and integration: pending.
+- Actual UI extraction and integration: initial presentation-only extraction committed on the working branch. `AssetGallery` and `UploadStatusMessage` are now separate components; the existing download callback and upload request/confirm flow remain in the route. This is an initial refactor, not a completed metadata-only Gallery redesign.
+- Source diff checked after correction; no server/storage source file was changed. Automated CI/typecheck and runtime verification have not yet run.
 - CI and exact-SHA Preview: pending.
 - Independent review: pending.
 - Production promotion: NO-GO until every required gate passes.
