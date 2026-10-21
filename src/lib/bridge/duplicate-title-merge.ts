@@ -221,6 +221,29 @@ async function loadMergeState(sql: any, titleId: string) {
   };
 }
 
+function summarizeMergeState(state: Awaited<ReturnType<typeof loadMergeState>>) {
+  return {
+    title: state.title,
+    counts: {
+      rights: state.rights.length,
+      buyerAccess: state.buyers.length,
+      assetVersions: state.assets.length,
+      assetRecords: state.assetRecords.length,
+      deliveryPackages: state.deliveries.length,
+      loopPublications: state.publications.length,
+      loopTitleLinks: state.loopTitles.length,
+      pendingLegacyMediaMigrations: state.migrationQueue.length,
+      rentalEntitlements: state.rentalEntitlements.length,
+      qcCases: state.qcCases.length,
+      legalCases: state.legalCases.length,
+      titleEvents: state.events.length,
+      payments: state.payments.length,
+      serviceOrders: state.serviceOrders.length,
+      serviceQuotes: state.serviceQuotes.length,
+    },
+  };
+}
+
 export const previewDuplicateTitleMerge = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(z.object({ canonicalTitleId: z.string().min(8), retiringTitleId: z.string().min(8), identityCertain: z.boolean().default(false) }))
@@ -256,7 +279,7 @@ export const previewDuplicateTitleMerge = createServerFn({ method: "POST" })
       decision: result.decision,
       reasons: result.reasons,
       collisions: result.collisions,
-      preview: { canonical, retiring },
+      preview: { canonical: summarizeMergeState(canonical), retiring: summarizeMergeState(retiring) },
     };
   });
 
