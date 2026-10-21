@@ -1,5 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { createRootRoute, HeadContent, Outlet, Scripts } from "@tanstack/react-router";
+import { createRootRoute, HeadContent, Outlet, Scripts, redirect } from "@tanstack/react-router";
+import { getCookieAuthStatus } from "@/lib/auth/ssr";
+import { requiresServerAuth } from "@/lib/auth/protected-path";
 import { AuthProvider } from "@/lib/auth/provider";
 import { Toaster } from "sonner";
 import appCss from "../styles.css?url";
@@ -10,6 +12,14 @@ const queryClient = new QueryClient({
 });
 
 export const Route = createRootRoute({
+  beforeLoad: async ({ location }) => {
+    if (import.meta.env.VITE_AUTH_ENABLED === "false") return;
+    if (!requiresServerAuth(location.pathname)) return;
+    const { authenticated } = await getCookieAuthStatus();
+    if (!authenticated) {
+      throw redirect({ href: `/login?next=${encodeURIComponent(location.href)}` });
+    }
+  },
   head: () => ({
     meta: [
       { charSet: "utf-8" },

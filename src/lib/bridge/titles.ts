@@ -266,14 +266,33 @@ export const listTitles = createServerFn({ method: "GET" })
       assertPermission(actor, "title.read_own");
       rows = await listOwned(sql, actor.userId, actor.accountType === "studio" ? actor.organizationName : null);
     }
-    return { titles: rows.flatMap((row) => {
-      try {
-        return [mapTitle(row)];
-      } catch (error) {
-        console.error("[bridge] skipped unreadable title", row?.id, error);
-        return [];
-      }
-    }) };
+    const deletableTitleIds = actor.internalRole && hasPermission(actor, "title.delete_draft")
+      ? (await sql<{ id: string }>`
+          select t.id
+          from bridge_titles t
+          where t.status = 'DRAFT'
+            and not exists (select 1 from bridge_assets a where a.title_id = t.id)
+            and not exists (select 1 from bridge_asset_versions av where av.title_id = t.id)
+            and not exists (select 1 from bridge_entitlements e where e.title_id = t.id)
+            and not exists (select 1 from bridge_payments p where p.title_id = t.id)
+            and not exists (select 1 from bridge_rights_grants r where r.title_id = t.id)
+            and not exists (select 1 from bridge_qc_cases q where q.title_id = t.id)
+            and not exists (select 1 from bridge_legal_cases l where l.title_id = t.id)
+            and not exists (select 1 from bridge_destination_packages d where d.title_id = t.id)
+            and not exists (select 1 from bridge_loop_publications lp where lp.bridge_title_id = t.id)
+        `).map((row) => row.id)
+      : [];
+    return {
+      titles: rows.flatMap((row) => {
+        try {
+          return [mapTitle(row)];
+        } catch (error) {
+          console.error("[bridge] skipped unreadable title", row?.id, error);
+          return [];
+        }
+      }),
+      deletableTitleIds,
+    };
   });
 
 export const getTitle = createServerFn({ method: "GET" })
@@ -336,7 +355,7 @@ export const updateTitle = createServerFn({ method: "POST" })
     const title = await loadTitle(data.id);
     if (!title) throw new Error("Not found");
     const owns = title.ownerUserId === actor.userId && !actor.internalRole;
-    if (!canMutateTitle(actor, title, "title.update_own", "title.license"))
+    if (!canMutateTitle(actor, title, "title.update_own", "title.update_catalog"))
       throw new Error("Forbidden");
     if (
       owns &&
@@ -368,6 +387,50 @@ export const updateTitle = createServerFn({ method: "POST" })
     });
     const next = await loadTitle(title.id);
     return { title: next };
+  });
+
+export const deleteEmptyDraftTitle = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({ id: z.string().min(8), confirmName: z.string().min(1).max(160) }))
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    assertPermission(actor, "title.delete_draft");
+    const sql = await getSql();
+    return sql.transaction(async (tx) => {
+      const rows = await tx<{ id: string; name: string; status: string }>`
+        select id, name, status from bridge_titles where id = ${data.id} for update
+      `;
+      const title = rows[0];
+      if (!title) throw new Error("Title not found");
+      if (title.name !== data.confirmName) throw new Error("Title name confirmation did not match");
+      if (title.status !== "DRAFT") throw new Error("Only empty DRAFT titles can be deleted");
+      const dependencies = await tx<{ blocked: boolean }>`
+        select (
+          exists(select 1 from bridge_assets where title_id = ${title.id})
+          or exists(select 1 from bridge_asset_versions where title_id = ${title.id})
+          or exists(select 1 from bridge_entitlements where title_id = ${title.id})
+          or exists(select 1 from bridge_payments where title_id = ${title.id})
+          or exists(select 1 from bridge_rights_grants where title_id = ${title.id})
+          or exists(select 1 from bridge_qc_cases where title_id = ${title.id})
+          or exists(select 1 from bridge_legal_cases where title_id = ${title.id})
+          or exists(select 1 from bridge_destination_packages where title_id = ${title.id})
+          or exists(select 1 from bridge_loop_publications where bridge_title_id = ${title.id})
+        ) as blocked
+      `;
+      if (dependencies[0]?.blocked) {
+        throw new Error("This title has assets or linked business records. Keep it and use the review/merge workflow instead.");
+      }
+      await tx`delete from bridge_titles where id = ${title.id} and status = 'DRAFT'`;
+      await writeAudit({
+        actorUserId: actor.userId,
+        action: "title.delete_empty_draft",
+        entityType: "bridge_title",
+        entityId: title.id,
+        metadata: { name: title.name },
+      }, tx);
+      return { deleted: true, id: title.id };
+    });
   });
 
 async function assertLicensingReady(titleId: string) {
