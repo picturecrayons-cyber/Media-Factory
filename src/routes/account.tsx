@@ -38,6 +38,8 @@ function Account() {
                   </div>
                 </div>
 
+                {actor.internalRole === "super_admin" ? <OrganizationEditor userId={actor.userId} displayName={actor.displayName} organizationName={actor.organizationName} /> : null}
+
                 {!actor.emailVerified ? (
                   <div className="mt-5">
                     <ResendVerify />
