@@ -44,7 +44,7 @@ try {
       if (!String(title.language ?? "").trim()) add("REVIEW", "MISSING_LANGUAGE", "Language is missing.");
       if (title.year == null) add("REVIEW", "MISSING_YEAR", "Release year is missing.");
       if (!title.poster_key) add("REVIEW", "MISSING_POSTER", "No canonical poster key is set.");
-      if (!title.master_key) add("BLOCK", "MISSING_MASTER", "No canonical master key is set.");
+      if (!title.master_key) add(["PREPARING", "UPLOADING", "LIVE_FOR_BUYERS"].includes(title.status) ? "BLOCK" : "REVIEW", "MISSING_MASTER", "No canonical master key is set.");
       if (Number(title.qc_cases) === 0 && ["PREPARING", "UPLOADING", "LIVE_FOR_BUYERS"].includes(title.status)) {
         add("BLOCK", "NO_QC_CASE", "Non-draft workflow state has no QC case.");
       }
