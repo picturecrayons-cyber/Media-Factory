@@ -278,7 +278,7 @@ export const listTitles = createServerFn({ method: "GET" })
 
 export const getTitle = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
-  .validator(z.object({ id: z.string().min(8) }))
+  .validator(z.object({ id: z.string().min(8), includeEvents: z.boolean().optional() }))
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
@@ -293,6 +293,7 @@ export const getTitle = createServerFn({ method: "GET" })
       if (actor.accountType !== "buyer") throw new Error("Not found");
       await assertBuyerPublishable(title.id);
     }
+    if (data.includeEvents === false) return { title, events: [] };
     const events = await sql<{
       from_status: string | null;
       to_status: string;
