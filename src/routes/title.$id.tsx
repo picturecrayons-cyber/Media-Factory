@@ -283,6 +283,7 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
           titleId={id}
           assets={assets}
           canManage={actor.internalRole === "admin" || actor.internalRole === "super_admin"}
+          isSuperAdmin={actor.internalRole === "super_admin"}
           onAssetsChanged={async () => {
             await assetsQ.refetch();
             await qc.invalidateQueries({ queryKey: ["bridge-titles"] });
@@ -310,9 +311,11 @@ function FilesPanel({
   onAssetsChanged,
   canUpload,
   canManage,
+  isSuperAdmin,
 }: {
   canUpload: boolean;
   canManage: boolean;
+  isSuperAdmin: boolean;
   titleId: string;
   assets: Array<{
     id: string;
@@ -514,7 +517,7 @@ function FilesPanel({
         </div>
       ) : (
         <div className="rounded-2xl border border-line bg-surface p-4 sm:p-5">
-          <TitleAssetPreviewGallery assets={assets} onDownload={(id) => void download(id)} onAssetsChanged={onAssetsChanged} canManage={canManage} />
+          <TitleAssetPreviewGallery assets={assets} onDownload={(id) => void download(id)} onAssetsChanged={onAssetsChanged} canManage={canManage} titleId={titleId} isSuperAdmin={isSuperAdmin} />
         </div>
       )}
     </section>
@@ -585,6 +588,7 @@ type PreviewAsset = {
   contentType: string | null;
   byteSize: number | null;
   verified: boolean;
+  createdAt: string;
 };
 
 const IMAGE_ASSET_KINDS = new Set(["poster", "poster_vertical", "poster_horizontal", "thumbnail"]);
@@ -594,12 +598,41 @@ function TitleAssetPreviewGallery({
   onDownload,
   onAssetsChanged,
   canManage,
+  titleId,
+  isSuperAdmin,
 }: {
   assets: PreviewAsset[];
   onDownload: (id: string) => void;
   onAssetsChanged: () => Promise<unknown> | unknown;
   canManage: boolean;
+  titleId: string;
+  isSuperAdmin: boolean;
 }) {
+  function downloadManifest() {
+    const manifest = {
+      titleId,
+      generatedAt: new Date().toISOString(),
+      note: "Metadata-only manifest. Original filenames and a cryptographic content checksum are not currently stored in this asset listing.",
+      assets: assets.map((asset) => ({
+        assetId: asset.id,
+        kind: asset.kind,
+        filename: null,
+        mimeType: asset.contentType,
+        byteSize: asset.byteSize,
+        checksum: null,
+        storageVerified: asset.verified,
+        createdAt: asset.createdAt,
+      })),
+    };
+    const blob = new Blob([JSON.stringify(manifest, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `crayons-bridge-${titleId}-asset-manifest.json`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
+
   const labelFor = (kind: string) =>
     ({
       master: "Main Film / Original Master",
@@ -615,10 +648,17 @@ function TitleAssetPreviewGallery({
 
   return (
     <section aria-label="Title Assets — Preview Gallery" className="mt-6">
-      <div className="mb-4">
-        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Files / Media</p>
-        <h3 className="mt-1 font-display text-lg font-semibold">Title Assets — Preview Gallery</h3>
-        <p className="mt-1 text-xs text-muted">Previews use authenticated, short-lived links. Download remains available.</p>
+      <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Files / Media</p>
+          <h3 className="mt-1 font-display text-lg font-semibold">Title Assets — Preview Gallery</h3>
+          <p className="mt-1 text-xs text-muted">Previews use authenticated, short-lived links. Download remains available.</p>
+        </div>
+        {isSuperAdmin ? (
+          <button type="button" onClick={downloadManifest} className="rounded-full border border-line px-4 py-2 text-xs font-semibold">
+            Download asset manifest
+          </button>
+        ) : null}
       </div>
       {assets.length === 0 ? (
         <p className="rounded-xl border border-dashed border-line p-5 text-sm text-muted">No verified assets are available to preview yet. Incomplete uploads are shown only to staff roles with cleanup permission.</p>
@@ -653,6 +693,15 @@ function PreviewAssetCard({
   const [expanded, setExpanded] = useState(false);
   const [removeConfirm, setRemoveConfirm] = useState(false);
   const [removeMessage, setRemoveMessage] = useState<string | null>(null);
+  const [retryMessage, setRetryMessage] = useState<string | null>(null);
+  const retryMutation = useMutation({
+    mutationFn: () => confirmAssetUpload({ data: { assetId: asset.id } }),
+    onSuccess: async () => {
+      setRetryMessage("Asset verification completed.");
+      await onAssetsChanged();
+    },
+    onError: (cause) => setRetryMessage(cause instanceof Error ? cause.message : "Could not verify asset"),
+  });
   const removeMutation = useMutation({
     mutationFn: () => removeIncompleteAsset({ data: { assetId: asset.id } }),
     onSuccess: async () => {
@@ -757,6 +806,11 @@ function PreviewAssetCard({
       <div className="flex items-center justify-between gap-3 border-t border-line p-3">
         <span className="text-[11px] text-muted">Secure preview</span>
         <div className="flex items-center gap-2">
+          {isSuperAdmin && !asset.verified ? (
+            <button type="button" disabled={retryMutation.isPending} onClick={() => { setRetryMessage(null); retryMutation.mutate(); }} className="rounded-full border border-line px-3 py-1.5 text-xs font-semibold disabled:opacity-50">
+              {retryMutation.isPending ? "Verifying…" : "Retry verification"}
+            </button>
+          ) : null}
           {canManage && !asset.verified ? <button type="button" onClick={() => { setRemoveMessage(null); setRemoveConfirm(true); }} className="rounded-full border border-line px-3 py-1.5 text-xs font-semibold text-destructive hover:bg-elevated">Remove</button> : null}
           {asset.verified ? <button type="button" onClick={() => onDownload(asset.id)} className="rounded-full border border-line px-3 py-1.5 text-xs font-semibold hover:bg-elevated">Download</button> : null}
         </div>
@@ -771,6 +825,7 @@ function PreviewAssetCard({
         </div>
       ) : null}
       {removeMessage ? <p role={removeMutation.isError ? "alert" : "status"} className="px-3 pb-3 text-xs text-muted">{removeMessage}</p> : null}
+      {retryMessage ? <p role={retryMutation.isError ? "alert" : "status"} className="px-3 pb-3 text-xs text-muted">{retryMessage}</p> : null}
       {expanded && previewUrl ? (
         <div role="dialog" aria-modal="true" aria-label={`Original preview: ${label}`} className="fixed inset-0 z-50 grid place-items-center bg-black/80 p-4" onClick={() => setExpanded(false)}>
           <div className="relative flex max-h-[95vh] max-w-[95vw] flex-col items-center" onClick={(event) => event.stopPropagation()}>
