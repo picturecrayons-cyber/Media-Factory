@@ -222,3 +222,27 @@ The custom application migrator uses this root-level collection. These files are
 ## Release gate
 
 **Production: NO-GO / NOT CERTIFIED.** This is a complete inventory but not a claim that the Branching error is fixed. No database writes, migration-ledger changes, or Production workflow retrigger occurred.
+
+
+## Source-recovery pass 1 — Git commit evidence (2026-10-22)
+
+This pass inspected the two rights-ready feature commits directly, including their changed-file patches. It recovered authoritative *repository source candidates* for the rights-ready feature, but it did **not** prove that either file is byte-for-byte the SQL payload originally applied for a Production ledger version.
+
+| Source artifact | Provenance evidence | What is established | What remains unproven |
+|---|---|---|---|
+| `migrations/0018_bridge_rights_ready_submission.sql` | Commit [`90684bc601ad21c57290203b7a0fb78dec286cd0`](https://github.com/picturecrayons-cyber/Media-Factory/commit/90684bc601ad21c57290203b7a0fb78dec286cd0), added as a 40-line SQL file in the commit patch | Git history contains the source SQL that creates `bridge_title_submission_intake`, its updated-at index, and enables RLS. | It is not a timestamped Supabase CLI file; the commit patch alone does not prove it was the exact payload recorded as Production version `20261009210503` or `20261009210645`. |
+| `migrations/0018_rights_ready_public_submission.sql` | Commit [`6c51ce89adb94eba76c8b111b789b3f7c316ad98`](https://github.com/picturecrayons-cyber/Media-Factory/commit/6c51ce89adb94eba76c8b111b789b3f7c316ad98), added as a 16-line SQL file in the commit patch | Git history contains a separate source SQL adding `rights_submission_status`, its index/comment, and RLS on rights/legal/package tables. | This is a distinct file with overlapping product area, not proof of the SQL payload for either Production rights-ready version. |
+| Production `20261009210503 bridge_rights_ready_submission` | Remote ledger row from the prior read-only history snapshot; related feature commits above | Two plausible source files exist in repository history and have distinguishable SQL content. | **SOURCE NOT RECOVERED as an exact applied payload**; no verified timestamped file, deployment artifact, SQL checksum, or authoritative link to the original applied text is recorded yet. |
+| Production `20261009210645 bridge_submission_intake_server_only` | Remote ledger row from the prior read-only history snapshot; related feature commits above | The feature's source history contains an intake table and related application code. | **SOURCE NOT RECOVERED as an exact applied payload**; no evidence yet isolates the exact server-only hardening SQL applied under this version. |
+
+### Provenance and checksum policy
+
+- Keep the remote migration version/name separate from the repository path and source commit. A matching feature name is not an identity match.
+- A source is **EXACT MATCH** only when an authoritative original SQL artifact is recovered and its content can be compared byte-for-byte (or normalized only under a documented, reviewed normalization rule) with the candidate.
+- Record SHA-256 for the recovered SQL bytes and the evidence location. A Git commit SHA identifies a commit, not the SQL file bytes by itself; use the file blob/content or a verified artifact checksum for content identity.
+- Until that evidence is available, use **SOURCE NOT RECOVERED** or **CANDIDATE — NOT VERIFIED**, never infer or synthesize SQL from the current schema.
+- Do not mark the Branching failure fixed from these findings. No database writes, ledger edits, migration application, or Production workflow retry were performed during this recovery pass.
+
+### Next recovery targets
+
+Prioritize the remaining versions with no candidate, then the versions with plausible candidates. Search source-control history and CI/deployment artifacts for the original SQL payloads and record exact artifact provenance. If the original payload cannot be recovered, preserve that as an explicit unresolved gap rather than manufacturing a timestamped migration.
