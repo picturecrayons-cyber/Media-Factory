@@ -104,12 +104,19 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
     queryKey: ["bridge-title-poster-preview", id],
     queryFn: async () => {
       const result = await listTitleAssets({ data: { titleId: id } });
-      const asset = ["poster_vertical", "poster"]
+      const candidates = ["poster_vertical", "poster"]
         .map((kind) => result.assets.find((item) => item.kind === kind && item.verified))
-        .find(Boolean);
-      if (!asset) return null;
-      const signed = await requestAssetDownload({ data: { assetId: asset.id } });
-      return signed.url;
+        .filter((asset): asset is (typeof result.assets)[number] => Boolean(asset));
+      for (const asset of candidates) {
+        try {
+          const signed = await requestAssetDownload({ data: { assetId: asset.id } });
+          return signed.url;
+        } catch {
+          // A buyer may not be allowed to sign a vertical variant. Try the
+          // standard poster before treating the title preview as unavailable.
+        }
+      }
+      return null;
     },
     retry: false,
     staleTime: 4 * 60 * 1000,
@@ -570,7 +577,7 @@ function TitleAssetPreviewGallery({
         <p className="mt-1 text-xs text-muted">Previews use authenticated, short-lived links. Download remains available.</p>
       </div>
       {assets.length === 0 ? (
-        <p className="rounded-xl border border-dashed border-line p-5 text-sm text-muted">No verified assets are available to preview yet.</p>
+        <p className="rounded-xl border border-dashed border-line p-5 text-sm text-muted">No verified assets are available to preview yet. Incomplete uploads are shown only to staff roles with cleanup permission.</p>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {assets.map((asset) => (
