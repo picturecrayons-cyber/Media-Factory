@@ -6,7 +6,7 @@ import type { BridgeActor } from "@/lib/bridge/session";
 export function ProceedToQcModal({
   titleId,
   titleName,
-  actor,
+  actor: _actor,
   onClose,
   onSuccess,
 }: {
@@ -27,7 +27,7 @@ export function ProceedToQcModal({
 
   const proceedMutation = useMutation({
     mutationFn: () => proceedToQc({ data: { titleId, note } }),
-    onSuccess: (data) => {
+    onSuccess: (_data) => {
       void Promise.all([
         qc.invalidateQueries({ queryKey: ["bridge-title", titleId] }),
         qc.invalidateQueries({ queryKey: ["title-workflow", titleId] }),
