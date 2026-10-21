@@ -39,18 +39,30 @@ function Deliveries() {
 
 function VendorJobs({ actor }: { actor: Actor }) {
   const canRequest = hasPermission(actor, "title.deliver") || hasPermission(actor, "title.create");
+  const titlesQ = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles(), enabled: canRequest });
+  const titles = titlesQ.data?.titles ?? [];
   const [jobs, setJobs] = useState<VendorJob[]>([]);
   const [type, setType] = useState<VendorJobType>("human_qc");
   const [titleId, setTitleId] = useState("");
   const [error, setError] = useState("");
 
   function onRequest() {
+    const selectedTitle = titles.find((title) => title.id === titleId);
+    if (!selectedTitle) {
+      setError(titlesQ.isError
+        ? "Titles could not be loaded. Refresh and try again."
+        : "Select a title before requesting a vendor job.");
+      return;
+    }
     try {
-      setJobs((prev) => [createVendorJob(type, titleId), ...prev]);
+      const job = createVendorJob(type, selectedTitle.id);
+      setJobs((prev) => [job, ...prev]);
       setError("");
       setTitleId("");
-    } catch {
-      setError("Title id required. Job stays requested until a reviewer signs off.");
+    } catch (cause) {
+      setError(cause instanceof Error && cause.message === "unknown_job_type"
+        ? "Choose a supported vendor job type."
+        : "The vendor job could not be requested. Please try again.");
     }
   }
 
@@ -63,6 +75,7 @@ function VendorJobs({ actor }: { actor: Actor }) {
       {canRequest ? (
         <div className="mt-4 flex flex-wrap gap-2">
           <select
+            aria-label="Vendor job type"
             className="rounded-lg border border-line bg-transparent px-3 py-2 text-sm"
             value={type}
             onChange={(e) => setType(e.target.value as VendorJobType)}
@@ -73,13 +86,31 @@ function VendorJobs({ actor }: { actor: Actor }) {
               </option>
             ))}
           </select>
-          <input
+          <select
+            aria-label="Title"
             className="rounded-lg border border-line bg-transparent px-3 py-2 text-sm"
-            placeholder="Title id"
             value={titleId}
-            onChange={(e) => setTitleId(e.target.value)}
-          />
-          <button type="button" className="rounded-lg border border-line px-3 py-2 text-sm" onClick={onRequest}>
+            onChange={(e) => {
+              setTitleId(e.target.value);
+              setError("");
+            }}
+            disabled={titlesQ.isPending || titlesQ.isError || titles.length === 0}
+          >
+            <option value="">
+              {titlesQ.isPending ? "Loading titles…" : titlesQ.isError ? "Titles unavailable" : titles.length === 0 ? "No titles available" : "Select a title"}
+            </option>
+            {titles.map((title) => (
+              <option key={title.id} value={title.id}>
+                {title.name}{title.year ? ` · ${title.year}` : ""} — {title.id}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            className="rounded-lg border border-line px-3 py-2 text-sm disabled:opacity-50"
+            onClick={onRequest}
+            disabled={!titleId || titlesQ.isPending || titlesQ.isError || !titles.some((title) => title.id === titleId)}
+          >
             Request
           </button>
         </div>
