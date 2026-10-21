@@ -309,7 +309,10 @@ function FilesPanel({
   const [uploading, setUploading] = useState<SimpleAssetKind | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [messageKind, setMessageKind] = useState<"status" | "success" | "error">("status");
-  const [progress, setProgress] = useState<UploadProgress | null>(null);
+  const [notificationPermission, setNotificationPermission] = useState<"default" | "granted" | "denied" | "unsupported">(() =>
+    typeof window === "undefined" || !("Notification" in window) ? "unsupported" : Notification.permission,
+  );
+  const [progress, setProgress = useState<UploadProgress | null>(null);
   const uploadXhrRef = useRef<XMLHttpRequest | null>(null);
   const cancelRequestedRef = useRef(false);
 
@@ -543,9 +546,27 @@ function FilesPanel({
           {message}
         </p>
       ) : null}
-      <p className="mt-2 text-xs text-muted">
-        Notifications appear here. Desktop notifications are used only if permission was already granted in your browser.
-      </p>
+      <div className="mt-2 flex flex-wrap items-center gap-3">
+        <p className="text-xs text-muted">Upload status and errors appear here.</p>
+        {notificationPermission === "default" ? (
+          <button
+            type="button"
+            onClick={() => {
+              if ("Notification" in window) {
+                void Notification.requestPermission().then((permission) => {
+                  setNotificationPermission(permission);
+                  if (permission === "granted") announce("Desktop upload notifications enabled.");
+                });
+              }
+            }}
+            className="rounded-full border border-line px-3 py-1.5 text-xs font-semibold"
+          >
+            Enable desktop notifications
+          </button>
+        ) : notificationPermission === "granted" ? (
+          <span className="text-xs text-muted">Desktop notifications enabled</span>
+        ) : null}
+      </div>
       <div className="mt-5 space-y-2">
         {assets.map((a) => (
           <div key={a.id} className="flex items-center justify-between gap-3 rounded-xl border border-line p-4">
