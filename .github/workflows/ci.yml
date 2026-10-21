@@ -4,7 +4,7 @@ on:
   push:
     branches: ["main", "feat/crayons-bridge-production", "fix/bridge-production-gate-20260923", "fix/bridge-final-production-gate-20260924"]
   pull_request:
-    branches: ["main"]
+    branches: ["main", "fix/bridge-upload-state-and-errors", "fix/bridge-optional-legacy-queue"]
   workflow_dispatch:
 
 jobs:
