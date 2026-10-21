@@ -414,6 +414,9 @@ export const abortAssetMultipartUpload = createServerFn({ method: "POST" })
     if (["COMMITTED", "COMPLETED"].includes(session.status)) {
       throw new Error("A committed upload cannot be aborted; verify or replace the asset instead");
     }
+    if (session.status !== "ACTIVE") {
+      throw new Error("Upload finalization is in progress; wait before cancelling");
+    }
     const { abortMultipartUpload, abortMultipartUploadById } = await import("./oci-object-storage.server");
     try {
       await abortMultipartUpload(session.encrypted_access_uri);
@@ -422,7 +425,7 @@ export const abortAssetMultipartUpload = createServerFn({ method: "POST" })
     }
     await sql`
       update bridge_asset_upload_sessions set status = 'ABORTED', updated_at = now()
-      where id = ${session.id} and status in ('ACTIVE','COMMITTING')
+      where id = ${session.id} and status = 'ACTIVE'
     `;
     await writeAudit({
       actorUserId: actor.userId,
