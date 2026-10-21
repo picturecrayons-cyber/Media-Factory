@@ -276,6 +276,22 @@ export const mergeDuplicateTitle = createServerFn({ method: "POST" })
 
     const sql = await getSql();
     return sql.transaction(async (tx) => {
+      const locked = await tx.query<{ id: string; merged_into_title_id: string | null }>(
+        "select id,merged_into_title_id from public.bridge_titles where id = any($1::text[]) for update",
+        [[data.canonicalTitleId, data.retiringTitleId]],
+      );
+      if (locked.length !== 2) throw new Error("Both title records must exist.");
+      const canonicalLock = locked.find((row) => row.id === data.canonicalTitleId);
+      const retiringLock = locked.find((row) => row.id === data.retiringTitleId);
+      if (!canonicalLock || !retiringLock) throw new Error("Both title records must exist.");
+      if (canonicalLock.merged_into_title_id) throw new Error("CANONICAL_TITLE_ALREADY_MERGED");
+      if (retiringLock.merged_into_title_id) throw new Error("RETIRING_TITLE_ALREADY_MERGED");
+      const priorAlias = await tx.query<{ retiring_title_id: string }>(
+        "select retiring_title_id from public.bridge_title_merge_aliases where retiring_title_id=$1 for update",
+        [data.retiringTitleId],
+      );
+      if (priorAlias.length) throw new Error("DUPLICATE_MERGE_ALREADY_RECORDED");
+
       const canonical = await loadMergeState(tx, data.canonicalTitleId);
       const retiring = await loadMergeState(tx, data.retiringTitleId);
       if (!canonical.title || !retiring.title) throw new Error("Both title records must exist.");
