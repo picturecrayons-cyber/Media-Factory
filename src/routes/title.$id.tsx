@@ -333,7 +333,7 @@ function FilesPanel({
     }
   }
 
-  function transferWithProgress(url: string, method: string, file: File, contentType: string) {
+  function transferWithProgress(kind: SimpleAssetKind, url: string, method: string, file: File, contentType: string) {
     return new Promise<void>((resolve, reject) => {
       const xhr = new XMLHttpRequest();
       uploadXhrRef.current = xhr;
@@ -348,7 +348,7 @@ function FilesPanel({
         const bytesPerSecond = loaded / elapsedSeconds;
         const etaSeconds = bytesPerSecond > 0 ? Math.max(0, (total - loaded) / bytesPerSecond) : null;
         setProgress({
-          kind: uploading ?? "master",
+          kind,
           phase: "transferring",
           percent: total > 0 ? Math.min(100, Math.floor((loaded / total) * 100)) : null,
           etaSeconds,
@@ -405,7 +405,7 @@ function FilesPanel({
       setProgress({ kind, phase: "transferring", percent: 0, etaSeconds: null, loaded: 0, total: file.size });
       announce(`Uploading ${kind}…`);
       transferTimer = setTimeout(() => uploadXhrRef.current?.abort(), 120_000);
-      await transferWithProgress(signed.url, signed.method, file, contentType);
+      await transferWithProgress(kind, signed.url, signed.method, file, contentType);
       if (transferTimer !== undefined) clearTimeout(transferTimer);
       transferTimer = undefined;
 
@@ -513,7 +513,7 @@ function FilesPanel({
             aria-valuenow={progress.phase === "transferring" ? progress.percent ?? 0 : undefined}
           >
             <div
-              className={`h-full rounded-full transition-[width] duration-200 ${progress.percent === null ? "w-1/3 animate-pulse" : ""}`}
+              className={`h-full rounded-full bg-accent transition-[width] duration-200 ${progress.percent === null ? "w-1/3 animate-pulse" : ""}`}
               style={progress.percent === null ? undefined : { width: `${progress.percent}%` }}
             />
           </div>
