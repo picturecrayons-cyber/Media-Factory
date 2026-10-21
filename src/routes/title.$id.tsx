@@ -416,7 +416,7 @@ function FilesPanel({
       announce(`Upload transferred. Verifying stored ${kind} before marking it Ready…`);
       await withTimeout(
         confirmAssetUpload({ data: { assetId: signed.assetId, expectedByteSize: file.size } }),
-        30_000,
+        55_000,
         "Stored-object verification",
       );
 
