@@ -241,6 +241,7 @@ export const recordAssetMultipartPart = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
+    assertPermission(actor, actor.internalRole ? "title.ingest_internal" : "asset.sign_upload");
     const sql = await getSql();
     const rows = await sql<{
       id: string; title_id: string; created_by: string; status: string;
@@ -277,6 +278,7 @@ export const finalizeAssetMultipartUpload = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
+    assertPermission(actor, actor.internalRole ? "title.ingest_internal" : "asset.sign_upload");
     const sql = await getSql();
     const rows = await sql<{
       id: string; asset_id: string; title_id: string; created_by: string; status: string;
@@ -350,6 +352,7 @@ export const completeAssetMultipartUpload = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
+    assertPermission(actor, actor.internalRole ? "title.ingest_internal" : "asset.sign_upload");
     const sql = await getSql();
     const rows = await sql<{ id: string; asset_id: string; title_id: string; created_by: string; status: string }>`
       select id, asset_id, title_id, created_by, status
@@ -379,6 +382,7 @@ export const abortAssetMultipartUpload = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
+    assertPermission(actor, actor.internalRole ? "title.ingest_internal" : "asset.sign_upload");
     const sql = await getSql();
     const rows = await sql<{ id: string; asset_id: string; title_id: string; created_by: string; status: string; encrypted_access_uri: string; object_key: string; upload_id: string }>`
       select id, asset_id, title_id, created_by, status, encrypted_access_uri, object_key, upload_id
