@@ -285,3 +285,33 @@ No SHA-256 checksums of original remote migration payloads can be supplied until
 ### Current gate
 
 **Source reconciliation remains INCOMPLETE. Production remains NO-GO / NOT CERTIFIED.** No Production or Staging database writes, migration-ledger changes, branch reset/rebase/merge, or Branching workflow retry were performed in this pass.
+
+
+## Source-recovery pass 3 — connected-source review (2026-10-22)
+
+This pass reviewed GitHub history and PR patches, Vercel deployment metadata, read-only Supabase migration inventories, and targeted Hostinger Mail searches. No Production database writes, migration applications, ledger edits, payment actions, OCI operations, merges, or deployment promotions were performed.
+
+### Historical candidate sources found — not exact remote payload recovery
+
+| Remote Production version/name | Candidate source located | Why it is still not certified as the applied payload |
+|---|---|---|
+| `20261011041046 bridge_storage_economics_20261011` | [PR #173 patch](https://github.com/picturecrayons-cyber/Media-Factory/pull/173) and [PR #208 patch](https://github.com/picturecrayons-cyber/Media-Factory/pull/208) contain `migrations/20261008165000_bridge_storage_economics.sql`; branch blob `c2f52e3b8f10c485ecb4d1b4e05523b03a52cb51`. | Source timestamp/name differs from the remote version. PR #173 is closed unmerged; PR #208 is Draft/open/unmerged. A Git blob ID is not the SHA-256 of the SQL applied remotely. |
+| `20261009210645 bridge_submission_intake_server_only` | [PR #201 patch](https://github.com/picturecrayons-cyber/Media-Factory/pull/201) contains `supabase/migrations/20261010110000_bridge_submission_intake_server_only.sql` (5 lines). | Timestamp differs from the remote version; PR #201 is Draft/open/unmerged. Treat as a later/related candidate only, not the exact original. |
+| `20261016161255 bridge_assets_kind_constraint_20261016` | [PR #235 patch](https://github.com/picturecrayons-cyber/Media-Factory/pull/235) contains `supabase/migrations/20261013_bridge_assets_supported_ingest_kinds.sql`; main also contains [`20261004_bridge_assets_add_censor_certificate.sql`](https://github.com/picturecrayons-cyber/Media-Factory/blob/main/supabase/migrations/20261004_bridge_assets_add_censor_certificate.sql). | PR #235 is Draft/open and explicitly says it was not applied. The older main file does not include `technical`; candidate filenames/content do not establish the exact Oct 16 payload. PR #268 is also Draft/open and says no migration was applied by that PR. |
+| `20261009210503 bridge_rights_ready_submission` | Previously identified root candidate `migrations/0018_bridge_rights_ready_submission.sql`, provenance commit `90684bc601ad21c57290203b7a0fb78dec286cd0`. | Root `migrations/` belongs to the custom application migrator and is not an exact timestamped Supabase CLI source match. Remote payload checksum is unavailable. |
+
+These findings improve provenance but **do not change any of the above rows from SOURCE NOT RECOVERED to RECOVERED**. Do not rename/copy a candidate into a timestamped Supabase migration or apply it to make the ledger appear aligned.
+
+### Cross-system checks
+
+- **Supabase:** read-only migration inventory still reports Production `mlmgugivsyoxzdgwkbpu` with 52 rows (latest `20261016161255`) and Staging `bbtrosuwisnxacuxvegt` with 33 rows (latest `20261021220723`). Ledgers differ.
+- **Vercel:** Preview deployment metadata confirms a READY deployment for PR #317 head `d311f979855b7722fc26875e742bff6e8eaa6dd8`. PR #338's latest listed Preview remains at older commit `32640f0d3b88558fd6b5449e872edba5aac3e39d`, not its current head. Deployment metadata does not contain the original remote SQL payloads.
+- **Razorpay:** the related [PR #285](https://github.com/picturecrayons-cyber/Media-Factory/pull/285) explicitly states no live Razorpay sandbox payment was executed. No payment was initiated in this pass; payment/webhook/entitlement E2E remains unverified.
+- **Hostinger Mail:** targeted searches for the exact storage-economics and legacy-import migration identifiers in Inbox/Sent returned no matching messages. This is a targeted search, not proof that no relevant mail exists anywhere in the mailbox.
+- **Privacy/OAuth:** Supabase organization metadata has `AI_SQL_GENERATOR_OPT_IN`, but does not prove the exact saved `Schema Only` setting. Granted OAuth scopes are not exposed by the inspected connector metadata operations.
+
+### Validation and release gate
+
+Documentation commit `b9f8d987d3384906aaf38ce78f4f79e3edbed0a2` CI run [#1352](https://github.com/picturecrayons-cyber/Media-Factory/actions/runs/39685954191) passed both the `gate` job and `workflow-postgres`. This validates repository checks only; it does not certify source identity, authenticated application E2E, OCI E2E, privacy, OAuth scopes, or Production readiness.
+
+**Decision remains Production NO-GO / NOT CERTIFIED.** Exact source recovery and isolated validation remain incomplete.
