@@ -8,204 +8,64 @@ import { requireVerifiedActor } from "./session";
 import { assertNotDevUser } from "./guards";
 import { writeAudit } from "./audit";
 
-export type MergeDecision = "SAFE" | "HOLD" | "BLOCK";
-
-export type MergeTitle = {
-  id: string;
-  name: string;
-  slug: string;
-  language: string | null;
-  status: string;
-  owner_user_id: string | null;
-  year: number | null;
-  runtime_minutes: number | null;
-  original_language?: string | null;
-};
-
-export type MergeRights = {
-  id: string;
-  territories: unknown;
-  languages: unknown;
-  window_start: string | Date | null;
-  window_end: string | Date | null;
-  exclusivity: string | null;
-  status: string;
-};
-
-export type MergeEvaluationInput = {
-  identityCertain: boolean;
-  canonical: MergeTitle;
-  retiring: MergeTitle;
-  canonicalRights: MergeRights[];
-  retiringRights: MergeRights[];
-  canonicalBuyers: unknown[];
-  retiringBuyers: unknown[];
-  canonicalAssets: unknown[];
-  retiringAssets: unknown[];
-  canonicalDeliveries: unknown[];
-  retiringDeliveries: unknown[];
-  canonicalLoopPublications: unknown[];
-  retiringLoopPublications: unknown[];
-};
-
-function setOf(value: unknown): Set<string> {
-  if (!Array.isArray(value)) return new Set();
-  return new Set(
-    value
-      .filter((v): v is string => typeof v === "string")
-      .map((v) => v.trim().toUpperCase())
-      .filter(Boolean),
-  );
-}
-
-function equalSet(a: unknown, b: unknown) {
-  const aa = setOf(a);
-  const bb = setOf(b);
-  if (!aa.size && !bb.size) return true;
-  if (!aa.size || !bb.size) return false;
-  return aa.size === bb.size && [...aa].every((v) => bb.has(v));
-}
-
-function normalized(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(normalized);
-  if (value && typeof value === "object") {
-    return Object.fromEntries(
-      Object.entries(value as Record<string, unknown>)
-        .sort(([a], [b]) => a.localeCompare(b))
-        .map(([key, entry]) => [key, normalized(entry)]),
-    );
-  }
-  return value;
-}
-
-function time(v: string | Date | null | undefined) {
-  if (!v) return null;
-  const n = new Date(v).getTime();
-  return Number.isFinite(n) ? n : null;
-}
-
-function windowsConflict(a: MergeRights, b: MergeRights) {
-  const aStart = time(a.window_start);
-  const aEnd = time(a.window_end);
-  const bStart = time(b.window_start);
-  const bEnd = time(b.window_end);
-  if (aStart === null && aEnd === null && bStart === null && bEnd === null) return false;
-  const startA = aStart ?? Number.NEGATIVE_INFINITY;
-  const endA = aEnd ?? Number.POSITIVE_INFINITY;
-  const startB = bStart ?? Number.NEGATIVE_INFINITY;
-  const endB = bEnd ?? Number.POSITIVE_INFINITY;
-  return startA < endB && startB < endA;
-}
-
-function rightsConflict(a: MergeRights, b: MergeRights) {
-  const languageConflict = !equalSet(a.languages, b.languages);
-  const territoryConflict = !equalSet(a.territories, b.territories);
-  const exclusivityConflict =
-    Boolean(a.exclusivity && b.exclusivity) &&
-    a.exclusivity!.toUpperCase() !== b.exclusivity!.toUpperCase();
-  const windowConflict = windowsConflict(a, b);
-  return { languageConflict, territoryConflict, exclusivityConflict, windowConflict };
-}
-
-function hasRightsCollision(a: MergeRights[], b: MergeRights[]) {
-  const conflicts: Record<string, boolean> = {
-    language: false,
-    territory: false,
-    window: false,
-    exclusivity: false,
-  };
-  for (const left of a) {
-    for (const right of b) {
-      // Identical grants are the same rights evidence, not a collision.
-      if (stableJson(left) === stableJson(right)) continue;
-      const c = rightsConflict(left, right);
-      conflicts.language ||= c.languageConflict;
-      conflicts.territory ||= c.territoryConflict;
-      conflicts.window ||= c.windowConflict;
-      conflicts.exclusivity ||= c.exclusivityConflict;
-    }
-  }
-  return conflicts;
-}
-
-function stableJson(value: unknown) {
-  return JSON.stringify(normalized(value));
-}
-
-function identicalReferenceSets(a: unknown[], b: unknown[]) {
-  if (!a.length || !b.length) return true;
-  return stableJson(a) === stableJson(b);
-}
-
-export function evaluateDuplicateTitleMerge(input: MergeEvaluationInput): {
-  decision: MergeDecision;
-  reasons: string[];
-  collisions: Record<string, boolean>;
-} {
-  const reasons: string[] = [];
-  if (!input.identityCertain) {
-    return { decision: "BLOCK", reasons: ["TITLE_IDENTITY_UNCERTAIN"], collisions: {} };
-  }
-
-  const titleLanguageConflict =
-    Boolean(input.canonical.language && input.retiring.language) &&
-    input.canonical.language!.trim().toUpperCase() !== input.retiring.language!.trim().toUpperCase();
-
-  const collisions = hasRightsCollision(input.canonicalRights, input.retiringRights);
-  collisions.language ||= titleLanguageConflict;
-  if (collisions.language) reasons.push("LANGUAGE_CONFLICT");
-  if (collisions.territory) reasons.push("TERRITORY_CONFLICT");
-  if (collisions.window) reasons.push("WINDOW_CONFLICT");
-  if (collisions.exclusivity) reasons.push("EXCLUSIVITY_CONFLICT");
-
-  if (!identicalReferenceSets(input.canonicalBuyers, input.retiringBuyers) && input.canonicalBuyers.length && input.retiringBuyers.length) {
-    reasons.push("BUYER_MAPPING_CONFLICT");
-  }
-  if (!identicalReferenceSets(input.canonicalAssets, input.retiringAssets) && input.canonicalAssets.length && input.retiringAssets.length) {
-    reasons.push("ASSET_VERSION_CONFLICT");
-  }
-  if (!identicalReferenceSets(input.canonicalDeliveries, input.retiringDeliveries) && input.canonicalDeliveries.length && input.retiringDeliveries.length) {
-    reasons.push("DELIVERY_REFERENCE_CONFLICT");
-  }
-
-  if (input.canonicalLoopPublications.length || input.retiringLoopPublications.length) {
-    reasons.push("LOOP_PUBLICATION_CONFLICT");
-  }
-
-  const loopBlock = reasons.includes("LOOP_PUBLICATION_CONFLICT");
-  const decision: MergeDecision = loopBlock ? "BLOCK" : reasons.length ? "HOLD" : "SAFE";
-  return { decision, reasons, collisions };
-}
+import { evaluateDuplicateTitleMerge, type MergeRights, type MergeTitle } from "./duplicate-title-merge-policy.ts";
 
 async function loadMergeState(sql: any, titleId: string) {
   const [
-    title,
-    rights,
-    buyers,
-    assets,
-    deliveries,
-    publications,
+    title, rights, buyers, assets, assetRecords, deliveries, publications,
+    qcCases, legalCases, events, payments, serviceOrders, serviceQuotes, loopTitles,
+    migrationQueue, rentalEntitlements,
   ] = await Promise.all([
-    sql<MergeTitle>`select id,name,slug,language,status,owner_user_id,year,runtime_minutes,original_language from public.bridge_titles where id=${titleId} limit 1`,
+    sql<MergeTitle>`select id,name,slug,language,status,owner_user_id,owner_account_type,year,runtime_minutes,original_language from public.bridge_titles where id=${titleId} limit 1`,
     sql<MergeRights>`select id,territories,languages,window_start,window_end,exclusivity,status from public.bridge_rights_grants where title_id=${titleId} order by created_at`,
     sql`select * from public.bridge_buyer_title_access where title_id=${titleId} order by buyer_user_id`,
     sql`select id,asset_group,asset_type,version,language,codec,s3_key,checksum_sha256,processing_state from public.bridge_asset_versions where title_id=${titleId} order by asset_group,asset_type,version,language`,
+    sql`select * from public.bridge_assets where title_id=${titleId} order by created_at,id`,
     sql`select id,destination,package_version,rights_grant_id,qc_case_id,asset_version_ids,readiness_state,authorized_at from public.bridge_destination_packages where title_id=${titleId} order by destination,package_version`,
     sql`select id,bridge_title_id,loop_title_id,authorization_status,territories,languages,exploitation_models,window_start,window_end,approved_at,revoked_at from public.bridge_loop_publications where bridge_title_id=${titleId}`,
+    sql`select * from public.bridge_qc_cases where title_id=${titleId} order by created_at,id`,
+    sql`select * from public.bridge_legal_cases where title_id=${titleId} order by created_at,id`,
+    sql`select * from public.bridge_title_events where title_id=${titleId} order by created_at,id`,
+    sql`select * from public.bridge_payments where title_id=${titleId} order by created_at,id`,
+    sql`select * from public.bridge_service_orders where title_id=${titleId} order by created_at,id`,
+    sql`select * from public.bridge_service_quotes where title_id=${titleId} order by created_at,id`,
+    sql`select * from public.loop_titles where bridge_title_id=${titleId} order by id`,
+    sql`select * from public.loop_media_migration_queue where title_id=${titleId} order by created_at,id`,
+    sql`select e.* from public.loop_user_tvod_entitlements e join public.loop_titles l on l.id::text=e.title_id::text where l.bridge_title_id=${titleId} order by e.id`,
   ]);
   return {
-    title: title[0] ?? null,
-    rights,
-    buyers,
-    assets,
-    deliveries,
-    publications,
+    title: title[0] ?? null, rights, buyers, assets, assetRecords, deliveries, publications,
+    qcCases, legalCases, events, payments, serviceOrders, serviceQuotes, loopTitles,
+    migrationQueue, rentalEntitlements,
+  };
+}
+
+function summarizeMergeState(state: Awaited<ReturnType<typeof loadMergeState>>) {
+  return {
+    title: state.title,
+    counts: {
+      rights: state.rights.length,
+      buyerAccess: state.buyers.length,
+      assetVersions: state.assets.length,
+      assetRecords: state.assetRecords.length,
+      deliveryPackages: state.deliveries.length,
+      loopPublications: state.publications.length,
+      loopTitleLinks: state.loopTitles.length,
+      pendingLegacyMediaMigrations: state.migrationQueue.length,
+      rentalEntitlements: state.rentalEntitlements.length,
+      qcCases: state.qcCases.length,
+      legalCases: state.legalCases.length,
+      titleEvents: state.events.length,
+      payments: state.payments.length,
+      serviceOrders: state.serviceOrders.length,
+      serviceQuotes: state.serviceQuotes.length,
+    },
   };
 }
 
 export const previewDuplicateTitleMerge = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .validator(z.object({ canonicalTitleId: z.string().min(8), retiringTitleId: z.string().min(8) }))
+  .validator(z.object({ canonicalTitleId: z.string().min(8), retiringTitleId: z.string().min(8), identityCertain: z.boolean().default(false) }))
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
@@ -216,7 +76,7 @@ export const previewDuplicateTitleMerge = createServerFn({ method: "POST" })
     const retiring = await loadMergeState(sql, data.retiringTitleId);
     if (!canonical.title || !retiring.title) throw new Error("Both title records must exist.");
     const result = evaluateDuplicateTitleMerge({
-      identityCertain: true,
+      identityCertain: data.identityCertain,
       canonical: canonical.title,
       retiring: retiring.title,
       canonicalRights: canonical.rights,
@@ -227,8 +87,10 @@ export const previewDuplicateTitleMerge = createServerFn({ method: "POST" })
       retiringAssets: retiring.assets,
       canonicalDeliveries: canonical.deliveries,
       retiringDeliveries: retiring.deliveries,
-      canonicalLoopPublications: canonical.publications,
-      retiringLoopPublications: retiring.publications,
+      canonicalLoopPublications: [...canonical.publications, ...canonical.loopTitles],
+      retiringLoopPublications: [...retiring.publications, ...retiring.loopTitles],
+      canonicalLegacyDependencies: [...canonical.migrationQueue, ...canonical.rentalEntitlements],
+      retiringLegacyDependencies: [...retiring.migrationQueue, ...retiring.rentalEntitlements],
     });
     return {
       canonicalTitleId: data.canonicalTitleId,
@@ -236,7 +98,7 @@ export const previewDuplicateTitleMerge = createServerFn({ method: "POST" })
       decision: result.decision,
       reasons: result.reasons,
       collisions: result.collisions,
-      preview: { canonical, retiring },
+      preview: { canonical: summarizeMergeState(canonical), retiring: summarizeMergeState(retiring) },
     };
   });
 
@@ -245,22 +107,39 @@ export const mergeDuplicateTitle = createServerFn({ method: "POST" })
   .validator(z.object({
     canonicalTitleId: z.string().min(8),
     retiringTitleId: z.string().min(8),
+    identityAttested: z.literal(true),
     expectedDecision: z.literal("SAFE"),
   }))
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
-    assertPermission(actor, "title.update_own");
+    assertPermission(actor, "title.merge_duplicate");
     if (data.canonicalTitleId === data.retiringTitleId) throw new Error("A title cannot merge into itself.");
 
     const sql = await getSql();
     return sql.transaction(async (tx) => {
+      const locked = await tx.query<{ id: string; merged_into_title_id: string | null }>(
+        "select id,merged_into_title_id from public.bridge_titles where id = any($1::text[]) for update",
+        [[data.canonicalTitleId, data.retiringTitleId]],
+      );
+      if (locked.length !== 2) throw new Error("Both title records must exist.");
+      const canonicalLock = locked.find((row) => row.id === data.canonicalTitleId);
+      const retiringLock = locked.find((row) => row.id === data.retiringTitleId);
+      if (!canonicalLock || !retiringLock) throw new Error("Both title records must exist.");
+      if (canonicalLock.merged_into_title_id) throw new Error("CANONICAL_TITLE_ALREADY_MERGED");
+      if (retiringLock.merged_into_title_id) throw new Error("RETIRING_TITLE_ALREADY_MERGED");
+      const priorAlias = await tx.query<{ retiring_title_id: string }>(
+        "select retiring_title_id from public.bridge_title_merge_aliases where retiring_title_id=$1 for update",
+        [data.retiringTitleId],
+      );
+      if (priorAlias.length) throw new Error("DUPLICATE_MERGE_ALREADY_RECORDED");
+
       const canonical = await loadMergeState(tx, data.canonicalTitleId);
       const retiring = await loadMergeState(tx, data.retiringTitleId);
       if (!canonical.title || !retiring.title) throw new Error("Both title records must exist.");
 
       const decision = evaluateDuplicateTitleMerge({
-        identityCertain: true,
+        identityCertain: data.identityAttested,
         canonical: canonical.title,
         retiring: retiring.title,
         canonicalRights: canonical.rights,
@@ -271,8 +150,10 @@ export const mergeDuplicateTitle = createServerFn({ method: "POST" })
         retiringAssets: retiring.assets,
         canonicalDeliveries: canonical.deliveries,
         retiringDeliveries: retiring.deliveries,
-        canonicalLoopPublications: canonical.publications,
-        retiringLoopPublications: retiring.publications,
+        canonicalLoopPublications: [...canonical.publications, ...canonical.loopTitles],
+        retiringLoopPublications: [...retiring.publications, ...retiring.loopTitles],
+        canonicalLegacyDependencies: [...canonical.migrationQueue, ...canonical.rentalEntitlements],
+        retiringLegacyDependencies: [...retiring.migrationQueue, ...retiring.rentalEntitlements],
       });
 
       if (decision.decision !== data.expectedDecision) {
@@ -364,7 +245,7 @@ export const rollbackDuplicateTitleMerge = createServerFn({ method: "POST" })
         canonical_title_id: string;
         retiring_title_id: string;
         decision: string;
-        pre_merge_state: { retiring?: { title?: { id?: string } } };
+        pre_merge_state: { retiring?: { title?: { id?: string; status?: string } } };
       }>(
         "select merge_id,canonical_title_id,retiring_title_id,decision,pre_merge_state from public.bridge_title_merge_audits where merge_id=$1 for update",
         [data.mergeId],
@@ -383,7 +264,7 @@ export const rollbackDuplicateTitleMerge = createServerFn({ method: "POST" })
       const state = audit.pre_merge_state as Record<string, unknown>;
       const retiringState = (state.retiring ?? {}) as Record<string, unknown>;
       const tableKeys: Array<[string, string]> = [
-        ["bridge_assets", "assets"],
+        ["bridge_assets", "assetRecords"],
         ["bridge_asset_versions", "assets"],
         ["bridge_qc_cases", "qcCases"],
         ["bridge_legal_cases", "legalCases"],
@@ -403,14 +284,16 @@ export const rollbackDuplicateTitleMerge = createServerFn({ method: "POST" })
         }
       }
 
+      const originalStatus = retiring.title.status;
+      if (!originalStatus) throw new Error("MERGE_ROLLBACK_SNAPSHOT_INVALID:status");
       await tx.query(
-        "update public.bridge_titles set merged_into_title_id=null, merged_at=null, updated_at=now() where id=$1",
-        [audit.retiring_title_id],
+        "update public.bridge_titles set status=$1, merged_into_title_id=null, merged_at=null, updated_at=now() where id=$2",
+        [originalStatus, audit.retiring_title_id],
       );
 
       await tx.query(
-        "update public.bridge_title_merge_aliases set retiring_title_id=retiring_title_id where retiring_title_id=$1",
-        [audit.retiring_title_id],
+        "delete from public.bridge_title_merge_aliases where retiring_title_id=$1 and merge_id=$2",
+        [audit.retiring_title_id, data.mergeId],
       );
 
       await tx.query(

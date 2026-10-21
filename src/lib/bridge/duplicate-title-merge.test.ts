@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { evaluateDuplicateTitleMerge } from "./duplicate-title-merge";
+import { evaluateDuplicateTitleMerge } from "./duplicate-title-merge-policy.ts";
 
 const title = (id: string) => ({
   id, name: "Film", slug: id, language: "Malayalam", status: "DRAFT",
@@ -17,6 +17,7 @@ const base = () => ({
   canonicalRights: [rights()], retiringRights: [rights()],
   canonicalBuyers: [] as unknown[], retiringBuyers: [] as unknown[], canonicalAssets: [] as unknown[], retiringAssets: [] as unknown[],
   canonicalDeliveries: [] as unknown[], retiringDeliveries: [] as unknown[], canonicalLoopPublications: [] as unknown[], retiringLoopPublications: [] as unknown[],
+  canonicalLegacyDependencies: [] as unknown[], retiringLegacyDependencies: [] as unknown[],
 });
 
 test("safe exact duplicate", () => {
@@ -97,4 +98,46 @@ test("safe when only one side has a non-conflicting reference", () => {
   input.canonicalAssets = [{ id: "a", checksum_sha256: "same" }];
   input.retiringAssets = [];
   assert.equal(evaluateDuplicateTitleMerge(input).decision, "SAFE");
+});
+
+test("holds when title ownership differs", () => {
+  const input = base();
+  input.retiring = { ...input.retiring, owner_user_id: "different-owner" };
+  const result = evaluateDuplicateTitleMerge(input);
+  assert.equal(result.decision, "HOLD");
+  assert.ok(result.reasons.includes("TITLE_OWNER_CONFLICT"));
+});
+
+test("holds when lifecycle states differ", () => {
+  const input = base();
+  input.retiring = { ...input.retiring, status: "LIVE_FOR_BUYERS" };
+  const result = evaluateDuplicateTitleMerge(input);
+  assert.equal(result.decision, "HOLD");
+  assert.ok(result.reasons.includes("TITLE_STATUS_CONFLICT"));
+  assert.ok(result.reasons.includes("BUYER_LIFECYCLE_REQUIRES_REVIEW"));
+});
+
+test("holds when runtime differs", () => {
+  const input = base();
+  input.retiring = { ...input.retiring, runtime_minutes: 105 };
+  const result = evaluateDuplicateTitleMerge(input);
+  assert.equal(result.decision, "HOLD");
+  assert.ok(result.reasons.includes("RUNTIME_CONFLICT"));
+});
+
+test("holds even when both records are buyer-facing", () => {
+  const input = base();
+  input.canonical = { ...input.canonical, status: "LIVE_FOR_BUYERS" };
+  input.retiring = { ...input.retiring, status: "LIVE_FOR_BUYERS" };
+  const result = evaluateDuplicateTitleMerge(input);
+  assert.equal(result.decision, "HOLD");
+  assert.ok(result.reasons.includes("BUYER_LIFECYCLE_REQUIRES_REVIEW"));
+});
+
+test("blocks when legacy media migration or rental entitlement remains", () => {
+  const input = base();
+  input.retiringLegacyDependencies = [{ kind: "pending_master_migration" }, { kind: "rental_entitlement" }];
+  const result = evaluateDuplicateTitleMerge(input);
+  assert.equal(result.decision, "BLOCK");
+  assert.ok(result.reasons.includes("LEGACY_DEPENDENCY_CONFLICT"));
 });
