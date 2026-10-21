@@ -262,7 +262,23 @@ export async function sealVerifiedObject(sourceKey: string, destinationKey: stri
   });
   if (res.status !== 202 && !res.ok) throw new Error(`OCI object copy failed (${res.status})`);
   const workRequestId = res.headers.get("opc-work-request-id");
-  if (workRequestId) await pollWorkRequest(cfg, workRequestId);
+  if (workRequestId) {
+    try {
+      await pollWorkRequest(cfg, workRequestId);
+    } catch (cause) {
+      // OCI can return 404 for a work request that has already aged out or is
+      // not visible through the polling endpoint. Never assume success: only
+      // continue if the destination object itself can be verified. The caller
+      // also compares its size with the source before marking the asset Ready.
+      const isMissingWorkRequest = cause instanceof Error && /work-request lookup failed \(404\)/.test(cause.message);
+      if (!isMissingWorkRequest) throw cause;
+      try {
+        return await verifyObject(destinationKey);
+      } catch {
+        throw cause;
+      }
+    }
+  }
   return verifyObject(destinationKey);
 }
 
