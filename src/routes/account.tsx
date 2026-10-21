@@ -1,10 +1,11 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation } from "@tanstack/react-query";
+import { useState } from "react";
 import { toast } from "sonner";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { Button } from "@/components/ui/button";
-import { requestEmailVerification } from "@/lib/bridge/profiles";
+import { requestEmailVerification, updateAdminProfile } from "@/lib/bridge/profiles";
 
 export const Route = createFileRoute("/account")({ component: Account });
 
