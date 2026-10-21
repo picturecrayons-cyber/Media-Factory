@@ -278,7 +278,23 @@ function FilesPanel({
 }) {
   const [uploading, setUploading] = useState<SimpleAssetKind | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+
+  async function withTimeout<T>(operation: Promise<T>, timeoutMs: number, phase: string): Promise<T> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      return await Promise.race([
+        operation,
+        new Promise<T>((_, reject) => {
+          timer = setTimeout(() => reject(new Error(`${phase} timed out. Please retry the upload.`)), timeoutMs);
+        }),
+      ]);
+    } finally {
+      if (timer !== undefined) clearTimeout(timer);
+    }
+  }
+
   async function uploadFile(kind: SimpleAssetKind, file: File) {
+    if (uploading) return;
     const filename = asciiUploadName(file.name);
     const contentType = file.type || "application/octet-stream";
     const validation = validateOttIngestFile({
@@ -290,38 +306,68 @@ function FilesPanel({
       setMessage(validation.message);
       return;
     }
+
     setUploading(kind);
-    setMessage(`Preparing ${kind} upload…`);
+    setMessage(`Preparing ${kind} upload URL…`);
+    let transferController: AbortController | undefined;
+    let transferTimer: ReturnType<typeof setTimeout> | undefined;
     try {
-      const signed = await requestAssetUpload({
-        data: {
-          titleId,
-          kind,
-          filename,
-          contentType,
-        },
-      });
+      const signed = await withTimeout(
+        requestAssetUpload({
+          data: {
+            titleId,
+            kind,
+            filename,
+            contentType,
+          },
+        }),
+        20_000,
+        "Upload URL preparation",
+      );
+
       // OCI returns a pre-authenticated URL; use it verbatim because rewriting its
       // encoded object path can change the target object and cause browser PUT failures.
-      const put = await fetch(signed.url, {
-        method: signed.method,
-        body: file,
-        headers: { "content-type": contentType },
-      });
-      if (!put.ok) throw new Error(`Upload failed (${put.status})`);
-      await confirmAssetUpload({ data: { assetId: signed.assetId, expectedByteSize: file.size } });
-      await onAssetsChanged();
-      setMessage(`${kind[0].toUpperCase() + kind.slice(1)} is ready.`);
+      setMessage(`Transferring ${kind} to storage…`);
+      transferController = new AbortController();
+      transferTimer = setTimeout(() => transferController?.abort(), 120_000);
+      let put: Response;
+      try {
+        put = await fetch(signed.url, {
+          method: signed.method,
+          body: file,
+          headers: { "content-type": contentType },
+          signal: transferController.signal,
+        });
+      } catch (error) {
+        if (transferController.signal.aborted) {
+          throw new Error("File transfer timed out after 2 minutes. No Ready status was set; select the file again to retry.");
+        }
+        throw error;
+      } finally {
+        if (transferTimer !== undefined) clearTimeout(transferTimer);
+      }
+      if (!put.ok) throw new Error(`Upload failed (${put.status}). No Ready status was set; please retry.`);
+
+      setMessage(`Verifying stored ${kind}…`);
+      await withTimeout(
+        confirmAssetUpload({ data: { assetId: signed.assetId, expectedByteSize: file.size } }),
+        30_000,
+        "Stored-object verification",
+      );
+      await withTimeout(Promise.resolve(onAssetsChanged()), 15_000, "Asset refresh");
+      setMessage(`${kind[0].toUpperCase() + kind.slice(1)} is ready after storage verification.`);
     } catch (error) {
       const raw = error instanceof Error ? error.message : "Upload failed";
       if (raw.includes("STORAGE_UNAVAILABLE")) {
-        setMessage("Storage service is currently unavailable. Please try again later.");
+        setMessage("Storage service is currently unavailable. Check the isolated Preview configuration, then select the file again to retry.");
       } else if (error instanceof TypeError) {
-        setMessage("The browser could not reach OCI storage. Check the OCI bucket CORS rule for this site's origin, PUT method and Content-Type header, then request a fresh upload URL.");
+        setMessage("The browser could not reach OCI storage. Check the OCI bucket CORS rule for this Preview origin, PUT method and Content-Type header, then select the file again to retry.");
       } else {
-        setMessage(raw);
+        setMessage(`${raw} No Ready status was set by this client flow; select the file again to retry.`);
       }
     } finally {
+      if (transferTimer !== undefined) clearTimeout(transferTimer);
+      transferController?.abort();
       setUploading(null);
     }
   }
