@@ -13,6 +13,7 @@ const queryClient = new QueryClient({
 
 export const Route = createRootRoute({
   beforeLoad: async ({ location }) => {
+    if (import.meta.env.VITE_AUTH_ENABLED === "false") return;
     if (!requiresServerAuth(location.pathname)) return;
     const { authenticated } = await getCookieAuthStatus();
     if (!authenticated) {
