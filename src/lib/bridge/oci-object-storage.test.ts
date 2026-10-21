@@ -273,3 +273,114 @@ test("cleanup error accumulation detects teardown failures without suppressed ex
     }
   }, /OCI E2E cleanup failed: delete sealedKey: HTTP 502 Bad Gateway during delete/);
 });
+
+
+test("OCI PAR URL validation rejects unexpected hosts, schemes, credentials, and fragments", async (t) => {
+  const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  const values = {
+    OCI_TENANCY_OCID: "test-tenancy",
+    OCI_USER_OCID: "test-user",
+    OCI_PRIVATE_KEY: privateKey.export({ type: "pkcs8", format: "pem" }).toString(),
+    OCI_FINGERPRINT: "test-fingerprint",
+    OCI_REGION: "ap-mumbai-1",
+    OCI_NAMESPACE: "test-namespace",
+    OCI_BUCKET_NAME: "test-bucket",
+  };
+  const saved = Object.fromEntries(Object.keys(values).map((key) => [key, process.env[key]]));
+  const originalFetch = globalThis.fetch;
+  Object.assign(process.env, values);
+  try {
+    const invalidUris = [
+      "https://evil.example/p/token",
+      "http://objectstorage.ap-mumbai-1.oraclecloud.com/p/token",
+      "https://user@objectstorage.ap-mumbai-1.oraclecloud.com/p/token",
+      "https://objectstorage.ap-mumbai-1.oraclecloud.com/p/token#fragment",
+      "//evil.example/p/token",
+    ];
+    for (const uri of invalidUris) {
+      await t.test(uri, async () => {
+        globalThis.fetch = async () => Response.json({ accessUri: uri });
+        await assert.rejects(
+          (await import("./oci-object-storage.server.ts")).signUpload({
+            key: "synthetic-test-key",
+            contentType: "application/octet-stream",
+          }),
+          /unexpected URL/,
+        );
+      });
+    }
+
+    globalThis.fetch = async () =>
+      Response.json({ accessUri: "/p/preview-token" });
+    const signed = await (await import("./oci-object-storage.server.ts")).signUpload({
+      key: "synthetic-test-key",
+      contentType: "application/octet-stream",
+    });
+    assert.equal(new URL(signed.url).origin, "https://objectstorage.ap-mumbai-1.oraclecloud.com");
+    assert.equal(new URL(signed.url).pathname, "/p/preview-token");
+  } finally {
+    globalThis.fetch = originalFetch;
+    for (const [key, value] of Object.entries(saved)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+});
+
+test("OCI copy verification fails closed when work request ID is missing or polling times out", async (t) => {
+  const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  const values = {
+    OCI_TENANCY_OCID: "test-tenancy",
+    OCI_USER_OCID: "test-user",
+    OCI_PRIVATE_KEY: privateKey.export({ type: "pkcs8", format: "pem" }).toString(),
+    OCI_FINGERPRINT: "test-fingerprint",
+    OCI_REGION: "ap-mumbai-1",
+    OCI_NAMESPACE: "test-namespace",
+    OCI_BUCKET_NAME: "test-bucket",
+  };
+  const saved = Object.fromEntries(Object.keys(values).map((key) => [key, process.env[key]]));
+  const originalFetch = globalThis.fetch;
+  Object.assign(process.env, values);
+  try {
+    await t.test("202 response without work request ID", async () => {
+      globalThis.fetch = async () => new Response(null, { status: 202 });
+      await assert.rejects(
+        (await import("./oci-object-storage.server.ts")).sealVerifiedObject(
+          "source-key",
+          "destination-key",
+          "source-etag",
+        ),
+        /no work-request ID/,
+      );
+    });
+
+    await t.test("work request lookup network timeout", async () => {
+      let calls = 0;
+      globalThis.fetch = async (_input, init) => {
+        calls += 1;
+        if (init?.method === "POST") {
+          return new Response(null, {
+            status: 202,
+            headers: { "opc-work-request-id": "copy/timeout-test" },
+          });
+        }
+        throw new Error("synthetic network timeout");
+      };
+      await assert.rejects(
+        (await import("./oci-object-storage.server.ts")).sealVerifiedObject(
+          "source-key",
+          "destination-key",
+          "source-etag",
+        ),
+        /lookup timed out \(last status: unknown\)/,
+      );
+      assert.equal(calls, 2, "copy polling should stop after the first failed request");
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+    for (const [key, value] of Object.entries(saved)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+});
