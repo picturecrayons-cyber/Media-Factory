@@ -470,6 +470,8 @@ function FilesPanel({
         setUploadProgress(Math.floor((completedBytes / file.size) * 100));
       }
 
+      setCanCancelUpload(false);
+      setMessage("Finalizing upload and verifying the stored object…");
       const finalized = await finalizeAssetMultipartUpload({ data: { sessionId: session.sessionId } });
       await confirmAssetUpload({ data: { assetId: finalized.assetId, expectedByteSize: finalized.expectedByteSize } });
       await completeAssetMultipartUpload({ data: { sessionId: session.sessionId } });
