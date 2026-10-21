@@ -354,19 +354,34 @@ function FilesPanel({
       // Use the provider-issued PAR URL verbatim; rewriting its encoded path can target a different object.
       await new Promise<void>((resolve, reject) => {
         const xhr = new XMLHttpRequest();
+        // Direct-to-OCI uploads can be large; cap hangs while allowing long masters.
+        xhr.timeout = 30 * 60 * 1000;
         xhr.open(signed.method, signed.url);
         xhr.setRequestHeader("content-type", contentType);
         xhr.upload.onprogress = (event) => {
-          if (!event.lengthComputable) return;
+          if (!event.lengthComputable) {
+            setMessage(`Uploading ${kind}…`);
+            return;
+          }
           const percent = Math.min(99, Math.floor((event.loaded / event.total) * 100));
           setUploadProgress(percent);
           setMessage(`Uploading ${kind}: ${(event.loaded / (1024 * 1024)).toFixed(1)} of ${(file.size / (1024 * 1024)).toFixed(1)} MB (${percent}%)…`);
         };
         xhr.onload = () => {
-          if (xhr.status >= 200 && xhr.status < 300) resolve();
-          else reject(new Error(`Upload failed (${xhr.status})`));
+          if (xhr.status >= 200 && xhr.status < 300) {
+            resolve();
+            return;
+          }
+          // Do not surface a PAR URL or raw storage response body in the UI.
+          const hint = xhr.status === 401 || xhr.status === 403
+            ? "The storage upload authorization was rejected. Refresh the title and try again; if it repeats, check the OCI bucket/PAR permissions."
+            : xhr.status === 404
+              ? "The storage upload target was not found. Check the configured OCI namespace and bucket."
+              : `Storage returned HTTP ${xhr.status}.`;
+          reject(new Error(`Upload failed. ${hint}`));
         };
-        xhr.onerror = () => reject(new Error("Browser could not reach OCI storage (status 0). Check bucket CORS, network access, and upload URL expiry."));
+        xhr.onerror = () => reject(new Error("The browser could not complete the OCI upload. A status of 0 commonly means the OCI bucket CORS policy does not allow this app origin, PUT, or the Content-Type header; also check network access and upload URL expiry."));
+        xhr.ontimeout = () => reject(new Error("Upload timed out after 30 minutes. Check the network connection and try again with a stable connection."));
         xhr.onabort = () => reject(new Error("Upload cancelled."));
         xhr.send(file);
       });
