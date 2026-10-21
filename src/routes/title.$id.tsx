@@ -419,8 +419,14 @@ function FilesPanel({
     }
   }
   async function download(id: string) {
-    const signed = await requestAssetDownload({ data: { assetId: id } });
-    window.location.assign(signed.url);
+    try {
+      const signed = await requestAssetDownload({ data: { assetId: id } });
+      window.location.assign(signed.url);
+    } catch (cause) {
+      const detail = cause instanceof Error ? cause.message : "Download could not be prepared.";
+      setMessage(detail);
+      toast.error(detail);
+    }
   }
   const cards: [SimpleAssetKind, string, string][] = [
     ["master", "Main Film", "Required"],
@@ -815,7 +821,18 @@ function PreviewAssetCard({
             </button>
           ) : null}
           {canManage && !asset.verified ? <button type="button" onClick={() => { setRemoveMessage(null); setRemoveConfirm(true); }} className="rounded-full border border-line px-3 py-1.5 text-xs font-semibold text-destructive hover:bg-elevated">Remove</button> : null}
-          {asset.verified ? <button type="button" onClick={() => onDownload(asset.id)} className="rounded-full border border-line px-3 py-1.5 text-xs font-semibold hover:bg-elevated">Download</button> : null}
+          {asset.verified || isSuperAdmin ? (
+            <button
+              type="button"
+              onClick={() => {
+                if (!asset.verified && !window.confirm("This source file has not passed storage verification. Download the temporary source object only if you need to recover or inspect it?")) return;
+                onDownload(asset.id);
+              }}
+              className="rounded-full border border-line px-3 py-1.5 text-xs font-semibold hover:bg-elevated"
+            >
+              {asset.verified ? "Download" : "Download unverified source"}
+            </button>
+          ) : null}
         </div>
       </div>
       {removeConfirm ? (
