@@ -177,7 +177,7 @@ export const requestAssetMultipartUpload = createServerFn({ method: "POST" })
       fileSize: data.fileSize,
       partSize: MULTIPART_PART_SIZE,
       status: "ACTIVE" as const,
-      parts: [] as Array<{ partNumber: number; etag: string; byteSize: number }>,
+      parts: [] as Array<{ partNumber: number; etag: string; checksum: string; byteSize: number }>,
     };
   });
 
