@@ -85,7 +85,13 @@ function TitleListItem({ title, canManage, canSeeInternalId, canDeleteDraft }: {
       setConfirmDelete(false);
       void qc.invalidateQueries({ queryKey: ["bridge-titles"] });
     },
-    onError: (error) => toast(error instanceof Error ? error.message : "Could not delete title"),
+    onError: (error) => {
+      const message = error instanceof Error ? error.message : "Could not delete title";
+      // Refresh eligibility after a stale delete action so titles with newly linked records
+      // switch from Delete to Review instead of repeatedly offering a blocked action.
+      void qc.invalidateQueries({ queryKey: ["bridge-titles"] });
+      toast.error(message);
+    },
   });
 
   return (
