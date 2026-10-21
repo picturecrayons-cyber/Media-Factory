@@ -146,7 +146,14 @@ async function signedFetch(opts: {
   const safeHeaders = Object.fromEntries(
     Object.entries(headers).map(([key, value]) => [toLatin1(key), toLatin1(value)]),
   );
-  return fetch(url, { method: opts.method, headers: safeHeaders, body });
+  // Fail closed when OCI signing/namespace/PAR requests stall. The caller receives
+  // a bounded error instead of leaving the browser upload UI in "Preparing…" forever.
+  return fetch(url, {
+    method: opts.method,
+    headers: safeHeaders,
+    body,
+    signal: AbortSignal.timeout(15_000),
+  });
 }
 
 async function resolveNamespace(cfg: OciConfig) {
