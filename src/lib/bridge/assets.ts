@@ -78,7 +78,7 @@ export const requestAssetUpload = createServerFn({ method: "POST" })
       entityId: id,
       metadata: { titleId: title.id, kind: data.kind },
     });
-    return { assetId: id, ...signed };
+    return { assetId: id, url: signed.url, method: signed.method, expiresIn: 900 };
   });
 
 export const confirmAssetUpload = createServerFn({ method: "POST" })
@@ -205,7 +205,7 @@ export const requestAssetDownload = createServerFn({ method: "POST" })
       entityType: "bridge_asset",
       entityId: asset.id,
     });
-    return signed;
+    return { url: signed.url, method: signed.method, expiresIn: 300 };
   });
 
 /** Issue a short-lived preview URL only to a verified super-admin. */
@@ -260,7 +260,6 @@ export const listTitleAssets = createServerFn({ method: "GET" })
     const rows = await sql<{
       id: string;
       kind: string;
-      s3_key: string;
       content_type: string | null;
       byte_size: number | null;
       created_at: string | Date;
