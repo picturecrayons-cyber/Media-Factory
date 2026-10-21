@@ -354,6 +354,14 @@ function FilesPanel({
     setMessage(`Preparing ${kind} upload…`);
     try {
       if (file.size < MULTIPART_THRESHOLD) {
+        const savedSession = window.localStorage.getItem(`bridge-upload:${titleId}`);
+        if (savedSession) {
+          try {
+            const previous = JSON.parse(savedSession) as { sessionId?: string };
+            if (previous.sessionId) await abortAssetMultipartUpload({ data: { sessionId: previous.sessionId } });
+          } catch { /* stale sessions are cleaned up by expiry recovery */ }
+          window.localStorage.removeItem(`bridge-upload:${titleId}`);
+        }
         const signed = await requestAssetUpload({
           data: { titleId, kind, filename, contentType },
         });
