@@ -53,13 +53,20 @@ function TitleListItem({ title, canManage, canSeeInternalId, canDeleteDraft }: {
     queryFn: async () => {
       const result = await listTitleAssets({ data: { titleId: title.id } });
       const priority = ["thumbnail", "poster_vertical", "poster", "poster_horizontal"];
-      const asset = priority
+      const candidates = priority
         .map((kind) => result.assets.find((item) => item.kind === kind && item.verified))
-        .find(Boolean);
-      if (!asset) return null;
-      const signed = await requestAssetDownload({ data: { assetId: asset.id } });
-      return signed.url;
+        .filter((asset): asset is (typeof result.assets)[number] => Boolean(asset));
+      for (const asset of candidates) {
+        try {
+          const signed = await requestAssetDownload({ data: { assetId: asset.id } });
+          return signed.url;
+        } catch {
+          // Try the next public artwork variant if this one is not buyer-readable.
+        }
+      }
+      return null;
     },
+    enabled: false,
     retry: false,
     staleTime: 4 * 60 * 1000,
   });
@@ -98,7 +105,7 @@ function TitleListItem({ title, canManage, canSeeInternalId, canDeleteDraft }: {
     <div className="px-3 py-3 sm:px-4">
       <div className="flex items-center gap-3 sm:gap-4">
         <div className="min-w-0 flex-1">
-        <Link to="/title/$id" params={{ id: title.id }} className="flex min-w-0 items-center gap-3 hover:text-accent sm:gap-4">
+        <Link to="/title/$id" params={{ id: title.id }} className="flex min-w-0 items-center gap-3 hover:text-accent sm:gap-4" onMouseEnter={() => { if (!previewQ.data && !previewQ.isFetching) void previewQ.refetch(); }} onFocus={() => { if (!previewQ.data && !previewQ.isFetching) void previewQ.refetch(); }}>
           <div className="grid h-16 w-12 shrink-0 place-items-center overflow-hidden rounded-md border border-line bg-elevated sm:h-20 sm:w-14">
             {previewQ.data ? (
               <img src={previewQ.data} alt="" loading="lazy" className="h-full w-full object-cover" />
