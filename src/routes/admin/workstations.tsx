@@ -6,6 +6,7 @@ import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { listAdminWorkstations, reviewAdminTitle, setBuyerPublicationGate } from "@/lib/bridge/admin-workstations";
 import { listDuplicateReviews, openDuplicateReview, decideDuplicateReview } from "@/lib/bridge/duplicate-reconciliation";
+import { buildTitleAuditGroups } from "@/lib/bridge/title-audit";
 
 export const Route = createFileRoute("/admin/workstations")({ component: AdminWorkstations });
 
