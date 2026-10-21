@@ -4,7 +4,7 @@ import { WorkflowDesk } from "@/components/bridge/workflow-desk";
 import { publicationIsActive } from "@/lib/bridge/workflow-policy";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { getTitle, updateTitle } from "@/lib/bridge/titles";
@@ -259,6 +259,36 @@ function Metric({ label, value }: { label: string; value: string }) {
 }
 
 type SimpleAssetKind = "master" | "poster_vertical" | "poster_horizontal" | "thumbnail" | "subtitle" | "screener" | "censor_certificate";
+type UploadProgress = {
+  kind: SimpleAssetKind;
+  phase: "preparing" | "transferring" | "verifying" | "refreshing";
+  percent: number | null;
+  etaSeconds: number | null;
+  loaded: number;
+  total: number;
+};
+
+function formatEta(seconds: number | null): string {
+  if (seconds == null || !Number.isFinite(seconds)) return "Calculating time remaining…";
+  if (seconds <= 0) return "Almost done";
+  if (seconds < 60) return `About ${Math.ceil(seconds)} sec remaining`;
+  const minutes = Math.floor(seconds / 60);
+  const remainder = Math.ceil(seconds % 60);
+  return remainder ? `About ${minutes} min ${remainder} sec remaining` : `About ${minutes} min remaining`;
+}
+
+function notifyUpload(message: string) {
+  // Keep notifications in the page by default. Use a desktop notification only
+  // when the user has already granted permission; never prompt unexpectedly.
+  if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
+    try {
+      new Notification("Crayons Bridge · Upload", { body: message });
+    } catch {
+      // The accessible in-page status remains available if desktop notifications fail.
+    }
+  }
+}
+
 function FilesPanel({
   titleId,
   assets,
@@ -278,6 +308,16 @@ function FilesPanel({
 }) {
   const [uploading, setUploading] = useState<SimpleAssetKind | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [messageKind, setMessageKind] = useState<"status" | "success" | "error">("status");
+  const [progress, setProgress] = useState<UploadProgress | null>(null);
+  const uploadXhrRef = useRef<XMLHttpRequest | null>(null);
+  const cancelRequestedRef = useRef(false);
+
+  function announce(text: string, kind: "status" | "success" | "error" = "status", desktop = false) {
+    setMessage(text);
+    setMessageKind(kind);
+    if (desktop) notifyUpload(text);
+  }
 
   async function withTimeout<T>(operation: Promise<T>, timeoutMs: number, phase: string): Promise<T> {
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -293,88 +333,121 @@ function FilesPanel({
     }
   }
 
+  function transferWithProgress(url: string, method: string, file: File, contentType: string) {
+    return new Promise<void>((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      uploadXhrRef.current = xhr;
+      const startedAt = Date.now();
+      xhr.open(method, url, true);
+      xhr.setRequestHeader("content-type", contentType);
+      xhr.timeout = 120_000;
+      xhr.upload.onprogress = (event) => {
+        const total = event.lengthComputable ? event.total : file.size;
+        const loaded = Math.min(event.loaded, total);
+        const elapsedSeconds = Math.max((Date.now() - startedAt) / 1000, 0.25);
+        const bytesPerSecond = loaded / elapsedSeconds;
+        const etaSeconds = bytesPerSecond > 0 ? Math.max(0, (total - loaded) / bytesPerSecond) : null;
+        setProgress({
+          kind: uploading ?? "master",
+          phase: "transferring",
+          percent: total > 0 ? Math.min(100, Math.floor((loaded / total) * 100)) : null,
+          etaSeconds,
+          loaded,
+          total,
+        });
+      };
+      xhr.onload = () => {
+        uploadXhrRef.current = null;
+        if (xhr.status >= 200 && xhr.status < 300) resolve();
+        else reject(new Error(`Upload failed (${xhr.status}). No Ready status was set; please retry.`));
+      };
+      xhr.onerror = () => {
+        uploadXhrRef.current = null;
+        reject(new TypeError("The browser could not reach OCI storage. Check the OCI bucket CORS rule for this Preview origin, PUT method and Content-Type header."));
+      };
+      xhr.ontimeout = () => {
+        uploadXhrRef.current = null;
+        reject(new Error("File transfer timed out after 2 minutes. No Ready status was set; select the file again to retry."));
+      };
+      xhr.onabort = () => {
+        uploadXhrRef.current = null;
+        reject(new Error(cancelRequestedRef.current
+          ? "Upload cancelled. The asset was not marked Ready; select the file again to retry."
+          : "File transfer was interrupted. The asset was not marked Ready; select the file again to retry."));
+      };
+      xhr.send(file);
+    });
+  }
+
   async function uploadFile(kind: SimpleAssetKind, file: File) {
     if (uploading) return;
     const filename = asciiUploadName(file.name);
     const contentType = file.type || "application/octet-stream";
-    const validation = validateOttIngestFile({
-      kind,
-      filename,
-      contentType,
-    });
+    const validation = validateOttIngestFile({ kind, filename, contentType });
     if (!validation.ok) {
-      setMessage(validation.message);
+      announce(validation.message, "error");
       return;
     }
 
+    cancelRequestedRef.current = false;
     setUploading(kind);
-    setMessage(`Preparing ${kind} upload URL…`);
-    let transferController: AbortController | undefined;
+    setProgress({ kind, phase: "preparing", percent: null, etaSeconds: null, loaded: 0, total: file.size });
+    announce(`Preparing ${kind} upload. You can follow progress here.`);
     let transferTimer: ReturnType<typeof setTimeout> | undefined;
     try {
       const signed = await withTimeout(
-        requestAssetUpload({
-          data: {
-            titleId,
-            kind,
-            filename,
-            contentType,
-          },
-        }),
+        requestAssetUpload({ data: { titleId, kind, filename, contentType } }),
         20_000,
         "Upload URL preparation",
       );
 
-      // OCI returns a pre-authenticated URL; use it verbatim because rewriting its
-      // encoded object path can change the target object and cause browser PUT failures.
-      setMessage(`Transferring ${kind} to storage…`);
-      transferController = new AbortController();
-      transferTimer = setTimeout(() => transferController?.abort(), 120_000);
-      let put: Response;
-      try {
-        put = await fetch(signed.url, {
-          method: signed.method,
-          body: file,
-          headers: { "content-type": contentType },
-          signal: transferController.signal,
-        });
-      } catch (error) {
-        if (transferController.signal.aborted) {
-          throw new Error("File transfer timed out after 2 minutes. No Ready status was set; select the file again to retry.");
-        }
-        throw error;
-      } finally {
-        if (transferTimer !== undefined) clearTimeout(transferTimer);
-      }
-      if (!put.ok) throw new Error(`Upload failed (${put.status}). No Ready status was set; please retry.`);
+      // Use the OCI pre-authenticated URL verbatim; rewriting its encoded path can invalidate it.
+      setProgress({ kind, phase: "transferring", percent: 0, etaSeconds: null, loaded: 0, total: file.size });
+      announce(`Uploading ${kind}…`);
+      transferTimer = setTimeout(() => uploadXhrRef.current?.abort(), 120_000);
+      await transferWithProgress(signed.url, signed.method, file, contentType);
+      if (transferTimer !== undefined) clearTimeout(transferTimer);
+      transferTimer = undefined;
 
-      setMessage(`Verifying stored ${kind}…`);
+      setProgress({ kind, phase: "verifying", percent: null, etaSeconds: null, loaded: file.size, total: file.size });
+      announce(`Upload transferred. Verifying stored ${kind} before marking it Ready…`);
       await withTimeout(
         confirmAssetUpload({ data: { assetId: signed.assetId, expectedByteSize: file.size } }),
         30_000,
         "Stored-object verification",
       );
+
+      setProgress({ kind, phase: "refreshing", percent: null, etaSeconds: null, loaded: file.size, total: file.size });
+      announce("Storage verified. Refreshing the asset list…");
       await withTimeout(Promise.resolve(onAssetsChanged()), 15_000, "Asset refresh");
-      setMessage(`${kind[0].toUpperCase() + kind.slice(1)} is ready after storage verification.`);
+      setProgress(null);
+      announce(`${kind[0].toUpperCase() + kind.slice(1)} is ready after storage verification.`, "success", true);
     } catch (error) {
       const raw = error instanceof Error ? error.message : "Upload failed";
+      setProgress(null);
+      const cancelled = cancelRequestedRef.current;
+      let detail = raw;
       if (raw.includes("STORAGE_UNAVAILABLE")) {
-        setMessage("Storage service is currently unavailable. Check the isolated Preview configuration, then select the file again to retry.");
+        detail = "Storage service is currently unavailable. Check the isolated Preview configuration, then select the file again to retry.";
       } else if (error instanceof TypeError) {
-        setMessage("The browser could not reach OCI storage. Check the OCI bucket CORS rule for this Preview origin, PUT method and Content-Type header, then select the file again to retry.");
-      } else {
-        setMessage(`${raw} No Ready status was set by this client flow; select the file again to retry.`);
+        detail = "The browser could not reach OCI storage. Check the OCI bucket CORS rule for this Preview origin, PUT method and Content-Type header, then select the file again to retry.";
+      } else if (!cancelled && !raw.includes("No Ready status")) {
+        detail = `${raw} No Ready status was set by this client flow; select the file again to retry.`;
       }
+      announce(detail, "error", true);
     } finally {
       if (transferTimer !== undefined) clearTimeout(transferTimer);
-      transferController?.abort();
+      uploadXhrRef.current = null;
+      cancelRequestedRef.current = false;
       setUploading(null);
     }
   }
+
   async function download(id: string) {
     const signed = await requestAssetDownload({ data: { assetId: id } });
     window.location.assign(signed.url);
   }
+
   const cards: [SimpleAssetKind, string, string][] = [
     ["master", "Main Film", "Required"],
     ["screener", "Trailer", "Add"],
@@ -384,6 +457,14 @@ function FilesPanel({
     ["subtitle", "Subtitle", "Optional"],
     ["censor_certificate", "Censor Certificate", "Optional"],
   ];
+
+  const phaseLabel = progress
+    ? progress.phase === "preparing" ? "Preparing secure upload"
+      : progress.phase === "transferring" ? "Transferring to storage"
+      : progress.phase === "verifying" ? "Verifying stored object"
+      : "Refreshing verified assets"
+    : "";
+
   return (
     <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
       <div className="flex items-center justify-between gap-3">
@@ -393,6 +474,53 @@ function FilesPanel({
         </div>
         <span className="text-xs text-muted">Ready / Missing</span>
       </div>
+
+      {progress ? (
+        <div className="mt-5 rounded-xl border border-line bg-elevated/40 p-4" aria-label="Upload progress">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold">{progress.kind.replaceAll("_", " ")} · {phaseLabel}</p>
+              <p className="mt-1 text-xs text-muted">
+                {progress.phase === "transferring" && progress.percent !== null
+                  ? `${progress.percent}% · ${(progress.loaded / (1024 * 1024)).toFixed(1)} of ${(progress.total / (1024 * 1024)).toFixed(1)} MB · ${formatEta(progress.etaSeconds)}`
+                  : progress.phase === "preparing" ? "Getting a secure upload URL…"
+                  : progress.phase === "verifying" ? "Checking the stored object's size, type and verification evidence…"
+                  : "Refreshing the verified asset list…"}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                cancelRequestedRef.current = true;
+                uploadXhrRef.current?.abort();
+                if (!uploadXhrRef.current) {
+                  setProgress(null);
+                  announce("Upload cancelled. If secure URL preparation was still running, wait for it to finish before retrying.", "error", true);
+                  setUploading(null);
+                }
+              }}
+              className="rounded-full border border-line px-3 py-1.5 text-xs font-semibold"
+            >
+              Cancel upload
+            </button>
+          </div>
+          <div
+            className="mt-3 h-2.5 overflow-hidden rounded-full bg-line"
+            role="progressbar"
+            aria-label="Upload transfer progress"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={progress.phase === "transferring" ? progress.percent ?? 0 : undefined}
+          >
+            <div
+              className={`h-full rounded-full transition-[width] duration-200 ${progress.percent === null ? "w-1/3 animate-pulse" : ""}`}
+              style={progress.percent === null ? undefined : { width: `${progress.percent}%` }}
+            />
+          </div>
+          <p className="mt-2 text-xs text-muted">The file is not Ready until server-side storage verification succeeds.</p>
+        </div>
+      ) : null}
+
       <div className="mt-5 grid gap-3 sm:grid-cols-2">
         {cards.map(([kind, label, empty]) => (
           <FileTypeCard
@@ -406,13 +534,21 @@ function FilesPanel({
           />
         ))}
       </div>
-      {message ? <p className="mt-3 text-xs text-muted">{message}</p> : null}
+      {message ? (
+        <p
+          className={`mt-3 rounded-lg border px-3 py-2 text-sm ${messageKind === "error" ? "border-red-300 text-red-700" : messageKind === "success" ? "border-green-300 text-green-700" : "border-line text-muted"}`}
+          role={messageKind === "error" ? "alert" : "status"}
+          aria-live={messageKind === "error" ? "assertive" : "polite"}
+        >
+          {message}
+        </p>
+      ) : null}
+      <p className="mt-2 text-xs text-muted">
+        Notifications appear here. Desktop notifications are used only if permission was already granted in your browser.
+      </p>
       <div className="mt-5 space-y-2">
         {assets.map((a) => (
-          <div
-            key={a.id}
-            className="flex items-center justify-between gap-3 rounded-xl border border-line p-4"
-          >
+          <div key={a.id} className="flex items-center justify-between gap-3 rounded-xl border border-line p-4">
             <div>
               <p className="text-sm font-semibold">{a.kind}</p>
               <p className="text-xs text-muted">{a.verified ? "Ready" : "Processing"}</p>
