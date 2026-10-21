@@ -3,11 +3,8 @@
 User-agent: *
 Allow: /
 
-# Keep application and account workflows out of search results.
-Disallow: /dashboard
-Disallow: /onboarding
-Disallow: /title/
-Disallow: /admin
+# Workflow pages publish a noindex meta directive and must remain crawlable
+# so compliant search engines can read it.
+# Keep private server-function and API endpoints out of crawler discovery.
 Disallow: /_serverFn/
 Disallow: /api/
-
