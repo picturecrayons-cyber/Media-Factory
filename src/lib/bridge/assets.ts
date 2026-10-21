@@ -215,8 +215,9 @@ export const resumeAssetMultipartUpload = createServerFn({ method: "POST" })
       } catch { /* leave the expired session retryable if OCI cleanup is unavailable */ }
       if (cleaned) {
         await sql`update bridge_asset_upload_sessions set status = 'ABORTED', updated_at = now() where id = ${session.id} and status = 'ACTIVE'`;
+        throw new Error("Upload session expired; restart the upload");
       }
-      throw new Error("Upload session expired; restart the upload");
+      throw new Error("Upload session expired; cleanup is still pending. Retry resume after storage recovers.");
     }
     const partRows = await sql<{ part_number: number; etag: string; checksum: string; byte_size: number | string }>`
       select part_number, etag, checksum, byte_size from bridge_asset_upload_parts
