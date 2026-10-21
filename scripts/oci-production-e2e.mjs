@@ -14,9 +14,6 @@ const payload = Buffer.from(`CRAYONS-BRIDGE-OCI-E2E:${runId}`, "utf8");
 const key = `bridge/_e2e/${Date.now()}-${runId}.txt`;
 const sealedKey = `${key}.verified/${runId}`;
 
-let sourceUploaded = false;
-let sealedCreated = false;
-
 await runWithCleanup(
   async () => {
     const upload = await signUpload({ key, contentType: "text/plain" });
@@ -27,14 +24,12 @@ await runWithCleanup(
       body: payload,
     });
     assert.ok(put.ok, `OCI upload failed: ${put.status}`);
-    sourceUploaded = true;
 
     const verified = await verifyObject(key, "text/plain");
     assert.equal(verified.byteSize, payload.byteLength);
     assert.ok(verified.etag, "OCI source ETag missing");
 
     const sealed = await sealVerifiedObject(key, sealedKey, verified.etag);
-    sealedCreated = true;
     assert.equal(sealed.byteSize, payload.byteLength);
     assert.ok(sealed.etag, "OCI sealed ETag missing");
 
@@ -45,19 +40,17 @@ await runWithCleanup(
     const downloaded = Buffer.from(await get.arrayBuffer());
     assert.deepEqual(downloaded, payload, "OCI round-trip payload mismatch");
   },
+  // Attempt deletion for both unique keys even if a PUT/copy succeeded remotely
+  // but its response was lost. deleteObject treats 404 as already-cleaned.
   () => [
-    ...(sealedCreated
-      ? [{
-          label: `Failed to delete sealed OCI test object ${sealedKey}`,
-          run: () => deleteObject(sealedKey),
-        }]
-      : []),
-    ...(sourceUploaded
-      ? [{
-          label: `Failed to delete source OCI test object ${key}`,
-          run: () => deleteObject(key),
-        }]
-      : []),
+    {
+      label: `Failed to delete sealed OCI test object ${sealedKey}`,
+      run: () => deleteObject(sealedKey),
+    },
+    {
+      label: `Failed to delete source OCI test object ${key}`,
+      run: () => deleteObject(key),
+    },
   ],
 );
 
