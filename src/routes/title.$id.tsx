@@ -325,6 +325,11 @@ function FilesPanel({
     });
   }
 
+  async function checksumChunk(chunk: Blob) {
+    const digest = await window.crypto.subtle.digest("SHA-256", await chunk.arrayBuffer());
+    return Array.from(new Uint8Array(digest), (value) => value.toString(16).padStart(2, "0")).join("");
+  }
+
   async function cancelUpload() {
     cancelRequested.current = true;
     activeXhr.current?.abort();
@@ -436,8 +441,9 @@ function FilesPanel({
         const start = (partNumber - 1) * session.partSize;
         const end = Math.min(file.size, start + session.partSize);
         const chunk = file.slice(start, end);
+        const checksum = await checksumChunk(chunk);
         const existing = existingParts.get(partNumber);
-        if (existing && existing.byteSize === chunk.size && existing.etag) continue;
+        if (existing && existing.byteSize === chunk.size && existing.checksum === checksum && existing.etag) continue;
 
         let etag = "";
         let lastError: unknown;
@@ -458,7 +464,7 @@ function FilesPanel({
         }
         if (!etag) throw lastError instanceof Error ? lastError : new Error("Part upload failed");
         await recordAssetMultipartPart({
-          data: { sessionId: session.sessionId, partNumber, etag, byteSize: chunk.size },
+          data: { sessionId: session.sessionId, partNumber, etag, checksum, byteSize: chunk.size },
         });
         completedBytes += chunk.size;
         setUploadProgress(Math.floor((completedBytes / file.size) * 100));
