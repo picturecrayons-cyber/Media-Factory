@@ -77,6 +77,7 @@ function TitlePage() {
 }
 
 function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
+  const qc = useQueryClient();
   const [activeTab, setActiveTab] = useState<WorkspaceTab>("Overview");
 
   const titleQ = useQuery({
@@ -275,7 +276,10 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
           titleId={id}
           assets={assets}
           canManage={actor.internalRole === "admin" || actor.internalRole === "super_admin"}
-          onAssetsChanged={() => assetsQ.refetch()}
+          onAssetsChanged={async () => {
+            await assetsQ.refetch();
+            await qc.invalidateQueries({ queryKey: ["bridge-titles"] });
+          }}
         />
       ) : activeTab === "Operations" ? (
         <WorkflowDesk title={title} actor={actor} />
@@ -314,6 +318,7 @@ function FilesPanel({
 }) {
   const [uploading, setUploading] = useState<SimpleAssetKind | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [filesView, setFilesView] = useState<"upload" | "gallery">("upload");
   async function uploadFile(kind: SimpleAssetKind, file: File) {
     const filename = asciiUploadName(file.name);
@@ -328,6 +333,7 @@ function FilesPanel({
       return;
     }
     setUploading(kind);
+    setUploadProgress(0);
     setMessage(`Preparing ${kind} upload…`);
     try {
       const signed = await requestAssetUpload({
@@ -338,24 +344,38 @@ function FilesPanel({
           contentType,
         },
       });
-      const uploadUrl = new URL(signed.url);
-      uploadUrl.pathname = uploadUrl.pathname.split("/").map((part) => encodeURIComponent(decodeURIComponent(part))).join("/");
-      const put = await fetch(uploadUrl.toString(), {
-        method: signed.method,
-        body: file,
-        headers: { "content-type": contentType },
+      // Use the provider-issued PAR URL verbatim; rewriting its encoded path can target a different object.
+      await new Promise<void>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open(signed.method, signed.url);
+        xhr.setRequestHeader("content-type", contentType);
+        xhr.upload.onprogress = (event) => {
+          if (!event.lengthComputable) return;
+          const percent = Math.min(99, Math.floor((event.loaded / event.total) * 100));
+          setUploadProgress(percent);
+          setMessage(`Uploading ${kind}: ${(event.loaded / (1024 * 1024)).toFixed(1)} of ${(file.size / (1024 * 1024)).toFixed(1)} MB (${percent}%)…`);
+        };
+        xhr.onload = () => {
+          if (xhr.status >= 200 && xhr.status < 300) resolve();
+          else reject(new Error(`Upload failed (${xhr.status})`));
+        };
+        xhr.onerror = () => reject(new Error("Browser could not reach OCI storage (status 0). Check bucket CORS, network access, and upload URL expiry."));
+        xhr.onabort = () => reject(new Error("Upload cancelled."));
+        xhr.send(file);
       });
-      if (!put.ok) throw new Error(`Upload failed (${put.status})`);
+      setMessage("Upload transferred. Verifying stored file…");
       await confirmAssetUpload({ data: { assetId: signed.assetId, expectedByteSize: file.size } });
       await onAssetsChanged();
-      setMessage(`${kind[0].toUpperCase() + kind.slice(1)} is ready.`);
+      setUploadProgress(100);
+      setMessage(`${kind[0].toUpperCase() + kind.slice(1)} is ready and verified.`);
+      toast.success(`${kind[0].toUpperCase() + kind.slice(1)} uploaded and verified`);
     } catch (error) {
       const raw = error instanceof Error ? error.message : "Upload failed";
-      setMessage(
-        raw.includes("STORAGE_UNAVAILABLE")
-          ? "Storage service is currently unavailable. Please try again later."
-          : raw,
-      );
+      const detail = raw.includes("STORAGE_UNAVAILABLE")
+        ? "Storage service is currently unavailable. Please try again later."
+        : raw;
+      setMessage(detail);
+      toast.error(detail);
     } finally {
       setUploading(null);
     }
@@ -432,6 +452,7 @@ function FilesPanel({
                 label={label}
                 status={assets.some((a) => (a.kind === kind || (kind === "poster_vertical" && a.kind === "poster")) && a.verified) ? "Ready" : empty}
                 busy={uploading === kind}
+                progress={uploading === kind ? uploadProgress : 0}
                 canUpload={canUpload}
                 onFile={(file) => void uploadFile(kind, file)}
               />
@@ -453,6 +474,7 @@ function FileTypeCard({
   label,
   status,
   busy,
+  progress,
   onFile,
   canUpload,
 }: {
@@ -461,6 +483,7 @@ function FileTypeCard({
   label: string;
   status: string;
   busy: boolean;
+  progress: number;
   onFile: (file: File) => void;
 }) {
   const spec = OTT_INGEST_SPEC[kind];
@@ -489,6 +512,17 @@ function FileTypeCard({
           />
         </label>
       </div>
+      {busy ? (
+        <div className="mt-4" aria-live="polite">
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-muted">Transfer progress</span>
+            <span className="font-semibold tabular-nums">{progress}%</span>
+          </div>
+          <div className="mt-2 h-2 overflow-hidden rounded-full bg-elevated" role="progressbar" aria-label={`${label} upload progress`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress}>
+            <div className="h-full rounded-full bg-accent-strong transition-[width] duration-150" style={{ width: `${progress}%` }} />
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
