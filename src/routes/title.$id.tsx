@@ -326,6 +326,7 @@ function FilesPanel({
       await new Promise<void>((resolve, reject) => {
         const xhr = new XMLHttpRequest();
         xhr.open(signed.method, uploadUrl.toString());
+        xhr.timeout = 120_000;
         xhr.setRequestHeader("content-type", contentType);
         xhr.upload.onprogress = (event) => {
           if (!event.lengthComputable) return;
@@ -344,6 +345,7 @@ function FilesPanel({
           });
         };
         xhr.onerror = () => reject(new Error("Upload connection failed. Check your connection and retry."));
+        xhr.ontimeout = () => reject(new Error("Upload timed out after 2 minutes. Check your connection and retry."));
         xhr.onabort = () => reject(new Error("Upload cancelled."));
         xhr.onload = () => {
           if (xhr.status >= 200 && xhr.status < 300) resolve();
@@ -432,8 +434,8 @@ function FilesPanel({
             aria-valuenow={uploadProgress.percent}
           >
             <div
-              className="h-full rounded-full bg-accent transition-[width] duration-150"
-              style={{ width: `${uploadProgress.percent}%` }}
+              className={`h-full rounded-full bg-accent transition-[width] duration-150 ${uploadProgress.stage === "preparing" ? "w-[35%] animate-pulse" : ""}`}
+              style={uploadProgress.stage === "preparing" ? undefined : { width: `${uploadProgress.percent}%` }}
             />
           </div>
           <div className="mt-2 flex flex-wrap justify-between gap-2 text-xs text-muted">
