@@ -307,11 +307,12 @@ export const finalizeAssetMultipartUpload = createServerFn({ method: "POST" })
         throw new Error("Upload part ledger is incomplete or inconsistent");
       }
     }
-    const claimed = await sql`
+    const claimed = await sql<{ id: string }>`
       update bridge_asset_upload_sessions set status = 'COMMITTING', updated_at = now()
       where id = ${session.id} and status = 'ACTIVE'
+      returning id
     `;
-    if (!claimed.count) throw new Error("Upload session is already being finalized; retry shortly");
+    if (!claimed[0]) throw new Error("Upload session is already being finalized; retry shortly");
     const { commitMultipartUpload, verifyObject } = await import("./oci-object-storage.server");
     try {
       await commitMultipartUpload(session.encrypted_access_uri);
