@@ -315,3 +315,13 @@ These findings improve provenance but **do not change any of the above rows from
 Documentation commit `b9f8d987d3384906aaf38ce78f4f79e3edbed0a2` CI run [#1352](https://github.com/picturecrayons-cyber/Media-Factory/actions/runs/39685954191) passed both the `gate` job and `workflow-postgres`. This validates repository checks only; it does not certify source identity, authenticated application E2E, OCI E2E, privacy, OAuth scopes, or Production readiness.
 
 **Decision remains Production NO-GO / NOT CERTIFIED.** Exact source recovery and isolated validation remain incomplete.
+
+
+## Additional connected-source check — Supabase Branching and Vercel artifact availability (2026-10-22)
+
+- Supabase Production project `mlmgugivsyoxzdgwkbpu` exposes a `main` development branch whose status is **`MIGRATIONS_FAILED`**. This corroborates the Branching failure; no reset, rebase, merge, or migration retry was performed.
+- Staging project `bbtrosuwisnxacuxvegt` reports no development branches. It remains a separate project with its own 33-row migration history; it is not a safe proxy for Production migration-source identity.
+- Vercel has a READY Preview deployment for the historical storage-economics branch: [deployment `dpl_9oFfn8RhyiS9gfVzoefuopKVMgua`](https://vercel.com/stream-vista-opc-pvt-ltd-s-projects/bridge/9oFfn8RhyiS9gfVzoefuopKVMgua), commit `ba979c5f67f7c63821d349575e77bcee025a6b29`. Attempting to retrieve its deployment file tree returned Vercel `404 File tree not found`; no SQL artifact could be extracted from that deployment.
+- Latest CI for the preceding report commit `783f699823f5ddb861bbf07d67bed0f4886782f5` started as run #1353 and was still `in_progress` at the time of this check. Do not call that report commit CI-passed until run #1353 is complete.
+
+This evidence strengthens the incident diagnosis but does not recover original migration payloads or clear the release gate. Production remains **NO-GO / NOT CERTIFIED**.
