@@ -4,7 +4,7 @@ import { WorkflowDesk } from "@/components/bridge/workflow-desk";
 import { publicationIsActive } from "@/lib/bridge/workflow-policy";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
-import { useState, useRef } from "react";
+import { useEffect, useState, useRef } from "react";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { getTitle, updateTitle } from "@/lib/bridge/titles";
@@ -128,13 +128,7 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
       {assetsQ.isError ? <p role="alert">Assets unavailable: {assetsQ.error.message}</p> : null}
       <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
         <div className="grid gap-5 md:grid-cols-[180px_1fr]">
-          <div className="aspect-[2/3] overflow-hidden rounded-xl border border-line bg-elevated">
-            <div className="grid h-full place-items-center px-4 text-center text-xs text-muted">
-              {assets.some((asset) => ["poster_vertical", "poster"].includes(asset.kind))
-                ? "Vertical poster ready"
-                : "Add vertical poster"}
-            </div>
-          </div>
+          <TitlePosterPreview assets={assets} titleName={title.name} />
           <div className="min-w-0">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
@@ -249,6 +243,46 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
     </div>
   );
 }
+function TitlePosterPreview({
+  assets,
+  titleName,
+}: {
+  assets: Array<{ id: string; kind: string; verified: boolean }>;
+  titleName: string;
+}) {
+  const poster = assets.find((asset) => asset.verified && asset.kind === "poster_vertical")
+    ?? assets.find((asset) => asset.verified && asset.kind === "poster")
+    ?? assets.find((asset) => asset.verified && asset.kind === "thumbnail");
+  const [posterUrl, setPosterUrl] = useState<string | null>(null);
+  const [unavailable, setUnavailable] = useState(false);
+  useEffect(() => {
+    let current = true;
+    setPosterUrl(null);
+    setUnavailable(false);
+    if (!poster) return () => { current = false; };
+    void requestAssetDownload({ data: { assetId: poster.id } })
+      .then((signed) => { if (current) setPosterUrl(signed.url); })
+      .catch(() => { if (current) setUnavailable(true); });
+    return () => { current = false; };
+  }, [poster?.id]);
+
+  return (
+    <div className="aspect-[2/3] overflow-hidden rounded-xl border border-line bg-elevated">
+      {posterUrl ? (
+        <img src={posterUrl} alt={`${titleName} poster`} className="h-full w-full object-cover" />
+      ) : (
+        <div className="grid h-full place-items-center px-4 text-center text-xs text-muted">
+          <div>
+            <div className="mx-auto grid size-12 place-items-center rounded-full border border-line text-2xl" aria-hidden="true">▧</div>
+            <p className="mt-3 font-semibold text-fg">{titleName}</p>
+            <p className="mt-1">{unavailable ? "Artwork preview unavailable" : "Add a vertical poster to identify this title visually"}</p>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Metric({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-xl border border-line bg-elevated/40 p-4">
