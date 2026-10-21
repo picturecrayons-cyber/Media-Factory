@@ -29,6 +29,7 @@ create table if not exists bridge_asset_upload_parts (
   session_id text not null references bridge_asset_upload_sessions(id) on delete cascade,
   part_number integer not null check (part_number between 1 and 10000),
   etag text not null check (length(etag) > 0),
+  checksum text not null check (length(checksum) = 64),
   byte_size bigint not null check (byte_size > 0),
   updated_at timestamptz not null default now(),
   primary key (session_id, part_number)
