@@ -13,10 +13,22 @@ declare
   v_qc uuid;
   v_grant uuid;
   v_legal uuid;
+  v_admin_actor text := 'test-admin-' || replace(gen_random_uuid()::text, '-', '');
+  v_qc_actor text := 'test-qc-' || replace(gen_random_uuid()::text, '-', '');
+  v_legal_actor text := 'test-legal-' || replace(gen_random_uuid()::text, '-', '');
+  v_viewer_actor text := 'test-viewer-' || replace(gen_random_uuid()::text, '-', '');
   v_window_start timestamptz := now() - interval '1 hour';
   v_window_end timestamptz := now() + interval '30 days';
   v_blocked boolean := false;
 begin
+  insert into public.bridge_profiles
+    (user_id, email, display_name, account_type, internal_role, email_verified)
+  values
+    (v_admin_actor, v_admin_actor || '@example.invalid', 'Synthetic Admin', 'independent_creator', 'admin', true),
+    (v_qc_actor, v_qc_actor || '@example.invalid', 'Synthetic QC Reviewer', 'independent_creator', 'qc_reviewer', true),
+    (v_legal_actor, v_legal_actor || '@example.invalid', 'Synthetic Legal Reviewer', 'independent_creator', 'legal_reviewer', true),
+    (v_viewer_actor, v_viewer_actor || '@example.invalid', 'Synthetic Viewer', 'independent_creator', 'viewer', true);
+
   insert into public.bridge_titles
     (id, slug, name, owner_user_id, owner_account_type, status, language)
   values
@@ -34,7 +46,7 @@ begin
        exploitation_models, window_start, window_end, approved_by, approved_at)
     values
       ('test-pub-' || v_title, v_title, v_loop, 'authorized', array['IN'], array['Malayalam'],
-       array['TVOD'], v_window_start, v_window_end, 'synthetic-reviewer', now());
+       array['TVOD'], v_window_start, v_window_end, v_admin_actor, now());
     raise exception 'TEST_FAILED: authorization unexpectedly passed with missing evidence';
   exception
     when others then
@@ -48,6 +60,30 @@ begin
   end;
   if not v_blocked then
     raise exception 'TEST_FAILED: incomplete evidence was not blocked';
+  end if;
+
+  -- Negative test 1b: a verified but unauthorized viewer cannot impersonate an approver.
+  v_blocked := false;
+  begin
+    insert into public.bridge_loop_publications
+      (id, bridge_title_id, loop_title_id, authorization_status, territories, languages,
+       exploitation_models, window_start, window_end, approved_by, approved_at)
+    values
+      ('test-unauth-pub-' || v_title, v_title, v_loop, 'authorized', array['IN'], array['Malayalam'],
+       array['TVOD'], v_window_start, v_window_end, v_viewer_actor, now());
+    raise exception 'TEST_FAILED: viewer role was allowed to authorize Loop publication';
+  exception
+    when others then
+      if sqlerrm like 'BRIDGE_GATE_BLOCKED:%' then
+        v_blocked := true;
+      elsif sqlerrm like 'TEST_FAILED:%' then
+        raise;
+      else
+        raise;
+      end if;
+  end;
+  if not v_blocked then
+    raise exception 'TEST_FAILED: unauthorized viewer approval was not blocked';
   end if;
 
   -- Negative test 2: Loop must not become buyer-visible without an active Bridge authorization.
@@ -90,7 +126,7 @@ begin
     (title_id, asset_version_id, status, reviewer_findings, reviewed_by, reviewed_at)
   values
     (v_title, v_master, 'PASSED', '[{"check":"synthetic-test","result":"passed"}]'::jsonb,
-     'independent-test-reviewer', now())
+     v_qc_actor, now())
   returning id into v_qc;
 
   insert into public.bridge_rights_grants
@@ -106,7 +142,7 @@ begin
   values
     (v_title, 'APPROVED',
      jsonb_build_array(jsonb_build_object('grantId', v_grant::text, 'reference', 'synthetic-test-evidence')),
-     'independent-test-legal-reviewer', now())
+     v_legal_actor, now())
   returning id into v_legal;
 
   insert into public.bridge_title_gate_certifications
@@ -124,7 +160,7 @@ begin
   values
     (v_title, 'CRAYONS_LOOP', v_grant, v_qc, v_legal,
      jsonb_build_array(v_master::text, v_art::text),
-     'AUTHORIZED', 'synthetic-bridge-authorizer', now());
+     'AUTHORIZED', v_admin_actor, now());
 
   -- Positive test: complete synthetic evidence must allow Bridge authorization.
   insert into public.bridge_loop_publications
@@ -132,7 +168,7 @@ begin
      exploitation_models, window_start, window_end, approved_by, approved_at)
   values
     ('test-pub-' || v_title, v_title, v_loop, 'authorized', array['IN'], array['Malayalam'],
-     array['TVOD'], v_window_start, v_window_end, 'synthetic-bridge-authorizer', now());
+     array['TVOD'], v_window_start, v_window_end, v_admin_actor, now());
 
   -- Positive test: Loop may become buyer-visible only after that authorization exists.
   update public.loop_titles set listed = true, published = true where id = v_loop;
