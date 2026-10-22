@@ -207,7 +207,7 @@ $$;
 
 drop trigger if exists bridge_guard_loop_publication_authorization on public.bridge_loop_publications;
 create trigger bridge_guard_loop_publication_authorization
-before insert or update of authorization_status, territories, languages, exploitation_models,
+before insert or update of bridge_title_id, loop_title_id, authorization_status, territories, languages, exploitation_models,
   window_start, window_end, approved_by, approved_at, revoked_at
 on public.bridge_loop_publications
 for each row execute function public.bridge_guard_loop_publication_authorization();
