@@ -143,16 +143,16 @@ export const getLoopAnalyticsReport = createServerFn({ method: "GET" })
     `;
 
     const audience = await sql<{
-      registered_users: number;
+      users_with_profiles: number;
       active_profiles: number;
-      new_profiles_in_period: number;
+      profiles_created_in_period: number;
       active_subscribers: number;
     }>`
       select
-        (select count(distinct user_id)::int from loop_profiles) as registered_users,
+        (select count(distinct user_id)::int from loop_profiles) as users_with_profiles,
         (select count(*)::int from loop_profiles where is_active = true) as active_profiles,
         (select count(distinct user_id)::int from loop_profiles
-          where created_at >= ${data.from}::timestamptz and created_at < ${data.to}::timestamptz) as new_profiles_in_period,
+          where created_at >= ${data.from}::timestamptz and created_at < ${data.to}::timestamptz) as profiles_created_in_period,
         (select count(distinct user_id)::int from loop_subscriptions
           where status = 'active' and expires_at > now()) as active_subscribers
     `;
@@ -172,9 +172,9 @@ export const getLoopAnalyticsReport = createServerFn({ method: "GET" })
         source: "client-reported telemetry; observational only",
       },
       audience: {
-        registeredUsers: Number(audience[0]?.registered_users ?? 0),
+        usersWithLoopProfiles: Number(audience[0]?.users_with_profiles ?? 0),
         activeProfiles: Number(audience[0]?.active_profiles ?? 0),
-        newUsersInPeriod: Number(audience[0]?.new_profiles_in_period ?? 0),
+        profilesCreatedInPeriod: Number(audience[0]?.profiles_created_in_period ?? 0),
         activeSubscribersNow: Number(audience[0]?.active_subscribers ?? 0),
         note: "Current user/subscription snapshot plus profile creation in the selected period; not a historical daily series",
       },
