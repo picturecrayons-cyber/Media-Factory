@@ -79,8 +79,7 @@ function WorkstationBody() {
         <ReviewQueue title="Rights Review" description="Clear ownership, territory, language and window before licensing." titles={rightsQueue}
           actions={[["APPROVE", "Approve → Licensing"], ["REJECT", "Reject"]]} mutation={review} />
       ) : activeTab === "Assets" ? (
-        <SimpleTable title="Assets" description={data.assets.length + " base assets · " + data.assetVersions.length + " versioned assets"}
-          rows={data.assets} fields={["kind", "s3_key", "content_type", "byte_size"]} />
+        <AssetParkingQueue assets={data.assets} assetVersions={data.assetVersions} titleName={titleName} />
       ) : activeTab === "Buyers" ? (
         <BuyerRelease titles={data.titles} qc={data.qc} legal={data.legal} gate={gate}
           onGate={(titleId, gateName) => gate.mutate({ data: { titleId, gate: gateName as "OTT", decision: "PASS" } })} />
@@ -122,6 +121,36 @@ function TitleQueue({ titles, review }: { titles: any[]; review: any }) {
         )) : <Empty text="No titles in the Bridge catalog." />}
       </div>
     </section>
+  );
+}
+
+function AssetParkingQueue({ assets, assetVersions, titleName }: { assets: any[]; assetVersions: any[]; titleName: Map<any, any> }) {
+  const pending = assets.filter((asset) => Number(asset.byte_size ?? 0) <= 0);
+  const verified = assets.filter((asset) => Number(asset.byte_size ?? 0) > 0);
+  return (
+    <div className="space-y-6">
+      <section className="space-y-3">
+        <SectionHeader title="Asset parking · admin review queue"
+          description="Uploads remain parked until server-side storage verification succeeds. Storage verification is not QC approval or distribution authorization." />
+        <div className="overflow-hidden rounded-2xl border border-line bg-surface">
+          {pending.length ? pending.slice(0, 100).map((asset) => (
+            <div key={asset.id} className="flex flex-col gap-3 border-b border-line p-4 last:border-b-0 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0">
+                <p className="font-medium">{titleName.get(asset.title_id) ?? "Title record"}</p>
+                <p className="mt-1 text-xs text-muted">{asset.kind} · {asset.content_type ?? "type not recorded"} · Parked / NOT VERIFIED</p>
+                <p className="mt-1 break-all text-xs text-muted">Asset ID: {asset.id}</p>
+              </div>
+              <Link to="/title/$id" params={{ id: asset.title_id }}
+                className="shrink-0 rounded-full border border-line px-3.5 py-1.5 text-xs text-muted hover:border-line-strong hover:text-fg">
+                Open title
+              </Link>
+            </div>
+          )) : <Empty text="No parked assets are waiting for storage verification." />}
+        </div>
+      </section>
+      <SimpleTable title="Storage-verified assets" description={verified.length + " verified base assets · " + assetVersions.length + " versioned asset records. QC remains a separate decision."}
+        rows={verified} fields={["kind", "content_type", "byte_size", "created_at"]} titleName={titleName} />
+    </div>
   );
 }
 
