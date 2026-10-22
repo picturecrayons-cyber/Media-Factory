@@ -4,6 +4,7 @@ import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import { assertPermission } from "@/lib/bridge/rbac";
 import { assertNotDevUser } from "@/lib/bridge/guards";
+import { requireVerifiedActor } from "@/lib/bridge/session";
 
 import { loopAnalyticsEventInput } from "./analytics-contract";
 export { loopAnalyticsEventInput } from "./analytics-contract";
