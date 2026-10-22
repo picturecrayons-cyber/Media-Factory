@@ -429,8 +429,9 @@ function FilesPanel({
     setUploading(kind);
     setProgress({ kind, phase: "preparing", percent: null, etaSeconds: null, loaded: 0, total: file.size });
     announce(`Preparing ${kind} upload.`);
+    let saved: SavedUpload | undefined;
     try {
-      let saved = await getUpload(key);
+      saved = await getUpload(key);
       if (!saved) {
         const signed = await withTimeout(
           requestAssetUpload({ data: { titleId, kind, filename, contentType, fileSize: file.size } }),
@@ -811,6 +812,7 @@ function FilesPanel({
         {cards.map(([kind, label, empty]) => (
           <FileTypeCard
             key={kind}
+            titleId={titleId}
             kind={kind}
             label={label}
             status={assets.some((a) => (a.kind === kind || (kind === "poster_vertical" && a.kind === "poster")) && a.verified) ? "Ready" : assets.some((a) => (a.kind === kind || (kind === "poster_vertical" && a.kind === "poster")) && !a.verified) ? "Verification pending" : empty}
@@ -872,6 +874,7 @@ function FilesPanel({
   );
 }
 function FileTypeCard({
+  titleId,
   kind,
   label,
   status,
@@ -880,6 +883,7 @@ function FileTypeCard({
   canUpload,
 }: {
   canUpload: boolean;
+  titleId: string;
   kind: SimpleAssetKind;
   label: string;
   status: string;
