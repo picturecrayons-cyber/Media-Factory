@@ -80,7 +80,7 @@ export const requestAssetUpload = createServerFn({ method: "POST" })
     // idempotency guard: two simultaneous requests cannot create two asset rows.
     const inserted = await sql<{ id: string }>`
       insert into bridge_assets (id, title_id, kind, s3_key, content_type, created_by)
-      values (${id}, ${title.id}, ${key}, ${key}, ${data.contentType}, ${actor.userId})
+      values (${id}, ${title.id}, ${data.kind}, ${key}, ${data.contentType}, ${actor.userId})
       on conflict (s3_key) do nothing
       returning id
     `;
