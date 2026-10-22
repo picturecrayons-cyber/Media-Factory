@@ -152,7 +152,7 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
               />
             ) : (
               <div className="grid h-full place-items-center px-4 text-center text-xs text-muted">
-                {posterPreviewQ.isPending ? "Loading verified poster…" : "Add vertical poster"}
+                {posterAsset && posterPreviewQ.isPending ? "Loading verified poster…" : "Add vertical poster"}
               </div>
             )}
           </div>
