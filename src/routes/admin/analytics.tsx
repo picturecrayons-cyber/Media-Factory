@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { listTitles } from "@/lib/bridge/titles";
+import { loopStageType } from "@/lib/bridge/loop-lanes";
 import type { TitleStatus } from "@/lib/bridge/types";
 
 export const Route = createFileRoute("/admin/analytics")({ component: RevenueAnalytics });
@@ -54,7 +55,7 @@ function RevenueAnalyticsBody() {
     return titles.filter((title) => {
       const matchesSearch = !q || title.name.toLocaleLowerCase().includes(q) || title.id.toLocaleLowerCase().includes(q);
       const matchesStatus = status === "ALL" || title.status === status;
-      const matchesLane = lane === "ALL" || title.contentType === lane;
+      const matchesLane = lane === "ALL" || loopStageType(title.contentType) === ({ FILM: "Film", SERIES: "Series", VERTICAL: "Vertical drama", SHORT: "Short" } as const)[lane as "FILM" | "SERIES" | "VERTICAL" | "SHORT"];
       return matchesSearch && matchesStatus && matchesLane;
     });
   }, [titles, search, status, lane]);
@@ -118,8 +119,8 @@ function RevenueAnalyticsBody() {
                 <option value="ALL">All lanes</option>
                 <option value="FILM">Films</option>
                 <option value="SERIES">Series</option>
-                <option value="VERTICAL_DRAMA">Vertical drama</option>
-                <option value="SHORTS">Shorts</option>
+                <option value="VERTICAL">Vertical drama</option>
+                <option value="SHORT">Shorts</option>
               </select>
             </label>
           </div>
