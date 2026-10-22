@@ -41,6 +41,8 @@ function LaneStore({ titleId, stored, locked }: { titleId: string; stored: strin
     <label className="mt-4 block text-sm">
       Stored for Loop preview
       <select
+        id={`bridge-loop-lane-${titleId}`}
+        name="loop-lane"
         value={value}
         disabled={locked || save.isPending}
         onChange={(event) => {
@@ -715,7 +717,7 @@ function FilesPanel({
                   <p className="text-xs text-muted">{item.kind.replaceAll("_", " ")} · {(item.file.size / (1024 * 1024)).toFixed(1)} MB</p>
                   {item.error ? <p className="text-xs text-red-700">{item.error}</p> : null}
                 </div>
-                <select aria-label={`Media slot for ${item.file.name}`} value={item.kind} disabled={queueRunning || item.status === "done"} onChange={(event) => {
+                <select id={`bridge-queue-slot-${item.id}`} name={`bridge-queue-slot-${item.id}`} aria-label={`Media slot for ${item.file.name}`} value={item.kind} disabled={queueRunning || item.status === "done"} onChange={(event) => {
                   const kind = event.target.value as SimpleAssetKind;
                   const validation = validateOttIngestFile({ kind, filename: asciiUploadName(item.file.name), contentType: item.file.type || "application/octet-stream" });
                   setQueuedUploads((current) => current.map((entry) => entry.id === item.id ? { ...entry, kind, status: validation.ok ? "queued" : "invalid", error: validation.ok ? undefined : validation.message } : entry));
