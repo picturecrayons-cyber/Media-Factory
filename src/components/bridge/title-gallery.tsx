@@ -27,14 +27,20 @@ function TitlePoster({ titleId, titleName }: { titleId: string; titleName: strin
   const [failedSrc, setFailedSrc] = useState<string | null>(null);
   const src = previewQ.data?.url;
   const imageFailed = Boolean(src && failedSrc === src);
+  const posterMessage = assetsQ.isError
+    ? "Could not load poster status"
+    : previewQ.isError || imageFailed
+      ? "Verified poster preview unavailable"
+      : "Original poster unavailable";
+
   return (
     <div className="aspect-[2/3] w-full overflow-hidden rounded-xl border border-line bg-elevated" aria-label={`Poster for ${titleName}`}>
       {src && !imageFailed ? (
         <img src={src} alt={`${titleName} original poster`} loading="lazy" className="h-full w-full object-cover" onError={() => setFailedSrc(src ?? null)} />
       ) : (
-        <div className="flex h-full w-full flex-col items-center justify-center gap-2 px-2 text-center text-xs text-muted">
+        <div className="flex h-full w-full flex-col items-center justify-center gap-2 px-2 text-center text-xs text-muted" role={assetsQ.isError || previewQ.isError || imageFailed ? "status" : undefined}>
           <span aria-hidden="true" className="text-3xl leading-none">▧</span>
-          <span>{assetsQ.isPending || Boolean(poster && previewQ.isPending) ? "Loading poster…" : "Original poster unavailable"}</span>
+          <span>{assetsQ.isPending || Boolean(poster && previewQ.isPending) ? "Loading poster…" : posterMessage}</span>
         </div>
       )}
     </div>
