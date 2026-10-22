@@ -514,10 +514,28 @@ function FilesPanel({
       const raw = error instanceof Error ? error.message : "Upload failed";
       setProgress(null);
       const cancelled = cancelRequestedRef.current;
+      const preparationTimedOut = raw.toLowerCase().includes("upload url preparation") && raw.toLowerCase().includes("timed out");
+      let reconciled = false;
+      if (preparationTimedOut || raw.toLowerCase().includes("asset record already exists")) {
+        // The server request may have completed after the browser stopped waiting.
+        // Refresh server state before the UI permits another attempt.
+        try {
+          await withTimeout(Promise.resolve(onAssetsChanged()), 15_000, "Asset status reconciliation");
+          reconciled = true;
+        } catch {
+          // Keep the original error; never imply reconciliation succeeded.
+        }
+      }
       const verificationMayStillBeRunning = raw.toLowerCase().includes("verification timed out") || raw.toLowerCase().includes("verification") && raw.toLowerCase().includes("timed out");
-      announce(cancelled ? raw : verificationMayStillBeRunning
-        ? "Verification is taking longer than expected. Checking the existing asset automatically; do not re-upload."
-        : `${raw} Saved upload state is retained when possible. Use Resume only if this asset has not entered server-side verification.`, verificationMayStillBeRunning ? "status" : "error", true);
+      announce(cancelled ? raw : preparationTimedOut
+        ? reconciled
+          ? "Upload preparation timed out. The asset list was refreshed; inspect existing asset status before retrying."
+          : "Upload preparation timed out and asset status could not be confirmed. Do not retry yet; refresh the asset list and inspect existing records."
+        : raw.toLowerCase().includes("asset record already exists")
+          ? "An asset record already exists for this file. The asset list was refreshed; inspect its status before retrying."
+          : verificationMayStillBeRunning
+            ? "Verification is taking longer than expected. Checking the existing asset automatically; do not re-upload."
+            : `${raw} Saved upload state is retained when possible. Use Resume only if this asset has not entered server-side verification.`, preparationTimedOut || verificationMayStillBeRunning || raw.toLowerCase().includes("asset record already exists") ? "status" : "error", true);
       if (verificationMayStillBeRunning && saved?.assetId) void pollVerification(saved.assetId);
       return false;
     } finally {
