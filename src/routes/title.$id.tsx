@@ -338,106 +338,168 @@ function FilesPanel({
   const [uploadPhase, setUploadPhase] = useState<"preparing" | "transferring" | "verifying" | "refreshing" | null>(null);
   const uploadXhrRef = useRef<XMLHttpRequest | null>(null);
   const cancelRequestedRef = useRef(false);
+  // Invalidate a cancelled or superseded attempt so late preparation results cannot start a transfer.
+  const uploadAttemptRef = useRef(0);
   const [notificationPermission, setNotificationPermission] = useState<"default" | "granted" | "denied" | "unsupported">(() =>
     typeof window === "undefined" || !("Notification" in window) ? "unsupported" : Notification.permission,
   );
   const [filesView, setFilesView] = useState<"upload" | "gallery">("upload");
+  async function withTimeout<T>(operation: Promise<T>, timeoutMs: number, phase: string): Promise<T> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      return await Promise.race([
+        operation,
+        new Promise<T>((_, reject) => {
+          timer = setTimeout(() => reject(new Error(`${phase} timed out. Please refresh the asset status before retrying.`)), timeoutMs);
+        }),
+      ]);
+    } finally {
+      if (timer !== undefined) clearTimeout(timer);
+    }
+  }
+
+  function transferWithProgress(kind: SimpleAssetKind, url: string, method: string, file: File, contentType: string) {
+    return new Promise<void>((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      uploadXhrRef.current = xhr;
+      const startedAt = Date.now();
+      xhr.open(method, url, true);
+      xhr.setRequestHeader("content-type", contentType);
+      xhr.timeout = 120_000;
+      xhr.upload.onprogress = (event) => {
+        const total = event.lengthComputable ? event.total : file.size;
+        const loaded = Math.min(event.loaded, total);
+        const elapsedSeconds = Math.max((Date.now() - startedAt) / 1000, 0.25);
+        const bytesPerSecond = loaded / elapsedSeconds;
+        const secondsRemaining = bytesPerSecond > 0 ? Math.max(0, (total - loaded) / bytesPerSecond) : null;
+        const eta = secondsRemaining == null
+          ? "Calculating time remaining…"
+          : secondsRemaining < 60
+            ? `About ${Math.ceil(secondsRemaining)} sec remaining`
+            : `About ${Math.floor(secondsRemaining / 60)} min ${Math.ceil(secondsRemaining % 60)} sec remaining`;
+        setUploadProgress(total > 0 ? Math.min(99, Math.floor((loaded / total) * 100)) : 0);
+        setUploadEta(eta);
+        setMessage(`Uploading ${kind}: ${(loaded / (1024 * 1024)).toFixed(1)} of ${(file.size / (1024 * 1024)).toFixed(1)} MB · ${eta}`);
+      };
+      xhr.onload = () => {
+        uploadXhrRef.current = null;
+        if (xhr.status >= 200 && xhr.status < 300) resolve();
+        else reject(new Error(`Upload failed (${xhr.status}). The file is not Ready; refresh the asset list before retrying.`));
+      };
+      xhr.onerror = () => {
+        uploadXhrRef.current = null;
+        reject(new TypeError("The browser could not reach OCI storage. Check the isolated Preview bucket CORS rule, PUT method and Content-Type header."));
+      };
+      xhr.ontimeout = () => {
+        uploadXhrRef.current = null;
+        reject(new Error("File transfer timed out after 2 minutes. The file is not Ready; refresh the asset list before retrying."));
+      };
+      xhr.onabort = () => {
+        uploadXhrRef.current = null;
+        reject(new Error(cancelRequestedRef.current
+          ? "Upload cancelled. No Ready status was set by this browser attempt."
+          : "File transfer was interrupted. The file is not Ready; refresh the asset list before retrying."));
+      };
+      xhr.send(file);
+    });
+  }
+
   async function uploadFile(kind: SimpleAssetKind, file: File) {
     if (uploading) return;
     const filename = asciiUploadName(file.name);
     const contentType = file.type || "application/octet-stream";
-    const validation = validateOttIngestFile({
-      kind,
-      filename,
-      contentType,
-    });
+    const validation = validateOttIngestFile({ kind, filename, contentType });
     if (!validation.ok) {
       setMessage(validation.message);
       return;
     }
+
     cancelRequestedRef.current = false;
+    const attemptId = ++uploadAttemptRef.current;
+    const assertAttemptActive = () => {
+      if (cancelRequestedRef.current || uploadAttemptRef.current !== attemptId) {
+        throw new Error("Upload cancelled or superseded. No further transfer or confirmation will start from this attempt.");
+      }
+    };
+
     setUploading(kind);
     setUploadProgress(0);
     setUploadEta(null);
     setUploadPhase("preparing");
     setMessage(`Preparing ${kind} upload…`);
+    let transferTimer: ReturnType<typeof setTimeout> | undefined;
     try {
-      const signed = await requestAssetUpload({
-        data: {
-          titleId,
-          kind,
-          filename,
-          contentType,
-        },
-      });
-      // If the user cancelled while the signed upload was being prepared, never start a transfer.
-      if (cancelRequestedRef.current) {
-        setMessage("Upload cancelled before transfer. No file transfer was started.");
-        return;
-      }
-      // Use the provider-issued PAR URL verbatim; rewriting its encoded path can target a different object.
+      const signed = await withTimeout(
+        requestAssetUpload({ data: { titleId, kind, filename, contentType } }),
+        20_000,
+        "Upload URL preparation",
+      );
+
+      // Cancellation can happen while preparation is pending. Never start a PUT for a stale attempt.
+      assertAttemptActive();
       setUploadPhase("transferring");
-      await new Promise<void>((resolve, reject) => {
-        const xhr = new XMLHttpRequest();
-        uploadXhrRef.current = xhr;
-        const startedAt = Date.now();
-        xhr.open(signed.method, signed.url);
-        xhr.setRequestHeader("content-type", contentType);
-        xhr.upload.onprogress = (event) => {
-          if (!event.lengthComputable) return;
-          const percent = Math.min(99, Math.floor((event.loaded / event.total) * 100));
-          setUploadProgress(percent);
-          const elapsedSeconds = Math.max((Date.now() - startedAt) / 1000, 0.25);
-          const bytesPerSecond = event.loaded / elapsedSeconds;
-          const secondsRemaining = bytesPerSecond > 0 ? Math.max(0, (event.total - event.loaded) / bytesPerSecond) : null;
-          const eta = secondsRemaining == null ? "Calculating time remaining…" : secondsRemaining < 60 ? `About ${Math.ceil(secondsRemaining)} sec remaining` : `About ${Math.floor(secondsRemaining / 60)} min ${Math.ceil(secondsRemaining % 60)} sec remaining`;
-          setUploadEta(eta);
-          setMessage(`Uploading ${kind}: ${(event.loaded / (1024 * 1024)).toFixed(1)} of ${(file.size / (1024 * 1024)).toFixed(1)} MB (${percent}%) · ${eta}`);
-        };
-        xhr.onload = () => {
-          uploadXhrRef.current = null;
-          if (xhr.status >= 200 && xhr.status < 300) resolve();
-          else reject(new Error(`Upload failed (${xhr.status})`));
-        };
-        xhr.onerror = () => { uploadXhrRef.current = null; reject(new Error("Browser could not reach OCI storage (status 0). Check bucket CORS, network access, and upload URL expiry.")); };
-        xhr.onabort = () => { uploadXhrRef.current = null; reject(new Error("Upload cancelled. The asset was not marked Ready; select the file again to retry.")); };
-        xhr.send(file);
-      });
-      if (cancelRequestedRef.current) {
-        setMessage("Upload cancelled. This attempt will not run storage verification.");
-        return;
-      }
+      setMessage(`Uploading ${kind}…`);
+      transferTimer = setTimeout(() => uploadXhrRef.current?.abort(), 120_000);
+      await transferWithProgress(kind, signed.url, signed.method, file, contentType);
+      assertAttemptActive();
+      if (transferTimer !== undefined) clearTimeout(transferTimer);
+      transferTimer = undefined;
+
       setUploadPhase("verifying");
       setUploadEta(null);
-      setMessage("Upload transferred. Verifying stored file…");
-      await confirmAssetUpload({ data: { assetId: signed.assetId, expectedByteSize: file.size } });
+      setMessage(`Upload transferred. Verifying stored ${kind} before marking it Ready…`);
+      assertAttemptActive();
+      await withTimeout(
+        confirmAssetUpload({ data: { assetId: signed.assetId, expectedByteSize: file.size } }),
+        55_000,
+        "Stored-object verification",
+      );
+      assertAttemptActive();
+
       setUploadPhase("refreshing");
-      setMessage("Storage verification passed. Refreshing the asset list…");
-      await onAssetsChanged();
+      setMessage("Storage verified. Refreshing the asset list…");
+      await withTimeout(Promise.resolve(onAssetsChanged()), 15_000, "Asset refresh");
+      assertAttemptActive();
       setUploadProgress(100);
-      setMessage(`${kind[0].toUpperCase() + kind.slice(1)} is ready and verified.`);
+      setMessage(`${kind[0].toUpperCase() + kind.slice(1)} is ready after storage verification.`);
       notify("success", `${kind[0].toUpperCase() + kind.slice(1)} uploaded and verified.`);
       toast.success(`${kind[0].toUpperCase() + kind.slice(1)} uploaded and verified`);
-      if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") new Notification("Crayons Bridge · Upload", { body: `${kind[0].toUpperCase() + kind.slice(1)} uploaded and verified.` });
+      if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
+        new Notification("Crayons Bridge · Upload", { body: `${kind[0].toUpperCase() + kind.slice(1)} uploaded and verified.` });
+      }
     } catch (error) {
+      // A cancelled/superseded attempt must not overwrite the status of a newer attempt.
+      if (uploadAttemptRef.current !== attemptId) return;
       const raw = error instanceof Error ? error.message : "Upload failed";
       if (cancelRequestedRef.current) {
         setMessage("Upload cancelled. Any pending preparation result will be ignored; no new transfer will start from this attempt.");
       } else {
-        const detail = raw.includes("STORAGE_UNAVAILABLE")
-          ? "Storage service is currently unavailable. Please try again later."
-          : raw;
+        let detail = raw;
+        if (raw.includes("STORAGE_UNAVAILABLE")) {
+          detail = "Storage service is currently unavailable. Check the isolated Preview configuration before retrying.";
+        } else if (error instanceof TypeError) {
+          detail = "The browser could not reach OCI storage. Check bucket CORS, network access and the upload URL, then refresh the asset status before retrying.";
+        } else if (raw.includes("Stored-object verification timed out")) {
+          detail = `${raw} The server may still be finishing verification. Refresh the asset list and check its status before retrying.`;
+        } else if (!raw.includes("not Ready")) {
+          detail = `${raw} Refresh the asset list to confirm its status before retrying.`;
+        }
         setMessage(detail);
         notify("error", `${kind.replaceAll("_", " ")} upload failed: ${detail}`);
         toast.error(detail);
-        if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") new Notification("Crayons Bridge · Upload failed", { body: detail });
+        if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
+          new Notification("Crayons Bridge · Upload failed", { body: detail });
+        }
       }
     } finally {
-      uploadXhrRef.current = null;
-      cancelRequestedRef.current = false;
-      setUploadPhase(null);
-      setUploadEta(null);
-      setUploading(null);
+      if (transferTimer !== undefined) clearTimeout(transferTimer);
+      if (uploadAttemptRef.current === attemptId) {
+        uploadXhrRef.current = null;
+        cancelRequestedRef.current = false;
+        setUploadPhase(null);
+        setUploadEta(null);
+        setUploading(null);
+      }
     }
   }
   async function download(id: string) {
@@ -535,8 +597,12 @@ function FilesPanel({
                   type="button"
                   onClick={() => {
                     cancelRequestedRef.current = true;
-                    if (uploadXhrRef.current) uploadXhrRef.current.abort();
-                    else setMessage("Cancelling upload preparation… the pending result will be ignored and no transfer will start.");
+                    uploadAttemptRef.current += 1;
+                    uploadXhrRef.current?.abort();
+                    setUploadPhase(null);
+                    setUploadEta(null);
+                    setUploading(null);
+                    setMessage("Upload cancelled. Any pending preparation result will be ignored; no new transfer will start from this attempt.");
                   }}
                   className="rounded-full border border-line px-3 py-1.5 text-xs font-semibold"
                 >
