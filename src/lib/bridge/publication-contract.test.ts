@@ -137,6 +137,10 @@ test("status alignment never bypasses operator, rights or commercial coverage", 
     { grants: [{ ...grant, territories: ["US"] }], allowed: true, data },
     { grants: [grant], allowed: false, data },
     { grants: [grant], allowed: true, data: { ...data, accessTier: "SVOD" } },
+    { grants: [grant], allowed: true, data: { ...data, territories: ["IN"] } },
+    { grants: [grant], allowed: true, data: { ...data, exploitationModels: ["TVOD", "FREE"] } },
+    { grants: [grant], allowed: true, data: { ...data, exploitationModels: ["TVOD", "FREE"], accessTier: "FREE" } },
+    { grants: [grant], allowed: true, data: { ...data, windowStart: null, windowEnd: null } },
     { grants: [grant], allowed: true, data, titleStatus: "IN_NEGOTIATION" },
   ]) {
     const h = harness(scenario.grants, scenario.allowed, false, "titleStatus" in scenario ? scenario.titleStatus : "LICENSED");
