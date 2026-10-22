@@ -108,18 +108,23 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
       {label}
     </button>
   );
-  const input = (label: string, value: string, set: (v: string) => void, type = "text") => (
-    <label className="grid gap-1 text-sm">
-      {label}
-      <input
-        type={type}
-        value={value}
-        onChange={(e) => set(e.target.value)}
-        className="rounded-lg border border-line bg-elevated p-2"
-        required
-      />
-    </label>
-  );
+  const input = (label: string, value: string, set: (v: string) => void, type = "text") => {
+    const fieldId = `bridge-workflow-${label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}`;
+    return (
+      <label htmlFor={fieldId} className="grid gap-1 text-sm">
+        {label}
+        <input
+          id={fieldId}
+          name={fieldId}
+          type={type}
+          value={value}
+          onChange={(e) => set(e.target.value)}
+          className="rounded-lg border border-line bg-elevated p-2"
+          required
+        />
+      </label>
+    );
+  };
   if (actor.accountType === "buyer" && !actor.internalRole) return null;
   return (
     <section className="space-y-4 rounded-2xl border border-line bg-surface p-5">
@@ -251,8 +256,10 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                     setOwnerShare,
                     "number",
                   )}
-                  <label className="text-sm">
+                  <label htmlFor="bridge-license-exclusive" className="text-sm">
                     <input
+                      id="bridge-license-exclusive"
+                      name="bridge-license-exclusive"
                       type="checkbox"
                       checked={exclusive}
                       onChange={(e) => setExclusive(e.target.checked)}
