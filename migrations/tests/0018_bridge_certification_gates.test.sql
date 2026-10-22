@@ -50,6 +50,25 @@ begin
     raise exception 'TEST_FAILED: incomplete evidence was not blocked';
   end if;
 
+  -- Negative test 2: Loop must not become buyer-visible without an active Bridge authorization.
+  v_blocked := false;
+  begin
+    update public.loop_titles set listed = true, published = true where id = v_loop;
+    raise exception 'TEST_FAILED: Loop became buyer-visible without Bridge authorization';
+  exception
+    when others then
+      if sqlerrm like 'BRIDGE_GATE_BLOCKED:%' then
+        v_blocked := true;
+      elsif sqlerrm like 'TEST_FAILED:%' then
+        raise;
+      else
+        raise;
+      end if;
+  end;
+  if not v_blocked then
+    raise exception 'TEST_FAILED: unauthorized buyer visibility was not blocked';
+  end if;
+
   -- Create synthetic, non-production-only evidence for the positive path.
   insert into public.bridge_asset_versions
     (title_id, asset_group, asset_type, s3_key, checksum_sha256, byte_size,
