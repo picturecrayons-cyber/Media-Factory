@@ -30,6 +30,8 @@ export const recordLoopAnalyticsEvent = createServerFn({ method: "POST" })
       join loop_titles l on l.id = p.loop_title_id
       where p.loop_title_id = ${data.loopTitleId}
         and p.authorization_status = 'authorized'
+        and p.revoked_at is null
+        and p.exploitation_models @> array[l.access_tier]::text[]
         and l.published = true
         and l.listed = true
         and l.status = 'approved'
@@ -125,23 +127,34 @@ export const getLoopAnalyticsReport = createServerFn({ method: "GET" })
         and (${data.bridgeTitleId ?? null}::text is null or bridge_title_id = ${data.bridgeTitleId ?? null})
     `;
 
+    // This is a Bridge payment snapshot only. Its schema does not currently
+    // contain certified Loop order links, refund totals, or settlement fee fields.
     const payments = await sql<{
       captured_count: number;
       gross_paise: number;
-      refunded_paise: number;
-      provider_fee_paise: number | null;
-      provider_tax_paise: number | null;
     }>`
       select
         count(*) filter (where status = 'captured')::int as captured_count,
-        coalesce(sum(amount_paise) filter (where status = 'captured'), 0)::bigint as gross_paise,
-        coalesce(sum(refunded_amount_paise), 0)::bigint as refunded_paise,
-        coalesce(sum(provider_fee_paise) filter (where status = 'captured'), 0)::bigint as provider_fee_paise,
-        coalesce(sum(provider_tax_paise) filter (where status = 'captured'), 0)::bigint as provider_tax_paise
+        coalesce(sum(amount_paise) filter (where status = 'captured'), 0)::bigint as gross_paise
       from bridge_payments
       where created_at >= ${data.from}::timestamptz
         and created_at < ${data.to}::timestamptz
         and (${data.bridgeTitleId ?? null}::text is null or title_id = ${data.bridgeTitleId ?? null})
+    `;
+
+    const audience = await sql<{
+      registered_users: number;
+      active_profiles: number;
+      new_profiles_in_period: number;
+      active_subscribers: number;
+    }>`
+      select
+        (select count(distinct user_id)::int from loop_profiles) as registered_users,
+        (select count(*)::int from loop_profiles where is_active = true) as active_profiles,
+        (select count(distinct user_id)::int from loop_profiles
+          where created_at >= ${data.from}::timestamptz and created_at < ${data.to}::timestamptz) as new_profiles_in_period,
+        (select count(distinct user_id)::int from loop_subscriptions
+          where status = 'active' and expires_at > now()) as active_subscribers
     `;
 
     const watch = playback[0];
@@ -158,12 +171,18 @@ export const getLoopAnalyticsReport = createServerFn({ method: "GET" })
         observedWatchMinutes: Math.floor(Number(watch?.watched_seconds ?? 0) / 60),
         source: "client-reported telemetry; observational only",
       },
+      audience: {
+        registeredUsers: Number(audience[0]?.registered_users ?? 0),
+        activeProfiles: Number(audience[0]?.active_profiles ?? 0),
+        newUsersInPeriod: Number(audience[0]?.new_profiles_in_period ?? 0),
+        activeSubscribersNow: Number(audience[0]?.active_subscribers ?? 0),
+        note: "Current user/subscription snapshot plus profile creation in the selected period; not a historical daily series",
+      },
       bridgePaymentRecords: {
         capturedPaymentCount: Number(sales?.captured_count ?? 0),
         capturedGrossPaise: Number(sales?.gross_paise ?? 0),
-        refundedPaise: Number(sales?.refunded_paise ?? 0),
-        providerFeePaise: sales?.provider_fee_paise == null ? null : Number(sales.provider_fee_paise),
-        providerTaxPaise: sales?.provider_tax_paise == null ? null : Number(sales.provider_tax_paise),
+        refunds: "NOT AVAILABLE — refund totals are not represented in bridge_payments",
+        providerFeesAndTax: "NOT AVAILABLE — fee/tax settlement data is not represented in bridge_payments",
         note: "Bridge payment records only; not certified as Loop TVOD sales",
       },
       loopTvodReconciliation: {
