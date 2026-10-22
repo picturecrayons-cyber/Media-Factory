@@ -226,6 +226,7 @@ test("concurrent upload preparation inserts at most one asset for a unique objec
   const db = new PGlite();
   try {
     await db.waitReady;
+    await db.exec("create role anon; create role authenticated;");
     await db.exec(readFileSync(join(process.cwd(), "migrations/0004_bridge.sql"), "utf8"));
     await db.exec(`
       insert into bridge_titles (id, slug, name, owner_user_id, owner_account_type, status)
