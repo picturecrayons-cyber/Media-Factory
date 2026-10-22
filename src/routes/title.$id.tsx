@@ -844,7 +844,15 @@ function PreviewAssetCard({
           <iframe title={`${label} PDF preview`} src={previewUrl} className="h-64 w-full rounded-lg border border-line bg-white" />
         ) : isCertificate && previewUrl && asset.contentType?.startsWith("image/") ? (
           <button type="button" onClick={() => setExpanded(true)} className="block w-full rounded-lg bg-elevated p-2">
-            <img src={previewUrl} alt={label} className="mx-auto max-h-64 object-contain" />
+            <img
+              src={previewUrl}
+              alt={label}
+              onError={() => {
+                setPreviewUrl(null);
+                setError("The secure preview link may have expired. Retry to request a fresh link.");
+              }}
+              className="mx-auto max-h-64 object-contain"
+            />
             <span className="mt-2 block text-xs text-muted">Click to view original</span>
           </button>
         ) : previewUrl ? (
