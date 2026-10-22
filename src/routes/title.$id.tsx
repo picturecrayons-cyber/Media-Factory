@@ -662,6 +662,24 @@ function FilesPanel({
         </div>
       ) : null}
 
+      {savedUploads.length ? (
+        <div className="mt-5 rounded-xl border border-line p-4">
+          <p className="text-sm font-semibold">Saved uploads · Resume</p>
+          <p className="mt-1 text-xs text-muted">Files and completed multipart parts are saved in this browser. Keep using this browser and profile; secure upload links expire.</p>
+          <div className="mt-3 space-y-2">
+            {savedUploads.map((saved) => (
+              <div key={saved.key} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-line px-3 py-2">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium">{saved.filename}</p>
+                  <p className="text-xs text-muted">{saved.kind.replaceAll("_", " ")} · {(saved.file.size / (1024 * 1024)).toFixed(1)} MB · {saved.completedParts.length} parts saved</p>
+                </div>
+                <button type="button" disabled={Boolean(uploading) || !canUpload} onClick={() => void uploadFile(saved.kind as SimpleAssetKind, saved.file)} className="rounded-full border border-line px-3 py-1.5 text-xs font-semibold disabled:opacity-50">Resume</button>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
       {progress ? (
         <div className="mt-5 rounded-xl border border-line bg-elevated/40 p-4" aria-label="Upload progress">
           <div className="flex flex-wrap items-start justify-between gap-3">
