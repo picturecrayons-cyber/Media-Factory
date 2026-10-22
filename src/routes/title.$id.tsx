@@ -462,7 +462,21 @@ function FilesPanel({
         }
         assertAttemptActive();
         announce("All parts uploaded. Committing multipart object…");
-        await commitMultipart(saved.multipartUrl);
+        try {
+          await commitMultipart(saved.multipartUrl);
+        } catch (commitError) {
+          // A dropped response can hide a successful commit. Reconcile via the existing
+          // server-side verification path before asking the user to start a new upload.
+          try {
+            await withTimeout(
+              confirmAssetUpload({ data: { assetId: saved.assetId, expectedByteSize: file.size } }),
+              55_000,
+              "Multipart commit reconciliation",
+            );
+          } catch {
+            throw commitError;
+          }
+        }
       } else {
         setProgress({ kind, phase: "transferring", percent: 0, etaSeconds: null, loaded: 0, total: file.size });
         announce(`Uploading ${kind}…`);
