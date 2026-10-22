@@ -37,7 +37,7 @@ function TitlePoster({ titleId, titleName }: { titleId: string; titleName: strin
       ) : (
         <div className="flex h-full w-full flex-col items-center justify-center gap-1 px-1 text-center text-[10px] text-muted">
           <span aria-hidden="true" className="text-lg leading-none">▧</span>
-          <span>{assetsQ.isPending || previewQ.isPending ? "Loading" : "No poster"}</span>
+          <span>{assetsQ.isPending || Boolean(poster && previewQ.isPending) ? "Loading" : "No poster"}</span>
         </div>
       )}
     </div>
