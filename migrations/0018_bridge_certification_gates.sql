@@ -87,7 +87,7 @@ begin
     and g.window_end >= p_window_end
     and not exists (
       select 1 from unnest(p_territories) requested(value)
-      where not (g.territories ? requested.value)
+      where not (g.territories ? 'WORLDWIDE' or g.territories ? requested.value)
     )
     and not exists (
       select 1 from unnest(p_languages) requested(value)
@@ -211,7 +211,7 @@ as $$
 declare
   v_pub record;
 begin
-  if new.published is true or new.listed is true then
+  if new.published is true and new.listed is true then
     if new.bridge_title_id is null then
       raise exception 'BRIDGE_GATE_BLOCKED: Loop listings require a canonical Bridge title';
     end if;
