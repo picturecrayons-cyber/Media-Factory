@@ -19,13 +19,14 @@ declare
   v_qc_id uuid;
   v_legal_id uuid;
 begin
-  if coalesce(array_length(p_territories, 1), 0) = 0
+  if coalesce(array_length(p_territories, 1), 0) <> 1
+     or upper(p_territories[1]) <> 'WORLDWIDE'
      or coalesce(array_length(p_languages, 1), 0) = 0
-     or coalesce(array_length(p_models, 1), 0) = 0
+     or coalesce(array_length(p_models, 1), 0) <> 1
+     or upper(p_models[1]) <> 'TVOD'
      or p_window_start is null or p_window_end is null
-     or p_window_start >= p_window_end
-     or not ('TVOD' = any(p_models)) then
-    raise exception 'BRIDGE_GATE_BLOCKED: explicit territory, language, TVOD model, and valid time window are required';
+     or p_window_start >= p_window_end then
+    raise exception 'BRIDGE_GATE_BLOCKED: Crayons Loop requires WORLDWIDE TVOD, explicit languages, and a valid time window';
   end if;
 
   -- Require a verified master and at least one verified artwork version.
