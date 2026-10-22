@@ -486,8 +486,7 @@ function FilesPanel({
   function inferKind(file: File, index: number, picked: File[]): SimpleAssetKind {
     const name = file.name.toLowerCase();
     const ext = name.includes(".") ? name.slice(name.lastIndexOf(".")) : "";
-    if (/\.(srt|vtt|ttml|xml)$/i.test(name) && !/\.xml$/i.test(name)) return "subtitle";
-    if (/\.(srt|vtt|ttml)$/i.test(name)) return "subtitle";
+    if (/\.(srt|vtt|ttml|xml)$/i.test(name)) return "subtitle";
     if (/certificate|censor|cbfc|censorboard/.test(name) || ext === ".pdf") return "censor_certificate";
     if (/\.(mp4|mov|mxf)$/i.test(name)) {
       if (/trailer|teaser|screener/.test(name)) return "screener";
