@@ -486,17 +486,17 @@ function FilesPanel({
   function inferKind(file: File, index: number, picked: File[]): SimpleAssetKind {
     const name = file.name.toLowerCase();
     const ext = name.includes(".") ? name.slice(name.lastIndexOf(".")) : "";
-    if (/\\.(srt|vtt|ttml|xml)$/i.test(name) && !/\\.xml$/i.test(name)) return "subtitle";
-    if (/\\.(srt|vtt|ttml)$/i.test(name)) return "subtitle";
+    if (/\.(srt|vtt|ttml|xml)$/i.test(name) && !/\.xml$/i.test(name)) return "subtitle";
+    if (/\.(srt|vtt|ttml)$/i.test(name)) return "subtitle";
     if (/certificate|censor|cbfc|censorboard/.test(name) || ext === ".pdf") return "censor_certificate";
-    if (/\\.(mp4|mov|mxf)$/i.test(name)) {
+    if (/\.(mp4|mov|mxf)$/i.test(name)) {
       if (/trailer|teaser|screener/.test(name)) return "screener";
-      const previousVideo = picked.slice(0, index).some((candidate) => /\\.(mp4|mov|mxf)$/i.test(candidate.name));
+      const previousVideo = picked.slice(0, index).some((candidate) => /\.(mp4|mov|mxf)$/i.test(candidate.name));
       return previousVideo ? "screener" : "master";
     }
     if (/horizontal|landscape|banner|wide/.test(name)) return "poster_horizontal";
     if (/thumb|thumbnail/.test(name)) return "thumbnail";
-    const priorImages = picked.slice(0, index).filter((candidate) => /\\.(png|jpe?g|webp)$/i.test(candidate.name)).length;
+    const priorImages = picked.slice(0, index).filter((candidate) => /\.(png|jpe?g|webp)$/i.test(candidate.name)).length;
     return priorImages === 0 ? "poster_vertical" : priorImages === 1 ? "poster_horizontal" : "thumbnail";
   }
 
@@ -540,13 +540,13 @@ function FilesPanel({
     setQueuePaused(false);
     try {
       // Process only the snapshot present when Start/Resume is pressed; new files can be queued for the next pass.
-      const batch = queuedUploads.filter((item) => item.status === "queued" || item.status === "failed");
+      const batch = queuedUploads.filter((item) => item.status === "queued");
       for (const item of batch) {
         if (queuePausedRef.current) break;
         setQueuedUploads((current) => current.map((entry) => entry.id === item.id ? { ...entry, status: "uploading", error: undefined } : entry));
         const ok = await uploadFile(item.kind, item.file);
         setQueuedUploads((current) => current.map((entry) => entry.id === item.id
-          ? { ...entry, status: ok ? "done" : "failed", error: ok ? undefined : "Upload did not finish successfully. Check the status above before retrying." }
+          ? { ...entry, status: ok ? "done" : "failed", error: ok ? undefined : "Upload did not finish successfully. Refresh and reconcile the asset status before adding a new attempt." }
           : entry));
       }
     } finally {
@@ -627,7 +627,7 @@ function FilesPanel({
             <div className="flex gap-2">
               {queueRunning
                 ? <button type="button" onClick={pauseQueue} className="rounded-full border border-line px-3 py-1.5 text-xs font-semibold">Pause queue</button>
-                : <button type="button" disabled={!canUpload || !queuedUploads.some((item) => item.status === "queued" || item.status === "failed")} onClick={() => void processQueue()} className="rounded-full bg-fg px-3 py-1.5 text-xs font-semibold text-bg">{queuePaused ? "Resume queue" : "Start queue"}</button>}
+                : <button type="button" disabled={!canUpload || !queuedUploads.some((item) => item.status === "queued")} onClick={() => void processQueue()} className="rounded-full bg-fg px-3 py-1.5 text-xs font-semibold text-bg">{queuePaused ? "Resume queue" : "Start queue"}</button>}
               <button type="button" disabled={queueRunning} onClick={() => setQueuedUploads((current) => current.filter((item) => item.status === "done" || item.status === "uploading"))} className="rounded-full border border-line px-3 py-1.5 text-xs font-semibold">Clear finished</button>
             </div>
           </div>
