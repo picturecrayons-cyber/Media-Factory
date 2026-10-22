@@ -70,7 +70,7 @@ function CheckGroup({
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
         {values.map((value) => (
           <label key={value} className="flex min-h-10 items-center gap-2 rounded-xl border border-line bg-elevated px-3 text-xs text-fg">
-            <input id="bridge-onboarding-tsx-input-1" name="bridge-onboarding-tsx-input-1"
+            <input id={`bridge-onboarding-${label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${value.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`} name={`${label}-${value}`}
               type="checkbox"
               checked={selected.includes(value)}
               onChange={(e) => onChange(value, e.target.checked)}
