@@ -605,8 +605,14 @@ function FilesPanel({
 
   async function refreshAssetStatus() {
     try {
-      await onAssetsChanged();
-      announce("Asset status refreshed. Ready is shown only after server-side verification is recorded.", "status", true);
+      const result = await onAssetsChanged() as { data?: { assets?: Array<{ id: string; verified: boolean }> } };
+      const verifiedIds = new Set((result?.data?.assets ?? []).filter(asset => asset.verified).map(asset => asset.id));
+      const completed = savedUploads.filter(saved => saved.verificationPending && verifiedIds.has(saved.assetId));
+      for (const saved of completed) await deleteUpload(saved.key);
+      if (completed.length) setSavedUploads(current => current.filter(saved => !verifiedIds.has(saved.assetId)));
+      announce(verifiedIds.size
+        ? "Asset status refreshed. Recorded storage verification is reflected in the asset list."
+        : "No verified result is recorded yet. Keep this asset pending; do not re-upload it.", "status", true);
     } catch {
       announce("Could not refresh asset status. The current asset remains unverified until the server confirms it.", "error", true);
     }
