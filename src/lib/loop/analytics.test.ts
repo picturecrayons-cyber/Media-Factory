@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { loopAnalyticsEventInput } from "./analytics.ts";
+import { loopAnalyticsEventInput } from "./analytics-contract.ts";
 
 test("accepts bounded observational playback events", () => {
   const parsed = loopAnalyticsEventInput.parse({
