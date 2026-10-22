@@ -80,8 +80,8 @@ function xhrRequest<T>(url: string, method: string, body: Blob | null, headers: 
   });
 }
 
-export async function startMultipart(parUrl: string): Promise<string> {
-  const { value } = await xhrRequest<{ accessUri?: string }>(parUrl, "PUT", new Blob([]), { "opc-multipart": "true" });
+export async function startMultipart(parUrl: string, contentType: string): Promise<string> {
+  const { value } = await xhrRequest<{ accessUri?: string }>(parUrl, "PUT", new Blob([]), { "opc-multipart": "true", "content-type": contentType });
   if (!value?.accessUri) throw new Error("OCI did not return a multipart access URI.");
   // OCI returns a relative access URI; resolve it against the same region host as the original PAR.
   return new URL(value.accessUri, parUrl).toString();
