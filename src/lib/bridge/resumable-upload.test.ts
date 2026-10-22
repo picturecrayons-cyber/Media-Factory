@@ -80,7 +80,7 @@ test("multipart part upload sends the requested slice and requires the OCI ETag"
   assert.equal(FakeXhr.requests[0].headers["content-type"], "application/octet-stream");
 
   class MissingEtagXhr extends FakeXhr {
-    getResponseHeader(_name: string): string | null { return null; }
+    getResponseHeader(_name: string): string { return ""; }
   }
   globalThis.XMLHttpRequest = MissingEtagXhr as unknown as typeof XMLHttpRequest;
   await assert.rejects(
