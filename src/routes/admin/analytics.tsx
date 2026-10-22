@@ -265,8 +265,8 @@ function RevenueAnalyticsBody() {
                     <td className="px-3 py-3">{title.runtimeMinutes ? `${title.runtimeMinutes} min` : "NOT AVAILABLE"}</td>
                     <td className="px-3 py-3">{title.licensingFeePaise > 0 ? formatMoney(title.licensingFeePaise) : "NOT SET"}</td>
                     <td className="px-3 py-3 text-muted">NOT AVAILABLE</td>
-                    <td className="px-3 py-3 text-muted">{reportQ.isError ? "NOT AVAILABLE" : reportQ.isPending ? "Loading…" : (playbackByTitle.get(title.id)?.titleViews ?? 0) + " views"}</td>
-                    <td className="px-3 py-3 text-muted">{reportQ.isError ? "NOT AVAILABLE" : reportQ.isPending ? "Loading…" : (playbackByTitle.get(title.id)?.observedWatchMinutes ?? 0) + " observed min"}</td>
+                    <td className="px-3 py-3 text-muted">{selectedTitleId !== "ALL" && selectedTitleId !== title.id ? "— (filtered)" : reportQ.isError ? "NOT AVAILABLE" : reportQ.isPending ? "Loading…" : (playbackByTitle.get(title.id)?.titleViews ?? 0) + " views"}</td>
+                    <td className="px-3 py-3 text-muted">{selectedTitleId !== "ALL" && selectedTitleId !== title.id ? "— (filtered)" : reportQ.isError ? "NOT AVAILABLE" : reportQ.isPending ? "Loading…" : (playbackByTitle.get(title.id)?.observedWatchMinutes ?? 0) + " observed min"}</td>
                   </tr>
                 ))}
                 {filtered.length === 0 ? <tr><td colSpan={7} className="px-3 py-8 text-center text-muted">No titles match these filters.</td></tr> : null}
