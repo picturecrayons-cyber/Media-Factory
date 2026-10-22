@@ -26,7 +26,7 @@ import { asciiUploadName } from "@/lib/bridge/latin1";
 
 export const Route = createFileRoute("/title/$id")({ component: TitlePage });
 
-const WORKSPACE_TABS = ["Overview", "Files"] as const;
+const WORKSPACE_TABS = ["Overview", "Files", "Media"] as const;
 type WorkspaceTab = (typeof WORKSPACE_TABS)[number];
 
 function LaneStore({ titleId, stored, locked }: { titleId: string; stored: string; locked: boolean }) {
@@ -97,6 +97,19 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
   });
   const title = titleQ.data?.title;
   const assets = assetsQ.data?.assets ?? [];
+  const posterAsset = assets
+    .filter((asset) => asset.verified && asset.contentType?.startsWith("image/") && ["poster_vertical", "poster", "thumbnail"].includes(asset.kind))
+    .sort((a, b) => {
+      const priority = (kind: string) => kind === "poster_vertical" ? 0 : kind === "poster" ? 1 : 2;
+      return priority(a.kind) - priority(b.kind);
+    })[0];
+  const posterPreviewQ = useQuery({
+    queryKey: ["bridge-title-poster-preview", posterAsset?.id],
+    queryFn: () => requestAssetDownload({ data: { assetId: posterAsset!.id } }),
+    enabled: Boolean(posterAsset?.verified && posterAsset.contentType?.startsWith("image/")),
+    staleTime: 4 * 60_000,
+    retry: false,
+  });
   const pub = pubQ.data?.publication;
 
   if (titleQ.isPending) return <p className="text-sm text-muted">Loading title workspace…</p>;
@@ -128,12 +141,19 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
       {assetsQ.isError ? <p role="alert">Assets unavailable: {assetsQ.error.message}</p> : null}
       <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
         <div className="grid gap-5 md:grid-cols-[180px_1fr]">
-          <div className="aspect-[2/3] overflow-hidden rounded-xl border border-line bg-elevated">
-            <div className="grid h-full place-items-center px-4 text-center text-xs text-muted">
-              {assets.some((asset) => ["poster_vertical", "poster"].includes(asset.kind))
-                ? "Vertical poster ready"
-                : "Add vertical poster"}
-            </div>
+          <div className="relative aspect-[2/3] overflow-hidden rounded-xl border border-line bg-elevated">
+            {posterPreviewQ.data?.url ? (
+              <img
+                src={posterPreviewQ.data.url}
+                alt={`${title.name} vertical poster`}
+                className="h-full w-full object-cover"
+                onError={(event) => { event.currentTarget.style.visibility = "hidden"; }}
+              />
+            ) : (
+              <div className="grid h-full place-items-center px-4 text-center text-xs text-muted">
+                {posterPreviewQ.isPending ? "Loading verified poster…" : "Add vertical poster"}
+              </div>
+            )}
           </div>
           <div className="min-w-0">
             <div className="flex flex-wrap items-start justify-between gap-3">
@@ -245,6 +265,8 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
           assets={assets}
           onAssetsChanged={() => assetsQ.refetch()}
         />
+      ) : activeTab === "Media" ? (
+        <MediaGallery assets={assets} loading={assetsQ.isPending} />
       ) : null}
     </div>
   );
@@ -255,6 +277,87 @@ function Metric({ label, value }: { label: string; value: string }) {
       <p className="text-xs text-muted">{label}</p>
       <p className="mt-1 text-sm font-semibold">{value}</p>
     </div>
+  );
+}
+
+function MediaGallery({
+  assets,
+  loading,
+}: {
+  loading: boolean;
+  assets: Array<{
+    id: string;
+    kind: string;
+    contentType: string | null;
+    byteSize: number | null;
+    verified: boolean;
+  }>;
+}) {
+  const artwork = assets
+    .filter((asset) => asset.verified && asset.contentType?.startsWith("image/") && ["poster_vertical", "poster_horizontal", "poster", "thumbnail"].includes(asset.kind))
+    .sort((a, b) => {
+      const priority = (kind: string) => kind === "poster_vertical" ? 0 : kind === "poster_horizontal" ? 1 : kind === "poster" ? 2 : 3;
+      return priority(a.kind) - priority(b.kind);
+    });
+
+  if (loading) return <p className="text-sm text-muted">Loading verified media…</p>;
+  if (!artwork.length) {
+    return (
+      <section className="rounded-2xl border border-line bg-surface p-6">
+        <h2 className="font-display text-xl font-semibold">Media Gallery</h2>
+        <p className="mt-2 text-sm text-muted">No verified artwork is available yet. An uploaded or pending file will appear here only after storage verification succeeds.</p>
+      </section>
+    );
+  }
+
+  return (
+    <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
+      <div className="mb-4">
+        <h2 className="font-display text-xl font-semibold">Media Gallery</h2>
+        <p className="mt-1 text-sm text-muted">Verified artwork only. Unverified uploads are not displayed.</p>
+      </div>
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+        {artwork.map((asset) => (
+          <VerifiedArtwork key={asset.id} asset={asset} />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function VerifiedArtwork({
+  asset,
+}: {
+  asset: {
+    id: string;
+    kind: string;
+    contentType: string | null;
+    byteSize: number | null;
+    verified: boolean;
+  };
+}) {
+  const previewQ = useQuery({
+    queryKey: ["bridge-media-gallery-preview", asset.id],
+    queryFn: () => requestAssetDownload({ data: { assetId: asset.id } }),
+    enabled: asset.verified && Boolean(asset.contentType?.startsWith("image/")),
+    staleTime: 4 * 60_000,
+    retry: false,
+  });
+  return (
+    <figure className="overflow-hidden rounded-xl border border-line bg-elevated">
+      <div className={asset.kind === "poster_horizontal" ? "aspect-video" : "aspect-[2/3]"}>
+        {previewQ.data?.url ? (
+          <img src={previewQ.data.url} alt={`${asset.kind.replaceAll("_", " ")} artwork`} loading="lazy" className="h-full w-full object-contain" />
+        ) : (
+          <div className="grid h-full place-items-center px-3 text-center text-xs text-muted">
+            {previewQ.isPending ? "Loading verified artwork…" : "Preview unavailable"}
+          </div>
+        )}
+      </div>
+      <figcaption className="border-t border-line px-3 py-2 text-xs font-medium capitalize">
+        {asset.kind.replaceAll("_", " ")}
+      </figcaption>
+    </figure>
   );
 }
 
