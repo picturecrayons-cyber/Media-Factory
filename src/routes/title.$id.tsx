@@ -461,6 +461,7 @@ function FilesPanel({
       await withTimeout(Promise.resolve(onAssetsChanged()), 15_000, "Asset refresh");
       assertAttemptActive();
       setUploadProgress(100);
+      if (canManage) setFilesView("gallery");
       setMessage(`${kind[0].toUpperCase() + kind.slice(1)} is ready after storage verification.`);
       notify("success", `${kind[0].toUpperCase() + kind.slice(1)} uploaded and verified.`);
       toast.success(`${kind[0].toUpperCase() + kind.slice(1)} uploaded and verified`);
@@ -554,19 +555,21 @@ function FilesPanel({
           >
             Upload & Replace
           </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={filesView === "gallery"}
-            onClick={() => setFilesView("gallery")}
-            className={`rounded-full px-4 py-2 text-sm font-semibold ${filesView === "gallery" ? "bg-fg text-bg" : "border border-line text-muted hover:bg-elevated hover:text-fg"}`}
-          >
-            Media Gallery <span className="ml-1 opacity-75">({assets.length})</span>
-          </button>
+          {canManage ? (
+            <button
+              type="button"
+              role="tab"
+              aria-selected={filesView === "gallery"}
+              onClick={() => setFilesView("gallery")}
+              className={`rounded-full px-4 py-2 text-sm font-semibold ${filesView === "gallery" ? "bg-fg text-bg" : "border border-line text-muted hover:bg-elevated hover:text-fg"}`}
+            >
+              Media Gallery <span className="ml-1 opacity-75">({assets.length})</span>
+            </button>
+          ) : null}
         </div>
       </div>
 
-      {filesView === "upload" ? (
+      {filesView === "upload" || !canManage ? (
         <div className="rounded-2xl border border-line bg-surface p-4 sm:p-5">
           <div className="mb-4">
             <h3 className="font-display text-lg font-semibold">Upload & replace assets</h3>
@@ -581,6 +584,7 @@ function FilesPanel({
                 status={assets.some((a) => (a.kind === kind || (kind === "poster_vertical" && a.kind === "poster")) && a.verified) ? "Ready" : empty}
                 busy={uploading === kind}
                 progress={uploading === kind ? uploadProgress : 0}
+                phase={uploading === kind ? uploadPhase : null}
                 canUpload={canUpload}
                 onFile={(file) => void uploadFile(kind, file)}
               />
@@ -624,6 +628,7 @@ function FilesPanel({
             ) : notificationPermission === "granted" ? <span className="text-xs text-muted">Desktop notifications enabled</span> : null}
           </div>
           {!canUpload ? <p className="mt-3 text-xs text-muted">Uploads are unavailable for your role or while this title is outside an editable preparation state.</p> : null}
+          {!canManage ? <p className="mt-2 text-xs text-muted">Asset previews and the media gallery are available to Bridge administrators only.</p> : null}
         </div>
       ) : (
         <div className="rounded-2xl border border-line bg-surface p-4 sm:p-5">
@@ -639,6 +644,7 @@ function FileTypeCard({
   status,
   busy,
   progress,
+  phase,
   onFile,
   canUpload,
 }: {
@@ -648,6 +654,7 @@ function FileTypeCard({
   status: string;
   busy: boolean;
   progress: number;
+  phase: "preparing" | "transferring" | "verifying" | "refreshing" | null;
   onFile: (file: File) => void;
 }) {
   const spec = OTT_INGEST_SPEC[kind];
@@ -662,7 +669,7 @@ function FileTypeCard({
           </p>
         </div>
         <label className="cursor-pointer rounded-full border border-line px-3 py-1.5 text-xs font-semibold">
-          {busy ? "Uploading…" : status === "Ready" ? "Replace" : "Upload"}
+          {busy ? (phase === "preparing" ? "Preparing…" : phase === "verifying" ? "Verifying…" : phase === "refreshing" ? "Finishing…" : "Uploading…") : status === "Ready" ? "Replace" : "Upload"}
           <input
             className="sr-only"
             type="file"
@@ -678,12 +685,27 @@ function FileTypeCard({
       </div>
       {busy ? (
         <div className="mt-4" aria-live="polite">
-          <div className="flex items-center justify-between text-xs">
-            <span className="text-muted">Transfer progress</span>
-            <span className="font-semibold tabular-nums">{progress}%</span>
+          <div className="flex items-center justify-between gap-2 text-xs">
+            <span className="text-muted">
+              {phase === "preparing" ? "Preparing secure upload" : phase === "verifying" ? "Verifying stored object" : phase === "refreshing" ? "Refreshing verified status" : "Transfer progress"}
+            </span>
+            <span className="font-semibold tabular-nums">
+              {phase === "transferring" ? `${progress}%` : phase === "preparing" ? "Starting…" : phase === "verifying" ? "Checking…" : phase === "refreshing" ? "Finishing…" : "Working…"}
+            </span>
           </div>
-          <div className="mt-2 h-2 overflow-hidden rounded-full bg-elevated" role="progressbar" aria-label={`${label} upload progress`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress}>
-            <div className="h-full rounded-full bg-accent-strong transition-[width] duration-150" style={{ width: `${progress}%` }} />
+          <div
+            className="mt-2 h-2 overflow-hidden rounded-full bg-elevated"
+            role="progressbar"
+            aria-label={`${label} upload progress`}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={phase === "transferring" ? progress : undefined}
+            aria-valuetext={phase === "transferring" ? `${progress}% transferred` : phase === "preparing" ? "Preparing secure upload" : phase === "verifying" ? "Verifying stored object" : "Refreshing verified status"}
+          >
+            <div
+              className={`h-full rounded-full bg-accent-strong transition-[width] duration-150 ${phase !== "transferring" ? "animate-pulse" : ""}`}
+              style={{ width: `${phase === "transferring" ? progress : phase === "preparing" ? 25 : 100}%` }}
+            />
           </div>
         </div>
       ) : null}
