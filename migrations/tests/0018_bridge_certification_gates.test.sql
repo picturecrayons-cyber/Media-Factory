@@ -147,7 +147,7 @@ begin
     raise exception 'TEST_FAILED: non-TVOD exploitation model was not blocked';
   end if;
 
-  -- Negative test 1d: TVOD must not be combined with SVOD, AVOD, or FREE.
+  -- Negative test 1e: TVOD must not be combined with SVOD, AVOD, or FREE.
   foreach v_model in array array['SVOD', 'AVOD', 'FREE'] loop
     v_blocked := false;
     begin
