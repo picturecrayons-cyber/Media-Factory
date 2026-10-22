@@ -390,7 +390,7 @@ export const authorizeLoopPublication = createServerFn({ method: "POST" })
           authorizedBy: actor.userId,
           commercialTerms: preflight.commercialTerms || null,
         })}::jsonb,
-        ${"approved"}, true, true, false,
+        ${"approved"}, false, false, false,
         ${data.accessTier}, now()
       )
       on conflict (bridge_title_id) do update set
@@ -398,7 +398,7 @@ export const authorizeLoopPublication = createServerFn({ method: "POST" })
         content_type = excluded.content_type,
         language = excluded.language, year = excluded.year, duration_minutes = excluded.duration_minutes,
         poster_path = excluded.poster_path, playback_path = excluded.playback_path,
-        status = 'approved', listed = true, published = true, access_tier = excluded.access_tier,
+        status = 'approved', listed = false, published = false, access_tier = excluded.access_tier,
         metadata = excluded.metadata, updated_at = now()
     `;
 
@@ -427,7 +427,15 @@ export const authorizeLoopPublication = createServerFn({ method: "POST" })
         revoked_at = null, metadata = excluded.metadata, updated_at = now()
     `;
 
-      // 3. Write immutable audit log
+      // 3. Buyer visibility is enabled only after Bridge authorization exists.
+      // The database listing trigger independently re-checks authorization and evidence.
+      await sql`
+        update loop_titles
+        set listed = true, published = true, updated_at = now()
+        where id = ${loopTitleId}
+      `;
+
+      // 4. Write immutable audit log
       await writeAudit(
         {
           actorUserId: actor.userId,
