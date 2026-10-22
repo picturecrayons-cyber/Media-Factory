@@ -14,7 +14,9 @@ function TitlePoster({ titleId, titleName }: { titleId: string; titleName: strin
     queryKey: ["bridge-title-poster-assets", titleId],
     queryFn: () => listTitleAssets({ data: { titleId } }),
     staleTime: 60_000,
-    retry: false,
+    // Retry once for transient Preview/API failures; refocus refreshes stale status.
+    retry: 1,
+    refetchOnWindowFocus: true,
   });
   const poster = selectVerifiedOriginalPoster(assetsQ.data?.assets ?? []);
   const previewQ = useQuery({
@@ -22,7 +24,9 @@ function TitlePoster({ titleId, titleName }: { titleId: string; titleName: strin
     queryFn: () => requestAssetDownload({ data: { assetId: poster!.id } }),
     enabled: Boolean(poster?.verified && poster.contentType?.startsWith("image/")),
     staleTime: 4 * 60_000,
-    retry: false,
+    // Signed-preview requests can fail transiently; retry once and refresh on focus.
+    retry: 1,
+    refetchOnWindowFocus: true,
   });
   const [failedSrc, setFailedSrc] = useState<string | null>(null);
   const src = previewQ.data?.url;
