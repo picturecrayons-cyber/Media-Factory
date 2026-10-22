@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { requestAssetDownload } from "@/lib/bridge/assets";
 
 type PreviewAsset = {
@@ -23,6 +23,46 @@ function prettySize(bytes: number | null) {
   if (bytes == null || !Number.isFinite(bytes) || bytes <= 0) return "Size unavailable";
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+
+export function AssetPosterSlot({ assets }: { assets: PreviewAsset[] }) {
+  const poster = assets.find((asset) =>
+    asset.verified && ["poster_vertical", "poster"].includes(asset.kind) && isImage(asset)
+  );
+  const [url, setUrl] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    setUrl(null);
+    setFailed(false);
+    if (!poster) return () => { active = false; };
+    void requestAssetDownload({ data: { assetId: poster.id } })
+      .then((signed) => {
+        if (active && signed?.url) setUrl(signed.url);
+        else if (active) setFailed(true);
+      })
+      .catch(() => { if (active) setFailed(true); });
+    return () => { active = false; };
+  }, [poster?.id]);
+
+  return (
+    <div className="aspect-[2/3] overflow-hidden rounded-xl border border-line bg-elevated">
+      {url && !failed ? (
+        <img
+          src={url}
+          alt="Verified vertical poster"
+          className="h-full w-full object-contain"
+          onError={() => setFailed(true)}
+        />
+      ) : (
+        <div className="grid h-full place-items-center px-4 text-center text-xs text-muted">
+          {poster && !failed ? "Loading poster preview…" : poster ? "Poster preview unavailable" : "Add vertical poster"}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export function AssetPreviewGallery({ assets }: { assets: PreviewAsset[] }) {
