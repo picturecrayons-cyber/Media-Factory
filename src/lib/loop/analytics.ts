@@ -127,6 +127,33 @@ export const getLoopAnalyticsReport = createServerFn({ method: "GET" })
         and (${data.bridgeTitleId ?? null}::text is null or bridge_title_id = ${data.bridgeTitleId ?? null})
     `;
 
+    const titleBreakdown = await sql<{
+      bridge_title_id: string;
+      loop_title_id: string;
+      event_count: number;
+      unique_viewers: number;
+      title_views: number;
+      playback_starts: number;
+      playback_completions: number;
+      watched_seconds: number;
+    }>`
+      select
+        bridge_title_id,
+        loop_title_id,
+        count(*)::int as event_count,
+        count(distinct user_id)::int as unique_viewers,
+        count(*) filter (where event_type = 'TITLE_VIEW')::int as title_views,
+        count(*) filter (where event_type = 'PLAYBACK_START')::int as playback_starts,
+        count(*) filter (where event_type = 'PLAYBACK_COMPLETE')::int as playback_completions,
+        coalesce(sum(watched_seconds), 0)::int as watched_seconds
+      from bridge_loop_analytics_events
+      where received_at >= ${data.from}::timestamptz
+        and received_at < ${data.to}::timestamptz
+        and (${data.bridgeTitleId ?? null}::text is null or bridge_title_id = ${data.bridgeTitleId ?? null})
+      group by bridge_title_id, loop_title_id
+      order by watched_seconds desc, title_views desc
+    `;
+
     // This is a Bridge payment snapshot only. Its schema does not currently
     // contain certified Loop order links, refund totals, or settlement fee fields.
     const payments = await sql<{
@@ -162,6 +189,16 @@ export const getLoopAnalyticsReport = createServerFn({ method: "GET" })
     return {
       period: { from: data.from, to: data.to, timezone: "UTC" },
       titleFilter: data.bridgeTitleId ?? null,
+      titleBreakdown: titleBreakdown.map((row) => ({
+        bridgeTitleId: row.bridge_title_id,
+        loopTitleId: row.loop_title_id,
+        events: Number(row.event_count ?? 0),
+        uniqueAuthenticatedViewers: Number(row.unique_viewers ?? 0),
+        titleViews: Number(row.title_views ?? 0),
+        playbackStarts: Number(row.playback_starts ?? 0),
+        playbackCompletions: Number(row.playback_completions ?? 0),
+        observedWatchMinutes: Math.floor(Number(row.watched_seconds ?? 0) / 60),
+      })),
       playback: {
         events: Number(watch?.event_count ?? 0),
         uniqueAuthenticatedViewers: Number(watch?.unique_viewers ?? 0),
