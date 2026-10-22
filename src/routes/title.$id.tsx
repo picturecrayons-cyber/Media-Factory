@@ -4,7 +4,7 @@ import { WorkflowDesk } from "@/components/bridge/workflow-desk";
 import { publicationIsActive } from "@/lib/bridge/workflow-policy";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { getTitle, updateTitle } from "@/lib/bridge/titles";
@@ -23,6 +23,7 @@ import {
   validateOttIngestFile,
 } from "@/lib/bridge/ott-ingest-spec";
 import { asciiUploadName } from "@/lib/bridge/latin1";
+import { commitMultipart, deleteUpload, getUpload, listUploads, MULTIPART_PART_SIZE, MULTIPART_THRESHOLD, saveUpload, startMultipart, uploadKey, uploadMultipartPart, type SavedUpload } from "@/lib/bridge/resumable-upload.client";
 
 export const Route = createFileRoute("/title/$id")({ component: TitlePage });
 
@@ -321,6 +322,14 @@ function FilesPanel({
   );
   const [progress, setProgress] = useState<UploadProgress | null>(null);
   const [queuedUploads, setQueuedUploads] = useState<QueuedUpload[]>([]);
+  const [savedUploads, setSavedUploads] = useState<SavedUpload[]>([]);
+  useEffect(() => {
+    let active = true;
+    void listUploads().then(items => { if (active) setSavedUploads(items.filter(item => item.titleId === titleId)); }).catch(() => {
+      if (active) announce("Resumable upload storage is unavailable in this browser.", "error");
+    });
+    return () => { active = false; };
+  }, [titleId]);
   const [queueRunning, setQueueRunning] = useState(false);
   const [queuePaused, setQueuePaused] = useState(false);
   const [dragActive, setDragActive] = useState(false);
@@ -402,79 +411,79 @@ function FilesPanel({
     const filename = asciiUploadName(file.name);
     const contentType = file.type || "application/octet-stream";
     const validation = validateOttIngestFile({ kind, filename, contentType });
-    if (!validation.ok) {
-      announce(validation.message, "error");
-      return false;
-    }
-
+    if (!validation.ok) { announce(validation.message, "error"); return false; }
     cancelRequestedRef.current = false;
     const attemptId = ++uploadAttemptRef.current;
     const assertAttemptActive = () => {
-      if (cancelRequestedRef.current || uploadAttemptRef.current !== attemptId) {
-        throw new Error("Upload cancelled. No further transfer or confirmation will be started by this attempt.");
-      }
+      if (cancelRequestedRef.current || uploadAttemptRef.current !== attemptId) throw new Error("Upload cancelled; this attempt will not continue.");
     };
+    const key = uploadKey(titleId, kind, file);
     setUploading(kind);
     setProgress({ kind, phase: "preparing", percent: null, etaSeconds: null, loaded: 0, total: file.size });
-    announce(`Preparing ${kind} upload. You can follow progress here.`);
-    let transferTimer: ReturnType<typeof setTimeout> | undefined;
+    announce(`Preparing ${kind} upload.`);
     try {
-      const signed = await withTimeout(
-        requestAssetUpload({ data: { titleId, kind, filename, contentType } }),
-        20_000,
-        "Upload URL preparation",
-      );
-
-      // Cancellation can happen while URL preparation is pending. Never start a PUT for a stale attempt.
+      let saved = await getUpload(key);
+      if (!saved) {
+        const signed = await withTimeout(
+          requestAssetUpload({ data: { titleId, kind, filename, contentType, fileSize: file.size } }),
+          20_000, "Upload URL preparation",
+        );
+        saved = { key, titleId, kind, filename, contentType, file, assetId: signed.assetId, parUrl: signed.url, completedParts: [], updatedAt: Date.now() };
+        await saveUpload(saved);
+        setSavedUploads(current => [...current.filter(item => item.key !== key), saved!]);
+      }
       assertAttemptActive();
-      // Use the OCI pre-authenticated URL verbatim; rewriting its encoded path can invalidate it.
-      setProgress({ kind, phase: "transferring", percent: 0, etaSeconds: null, loaded: 0, total: file.size });
-      announce(`Uploading ${kind}…`);
-      transferTimer = setTimeout(() => uploadXhrRef.current?.abort(), 120_000);
-      await transferWithProgress(kind, signed.url, signed.method, file, contentType);
+      if (file.size >= MULTIPART_THRESHOLD) {
+        if (!saved.multipartUrl) {
+          announce("Starting secure multipart session…");
+          saved.multipartUrl = await startMultipart(saved.parUrl);
+          saved.updatedAt = Date.now();
+          await saveUpload(saved);
+          setSavedUploads(current => [...current.filter(item => item.key !== key), saved!]);
+        }
+        const totalParts = Math.ceil(file.size / MULTIPART_PART_SIZE);
+        for (let partNumber = 1; partNumber <= totalParts; partNumber++) {
+          assertAttemptActive();
+          if (saved.completedParts.some(part => part.number === partNumber)) continue;
+          const loaded = Math.min(file.size, (partNumber - 1) * MULTIPART_PART_SIZE);
+          setProgress({ kind, phase: "transferring", percent: Math.floor(loaded / file.size * 100), etaSeconds: null, loaded, total: file.size });
+          announce(`Uploading ${kind}: part ${partNumber} of ${totalParts}. Completed parts are saved for resume.`);
+          const part = await uploadMultipartPart(saved.multipartUrl, file, partNumber);
+          saved.completedParts = [...saved.completedParts.filter(item => item.number !== partNumber), part];
+          saved.updatedAt = Date.now();
+          await saveUpload(saved);
+          setSavedUploads(current => [...current.filter(item => item.key !== key), saved!]);
+          const after = Math.min(file.size, partNumber * MULTIPART_PART_SIZE);
+          setProgress({ kind, phase: "transferring", percent: Math.floor(after / file.size * 100), etaSeconds: null, loaded: after, total: file.size });
+        }
+        assertAttemptActive();
+        announce("All parts uploaded. Committing multipart object…");
+        await commitMultipart(saved.multipartUrl);
+      } else {
+        setProgress({ kind, phase: "transferring", percent: 0, etaSeconds: null, loaded: 0, total: file.size });
+        announce(`Uploading ${kind}…`);
+        await transferWithProgress(kind, saved.parUrl, "PUT", file, contentType);
+      }
       assertAttemptActive();
-      if (transferTimer !== undefined) clearTimeout(transferTimer);
-      transferTimer = undefined;
-
       setProgress({ kind, phase: "verifying", percent: null, etaSeconds: null, loaded: file.size, total: file.size });
       announce(`Upload transferred. Verifying stored ${kind} before marking it Ready…`);
+      await withTimeout(confirmAssetUpload({ data: { assetId: saved.assetId, expectedByteSize: file.size } }), 55_000, "Stored-object verification");
       assertAttemptActive();
-      await withTimeout(
-        confirmAssetUpload({ data: { assetId: signed.assetId, expectedByteSize: file.size } }),
-        55_000,
-        "Stored-object verification",
-      );
-      assertAttemptActive();
-
       setProgress({ kind, phase: "refreshing", percent: null, etaSeconds: null, loaded: file.size, total: file.size });
-      announce("Storage verified. Refreshing the asset list…");
       await withTimeout(Promise.resolve(onAssetsChanged()), 15_000, "Asset refresh");
-      assertAttemptActive();
+      await deleteUpload(key);
+      setSavedUploads(current => current.filter(item => item.key !== key));
       setProgress(null);
       announce(`${kind[0].toUpperCase() + kind.slice(1)} is ready after storage verification.`, "success", true);
       return true;
     } catch (error) {
-      // A cancelled/superseded attempt must not overwrite the status of a newer upload.
       if (uploadAttemptRef.current !== attemptId) return false;
       const raw = error instanceof Error ? error.message : "Upload failed";
       setProgress(null);
       const cancelled = cancelRequestedRef.current;
-      let detail = raw;
-      if (raw.includes("STORAGE_UNAVAILABLE")) {
-        detail = "Storage service is currently unavailable. Check the isolated Preview configuration, then select the file again to retry.";
-      } else if (error instanceof TypeError) {
-        detail = "The browser could not reach OCI storage. Check the OCI bucket CORS rule for this Preview origin, PUT method and Content-Type header, then select the file again to retry.";
-      } else if (raw.includes("Stored-object verification timed out")) {
-        // A browser timeout cannot cancel server-side verification. Avoid claiming
-        // the asset is unverified or encouraging a blind retry while that request runs.
-        detail = `${raw} The server may still be finishing verification. Refresh the asset list and check its status before retrying.`;
-      } else if (!cancelled && !raw.includes("No Ready status")) {
-        detail = `${raw} Refresh the asset list to confirm its status before retrying.`;
-      }
-      announce(detail, "error", true);
+      announce(cancelled ? raw : `${raw} Saved upload state is retained when possible. Use Resume instead of starting a duplicate attempt.`, "error", true);
       return false;
     } finally {
-      if (transferTimer !== undefined) clearTimeout(transferTimer);
       if (uploadAttemptRef.current === attemptId) {
         uploadXhrRef.current = null;
         cancelRequestedRef.current = false;
