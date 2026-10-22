@@ -328,6 +328,7 @@ function FilesPanel({
   const [savedUploads, setSavedUploads] = useState<SavedUpload[]>([]);
   useEffect(() => {
     let active = true;
+    setSavedUploads([]);
     void listUploads().then(items => { if (active) setSavedUploads(items.filter(item => item.titleId === titleId && item.userId === userId)); }).catch(() => {
       if (active) announce("Resumable upload storage is unavailable in this browser.", "error");
     });
