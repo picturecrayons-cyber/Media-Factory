@@ -70,7 +70,7 @@ jobs:
           $roles$;
           CREATE SCHEMA IF NOT EXISTS auth;
           CREATE OR REPLACE FUNCTION auth.uid() RETURNS uuid
-            LANGUAGE sql STABLE AS $ SELECT NULL::uuid $;
+            LANGUAGE sql STABLE AS 'SELECT NULL::uuid';
           SQL
       - name: Apply migrations to disposable PostgreSQL
         run: npm run db:migrate
