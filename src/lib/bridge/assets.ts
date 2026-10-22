@@ -58,6 +58,17 @@ export const requestAssetUpload = createServerFn({ method: "POST" })
       kind: data.kind,
       filename: data.filename,
     });
+    // A timed-out request may have created the asset row even if its response never
+    // reached the browser. Do not create a second row for the same deterministic object key.
+    const sql = await getSql();
+    const existing = await sql<{ id: string }>`
+      select id from bridge_assets
+      where title_id = ${title.id} and s3_key = ${key}
+      limit 1
+    `;
+    if (existing.length) {
+      throw new Error("An asset record already exists for this file. The asset list was refreshed; inspect its status before retrying.");
+    }
     const signed = await signUpload({
       key,
       contentType: data.contentType,
@@ -65,11 +76,17 @@ export const requestAssetUpload = createServerFn({ method: "POST" })
       expiresIn: (data.fileSize ?? 0) >= 100 * 1024 * 1024 ? 24 * 60 * 60 : undefined,
     });
     const id = randomBytes(16).toString("hex");
-    const sql = await getSql();
-    await sql`
+    // s3_key has a database UNIQUE constraint. Use it as the concurrency-safe
+    // idempotency guard: two simultaneous requests cannot create two asset rows.
+    const inserted = await sql<{ id: string }>`
       insert into bridge_assets (id, title_id, kind, s3_key, content_type, created_by)
       values (${id}, ${title.id}, ${data.kind}, ${key}, ${data.contentType}, ${actor.userId})
+      on conflict (s3_key) do nothing
+      returning id
     `;
+    if (!inserted.length) {
+      throw new Error("An asset record already exists for this file. The asset list was refreshed; inspect its status before retrying.");
+    }
     await writeAudit({
       actorUserId: actor.userId,
       action: "asset.upload_signed",
