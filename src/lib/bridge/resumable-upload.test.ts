@@ -79,9 +79,6 @@ test("multipart part upload sends the requested slice and requires the OCI ETag"
   assert.equal(FakeXhr.requests[0].body?.size, 4);
   assert.equal(FakeXhr.requests[0].headers["content-type"], "application/octet-stream");
 
-  const noEtag = new FakeXhr();
-  noEtag.getResponseHeader = () => null;
-  const current = globalThis.XMLHttpRequest;
   class MissingEtagXhr extends FakeXhr {
     getResponseHeader() { return null; }
   }
@@ -90,7 +87,7 @@ test("multipart part upload sends the requested slice and requires the OCI ETag"
     uploadMultipartPart("https://storage.example/u/object/id/upload/", file, 1, 4),
     /did not expose the uploaded part ETag/,
   );
-  globalThis.XMLHttpRequest = current;
+  globalThis.XMLHttpRequest = FakeXhr as unknown as typeof XMLHttpRequest;
 });
 
 test("multipart commit posts to the upload access URI", async (t) => {
