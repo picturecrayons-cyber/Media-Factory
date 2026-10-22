@@ -4,7 +4,8 @@ import { WorkflowDesk } from "@/components/bridge/workflow-desk";
 import { publicationIsActive } from "@/lib/bridge/workflow-policy";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
-import { useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { getTitle, updateTitle } from "@/lib/bridge/titles";
@@ -12,6 +13,7 @@ import { BRIDGE_LOOP_LANES, loopStageType } from "@/lib/bridge/loop-lanes";
 import {
   confirmAssetUpload,
   listTitleAssets,
+  removeIncompleteAsset,
   requestAssetDownload,
   requestAssetUpload,
 } from "@/lib/bridge/assets";
@@ -26,7 +28,7 @@ import { asciiUploadName } from "@/lib/bridge/latin1";
 
 export const Route = createFileRoute("/title/$id")({ component: TitlePage });
 
-const WORKSPACE_TABS = ["Overview", "Files"] as const;
+const WORKSPACE_TABS = ["Overview", "Files", "Operations"] as const;
 type WorkspaceTab = (typeof WORKSPACE_TABS)[number];
 
 function LaneStore({ titleId, stored, locked }: { titleId: string; stored: string; locked: boolean }) {
@@ -75,6 +77,7 @@ function TitlePage() {
 }
 
 function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
+  const qc = useQueryClient();
   const [activeTab, setActiveTab] = useState<WorkspaceTab>("Overview");
 
   const titleQ = useQuery({
@@ -97,12 +100,42 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
   });
   const title = titleQ.data?.title;
   const assets = assetsQ.data?.assets ?? [];
+  const posterQ = useQuery({
+    queryKey: ["bridge-title-poster-preview", id],
+    queryFn: async () => {
+      const result = await listTitleAssets({ data: { titleId: id } });
+      const candidates = ["poster_vertical", "poster"]
+        .map((kind) => result.assets.find((item) => item.kind === kind && item.verified))
+        .filter((asset): asset is (typeof result.assets)[number] => Boolean(asset));
+      for (const asset of candidates) {
+        try {
+          const signed = await requestAssetDownload({ data: { assetId: asset.id } });
+          return signed.url;
+        } catch {
+          // A buyer may not be allowed to sign a vertical variant. Try the
+          // standard poster before treating the title preview as unavailable.
+        }
+      }
+      return null;
+    },
+    retry: false,
+    staleTime: 4 * 60 * 1000,
+  });
   const pub = pubQ.data?.publication;
 
   if (titleQ.isPending) return <p className="text-sm text-muted">Loading title workspace…</p>;
   if (titleQ.isError)
     return <p role="alert">Title workspace unavailable: {titleQ.error.message}</p>;
   if (!title) return <p className="text-sm text-muted">Title not found.</p>;
+
+  const copyTitleId = async () => {
+    try {
+      await navigator.clipboard.writeText(title.id);
+      toast("Title ID copied");
+    } catch {
+      toast.error("Could not copy Title ID. Check browser clipboard permissions.");
+    }
+  };
 
   const qcReady =
     reviewQ.data?.qc?.status === "PASSED" &&
@@ -124,16 +157,17 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
 
   return (
     <div className="space-y-5">
-      <WorkflowDesk title={title} actor={actor} />
       {assetsQ.isError ? <p role="alert">Assets unavailable: {assetsQ.error.message}</p> : null}
       <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
-        <div className="grid gap-5 md:grid-cols-[180px_1fr]">
-          <div className="aspect-[2/3] overflow-hidden rounded-xl border border-line bg-elevated">
-            <div className="grid h-full place-items-center px-4 text-center text-xs text-muted">
-              {assets.some((asset) => ["poster_vertical", "poster"].includes(asset.kind))
-                ? "Vertical poster ready"
-                : "Add vertical poster"}
-            </div>
+        <div className="grid gap-4 md:grid-cols-[112px_1fr]">
+          <div className="aspect-[2/3] max-h-44 overflow-hidden rounded-lg border border-line bg-elevated">
+            {posterQ.data ? (
+              <img src={posterQ.data} alt={`${title.name} poster`} loading="lazy" className="h-full w-full object-cover" />
+            ) : (
+              <div className="grid h-full place-items-center px-3 text-center text-xs text-muted">
+                {posterQ.isError ? "Poster preview unavailable" : "Add vertical poster"}
+              </div>
+            )}
           </div>
           <div className="min-w-0">
             <div className="flex flex-wrap items-start justify-between gap-3">
@@ -149,6 +183,15 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
                   {title.year ? ` · ${title.year}` : ""}
                   {title.runtimeMinutes ? ` · ${title.runtimeMinutes} min` : ""}
                 </p>
+                {actor.internalRole ? (
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <span className="text-xs text-muted">Title ID</span>
+                    <code className="max-w-full break-all rounded-md border border-line bg-elevated px-2 py-1 text-xs">{title.id}</code>
+                    <button type="button" onClick={() => void copyTitleId()} className="rounded-full border border-line px-3 py-1.5 text-xs font-semibold hover:bg-elevated" aria-label={`Copy title ID for ${title.name}`}>
+                      Copy ID
+                    </button>
+                  </div>
+                ) : null}
               </div>
               <span className="rounded-full border border-line bg-elevated px-3 py-1.5 text-xs font-semibold">
                 {title.status}
@@ -207,15 +250,12 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
       </nav>
 
       {activeTab === "Overview" ? (
-        <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Metadata</p>
-              <h2 className="mt-1 font-display text-xl font-semibold">OTT title details</h2>
-            </div>
-            <span className="rounded-full border border-line px-3 py-1 text-xs font-semibold">{title.status}</span>
+        <section className="rounded-2xl border border-line bg-surface p-4 sm:p-5">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Overview</p>
+            <h2 className="mt-1 font-display text-lg font-semibold">Title details & readiness</h2>
           </div>
-          <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
             <Metric label="Original title" value={title.nameMl || "—"} />
             <Metric label="Content type" value={loopStageType(title.contentType)} />
             <Metric label="Language" value={title.language || "—"} />
@@ -227,7 +267,6 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
             <Metric label="Producer" value={title.credits?.filter((c) => c.role === "Producer").map((c) => c.name).join(", ") || "—"} />
           </div>
           <LaneStore key={title.contentType} titleId={title.id} stored={loopStageType(title.contentType)} locked={!actor.internalRole && !["DRAFT", "UPLOADING", "PREPARING"].includes(title.status)} />
-          {title.synopsis ? <p className="mt-4 text-sm leading-6 text-muted">{title.synopsis}</p> : null}
           <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <Metric label="QC" value={qcReady ? "READY" : "PENDING"} />
             <Metric label="Rights" value={rightsReady ? "READY" : "PENDING"} />
@@ -243,15 +282,22 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
           }
           titleId={id}
           assets={assets}
-          onAssetsChanged={() => assetsQ.refetch()}
+          canManage={actor.internalRole === "admin" || actor.internalRole === "super_admin"}
+          isSuperAdmin={actor.internalRole === "super_admin"}
+          onAssetsChanged={async () => {
+            await assetsQ.refetch();
+            await qc.invalidateQueries({ queryKey: ["bridge-titles"] });
+          }}
         />
+      ) : activeTab === "Operations" ? (
+        <WorkflowDesk title={title} actor={actor} />
       ) : null}
     </div>
   );
 }
 function Metric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border border-line bg-elevated/40 p-4">
+    <div className="rounded-lg border border-line bg-elevated/30 p-3">
       <p className="text-xs text-muted">{label}</p>
       <p className="mt-1 text-sm font-semibold">{value}</p>
     </div>
@@ -259,43 +305,17 @@ function Metric({ label, value }: { label: string; value: string }) {
 }
 
 type SimpleAssetKind = "master" | "poster_vertical" | "poster_horizontal" | "thumbnail" | "subtitle" | "screener" | "censor_certificate";
-type UploadProgress = {
-  kind: SimpleAssetKind;
-  phase: "preparing" | "transferring" | "verifying" | "refreshing";
-  percent: number | null;
-  etaSeconds: number | null;
-  loaded: number;
-  total: number;
-};
-
-function formatEta(seconds: number | null): string {
-  if (seconds == null || !Number.isFinite(seconds)) return "Calculating time remaining…";
-  if (seconds <= 0) return "Almost done";
-  if (seconds < 60) return `About ${Math.ceil(seconds)} sec remaining`;
-  const minutes = Math.floor(seconds / 60);
-  const remainder = Math.ceil(seconds % 60);
-  return remainder ? `About ${minutes} min ${remainder} sec remaining` : `About ${minutes} min remaining`;
-}
-
-function notifyUpload(message: string) {
-  // Keep notifications in the page by default. Use a desktop notification only
-  // when the user has already granted permission; never prompt unexpectedly.
-  if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
-    try {
-      new Notification("Crayons Bridge · Upload", { body: message });
-    } catch {
-      // The accessible in-page status remains available if desktop notifications fail.
-    }
-  }
-}
-
 function FilesPanel({
   titleId,
   assets,
   onAssetsChanged,
   canUpload,
+  canManage,
+  isSuperAdmin,
 }: {
   canUpload: boolean;
+  canManage: boolean;
+  isSuperAdmin: boolean;
   titleId: string;
   assets: Array<{
     id: string;
@@ -303,34 +323,34 @@ function FilesPanel({
     contentType: string | null;
     byteSize: number | null;
     verified: boolean;
+    createdAt: string;
   }>;
   onAssetsChanged: () => Promise<unknown> | unknown;
 }) {
   const [uploading, setUploading] = useState<SimpleAssetKind | null>(null);
   const [message, setMessage] = useState<string | null>(null);
-  const [messageKind, setMessageKind] = useState<"status" | "success" | "error">("status");
+  const [appNotifications, setAppNotifications] = useState<Array<{ id: number; tone: "success" | "error" | "info"; text: string; at: string }>>([]);
+  const notify = useCallback((tone: "success" | "error" | "info", text: string) => {
+    setAppNotifications((items) => [{ id: Date.now(), tone, text, at: new Date().toLocaleTimeString() }, ...items].slice(0, 6));
+  }, []);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadEta, setUploadEta] = useState<string | null>(null);
+  const [uploadPhase, setUploadPhase] = useState<"preparing" | "transferring" | "verifying" | "refreshing" | null>(null);
+  const uploadXhrRef = useRef<XMLHttpRequest | null>(null);
+  const cancelRequestedRef = useRef(false);
+  // Invalidate a cancelled or superseded attempt so late preparation results cannot start a transfer.
+  const uploadAttemptRef = useRef(0);
   const [notificationPermission, setNotificationPermission] = useState<"default" | "granted" | "denied" | "unsupported">(() =>
     typeof window === "undefined" || !("Notification" in window) ? "unsupported" : Notification.permission,
   );
-  const [progress, setProgress] = useState<UploadProgress | null>(null);
-  const uploadXhrRef = useRef<XMLHttpRequest | null>(null);
-  const cancelRequestedRef = useRef(false);
-  // Invalidates any in-flight preparation/confirmation continuation after cancel or a newer attempt.
-  const uploadAttemptRef = useRef(0);
-
-  function announce(text: string, kind: "status" | "success" | "error" = "status", desktop = false) {
-    setMessage(text);
-    setMessageKind(kind);
-    if (desktop) notifyUpload(text);
-  }
-
+  const [filesView, setFilesView] = useState<"upload" | "gallery">("upload");
   async function withTimeout<T>(operation: Promise<T>, timeoutMs: number, phase: string): Promise<T> {
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
       return await Promise.race([
         operation,
         new Promise<T>((_, reject) => {
-          timer = setTimeout(() => reject(new Error(`${phase} timed out. Please retry the upload.`)), timeoutMs);
+          timer = setTimeout(() => reject(new Error(`${phase} timed out. Please refresh the asset status before retrying.`)), timeoutMs);
         }),
       ]);
     } finally {
@@ -351,34 +371,34 @@ function FilesPanel({
         const loaded = Math.min(event.loaded, total);
         const elapsedSeconds = Math.max((Date.now() - startedAt) / 1000, 0.25);
         const bytesPerSecond = loaded / elapsedSeconds;
-        const etaSeconds = bytesPerSecond > 0 ? Math.max(0, (total - loaded) / bytesPerSecond) : null;
-        setProgress({
-          kind,
-          phase: "transferring",
-          percent: total > 0 ? Math.min(100, Math.floor((loaded / total) * 100)) : null,
-          etaSeconds,
-          loaded,
-          total,
-        });
+        const secondsRemaining = bytesPerSecond > 0 ? Math.max(0, (total - loaded) / bytesPerSecond) : null;
+        const eta = secondsRemaining == null
+          ? "Calculating time remaining…"
+          : secondsRemaining < 60
+            ? `About ${Math.ceil(secondsRemaining)} sec remaining`
+            : `About ${Math.floor(secondsRemaining / 60)} min ${Math.ceil(secondsRemaining % 60)} sec remaining`;
+        setUploadProgress(total > 0 ? Math.min(99, Math.floor((loaded / total) * 100)) : 0);
+        setUploadEta(eta);
+        setMessage(`Uploading ${kind}: ${(loaded / (1024 * 1024)).toFixed(1)} of ${(file.size / (1024 * 1024)).toFixed(1)} MB · ${eta}`);
       };
       xhr.onload = () => {
         uploadXhrRef.current = null;
         if (xhr.status >= 200 && xhr.status < 300) resolve();
-        else reject(new Error(`Upload failed (${xhr.status}). No Ready status was set; please retry.`));
+        else reject(new Error(`Upload failed (${xhr.status}). The file is not Ready; refresh the asset list before retrying.`));
       };
       xhr.onerror = () => {
         uploadXhrRef.current = null;
-        reject(new TypeError("The browser could not reach OCI storage. Check the OCI bucket CORS rule for this Preview origin, PUT method and Content-Type header."));
+        reject(new TypeError("The browser could not reach OCI storage. Check the isolated Preview bucket CORS rule, PUT method and Content-Type header."));
       };
       xhr.ontimeout = () => {
         uploadXhrRef.current = null;
-        reject(new Error("File transfer timed out after 2 minutes. No Ready status was set; select the file again to retry."));
+        reject(new Error("File transfer timed out after 2 minutes. The file is not Ready; refresh the asset list before retrying."));
       };
       xhr.onabort = () => {
         uploadXhrRef.current = null;
         reject(new Error(cancelRequestedRef.current
-          ? "Upload cancelled. The asset was not marked Ready; select the file again to retry."
-          : "File transfer was interrupted. The asset was not marked Ready; select the file again to retry."));
+          ? "Upload cancelled. No Ready status was set by this browser attempt."
+          : "File transfer was interrupted. The file is not Ready; refresh the asset list before retrying."));
       };
       xhr.send(file);
     });
@@ -390,7 +410,7 @@ function FilesPanel({
     const contentType = file.type || "application/octet-stream";
     const validation = validateOttIngestFile({ kind, filename, contentType });
     if (!validation.ok) {
-      announce(validation.message, "error");
+      setMessage(validation.message);
       return;
     }
 
@@ -398,12 +418,15 @@ function FilesPanel({
     const attemptId = ++uploadAttemptRef.current;
     const assertAttemptActive = () => {
       if (cancelRequestedRef.current || uploadAttemptRef.current !== attemptId) {
-        throw new Error("Upload cancelled. No further transfer or confirmation will be started by this attempt.");
+        throw new Error("Upload cancelled or superseded. No further transfer or confirmation will start from this attempt.");
       }
     };
+
     setUploading(kind);
-    setProgress({ kind, phase: "preparing", percent: null, etaSeconds: null, loaded: 0, total: file.size });
-    announce(`Preparing ${kind} upload. You can follow progress here.`);
+    setUploadProgress(0);
+    setUploadEta(null);
+    setUploadPhase("preparing");
+    setMessage(`Preparing ${kind} upload…`);
     let transferTimer: ReturnType<typeof setTimeout> | undefined;
     try {
       const signed = await withTimeout(
@@ -412,19 +435,19 @@ function FilesPanel({
         "Upload URL preparation",
       );
 
-      // Cancellation can happen while URL preparation is pending. Never start a PUT for a stale attempt.
+      // Cancellation can happen while preparation is pending. Never start a PUT for a stale attempt.
       assertAttemptActive();
-      // Use the OCI pre-authenticated URL verbatim; rewriting its encoded path can invalidate it.
-      setProgress({ kind, phase: "transferring", percent: 0, etaSeconds: null, loaded: 0, total: file.size });
-      announce(`Uploading ${kind}…`);
+      setUploadPhase("transferring");
+      setMessage(`Uploading ${kind}…`);
       transferTimer = setTimeout(() => uploadXhrRef.current?.abort(), 120_000);
       await transferWithProgress(kind, signed.url, signed.method, file, contentType);
       assertAttemptActive();
       if (transferTimer !== undefined) clearTimeout(transferTimer);
       transferTimer = undefined;
 
-      setProgress({ kind, phase: "verifying", percent: null, etaSeconds: null, loaded: file.size, total: file.size });
-      announce(`Upload transferred. Verifying stored ${kind} before marking it Ready…`);
+      setUploadPhase("verifying");
+      setUploadEta(null);
+      setMessage(`Upload transferred. Verifying stored ${kind} before marking it Ready…`);
       assertAttemptActive();
       await withTimeout(
         confirmAssetUpload({ data: { assetId: signed.assetId, expectedByteSize: file.size } }),
@@ -433,46 +456,62 @@ function FilesPanel({
       );
       assertAttemptActive();
 
-      setProgress({ kind, phase: "refreshing", percent: null, etaSeconds: null, loaded: file.size, total: file.size });
-      announce("Storage verified. Refreshing the asset list…");
+      setUploadPhase("refreshing");
+      setMessage("Storage verified. Refreshing the asset list…");
       await withTimeout(Promise.resolve(onAssetsChanged()), 15_000, "Asset refresh");
       assertAttemptActive();
-      setProgress(null);
-      announce(`${kind[0].toUpperCase() + kind.slice(1)} is ready after storage verification.`, "success", true);
+      setUploadProgress(100);
+      setMessage(`${kind[0].toUpperCase() + kind.slice(1)} is ready after storage verification.`);
+      notify("success", `${kind[0].toUpperCase() + kind.slice(1)} uploaded and verified.`);
+      toast.success(`${kind[0].toUpperCase() + kind.slice(1)} uploaded and verified`);
+      if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
+        new Notification("Crayons Bridge · Upload", { body: `${kind[0].toUpperCase() + kind.slice(1)} uploaded and verified.` });
+      }
     } catch (error) {
-      // A cancelled/superseded attempt must not overwrite the status of a newer upload.
+      // A cancelled/superseded attempt must not overwrite the status of a newer attempt.
       if (uploadAttemptRef.current !== attemptId) return;
       const raw = error instanceof Error ? error.message : "Upload failed";
-      setProgress(null);
-      const cancelled = cancelRequestedRef.current;
-      let detail = raw;
-      if (raw.includes("STORAGE_UNAVAILABLE")) {
-        detail = "Storage service is currently unavailable. Check the isolated Preview configuration, then select the file again to retry.";
-      } else if (error instanceof TypeError) {
-        detail = "The browser could not reach OCI storage. Check the OCI bucket CORS rule for this Preview origin, PUT method and Content-Type header, then select the file again to retry.";
-      } else if (raw.includes("Stored-object verification timed out")) {
-        // A browser timeout cannot cancel server-side verification. Avoid claiming
-        // the asset is unverified or encouraging a blind retry while that request runs.
-        detail = `${raw} The server may still be finishing verification. Refresh the asset list and check its status before retrying.`;
-      } else if (!cancelled && !raw.includes("No Ready status")) {
-        detail = `${raw} Refresh the asset list to confirm its status before retrying.`;
+      if (cancelRequestedRef.current) {
+        setMessage("Upload cancelled. Any pending preparation result will be ignored; no new transfer will start from this attempt.");
+      } else {
+        let detail = raw;
+        if (raw.includes("STORAGE_UNAVAILABLE")) {
+          detail = "Storage service is currently unavailable. Check the isolated Preview configuration before retrying.";
+        } else if (error instanceof TypeError) {
+          detail = "The browser could not reach OCI storage. Check bucket CORS, network access and the upload URL, then refresh the asset status before retrying.";
+        } else if (raw.includes("Stored-object verification timed out")) {
+          detail = `${raw} The server may still be finishing verification. Refresh the asset list and check its status before retrying.`;
+        } else if (!raw.includes("not Ready")) {
+          detail = `${raw} Refresh the asset list to confirm its status before retrying.`;
+        }
+        setMessage(detail);
+        notify("error", `${kind.replaceAll("_", " ")} upload failed: ${detail}`);
+        toast.error(detail);
+        if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
+          new Notification("Crayons Bridge · Upload failed", { body: detail });
+        }
       }
-      announce(detail, "error", true);
     } finally {
       if (transferTimer !== undefined) clearTimeout(transferTimer);
       if (uploadAttemptRef.current === attemptId) {
         uploadXhrRef.current = null;
         cancelRequestedRef.current = false;
+        setUploadPhase(null);
+        setUploadEta(null);
         setUploading(null);
       }
     }
   }
-
   async function download(id: string) {
-    const signed = await requestAssetDownload({ data: { assetId: id } });
-    window.location.assign(signed.url);
+    try {
+      const signed = await requestAssetDownload({ data: { assetId: id } });
+      window.location.assign(signed.url);
+    } catch (cause) {
+      const detail = cause instanceof Error ? cause.message : "Download could not be prepared.";
+      setMessage(detail);
+      toast.error(detail);
+    }
   }
-
   const cards: [SimpleAssetKind, string, string][] = [
     ["master", "Main Film", "Required"],
     ["screener", "Trailer", "Add"],
@@ -482,133 +521,115 @@ function FilesPanel({
     ["subtitle", "Subtitle", "Optional"],
     ["censor_certificate", "Censor Certificate", "Optional"],
   ];
-
-  const phaseLabel = progress
-    ? progress.phase === "preparing" ? "Preparing secure upload"
-      : progress.phase === "transferring" ? "Transferring to storage"
-      : progress.phase === "verifying" ? "Verifying stored object"
-      : "Refreshing verified assets"
-    : "";
+  const readyCount = cards.filter(([kind]) =>
+    assets.some((asset) =>
+      (asset.kind === kind || (kind === "poster_vertical" && asset.kind === "poster")) &&
+      asset.verified,
+    ),
+  ).length;
 
   return (
-    <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Media</p>
-          <h2 className="mt-1 font-display text-xl font-semibold">OTT package</h2>
-        </div>
-        <span className="text-xs text-muted">Ready / Missing</span>
-      </div>
-
-      {progress ? (
-        <div className="mt-5 rounded-xl border border-line bg-elevated/40 p-4" aria-label="Upload progress">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <p className="text-sm font-semibold">{progress.kind.replaceAll("_", " ")} · {phaseLabel}</p>
-              <p className="mt-1 text-xs text-muted">
-                {progress.phase === "transferring" && progress.percent !== null
-                  ? `${progress.percent}% · ${(progress.loaded / (1024 * 1024)).toFixed(1)} of ${(progress.total / (1024 * 1024)).toFixed(1)} MB · ${formatEta(progress.etaSeconds)}`
-                  : progress.phase === "preparing" ? "Getting a secure upload URL…"
-                  : progress.phase === "verifying" ? "Checking the stored object's size, type and verification evidence…"
-                  : "Refreshing the verified asset list…"}
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => {
-                cancelRequestedRef.current = true;
-                // Invalidate this attempt so a late URL-preparation result cannot start a PUT.
-                uploadAttemptRef.current += 1;
-                uploadXhrRef.current?.abort();
-                setProgress(null);
-                announce("Upload cancelled. Any pending preparation result will be ignored; no new transfer will start from this attempt.", "error", true);
-                if (!uploadXhrRef.current) {
-                  setUploading(null);
-                }
-              }}
-              className="rounded-full border border-line px-3 py-1.5 text-xs font-semibold"
-            >
-              Cancel upload
-            </button>
+    <section className="space-y-4">
+      <div className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Media library</p>
+            <h2 className="mt-1 font-display text-xl font-semibold">Title files</h2>
+            <p className="mt-1 max-w-2xl text-sm text-muted">
+              Upload or replace delivery assets, then review secure previews and downloads in the gallery.
+            </p>
           </div>
-          <div
-            className="mt-3 h-2.5 overflow-hidden rounded-full bg-line"
-            role="progressbar"
-            aria-label="Upload transfer progress"
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-valuenow={progress.phase === "transferring" ? progress.percent ?? 0 : undefined}
-          >
-            <div
-              className={`h-full rounded-full bg-accent transition-[width] duration-200 ${progress.percent === null ? "w-1/3 animate-pulse" : ""}`}
-              style={progress.percent === null ? undefined : { width: `${progress.percent}%` }}
-            />
+          <div className="rounded-xl border border-line bg-elevated/40 px-4 py-3">
+            <p className="text-xs text-muted">Package readiness</p>
+            <p className="mt-1 text-lg font-semibold tabular-nums">{readyCount}<span className="text-sm font-normal text-muted"> / {cards.length} assets</span></p>
           </div>
-          <p className="mt-2 text-xs text-muted">The file is not Ready until server-side storage verification succeeds.</p>
         </div>
-      ) : null}
-
-      <div className="mt-5 grid gap-3 sm:grid-cols-2">
-        {cards.map(([kind, label, empty]) => (
-          <FileTypeCard
-            key={kind}
-            kind={kind}
-            label={label}
-            status={assets.some((a) => (a.kind === kind || (kind === "poster_vertical" && a.kind === "poster")) && a.verified) ? "Ready" : empty}
-            busy={uploading === kind}
-            canUpload={canUpload}
-            onFile={(file) => void uploadFile(kind, file)}
-          />
-        ))}
-      </div>
-      {message ? (
-        <p
-          className={`mt-3 rounded-lg border px-3 py-2 text-sm ${messageKind === "error" ? "border-red-300 text-red-700" : messageKind === "success" ? "border-green-300 text-green-700" : "border-line text-muted"}`}
-          role={messageKind === "error" ? "alert" : "status"}
-          aria-live={messageKind === "error" ? "assertive" : "polite"}
-        >
-          {message}
-        </p>
-      ) : null}
-      <div className="mt-2 flex flex-wrap items-center gap-3">
-        <p className="text-xs text-muted">Upload status and errors appear here.</p>
-        {notificationPermission === "default" ? (
+        <div className="mt-5 flex flex-wrap gap-2 border-t border-line pt-4" role="tablist" aria-label="Title files views">
           <button
             type="button"
-            onClick={() => {
-              if ("Notification" in window) {
-                void Notification.requestPermission().then((permission) => {
-                  setNotificationPermission(permission);
-                  if (permission === "granted") announce("Desktop upload notifications enabled.");
-                });
-              }
-            }}
-            className="rounded-full border border-line px-3 py-1.5 text-xs font-semibold"
+            role="tab"
+            aria-selected={filesView === "upload"}
+            onClick={() => setFilesView("upload")}
+            className={`rounded-full px-4 py-2 text-sm font-semibold ${filesView === "upload" ? "bg-fg text-bg" : "border border-line text-muted hover:bg-elevated hover:text-fg"}`}
           >
-            Enable desktop notifications
+            Upload & Replace
           </button>
-        ) : notificationPermission === "granted" ? (
-          <span className="text-xs text-muted">Desktop notifications enabled</span>
-        ) : null}
+          <button
+            type="button"
+            role="tab"
+            aria-selected={filesView === "gallery"}
+            onClick={() => setFilesView("gallery")}
+            className={`rounded-full px-4 py-2 text-sm font-semibold ${filesView === "gallery" ? "bg-fg text-bg" : "border border-line text-muted hover:bg-elevated hover:text-fg"}`}
+          >
+            Media Gallery <span className="ml-1 opacity-75">({assets.length})</span>
+          </button>
+        </div>
       </div>
-      <div className="mt-5 space-y-2">
-        {assets.map((a) => (
-          <div key={a.id} className="flex items-center justify-between gap-3 rounded-xl border border-line p-4">
-            <div>
-              <p className="text-sm font-semibold">{a.kind}</p>
-              <p className="text-xs text-muted">{a.verified ? "Ready" : "Processing"}</p>
-            </div>
-            {a.verified ? (
-              <button
-                onClick={() => void download(a.id)}
-                className="rounded-full border border-line px-4 py-2 text-xs font-semibold"
-              >
-                Download
-              </button>
-            ) : null}
+
+      {filesView === "upload" ? (
+        <div className="rounded-2xl border border-line bg-surface p-4 sm:p-5">
+          <div className="mb-4">
+            <h3 className="font-display text-lg font-semibold">Upload & replace assets</h3>
+            <p className="mt-1 text-sm text-muted">Required and optional files are listed separately with accepted formats.</p>
           </div>
-        ))}
-      </div>
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {cards.map(([kind, label, empty]) => (
+              <FileTypeCard
+                key={kind}
+                kind={kind}
+                label={label}
+                status={assets.some((a) => (a.kind === kind || (kind === "poster_vertical" && a.kind === "poster")) && a.verified) ? "Ready" : empty}
+                busy={uploading === kind}
+                progress={uploading === kind ? uploadProgress : 0}
+                canUpload={canUpload}
+                onFile={(file) => void uploadFile(kind, file)}
+              />
+            ))}
+          </div>
+          {uploading ? (
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-line bg-elevated/40 p-3" aria-live="polite">
+              <div>
+                <p className="text-sm font-semibold">{uploading.replaceAll("_", " ")} · {uploadPhase === "preparing" ? "Preparing secure upload" : uploadPhase === "transferring" ? "Uploading" : uploadPhase === "verifying" ? "Verifying stored file" : "Refreshing assets"}</p>
+                <p className="mt-1 text-xs text-muted">{uploadPhase === "transferring" ? `${uploadProgress}% transferred${uploadEta ? ` · ${uploadEta}` : ""}` : uploadPhase === "preparing" ? "Requesting a secure upload URL…" : uploadPhase === "verifying" ? "Checking stored object before marking Ready…" : "Updating the verified asset list…"}</p>
+              </div>
+              {uploadPhase === "preparing" || uploadPhase === "transferring" ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    cancelRequestedRef.current = true;
+                    uploadAttemptRef.current += 1;
+                    uploadXhrRef.current?.abort();
+                    setUploadPhase(null);
+                    setUploadEta(null);
+                    setUploading(null);
+                    setMessage("Upload cancelled. Any pending preparation result will be ignored; no new transfer will start from this attempt.");
+                  }}
+                  className="rounded-full border border-line px-3 py-1.5 text-xs font-semibold"
+                >
+                  Cancel upload
+                </button>
+              ) : null}
+            </div>
+          ) : null}
+          {message ? <p role="status" aria-live="polite" className="mt-3 rounded-lg bg-elevated/50 p-3 text-sm text-muted">{message}</p> : null}
+          {appNotifications.length ? (
+            <div className="mt-4 rounded-lg border border-line bg-elevated/30 p-3" aria-label="In-app notifications" aria-live="polite">
+              <div className="mb-2 flex items-center justify-between gap-2"><p className="text-xs font-semibold">Recent in-app notifications</p><button type="button" onClick={() => setAppNotifications([])} className="text-xs text-muted underline">Clear</button></div>
+              <ul className="space-y-2">{appNotifications.map((item) => <li key={item.id} className="flex gap-2 text-xs"><span className={item.tone === "error" ? "font-semibold text-destructive" : item.tone === "success" ? "font-semibold text-accent" : "font-semibold text-muted"}>{item.tone === "error" ? "Failed" : item.tone === "success" ? "Success" : "Info"}</span><span className="min-w-0 flex-1 break-words">{item.text}</span><time className="shrink-0 text-muted">{item.at}</time></li>)}</ul>
+            </div>
+          ) : <p className="mt-3 text-xs text-muted">Upload results and failures will appear here while this workspace is open.</p>}
+          <div className="mt-2 flex flex-wrap items-center gap-3">
+            {notificationPermission === "default" ? (
+              <button type="button" onClick={() => { if ("Notification" in window) void Notification.requestPermission().then((permission) => { setNotificationPermission(permission); if (permission === "granted") toast.success("Desktop upload notifications enabled"); }); }} className="rounded-full border border-line px-3 py-1.5 text-xs font-semibold">Enable desktop notifications</button>
+            ) : notificationPermission === "granted" ? <span className="text-xs text-muted">Desktop notifications enabled</span> : null}
+          </div>
+          {!canUpload ? <p className="mt-3 text-xs text-muted">Uploads are unavailable for your role or while this title is outside an editable preparation state.</p> : null}
+        </div>
+      ) : (
+        <div className="rounded-2xl border border-line bg-surface p-4 sm:p-5">
+          <TitleAssetPreviewGallery assets={assets} onDownload={(id) => void download(id)} onAssetsChanged={onAssetsChanged} canManage={canManage} titleId={titleId} isSuperAdmin={isSuperAdmin} />
+        </div>
+      )}
     </section>
   );
 }
@@ -617,6 +638,7 @@ function FileTypeCard({
   label,
   status,
   busy,
+  progress,
   onFile,
   canUpload,
 }: {
@@ -625,6 +647,7 @@ function FileTypeCard({
   label: string;
   status: string;
   busy: boolean;
+  progress: number;
   onFile: (file: File) => void;
 }) {
   const spec = OTT_INGEST_SPEC[kind];
@@ -653,6 +676,314 @@ function FileTypeCard({
           />
         </label>
       </div>
+      {busy ? (
+        <div className="mt-4" aria-live="polite">
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-muted">Transfer progress</span>
+            <span className="font-semibold tabular-nums">{progress}%</span>
+          </div>
+          <div className="mt-2 h-2 overflow-hidden rounded-full bg-elevated" role="progressbar" aria-label={`${label} upload progress`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress}>
+            <div className="h-full rounded-full bg-accent-strong transition-[width] duration-150" style={{ width: `${progress}%` }} />
+          </div>
+        </div>
+      ) : null}
     </div>
+  );
+}
+
+
+type PreviewAsset = {
+  id: string;
+  kind: string;
+  contentType: string | null;
+  byteSize: number | null;
+  verified: boolean;
+  createdAt: string;
+};
+
+const IMAGE_ASSET_KINDS = new Set(["poster", "poster_vertical", "poster_horizontal", "thumbnail"]);
+
+function TitleAssetPreviewGallery({
+  assets,
+  onDownload,
+  onAssetsChanged,
+  canManage,
+  titleId,
+  isSuperAdmin,
+}: {
+  assets: PreviewAsset[];
+  onDownload: (id: string) => void;
+  onAssetsChanged: () => Promise<unknown> | unknown;
+  canManage: boolean;
+  titleId: string;
+  isSuperAdmin: boolean;
+}) {
+  function downloadManifest() {
+    const manifest = {
+      titleId,
+      generatedAt: new Date().toISOString(),
+      note: "Metadata-only manifest. Original filenames and a cryptographic content checksum are not currently stored in this asset listing.",
+      assets: assets.map((asset) => ({
+        assetId: asset.id,
+        kind: asset.kind,
+        filename: null,
+        mimeType: asset.contentType,
+        byteSize: asset.byteSize,
+        checksum: null,
+        storageVerified: asset.verified,
+        createdAt: asset.createdAt,
+      })),
+    };
+    const blob = new Blob([JSON.stringify(manifest, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `crayons-bridge-${titleId}-asset-manifest.json`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
+
+  const labelFor = (kind: string) =>
+    ({
+      master: "Main Film / Original Master",
+      screener: "Trailer / Screener",
+      poster: "Poster",
+      poster_vertical: "Vertical Poster",
+      poster_horizontal: "Horizontal Artwork",
+      thumbnail: "Thumbnail",
+      subtitle: "Subtitle",
+      censor_certificate: "Censor Certificate",
+      technical: "Technical Package",
+    })[kind] ?? kind.replaceAll("_", " ");
+
+  return (
+    <section aria-label="Title Assets — Preview Gallery" className="mt-6">
+      <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Files / Media</p>
+          <h3 className="mt-1 font-display text-lg font-semibold">Title Assets — Preview Gallery</h3>
+          <p className="mt-1 text-xs text-muted">Previews use authenticated, short-lived links. Download remains available.</p>
+        </div>
+        {isSuperAdmin ? (
+          <button type="button" onClick={downloadManifest} className="rounded-full border border-line px-4 py-2 text-xs font-semibold">
+            Download asset manifest
+          </button>
+        ) : null}
+      </div>
+      {assets.length === 0 ? (
+        <p className="rounded-xl border border-dashed border-line p-5 text-sm text-muted">No verified assets are available to preview yet. Incomplete uploads are shown only to staff roles with cleanup permission.</p>
+      ) : (
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          {assets.map((asset) => (
+            <PreviewAssetCard key={asset.id} asset={asset} label={labelFor(asset.kind)} onDownload={onDownload} onAssetsChanged={onAssetsChanged} canManage={canManage} isSuperAdmin={isSuperAdmin} />
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function PreviewAssetCard({
+  asset,
+  label,
+  onDownload,
+  onAssetsChanged,
+  canManage,
+  isSuperAdmin,
+}: {
+  asset: PreviewAsset;
+  label: string;
+  onDownload: (id: string) => void;
+  onAssetsChanged: () => Promise<unknown> | unknown;
+  canManage: boolean;
+  isSuperAdmin: boolean;
+}) {
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewText, setPreviewText] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState(false);
+  const [removeConfirm, setRemoveConfirm] = useState(false);
+  const [removeMessage, setRemoveMessage] = useState<string | null>(null);
+  const [retryMessage, setRetryMessage] = useState<string | null>(null);
+  const retryMutation = useMutation({
+    mutationFn: () => confirmAssetUpload({ data: { assetId: asset.id } }),
+    onSuccess: async () => {
+      setRetryMessage("Asset verification completed.");
+      await onAssetsChanged();
+    },
+    onError: (cause) => setRetryMessage(cause instanceof Error ? cause.message : "Could not verify asset"),
+  });
+  const removeMutation = useMutation({
+    mutationFn: () => removeIncompleteAsset({ data: { assetId: asset.id } }),
+    onSuccess: async () => {
+      setRemoveConfirm(false);
+      setRemoveMessage("Incomplete upload removed.");
+      await onAssetsChanged();
+    },
+    onError: (cause) => setRemoveMessage(cause instanceof Error ? cause.message : "Could not remove incomplete upload"),
+  });
+  const isImage = IMAGE_ASSET_KINDS.has(asset.kind);
+  const isVideo = asset.kind === "master" || asset.kind === "screener";
+  const isCertificate = asset.kind === "censor_certificate";
+  const isSubtitle = asset.kind === "subtitle";
+  const isPdf = asset.contentType?.toLowerCase().includes("pdf") ?? false;
+  const sizeLabel = asset.byteSize ? `${(asset.byteSize / (1024 * 1024)).toFixed(1)} MB` : "Size unavailable";
+
+  const loadPreview = useCallback(async () => {
+    if (!asset.verified) {
+      setError("This asset has not been verified yet.");
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      // This existing server function enforces title access, entitlement, and master restrictions
+      // before issuing a short-lived OCI Object Storage read URL.
+      const signed = await requestAssetDownload({ data: { assetId: asset.id } });
+      setPreviewUrl(signed.url);
+      if (isSubtitle) {
+        const response = await fetch(signed.url);
+        if (!response.ok) throw new Error(`Subtitle preview failed (${response.status})`);
+        const text = await response.text();
+        setPreviewText(text.slice(0, 200_000));
+      }
+    } catch (cause) {
+      setPreviewUrl(null);
+      setPreviewText(null);
+      setError(cause instanceof Error ? cause.message : "Preview unavailable. Please retry.");
+    } finally {
+      setLoading(false);
+    }
+  }, [asset.id, asset.verified, isSubtitle]);
+
+  return (
+    <article className="min-w-0 overflow-hidden rounded-xl border border-line bg-surface">
+      <div className="flex items-start justify-between gap-3 border-b border-line p-4">
+        <div className="min-w-0">
+          <h4 className="text-sm font-semibold">{label}</h4>
+          <p className="mt-1 text-xs text-muted">{asset.verified ? "Ready" : "Processing"} · {sizeLabel}</p>
+        </div>
+        <span className="shrink-0 rounded-full border border-line px-2 py-1 text-[10px] font-semibold">
+          {asset.contentType?.split(";")[0] || asset.kind}
+        </span>
+      </div>
+      <div className="p-3">
+        {!asset.verified ? (
+          <div className="grid min-h-36 place-items-center rounded-lg bg-elevated p-4 text-center text-xs text-muted">Preview will be available after verification.</div>
+        ) : loading && !previewUrl ? (
+          <div role="status" className="grid min-h-36 place-items-center rounded-lg bg-elevated p-4 text-xs text-muted">Loading secure preview…</div>
+        ) : error ? (
+          <div className="grid min-h-36 place-items-center rounded-lg bg-elevated p-4 text-center">
+            <p role="alert" className="text-xs text-muted">{error}</p>
+            <button type="button" onClick={() => void loadPreview()} className="mt-3 rounded-full border border-line px-3 py-1.5 text-xs font-semibold">Retry preview</button>
+          </div>
+        ) : isImage && !previewUrl ? (
+          <div className="grid min-h-36 place-items-center rounded-lg bg-elevated p-4 text-center">
+            <p className="text-xs text-muted">Preview loads only when requested, keeping large galleries responsive.</p>
+            <button type="button" onClick={() => void loadPreview()} className="mt-3 rounded-full border border-line px-3 py-1.5 text-xs font-semibold">{loading ? "Loading…" : "Load preview"}</button>
+          </div>
+        ) : isImage && previewUrl ? (
+          <button type="button" onClick={() => setExpanded(true)} className="group block w-full overflow-hidden rounded-lg bg-elevated text-left" aria-label={`Open original ${label} preview`}>
+            <img
+              src={previewUrl}
+              alt={label}
+              loading="lazy"
+              onError={() => {
+                setPreviewUrl(null);
+                setError("The secure preview link may have expired. Retry to request a fresh link.");
+              }}
+              className={asset.kind === "poster_vertical" || asset.kind === "poster" ? "mx-auto max-h-72 w-auto object-contain" : "h-44 w-full object-contain"}
+            />
+            <span className="block px-3 py-2 text-xs text-muted group-hover:text-fg">Click to view original dimensions</span>
+          </button>
+        ) : isVideo && previewUrl ? (
+          <div className="space-y-2">
+            <video src={previewUrl} controls preload="metadata" className="aspect-video w-full rounded-lg bg-black" onError={() => setError("This file or codec may not be supported by the browser. Download remains available.")}>
+              Your browser cannot play this media format.
+            </video>
+            {asset.kind === "master" ? <p className="text-[11px] text-muted">Master access is restricted by the server to the title owner or authorized internal staff.</p> : null}
+          </div>
+        ) : isSubtitle && previewUrl && previewText !== null ? (
+          <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-elevated p-3 text-xs leading-5">{previewText || "Subtitle file is empty."}</pre>
+        ) : isCertificate && previewUrl && isPdf ? (
+          <iframe title={`${label} PDF preview`} src={previewUrl} className="h-64 w-full rounded-lg border border-line bg-white" />
+        ) : isCertificate && previewUrl && asset.contentType?.startsWith("image/") ? (
+          <button type="button" onClick={() => setExpanded(true)} className="block w-full rounded-lg bg-elevated p-2">
+            <img
+              src={previewUrl}
+              alt={label}
+              onError={() => {
+                setPreviewUrl(null);
+                setError("The secure preview link may have expired. Retry to request a fresh link.");
+              }}
+              className="mx-auto max-h-64 object-contain"
+            />
+            <span className="mt-2 block text-xs text-muted">Click to view original</span>
+          </button>
+        ) : previewUrl ? (
+          <div className="grid min-h-36 place-items-center rounded-lg bg-elevated p-4 text-center">
+            <p className="text-xs text-muted">Inline preview may not be supported for this file type.</p>
+            <button type="button" onClick={() => window.open(previewUrl, "_blank", "noopener,noreferrer")} className="mt-2 rounded-full border border-line px-3 py-1.5 text-xs font-semibold">Open preview</button>
+          </div>
+        ) : (
+          <div className="grid min-h-36 place-items-center rounded-lg bg-elevated p-4 text-center">
+            <p className="text-xs text-muted">{isVideo ? "Play supported video formats directly in this gallery." : isSubtitle ? "View SRT/VTT text inline." : isCertificate ? "Preview PDF or image certificates inline." : "Secure preview available on request."}</p>
+            <button type="button" onClick={() => void loadPreview()} className="mt-3 rounded-full border border-line px-3 py-1.5 text-xs font-semibold">{loading ? "Loading…" : "Load preview"}</button>
+          </div>
+        )}
+      </div>
+      <div className="flex items-center justify-between gap-3 border-t border-line p-3">
+        <span className="text-[11px] text-muted">Secure preview</span>
+        <div className="flex items-center gap-2">
+          {isSuperAdmin && !asset.verified ? (
+            <button type="button" disabled={retryMutation.isPending} onClick={() => { setRetryMessage(null); retryMutation.mutate(); }} className="rounded-full border border-line px-3 py-1.5 text-xs font-semibold disabled:opacity-50">
+              {retryMutation.isPending ? "Verifying…" : "Retry verification"}
+            </button>
+          ) : null}
+          {canManage && !asset.verified ? <button type="button" onClick={() => { setRemoveMessage(null); setRemoveConfirm(true); }} className="rounded-full border border-line px-3 py-1.5 text-xs font-semibold text-destructive hover:bg-elevated">Remove</button> : null}
+          {asset.verified || isSuperAdmin ? (
+            <button
+              type="button"
+              onClick={() => {
+                if (!asset.verified && !window.confirm("This source file has not passed storage verification. Download the temporary source object only if you need to recover or inspect it?")) return;
+                onDownload(asset.id);
+              }}
+              className="rounded-full border border-line px-3 py-1.5 text-xs font-semibold hover:bg-elevated"
+            >
+              {asset.verified ? "Download" : "Download unverified source"}
+            </button>
+          ) : null}
+        </div>
+      </div>
+      {removeConfirm ? (
+        <div role="dialog" aria-modal="true" aria-label="Remove incomplete asset" className="border-t border-line bg-elevated p-3">
+          <p className="text-xs text-muted">Remove this incomplete upload and clean up its temporary storage object?</p>
+          <div className="mt-2 flex gap-2">
+            <button type="button" onClick={() => setRemoveConfirm(false)} className="rounded-full border border-line px-3 py-1.5 text-xs">Cancel</button>
+            <button type="button" disabled={removeMutation.isPending} onClick={() => removeMutation.mutate()} className="rounded-full border border-line px-3 py-1.5 text-xs font-semibold text-destructive">{removeMutation.isPending ? "Removing…" : "Confirm remove"}</button>
+          </div>
+        </div>
+      ) : null}
+      {removeMessage ? <p role={removeMutation.isError ? "alert" : "status"} className="px-3 pb-3 text-xs text-muted">{removeMessage}</p> : null}
+      {retryMessage ? <p role={retryMutation.isError ? "alert" : "status"} className="px-3 pb-3 text-xs text-muted">{retryMessage}</p> : null}
+      {expanded && previewUrl ? (
+        <div role="dialog" aria-modal="true" aria-label={`Original preview: ${label}`} className="fixed inset-0 z-50 grid place-items-center bg-black/80 p-4" onClick={() => setExpanded(false)}>
+          <div className="relative flex max-h-[95vh] max-w-[95vw] flex-col items-center" onClick={(event) => event.stopPropagation()}>
+            <button type="button" onClick={() => setExpanded(false)} className="mb-3 self-end rounded-full bg-white px-4 py-2 text-sm font-semibold text-black">Close preview</button>
+            <img
+              src={previewUrl}
+              alt={`${label} original dimensions`}
+              onError={() => {
+                setExpanded(false);
+                setPreviewUrl(null);
+                setError("The secure preview link may have expired. Retry to request a fresh link.");
+              }}
+              className="max-h-[82vh] max-w-[92vw] object-contain"
+            />
+          </div>
+        </div>
+      ) : null}
+    </article>
   );
 }

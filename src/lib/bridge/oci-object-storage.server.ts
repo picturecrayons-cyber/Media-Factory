@@ -233,7 +233,11 @@ async function pollWorkRequest(
   workRequestId: string,
   opts?: { propagationGracePeriodMs?: number; pollIntervalMs?: number },
 ) {
-  const url = new URL(`/workRequests/${encodeURIComponent(workRequestId)}`, endpoint(cfg.region));
+  const namespace = await resolveNamespace(cfg);
+  const url = new URL(
+    `/n/${encodeURIComponent(namespace)}/workRequests/${encodeURIComponent(workRequestId)}`,
+    endpoint(cfg.region),
+  );
   const startTime = Date.now();
   const deadline = startTime + 45_000;
   const propagationGraceMs = opts?.propagationGracePeriodMs ?? 10_000;
@@ -306,7 +310,22 @@ export async function sealVerifiedObject(
   });
   if (res.status !== 202 && !res.ok) throw new Error(`OCI object copy failed (${res.status})`);
   const workRequestId = res.headers.get("opc-work-request-id");
-  if (workRequestId) await pollWorkRequest(cfg, workRequestId, pollOpts);
+  if (workRequestId) {
+    try {
+      await pollWorkRequest(cfg, workRequestId, pollOpts);
+    } catch (cause) {
+      // A missing work-request record is not proof of success. Accept only if a direct
+      // read independently verifies the exact immutable destination object.
+      const isMissingWorkRequest =
+        cause instanceof Error && /work-request lookup failed \(404\)/.test(cause.message);
+      if (!isMissingWorkRequest) throw cause;
+      try {
+        return await verifyObject(destinationKey);
+      } catch {
+        throw cause;
+      }
+    }
+  }
   return verifyObject(destinationKey);
 }
 

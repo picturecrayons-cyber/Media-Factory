@@ -6,10 +6,11 @@ import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { listAdminWorkstations, reviewAdminTitle, setBuyerPublicationGate } from "@/lib/bridge/admin-workstations";
 import { listDuplicateReviews, openDuplicateReview, decideDuplicateReview } from "@/lib/bridge/duplicate-reconciliation";
+import { buildTitleAuditGroups } from "@/lib/bridge/title-audit";
 
 export const Route = createFileRoute("/admin/workstations")({ component: AdminWorkstations });
 
-const TABS = ["Titles", "QC", "Rights", "Assets", "Buyers", "Deliveries", "Audit"] as const;
+const TABS = ["Titles", "QC", "Rights", "OTT Ready", "Packaging & Localization", "Assets", "Buyers", "Deliveries", "Audit"] as const;
 type Tab = (typeof TABS)[number];
 
 const STATUS_LABELS: Record<string, string> = {
@@ -61,6 +62,11 @@ function WorkstationBody() {
         </div>
       </section>
 
+      <section className="rounded-2xl border border-line bg-surface p-4">
+        <h3 className="font-semibold">Workflow discovery</h3>
+        <p className="mt-1 text-sm text-muted">Curation → QC → legal and rights → OTT readiness → packaging and localization. Each stage is a review workspace; nothing is auto-approved or published.</p>
+        <p className="mt-2 text-xs text-muted">Use the tabs below to inspect canonical title records, evidence, assets, buyer gates, package status and audit history.</p>
+      </section>
       <nav className="flex gap-2 overflow-x-auto border-b border-line pb-2">
         {TABS.map((tab) => (
           <button key={tab} type="button" onClick={() => setActiveTab(tab)}
@@ -78,6 +84,10 @@ function WorkstationBody() {
       ) : activeTab === "Rights" ? (
         <ReviewQueue title="Rights Review" description="Clear ownership, territory, language and window before licensing." titles={rightsQueue}
           actions={[["APPROVE", "Approve → Licensing"], ["REJECT", "Reject"]]} mutation={review} />
+      ) : activeTab === "OTT Ready" ? (
+        <SimpleTable title="OTT / Loop readiness" description="Readiness inventory only; this view does not publish titles." rows={ready} fields={["name", "id", "status", "language", "year", "content_type", "updated_at"]} />
+      ) : activeTab === "Packaging & Localization" ? (
+        <div className="space-y-4"><SimpleTable title="Package status" description="Review persisted package evidence; no automatic conversion is implied." rows={data.packages} fields={["title_id", "destination", "package_version", "readiness_state", "rights_grant_id", "qc_case_id", "legal_case_id"]} /><p className="text-sm text-muted">Dubbing, loudness checks, IMF/DCP requests and human QC require explicit vendor request and sign-off.</p><Link to="/deliveries" className="text-sm font-semibold text-accent hover:underline">Open Delivery & vendor request desk →</Link></div>
       ) : activeTab === "Assets" ? (
         <SimpleTable title="Assets" description={data.assets.length + " base assets · " + data.assetVersions.length + " versioned assets"}
           rows={data.assets} fields={["kind", "s3_key", "content_type", "byte_size"]} />
@@ -94,8 +104,12 @@ function WorkstationBody() {
             rows={data.publications} titleName={titleName} fields={["bridge_title_id", "authorization_status", "territories", "languages", "window_end"]} />
         </div>
       ) : (
-        <SimpleTable title="Audit History" description="Persisted operator activity. No UI-only decisions."
-          rows={data.audit} fields={["action", "entity_type", "entity_id", "actor_user_id", "created_at"]} />
+        <div className="space-y-8">
+          <SimpleTable title="Audit History" description="Persisted operator activity. No UI-only decisions."
+            rows={data.audit} fields={["action", "entity_type", "entity_id", "actor_user_id", "created_at"]} />
+          <TitleIdentityAudit titles={data.titles} />
+          <DuplicateReviewSection />
+        </div>
       )}
 
       {review.isError || gate.isError ? <p className="rounded-xl border border-line p-4 text-sm">Action failed: {String(review.error ?? gate.error)}</p> : null}
@@ -111,8 +125,8 @@ function TitleQueue({ titles, review }: { titles: any[]; review: any }) {
         {titles.length ? titles.slice(0, 100).map((title) => (
           <div key={title.id} className="flex flex-col gap-3 border-b border-line p-4 last:border-b-0 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <p className="font-medium">{title.name}</p>
-              <p className="mt-1 text-xs text-muted">{STATUS_LABELS[title.status] ?? title.status} · {title.language}</p>
+              <p className="font-medium">{title.name}</p><p className="break-all font-mono text-[11px] text-muted">{title.id}</p>
+              <p className="mt-1 text-xs text-muted">{STATUS_LABELS[title.status] ?? title.status} · {title.content_type ?? "Type unknown"} · {title.language ?? title.original_language ?? "Language unknown"}{title.year ? " · " + title.year : ""}</p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
               {title.status === "PREPARING" ? <ActionButton label="Accept → QC" onClick={() => review.mutate({ data: { titleId: title.id, decision: "ACCEPT" } })} disabled={review.isPending} /> : null}
@@ -123,6 +137,26 @@ function TitleQueue({ titles, review }: { titles: any[]; review: any }) {
       </div>
     </section>
   );
+}
+
+function TitleIdentityAudit({ titles }: { titles: any[] }) {
+  const groups = buildTitleAuditGroups(titles);
+  const byId = new Map(titles.map((title) => [title.id, title]));
+  const watchIds = ["f15e0a5385aaf8365f6ad730de747da0", "8dd4886567a00fe97379ab8514fffa87"];
+  const watch = watchIds.map((id) => byId.get(id)).filter(Boolean);
+  return <section className="space-y-4">
+    <SectionHeader title="Canonical title identity audit" description="Read-only discovery. Exact normalized title + language + year are required for identity candidates. Missing metadata needs manual review; no title is merged, archived, deleted or hidden." />
+    <div className="rounded-2xl border border-line bg-surface p-4">
+      <p className="font-semibold">Previously flagged records — compare manually</p>
+      <p className="mt-1 text-sm text-muted">These records are not declared duplicates. Review their full metadata and linked records before deciding.</p>
+      {watch.length ? watch.map((title: any) => <div key={title.id} className="flex flex-col gap-2 border-b border-line py-3 last:border-0 sm:flex-row sm:items-center sm:justify-between"><div><p className="font-medium">{title.name}</p><p className="text-xs text-muted">{title.content_type ?? "Type unknown"} · {title.language ?? title.original_language ?? "Language unknown"} · {title.year ?? "Year unknown"} · {title.status}</p><p className="break-all font-mono text-xs text-muted">{title.id}</p></div><Link to="/title/$id" params={{ id: title.id }} className="text-sm font-semibold text-accent hover:underline">Inspect record →</Link></div>) : <Empty text="Flagged records are not in the current title inventory response. Check inventory coverage before concluding they are absent." />}
+    </div>
+    {!groups.length ? <Empty text="No exact identity candidate groups or incomplete-metadata groups found. This does not rule out differently named duplicates." /> : groups.map((group) => <div key={group.key} className="rounded-2xl border border-line bg-surface p-4">
+      <div className="flex flex-wrap items-center gap-2"><p className="font-semibold">{group.records[0]?.name}</p><span className="rounded-full border border-line px-2 py-1 text-xs">{group.classification === "MATCHED_IDENTITY_CANDIDATES" ? "Identity candidates · review" : "Metadata review"}</span><span className="text-xs text-muted">{group.language ?? "Language unknown"} · {group.year ?? "Year unknown"} · {group.records.length} record(s)</span></div>
+      {group.records.map((record) => <div key={record.id} className="flex flex-col gap-1 border-t border-line py-3 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-sm">{record.name} · {record.status ?? "Status unknown"}</p><p className="break-all font-mono text-xs text-muted">{record.id}</p></div><Link to="/title/$id" params={{ id: record.id }} className="text-sm font-semibold text-accent hover:underline">Inspect record →</Link></div>)}
+    </div>)}
+    <p className="text-xs text-muted">Audit is non-destructive. Different names/languages/years are not automatically matched; compare full metadata, assets, rights, buyer mappings and deliveries before any decision.</p>
+  </section>;
 }
 
 function DuplicateReviewSection() {

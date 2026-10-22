@@ -20,7 +20,7 @@ export const listAdminWorkstations = createServerFn({ method: "GET" })
     assertPermission(actor, "title.read_catalog");
     const sql = await getSql();
     const [titles, assets, assetVersions, qc, legal, rights, packages, publications, profiles, audit] = await Promise.all([
-      sql`select id, name, owner_user_id, owner_account_type, status, language, updated_at from bridge_titles order by updated_at desc limit 200`,
+      sql`select id, name, owner_user_id, owner_account_type, status, language, original_language, year, content_type, runtime_minutes, country_of_origin, release_date, synopsis, licensing_fee_paise, created_at, updated_at from bridge_titles order by updated_at desc limit 200`,
       sql`select id, title_id, kind, s3_key, content_type, byte_size, created_at from bridge_assets order by created_at desc limit 300`,
       sql`select id, title_id, asset_group, asset_type, version, language, codec, s3_key, processing_state, created_at from bridge_asset_versions order by created_at desc limit 300`,
       sql`select id, title_id, asset_version_id, status, automated_findings, reviewer_findings, reviewed_by, reviewed_at, created_at from bridge_qc_cases order by created_at desc limit 200`,
