@@ -7,7 +7,9 @@ begin;
 do $test$
 declare
   v_title text := 'test-cert-gates-' || replace(gen_random_uuid()::text, '-', '');
+  v_other_title text := 'test-cert-gates-other-' || replace(gen_random_uuid()::text, '-', '');
   v_loop text := 'test-loop-cert-gates-' || replace(gen_random_uuid()::text, '-', '');
+  v_other_loop text := 'test-loop-cert-gates-other-' || replace(gen_random_uuid()::text, '-', '');
   v_master uuid;
   v_art uuid;
   v_qc uuid;
@@ -38,6 +40,16 @@ begin
     (id, bridge_title_id, slug, title, language, listed, published, access_tier)
   values
     (v_loop, v_title, v_loop, 'Synthetic certification gate test', 'Malayalam', false, false, 'TVOD');
+
+  insert into public.bridge_titles
+    (id, slug, name, owner_user_id, owner_account_type, status, language)
+  values
+    (v_other_title, v_other_title, 'Synthetic alternate title for relink test', 'test-only', 'studio', 'DRAFT', 'Malayalam');
+
+  insert into public.loop_titles
+    (id, bridge_title_id, slug, title, language, listed, published, access_tier)
+  values
+    (v_other_loop, v_other_title, v_other_loop, 'Synthetic alternate Loop title', 'Malayalam', false, false, 'TVOD');
 
   -- Negative test 1: no evidence must block an attempted Bridge authorization.
   begin
@@ -134,6 +146,33 @@ begin
     raise exception 'TEST_FAILED: non-TVOD exploitation model was not blocked';
   end if;
 
+  -- Negative test 1d: TVOD must not be combined with SVOD, AVOD, or FREE.
+  foreach v_model in array array['SVOD', 'AVOD', 'FREE'] loop
+    v_blocked := false;
+    begin
+      insert into public.bridge_loop_publications
+        (id, bridge_title_id, loop_title_id, authorization_status, territories, languages,
+         exploitation_models, window_start, window_end, approved_by, approved_at)
+      values
+        ('test-combined-model-' || v_model || '-' || v_title, v_title, v_loop, 'authorized',
+         array['WORLDWIDE'], array['Malayalam'], array['TVOD', v_model],
+         v_window_start, v_window_end, v_admin_actor, now());
+      raise exception 'TEST_FAILED: TVOD combined with % was allowed', v_model;
+    exception
+      when others then
+        if sqlerrm like 'BRIDGE_GATE_BLOCKED:%' then
+          v_blocked := true;
+        elsif sqlerrm like 'TEST_FAILED:%' then
+          raise;
+        else
+          raise;
+        end if;
+    end;
+    if not v_blocked then
+      raise exception 'TEST_FAILED: TVOD combined with % was not blocked', v_model;
+    end if;
+  end loop;
+
   -- Negative test 2: Loop must not become buyer-visible without an active Bridge authorization.
   v_blocked := false;
   begin
@@ -217,6 +256,48 @@ begin
   values
     ('test-pub-' || v_title, v_title, v_loop, 'authorized', array['WORLDWIDE'], array['Malayalam'],
      array['TVOD'], v_window_start, v_window_end, v_admin_actor, now());
+
+  -- Negative test 3: relinking an authorized publication to another Bridge title must re-run the gate.
+  v_blocked := false;
+  begin
+    update public.bridge_loop_publications
+    set bridge_title_id = v_other_title
+    where id = 'test-pub-' || v_title;
+    raise exception 'TEST_FAILED: authorized publication was relinked to another Bridge title';
+  exception
+    when others then
+      if sqlerrm like 'BRIDGE_GATE_BLOCKED:%' then
+        v_blocked := true;
+      elsif sqlerrm like 'TEST_FAILED:%' then
+        raise;
+      else
+        raise;
+      end if;
+  end;
+  if not v_blocked then
+    raise exception 'TEST_FAILED: Bridge-title relink was not blocked';
+  end if;
+
+  -- Negative test 4: relinking an authorized publication to another Loop record must re-run the gate.
+  v_blocked := false;
+  begin
+    update public.bridge_loop_publications
+    set loop_title_id = v_other_loop
+    where id = 'test-pub-' || v_title;
+    raise exception 'TEST_FAILED: authorized publication was relinked to another Loop title';
+  exception
+    when others then
+      if sqlerrm like 'BRIDGE_GATE_BLOCKED:%' then
+        v_blocked := true;
+      elsif sqlerrm like 'TEST_FAILED:%' then
+        raise;
+      else
+        raise;
+      end if;
+  end;
+  if not v_blocked then
+    raise exception 'TEST_FAILED: Loop-title relink was not blocked';
+  end if;
 
   -- Positive test: Loop may become buyer-visible only after that authorization exists.
   update public.loop_titles set listed = true, published = true where id = v_loop;
