@@ -22,6 +22,12 @@ function Dashboard() {
 
 const ADMIN_MODULES = [
   {
+    title: "Revenue & analytics",
+    description: "Review title-level licensing value and workflow status; unavailable TVOD and watch-time metrics are clearly labeled.",
+    to: "/admin/analytics",
+    action: "Open analytics desk",
+  },
+  {
     title: "Titles & media",
     description: "Canonical title records, metadata, artwork, uploads, QC and rights workflow.",
     to: "/workspace",
