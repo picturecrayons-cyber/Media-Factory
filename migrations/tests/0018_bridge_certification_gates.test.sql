@@ -45,7 +45,7 @@ begin
       (id, bridge_title_id, loop_title_id, authorization_status, territories, languages,
        exploitation_models, window_start, window_end, approved_by, approved_at)
     values
-      ('test-pub-' || v_title, v_title, v_loop, 'authorized', array['IN'], array['Malayalam'],
+      ('test-pub-' || v_title, v_title, v_loop, 'authorized', array['WORLDWIDE'], array['Malayalam'],
        array['TVOD'], v_window_start, v_window_end, v_admin_actor, now());
     raise exception 'TEST_FAILED: authorization unexpectedly passed with missing evidence';
   exception
@@ -69,7 +69,7 @@ begin
       (id, bridge_title_id, loop_title_id, authorization_status, territories, languages,
        exploitation_models, window_start, window_end, approved_by, approved_at)
     values
-      ('test-unauth-pub-' || v_title, v_title, v_loop, 'authorized', array['IN'], array['Malayalam'],
+      ('test-unauth-pub-' || v_title, v_title, v_loop, 'authorized', array['WORLDWIDE'], array['Malayalam'],
        array['TVOD'], v_window_start, v_window_end, v_viewer_actor, now());
     raise exception 'TEST_FAILED: viewer role was allowed to authorize Loop publication';
   exception
@@ -84,6 +84,30 @@ begin
   end;
   if not v_blocked then
     raise exception 'TEST_FAILED: unauthorized viewer approval was not blocked';
+  end if;
+
+  -- Negative test 1c: Loop authorization is restricted to WORLDWIDE TVOD.
+  v_blocked := false;
+  begin
+    insert into public.bridge_loop_publications
+      (id, bridge_title_id, loop_title_id, authorization_status, territories, languages,
+       exploitation_models, window_start, window_end, approved_by, approved_at)
+    values
+      ('test-scope-pub-' || v_title, v_title, v_loop, 'authorized', array['IN'], array['Malayalam'],
+       array['SVOD'], v_window_start, v_window_end, v_admin_actor, now());
+    raise exception 'TEST_FAILED: non-WORLDWIDE SVOD scope was allowed';
+  exception
+    when others then
+      if sqlerrm like 'BRIDGE_GATE_BLOCKED:%' then
+        v_blocked := true;
+      elsif sqlerrm like 'TEST_FAILED:%' then
+        raise;
+      else
+        raise;
+      end if;
+  end;
+  if not v_blocked then
+    raise exception 'TEST_FAILED: unsupported territory/exploitation scope was not blocked';
   end if;
 
   -- Negative test 2: Loop must not become buyer-visible without an active Bridge authorization.
@@ -132,7 +156,7 @@ begin
   insert into public.bridge_rights_grants
     (title_id, territories, languages, media, window_start, window_end, evidence, status, created_by)
   values
-    (v_title, '["IN"]'::jsonb, '["Malayalam"]'::jsonb, '["TVOD"]'::jsonb,
+    (v_title, '["WORLDWIDE"]'::jsonb, '["Malayalam"]'::jsonb, '["TVOD"]'::jsonb,
      v_window_start, v_window_end, '[{"reference":"synthetic-test-evidence"}]'::jsonb,
      'VALID', 'test-only')
   returning id into v_grant;
@@ -167,7 +191,7 @@ begin
     (id, bridge_title_id, loop_title_id, authorization_status, territories, languages,
      exploitation_models, window_start, window_end, approved_by, approved_at)
   values
-    ('test-pub-' || v_title, v_title, v_loop, 'authorized', array['IN'], array['Malayalam'],
+    ('test-pub-' || v_title, v_title, v_loop, 'authorized', array['WORLDWIDE'], array['Malayalam'],
      array['TVOD'], v_window_start, v_window_end, v_admin_actor, now());
 
   -- Positive test: Loop may become buyer-visible only after that authorization exists.
