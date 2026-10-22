@@ -110,6 +110,20 @@ test("new and existing publications emit the status accepted by the Loop catalog
     assert.match(publication.query, /authorization_status = 'authorized'/);
     assert.ok(publication.values.includes(data.territories));
     assert.ok(publication.values.includes(data.windowEnd));
+
+    const listingInsert = h.writes.find((write) => write.query.includes("insert into loop_titles"));
+    const visibilityUpdate = h.writes.find((write) =>
+      write.query.includes("update loop_titles") && write.query.includes("set listed = true, published = true"),
+    );
+    assert.ok(listingInsert, "Loop draft must be created before authorization");
+    assert.equal(listingInsert.values[13], false, "Loop draft must start unlisted");
+    assert.equal(listingInsert.values[14], false, "Loop draft must start unpublished");
+    assert.ok(visibilityUpdate, "buyer visibility must be enabled only after Bridge authorization");
+    assert.ok(
+      h.writes.indexOf(listingInsert) < h.writes.indexOf(publication) &&
+      h.writes.indexOf(publication) < h.writes.indexOf(visibilityUpdate),
+      "write order must be draft -> Bridge authorization -> buyer visibility",
+    );
   }
 });
 
