@@ -567,6 +567,8 @@ function FilesPanel({
         detail = `${raw} Refresh the asset list to confirm its status before retrying.`;
       }
       announce(detail, "error", true);
+      // Keep the durable pending record visible after a failed or timed-out attempt.
+      void Promise.resolve(onAssetsChanged()).catch(() => undefined);
     } finally {
       if (transferTimer !== undefined) clearTimeout(transferTimer);
       if (uploadAttemptRef.current === attemptId) {
@@ -606,7 +608,7 @@ function FilesPanel({
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Media</p>
           <h2 className="mt-1 font-display text-xl font-semibold">OTT package</h2>
         </div>
-        <span className="text-xs text-muted">Ready / Missing</span>
+        <span className="text-xs text-muted">Storage status</span>
       </div>
 
       {progress ? (
@@ -630,14 +632,19 @@ function FilesPanel({
                 uploadAttemptRef.current += 1;
                 uploadXhrRef.current?.abort();
                 setProgress(null);
-                announce("Upload cancelled. Any pending preparation result will be ignored; no new transfer will start from this attempt.", "error", true);
+                if (progress.phase === "verifying") {
+                  announce("Stopped waiting in this page. Server-side storage verification may still finish. Refresh asset status before retrying.", "status", true);
+                  void Promise.resolve(onAssetsChanged()).catch(() => undefined);
+                } else {
+                  announce("Upload cancelled. Any pending preparation result will be ignored; no new transfer will start from this attempt.", "error", true);
+                }
                 if (!uploadXhrRef.current) {
                   setUploading(null);
                 }
               }}
               className="rounded-full border border-line px-3 py-1.5 text-xs font-semibold"
             >
-              Cancel upload
+              {progress.phase === "verifying" ? "Stop waiting" : "Cancel upload"}
             </button>
           </div>
           <div
@@ -663,7 +670,7 @@ function FilesPanel({
             key={kind}
             kind={kind}
             label={label}
-            status={assets.some((a) => (a.kind === kind || (kind === "poster_vertical" && a.kind === "poster")) && a.verified) ? "Ready" : empty}
+            status={assets.some((a) => (a.kind === kind || (kind === "poster_vertical" && a.kind === "poster")) && a.verified) ? "Stored" : empty}
             busy={uploading === kind}
             canUpload={canUpload}
             onFile={(file) => void uploadFile(kind, file)}
@@ -681,6 +688,17 @@ function FilesPanel({
       ) : null}
       <div className="mt-2 flex flex-wrap items-center gap-3">
         <p className="text-xs text-muted">Upload status and errors appear here.</p>
+        <button
+          type="button"
+          onClick={() => {
+            void Promise.resolve(onAssetsChanged())
+              .then(() => announce("Asset list refreshed. Only server-verified objects are marked Ready.", "status"))
+              .catch(() => announce("Could not refresh the asset list. Reopen the title workspace and check status before retrying.", "error"));
+          }}
+          className="rounded-full border border-line px-3 py-1.5 text-xs font-semibold"
+        >
+          Refresh asset status
+        </button>
         {notificationPermission === "default" ? (
           <button
             type="button"
@@ -705,7 +723,7 @@ function FilesPanel({
           <div key={a.id} className="flex items-center justify-between gap-3 rounded-xl border border-line p-4">
             <div>
               <p className="text-sm font-semibold">{a.kind}</p>
-              <p className="text-xs text-muted">{a.verified ? "Ready" : "Processing"}</p>
+              <p className="text-xs text-muted">{a.verified ? "Storage verified (QC is separate)" : "Pending storage verification · not Ready"}</p>
             </div>
             {a.verified ? (
               <button
@@ -748,7 +766,7 @@ function FileTypeCard({
           </p>
         </div>
         <label className="cursor-pointer rounded-full border border-line px-3 py-1.5 text-xs font-semibold">
-          {busy ? "Uploading…" : status === "Ready" ? "Replace" : "Upload"}
+          {busy ? "Uploading…" : status === "Stored" ? "Replace" : "Upload"}
           <input
             className="sr-only"
             type="file"
