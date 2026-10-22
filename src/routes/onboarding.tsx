@@ -13,6 +13,7 @@ import { BRIDGE_LOOP_LANES } from "@/lib/bridge/loop-lanes";
 import { publicOnboardingError } from "@/lib/bridge/onboarding-errors";
 import { BrandMark } from "@/components/bridge/shell";
 import { Button } from "@/components/ui/button";
+import { reportBridgeClientFailure } from "@/lib/diagnostics/client-failure";
 
 export const Route = createFileRoute("/onboarding")({ component: Onboarding });
 
@@ -130,6 +131,12 @@ function Onboarding() {
   const [busy, setBusy] = useState(false);
   const submitInFlight = useRef(false);
   const [retrying, setRetrying] = useState(false);
+  const [diagnosticId, setDiagnosticId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!sessionQ.isError) return;
+    setDiagnosticId(reportBridgeClientFailure("onboarding.session-load", sessionQ.error));
+  }, [sessionQ.isError, sessionQ.error]);
 
   const home = sessionQ.data?.profile ? sessionQ.data.home : null;
 
@@ -193,6 +200,7 @@ function Onboarding() {
           <h1 className="font-display text-2xl">Could not load Bridge</h1>
           <p className="text-sm leading-relaxed text-muted">Retry without clearing your session.</p>
           {error ? <p role="alert" className="text-sm text-accent">{error}</p> : null}
+          {diagnosticId ? <p className="text-xs text-muted">Diagnostic reference: <code>{diagnosticId}</code>. For technical details, open browser DevTools → Console and find “Bridge client diagnostic”. No session reset was performed.</p> : null}
           <Button type="button" disabled={retrying} className="w-full" onClick={() => void retrySession()}>{retrying ? "Checking…" : "Retry"}</Button>
         </div>
       </main>
