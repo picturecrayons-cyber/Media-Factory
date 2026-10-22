@@ -267,6 +267,13 @@ type UploadProgress = {
   loaded: number;
   total: number;
 };
+type QueuedUpload = {
+  id: string;
+  file: File;
+  kind: SimpleAssetKind;
+  status: "queued" | "uploading" | "done" | "failed" | "invalid";
+  error?: string;
+};
 
 function formatEta(seconds: number | null): string {
   if (seconds == null || !Number.isFinite(seconds)) return "Calculating time remaining…";
@@ -313,6 +320,12 @@ function FilesPanel({
     typeof window === "undefined" || !("Notification" in window) ? "unsupported" : Notification.permission,
   );
   const [progress, setProgress] = useState<UploadProgress | null>(null);
+  const [queuedUploads, setQueuedUploads] = useState<QueuedUpload[]>([]);
+  const [queueRunning, setQueueRunning] = useState(false);
+  const [queuePaused, setQueuePaused] = useState(false);
+  const [dragActive, setDragActive] = useState(false);
+  const queuePausedRef = useRef(false);
+  const queueRunningRef = useRef(false);
   const uploadXhrRef = useRef<XMLHttpRequest | null>(null);
   const cancelRequestedRef = useRef(false);
   // Invalidates any in-flight preparation/confirmation continuation after cancel or a newer attempt.
@@ -384,14 +397,14 @@ function FilesPanel({
     });
   }
 
-  async function uploadFile(kind: SimpleAssetKind, file: File) {
-    if (uploading) return;
+  async function uploadFile(kind: SimpleAssetKind, file: File): Promise<boolean> {
+    if (uploading) return false;
     const filename = asciiUploadName(file.name);
     const contentType = file.type || "application/octet-stream";
     const validation = validateOttIngestFile({ kind, filename, contentType });
     if (!validation.ok) {
       announce(validation.message, "error");
-      return;
+      return false;
     }
 
     cancelRequestedRef.current = false;
@@ -439,9 +452,10 @@ function FilesPanel({
       assertAttemptActive();
       setProgress(null);
       announce(`${kind[0].toUpperCase() + kind.slice(1)} is ready after storage verification.`, "success", true);
+      return true;
     } catch (error) {
       // A cancelled/superseded attempt must not overwrite the status of a newer upload.
-      if (uploadAttemptRef.current !== attemptId) return;
+      if (uploadAttemptRef.current !== attemptId) return false;
       const raw = error instanceof Error ? error.message : "Upload failed";
       setProgress(null);
       const cancelled = cancelRequestedRef.current;
@@ -458,6 +472,7 @@ function FilesPanel({
         detail = `${raw} Refresh the asset list to confirm its status before retrying.`;
       }
       announce(detail, "error", true);
+      return false;
     } finally {
       if (transferTimer !== undefined) clearTimeout(transferTimer);
       if (uploadAttemptRef.current === attemptId) {
@@ -466,6 +481,86 @@ function FilesPanel({
         setUploading(null);
       }
     }
+  }
+
+  function inferKind(file: File, index: number, picked: File[]): SimpleAssetKind {
+    const name = file.name.toLowerCase();
+    const ext = name.includes(".") ? name.slice(name.lastIndexOf(".")) : "";
+    if (/\\.(srt|vtt|ttml|xml)$/i.test(name) && !/\\.xml$/i.test(name)) return "subtitle";
+    if (/\\.(srt|vtt|ttml)$/i.test(name)) return "subtitle";
+    if (/certificate|censor|cbfc|censorboard/.test(name) || ext === ".pdf") return "censor_certificate";
+    if (/\\.(mp4|mov|mxf)$/i.test(name)) {
+      if (/trailer|teaser|screener/.test(name)) return "screener";
+      const previousVideo = picked.slice(0, index).some((candidate) => /\\.(mp4|mov|mxf)$/i.test(candidate.name));
+      return previousVideo ? "screener" : "master";
+    }
+    if (/horizontal|landscape|banner|wide/.test(name)) return "poster_horizontal";
+    if (/thumb|thumbnail/.test(name)) return "thumbnail";
+    const priorImages = picked.slice(0, index).filter((candidate) => /\\.(png|jpe?g|webp)$/i.test(candidate.name)).length;
+    return priorImages === 0 ? "poster_vertical" : priorImages === 1 ? "poster_horizontal" : "thumbnail";
+  }
+
+  function addFiles(filesLike: FileList | File[]) {
+    if (!canUpload) {
+      announce("Uploads are not permitted for this title or account.", "error");
+      return;
+    }
+    const files = Array.from(filesLike);
+    if (!files.length) return;
+    const additions: QueuedUpload[] = files.map((file, index) => {
+      const kind = inferKind(file, index, files);
+      const validation = validateOttIngestFile({
+        kind,
+        filename: asciiUploadName(file.name),
+        contentType: file.type || "application/octet-stream",
+      });
+      return {
+        id: `${Date.now()}-${index}-${Math.random().toString(36).slice(2, 8)}`,
+        file,
+        kind,
+        status: validation.ok ? "queued" : "invalid",
+        error: validation.ok ? undefined : validation.message,
+      };
+    });
+    setQueuedUploads((current) => [...current, ...additions]);
+    const invalid = additions.filter((item) => item.status === "invalid").length;
+    announce(
+      invalid
+        ? `${files.length} file(s) added; ${invalid} need attention because the file type does not match the selected media slot.`
+        : `${files.length} file(s) added to the upload queue. Review each media slot before starting.`,
+      invalid ? "error" : "status",
+    );
+  }
+
+  async function processQueue() {
+    if (queueRunningRef.current) return;
+    queueRunningRef.current = true;
+    queuePausedRef.current = false;
+    setQueueRunning(true);
+    setQueuePaused(false);
+    try {
+      // Process only the snapshot present when Start/Resume is pressed; new files can be queued for the next pass.
+      const batch = queuedUploads.filter((item) => item.status === "queued" || item.status === "failed");
+      for (const item of batch) {
+        if (queuePausedRef.current) break;
+        setQueuedUploads((current) => current.map((entry) => entry.id === item.id ? { ...entry, status: "uploading", error: undefined } : entry));
+        const ok = await uploadFile(item.kind, item.file);
+        setQueuedUploads((current) => current.map((entry) => entry.id === item.id
+          ? { ...entry, status: ok ? "done" : "failed", error: ok ? undefined : "Upload did not finish successfully. Check the status above before retrying." }
+          : entry));
+      }
+    } finally {
+      queueRunningRef.current = false;
+      setQueueRunning(false);
+      setQueuePaused(queuePausedRef.current);
+      if (queuePausedRef.current) announce("Queue paused between files. The current file was allowed to finish; resume to continue.", "status");
+    }
+  }
+
+  function pauseQueue() {
+    queuePausedRef.current = true;
+    setQueuePaused(true);
+    if (!queueRunningRef.current) announce("Queue paused. Resume when ready.", "status");
   }
 
   async function download(id: string) {
@@ -499,6 +594,65 @@ function FilesPanel({
         </div>
         <span className="text-xs text-muted">Ready / Missing</span>
       </div>
+
+      <div
+        className={`mt-5 rounded-xl border border-dashed p-6 text-center transition-colors ${dragActive ? "border-accent bg-elevated" : "border-line bg-elevated/30"}`}
+        onDragEnter={(event) => { event.preventDefault(); if (canUpload) setDragActive(true); }}
+        onDragOver={(event) => { event.preventDefault(); if (canUpload) event.dataTransfer.dropEffect = "copy"; }}
+        onDragLeave={(event) => { event.preventDefault(); if (event.currentTarget === event.target) setDragActive(false); }}
+        onDrop={(event) => { event.preventDefault(); setDragActive(false); addFiles(event.dataTransfer.files); }}
+      >
+        <p className="text-sm font-semibold">Drag and drop media files here</p>
+        <p className="mt-1 text-xs text-muted">Or select multiple files. Bridge will suggest a media slot; review the queue before starting.</p>
+        <label className="mt-3 inline-flex cursor-pointer rounded-full border border-line bg-surface px-4 py-2 text-xs font-semibold">
+          Browse files
+          <input
+            className="sr-only"
+            type="file"
+            multiple
+            disabled={!canUpload || queueRunning}
+            accept={[...new Set(Object.values(OTT_INGEST_SPEC).flatMap((spec) => [...spec.extensions, ...spec.mimeTypes]))].join(",")}
+            onChange={(event) => { if (event.currentTarget.files) addFiles(event.currentTarget.files); event.currentTarget.value = ""; }}
+          />
+        </label>
+      </div>
+
+      {queuedUploads.length ? (
+        <div className="mt-4 rounded-xl border border-line p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold">Upload queue · {queuedUploads.filter((item) => item.status === "done").length}/{queuedUploads.length} complete</p>
+              <p className="mt-1 text-xs text-muted">Files upload one at a time. Pause stops the queue between files; it does not pause an active transfer or provide chunk-level resume.</p>
+            </div>
+            <div className="flex gap-2">
+              {queueRunning
+                ? <button type="button" onClick={pauseQueue} className="rounded-full border border-line px-3 py-1.5 text-xs font-semibold">Pause queue</button>
+                : <button type="button" disabled={!canUpload || !queuedUploads.some((item) => item.status === "queued" || item.status === "failed")} onClick={() => void processQueue()} className="rounded-full bg-fg px-3 py-1.5 text-xs font-semibold text-bg">{queuePaused ? "Resume queue" : "Start queue"}</button>}
+              <button type="button" disabled={queueRunning} onClick={() => setQueuedUploads((current) => current.filter((item) => item.status === "done" || item.status === "uploading"))} className="rounded-full border border-line px-3 py-1.5 text-xs font-semibold">Clear finished</button>
+            </div>
+          </div>
+          <div className="mt-3 space-y-2">
+            {queuedUploads.map((item) => (
+              <div key={item.id} className="flex flex-wrap items-center gap-3 rounded-lg border border-line px-3 py-2">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium">{item.file.name}</p>
+                  <p className="text-xs text-muted">{item.kind.replaceAll("_", " ")} · {(item.file.size / (1024 * 1024)).toFixed(1)} MB</p>
+                  {item.error ? <p className="text-xs text-red-700">{item.error}</p> : null}
+                </div>
+                <select aria-label={`Media slot for ${item.file.name}`} value={item.kind} disabled={queueRunning || item.status === "done"} onChange={(event) => {
+                  const kind = event.target.value as SimpleAssetKind;
+                  const validation = validateOttIngestFile({ kind, filename: asciiUploadName(item.file.name), contentType: item.file.type || "application/octet-stream" });
+                  setQueuedUploads((current) => current.map((entry) => entry.id === item.id ? { ...entry, kind, status: validation.ok ? "queued" : "invalid", error: validation.ok ? undefined : validation.message } : entry));
+                }} className="max-w-full rounded-lg border border-line bg-surface px-2 py-1.5 text-xs">
+                  {cards.map(([kind, label]) => <option key={kind} value={kind}>{label}</option>)}
+                </select>
+                <span className="text-xs font-semibold">{item.status === "done" ? "Verified" : item.status === "uploading" ? "Uploading" : item.status === "failed" ? "Failed" : item.status === "invalid" ? "Check file" : "Queued"}</span>
+                {!queueRunning && item.status !== "done" ? <button type="button" aria-label={`Remove ${item.file.name} from queue`} onClick={() => setQueuedUploads((current) => current.filter((entry) => entry.id !== item.id))} className="rounded-full border border-line px-2 py-1 text-xs">Remove</button> : null}
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
 
       {progress ? (
         <div className="mt-5 rounded-xl border border-line bg-elevated/40 p-4" aria-label="Upload progress">
