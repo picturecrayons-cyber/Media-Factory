@@ -309,7 +309,26 @@ begin
     raise exception 'TEST_FAILED: valid synthetic fixture did not become buyer-visible';
   end if;
 
-  raise notice 'PASS: missing evidence blocked; complete synthetic evidence authorized; buyer visibility gated';
+  -- Negative test 5: an authorized TVOD listing cannot be switched to FREE while visible.
+  v_blocked := false;
+  begin
+    update public.loop_titles set access_tier = 'FREE' where id = v_loop;
+    raise exception 'TEST_FAILED: buyer-visible Loop title changed to FREE access tier';
+  exception
+    when others then
+      if sqlerrm like 'BRIDGE_GATE_BLOCKED:%' then
+        v_blocked := true;
+      elsif sqlerrm like 'TEST_FAILED:%' then
+        raise;
+      else
+        raise;
+      end if;
+  end;
+  if not v_blocked then
+    raise exception 'TEST_FAILED: buyer-visible non-TVOD access tier was not blocked';
+  end if;
+
+  raise notice 'PASS: incomplete evidence, unauthorized roles, invalid rights scope, relinking, and non-TVOD buyer visibility blocked; complete TVOD evidence authorized';
 end
 $test$;
 
