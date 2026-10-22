@@ -233,7 +233,12 @@ begin
     where p.bridge_title_id = new.bridge_title_id
       and p.loop_title_id = new.id
       and lower(p.authorization_status) in ('authorized','live','delivered')
-      and p.approved_by is not null
+      and exists (
+        select 1 from public.bridge_profiles approver
+        where approver.user_id = p.approved_by
+          and approver.email_verified = true
+          and approver.internal_role in ('admin','super_admin')
+      )
       and p.approved_at is not null
       and p.revoked_at is null
       and (p.window_start is null or p.window_start <= now())
