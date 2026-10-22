@@ -246,7 +246,7 @@ export const listTitleAssets = createServerFn({ method: "GET" })
           contentType: r.content_type,
           byteSize: r.byte_size,
           verified: Number(r.byte_size ?? 0) > 0,
-          storageStatus: Number(r.byte_size ?? 0) > 0 ? "VERIFIED" as const : "PENDING_VERIFICATION" as const,
+          storageStatus: Number(r.byte_size ?? 0) > 0 ? "VERIFIED" as const : "NOT_VERIFIED" as const,
           createdAt:
             r.created_at instanceof Date ? r.created_at.toISOString() : String(r.created_at),
         })),
