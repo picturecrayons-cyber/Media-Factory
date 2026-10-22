@@ -13,7 +13,7 @@ import { BRIDGE_LOOP_LANES } from "@/lib/bridge/loop-lanes";
 import { publicOnboardingError } from "@/lib/bridge/onboarding-errors";
 import { BrandMark } from "@/components/bridge/shell";
 import { Button } from "@/components/ui/button";
-import { reportBridgeClientFailure } from "@/lib/diagnostics/client-failure";
+import { reportBridgeClientFailure, reportBridgeWindowError } from "@/lib/diagnostics/client-failure";
 
 export const Route = createFileRoute("/onboarding")({ component: Onboarding });
 
@@ -137,6 +137,12 @@ function Onboarding() {
     if (!sessionQ.isError) return;
     setDiagnosticId(reportBridgeClientFailure("onboarding.session-load", sessionQ.error));
   }, [sessionQ.isError, sessionQ.error]);
+
+  useEffect(() => {
+    const handleError = (event: ErrorEvent) => reportBridgeWindowError(event);
+    window.addEventListener("error", handleError);
+    return () => window.removeEventListener("error", handleError);
+  }, []);
 
   const home = sessionQ.data?.profile ? sessionQ.data.home : null;
 
