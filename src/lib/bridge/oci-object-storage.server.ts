@@ -267,7 +267,9 @@ async function pollWorkRequest(
     } else {
       const body = (await res.json()) as { status?: string };
       lastStatus = body.status || "unknown";
-      if (lastStatus === "SUCCEEDED") return;
+      // OCI can report a terminal successful copy as COMPLETED as well as SUCCEEDED.
+      // This only ends work-request polling; sealVerifiedObject still HEAD-verifies the destination.
+      if (lastStatus === "SUCCEEDED" || lastStatus === "COMPLETED") return;
       if (lastStatus === "FAILED" || lastStatus === "CANCELED") {
         throw new Error(`OCI object copy ${lastStatus.toLowerCase()}`);
       }
