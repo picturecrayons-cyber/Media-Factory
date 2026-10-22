@@ -436,7 +436,7 @@ function FilesPanel({
       if (file.size >= MULTIPART_THRESHOLD) {
         if (!saved.multipartUrl) {
           announce("Starting secure multipart session…");
-          saved.multipartUrl = await startMultipart(saved.parUrl);
+          saved.multipartUrl = await startMultipart(saved.parUrl, contentType);
           saved.updatedAt = Date.now();
           await saveUpload(saved);
           setSavedUploads(current => [...current.filter(item => item.key !== key), saved!]);
