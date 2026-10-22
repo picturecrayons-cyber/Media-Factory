@@ -23,6 +23,7 @@ import {
   validateOttIngestFile,
 } from "@/lib/bridge/ott-ingest-spec";
 import { asciiUploadName } from "@/lib/bridge/latin1";
+import { AssetPreviewGallery } from "@/components/bridge/asset-preview-gallery";
 
 export const Route = createFileRoute("/title/$id")({ component: TitlePage });
 
@@ -609,6 +610,7 @@ function FilesPanel({
           </div>
         ))}
       </div>
+      <AssetPreviewGallery assets={assets} />
     </section>
   );
 }
