@@ -337,6 +337,7 @@ function FilesPanel({
   const [uploadEta, setUploadEta] = useState<string | null>(null);
   const [uploadPhase, setUploadPhase] = useState<"preparing" | "transferring" | "verifying" | "refreshing" | null>(null);
   const uploadXhrRef = useRef<XMLHttpRequest | null>(null);
+  const cancelRequestedRef = useRef(false);
   const [notificationPermission, setNotificationPermission] = useState<"default" | "granted" | "denied" | "unsupported">(() =>
     typeof window === "undefined" || !("Notification" in window) ? "unsupported" : Notification.permission,
   );
@@ -354,6 +355,7 @@ function FilesPanel({
       setMessage(validation.message);
       return;
     }
+    cancelRequestedRef.current = false;
     setUploading(kind);
     setUploadProgress(0);
     setUploadEta(null);
@@ -368,6 +370,11 @@ function FilesPanel({
           contentType,
         },
       });
+      // If the user cancelled while the signed upload was being prepared, never start a transfer.
+      if (cancelRequestedRef.current) {
+        setMessage("Upload cancelled before transfer. No file transfer was started.");
+        return;
+      }
       // Use the provider-issued PAR URL verbatim; rewriting its encoded path can target a different object.
       setUploadPhase("transferring");
       await new Promise<void>((resolve, reject) => {
@@ -396,6 +403,10 @@ function FilesPanel({
         xhr.onabort = () => { uploadXhrRef.current = null; reject(new Error("Upload cancelled. The asset was not marked Ready; select the file again to retry.")); };
         xhr.send(file);
       });
+      if (cancelRequestedRef.current) {
+        setMessage("Upload cancelled. This attempt will not run storage verification.");
+        return;
+      }
       setUploadPhase("verifying");
       setUploadEta(null);
       setMessage("Upload transferred. Verifying stored file…");
@@ -410,15 +421,20 @@ function FilesPanel({
       if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") new Notification("Crayons Bridge · Upload", { body: `${kind[0].toUpperCase() + kind.slice(1)} uploaded and verified.` });
     } catch (error) {
       const raw = error instanceof Error ? error.message : "Upload failed";
-      const detail = raw.includes("STORAGE_UNAVAILABLE")
-        ? "Storage service is currently unavailable. Please try again later."
-        : raw;
-      setMessage(detail);
-      notify("error", `${kind.replaceAll("_", " ")} upload failed: ${detail}`);
-      toast.error(detail);
-      if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") new Notification("Crayons Bridge · Upload failed", { body: detail });
+      if (cancelRequestedRef.current) {
+        setMessage("Upload cancelled. Any pending preparation result will be ignored; no new transfer will start from this attempt.");
+      } else {
+        const detail = raw.includes("STORAGE_UNAVAILABLE")
+          ? "Storage service is currently unavailable. Please try again later."
+          : raw;
+        setMessage(detail);
+        notify("error", `${kind.replaceAll("_", " ")} upload failed: ${detail}`);
+        toast.error(detail);
+        if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") new Notification("Crayons Bridge · Upload failed", { body: detail });
+      }
     } finally {
       uploadXhrRef.current = null;
+      cancelRequestedRef.current = false;
       setUploadPhase(null);
       setUploadEta(null);
       setUploading(null);
@@ -514,8 +530,18 @@ function FilesPanel({
                 <p className="text-sm font-semibold">{uploading.replaceAll("_", " ")} · {uploadPhase === "preparing" ? "Preparing secure upload" : uploadPhase === "transferring" ? "Uploading" : uploadPhase === "verifying" ? "Verifying stored file" : "Refreshing assets"}</p>
                 <p className="mt-1 text-xs text-muted">{uploadPhase === "transferring" ? `${uploadProgress}% transferred${uploadEta ? ` · ${uploadEta}` : ""}` : uploadPhase === "preparing" ? "Requesting a secure upload URL…" : uploadPhase === "verifying" ? "Checking stored object before marking Ready…" : "Updating the verified asset list…"}</p>
               </div>
-              {uploadPhase === "transferring" ? (
-                <button type="button" onClick={() => uploadXhrRef.current?.abort()} className="rounded-full border border-line px-3 py-1.5 text-xs font-semibold">Cancel upload</button>
+              {uploadPhase === "preparing" || uploadPhase === "transferring" ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    cancelRequestedRef.current = true;
+                    if (uploadXhrRef.current) uploadXhrRef.current.abort();
+                    else setMessage("Cancelling upload preparation… the pending result will be ignored and no transfer will start.");
+                  }}
+                  className="rounded-full border border-line px-3 py-1.5 text-xs font-semibold"
+                >
+                  Cancel upload
+                </button>
               ) : null}
             </div>
           ) : null}
@@ -793,7 +819,16 @@ function PreviewAssetCard({
           </div>
         ) : isImage && previewUrl ? (
           <button type="button" onClick={() => setExpanded(true)} className="group block w-full overflow-hidden rounded-lg bg-elevated text-left" aria-label={`Open original ${label} preview`}>
-            <img src={previewUrl} alt={label} loading="lazy" className={asset.kind === "poster_vertical" || asset.kind === "poster" ? "mx-auto max-h-72 w-auto object-contain" : "h-44 w-full object-contain"} />
+            <img
+              src={previewUrl}
+              alt={label}
+              loading="lazy"
+              onError={() => {
+                setPreviewUrl(null);
+                setError("The secure preview link may have expired. Retry to request a fresh link.");
+              }}
+              className={asset.kind === "poster_vertical" || asset.kind === "poster" ? "mx-auto max-h-72 w-auto object-contain" : "h-44 w-full object-contain"}
+            />
             <span className="block px-3 py-2 text-xs text-muted group-hover:text-fg">Click to view original dimensions</span>
           </button>
         ) : isVideo && previewUrl ? (
@@ -862,7 +897,16 @@ function PreviewAssetCard({
         <div role="dialog" aria-modal="true" aria-label={`Original preview: ${label}`} className="fixed inset-0 z-50 grid place-items-center bg-black/80 p-4" onClick={() => setExpanded(false)}>
           <div className="relative flex max-h-[95vh] max-w-[95vw] flex-col items-center" onClick={(event) => event.stopPropagation()}>
             <button type="button" onClick={() => setExpanded(false)} className="mb-3 self-end rounded-full bg-white px-4 py-2 text-sm font-semibold text-black">Close preview</button>
-            <img src={previewUrl} alt={`${label} original dimensions`} className="max-h-[82vh] max-w-[92vw] object-contain" />
+            <img
+              src={previewUrl}
+              alt={`${label} original dimensions`}
+              onError={() => {
+                setExpanded(false);
+                setPreviewUrl(null);
+                setError("The secure preview link may have expired. Retry to request a fresh link.");
+              }}
+              className="max-h-[82vh] max-w-[92vw] object-contain"
+            />
           </div>
         </div>
       ) : null}
