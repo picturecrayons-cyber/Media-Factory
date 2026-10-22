@@ -4,7 +4,7 @@
 
 create table if not exists public.bridge_loop_analytics_events (
   event_id uuid primary key,
-  user_id text not null references public.bridge_profiles(user_id) on delete restrict,
+  user_id text not null,
   bridge_title_id text not null references public.bridge_titles(id) on delete restrict,
   loop_title_id text not null references public.loop_titles(id) on delete restrict,
   session_id uuid not null,
