@@ -76,6 +76,7 @@ function TitlePage() {
 
 function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
   const [activeTab, setActiveTab] = useState<WorkspaceTab>("Overview");
+  const [posterFailed, setPosterFailed] = useState(false);
 
   const titleQ = useQuery({
     queryKey: ["bridge-title", id],
@@ -142,12 +143,12 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
       <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
         <div className="grid gap-5 md:grid-cols-[180px_1fr]">
           <div className="relative aspect-[2/3] overflow-hidden rounded-xl border border-line bg-elevated">
-            {posterPreviewQ.data?.url ? (
+            {posterPreviewQ.data?.url && !posterFailed ? (
               <img
                 src={posterPreviewQ.data.url}
                 alt={`${title.name} vertical poster`}
                 className="h-full w-full object-cover"
-                onError={(event) => { event.currentTarget.style.visibility = "hidden"; }}
+                onError={() => setPosterFailed(true)}
               />
             ) : (
               <div className="grid h-full place-items-center px-4 text-center text-xs text-muted">
@@ -336,6 +337,7 @@ function VerifiedArtwork({
     verified: boolean;
   };
 }) {
+  const [imageFailed, setImageFailed] = useState(false);
   const previewQ = useQuery({
     queryKey: ["bridge-media-gallery-preview", asset.id],
     queryFn: () => requestAssetDownload({ data: { assetId: asset.id } }),
@@ -346,8 +348,8 @@ function VerifiedArtwork({
   return (
     <figure className="overflow-hidden rounded-xl border border-line bg-elevated">
       <div className={asset.kind === "poster_horizontal" ? "aspect-video" : "aspect-[2/3]"}>
-        {previewQ.data?.url ? (
-          <img src={previewQ.data.url} alt={`${asset.kind.replaceAll("_", " ")} artwork`} loading="lazy" className="h-full w-full object-contain" />
+        {previewQ.data?.url && !imageFailed ? (
+          <img src={previewQ.data.url} alt={`${asset.kind.replaceAll("_", " ")} artwork`} loading="lazy" className="h-full w-full object-contain" onError={() => setImageFailed(true)} />
         ) : (
           <div className="grid h-full place-items-center px-3 text-center text-xs text-muted">
             {previewQ.isPending ? "Loading verified artwork…" : "Preview unavailable"}
