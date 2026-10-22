@@ -6,6 +6,7 @@ export const MULTIPART_PART_SIZE = 10 * 1024 * 1024;
 export type SavedUpload = {
   key: string;
   titleId: string;
+  userId: string;
   kind: string;
   filename: string;
   contentType: string;
@@ -54,8 +55,8 @@ export const getUpload = (key: string) => withStore<SavedUpload | undefined>("re
 export const listUploads = () => withStore<SavedUpload[]>("readonly", store => store.getAll());
 export const deleteUpload = (key: string) => withStore("readwrite", store => store.delete(key));
 
-export function uploadKey(titleId: string, kind: string, file: File) {
-  return [titleId, kind, file.name, file.size, file.lastModified].join(":");
+export function uploadKey(userId: string, titleId: string, kind: string, file: File) {
+  return [userId, titleId, kind, file.name, file.size, file.lastModified].join(":");
 }
 
 function xhrRequest<T>(url: string, method: string, body: Blob | null, headers: Record<string, string> = {}): Promise<{ value: T; etag: string | null }> {
