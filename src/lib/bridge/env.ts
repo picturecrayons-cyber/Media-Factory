@@ -1,11 +1,25 @@
 import { resolveBridgeConfiguredOrigin } from "./origin.ts";
+import { resolveBridgeSupabaseTarget } from "./supabase-target.ts";
 function read(key: string): string | undefined {
   const v = typeof process === "undefined" ? undefined : process.env[key]?.trim();
   return v || undefined;
 }
 
+function deploymentEnvironment(): string {
+  return read("VERCEL_ENV") || read("VITE_BRIDGE_ENVIRONMENT") ||
+    (read("NODE_ENV") === "test" ? "test" : "production");
+}
+function configuredSupabaseTarget() {
+  return resolveBridgeSupabaseTarget(
+    read("SUPABASE_URL") || read("VITE_SUPABASE_URL"),
+    deploymentEnvironment(),
+    read("EXPECTED_SUPABASE_PROJECT_REF") || read("VITE_EXPECTED_SUPABASE_PROJECT_REF"),
+  );
+}
+
 export const bridgeEnv = {
-  supabaseUrl: () => read("SUPABASE_URL") || read("VITE_SUPABASE_URL"),
+  supabaseUrl: () => configuredSupabaseTarget()?.url,
+  supabaseProjectRef: () => configuredSupabaseTarget()?.projectRef,
   supabaseAnon: () => read("VITE_SUPABASE_PUBLISHABLE_KEY") || read("VITE_SUPABASE_ANON_KEY"),
   supabaseService: () => read("SUPABASE_SECRET_KEY") || read("SUPABASE_SERVICE_ROLE_KEY"),
   razorpayKeyId: () => read("RAZORPAY_KEY_ID"),
