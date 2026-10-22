@@ -146,7 +146,14 @@ async function signedFetch(opts: {
   const safeHeaders = Object.fromEntries(
     Object.entries(headers).map(([key, value]) => [toLatin1(key), toLatin1(value)]),
   );
-  return fetch(url, { method: opts.method, headers: safeHeaders, body });
+  // Fail closed when OCI signing/namespace/PAR requests stall. The caller receives
+  // a bounded error instead of leaving the browser upload UI in "Preparing…" forever.
+  return fetch(url, {
+    method: opts.method,
+    headers: safeHeaders,
+    body,
+    signal: AbortSignal.timeout(15_000),
+  });
 }
 
 async function resolveNamespace(cfg: OciConfig) {
@@ -221,29 +228,70 @@ export async function verifyObject(key: string, expectedContentType?: string | n
   };
 }
 
-async function pollWorkRequest(cfg: OciConfig, workRequestId: string) {
-  // Object Storage work requests are scoped to the namespace used for the copy.
+async function pollWorkRequest(
+  cfg: OciConfig,
+  workRequestId: string,
+  opts?: { propagationGracePeriodMs?: number; pollIntervalMs?: number },
+) {
   const namespace = await resolveNamespace(cfg);
   const url = new URL(
     `/n/${encodeURIComponent(namespace)}/workRequests/${encodeURIComponent(workRequestId)}`,
     endpoint(cfg.region),
   );
-  for (let i = 0; i < 30; i += 1) {
+  const startTime = Date.now();
+  const deadline = startTime + 45_000;
+  const propagationGraceMs = opts?.propagationGracePeriodMs ?? 10_000;
+  const pollIntervalMs = opts?.pollIntervalMs ?? 1_000;
+  let lastStatus = "unknown";
+
+  while (Date.now() < deadline) {
+    const remainingMs = deadline - Date.now();
     const headers = signHeaders({ cfg, method: "GET", url });
-    const res = await fetch(url, { method: "GET", headers });
-    if (!res.ok) throw new Error(`OCI copy work-request lookup failed (${res.status})`);
-    const body = (await res.json()) as { status?: string };
-    if (body.status === "SUCCEEDED") return;
-    if (body.status === "FAILED" || body.status === "CANCELED") {
-      throw new Error(`OCI object copy ${body.status.toLowerCase()}`);
+    let res: Response;
+    try {
+      res = await fetch(url, {
+        method: "GET",
+        headers,
+        signal: AbortSignal.timeout(Math.min(8_000, Math.max(1, remainingMs))),
+      });
+    } catch {
+      throw new Error(`OCI copy work-request lookup timed out (last status: ${lastStatus})`);
     }
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+
+    if (!res.ok) {
+      if (res.status === 404) {
+        lastStatus = "not_yet_visible (404)";
+        const elapsed = Date.now() - startTime;
+        if (elapsed >= propagationGraceMs) {
+          throw new Error(`OCI copy work-request lookup failed (404) (last status: ${lastStatus})`);
+        }
+      } else {
+        throw new Error(`OCI copy work-request lookup failed (${res.status}) (last status: ${lastStatus})`);
+      }
+    } else {
+      const body = (await res.json()) as { status?: string };
+      lastStatus = body.status || "unknown";
+      if (lastStatus === "SUCCEEDED") return;
+      if (lastStatus === "FAILED" || lastStatus === "CANCELED") {
+        throw new Error(`OCI object copy ${lastStatus.toLowerCase()}`);
+      }
+    }
+
+    const remainingAfterPoll = deadline - Date.now();
+    if (remainingAfterPoll > 0) {
+      await new Promise((resolve) => setTimeout(resolve, Math.min(pollIntervalMs, remainingAfterPoll)));
+    }
   }
-  throw new Error("OCI object copy did not complete in time");
+  throw new Error(`OCI object copy did not complete within 45 seconds (last status: ${lastStatus})`);
 }
 
 /** Copy a verified upload into an immutable destination key. */
-export async function sealVerifiedObject(sourceKey: string, destinationKey: string, expectedEtag: string) {
+export async function sealVerifiedObject(
+  sourceKey: string,
+  destinationKey: string,
+  expectedEtag: string,
+  pollOpts?: { propagationGracePeriodMs?: number; pollIntervalMs?: number },
+) {
   const cfg = config();
   const namespace = await resolveNamespace(cfg);
   const path = `/n/${encodeURIComponent(namespace)}/b/${encodeURIComponent(cfg.bucket)}/actions/copyObject`;
@@ -264,13 +312,12 @@ export async function sealVerifiedObject(sourceKey: string, destinationKey: stri
   const workRequestId = res.headers.get("opc-work-request-id");
   if (workRequestId) {
     try {
-      await pollWorkRequest(cfg, workRequestId);
+      await pollWorkRequest(cfg, workRequestId, pollOpts);
     } catch (cause) {
-      // OCI can return 404 for a work request that has already aged out or is
-      // not visible through the polling endpoint. Never assume success: only
-      // continue if the destination object itself can be verified. The caller
-      // also compares its size with the source before marking the asset Ready.
-      const isMissingWorkRequest = cause instanceof Error && /work-request lookup failed \(404\)/.test(cause.message);
+      // Never assume a missing work request means the copy succeeded. Only accept
+      // this narrow 404 case when a direct read verifies the destination object.
+      const isMissingWorkRequest =
+        cause instanceof Error && /work-request lookup failed \(404\)/.test(cause.message);
       if (!isMissingWorkRequest) throw cause;
       try {
         return await verifyObject(destinationKey);
