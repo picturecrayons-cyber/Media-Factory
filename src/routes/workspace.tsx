@@ -45,7 +45,7 @@ function Workspace() {
         </section>
         {showCreate && canCreate ? <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6"><h3 className="font-display text-xl font-semibold">New Title</h3><p className="mb-4 mt-1 text-sm text-muted">Start with the essentials. You can complete metadata inside the Title Workspace.</p><CreateTitleForm concise /></section> : null}
         <section aria-label="Film gallery" className="rounded-2xl border border-line bg-surface p-4 sm:p-6 lg:p-7">
-          <TitleGallery empty="No titles available for this workspace." query={search} status={status} />
+          <TitleGallery query={search} status={status} />
         </section>
       </div>
     </BridgeShell>;
