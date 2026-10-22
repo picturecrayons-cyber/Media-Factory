@@ -231,18 +231,22 @@ export const listTitleAssets = createServerFn({ method: "GET" })
       created_at: string | Date;
     }>`
       select id, kind, s3_key, content_type, byte_size, created_at
-      from bridge_assets where title_id = ${title.id} and byte_size > 0 order by created_at desc
+      from bridge_assets where title_id = ${title.id} order by created_at desc
     `;
     return {
       assets: rows
-        .filter((r) => !buyer || !["master", "technical", "censor_certificate"].includes(r.kind))
+        // Buyers must never see pending or unverified asset records. Owners and authorized
+        // staff can see these durable records so they can distinguish pending verification
+        // from missing files after navigating away or reopening the workspace.
+        .filter((r) => !buyer || (Number(r.byte_size ?? 0) > 0 && !["master", "technical", "censor_certificate"].includes(r.kind)))
         .map((r) => ({
           id: r.id,
           kind: r.kind,
           key: buyer ? null : r.s3_key,
           contentType: r.content_type,
           byteSize: r.byte_size,
-          verified: Number(r.byte_size) > 0,
+          verified: Number(r.byte_size ?? 0) > 0,
+          storageStatus: Number(r.byte_size ?? 0) > 0 ? "VERIFIED" as const : "PENDING_VERIFICATION" as const,
           createdAt:
             r.created_at instanceof Date ? r.created_at.toISOString() : String(r.created_at),
         })),
