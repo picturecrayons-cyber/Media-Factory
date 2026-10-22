@@ -356,7 +356,9 @@ function FilesPanel({
       return await Promise.race([
         operation,
         new Promise<T>((_, reject) => {
-          timer = setTimeout(() => reject(new Error(`${phase} timed out. Please retry the upload.`)), timeoutMs);
+          timer = setTimeout(() => reject(new Error(phase.toLowerCase().includes("verification")
+            ? `${phase} timed out. The server may still be finishing verification; do not re-upload this file. Bridge will keep checking the saved asset status.`
+            : `${phase} timed out. The operation may still be running; refresh status before retrying.`)), timeoutMs);
         }),
       ]);
     } finally {
@@ -512,8 +514,9 @@ function FilesPanel({
       const cancelled = cancelRequestedRef.current;
       const verificationMayStillBeRunning = raw.toLowerCase().includes("verification timed out") || raw.toLowerCase().includes("verification") && raw.toLowerCase().includes("timed out");
       announce(cancelled ? raw : verificationMayStillBeRunning
-        ? `${raw} Server-side verification may still be running. Refresh asset status before taking further action; do not re-upload this file.`
-        : `${raw} Saved upload state is retained when possible. Use Resume only if this asset has not entered server-side verification.`, "error", true);
+        ? "Verification is taking longer than expected. Checking the existing asset automatically; do not re-upload."
+        : `${raw} Saved upload state is retained when possible. Use Resume only if this asset has not entered server-side verification.`, verificationMayStillBeRunning ? "status" : "error", true);
+      if (verificationMayStillBeRunning && saved?.assetId) void pollVerification(saved.assetId);
       return false;
     } finally {
       if (uploadAttemptRef.current === attemptId) {
@@ -603,19 +606,35 @@ function FilesPanel({
     if (!queueRunningRef.current) announce("Queue paused. Resume when ready.", "status");
   }
 
-  async function refreshAssetStatus() {
+  async function refreshAssetStatus(assetId?: string, announceResult = true) {
     try {
       const result = await onAssetsChanged() as { data?: { assets?: Array<{ id: string; verified: boolean }> } };
       const verifiedIds = new Set((result?.data?.assets ?? []).filter(asset => asset.verified).map(asset => asset.id));
       const completed = savedUploads.filter(saved => saved.verificationPending && verifiedIds.has(saved.assetId));
       for (const saved of completed) await deleteUpload(saved.key);
       if (completed.length) setSavedUploads(current => current.filter(saved => !verifiedIds.has(saved.assetId)));
-      announce(verifiedIds.size
-        ? "Asset status refreshed. Recorded storage verification is reflected in the asset list."
-        : "No verified result is recorded yet. Keep this asset pending; do not re-upload it.", "status", true);
+      const targetVerified = assetId ? verifiedIds.has(assetId) : completed.length > 0;
+      if (announceResult) announce(targetVerified
+        ? "Storage verification is recorded. The asset list has been refreshed."
+        : "No verified result is recorded yet. The asset remains pending; do not re-upload it.", targetVerified ? "success" : "status", true);
+      return targetVerified;
     } catch {
-      announce("Could not refresh asset status. The current asset remains unverified until the server confirms it.", "error", true);
+      if (announceResult) announce("Could not refresh asset status. The current asset remains unverified until the server confirms it.", "error", true);
+      return false;
     }
+  }
+
+  async function pollVerification(assetId: string) {
+    // The original server confirmation can continue after the browser-side timeout.
+    // Poll only the recorded asset state; never start another upload or confirmation here.
+    for (let attempt = 0; attempt < 40; attempt++) {
+      await new Promise(resolve => setTimeout(resolve, 3_000));
+      if (await refreshAssetStatus(assetId, false)) {
+        announce("Thumbnail/media verification completed. The asset is now shown as Ready.", "success", true);
+        return;
+      }
+    }
+    announce("Verification is still pending. The saved upload is retained; use Refresh status later. Do not re-upload.", "status", true);
   }
 
   async function download(id: string) {
@@ -662,6 +681,8 @@ function FilesPanel({
         <label className="mt-3 inline-flex cursor-pointer rounded-full border border-line bg-surface px-4 py-2 text-xs font-semibold">
           Browse files
           <input
+            id={`bridge-file-browser-${titleId}`}
+            name="bridge-file-browser"
             className="sr-only"
             type="file"
             multiple
@@ -877,6 +898,8 @@ function FileTypeCard({
         <label className="cursor-pointer rounded-full border border-line px-3 py-1.5 text-xs font-semibold">
           {busy ? "Working…" : status === "Ready" ? "Replace" : "Upload"}
           <input
+            id={`bridge-asset-file-${titleId}-${kind}`}
+            name={`bridge-asset-file-${kind}`}
             className="sr-only"
             type="file"
             accept={getOttIngestAccept(kind)}
