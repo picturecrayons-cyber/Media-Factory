@@ -8,13 +8,13 @@ import * as rights from "./rights-coverage.ts";
 
 // Execute the real server handler with isolated transport/database dependencies.
 // No database or AWS requests are made by this harness.
-function harness(grants: unknown[], allowed = true, existing = false) {
+function harness(grants: unknown[], allowed = true, existing = false, titleStatus = "LICENSED") {
   const writes: { query: string; values: unknown[] }[] = [];
   const title = {
     id: "title-1",
     slug: "film",
     name: "Film",
-    status: "LICENSED",
+    status: titleStatus,
     language: "Malayalam",
     master_key: "sealed/master",
     poster_key: "sealed/poster",
@@ -137,8 +137,9 @@ test("status alignment never bypasses operator, rights or commercial coverage", 
     { grants: [{ ...grant, territories: ["US"] }], allowed: true, data },
     { grants: [grant], allowed: false, data },
     { grants: [grant], allowed: true, data: { ...data, accessTier: "SVOD" } },
+    { grants: [grant], allowed: true, data, titleStatus: "IN_NEGOTIATION" },
   ]) {
-    const h = harness(scenario.grants, scenario.allowed);
+    const h = harness(scenario.grants, scenario.allowed, false, "titleStatus" in scenario ? scenario.titleStatus : "LICENSED");
     await assert.rejects(h.authorize({ context, data: scenario.data }));
     assert.equal(h.writes.length, 0);
   }
