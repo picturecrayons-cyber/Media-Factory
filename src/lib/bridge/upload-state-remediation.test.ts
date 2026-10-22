@@ -220,3 +220,30 @@ test("verification timeout warns that server-side work may still complete and re
   assert.match(route, /The server may still be finishing verification/);
   assert.match(route, /Refresh the asset list and check its status before retrying/);
 });
+
+
+test("concurrent upload preparation inserts at most one asset for a unique object key", async () => {
+  const db = new PGlite();
+  try {
+    await db.waitReady;
+    await db.exec(readFileSync(join(process.cwd(), "migrations/0004_bridge.sql"), "utf8"));
+    await db.exec(`
+      insert into bridge_titles (id, slug, name, owner_user_id, owner_account_type, status)
+      values ('title-idempotency-test', 'title-idempotency-test', 'Idempotency Test', 'owner-1', 'independent_creator', 'PREPARING');
+    `);
+    const insert = (id: string) => db.query<{ id: string }>(`
+      insert into bridge_assets (id, title_id, kind, s3_key, content_type, created_by)
+      values ($1, 'title-idempotency-test', 'master', 'bridge/owner-1/title-idempotency-test/master/file.mp4', 'video/mp4', 'owner-1')
+      on conflict (s3_key) do nothing
+      returning id
+    `, [id]);
+    const results = await Promise.all([insert("asset-attempt-a"), insert("asset-attempt-b")]);
+    assert.equal(results.reduce((count, result) => count + result.rows.length, 0), 1);
+    const stored = await db.query<{ count: string }>(
+      "select count(*)::text as count from bridge_assets where s3_key = 'bridge/owner-1/title-idempotency-test/master/file.mp4'",
+    );
+    assert.equal(stored.rows[0]?.count, "1");
+  } finally {
+    await db.close();
+  }
+});
