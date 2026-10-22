@@ -178,7 +178,7 @@ export const getLoopAnalyticsReport = createServerFn({ method: "GET" })
       select
         (select count(distinct user_id)::int from loop_profiles) as users_with_profiles,
         (select count(*)::int from loop_profiles where is_active = true) as active_profiles,
-        (select count(distinct user_id)::int from loop_profiles
+        (select count(*)::int from loop_profiles
           where created_at >= ${data.from}::timestamptz and created_at < ${data.to}::timestamptz) as profiles_created_in_period,
         (select count(distinct user_id)::int from loop_subscriptions
           where status = 'active' and expires_at > now()) as active_subscribers
