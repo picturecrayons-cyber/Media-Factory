@@ -530,7 +530,7 @@ function FilesPanel({
       announce(cancelled ? raw : preparationTimedOut
         ? reconciled
           ? "Upload preparation timed out. The asset list was refreshed; inspect existing asset status before retrying."
-          : "Upload preparation timed out and asset status could not be confirmed. Do not retry yet; refresh the asset list and inspect existing records."
+          : "Upload preparation timed out. Refresh the asset list and check its status before retrying; do not upload again until confirmed."
         : raw.toLowerCase().includes("asset record already exists")
           ? "An asset record already exists for this file. The asset list was refreshed; inspect its status before retrying."
           : verificationMayStillBeRunning
