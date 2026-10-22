@@ -441,19 +441,20 @@ function FilesPanel({
           await saveUpload(saved);
           setSavedUploads(current => [...current.filter(item => item.key !== key), saved!]);
         }
-        const totalParts = Math.ceil(file.size / MULTIPART_PART_SIZE);
+        const partSize = Math.max(MULTIPART_PART_SIZE, Math.ceil(file.size / 10_000));
+        const totalParts = Math.ceil(file.size / partSize);
         for (let partNumber = 1; partNumber <= totalParts; partNumber++) {
           assertAttemptActive();
           if (saved.completedParts.some(part => part.number === partNumber)) continue;
-          const loaded = Math.min(file.size, (partNumber - 1) * MULTIPART_PART_SIZE);
+          const loaded = Math.min(file.size, (partNumber - 1) * partSize);
           setProgress({ kind, phase: "transferring", percent: Math.floor(loaded / file.size * 100), etaSeconds: null, loaded, total: file.size });
           announce(`Uploading ${kind}: part ${partNumber} of ${totalParts}. Completed parts are saved for resume.`);
-          const part = await uploadMultipartPart(saved.multipartUrl, file, partNumber);
+          const part = await uploadMultipartPart(saved.multipartUrl, file, partNumber, partSize);
           saved.completedParts = [...saved.completedParts.filter(item => item.number !== partNumber), part];
           saved.updatedAt = Date.now();
           await saveUpload(saved);
           setSavedUploads(current => [...current.filter(item => item.key !== key), saved!]);
-          const after = Math.min(file.size, partNumber * MULTIPART_PART_SIZE);
+          const after = Math.min(file.size, partNumber * partSize);
           setProgress({ kind, phase: "transferring", percent: Math.floor(after / file.size * 100), etaSeconds: null, loaded: after, total: file.size });
         }
         assertAttemptActive();
@@ -819,7 +820,7 @@ function FileTypeCard({
           </p>
         </div>
         <label className="cursor-pointer rounded-full border border-line px-3 py-1.5 text-xs font-semibold">
-          {busy ? "Uploading…" : status === "Ready" ? "Replace" : "Upload"}
+          {busy ? "Working…" : status === "Ready" ? "Replace" : "Upload"}
           <input
             className="sr-only"
             type="file"
