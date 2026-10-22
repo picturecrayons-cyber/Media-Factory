@@ -485,6 +485,10 @@ function FilesPanel({
       }
       assertAttemptActive();
       setProgress({ kind, phase: "verifying", percent: null, etaSeconds: null, loaded: file.size, total: file.size });
+      saved.verificationPending = true;
+      saved.updatedAt = Date.now();
+      await saveUpload(saved);
+      setSavedUploads(current => [...current.filter(item => item.key !== key), saved!]);
       announce(`Upload transferred. Verifying stored ${kind} before marking it Ready…`);
       await withTimeout(confirmAssetUpload({ data: { assetId: saved.assetId, expectedByteSize: file.size } }), 55_000, "Stored-object verification");
       assertAttemptActive();
@@ -500,7 +504,10 @@ function FilesPanel({
       const raw = error instanceof Error ? error.message : "Upload failed";
       setProgress(null);
       const cancelled = cancelRequestedRef.current;
-      announce(cancelled ? raw : `${raw} Saved upload state is retained when possible. Use Resume instead of starting a duplicate attempt.`, "error", true);
+      const verificationMayStillBeRunning = raw.toLowerCase().includes("verification timed out") || raw.toLowerCase().includes("verification") && raw.toLowerCase().includes("timed out");
+      announce(cancelled ? raw : verificationMayStillBeRunning
+        ? `${raw} Server-side verification may still be running. Refresh asset status before taking further action; do not re-upload this file.`
+        : `${raw} Saved upload state is retained when possible. Use Resume only if this asset has not entered server-side verification.`, "error", true);
       return false;
     } finally {
       if (uploadAttemptRef.current === attemptId) {
@@ -588,6 +595,15 @@ function FilesPanel({
     queuePausedRef.current = true;
     setQueuePaused(true);
     if (!queueRunningRef.current) announce("Queue paused. Resume when ready.", "status");
+  }
+
+  async function refreshAssetStatus() {
+    try {
+      await onAssetsChanged();
+      announce("Asset status refreshed. Ready is shown only after server-side verification is recorded.", "status", true);
+    } catch {
+      announce("Could not refresh asset status. The current asset remains unverified until the server confirms it.", "error", true);
+    }
   }
 
   async function download(id: string) {
@@ -690,9 +706,13 @@ function FilesPanel({
               <div key={saved.key} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-line px-3 py-2">
                 <div className="min-w-0">
                   <p className="truncate text-sm font-medium">{saved.filename}</p>
-                  <p className="text-xs text-muted">{saved.kind.replaceAll("_", " ")} · {(saved.file.size / (1024 * 1024)).toFixed(1)} MB · {saved.completedParts.length} parts saved</p>
+                  <p className="text-xs text-muted">{saved.kind.replaceAll("_", " ")} · {(saved.file.size / (1024 * 1024)).toFixed(1)} MB · {saved.completedParts.length} parts saved{saved.verificationPending ? " · server verification pending; do not re-upload" : ""}</p>
                 </div>
-                <button type="button" disabled={Boolean(uploading) || !canUpload} onClick={() => void uploadFile(saved.kind as SimpleAssetKind, saved.file)} className="rounded-full border border-line px-3 py-1.5 text-xs font-semibold disabled:opacity-50">Resume</button>
+                {saved.verificationPending ? (
+                  <button type="button" onClick={() => void refreshAssetStatus()} className="rounded-full border border-line px-3 py-1.5 text-xs font-semibold">Refresh status</button>
+                ) : (
+                  <button type="button" disabled={Boolean(uploading) || !canUpload} onClick={() => void uploadFile(saved.kind as SimpleAssetKind, saved.file)} className="rounded-full border border-line px-3 py-1.5 text-xs font-semibold disabled:opacity-50">Resume</button>
+                )}
               </div>
             ))}
           </div>
@@ -712,7 +732,9 @@ function FilesPanel({
                   : "Refreshing the verified asset list…"}
               </p>
             </div>
-            <button
+            {progress.phase === "verifying" || progress.phase === "refreshing" ? (
+              <button type="button" onClick={() => void refreshAssetStatus()} className="rounded-full border border-line px-3 py-1.5 text-xs font-semibold">Refresh status</button>
+            ) : <button
               type="button"
               onClick={() => {
                 cancelRequestedRef.current = true;
@@ -731,7 +753,7 @@ function FilesPanel({
               className="rounded-full border border-line px-3 py-1.5 text-xs font-semibold"
             >
               {progress.total >= MULTIPART_THRESHOLD && progress.phase === "transferring" ? "Pause after part" : "Cancel upload"}
-            </button>
+            </button>}
           </div>
           <div
             className="mt-3 h-2.5 overflow-hidden rounded-full bg-line"
@@ -746,7 +768,7 @@ function FilesPanel({
               style={progress.percent === null ? undefined : { width: `${progress.percent}%` }}
             />
           </div>
-          <p className="mt-2 text-xs text-muted">The file is not Ready until server-side storage verification succeeds.</p>
+          <p className="mt-2 text-xs text-muted">{progress.phase === "verifying" || progress.phase === "refreshing" ? "Verification runs on the server and cannot be cancelled from this screen. Refresh status to check the recorded result; do not re-upload while verification is pending." : "The file is not Ready until server-side storage verification succeeds."}</p>
         </div>
       ) : null}
 
@@ -756,7 +778,7 @@ function FilesPanel({
             key={kind}
             kind={kind}
             label={label}
-            status={assets.some((a) => (a.kind === kind || (kind === "poster_vertical" && a.kind === "poster")) && a.verified) ? "Ready" : empty}
+            status={assets.some((a) => (a.kind === kind || (kind === "poster_vertical" && a.kind === "poster")) && a.verified) ? "Ready" : assets.some((a) => (a.kind === kind || (kind === "poster_vertical" && a.kind === "poster")) && !a.verified) ? "Verification pending" : empty}
             busy={uploading === kind}
             canUpload={canUpload}
             onFile={(file) => void uploadFile(kind, file)}
