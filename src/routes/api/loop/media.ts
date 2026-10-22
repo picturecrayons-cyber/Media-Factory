@@ -152,6 +152,7 @@ async function serveLoopMedia(request: Request) {
       streamUrl: signed.url,
       expiresInSeconds: 300,
       storageAuthority: "bridge-oci",
+      supabaseProjectRef: bridgeEnv.supabaseProjectRef(),
     }, { headers: { "Cache-Control": "no-store, private" } });
   } catch {
     return errorResponse(503, "BRIDGE_STORAGE_UNAVAILABLE", "Bridge storage is temporarily unavailable");
