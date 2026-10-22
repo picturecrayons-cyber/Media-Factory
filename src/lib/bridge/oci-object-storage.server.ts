@@ -278,7 +278,12 @@ async function pollWorkRequest(
       await new Promise((resolve) => setTimeout(resolve, Math.min(pollIntervalMs, remainingAfterPoll)));
     }
   }
-  throw new Error(`OCI object copy did not complete within 45 seconds (last status: ${lastStatus})`);
+  console.error("[bridge-oci] copy work request exceeded polling deadline", {
+    workRequestId,
+    lastStatus,
+    elapsedMs: Date.now() - startTime,
+  });
+  throw new Error(`OCI object copy did not complete within 45 seconds (last status: ${lastStatus}; work request: ${workRequestId})`);
 }
 
 /** Copy a verified upload into an immutable destination key. */
@@ -304,8 +309,17 @@ export async function sealVerifiedObject(
       destinationObjectName: destinationKey,
     },
   });
-  if (res.status !== 202 && !res.ok) throw new Error(`OCI object copy failed (${res.status})`);
+  if (res.status !== 202 && !res.ok) {
+    const requestId = res.headers.get("opc-request-id");
+    console.error("[bridge-oci] copy request rejected", { status: res.status, requestId });
+    throw new Error(`OCI object copy failed (${res.status})${requestId ? ` (request: ${requestId})` : ""}`);
+  }
   const workRequestId = res.headers.get("opc-work-request-id");
+  if (res.status === 202 && !workRequestId) {
+    const requestId = res.headers.get("opc-request-id");
+    console.error("[bridge-oci] accepted copy response omitted work-request id", { requestId });
+    throw new Error("OCI copy was accepted without a work-request ID; destination verification was not attempted");
+  }
   if (workRequestId) await pollWorkRequest(cfg, workRequestId, pollOpts);
   return verifyObject(destinationKey);
 }
