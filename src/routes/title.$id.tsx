@@ -712,7 +712,7 @@ function FilesPanel({
               }}
               className="rounded-full border border-line px-3 py-1.5 text-xs font-semibold"
             >
-              Cancel upload
+              {progress.total >= MULTIPART_THRESHOLD && progress.phase === "transferring" ? "Pause after part" : "Cancel upload"}
             </button>
           </div>
           <div
