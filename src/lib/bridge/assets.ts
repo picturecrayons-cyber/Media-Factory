@@ -241,7 +241,7 @@ export const listTitleAssets = createServerFn({ method: "GET" })
     `;
     return {
       assets: rows
-        .filter((r) => !buyer || !["master", "technical", "censor_certificate"].includes(r.kind))
+        .filter((r) => (!buyer || Number(r.byte_size ?? 0) > 0) && (!buyer || !["master", "technical", "censor_certificate"].includes(r.kind)))
         .map((r) => ({
           id: r.id,
           kind: r.kind,
