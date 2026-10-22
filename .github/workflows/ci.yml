@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: ["main", "feat/crayons-bridge-production", "fix/bridge-production-gate-20260923", "fix/bridge-final-production-gate-20260924"]
+    branches: ["main", "feat/crayons-bridge-production", "fix/bridge-production-gate-20260923", "fix/bridge-final-production-gate-20260924", "feat/bridge-autosave-resumable-multipart", "fix/bridge-upload-timeout-reconciliation"]
   pull_request:
-    branches: ["main"]
+    branches: ["main", "feat/bridge-autosave-resumable-multipart", "feat/bridge-drag-drop-upload-queue"]
   workflow_dispatch:
 
 jobs:

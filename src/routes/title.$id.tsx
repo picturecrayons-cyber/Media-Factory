@@ -4,7 +4,7 @@ import { WorkflowDesk } from "@/components/bridge/workflow-desk";
 import { publicationIsActive } from "@/lib/bridge/workflow-policy";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { getTitle, updateTitle } from "@/lib/bridge/titles";
@@ -23,6 +23,7 @@ import {
   validateOttIngestFile,
 } from "@/lib/bridge/ott-ingest-spec";
 import { asciiUploadName } from "@/lib/bridge/latin1";
+import { commitMultipart, deleteUpload, getUpload, listUploads, MULTIPART_PART_SIZE, MULTIPART_THRESHOLD, saveUpload, startMultipart, uploadKey, uploadMultipartPart, type SavedUpload } from "@/lib/bridge/resumable-upload";
 
 export const Route = createFileRoute("/title/$id")({ component: TitlePage });
 
@@ -40,6 +41,8 @@ function LaneStore({ titleId, stored, locked }: { titleId: string; stored: strin
     <label className="mt-4 block text-sm">
       Stored for Loop preview
       <select
+        id={`bridge-loop-lane-${titleId}`}
+        name="loop-lane"
         value={value}
         disabled={locked || save.isPending}
         onChange={(event) => {
@@ -242,6 +245,7 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
             ["DRAFT", "UPLOADING", "PREPARING"].includes(title.status)
           }
           titleId={id}
+          userId={actor.userId}
           assets={assets}
           onAssetsChanged={() => assetsQ.refetch()}
         />
@@ -298,12 +302,14 @@ function notifyUpload(message: string) {
 
 function FilesPanel({
   titleId,
+  userId,
   assets,
   onAssetsChanged,
   canUpload,
 }: {
   canUpload: boolean;
   titleId: string;
+  userId: string;
   assets: Array<{
     id: string;
     kind: string;
@@ -321,6 +327,15 @@ function FilesPanel({
   );
   const [progress, setProgress] = useState<UploadProgress | null>(null);
   const [queuedUploads, setQueuedUploads] = useState<QueuedUpload[]>([]);
+  const [savedUploads, setSavedUploads] = useState<SavedUpload[]>([]);
+  useEffect(() => {
+    let active = true;
+    setSavedUploads([]);
+    void listUploads().then(items => { if (active) setSavedUploads(items.filter(item => item.titleId === titleId && item.userId === userId)); }).catch(() => {
+      if (active) announce("Resumable upload storage is unavailable in this browser.", "error");
+    });
+    return () => { active = false; };
+  }, [titleId, userId]);
   const [queueRunning, setQueueRunning] = useState(false);
   const [queuePaused, setQueuePaused] = useState(false);
   const [dragActive, setDragActive] = useState(false);
@@ -343,7 +358,9 @@ function FilesPanel({
       return await Promise.race([
         operation,
         new Promise<T>((_, reject) => {
-          timer = setTimeout(() => reject(new Error(`${phase} timed out. Please retry the upload.`)), timeoutMs);
+          timer = setTimeout(() => reject(new Error(phase.toLowerCase().includes("verification")
+            ? `${phase} timed out. The server may still be finishing verification; do not re-upload this file. Bridge will keep checking the saved asset status.`
+            : `${phase} timed out. The operation may still be running; refresh status before retrying.`)), timeoutMs);
         }),
       ]);
     } finally {
@@ -402,79 +419,109 @@ function FilesPanel({
     const filename = asciiUploadName(file.name);
     const contentType = file.type || "application/octet-stream";
     const validation = validateOttIngestFile({ kind, filename, contentType });
-    if (!validation.ok) {
-      announce(validation.message, "error");
-      return false;
-    }
-
+    if (!validation.ok) { announce(validation.message, "error"); return false; }
     cancelRequestedRef.current = false;
     const attemptId = ++uploadAttemptRef.current;
     const assertAttemptActive = () => {
-      if (cancelRequestedRef.current || uploadAttemptRef.current !== attemptId) {
-        throw new Error("Upload cancelled. No further transfer or confirmation will be started by this attempt.");
-      }
+      if (cancelRequestedRef.current || uploadAttemptRef.current !== attemptId) throw new Error("Upload cancelled; this attempt will not continue.");
     };
+    const key = uploadKey(userId, titleId, kind, file);
     setUploading(kind);
     setProgress({ kind, phase: "preparing", percent: null, etaSeconds: null, loaded: 0, total: file.size });
-    announce(`Preparing ${kind} upload. You can follow progress here.`);
-    let transferTimer: ReturnType<typeof setTimeout> | undefined;
+    announce(`Preparing ${kind} upload.`);
+    let saved: SavedUpload | undefined;
     try {
-      const signed = await withTimeout(
-        requestAssetUpload({ data: { titleId, kind, filename, contentType } }),
-        20_000,
-        "Upload URL preparation",
-      );
-
-      // Cancellation can happen while URL preparation is pending. Never start a PUT for a stale attempt.
+      saved = await getUpload(key);
+      if (!saved) {
+        const signed = await withTimeout(
+          requestAssetUpload({ data: { titleId, kind, filename, contentType, fileSize: file.size } }),
+          20_000, "Upload URL preparation",
+        );
+        saved = { key, titleId, userId, kind, filename, contentType, file, assetId: signed.assetId, parUrl: signed.url, completedParts: [], updatedAt: Date.now() };
+        await saveUpload(saved);
+        setSavedUploads(current => [...current.filter(item => item.key !== key), saved!]);
+      }
       assertAttemptActive();
-      // Use the OCI pre-authenticated URL verbatim; rewriting its encoded path can invalidate it.
-      setProgress({ kind, phase: "transferring", percent: 0, etaSeconds: null, loaded: 0, total: file.size });
-      announce(`Uploading ${kind}…`);
-      transferTimer = setTimeout(() => uploadXhrRef.current?.abort(), 120_000);
-      await transferWithProgress(kind, signed.url, signed.method, file, contentType);
+      if (file.size >= MULTIPART_THRESHOLD) {
+        if (!saved.multipartUrl) {
+          announce("Starting secure multipart session…");
+          saved.multipartUrl = await startMultipart(saved.parUrl, contentType);
+          saved.updatedAt = Date.now();
+          await saveUpload(saved);
+          setSavedUploads(current => [...current.filter(item => item.key !== key), saved!]);
+        }
+        const partSize = Math.max(MULTIPART_PART_SIZE, Math.ceil(file.size / 10_000));
+        const totalParts = Math.ceil(file.size / partSize);
+        for (let partNumber = 1; partNumber <= totalParts; partNumber++) {
+          assertAttemptActive();
+          if (saved.completedParts.some(part => part.number === partNumber)) continue;
+          const loaded = Math.min(file.size, (partNumber - 1) * partSize);
+          setProgress({ kind, phase: "transferring", percent: Math.floor(loaded / file.size * 100), etaSeconds: null, loaded, total: file.size });
+          announce(`Uploading ${kind}: part ${partNumber} of ${totalParts}. Completed parts are saved for resume.`);
+          const part = await uploadMultipartPart(saved.multipartUrl, file, partNumber, partSize);
+          saved.completedParts = [...saved.completedParts.filter(item => item.number !== partNumber), part];
+          saved.updatedAt = Date.now();
+          await saveUpload(saved);
+          setSavedUploads(current => [...current.filter(item => item.key !== key), saved!]);
+          const after = Math.min(file.size, partNumber * partSize);
+          setProgress({ kind, phase: "transferring", percent: Math.floor(after / file.size * 100), etaSeconds: null, loaded: after, total: file.size });
+        }
+        assertAttemptActive();
+        announce("All parts uploaded. Committing multipart object…");
+        try {
+          await commitMultipart(saved.multipartUrl);
+        } catch (commitError) {
+          // A dropped response can hide a successful commit. Mark the asset as pending
+          // before reconciliation so the UI never offers a blind re-upload.
+          setProgress({ kind, phase: "verifying", percent: null, etaSeconds: null, loaded: file.size, total: file.size });
+          saved.verificationPending = true;
+          saved.updatedAt = Date.now();
+          await saveUpload(saved);
+          setSavedUploads(current => [...current.filter(item => item.key !== key), saved!]);
+          announce("Multipart commit response was lost. Checking the existing asset; do not re-upload it.", "status", true);
+          try {
+            await withTimeout(
+              confirmAssetUpload({ data: { assetId: saved.assetId, expectedByteSize: file.size } }),
+              55_000,
+              "Multipart commit reconciliation",
+            );
+          } catch {
+            throw commitError;
+          }
+        }
+      } else {
+        setProgress({ kind, phase: "transferring", percent: 0, etaSeconds: null, loaded: 0, total: file.size });
+        announce(`Uploading ${kind}…`);
+        await transferWithProgress(kind, saved.parUrl, "PUT", file, contentType);
+      }
       assertAttemptActive();
-      if (transferTimer !== undefined) clearTimeout(transferTimer);
-      transferTimer = undefined;
-
       setProgress({ kind, phase: "verifying", percent: null, etaSeconds: null, loaded: file.size, total: file.size });
+      saved.verificationPending = true;
+      saved.updatedAt = Date.now();
+      await saveUpload(saved);
+      setSavedUploads(current => [...current.filter(item => item.key !== key), saved!]);
       announce(`Upload transferred. Verifying stored ${kind} before marking it Ready…`);
+      await withTimeout(confirmAssetUpload({ data: { assetId: saved.assetId, expectedByteSize: file.size } }), 55_000, "Stored-object verification");
       assertAttemptActive();
-      await withTimeout(
-        confirmAssetUpload({ data: { assetId: signed.assetId, expectedByteSize: file.size } }),
-        55_000,
-        "Stored-object verification",
-      );
-      assertAttemptActive();
-
       setProgress({ kind, phase: "refreshing", percent: null, etaSeconds: null, loaded: file.size, total: file.size });
-      announce("Storage verified. Refreshing the asset list…");
       await withTimeout(Promise.resolve(onAssetsChanged()), 15_000, "Asset refresh");
-      assertAttemptActive();
+      await deleteUpload(key);
+      setSavedUploads(current => current.filter(item => item.key !== key));
       setProgress(null);
       announce(`${kind[0].toUpperCase() + kind.slice(1)} is ready after storage verification.`, "success", true);
       return true;
     } catch (error) {
-      // A cancelled/superseded attempt must not overwrite the status of a newer upload.
       if (uploadAttemptRef.current !== attemptId) return false;
       const raw = error instanceof Error ? error.message : "Upload failed";
       setProgress(null);
       const cancelled = cancelRequestedRef.current;
-      let detail = raw;
-      if (raw.includes("STORAGE_UNAVAILABLE")) {
-        detail = "Storage service is currently unavailable. Check the isolated Preview configuration, then select the file again to retry.";
-      } else if (error instanceof TypeError) {
-        detail = "The browser could not reach OCI storage. Check the OCI bucket CORS rule for this Preview origin, PUT method and Content-Type header, then select the file again to retry.";
-      } else if (raw.includes("Stored-object verification timed out")) {
-        // A browser timeout cannot cancel server-side verification. Avoid claiming
-        // the asset is unverified or encouraging a blind retry while that request runs.
-        detail = `${raw} The server may still be finishing verification. Refresh the asset list and check its status before retrying.`;
-      } else if (!cancelled && !raw.includes("No Ready status")) {
-        detail = `${raw} Refresh the asset list to confirm its status before retrying.`;
-      }
-      announce(detail, "error", true);
+      const verificationMayStillBeRunning = raw.toLowerCase().includes("verification timed out") || raw.toLowerCase().includes("verification") && raw.toLowerCase().includes("timed out");
+      announce(cancelled ? raw : verificationMayStillBeRunning
+        ? "Verification is taking longer than expected. Checking the existing asset automatically; do not re-upload."
+        : `${raw} Saved upload state is retained when possible. Use Resume only if this asset has not entered server-side verification.`, verificationMayStillBeRunning ? "status" : "error", true);
+      if (verificationMayStillBeRunning && saved?.assetId) void pollVerification(saved.assetId);
       return false;
     } finally {
-      if (transferTimer !== undefined) clearTimeout(transferTimer);
       if (uploadAttemptRef.current === attemptId) {
         uploadXhrRef.current = null;
         cancelRequestedRef.current = false;
@@ -562,6 +609,37 @@ function FilesPanel({
     if (!queueRunningRef.current) announce("Queue paused. Resume when ready.", "status");
   }
 
+  async function refreshAssetStatus(assetId?: string, announceResult = true) {
+    try {
+      const result = await onAssetsChanged() as { data?: { assets?: Array<{ id: string; verified: boolean }> } };
+      const verifiedIds = new Set((result?.data?.assets ?? []).filter(asset => asset.verified).map(asset => asset.id));
+      const completed = savedUploads.filter(saved => saved.verificationPending && verifiedIds.has(saved.assetId));
+      for (const saved of completed) await deleteUpload(saved.key);
+      if (completed.length) setSavedUploads(current => current.filter(saved => !verifiedIds.has(saved.assetId)));
+      const targetVerified = assetId ? verifiedIds.has(assetId) : completed.length > 0;
+      if (announceResult) announce(targetVerified
+        ? "Storage verification is recorded. The asset list has been refreshed."
+        : "No verified result is recorded yet. The asset remains pending; do not re-upload it.", targetVerified ? "success" : "status", true);
+      return targetVerified;
+    } catch {
+      if (announceResult) announce("Could not refresh asset status. The current asset remains unverified until the server confirms it.", "error", true);
+      return false;
+    }
+  }
+
+  async function pollVerification(assetId: string) {
+    // The original server confirmation can continue after the browser-side timeout.
+    // Poll only the recorded asset state; never start another upload or confirmation here.
+    for (let attempt = 0; attempt < 40; attempt++) {
+      await new Promise(resolve => setTimeout(resolve, 3_000));
+      if (await refreshAssetStatus(assetId, false)) {
+        announce("Thumbnail/media verification completed. The asset is now shown as Ready.", "success", true);
+        return;
+      }
+    }
+    announce("Verification is still pending. The saved upload is retained; use Refresh status later. Do not re-upload.", "status", true);
+  }
+
   async function download(id: string) {
     const signed = await requestAssetDownload({ data: { assetId: id } });
     window.location.assign(signed.url);
@@ -606,6 +684,8 @@ function FilesPanel({
         <label className="mt-3 inline-flex cursor-pointer rounded-full border border-line bg-surface px-4 py-2 text-xs font-semibold">
           Browse files
           <input
+            id={`bridge-file-browser-${titleId}`}
+            name="bridge-file-browser"
             className="sr-only"
             type="file"
             multiple
@@ -638,7 +718,7 @@ function FilesPanel({
                   <p className="text-xs text-muted">{item.kind.replaceAll("_", " ")} · {(item.file.size / (1024 * 1024)).toFixed(1)} MB</p>
                   {item.error ? <p className="text-xs text-red-700">{item.error}</p> : null}
                 </div>
-                <select aria-label={`Media slot for ${item.file.name}`} value={item.kind} disabled={queueRunning || item.status === "done"} onChange={(event) => {
+                <select id={`bridge-queue-slot-${item.id}`} name={`bridge-queue-slot-${item.id}`} aria-label={`Media slot for ${item.file.name}`} value={item.kind} disabled={queueRunning || item.status === "done"} onChange={(event) => {
                   const kind = event.target.value as SimpleAssetKind;
                   const validation = validateOttIngestFile({ kind, filename: asciiUploadName(item.file.name), contentType: item.file.type || "application/octet-stream" });
                   setQueuedUploads((current) => current.map((entry) => entry.id === item.id ? { ...entry, kind, status: validation.ok ? "queued" : "invalid", error: validation.ok ? undefined : validation.message } : entry));
@@ -647,6 +727,28 @@ function FilesPanel({
                 </select>
                 <span className="text-xs font-semibold">{item.status === "done" ? "Verified" : item.status === "uploading" ? "Uploading" : item.status === "failed" ? "Failed" : item.status === "invalid" ? "Check file" : "Queued"}</span>
                 {!queueRunning && item.status !== "done" ? <button type="button" aria-label={`Remove ${item.file.name} from queue`} onClick={() => setQueuedUploads((current) => current.filter((entry) => entry.id !== item.id))} className="rounded-full border border-line px-2 py-1 text-xs">Remove</button> : null}
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      {savedUploads.length ? (
+        <div className="mt-5 rounded-xl border border-line p-4">
+          <p className="text-sm font-semibold">Saved uploads · Resume</p>
+          <p className="mt-1 text-xs text-muted">Files and completed multipart parts are saved in this browser. Keep using this browser and profile; secure upload links expire.</p>
+          <div className="mt-3 space-y-2">
+            {savedUploads.map((saved) => (
+              <div key={saved.key} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-line px-3 py-2">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium">{saved.filename}</p>
+                  <p className="text-xs text-muted">{saved.kind.replaceAll("_", " ")} · {(saved.file.size / (1024 * 1024)).toFixed(1)} MB · {saved.completedParts.length} parts saved{saved.verificationPending ? " · server verification pending; do not re-upload" : ""}</p>
+                </div>
+                {saved.verificationPending ? (
+                  <button type="button" onClick={() => void refreshAssetStatus()} className="rounded-full border border-line px-3 py-1.5 text-xs font-semibold">Refresh status</button>
+                ) : (
+                  <button type="button" disabled={Boolean(uploading) || !canUpload} onClick={() => void uploadFile(saved.kind as SimpleAssetKind, saved.file)} className="rounded-full border border-line px-3 py-1.5 text-xs font-semibold disabled:opacity-50">Resume</button>
+                )}
               </div>
             ))}
           </div>
@@ -666,23 +768,28 @@ function FilesPanel({
                   : "Refreshing the verified asset list…"}
               </p>
             </div>
-            <button
+            {progress.phase === "verifying" || progress.phase === "refreshing" ? (
+              <button type="button" onClick={() => void refreshAssetStatus()} className="rounded-full border border-line px-3 py-1.5 text-xs font-semibold">Refresh status</button>
+            ) : <button
               type="button"
               onClick={() => {
                 cancelRequestedRef.current = true;
-                // Invalidate this attempt so a late URL-preparation result cannot start a PUT.
+                if (progress.total >= MULTIPART_THRESHOLD && progress.phase === "transferring") {
+                  // OCI cannot pause an in-flight part. Let it finish, persist its checkpoint, then stop before the next part/commit.
+                  announce("Pausing after the current part. Completed parts are saved; use Resume to continue.", "status", true);
+                  return;
+                }
+                // Invalidate a single-PUT/preparation attempt so a late URL result cannot start a transfer.
                 uploadAttemptRef.current += 1;
                 uploadXhrRef.current?.abort();
                 setProgress(null);
                 announce("Upload cancelled. Any pending preparation result will be ignored; no new transfer will start from this attempt.", "error", true);
-                if (!uploadXhrRef.current) {
-                  setUploading(null);
-                }
+                if (!uploadXhrRef.current) setUploading(null);
               }}
               className="rounded-full border border-line px-3 py-1.5 text-xs font-semibold"
             >
-              Cancel upload
-            </button>
+              {progress.total >= MULTIPART_THRESHOLD && progress.phase === "transferring" ? "Pause after part" : "Cancel upload"}
+            </button>}
           </div>
           <div
             className="mt-3 h-2.5 overflow-hidden rounded-full bg-line"
@@ -697,7 +804,7 @@ function FilesPanel({
               style={progress.percent === null ? undefined : { width: `${progress.percent}%` }}
             />
           </div>
-          <p className="mt-2 text-xs text-muted">The file is not Ready until server-side storage verification succeeds.</p>
+          <p className="mt-2 text-xs text-muted">{progress.phase === "verifying" || progress.phase === "refreshing" ? "Verification runs on the server and cannot be cancelled from this screen. Refresh status to check the recorded result; do not re-upload while verification is pending." : "The file is not Ready until server-side storage verification succeeds."}</p>
         </div>
       ) : null}
 
@@ -705,9 +812,10 @@ function FilesPanel({
         {cards.map(([kind, label, empty]) => (
           <FileTypeCard
             key={kind}
+            titleId={titleId}
             kind={kind}
             label={label}
-            status={assets.some((a) => (a.kind === kind || (kind === "poster_vertical" && a.kind === "poster")) && a.verified) ? "Ready" : empty}
+            status={assets.some((a) => (a.kind === kind || (kind === "poster_vertical" && a.kind === "poster")) && a.verified) ? "Ready" : assets.some((a) => (a.kind === kind || (kind === "poster_vertical" && a.kind === "poster")) && !a.verified) ? "Verification pending" : empty}
             busy={uploading === kind}
             canUpload={canUpload}
             onFile={(file) => void uploadFile(kind, file)}
@@ -766,6 +874,7 @@ function FilesPanel({
   );
 }
 function FileTypeCard({
+  titleId,
   kind,
   label,
   status,
@@ -774,6 +883,7 @@ function FileTypeCard({
   canUpload,
 }: {
   canUpload: boolean;
+  titleId: string;
   kind: SimpleAssetKind;
   label: string;
   status: string;
@@ -792,8 +902,10 @@ function FileTypeCard({
           </p>
         </div>
         <label className="cursor-pointer rounded-full border border-line px-3 py-1.5 text-xs font-semibold">
-          {busy ? "Uploading…" : status === "Ready" ? "Replace" : "Upload"}
+          {busy ? "Working…" : status === "Ready" ? "Replace" : "Upload"}
           <input
+            id={`bridge-asset-file-${titleId}-${kind}`}
+            name={`bridge-asset-file-${kind}`}
             className="sr-only"
             type="file"
             accept={getOttIngestAccept(kind)}
