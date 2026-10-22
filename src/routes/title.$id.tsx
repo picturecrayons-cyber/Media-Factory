@@ -466,8 +466,14 @@ function FilesPanel({
         try {
           await commitMultipart(saved.multipartUrl);
         } catch (commitError) {
-          // A dropped response can hide a successful commit. Reconcile via the existing
-          // server-side verification path before asking the user to start a new upload.
+          // A dropped response can hide a successful commit. Mark the asset as pending
+          // before reconciliation so the UI never offers a blind re-upload.
+          setProgress({ kind, phase: "verifying", percent: null, etaSeconds: null, loaded: file.size, total: file.size });
+          saved.verificationPending = true;
+          saved.updatedAt = Date.now();
+          await saveUpload(saved);
+          setSavedUploads(current => [...current.filter(item => item.key !== key), saved!]);
+          announce("Multipart commit response was lost. Checking the existing asset; do not re-upload it.", "status", true);
           try {
             await withTimeout(
               confirmAssetUpload({ data: { assetId: saved.assetId, expectedByteSize: file.size } }),
