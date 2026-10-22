@@ -243,6 +243,7 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
             ["DRAFT", "UPLOADING", "PREPARING"].includes(title.status)
           }
           titleId={id}
+          userId={actor.userId}
           assets={assets}
           onAssetsChanged={() => assetsQ.refetch()}
         />
@@ -299,12 +300,14 @@ function notifyUpload(message: string) {
 
 function FilesPanel({
   titleId,
+  userId,
   assets,
   onAssetsChanged,
   canUpload,
 }: {
   canUpload: boolean;
   titleId: string;
+  userId: string;
   assets: Array<{
     id: string;
     kind: string;
@@ -325,11 +328,11 @@ function FilesPanel({
   const [savedUploads, setSavedUploads] = useState<SavedUpload[]>([]);
   useEffect(() => {
     let active = true;
-    void listUploads().then(items => { if (active) setSavedUploads(items.filter(item => item.titleId === titleId)); }).catch(() => {
+    void listUploads().then(items => { if (active) setSavedUploads(items.filter(item => item.titleId === titleId && item.userId === userId)); }).catch(() => {
       if (active) announce("Resumable upload storage is unavailable in this browser.", "error");
     });
     return () => { active = false; };
-  }, [titleId]);
+  }, [titleId, userId]);
   const [queueRunning, setQueueRunning] = useState(false);
   const [queuePaused, setQueuePaused] = useState(false);
   const [dragActive, setDragActive] = useState(false);
@@ -417,7 +420,7 @@ function FilesPanel({
     const assertAttemptActive = () => {
       if (cancelRequestedRef.current || uploadAttemptRef.current !== attemptId) throw new Error("Upload cancelled; this attempt will not continue.");
     };
-    const key = uploadKey(titleId, kind, file);
+    const key = uploadKey(userId, titleId, kind, file);
     setUploading(kind);
     setProgress({ kind, phase: "preparing", percent: null, etaSeconds: null, loaded: 0, total: file.size });
     announce(`Preparing ${kind} upload.`);
@@ -428,7 +431,7 @@ function FilesPanel({
           requestAssetUpload({ data: { titleId, kind, filename, contentType, fileSize: file.size } }),
           20_000, "Upload URL preparation",
         );
-        saved = { key, titleId, kind, filename, contentType, file, assetId: signed.assetId, parUrl: signed.url, completedParts: [], updatedAt: Date.now() };
+        saved = { key, titleId, userId, kind, filename, contentType, file, assetId: signed.assetId, parUrl: signed.url, completedParts: [], updatedAt: Date.now() };
         await saveUpload(saved);
         setSavedUploads(current => [...current.filter(item => item.key !== key), saved!]);
       }
