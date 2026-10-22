@@ -723,7 +723,7 @@ function FilesPanel({
           <div key={a.id} className="flex items-center justify-between gap-3 rounded-xl border border-line p-4">
             <div>
               <p className="text-sm font-semibold">{a.kind}</p>
-              <p className="text-xs text-muted">{a.verified ? "Storage verified (QC is separate)" : "Pending storage verification · not Ready"}</p>
+              <p className="text-xs text-muted">{a.verified ? "Storage verified (QC is separate)" : "Not storage-verified · check status before retrying"}</p>
             </div>
             {a.verified ? (
               <button
