@@ -23,7 +23,7 @@ import {
   validateOttIngestFile,
 } from "@/lib/bridge/ott-ingest-spec";
 import { asciiUploadName } from "@/lib/bridge/latin1";
-import { commitMultipart, deleteUpload, getUpload, listUploads, MULTIPART_PART_SIZE, MULTIPART_THRESHOLD, saveUpload, startMultipart, uploadKey, uploadMultipartPart, type SavedUpload } from "@/lib/bridge/resumable-upload.client";
+import { commitMultipart, deleteUpload, getUpload, listUploads, MULTIPART_PART_SIZE, MULTIPART_THRESHOLD, saveUpload, startMultipart, uploadKey, uploadMultipartPart, type SavedUpload } from "@/lib/bridge/resumable-upload";
 
 export const Route = createFileRoute("/title/$id")({ component: TitlePage });
 
