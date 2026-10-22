@@ -3,7 +3,6 @@ import { z } from "zod";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import { assertPermission } from "@/lib/bridge/rbac";
-import { requireVerifiedActor } from "@/lib/bridge/session";
 import { assertNotDevUser } from "@/lib/bridge/guards";
 
 export const loopAnalyticsEventInput = z.object({
@@ -25,7 +24,6 @@ export const recordLoopAnalyticsEvent = createServerFn({ method: "POST" })
   .validator(loopAnalyticsEventInput)
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
-    const actor = await requireVerifiedActor(context.userId);
     const sql = await getSql();
 
     const eligible = await sql<{
@@ -39,21 +37,50 @@ export const recordLoopAnalyticsEvent = createServerFn({ method: "POST" })
         and p.authorization_status = 'authorized'
         and l.published = true
         and l.listed = true
+        and l.status = 'approved'
         and (p.window_start is null or p.window_start <= now())
-        and (p.window_end is null or p.window_end > now())
-        and p.exploitation_models @> array['TVOD']::text[]
+        and (p.window_end is null or p.window_end >= now())
       limit 1
     `;
     const publication = eligible[0];
     if (!publication) throw new Error("Title is not authorized for Loop analytics");
 
-    // The server resolves the authenticated user; no client-supplied identity,
-    // price, order, payment, entitlement, or arbitrary metadata is accepted.
+    // Playback events require server-verified access for this exact Loop title.
+    // Views can be recorded without playback entitlement; playback cannot.
+    if (data.eventType !== "TITLE_VIEW") {
+      const access = await sql<{ access_tier: string }>`
+        select access_tier from loop_titles where id = ${publication.loop_title_id} limit 1
+      `;
+      const tier = access[0]?.access_tier;
+      let canPlay = tier === "FREE";
+      if (tier === "SVOD") {
+        const subscriptions = await sql<{ id: number }>`
+          select id from loop_subscriptions
+          where user_id = ${context.userId} and status = 'active'
+            and (expires_at is null or expires_at > now())
+          limit 1
+        `;
+        canPlay = subscriptions.length > 0;
+      } else if (tier === "TVOD") {
+        const entitlements = await sql<{ id: number }>`
+          select id from loop_entitlements
+          where user_id = ${context.userId}
+            and loop_title_id = ${publication.loop_title_id}
+            and (expires_at is null or expires_at > now())
+          limit 1
+        `;
+        canPlay = entitlements.length > 0;
+      }
+      if (!canPlay) throw new Error("Playback entitlement required for this title");
+    }
+
+    // Identity comes from the authenticated Loop session. No client-supplied user,
+    // price, order, payment, or arbitrary metadata is accepted.
     const inserted = await sql<{ event_id: string }>`
       insert into bridge_loop_analytics_events
         (event_id, user_id, bridge_title_id, loop_title_id, session_id, event_type, watched_seconds)
       values (
-        ${data.eventId}, ${actor.userId}, ${publication.bridge_title_id},
+        ${data.eventId}, ${context.userId}, ${publication.bridge_title_id},
         ${publication.loop_title_id}, ${data.sessionId}, ${data.eventType},
         ${data.eventType === "PLAYBACK_PROGRESS" ? data.watchedSeconds : 0}
       )
@@ -136,14 +163,17 @@ export const getLoopAnalyticsReport = createServerFn({ method: "GET" })
         observedWatchMinutes: Math.floor(Number(watch?.watched_seconds ?? 0) / 60),
         source: "client-reported telemetry; observational only",
       },
-      payments: {
+      bridgePaymentRecords: {
         capturedPaymentCount: Number(sales?.captured_count ?? 0),
         capturedGrossPaise: Number(sales?.gross_paise ?? 0),
         refundedPaise: Number(sales?.refunded_paise ?? 0),
         providerFeePaise: sales?.provider_fee_paise == null ? null : Number(sales.provider_fee_paise),
         providerTaxPaise: sales?.provider_tax_paise == null ? null : Number(sales.provider_tax_paise),
+        note: "Bridge payment records only; not certified as Loop TVOD sales",
+      },
+      loopTvodReconciliation: {
+        status: "NOT AVAILABLE — Loop TVOD order-to-Razorpay reconciliation is not connected",
         settlementStatus: "NOT AVAILABLE — settlement reconciliation is not connected",
-        source: "internal payment records; Razorpay settlement reconciliation pending",
       },
     };
   });
