@@ -230,6 +230,8 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
       synopsis: string;
       year: number | null;
       runtime_minutes: number | null;
+      qc_ok: boolean;
+      approved_legal_grant_ids: string[] | null;
       loop_title_id: string | null;
       authorization_status: string | null;
       window_start: string | Date | null;
@@ -244,6 +246,17 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
     }>`
       select b.id, b.slug, b.name, b.status, b.language, b.master_key, b.poster_key,
              b.synopsis, b.year, b.runtime_minutes,
+             exists(
+               select 1 from bridge_qc_cases q
+               where q.title_id = b.id and q.status = 'PASSED'
+                 and q.reviewer_findings->0->>'masterKey' = b.master_key
+                 and q.reviewer_findings->0->>'posterKey' = b.poster_key
+             ) as qc_ok,
+             array(
+               select l.evidence->0->>'grantId'
+               from bridge_legal_cases l
+               where l.title_id = b.id and l.status = 'APPROVED'
+             ) as approved_legal_grant_ids,
              p.loop_title_id, p.authorization_status, p.window_start, p.window_end,
              p.territories, p.languages, p.exploitation_models,
              l.status as loop_status, l.listed, l.published, l.playback_path
@@ -274,6 +287,10 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
               },
             )
           : null;
+        const qcApproved = Boolean(r.qc_ok);
+        const legalApproved = Boolean(
+          coveringGrant && (r.approved_legal_grant_ids ?? []).includes(coveringGrant.id),
+        );
         const isReady =
           Boolean(coveringGrant) &&
           [
@@ -284,11 +301,17 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
             "DELIVERED",
           ].includes(r.status) &&
           Boolean(r.master_key) &&
-          Boolean(r.poster_key);
+          Boolean(r.poster_key) &&
+          qcApproved &&
+          legalApproved;
 
         const blockers: string[] = [];
         if (!coveringGrant)
           blockers.push("A matching rights grant and explicit publication dimensions are required");
+        if (!qcApproved)
+          blockers.push("A passed QC approval matching the current master and artwork is required");
+        if (!legalApproved)
+          blockers.push("Independent legal approval matching the publication rights grant is required");
         if (
           ![
             "LICENSING_READY",
@@ -311,6 +334,8 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
           language: r.language,
           hasMaster: Boolean(r.master_key),
           hasPoster: Boolean(r.poster_key),
+          qcApproved,
+          legalApproved,
           ready: isReady,
           blockers,
           publication: r.loop_title_id
