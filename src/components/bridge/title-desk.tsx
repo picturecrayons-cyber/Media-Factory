@@ -1,6 +1,6 @@
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { StatusChip } from "@/components/bridge/status-rail";
@@ -48,6 +48,7 @@ function TitleListItem({ title, canManage, canSeeInternalId, canDeleteDraft }: {
   const [language, setLanguage] = useState(title.language);
   const [year, setYear] = useState(title.year ? String(title.year) : "");
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const previewRefreshAttemptRef = useRef(false);
   const previewQ = useQuery({
     queryKey: ["bridge-title-list-thumbnail", title.id],
     queryFn: async () => {
@@ -108,7 +109,18 @@ function TitleListItem({ title, canManage, canSeeInternalId, canDeleteDraft }: {
         <Link to="/title/$id" params={{ id: title.id }} className="flex min-w-0 items-center gap-3 hover:text-accent sm:gap-4" onMouseEnter={() => { if (!previewQ.isFetched && !previewQ.isFetching) void previewQ.refetch(); }} onFocus={() => { if (!previewQ.data && !previewQ.isFetching) void previewQ.refetch(); }}>
           <div className="grid h-16 w-12 shrink-0 place-items-center overflow-hidden rounded-md border border-line bg-elevated sm:h-20 sm:w-14">
             {previewQ.data ? (
-              <img src={previewQ.data} alt="" loading="lazy" className="h-full w-full object-cover" />
+              <img
+                src={previewQ.data}
+                alt=""
+                loading="lazy"
+                onLoad={() => { previewRefreshAttemptRef.current = false; }}
+                onError={() => {
+                  if (previewRefreshAttemptRef.current) return;
+                  previewRefreshAttemptRef.current = true;
+                  void previewQ.refetch();
+                }}
+                className="h-full w-full object-cover"
+              />
             ) : (
               <span aria-hidden="true" className="text-[9px] font-semibold tracking-wide text-muted">POSTER</span>
             )}
