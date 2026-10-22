@@ -173,7 +173,7 @@ test("OCI copy work-request handles transient 404 propagation delay and recovers
         return Response.json({ status: "SUCCEEDED" });
       }
       // HEAD on destination object
-      return new Response(null, { status: 404 });
+      return new Response(null, { headers: { "content-length": "42", etag: '"sealed-etag"' } });
     };
 
     const sealed = await sealVerifiedObject("src", "dst", "etag", {
@@ -215,7 +215,7 @@ test("OCI copy fails closed when a persistent work-request 404 has no verified d
       if (method === "GET") {
         return new Response(null, { status: 404 });
       }
-      return new Response(null, { headers: { "content-length": "42", etag: '"sealed-etag"' } });
+      return new Response(null, { status: 404 });
     };
 
     await assert.rejects(
