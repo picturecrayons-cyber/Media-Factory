@@ -2,9 +2,16 @@ name: CI
 
 on:
   push:
-    branches: ["main", "feat/crayons-bridge-production", "fix/bridge-production-gate-20260923", "fix/bridge-final-production-gate-20260924"]
+    branches:
+      - "main"
+      - "feat/crayons-bridge-production"
+      - "fix/bridge-production-gate-20260923"
+      - "fix/bridge-final-production-gate-20260924"
+      - "ui/titles-library-gallery-20261022"
   pull_request:
-    branches: ["main"]
+    branches:
+      - "main"
+      - "fix/bridge-poster-gallery-oci-copy-diagnostics-20261022"
   workflow_dispatch:
 
 jobs:
