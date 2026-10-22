@@ -233,6 +233,10 @@ declare
   v_pub record;
 begin
   if new.published is true and new.listed is true then
+    if upper(coalesce(new.access_tier, '')) <> 'TVOD' then
+      raise exception 'BRIDGE_GATE_BLOCKED: buyer-visible Crayons Loop listings must use the authorized TVOD access tier';
+    end if;
+
     if new.bridge_title_id is null then
       raise exception 'BRIDGE_GATE_BLOCKED: Loop listings require a canonical Bridge title';
     end if;
@@ -269,7 +273,7 @@ $$;
 
 drop trigger if exists bridge_guard_loop_listing on public.loop_titles;
 create trigger bridge_guard_loop_listing
-before insert or update of published, listed, bridge_title_id
+before insert or update of published, listed, bridge_title_id, access_tier
 on public.loop_titles
 for each row execute function public.bridge_guard_loop_listing();
 
