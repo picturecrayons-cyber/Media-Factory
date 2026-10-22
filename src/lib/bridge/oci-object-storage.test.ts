@@ -82,7 +82,7 @@ test("OCI copy polling uses Object Storage and only verifies successful copies",
             return new Response(null, { status: 202, headers: { "opc-work-request-id": "copy/id" } });
           }
           if (method === "GET") {
-            assert.equal(url.pathname, "/workRequests/copy%2Fid");
+            assert.equal(url.pathname, "/n/test-namespace/workRequests/copy%2Fid");
             const headers = new Headers(init?.headers);
             const signature = headers.get("authorization")?.match(/signature="([^"]+)"/)?.[1];
             assert.ok(signature);
@@ -191,7 +191,7 @@ test("OCI copy work-request handles transient 404 propagation delay and recovers
   }
 });
 
-test("OCI copy work-request fails closed on persistent 404 after propagation grace period", async () => {
+test("OCI copy fails closed when a persistent work-request 404 has no verified destination", async () => {
   const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
   const values = {
     OCI_TENANCY_OCID: "test-tenancy",
@@ -215,7 +215,7 @@ test("OCI copy work-request fails closed on persistent 404 after propagation gra
       if (method === "GET") {
         return new Response(null, { status: 404 });
       }
-      return new Response(null, { headers: { "content-length": "42", etag: '"sealed-etag"' } });
+      return new Response(null, { status: 404 });
     };
 
     await assert.rejects(

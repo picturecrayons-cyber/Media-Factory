@@ -352,6 +352,44 @@ export const listAdminProfiles = createServerFn({ method: "GET" })
     };
   });
 
+export const updateAdminProfile = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({
+    userId: z.string().min(8).max(160),
+    displayName: z.string().trim().min(1).max(80),
+    organizationName: z.string().trim().max(120).nullable(),
+  }))
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    if (actor.internalRole !== "admin" && actor.internalRole !== "super_admin") {
+      throw new Error("Admin access required");
+    }
+    const sql = await getSql();
+    const rows = await sql<{ user_id: string; internal_role: string | null }>`
+      select user_id, internal_role from bridge_profiles where user_id = ${data.userId} limit 1
+    `;
+    if (!rows[0]) throw new Error("User profile not found");
+    if (rows[0].internal_role === "super_admin" && actor.internalRole !== "super_admin") {
+      throw new Error("Only a Super Admin can update this profile");
+    }
+    await sql`
+      update bridge_profiles
+      set display_name = ${data.displayName},
+          organization_name = ${data.organizationName?.trim() || null},
+          updated_at = now()
+      where user_id = ${data.userId}
+    `;
+    await writeAudit({
+      actorUserId: actor.userId,
+      action: "users.profile_update",
+      entityType: "bridge_profile",
+      entityId: data.userId,
+      metadata: { displayNameChanged: true, organizationChanged: true },
+    });
+    return { updated: true };
+  });
+
 export const inviteInternalRole = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(z.object({ email: z.string().email(), role: z.enum(INTERNAL_ROLES) }))

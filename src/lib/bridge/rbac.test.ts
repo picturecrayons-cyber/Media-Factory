@@ -124,6 +124,14 @@ describe("PRD authorization matrix", () => {
     assert.equal(hasStaffPermission(superAdmin(), "asset.sign_upload"), true);
   });
 
+  it("incomplete asset cleanup is limited to admin roles", () => {
+    assert.equal(hasPermission(admin(), "asset.delete"), true);
+    assert.equal(hasPermission(superAdmin(), "asset.delete"), true);
+    assert.equal(hasPermission(qc, "asset.delete"), false);
+    assert.equal(hasPermission(viewer(), "asset.delete"), false);
+    assert.equal(hasPermission(buyer(), "asset.delete"), false);
+  });
+
   it("signed asset permissions are role scoped", () => {
     assert.equal(hasPermission(creator(), "asset.sign_upload"), true);
     assert.equal(hasPermission(studio(), "asset.sign_upload"), true);

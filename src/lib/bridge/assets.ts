@@ -4,7 +4,7 @@ import { randomBytes } from "node:crypto";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import { ASSET_KINDS } from "./types";
-import { assertPermission, canReadTitle, hasStaffPermission } from "./rbac";
+import { assertPermission, canReadTitle, hasPermission, hasStaffPermission } from "./rbac";
 import { requireVerifiedActor } from "./session";
 import { loadTitle } from "./titles";
 import { writeAudit } from "./audit";
@@ -64,6 +64,13 @@ export const requestAssetUpload = createServerFn({ method: "POST" })
       insert into bridge_assets (id, title_id, kind, s3_key, content_type, created_by)
       values (${id}, ${title.id}, ${data.kind}, ${key}, ${data.contentType}, ${actor.userId})
     `;
+    await sql`
+      update loop_media_migration_queue
+      set status = 'UPLOADED', target_path = ${key}, updated_at = now()
+      where title_id = ${title.id}
+        and asset_kind = case when ${data.kind} = 'screener' then 'TRAILER' else upper(${data.kind}) end
+        and status in ('PENDING_REUPLOAD', 'UPLOADED')
+    `;
     await writeAudit({
       actorUserId: actor.userId,
       action: "asset.upload_signed",
@@ -71,7 +78,7 @@ export const requestAssetUpload = createServerFn({ method: "POST" })
       entityId: id,
       metadata: { titleId: title.id, kind: data.kind },
     });
-    return { assetId: id, ...signed };
+    return { assetId: id, url: signed.url, method: signed.method, expiresIn: 900 };
   });
 
 export const confirmAssetUpload = createServerFn({ method: "POST" })
@@ -114,23 +121,12 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
       throw new Error("Uploaded object size does not match the file that was sent");
     }
     if (!object.etag) throw new Error("Object ETag is required for immutable verification");
-    // Use the immutable asset row ID, not a per-request UUID. If a browser timeout
-    // leads to a duplicate confirmation while the first server call is still running,
-    // both attempts target the same sealed object instead of creating orphan copies.
+    // Stable destination prevents concurrent confirmations from creating orphan sealed copies.
     const sealedKey = `${asset.s3_key}.verified/${asset.id}`;
     const sealed = await sealVerifiedObject(asset.s3_key, sealedKey, object.etag);
     if (sealed.byteSize !== object.byteSize || !sealed.etag) {
       throw new Error("Verified copy differs from the uploaded object");
     }
-    // Only mark the migration queue as UPLOADED after the immutable copy succeeds
-    // and destination object's size, content type, and ETag have been verified.
-    await sql`
-      update loop_media_migration_queue
-      set status = 'UPLOADED', target_path = ${sealedKey}, updated_at = now()
-      where title_id = ${title.id}
-        and asset_kind = case when ${asset.kind} = 'screener' then 'TRAILER' else upper(${asset.kind}) end
-        and status in ('PENDING_REUPLOAD', 'UPLOADED')
-    `;
     const confirmed = await persistVerifiedAsset(sql, {
       assetId: asset.id,
       actorUserId: actor.userId,
@@ -176,9 +172,11 @@ export const requestAssetDownload = createServerFn({ method: "POST" })
       title_id: string;
       kind: string;
       s3_key: string;
+      content_type: string | null;
       byte_size: number | null;
     }>`
-      select id, title_id, kind, s3_key, byte_size from bridge_assets where id = ${data.assetId} and byte_size > 0 limit 1
+      select id, title_id, kind, s3_key, content_type, byte_size
+      from bridge_assets where id = ${data.assetId} limit 1
     `;
     const asset = rows[0];
     if (!asset) throw new Error("Not found");
@@ -202,15 +200,79 @@ export const requestAssetDownload = createServerFn({ method: "POST" })
       });
       throw new Error(decision.reason);
     }
-    const { signDownload } = await import("./oci-object-storage.server");
-    const signed = await signDownload({ key: asset.s3_key });
+    const { signDownload, verifyObject } = await import("./oci-object-storage.server");
+    if (asset.byte_size == null) {
+      if (actor.internalRole !== "super_admin") {
+        await writeAudit({
+          actorUserId: actor.userId,
+          action: "asset.download_denied",
+          entityType: "bridge_asset",
+          entityId: asset.id,
+          metadata: { reason: "Asset has not passed storage verification", kind: asset.kind },
+        });
+        throw new Error("This asset has not passed storage verification");
+      }
+      try {
+        // Super Admin may recover an existing temporary source file, but only
+        // after OCI confirms the object exists and the stored MIME type matches.
+        await verifyObject(asset.s3_key, asset.content_type);
+      } catch (cause) {
+        await writeAudit({
+          actorUserId: actor.userId,
+          action: "asset.download_unverified_failed",
+          entityType: "bridge_asset",
+          entityId: asset.id,
+          metadata: {
+            kind: asset.kind,
+            reason: cause instanceof Error ? cause.message : "Source object verification failed",
+          },
+        });
+        throw new Error("Unverified source object is unavailable in storage");
+      }
+    }
+    const signed = await signDownload({ key: asset.s3_key, expiresIn: 300 });
     await writeAudit({
       actorUserId: actor.userId,
-      action: "asset.download_signed",
+      action: asset.byte_size == null ? "asset.download_unverified_signed" : "asset.download_signed",
       entityType: "bridge_asset",
       entityId: asset.id,
+      metadata: { kind: asset.kind, storageVerified: asset.byte_size != null },
     });
-    return signed;
+    return { url: signed.url, method: signed.method, expiresIn: 300 };
+  });
+
+export const removeIncompleteAsset = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({ assetId: z.string().min(8) }))
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    assertPermission(actor, "asset.delete");
+    const sql = await getSql();
+    const rows = await sql<{
+      id: string; title_id: string; kind: string; s3_key: string; byte_size: number | null;
+    }>`select id, title_id, kind, s3_key, byte_size from bridge_assets where id = ${data.assetId} limit 1`;
+    const asset = rows[0];
+    if (!asset) throw new Error("Asset not found");
+    if (asset.byte_size != null) throw new Error("Verified assets are retained. Use the approved asset replacement workflow.");
+    const title = await loadTitle(asset.title_id);
+    if (!title || !["DRAFT", "UPLOADING", "PREPARING"].includes(title.status)) {
+      throw new Error("Incomplete asset cleanup is available only before title review");
+    }
+    if (asset.s3_key === title.masterKey || asset.s3_key === title.posterKey) {
+      throw new Error("This asset is referenced by the title record and cannot be removed here");
+    }
+    const { deleteObject } = await import("./oci-object-storage.server");
+    await deleteObject(asset.s3_key);
+    await sql`delete from bridge_assets where id = ${asset.id} and byte_size is null`;
+    await writeAudit({
+      actorUserId: actor.userId,
+      action: "asset.remove_incomplete",
+      entityType: "bridge_asset",
+      entityId: asset.id,
+      metadata: { titleId: title.id, kind: asset.kind },
+    });
+    return { deleted: true, id: asset.id };
   });
 
 export const listTitleAssets = createServerFn({ method: "GET" })
@@ -222,6 +284,7 @@ export const listTitleAssets = createServerFn({ method: "GET" })
     if (!title || !canReadTitle(actor, title)) throw new Error("Not found");
     const sql = await getSql();
     const buyer = actor.accountType === "buyer" && !actor.internalRole;
+    const includeIncomplete = Boolean(actor.internalRole && hasPermission(actor, "asset.delete"));
     const rows = await sql<{
       id: string;
       kind: string;
@@ -231,7 +294,10 @@ export const listTitleAssets = createServerFn({ method: "GET" })
       created_at: string | Date;
     }>`
       select id, kind, s3_key, content_type, byte_size, created_at
-      from bridge_assets where title_id = ${title.id} and byte_size > 0 order by created_at desc
+      from bridge_assets
+      where title_id = ${title.id}
+        and (byte_size > 0 or (${includeIncomplete} and byte_size is null))
+      order by created_at desc
     `;
     return {
       assets: rows
@@ -239,7 +305,6 @@ export const listTitleAssets = createServerFn({ method: "GET" })
         .map((r) => ({
           id: r.id,
           kind: r.kind,
-          key: buyer ? null : r.s3_key,
           contentType: r.content_type,
           byteSize: r.byte_size,
           verified: Number(r.byte_size) > 0,
