@@ -29,10 +29,11 @@ function TitlePoster({ titleId, titleName }: { titleId: string; titleName: strin
     retry: false,
   });
   const src = previewQ.data?.url;
+  const [imageFailed, setImageFailed] = useState(false);
   return (
     <div className="h-24 w-16 shrink-0 overflow-hidden rounded-md border border-line bg-elevated sm:h-28 sm:w-[4.65rem]" aria-label={`Poster for ${titleName}`}>
-      {src ? (
-        <img src={src} alt={`${titleName} poster`} loading="lazy" className="h-full w-full object-cover" />
+      {src && !imageFailed ? (
+        <img src={src} alt={`${titleName} poster`} loading="lazy" className="h-full w-full object-cover" onError={() => setImageFailed(true)} />
       ) : (
         <div className="flex h-full w-full flex-col items-center justify-center gap-1 px-1 text-center text-[10px] text-muted">
           <span aria-hidden="true" className="text-lg leading-none">▧</span>
