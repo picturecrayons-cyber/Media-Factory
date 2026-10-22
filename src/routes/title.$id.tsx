@@ -698,14 +698,17 @@ function FilesPanel({
               type="button"
               onClick={() => {
                 cancelRequestedRef.current = true;
-                // Invalidate this attempt so a late URL-preparation result cannot start a PUT.
+                if (progress.total >= MULTIPART_THRESHOLD && progress.phase === "transferring") {
+                  // OCI cannot pause an in-flight part. Let it finish, persist its checkpoint, then stop before the next part/commit.
+                  announce("Pausing after the current part. Completed parts are saved; use Resume to continue.", "status", true);
+                  return;
+                }
+                // Invalidate a single-PUT/preparation attempt so a late URL result cannot start a transfer.
                 uploadAttemptRef.current += 1;
                 uploadXhrRef.current?.abort();
                 setProgress(null);
                 announce("Upload cancelled. Any pending preparation result will be ignored; no new transfer will start from this attempt.", "error", true);
-                if (!uploadXhrRef.current) {
-                  setUploading(null);
-                }
+                if (!uploadXhrRef.current) setUploading(null);
               }}
               className="rounded-full border border-line px-3 py-1.5 text-xs font-semibold"
             >
