@@ -22,6 +22,7 @@ declare
   v_window_start timestamptz := now() - interval '1 hour';
   v_window_end timestamptz := now() + interval '30 days';
   v_blocked boolean := false;
+  v_model text;
 begin
   insert into public.bridge_profiles
     (user_id, email, display_name, account_type, internal_role, email_verified)
