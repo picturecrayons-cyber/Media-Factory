@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { StatusChip } from "@/components/bridge/status-rail";
 import { listTitleAssets, requestAssetDownload } from "@/lib/bridge/assets";
+import { selectVerifiedOriginalPoster } from "@/lib/bridge/title-gallery-model";
 import { listTitles } from "@/lib/bridge/titles";
 
 type LibraryStatus = "all" | "draft" | "preparing" | "uploading" | "live for buyers";
@@ -15,12 +16,7 @@ function TitlePoster({ titleId, titleName }: { titleId: string; titleName: strin
     staleTime: 60_000,
     retry: false,
   });
-  const poster = (assetsQ.data?.assets ?? [])
-    .filter((asset) => asset.verified && asset.contentType?.startsWith("image/") && ["poster_vertical", "poster", "thumbnail"].includes(asset.kind))
-    .sort((a, b) => {
-      const priority = (kind: string) => kind === "poster_vertical" ? 0 : kind === "poster" ? 1 : 2;
-      return priority(a.kind) - priority(b.kind);
-    })[0];
+  const poster = selectVerifiedOriginalPoster(assetsQ.data?.assets ?? []);
   const previewQ = useQuery({
     queryKey: ["bridge-title-poster-preview", poster?.id],
     queryFn: () => requestAssetDownload({ data: { assetId: poster!.id } }),
@@ -28,12 +24,13 @@ function TitlePoster({ titleId, titleName }: { titleId: string; titleName: strin
     staleTime: 4 * 60_000,
     retry: false,
   });
-  const [imageFailed, setImageFailed] = useState(false);
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
   const src = previewQ.data?.url;
+  const imageFailed = Boolean(src && failedSrc === src);
   return (
     <div className="aspect-[2/3] w-full overflow-hidden rounded-xl border border-line bg-elevated" aria-label={`Poster for ${titleName}`}>
       {src && !imageFailed ? (
-        <img src={src} alt={`${titleName} original poster`} loading="lazy" className="h-full w-full object-cover" onError={() => setImageFailed(true)} />
+        <img src={src} alt={`${titleName} original poster`} loading="lazy" className="h-full w-full object-cover" onError={() => setFailedSrc(src ?? null)} />
       ) : (
         <div className="flex h-full w-full flex-col items-center justify-center gap-2 px-2 text-center text-xs text-muted">
           <span aria-hidden="true" className="text-3xl leading-none">▧</span>
