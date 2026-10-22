@@ -183,6 +183,14 @@ set search_path = public
 as $$
 begin
   if lower(new.authorization_status) in ('authorized','live','delivered') then
+    if new.bridge_title_id is null or new.loop_title_id is null or not exists (
+      select 1 from public.loop_titles loop_title
+      where loop_title.id = new.loop_title_id
+        and loop_title.bridge_title_id = new.bridge_title_id
+    ) then
+      raise exception 'BRIDGE_GATE_BLOCKED: authorization must bind the canonical Bridge title to its matching Loop title';
+    end if;
+
     if not exists (
       select 1 from public.bridge_profiles approver
       where approver.user_id = new.approved_by
