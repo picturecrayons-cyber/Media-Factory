@@ -314,8 +314,8 @@ export async function sealVerifiedObject(
     try {
       await pollWorkRequest(cfg, workRequestId, pollOpts);
     } catch (cause) {
-      // Never assume a missing work request means the copy succeeded. Only accept
-      // this narrow 404 case when a direct read verifies the destination object.
+      // A missing work-request record is not proof of success. Accept only if a direct
+      // read independently verifies the exact immutable destination object.
       const isMissingWorkRequest =
         cause instanceof Error && /work-request lookup failed \(404\)/.test(cause.message);
       if (!isMissingWorkRequest) throw cause;
