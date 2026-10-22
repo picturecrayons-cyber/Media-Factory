@@ -91,9 +91,10 @@ export async function uploadMultipartPart(
   multipartUrl: string,
   file: File,
   partNumber: number,
+  partSize = MULTIPART_PART_SIZE,
 ): Promise<{ number: number; etag: string; size: number }> {
-  const start = (partNumber - 1) * MULTIPART_PART_SIZE;
-  const end = Math.min(file.size, start + MULTIPART_PART_SIZE);
+  const start = (partNumber - 1) * partSize;
+  const end = Math.min(file.size, start + partSize);
   const { etag } = await xhrRequest<unknown>(`${multipartUrl}${partNumber}`, "PUT", file.slice(start, end), { "content-type": "application/octet-stream" });
   if (!etag) throw new Error("OCI did not expose the uploaded part ETag. Check CORS exposed headers.");
   return { number: partNumber, etag, size: end - start };
