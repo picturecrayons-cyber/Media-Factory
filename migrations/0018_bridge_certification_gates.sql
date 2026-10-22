@@ -243,7 +243,7 @@ $$;
 
 drop trigger if exists bridge_guard_loop_listing on public.loop_titles;
 create trigger bridge_guard_loop_listing
-before insert or update of published, listed, bridge_title_id, status
+before insert or update of published, listed, bridge_title_id
 on public.loop_titles
 for each row execute function public.bridge_guard_loop_listing();
 
