@@ -549,7 +549,11 @@ function FilesPanel({
       setProgress(null);
       const cancelled = cancelRequestedRef.current;
       let detail = raw;
-      if (raw.includes("STORAGE_UNAVAILABLE")) {
+      if (raw.includes("OCI object copy did not complete") || raw.includes("OCI copy was accepted without a work-request ID")) {
+        detail = `${raw}. The object was not marked Ready. Do not retry yet; inspect the matching Preview function log and OCI work-request status first.`;
+      } else if (raw.includes("OCI copy work-request lookup failed")) {
+        detail = `${raw}. The object was not marked Ready. Check the Preview OCI region, identity permissions and work-request visibility before another attempt.`;
+      } else if (raw.includes("STORAGE_UNAVAILABLE")) {
         detail = "Storage service is currently unavailable. Check the isolated Preview configuration, then select the file again to retry.";
       } else if (error instanceof TypeError) {
         detail = "The browser could not reach OCI storage. Check the OCI bucket CORS rule for this Preview origin, PUT method and Content-Type header, then select the file again to retry.";
