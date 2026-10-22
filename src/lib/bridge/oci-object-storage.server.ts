@@ -267,9 +267,13 @@ async function pollWorkRequest(
     } else {
       const body = (await res.json()) as { status?: string };
       lastStatus = body.status || "unknown";
-      if (lastStatus === "SUCCEEDED") return;
-      if (lastStatus === "FAILED" || lastStatus === "CANCELED") {
-        throw new Error(`OCI object copy ${lastStatus.toLowerCase()}`);
+      const normalizedStatus = lastStatus.toUpperCase();
+      // OCI-compatible work-request responses can expose a completed terminal state
+      // as either SUCCEEDED or COMPLETED. In both cases, the destination HEAD check
+      // below remains mandatory before the caller can persist a verified asset.
+      if (normalizedStatus === "SUCCEEDED" || normalizedStatus === "COMPLETED") return;
+      if (["FAILED", "CANCELED", "CANCELLED"].includes(normalizedStatus)) {
+        throw new Error(`OCI object copy ${normalizedStatus.toLowerCase()}`);
       }
     }
 
