@@ -15,6 +15,7 @@ export type SavedUpload = {
   parUrl: string;
   multipartUrl?: string;
   completedParts: Array<{ number: number; etag: string; size: number }>;
+  verificationPending?: boolean;
   updatedAt: number;
 };
 
