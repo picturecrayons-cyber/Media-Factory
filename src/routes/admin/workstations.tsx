@@ -5,11 +5,12 @@ import { Button } from "@/components/ui/button";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { listAdminWorkstations, reviewAdminTitle, setBuyerPublicationGate } from "@/lib/bridge/admin-workstations";
+import { authorizeLoopPublication, suspendLoopPublication, revokeLoopPublication } from "@/lib/bridge/loop-publication";
 import { listDuplicateReviews, openDuplicateReview, decideDuplicateReview } from "@/lib/bridge/duplicate-reconciliation";
 
 export const Route = createFileRoute("/admin/workstations")({ component: AdminWorkstations });
 
-const TABS = ["Titles", "QC", "Rights", "Assets", "Buyers", "Deliveries", "Audit"] as const;
+const TABS = ["Titles", "QC", "Rights", "Assets", "Buyers", "Publication", "Deliveries", "Audit"] as const;
 type Tab = (typeof TABS)[number];
 
 const STATUS_LABELS: Record<string, string> = {
@@ -38,6 +39,28 @@ function WorkstationBody() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-workstations"] }),
   });
   const [activeTab, setActiveTab] = useState<Tab>("Titles");
+  const [publicationTitleId, setPublicationTitleId] = useState("");
+  const [territoriesText, setTerritoriesText] = useState("IN");
+  const [languagesText, setLanguagesText] = useState("");
+  const [models, setModels] = useState<string[]>(["SVOD"]);
+  const [accessTier, setAccessTier] = useState<"FREE" | "SVOD" | "TVOD">("SVOD");
+  const [windowStart, setWindowStart] = useState("");
+  const [windowEnd, setWindowEnd] = useState("");
+  const publication = useMutation({
+    mutationFn: authorizeLoopPublication,
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ["admin-workstations"] });
+      setPublicationTitleId("");
+    },
+  });
+  const suspendPublication = useMutation({
+    mutationFn: suspendLoopPublication,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-workstations"] }),
+  });
+  const revokePublication = useMutation({
+    mutationFn: revokeLoopPublication,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-workstations"] }),
+  });
 
   const data = query.data;
   if (query.isLoading) return <div className="p-8 text-sm text-muted">Loading Admin…</div>;
@@ -84,6 +107,28 @@ function WorkstationBody() {
       ) : activeTab === "Buyers" ? (
         <BuyerRelease titles={data.titles} qc={data.qc} legal={data.legal} gate={gate}
           onGate={(titleId, gateName) => gate.mutate({ data: { titleId, gate: gateName as "OTT", decision: "PASS" } })} />
+      ) : activeTab === "Publication" ? (
+        <PublicationControl
+          titles={data.titles}
+          publications={data.publications}
+          selectedTitleId={publicationTitleId}
+          setSelectedTitleId={setPublicationTitleId}
+          territoriesText={territoriesText}
+          setTerritoriesText={setTerritoriesText}
+          languagesText={languagesText}
+          setLanguagesText={setLanguagesText}
+          models={models}
+          setModels={setModels}
+          accessTier={accessTier}
+          setAccessTier={setAccessTier}
+          windowStart={windowStart}
+          setWindowStart={setWindowStart}
+          windowEnd={windowEnd}
+          setWindowEnd={setWindowEnd}
+          publish={publication}
+          suspend={suspendPublication}
+          revoke={revokePublication}
+        />
       ) : activeTab === "Deliveries" ? (
         <div className="space-y-6">
           <SimpleTable title="Licensing & Delivery" description={ready.length + " titles in the commercial pipeline"}
@@ -98,7 +143,7 @@ function WorkstationBody() {
           rows={data.audit} fields={["action", "entity_type", "entity_id", "actor_user_id", "created_at"]} />
       )}
 
-      {review.isError || gate.isError ? <p className="rounded-xl border border-line p-4 text-sm">Action failed: {String(review.error ?? gate.error)}</p> : null}
+      {review.isError || gate.isError || publication.isError || suspendPublication.isError || revokePublication.isError ? <p role="alert" className="rounded-xl border border-line p-4 text-sm">Action failed: {String(review.error ?? gate.error ?? publication.error ?? suspendPublication.error ?? revokePublication.error)}</p> : null}
     </div>
   );
 }
@@ -123,6 +168,66 @@ function TitleQueue({ titles, review }: { titles: any[]; review: any }) {
       </div>
     </section>
   );
+}
+
+
+function PublicationControl({
+  titles, publications, selectedTitleId, setSelectedTitleId,
+  territoriesText, setTerritoriesText, languagesText, setLanguagesText,
+  models, setModels, accessTier, setAccessTier, windowStart, setWindowStart,
+  windowEnd, setWindowEnd, publish, suspend, revoke,
+}: {
+  titles: any[]; publications: any[]; selectedTitleId: string; setSelectedTitleId: (v: string) => void;
+  territoriesText: string; setTerritoriesText: (v: string) => void; languagesText: string; setLanguagesText: (v: string) => void;
+  models: string[]; setModels: (v: string[]) => void; accessTier: "FREE" | "SVOD" | "TVOD"; setAccessTier: (v: "FREE" | "SVOD" | "TVOD") => void;
+  windowStart: string; setWindowStart: (v: string) => void; windowEnd: string; setWindowEnd: (v: string) => void;
+  publish: any; suspend: any; revoke: any;
+}) {
+  const selectedTitle = titles.find((title) => title.id === selectedTitleId);
+  const existing = publications.find((row) => row.bridge_title_id === selectedTitleId);
+  const toggleModel = (model: string, checked: boolean) => setModels(checked ? [...models, model] : models.filter((item) => item !== model));
+  const canSubmit = Boolean(selectedTitleId && territoriesText.trim() && languagesText.trim() && models.includes(accessTier) && !publish.isPending);
+  return <section className="space-y-5">
+    <SectionHeader title="Loop Publication Control" description="Server-side rights preflight runs before authorization. Drafts never become public just because assets were uploaded." />
+    <div className="rounded-2xl border border-line bg-surface p-4 sm:p-6 space-y-4">
+      <label className="block space-y-1 text-sm"><span className="font-medium">Bridge title</span>
+        <select className="w-full rounded-xl border border-line bg-bg p-3" value={selectedTitleId} onChange={(event) => { setSelectedTitleId(event.target.value); setLanguagesText(titles.find((title) => title.id === event.target.value)?.language || ""); }} >
+          <option value="">Select a title — no action is preselected</option>
+          {titles.map((title) => <option key={title.id} value={title.id}>{title.name} · {title.status}</option>)}
+        </select>
+      </label>
+      {selectedTitle ? <p className="text-sm text-muted">Selected: {selectedTitle.name}. Status: {selectedTitle.status}. Authorization can still fail if QC, rights, master, artwork, or commercial terms are incomplete.</p> : null}
+      <div className="grid gap-3 sm:grid-cols-2">
+        <label className="space-y-1 text-sm"><span className="font-medium">Territories (comma-separated ISO codes)</span><input className="w-full rounded-xl border border-line bg-bg p-3" value={territoriesText} onChange={(event) => setTerritoriesText(event.target.value)} placeholder="IN, AE" /></label>
+        <label className="space-y-1 text-sm"><span className="font-medium">Languages (comma-separated)</span><input className="w-full rounded-xl border border-line bg-bg p-3" value={languagesText} onChange={(event) => setLanguagesText(event.target.value)} placeholder="ml, en" /></label>
+      </div>
+      <fieldset className="space-y-2"><legend className="text-sm font-medium">Allowed exploitation models</legend>
+        <div className="flex flex-wrap gap-4 text-sm">{["SVOD", "TVOD", "AVOD", "FREE", "PROMOTIONAL"].map((model) => <label key={model} className="flex items-center gap-2"><input type="checkbox" checked={models.includes(model)} onChange={(event) => toggleModel(model, event.target.checked)} />{model}</label>)}</div>
+        <p className="text-xs text-muted">PPV is not available in this authorization API yet. Do not select a model that is not covered by the signed rights grant.</p>
+      </fieldset>
+      <label className="block space-y-1 text-sm"><span className="font-medium">Loop viewer access tier</span><select className="w-full rounded-xl border border-line bg-bg p-3" value={accessTier} onChange={(event) => setAccessTier(event.target.value as "FREE" | "SVOD" | "TVOD")}><option value="FREE">FREE</option><option value="SVOD">SVOD</option><option value="TVOD">TVOD</option></select></label>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <label className="space-y-1 text-sm"><span className="font-medium">Window starts (optional)</span><input type="datetime-local" className="w-full rounded-xl border border-line bg-bg p-3" value={windowStart} onChange={(event) => setWindowStart(event.target.value)} /></label>
+        <label className="space-y-1 text-sm"><span className="font-medium">Window ends (optional)</span><input type="datetime-local" className="w-full rounded-xl border border-line bg-bg p-3" value={windowEnd} onChange={(event) => setWindowEnd(event.target.value)} /></label>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <Button disabled={!canSubmit} onClick={() => publish.mutate({ data: {
+          bridgeTitleId: selectedTitleId, destination: "CRAYONS_LOOP",
+          territories: territoriesText.split(",").map((v) => v.trim().toUpperCase()).filter(Boolean),
+          languages: languagesText.split(",").map((v) => v.trim()).filter(Boolean),
+          exploitationModels: models as ("SVOD" | "TVOD" | "AVOD" | "FREE" | "PROMOTIONAL")[],
+          accessTier,
+          windowStart: windowStart ? new Date(windowStart).toISOString() : null,
+          windowEnd: windowEnd ? new Date(windowEnd).toISOString() : null,
+        } })}>{publish.isPending ? "Checking rights…" : "Authorize & publish to Loop"}</Button>
+        <Button variant="outline" disabled={!existing || suspend.isPending} onClick={() => suspend.mutate({ data: { bridgeTitleId: selectedTitleId, reason: "Admin publication control suspension" } })}>Suspend</Button>
+        <Button variant="outline" disabled={!existing || revoke.isPending} onClick={() => revoke.mutate({ data: { bridgeTitleId: selectedTitleId } })}>Revoke authorization</Button>
+      </div>
+      {existing ? <p className="text-xs text-muted">Current record: {existing.authorization_status} · listed/published values shown below. Revoke and suspend actions are server-authorized and audited.</p> : null}
+      {publish.isSuccess ? <p role="status" className="text-sm">Authorization succeeded. Loop title ID: {publish.data.loopTitleId}</p> : null}
+    </div>
+    <SimpleTable title="Persisted publication records" description="Current Bridge authorization state; this table is read-only." rows={publications} fields={["bridge_title_id", "authorization_status", "territories", "languages", "exploitation_models", "window_start", "window_end", "approved_by", "approved_at", "revoked_at"]} />
+  </section>;
 }
 
 function DuplicateReviewSection() {
