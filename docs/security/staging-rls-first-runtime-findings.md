@@ -62,3 +62,46 @@ A fresh read-only catalog check on Staging confirmed:
 - Establish the function's real caller (repository search on the default branch found no direct call) and test owner/non-owner/anonymous/unauthorized cases in a safe staging test harness.
 - Enable leaked-password protection manually in the Staging Auth dashboard and verify signup/password-change/password-reset behavior. It remains NOT VERIFIED.
 - Rerun Security Advisor after any approved change and record the exact output.
+
+
+## Follow-up application authorization review — 2026-10-23
+
+Status: **PARTIAL; catalog inventory re-verified, source review not complete.**
+
+### Fresh read-only catalog result
+
+A read-only query against Staging project bbtrosuwisnxacuxvegt returned exactly 63 public base tables with RLS enabled and no policies. For every one of these tables, effective SELECT/INSERT/UPDATE/DELETE privileges were false for both anon and authenticated. This confirms the current client roles are blocked at the table-grant layer. It does not establish that the server-side SQL connection is least-privileged or that every server function performs correct authorization. No policies or grants should be added merely to clear the advisor findings.
+
+### Source paths verified
+
+- `src/lib/auth/middleware.ts`: server functions obtain a bearer token, enforce same-site request checks, call `requireUser`, and pass verified user ID/email in server context.
+- `src/lib/bridge/session.ts`: loads Bridge actor profile by verified identity, resolves identity links, and exposes verified actor / internal-role checks. The identity-link and email-based fallback path needs a focused review before synthetic-user testing.
+- `src/lib/bridge/admin-workstations.ts`: admin read/write functions use auth middleware and require a verified actor, internal role and/or named RBAC permission before protected operations.
+- `src/lib/loop/profile.ts`: consumer profile, watch progress and singular `loop_watchlist` calls use auth middleware and predicates scoped to `context.userId`. These calls use direct SQL, not the Supabase Data API.
+- `src/lib/db.ts`: direct PostgreSQL connection is selected from DATABASE_URL / POSTGRES_URL and uses the database role embedded in that connection. The exact deployed Staging connection target and role have not been proven from source. This remains a critical gate; do not run synthetic-user workflows until runtime isolation is evidenced.
+- `src/lib/bridge/env.ts`: reads SUPABASE_SECRET_KEY / SUPABASE_SERVICE_ROLE_KEY server-side.
+- `supabase/functions/razorpay-webhook/index.ts`: service-role client is used after Razorpay signature validation; code checks provider order binding, event idempotency and payload hash before payment/entitlement/title/audit writes. Needs negative tests for wrong order, duplicate event, conflicting payload and unknown/missing local order. No live payment tests were run.
+- Additional table-specific references found: bridge_profiles in session.ts / profiles.ts / admin-workstations.ts; bridge_titles in titles.ts / workflow.ts / admin-workstations.ts; bridge_assets in assets.ts / asset-confirmation.ts / workflow.ts; bridge_loop_publications in loop-publication.ts / loop/catalog.ts; bridge_webhook_events in payments.ts / service-revenue.ts / the Razorpay webhook; loop_profiles, loop_watch_progress and loop_watchlist in loop/profile.ts; streamvista_orders in bridge/streamvista.ts; bridge_language_rights in multilingual-rights.ts; bridge_site_content in site-content.ts; bridge_dmca_registrations in dmca.ts; bridge_buyer_title_access and bridge_title_merge_aliases in duplicate-title-merge.ts.
+
+This is a partial call-site map, not a claim that all 63 tables have been fully traced. The remaining tables must be reconciled against the schema and all source references, with exact functions and authorization predicates recorded before this register can be marked complete.
+
+### loop_my_watchlist() decision
+
+Repository default-branch search for loop_my_watchlist returned no direct source match. The function remains SECURITY DEFINER, with EXECUTE available to authenticated but not anon. A separate application path uses singular loop_watchlist; the function reads plural loop_watchlists. A repository search alone cannot exclude dynamic RPC calls, external callers or stale deployed code. No privilege change and no SECURITY INVOKER conversion were made. Keep the function unchanged until runtime/deployed-client caller evidence is checked; only then consider a reviewed REVOKE EXECUTE proposal if no required caller exists.
+
+### Not performed / remaining blockers
+
+- No synthetic owner, non-owner, anonymous or unauthorized-role tests were run.
+- Leaked-password protection remains NOT VERIFIED. Available connected Supabase tools do not provide Auth Dashboard configuration or Auth Admin user lifecycle operations; enable the setting manually in the Staging dashboard and capture evidence.
+- Signup, password-change and password-reset tests were not run.
+- No migration, grant, policy, function privilege or Auth setting was changed; Security Advisor was not rerun because there was no change to validate.
+
+### Next gate
+
+1. Complete the per-table source-callsite and server-side authorization register; document unused/legacy only after repository-wide evidence.
+2. Prove deployed DATABASE_URL / POSTGRES_URL target and connection role without exposing secrets; prove service-role secrets remain server-only.
+3. Confirm any deployed or dynamic caller of loop_my_watchlist().
+4. After isolation proof, run synthetic negative/positive tests and manually enable/test Staging leaked-password protection.
+5. Rerun Security Advisor after approved changes and record the exact result.
+
+**Release gate remains NO-GO — NOT CERTIFIED. Production was not queried or changed.**
