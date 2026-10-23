@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { randomUUID } from "node:crypto";
 import { createTransport } from "nodemailer";
 import { bridgeEnv } from "@/lib/bridge/env";
+import { buyerStageNotificationDedupeKey, canAccessBuyerProspect, canAdvanceBuyerProspectStage, recipientsMatchProspectContact } from "./communications-policy";
 import { z } from "zod";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
@@ -128,7 +129,7 @@ export const linkBuyerCommunicationThread = createServerFn({ method: "POST" })
         and (${actor.internalRole === "super_admin"} or organization_scope = ${actor.organizationName})
       limit 1
     `;
-    if (!prospect[0]) throw new Error("Buyer prospect not found");
+    if (!prospect[0] || !canAccessBuyerProspect(actor.internalRole ?? "", actor.organizationName, prospect[0].organization_scope)) throw new Error("Buyer prospect not found in your authorized scope.");
     const scope = prospect[0].organization_scope || `prospect:${prospect[0].id}`;
     const rows = await sql<{ id: string }>`
       insert into bridge_communication_threads (
@@ -246,17 +247,7 @@ const verifyInput = z.object({
   legalReference: z.string().trim().min(3).max(300),
 });
 
-const ALLOWED_STAGE_TRANSITIONS: Record<string, string[]> = {
-  DISCOVERED: ["RESEARCHING", "CONTACT_READY", "DECLINED"],
-  RESEARCHING: ["CONTACT_READY", "ENQUIRY", "DECLINED"],
-  CONTACT_READY: ["ENQUIRY", "IN_NEGOTIATION", "DECLINED"],
-  ENQUIRY: ["IN_NEGOTIATION", "DECLINED", "DORMANT"],
-  IN_NEGOTIATION: ["CONTRACT_REVIEW", "DECLINED", "DORMANT"],
-  CONTRACT_REVIEW: ["IN_NEGOTIATION", "CONTRACTED", "DECLINED"],
-  CONTRACTED: [],
-  DECLINED: ["RESEARCHING"],
-  DORMANT: ["RESEARCHING"],
-};
+
 
 /** Explicit, audited pipeline transitions; contract status requires prior verification evidence. */
 export const advanceBuyerProspectStage = createServerFn({ method: "POST" })
@@ -266,16 +257,16 @@ export const advanceBuyerProspectStage = createServerFn({ method: "POST" })
     const actor = await requireOperator(context.userId);
     const sql = await getSql();
     return sql.transaction(async (tx) => {
-      const currentRows = await tx<{ id: string; pipeline_stage: string; verification_status: string; verification_evidence_ref: string | null }>`
-        select id, pipeline_stage, verification_status, verification_evidence_ref
+      const currentRows = await tx<{ id: string; pipeline_stage: string; verification_status: string; verification_evidence_ref: string | null; organization_scope: string | null }>`
+        select id, pipeline_stage, verification_status, verification_evidence_ref, organization_scope
         from bridge_buyer_prospects
         where id = ${data.prospectId}
           and (${actor.internalRole === "super_admin"} or organization_scope = ${actor.organizationName})
         for update
       `;
       const current = currentRows[0];
-      if (!current) throw new Error("Buyer prospect not found");
-      if (!(ALLOWED_STAGE_TRANSITIONS[current.pipeline_stage] ?? []).includes(data.stage)) {
+      if (!current || !canAccessBuyerProspect(actor.internalRole ?? "", actor.organizationName, current.organization_scope)) throw new Error("Buyer prospect not found in your authorized scope.");
+      if (!canAdvanceBuyerProspectStage(current.pipeline_stage, data.stage)) {
         throw new Error(`Invalid buyer pipeline transition: ${current.pipeline_stage} → ${data.stage}`);
       }
       if (data.stage === "CONTRACTED" &&
@@ -295,7 +286,7 @@ export const advanceBuyerProspectStage = createServerFn({ method: "POST" })
         insert into bridge_notifications (recipient_user_id, organization_scope, event_type, entity_type, entity_id, dedupe_key, payload)
         values (${actor.userId}, ${actor.organizationName}, 'BUYER_PIPELINE_STAGE_CHANGED',
           'bridge_buyer_prospect', ${data.prospectId},
-          ${`buyer-stage:${data.prospectId}:${current.pipeline_stage}:${data.stage}`},
+          ${buyerStageNotificationDedupeKey(data.prospectId, current.pipeline_stage as import("./communications-policy").BuyerPipelineStage, data.stage)},
           ${JSON.stringify({ from: current.pipeline_stage, to: data.stage })}::jsonb)
         on conflict (dedupe_key) do nothing
       `;
@@ -312,13 +303,13 @@ export const verifyBuyerProspect = createServerFn({ method: "POST" })
     if (actor.internalRole !== "super_admin") throw new Error("Super Admin approval required for buyer verification.");
     const sql = await getSql();
     const rows = await sql<{ id: string; pipeline_stage: string; verification_status: string }>`
-      select id, pipeline_stage, verification_status from bridge_buyer_prospects
+      select id, pipeline_stage, verification_status, organization_scope from bridge_buyer_prospects
       where id = ${data.prospectId}
         and (${actor.internalRole === "super_admin"} or organization_scope = ${actor.organizationName})
       limit 1
     `;
     const prospect = rows[0];
-    if (!prospect) throw new Error("Buyer prospect not found");
+    if (!prospect || !canAccessBuyerProspect(actor.internalRole ?? "", actor.organizationName, prospect.organization_scope)) throw new Error("Buyer prospect not found in your authorized scope.");
     if (data.verificationStatus === "CONTRACTED_PARTNER" && prospect.pipeline_stage !== "CONTRACT_REVIEW") {
       throw new Error("Contracted-partner status requires the prospect to be in CONTRACT_REVIEW.");
     }
@@ -410,8 +401,7 @@ export const sendConfirmedBuyerMailDraft = createServerFn({ method: "POST" })
       const draft = rows[0];
       if (!draft) throw new Error("Draft is unavailable in your authorized scope.");
       if (!draft.prospect_email) throw new Error("Sending is blocked until the prospect has a verified contact email.");
-      if (!draft.recipient_refs.length ||
-          draft.recipient_refs.some((recipient) => recipient.trim().toLowerCase() !== draft.prospect_email)) {
+      if (!recipientsMatchProspectContact(draft.recipient_refs, draft.prospect_email)) {
         throw new Error("Sending is blocked: recipients must match the linked prospect's recorded contact email.");
       }
 
