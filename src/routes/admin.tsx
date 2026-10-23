@@ -83,6 +83,28 @@ function AdminBody({ actor }: { actor: any }) {
         </section>
 
         <section className="rounded-2xl border border-line bg-surface p-4 sm:p-5">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h3 className="font-display text-xl font-semibold">Direct asset ingestion</h3>
+              <p className="mt-1 max-w-2xl text-sm text-muted">Choose an existing title to upload master video, screener/trailer, posters, or artwork from the authenticated Bridge workspace. Uploads stay unverified until OCI storage and database checks pass.</p>
+            </div>
+            <Link to="/admin/workstations"><Button variant="outline">Open title workspace</Button></Link>
+          </div>
+          <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+            {titles.slice(0, 6).map((title) => (
+              <Link key={title.id} to="/title/$id" params={{ id: title.id }} className="flex min-w-0 items-center justify-between gap-3 rounded-xl border border-line bg-elevated/40 px-3 py-3 hover:bg-fg/5">
+                <span className="min-w-0">
+                  <span className="block truncate text-sm font-semibold">{title.name}</span>
+                  <span className="mt-1 block text-xs text-muted">{title.status.replaceAll("_", " ").toLowerCase()} · open Files / Media</span>
+                </span>
+                <span aria-hidden="true" className="shrink-0 text-sm text-accent">→</span>
+              </Link>
+            ))}
+            {!titles.length && !titlesQ.isPending ? <p className="text-sm text-muted">No titles available for ingestion.</p> : null}
+          </div>
+        </section>
+
+        <section className="rounded-2xl border border-line bg-surface p-4 sm:p-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <h3 className="font-display text-xl font-semibold">Needs attention</h3>
