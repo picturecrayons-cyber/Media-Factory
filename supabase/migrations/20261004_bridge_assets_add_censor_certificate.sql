@@ -13,6 +13,7 @@ alter table public.bridge_assets
         'screener'::text,
         'master'::text,
         'subtitle'::text,
+        'technical'::text,
         'censor_certificate'::text
       ]
     )
