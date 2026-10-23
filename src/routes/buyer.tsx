@@ -54,7 +54,7 @@ function Buyer() {
           return <AdminBuyerDesk actor={actor} />;
         }
         if (actor.internalRole || actor.accountType !== "buyer") {
-          return <Navigate to={actor.internalRole ? "/internal" : "/dashboard"} />;
+          return <Navigate to={actor.internalRole ? "/internal" : "/"} />;
         }
         return (
           <BridgeShell actor={actor} title="Buyer dashboard">
