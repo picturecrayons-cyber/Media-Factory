@@ -7,7 +7,6 @@ import { assertPermission } from "./rbac";
 import { requireVerifiedActor } from "./session";
 import { writeAudit } from "./audit";
 
-const internalOperator = z.object({}).optional();
 const prospectInput = z.object({
   companyName: z.string().trim().min(2).max(180),
   companyDomain: z.string().trim().max(253).optional(),
