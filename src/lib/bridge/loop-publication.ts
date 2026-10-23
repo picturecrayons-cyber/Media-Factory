@@ -218,7 +218,7 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
               and (g.status = 'EXPIRED' or (g.window_end is not null and g.window_end <= now()))
           )
         )
-    `.catch(() => {});
+    `;
 
     // A missing, revoked, or no-longer-covering grant must stop Loop visibility.
     await sql`
@@ -240,7 +240,7 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
               and p.exploitation_models <@ array(select jsonb_array_elements_text(g.media))
           )
         )
-    `.catch(() => {});
+    `;
 
     await sql`
       update loop_titles l
@@ -250,7 +250,7 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
       where p.loop_title_id = l.id
         and p.authorization_status in ('expired', 'revoked')
         and (l.published = true or l.listed = true or l.status not in ('expired', 'revoked'))
-    `.catch(() => {});
+    `;
 
     const rows = await sql<{
       id: string;
