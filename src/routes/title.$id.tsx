@@ -535,7 +535,7 @@ function FilesPanel({
       assertAttemptActive();
       await withTimeout(
         confirmAssetUpload({ data: { assetId: signed.assetId, expectedByteSize: file.size } }),
-        55_000,
+        125_000,
         "Stored-object verification",
       );
       assertAttemptActive();
