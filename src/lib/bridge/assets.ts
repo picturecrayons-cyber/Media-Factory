@@ -190,15 +190,8 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
     }
 
     // Stage 4: Database persistence and audit logging
-    diagnosticStage = "database_migration_queue_uploaded";
-    await sql`
-      update loop_media_migration_queue
-      set status = 'UPLOADED', target_path = ${sealedKey}, updated_at = now()
-      where title_id = ${title.id}
-        and asset_kind = case when ${asset.kind} = 'screener' then 'TRAILER' else upper(${asset.kind}) end
-        and status in ('PENDING_REUPLOAD', 'UPLOADED')
-    `;
-
+    // The legacy Loop migration queue has a different schema and lifecycle contract.
+    // Canonical Bridge verification is persisted atomically in bridge_assets and bridge_audit_logs.
     diagnosticStage = "database_persist_verified_asset";
     let confirmed = false;
     try {
@@ -228,14 +221,6 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
     }
 
     if (confirmed) {
-      diagnosticStage = "database_migration_queue_verified";
-      await sql`
-        update loop_media_migration_queue
-        set status = 'VERIFIED', target_path = ${sealedKey}, updated_at = now()
-        where title_id = ${title.id}
-          and asset_kind = case when ${asset.kind} = 'screener' then 'TRAILER' else upper(${asset.kind}) end
-          and status in ('UPLOADED', 'PENDING_REUPLOAD')
-      `;
       console.log("[bridge-asset-confirmation] asset verification completed", {
         stage: "COMPLETED",
         assetId: asset.id,
