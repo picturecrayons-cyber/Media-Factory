@@ -18,7 +18,9 @@ function configuredSupabaseTarget() {
   return resolveBridgeSupabaseTarget(
     read("SUPABASE_URL") || read("VITE_SUPABASE_URL"),
     deploymentEnvironment(),
-    read("EXPECTED_SUPABASE_PROJECT_REF") || read("VITE_EXPECTED_SUPABASE_PROJECT_REF"),
+    read("EXPECTED_SUPABASE_PROJECT_REF") ||
+      read("VITE_EXPECTED_SUPABASE_PROJECT_REF") ||
+      read("VITE_BRIDGE_EXPECTED_SUPABASE_REF"),
   );
 }
 
