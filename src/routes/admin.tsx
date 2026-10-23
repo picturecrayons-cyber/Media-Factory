@@ -52,13 +52,14 @@ function AdminBody({ actor }: { actor: any }) {
       <div className="space-y-5">
         <section className="flex flex-col gap-4 rounded-2xl border border-line bg-surface p-5 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wider text-accent">Crayons Pictures · Operations</p>
-            <h2 className="mt-1 font-display text-2xl font-semibold">Good overview. Clear next steps.</h2>
-            <p className="mt-1 max-w-2xl text-sm text-muted">Review titles, complete QC and rights checks, and authorize delivery only when required gates pass.</p>
+            <p className="text-xs font-semibold uppercase tracking-wider text-accent">StreamVista OPC PVT LTD · Operations</p>
+            <h2 className="mt-1 font-display text-2xl font-semibold">Bridge Command Center</h2>
+            <p className="mt-1 max-w-2xl text-sm leading-relaxed text-muted">One place to monitor intake, review queues, licensing readiness, delivery and operator activity. Uploading is not approval; publication stays gated by verified evidence and explicit authorization.</p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Link to="/admin/workstations"><Button>Open workspace</Button></Link>
+            <Link to="/admin/workstations"><Button>Review queue</Button></Link>
             <Link to="/cms"><Button variant="outline">Open CMS</Button></Link>
+            <Link to="/cms" search={{ tab: "licensing" }}><Button variant="outline">Buyer / licensing desk</Button></Link>
             <a href="https://crayonsloop.in/" target="_blank" rel="noreferrer"><Button variant="outline">Open Loop ↗</Button></a>
           </div>
         </section>
@@ -68,6 +69,22 @@ function AdminBody({ actor }: { actor: any }) {
           <Metric label="QC / intake" value={loading ? "—" : String(qcQueue)} detail="Awaiting review" />
           <Metric label="Rights review" value={loading ? "—" : String(rightsQueue)} detail="Clearance queue" />
           <Metric label="Buyer-ready" value={loading ? "—" : String(buyerReady)} detail="Licensing stages" />
+        </section>
+
+        <section aria-labelledby="command-center-tools" className="space-y-3">
+          <div>
+            <h3 id="command-center-tools" className="font-display text-xl font-semibold">Command center</h3>
+            <p className="mt-1 text-sm text-muted">Choose a task-specific workspace. Each module keeps its existing role checks and workflow gates.</p>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            <CommandCard title="Title library" description="Search canonical title records, inspect metadata and open a title workspace." action="Browse titles" to="/workspace" />
+            <CommandCard title="Curation · QC · Rights" description="Review intake, assets, QC findings, legal evidence and the audit trail." action="Open review workstations" to="/admin/workstations" />
+            <CommandCard title="Ingest & CMS" description="Create a canonical title and manage the ingest workflow without bypassing approval gates." action="Open ingest" to="/cms" />
+            <CommandCard title="Buyer / licensing desk" description="Inspect licensing-stage titles and readiness from the administrator workspace." action="Open licensing desk" to="/cms" searchTab="licensing" />
+            <CommandCard title="Global buyer communications" description="Maintain buyer prospects, link existing mailbox threads and prepare audited unsent drafts." action="Open communications desk" to="/admin/communications" />
+            <CommandCard title="Deliveries & vendor jobs" description="Inspect delivery readiness and operational delivery status." action="Open deliveries" to="/deliveries" />
+            <CommandCard title="People & organization" description="Review profile and organization information; role grants remain invitation-controlled." action="Open account" to="/account" />
+          </div>
         </section>
 
         <section className="rounded-2xl border border-line bg-surface p-4">
@@ -151,6 +168,20 @@ function AdminBody({ actor }: { actor: any }) {
         </section>
       </div>
     </BridgeShell>
+  );
+}
+
+function CommandCard({ title, description, action, to, searchTab }: { title: string; description: string; action: string; to: "/workspace" | "/admin/workstations" | "/admin/communications" | "/cms" | "/deliveries" | "/account"; searchTab?: "ingest" | "licensing" | "publishing" }) {
+  return (
+    <article className="flex min-w-0 flex-col rounded-2xl border border-line bg-surface p-4 transition-colors hover:border-accent/60">
+      <h4 className="font-semibold">{title}</h4>
+      <p className="mt-2 flex-1 text-sm leading-relaxed text-muted">{description}</p>
+      {searchTab ? (
+        <Link to={to} search={{ tab: searchTab }} className="mt-4 inline-flex min-h-9 items-center font-semibold text-accent hover:underline">{action} →</Link>
+      ) : (
+        <Link to={to} className="mt-4 inline-flex min-h-9 items-center font-semibold text-accent hover:underline">{action} →</Link>
+      )}
+    </article>
   );
 }
 

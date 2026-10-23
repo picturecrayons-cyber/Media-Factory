@@ -14,7 +14,7 @@ const baseGrant: BridgeRightsGrant = {
 };
 
 const request = {
-  destination: "CRAYONS_LOOP" as const,
+  destination: "CRAYONS_LOOP",
   territories: ["IN"],
   languages: ["Malayalam"],
   exploitationModels: ["TVOD"],
@@ -81,7 +81,6 @@ test("rejects a publication window outside the grant", () => {
   );
 });
 
-
 test("rejects a temporally expired grant even when its status is still VALID", () => {
   assert.equal(findCoveringRightsGrant([baseGrant], { ...request, now: new Date("2028-01-01T00:00:00.000Z") }), null);
 });
@@ -93,6 +92,7 @@ test("rejects malformed and reversed rights windows", () => {
 });
 
 test("rejects empty publication dimensions", () => {
+  assert.equal(findCoveringRightsGrant([baseGrant], { ...request, destination: "  " }), null);
   assert.equal(findCoveringRightsGrant([baseGrant], { ...request, territories: [] }), null);
   assert.equal(findCoveringRightsGrant([baseGrant], { ...request, languages: ["  "] }), null);
   assert.equal(findCoveringRightsGrant([baseGrant], { ...request, exploitationModels: [] }), null);
@@ -111,4 +111,24 @@ test("extension cannot restore suspended revoked expired or pending publications
   assert.throws(() => assertPublicationCanExtend("live", "2026-09-29T00:00:00.000Z"), /fresh authorization/);
   assert.doesNotThrow(() => assertPublicationCanExtend("live", null));
   assert.doesNotThrow(() => assertPublicationCanExtend("authorized", null));
+});
+
+test("checks each partner independently; a Loop grant cannot authorize another partner", () => {
+  const loopOnly = { ...baseGrant, media: ["CRAYONS_LOOP", "TVOD"] };
+  assert.equal(findCoveringRightsGrant([loopOnly], request)?.id, "grant-1");
+  assert.equal(findCoveringRightsGrant([loopOnly], { ...request, destination: "AMAZON_PRIME_VIDEO" }), null);
+  assert.equal(findCoveringRightsGrant([loopOnly], { ...request, destination: "JIOHOTSTAR" }), null);
+});
+
+test("supports explicit partner and exploitation-model grants without granting other partners", () => {
+  const amazonTvod = { ...baseGrant, media: ["AMAZON_PRIME_VIDEO", "TVOD"] };
+  assert.equal(findCoveringRightsGrant([amazonTvod], { ...request, destination: "AMAZON_PRIME_VIDEO" })?.id, "grant-1");
+  assert.equal(findCoveringRightsGrant([amazonTvod], { ...request, destination: "AMAZON_PRIME_VIDEO", exploitationModels: ["SVOD"] }), null);
+  assert.equal(findCoveringRightsGrant([amazonTvod], { ...request, destination: "CRAYONS_LOOP" }), null);
+});
+
+test("partner-specific rights comparisons are case-insensitive but never infer a missing partner", () => {
+  const grant = { ...baseGrant, media: ["amazon_prime_video", "tvod"] };
+  assert.equal(findCoveringRightsGrant([grant], { ...request, destination: "AMAZON_PRIME_VIDEO" })?.id, "grant-1");
+  assert.equal(findCoveringRightsGrant([grant], { ...request, destination: "" }), null);
 });

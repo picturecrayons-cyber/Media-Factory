@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, Navigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { RequireBridge } from "@/components/bridge/gate";
@@ -48,16 +48,77 @@ function loadRazorpay(): Promise<RzCtor> {
 
 function Buyer() {
   return (
-    <RequireBridge allow="buyer">
-      {(actor) => (
-        <BridgeShell actor={actor} title="Buyer dashboard">
-          <p className="mb-6 max-w-2xl text-sm leading-relaxed text-muted">
-            Discover licensing-ready titles, open a listing, then license only after captured payment.
-          </p>
-          <BuyerBody />
-        </BridgeShell>
-      )}
+    <RequireBridge>
+      {(actor) => {
+        if (actor.internalRole === "admin" || actor.internalRole === "super_admin") {
+          return <AdminBuyerDesk actor={actor} />;
+        }
+        if (actor.internalRole || actor.accountType !== "buyer") {
+          return <Navigate to={actor.internalRole ? "/internal" : "/"} />;
+        }
+        return (
+          <BridgeShell actor={actor} title="Buyer dashboard">
+            <p className="mb-6 max-w-2xl text-sm leading-relaxed text-muted">
+              Discover licensing-ready titles, open a listing, then license only after captured payment.
+            </p>
+            <BuyerBody />
+          </BridgeShell>
+        );
+      }}
     </RequireBridge>
+  );
+}
+
+function AdminBuyerDesk({ actor }: { actor: any }) {
+  const titlesQ = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles() });
+  const liveTitles = (titlesQ.data?.titles ?? []).filter((title) => title.status === "LIVE_FOR_BUYERS");
+
+  return (
+    <BridgeShell actor={actor} title="Buyer Desk · Admin Preview">
+      <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
+        <p className="text-xs font-semibold uppercase tracking-wider text-accent">Read-only · Admin / Super Admin</p>
+        <h2 className="mt-1 font-display text-2xl font-semibold">Buyer-facing catalogue</h2>
+        <p className="mt-2 max-w-3xl text-sm leading-relaxed text-muted">
+          Inspect only titles whose Bridge lifecycle is LIVE FOR BUYERS. This administrator view does not create orders, trigger payments, grant entitlements, or publish titles.
+        </p>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <Link to="/admin"><Button variant="outline">Back to Command Center</Button></Link>
+          <Link to="/cms" search={{ tab: "licensing" }}><Button variant="outline">Licensing readiness</Button></Link>
+        </div>
+      </section>
+
+      <section className="mt-5 rounded-2xl border border-line bg-surface">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-4 py-4">
+          <div>
+            <h3 className="font-semibold">Live buyer listings</h3>
+            <p className="mt-1 text-sm text-muted">Canonical Bridge records · no unpublished or preparing titles are shown.</p>
+          </div>
+          <span className="rounded-full border border-line px-3 py-1 text-sm font-semibold tabular-nums">{titlesQ.isPending ? "—" : liveTitles.length} titles</span>
+        </div>
+        {titlesQ.isPending ? (
+          <p className="px-4 py-6 text-sm text-muted">Loading buyer listings…</p>
+        ) : titlesQ.isError ? (
+          <p role="alert" className="px-4 py-6 text-sm text-muted">Buyer listings could not be loaded. Refresh to retry; no empty catalogue is inferred.</p>
+        ) : !liveTitles.length ? (
+          <p className="px-4 py-6 text-sm text-muted">No titles are currently marked LIVE FOR BUYERS in the canonical Bridge records.</p>
+        ) : (
+          <ul className="divide-y divide-line">
+            {liveTitles.map((title) => (
+              <li key={title.id} className="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0">
+                  <p className="font-semibold">{title.name}</p>
+                  <p className="mt-1 text-sm text-muted">{title.language} · {title.licensingFeePaise > 0 ? `₹${Math.round(title.licensingFeePaise / 100)}` : "Fee not set"}</p>
+                </div>
+                <div className="flex flex-wrap items-center gap-3">
+                  <span className="rounded-full border border-line px-2 py-1 text-xs text-muted">LIVE FOR BUYERS</span>
+                  <Link to="/title/$id" params={{ id: title.id }} className="text-sm font-semibold text-accent hover:underline">Inspect title →</Link>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+    </BridgeShell>
   );
 }
 
