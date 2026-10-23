@@ -180,8 +180,8 @@ function Onboarding() {
           refetch: async () => { const result = await sessionQ.refetch(); if (result.error) throw result.error; },
           signIn: async () => { await supabase.auth.signOut({ scope: "local" }).catch(() => undefined); void navigate({ to: "/login", replace: true }); },
         });
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Bridge could not load onboarding. Please try again shortly.");
+      } catch {
+        setError("Bridge could not load onboarding. Please try again shortly.");
       } finally {
         setRetrying(false);
       }
@@ -192,9 +192,7 @@ function Onboarding() {
           <BrandMark />
           <h1 className="font-display text-2xl font-semibold">Could not load Bridge</h1>
           <p className="text-sm leading-relaxed text-muted">
-            {sessionQ.error?.message
-              ? `Session status: ${sessionQ.error.message}`
-              : "Retry without clearing your session."}
+            Retry without clearing your session, or continue to the onboarding form.
           </p>
           {error ? <p role="alert" className="text-sm text-accent">{error}</p> : null}
           <div className="space-y-2">
