@@ -125,6 +125,9 @@ function DeliveryList() {
                 {t.language}
                 {t.year ? ` · ${t.year}` : ""}
               </p>
+              <p className="mt-1 break-all font-mono text-[11px] text-muted">
+                Title ID: {t.id}
+              </p>
             </div>
             <span className="rounded-full border border-line px-3 py-1 text-[10px] font-semibold">
               {t.status === "DELIVERED" ? "DELIVERED" : "OPEN TITLE"}
