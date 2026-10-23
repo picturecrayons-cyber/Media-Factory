@@ -56,6 +56,7 @@ export const listBuyerProspects = createServerFn({ method: "GET" })
       select id, company_name, company_domain, contact_name, contact_email, country,
              pipeline_stage, verification_status, updated_at
       from bridge_buyer_prospects
+      where (${actor.internalRole === "super_admin"} or organization_scope = ${actor.organizationName})
       order by updated_at desc
       limit 500
     `;
@@ -119,7 +120,10 @@ export const linkBuyerCommunicationThread = createServerFn({ method: "POST" })
     }
     const sql = await getSql();
     const prospect = await sql<{ id: string; organization_scope: string | null }>`
-      select id, organization_scope from bridge_buyer_prospects where id = ${data.prospectId} limit 1
+      select id, organization_scope from bridge_buyer_prospects
+      where id = ${data.prospectId}
+        and (${actor.internalRole === "super_admin"} or organization_scope = ${actor.organizationName})
+      limit 1
     `;
     if (!prospect[0]) throw new Error("Buyer prospect not found");
     const scope = prospect[0].organization_scope || `prospect:${prospect[0].id}`;
@@ -233,7 +237,10 @@ export const advanceBuyerProspectStage = createServerFn({ method: "POST" })
     return sql.transaction(async (tx) => {
       const currentRows = await tx<{ id: string; pipeline_stage: string; verification_status: string; verification_evidence_ref: string | null }>`
         select id, pipeline_stage, verification_status, verification_evidence_ref
-        from bridge_buyer_prospects where id = ${data.prospectId} for update
+        from bridge_buyer_prospects
+        where id = ${data.prospectId}
+          and (${actor.internalRole === "super_admin"} or organization_scope = ${actor.organizationName})
+        for update
       `;
       const current = currentRows[0];
       if (!current) throw new Error("Buyer prospect not found");
@@ -257,7 +264,7 @@ export const advanceBuyerProspectStage = createServerFn({ method: "POST" })
         insert into bridge_notifications (recipient_user_id, organization_scope, event_type, entity_type, entity_id, dedupe_key, payload)
         values (${actor.userId}, ${actor.organizationName}, 'BUYER_PIPELINE_STAGE_CHANGED',
           'bridge_buyer_prospect', ${data.prospectId},
-          ${`buyer-stage:${data.prospectId}:${data.stage}:${Date.now()}`},
+          ${`buyer-stage:${data.prospectId}:${current.pipeline_stage}:${data.stage}`},
           ${JSON.stringify({ from: current.pipeline_stage, to: data.stage })}::jsonb)
         on conflict (dedupe_key) do nothing
       `;
@@ -275,7 +282,9 @@ export const verifyBuyerProspect = createServerFn({ method: "POST" })
     const sql = await getSql();
     const rows = await sql<{ id: string; pipeline_stage: string; verification_status: string }>`
       select id, pipeline_stage, verification_status from bridge_buyer_prospects
-      where id = ${data.prospectId} limit 1
+      where id = ${data.prospectId}
+        and (${actor.internalRole === "super_admin"} or organization_scope = ${actor.organizationName})
+      limit 1
     `;
     const prospect = rows[0];
     if (!prospect) throw new Error("Buyer prospect not found");
