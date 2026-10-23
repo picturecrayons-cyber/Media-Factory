@@ -4,7 +4,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import { bridgeEnv } from "./env";
-import { paymentVerifyBody, verifyRazorpaySignature } from "./razorpay-crypto";
+import { assertRazorpayEnvironment, paymentVerifyBody, verifyRazorpaySignature } from "./razorpay-crypto";
 import { requireVerifiedActor } from "./session";
 import { assertPermission, canReadTitle } from "./rbac";
 import { loadTitle, recordTransition } from "./titles";
@@ -16,6 +16,12 @@ function requireRazorpayKeys() {
   const keyId = bridgeEnv.razorpayKeyId();
   const keySecret = bridgeEnv.razorpayKeySecret();
   if (!keyId || !keySecret) throw new Error("Razorpay is not configured");
+  assertRazorpayEnvironment({
+    deploymentEnvironment:
+      process.env.VERCEL_ENV || process.env.VITE_BRIDGE_ENVIRONMENT || process.env.VITE_BRIDGE_DEPLOY_ENV,
+    testMode: process.env.RAZORPAY_TEST_MODE,
+    keyId,
+  });
   return { keyId, keySecret };
 }
 
@@ -346,6 +352,7 @@ export const listOwnEntitlements = createServerFn({ method: "GET" })
   });
 
 export async function ingestRazorpayWebhook(rawBody: string, signature: string | null) {
+  requireRazorpayKeys();
   const secret = bridgeEnv.razorpayWebhookSecret();
   if (!secret) throw new Error("Razorpay webhook is not configured");
   const ok = verifyRazorpaySignature({ secret, body: rawBody, signature });

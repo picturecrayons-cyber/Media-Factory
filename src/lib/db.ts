@@ -3,18 +3,27 @@ import { pendingMigrations } from "../../scripts/migration-plan.mjs";
 /** Which database backend is active. */
 export type DbSource = "postgres" | "pglite";
 
-// Prefer an explicit DATABASE_URL when present. On Vercel, the native Supabase
-// integration injects POSTGRES_URL, so accept that as the canonical fallback.
-// Empty/whitespace values are treated as unset to avoid a silent PGLite fallback.
-const rawDatabaseUrl =
-  typeof process !== "undefined"
-    ? (
-        process.env.DATABASE_URL ??
-        process.env.POSTGRES_URL ??
-        process.env.SUPABASE_DB_URL ??
-        process.env.SUPABASE_DATABASE_URL
-      )
-    : undefined;
+// Prefer the first non-empty database binding. Vercel branch-scoped fail-closed
+// overrides may intentionally set DATABASE_URL to an empty string; nullish coalescing
+// would incorrectly stop there and hide a later, explicitly configured staging URL.
+function firstNonEmptyEnv(...names: string[]): string | undefined {
+  if (typeof process === "undefined") return undefined;
+  for (const name of names) {
+    const value = process.env[name];
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return undefined;
+}
+const rawDatabaseUrl = firstNonEmptyEnv(
+  "DATABASE_URL",
+  "POSTGRES_URL",
+  "SUPABASE_DB_URL",
+  "SUPABASE_DATABASE_URL",
+);
+const expectedSupabaseProjectRef = firstNonEmptyEnv(
+  "EXPECTED_SUPABASE_PROJECT_REF",
+  "BRIDGE_EXPECTED_SUPABASE_REF",
+);
 function normalizePostgresUrl(value: string | undefined): string | undefined {
   if (!value) return undefined;
   const trimmed = value.trim();
@@ -51,10 +60,20 @@ const deployEnv =
         .toLowerCase()
     : "";
 
-if (rawDatabaseUrl && deployEnv === "preview") {
-  if (rawDatabaseUrl.includes("mlmgugivsyoxzdgwkbpu")) {
+if (deployEnv === "preview" && rawDatabaseUrl) {
+  if (rawDatabaseUrl.toLowerCase().includes("mlmgugivsyoxzdgwkbpu")) {
     throw new Error(
       "Preview environment must not target production database: canonical production ref detected.",
+    );
+  }
+  if (!expectedSupabaseProjectRef) {
+    throw new Error(
+      "Preview database target is configured without EXPECTED_SUPABASE_PROJECT_REF; refusing an unverified target.",
+    );
+  }
+  if (!rawDatabaseUrl.toLowerCase().includes(expectedSupabaseProjectRef.toLowerCase())) {
+    throw new Error(
+      "Preview database target does not match EXPECTED_SUPABASE_PROJECT_REF; refusing unknown or production fallback.",
     );
   }
 }

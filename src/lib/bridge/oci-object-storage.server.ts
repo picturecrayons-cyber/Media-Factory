@@ -252,7 +252,7 @@ async function pollWorkRequest(
 ) {
   const url = new URL(`/workRequests/${encodeURIComponent(workRequestId)}`, endpoint(cfg.region));
   const startTime = Date.now();
-  const deadline = startTime + (opts?.deadlineMs ?? 45_000);
+  const deadline = startTime + (opts?.deadlineMs ?? 120_000);
   const propagationGraceMs = opts?.propagationGracePeriodMs ?? 10_000;
   const pollIntervalMs = opts?.pollIntervalMs ?? 1_000;
   let lastStatus = "unknown";
@@ -260,7 +260,7 @@ async function pollWorkRequest(
   while (Date.now() < deadline) {
     const remainingMs = deadline - Date.now();
     const headers = signHeaders({ cfg, method: "GET", url });
-    let res: Response;
+    let res: Response | null = null;
     try {
       res = await fetch(url, {
         method: "GET",
@@ -268,30 +268,34 @@ async function pollWorkRequest(
         signal: AbortSignal.timeout(Math.min(8_000, Math.max(1, remainingMs))),
       });
     } catch {
-      const timeoutErr = new Error(`OCI copy work-request lookup timed out (last status: ${lastStatus})`);
-      Object.assign(timeoutErr, { workRequestId, lastStatus, elapsedMs: Date.now() - startTime, isTimeout: true, ociStage: "WORK_REQUEST_POLL" });
-      throw timeoutErr;
+      // A single request timeout/network reset is not a terminal copy failure. Retry
+      // within the overall deadline; sealVerifiedObject reconciles the destination HEAD
+      // if the work-request endpoint remains temporarily unavailable.
+      lastStatus = "lookup_unreachable";
     }
 
-    const requestId = res.headers.get("opc-request-id");
-    if (!res.ok) {
-      if (res.status === 404) {
-        lastStatus = "not_yet_visible (404)";
-        const elapsed = Date.now() - startTime;
-        if (elapsed >= propagationGraceMs) {
-          const error = new Error(`OCI copy work-request lookup failed (404) (last status: ${lastStatus})${requestId ? ` (request: ${requestId})` : ""}`);
-          Object.assign(error, { status: 404, workRequestId, lastStatus, requestId, elapsedMs: elapsed, ociStage: "WORK_REQUEST_POLL" });
+    if (res) {
+      const requestId = res.headers.get("opc-request-id");
+      if (!res.ok) {
+        if (res.status === 404) {
+          lastStatus = "not_yet_visible (404)";
+          const elapsed = Date.now() - startTime;
+          if (elapsed >= propagationGraceMs) {
+            const error = new Error(`OCI copy work-request lookup failed (404) (last status: ${lastStatus})${requestId ? ` (request: ${requestId})` : ""}`);
+            Object.assign(error, { status: 404, workRequestId, lastStatus, requestId, elapsedMs: elapsed, ociStage: "WORK_REQUEST_POLL" });
+            throw error;
+          }
+        } else if (res.status === 429 || res.status >= 500) {
+          lastStatus = `retryable_http_${res.status}`;
+        } else {
+          const error = new Error(`OCI copy work-request lookup failed (${res.status}) (last status: ${lastStatus})${requestId ? ` (request: ${requestId})` : ""}`);
+          Object.assign(error, { status: res.status, workRequestId, lastStatus, requestId, elapsedMs: Date.now() - startTime, ociStage: "WORK_REQUEST_POLL" });
           throw error;
         }
       } else {
-        const error = new Error(`OCI copy work-request lookup failed (${res.status}) (last status: ${lastStatus})${requestId ? ` (request: ${requestId})` : ""}`);
-        Object.assign(error, { status: res.status, workRequestId, lastStatus, requestId, elapsedMs: Date.now() - startTime, ociStage: "WORK_REQUEST_POLL" });
-        throw error;
-      }
-    } else {
-      const body = (await res.json()) as { status?: string };
-      lastStatus = body.status || "unknown";
-      const normalizedStatus = lastStatus.toUpperCase();
+        const body = (await res.json()) as { status?: string };
+        lastStatus = body.status || "unknown";
+        const normalizedStatus = lastStatus.toUpperCase();
       // OCI-compatible work-request responses can expose a completed terminal state
       // as either SUCCEEDED or COMPLETED. In both cases, the destination HEAD check
       // below remains mandatory before the caller can persist a verified asset.
@@ -300,6 +304,7 @@ async function pollWorkRequest(
         const error = new Error(`OCI object copy ${normalizedStatus.toLowerCase()}`);
         Object.assign(error, { workRequestId, lastStatus: normalizedStatus, requestId, elapsedMs: Date.now() - startTime, ociStage: "WORK_REQUEST_POLL" });
         throw error;
+      }
       }
     }
 
@@ -313,7 +318,7 @@ async function pollWorkRequest(
     lastStatus,
     elapsedMs: Date.now() - startTime,
   });
-  const deadlineErr = new Error(`OCI object copy did not complete within 45 seconds (last status: ${lastStatus}; work request: ${workRequestId})`);
+  const deadlineErr = new Error(`OCI object copy did not complete within 120 seconds (last status: ${lastStatus}; work request: ${workRequestId})`);
   Object.assign(deadlineErr, { workRequestId, lastStatus, elapsedMs: Date.now() - startTime, isTimeout: true, ociStage: "WORK_REQUEST_POLL" });
   throw deadlineErr;
 }
@@ -355,7 +360,27 @@ export async function sealVerifiedObject(
     Object.assign(error, { status: 202, requestId, ociStage: "COPY_REQUEST" });
     throw error;
   }
-  if (workRequestId) await pollWorkRequest(cfg, workRequestId, pollOpts);
+  if (workRequestId) {
+    try {
+      await pollWorkRequest(cfg, workRequestId, pollOpts);
+    } catch (pollError) {
+      // The work-request API can lag or be temporarily unavailable after OCI accepts
+      // a copy. Because destinationKey is unique per asset, a successful HEAD is a
+      // safe reconciliation signal; the caller still compares source/destination size
+      // and requires an ETag before persisting the asset as verified.
+      try {
+        const reconciled = await verifyObject(destinationKey);
+        console.warn("[bridge-oci] work-request polling failed; destination HEAD reconciled copy", {
+          elapsedMs: (pollError as { elapsedMs?: number })?.elapsedMs ?? null,
+          lastStatus: (pollError as { lastStatus?: string })?.lastStatus ?? "unavailable",
+          destinationPresent: true,
+        });
+        return reconciled;
+      } catch {
+        throw pollError;
+      }
+    }
+  }
   return verifyObject(destinationKey);
 }
 
