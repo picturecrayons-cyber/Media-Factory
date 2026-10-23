@@ -7,7 +7,7 @@ import { assertPermission, canAccessDashboard, workspaceHome } from "./rbac";
 import { PRODUCT_NAME, LEGAL_OWNER, PRODUCTION_DOMAIN } from "./canonical";
 import { integrationStatus } from "./env";
 import { assertNotDevUser } from "./guards";
-import { resolveExplicitBridgeProfileId } from "./identity-link-guard";
+import { canUseLegacyEmailFallback, resolveExplicitBridgeProfileId } from "./identity-link-guard";
 
 export type BridgeActor = Actor & {
   email: string;
@@ -70,7 +70,7 @@ export async function resolveBridgeUserId(authUserId: string): Promise<string> {
       where user_id = ${authUserId}::uuid and provider = 'google'
     ) as present
   `;
-  if (googleIdentity[0]?.present) return authUserId;
+  if (!canUseLegacyEmailFallback(Boolean(googleIdentity[0]?.present))) return authUserId;
 
   // Legacy non-Google accounts may still use the verified-email recovery path
   // while the separately reviewed account-linking flow is pending.
