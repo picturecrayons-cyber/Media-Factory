@@ -105,3 +105,42 @@ Repository default-branch search for loop_my_watchlist returned no direct source
 5. Rerun Security Advisor after approved changes and record the exact result.
 
 **Release gate remains NO-GO — NOT CERTIFIED. Production was not queried or changed.**
+
+
+### Follow-up gate execution — 2026-10-23 (read-only)
+
+#### Staging catalog re-check
+
+A fresh read-only query against Staging project `bbtrosuwisnxacuxvegt` returned:
+- Project status `ACTIVE_HEALTHY`, region `ap-south-1`, PostgreSQL 17.
+- Query session identity: `current_user=postgres`, `session_user=postgres`. This identifies the connector SQL session only; it is **not** evidence of the Vercel Preview runtime's database role.
+- Exactly 63 public base tables have RLS enabled and no policies.
+- Each of those 63 tables reports no effective SELECT/INSERT/UPDATE/DELETE privilege for either `anon` or `authenticated`.
+- Fresh function metadata for `public.loop_my_watchlist()`: SECURITY DEFINER, owner `postgres`, fixed `search_path=public, pg_temp`, EXECUTE false for `anon`, true for `authenticated` and `service_role`. No function ACL change was made.
+
+#### Runtime isolation blocker
+
+Read-only Vercel project and Preview environment metadata requests for project `bridge` returned `403 Forbidden`. No environment values were requested/decrypted. Consequently, this review cannot establish the deployed Preview branch's effective `DATABASE_URL`/`POSTGRES_URL` target or embedded database role. Do not infer runtime isolation from the Staging connector query, source code, or project naming. Do not run synthetic-user tests until a project owner supplies verifiable, sanitized Preview-scope evidence tying the deployed commit to the Staging database host/project and the intended least-privileged DB role. Do not expose connection strings or secret values.
+
+#### Source-search additions (default branch at `3b96a07da0b0706515488552d06ecfd3dcb916ea`)
+
+Repository searches found server-side `getSql()` access patterns for:
+- `bridge_buyer_title_access`: `src/lib/bridge/duplicate-title-merge.ts`; related migration/policy references also appear in `migrations/0012_bridge_rls_identity_binding.sql`.
+- `bridge_dmca_registrations`: `src/lib/bridge/dmca.ts`.
+- `bridge_email_challenges`, `bridge_invites`, `bridge_profiles`, `bridge_loop_identity_links`: `src/lib/bridge/profiles.ts`, `src/lib/bridge/session.ts`, and onboarding scripts/tests.
+- `bridge_language_rights`, `bridge_license_packages`, `bridge_package_entitlements`: `src/lib/bridge/multilingual-rights.ts`, `src/lib/bridge/payments.ts`.
+- `bridge_service_catalog`, `bridge_service_costs`, `bridge_service_invoices`, `bridge_service_order_events`, `bridge_service_orders`, `bridge_service_quote_lines`, `bridge_service_quotes`, `bridge_service_rates`, `bridge_tax_rates`: `src/lib/bridge/service-revenue.ts` and `src/lib/bridge/commercial-admin.ts`; the default branch includes `supabase/migrations/20261007000000_harden_bridge_commercial_server_only.sql`, which revokes browser-role privileges for commercial tables.
+- `bridge_site_content`: `src/lib/bridge/site-content.ts`.
+- `bridge_title_gate_certifications`: `src/lib/bridge/admin-workstations.ts` and `src/lib/bridge/buyer-visibility.ts`.
+- `bridge_title_merge_aliases`, `bridge_title_merge_audits`: `src/lib/bridge/duplicate-title-merge.ts`.
+- `bridge_titles`: `src/lib/bridge/titles.ts`, `src/lib/bridge/asset-confirmation.ts`, `src/lib/bridge/admin-workstations.ts`, plus E2E script references.
+- `bridge_webhook_events`: `src/lib/bridge/payments.ts`, `src/lib/bridge/service-revenue.ts`, and `supabase/functions/razorpay-webhook/index.ts`.
+- `bridge_service_catalog` and related commercial tables use direct SQL in server functions; this source observation is not a substitute for confirming the deployed DB role.
+- `config_revisions`, `loc_jobs`: schema/migration references were found; caller/authorization classification remains open.
+- `entitlements`, `loop_entitlements`, `loop_profiles`: source references include `src/lib/bridge/payments.ts`, `src/lib/loop/subscriptions.ts`, `src/lib/loop/catalog.ts`, and `src/lib/loop/profile.ts`. `loop_profiles` reads/writes are scoped with `context.userId` in the reviewed snippet.
+
+This is **still a partial register**, not a claim that all 63 tables have been traced. Some searches returned no default-branch result for the table name; absence of a search hit is not proof that a table is unused. Finish a systematic schema-to-source reconciliation, inspect exact function bodies and role guards, and document each of the 63 tables before marking the register complete.
+
+#### Gate outcome
+
+No migration, grant, policy, function privilege, Auth setting, or application data was changed. No synthetic-user or password-flow tests were run. The Vercel 403 blocks runtime isolation proof; Staging leaked-password protection remains NOT VERIFIED. Keep PR #376 Draft and release status `NO-GO — NOT CERTIFIED`. Production project `mlmgugivsyoxzdgwkbpu` was not queried or changed.
