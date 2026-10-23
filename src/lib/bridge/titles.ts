@@ -12,6 +12,7 @@ import { writeAudit } from "./audit";
 import { assertNotDevUser } from "./guards";
 import { loopStageType } from "./loop-lanes";
 import { assertBuyerPublishable, getBuyerGateStatus } from "./buyer-visibility";
+import { metadataFirstTitleSchema } from "./title-metadata-validation";
 
 type TitleRow = {
   id: string;
@@ -233,6 +234,52 @@ export const createTitle = createServerFn({ method: "POST" })
     const title = await loadTitle(id);
     if (!title) throw new Error("Title create failed");
     return { title, submission: isPublicSubmission };
+  });
+
+export const createMetadataFirstTitle = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(metadataFirstTitleSchema)
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    assertPermission(actor, actor.internalRole ? "title.ingest_internal" : "title.create");
+    const id = randomBytes(16).toString("hex");
+    const slug = slugify(data.name, id);
+    const sql = await getSql();
+    await sql`
+      insert into bridge_titles (
+        id, slug, name, name_ml, owner_user_id, owner_account_type, status,
+        synopsis, language, year, runtime_minutes, licensing_fee_paise,
+        content_type, country_of_origin, release_date, credits
+      ) values (
+        ${id}, ${slug}, ${data.name}, ${data.nameMl ?? null}, ${actor.userId}, ${actor.accountType},
+        ${"DRAFT"}, ${data.synopsis}, ${data.language},
+        ${data.year}, ${data.runtimeMinutes}, ${data.licensingFeePaise ?? 0},
+        ${loopStageType(data.contentType)}, ${data.countryOfOrigin ?? null},
+        ${data.releaseDate ?? null}, ${JSON.stringify([
+          { role: "Director", name: data.director },
+          { role: "Producer", name: data.producer },
+          ...(data.cast ?? []).map((name) => ({ role: "Cast", name })),
+        ])}::jsonb
+      )
+    `;
+    await recordTransition({
+      titleId: id,
+      from: null,
+      to: "DRAFT",
+      actorUserId: actor.userId,
+      note: "metadata-first draft created",
+    });
+    await writeAudit({
+      actorUserId: actor.userId,
+      action: "title.create",
+      entityType: "bridge_title",
+      entityId: id,
+      metadata: { metadataFirst: true },
+    });
+    const title = await loadTitle(id);
+    if (!title) throw new Error("Title create failed");
+    return { title, submission: false };
   });
 
 export const listTitles = createServerFn({ method: "GET" })
