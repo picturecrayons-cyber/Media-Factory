@@ -12,6 +12,7 @@ import {
   listUnlinkedHostingerEvents,
   linkBuyerCommunicationThread,
   listMyBuyerCommunicationThreads,
+  listMyBuyerCommunicationMessages,
   prepareBuyerMailDraft,
   sendConfirmedBuyerMailDraft,
 } from "@/lib/bridge/communications";
@@ -44,6 +45,7 @@ function CommunicationsDesk({ actor }: { actor: any }) {
   const [externalThreadId, setExternalThreadId] = useState("");
   const [mailboxAccountRef, setMailboxAccountRef] = useState("");
   const [threadId, setThreadId] = useState("");
+  const [viewThreadId, setViewThreadId] = useState("");
   const [recipients, setRecipients] = useState("");
   const [draftSubject, setDraftSubject] = useState("");
   const [bodyText, setBodyText] = useState("");
@@ -55,6 +57,7 @@ function CommunicationsDesk({ actor }: { actor: any }) {
 
   const prospectsQ = useQuery({ queryKey: ["bridge-buyer-prospects"], queryFn: () => listBuyerProspects() });
   const threadsQ = useQuery({ queryKey: ["bridge-my-communication-threads"], queryFn: () => listMyBuyerCommunicationThreads({ data: {} }) });
+  const messagesQ = useQuery({ queryKey: ["bridge-thread-messages", viewThreadId], queryFn: () => listMyBuyerCommunicationMessages({ data: { threadId: viewThreadId } }), enabled: Boolean(viewThreadId) });
   const notificationsQ = useQuery({ queryKey: ["bridge-my-notifications"], queryFn: () => listMyBridgeNotifications() });
   const unlinkedEventsQ = useQuery({ queryKey: ["bridge-unlinked-hostinger-events"], queryFn: () => listUnlinkedHostingerEvents(), enabled: actor.internalRole === "super_admin" });
 
@@ -154,6 +157,24 @@ function CommunicationsDesk({ actor }: { actor: any }) {
             {channel === "HOSTINGER_MAIL" ? <><input required className="rounded-lg border border-line bg-transparent px-3 py-2 text-sm" placeholder="Exact Hostinger thread ID" value={externalThreadId} onChange={(e) => setExternalThreadId(e.target.value)} /><input required className="rounded-lg border border-line bg-transparent px-3 py-2 text-sm" placeholder="Exact mailbox address configured in Hostinger webhook" value={mailboxAccountRef} onChange={(e) => setMailboxAccountRef(e.target.value)} /></> : null}
             <button className="rounded-lg border border-line px-4 py-2 text-sm font-semibold disabled:opacity-50" disabled={linkThread.isPending}>Save thread link</button>
           </form>
+        </section>
+
+        <section className="rounded-2xl border border-line bg-surface p-5">
+          <h2 className="font-display text-xl font-semibold">Conversation history</h2>
+          <p className="mt-1 text-sm text-muted">History is scoped to threads linked by your operator account. Webhook previews may be truncated by the mailbox provider.</p>
+          <select className="mt-3 w-full rounded-lg border border-line bg-transparent px-3 py-2 text-sm" value={viewThreadId} onChange={(e) => setViewThreadId(e.target.value)}>
+            <option value="">Choose a linked thread</option>
+            {(threadsQ.data?.threads ?? []).map((t) => <option key={t.id} value={t.id}>{t.subject} · {t.channel}</option>)}
+          </select>
+          {messagesQ.isError ? <p className="mt-3 text-sm text-muted">Conversation history unavailable for this thread.</p> : null}
+          <ol className="mt-3 space-y-3">
+            {(messagesQ.data?.messages ?? []).map((message) => <li key={message.id} className="rounded-lg border border-line p-3">
+              <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted"><span>{message.direction.replaceAll("_", " ")} · {message.sender_ref ?? "Internal"}</span><span>{message.sent_at ?? message.created_at}</span></div>
+              {message.subject ? <p className="mt-1 font-medium">{message.subject}</p> : null}
+              <p className="mt-2 whitespace-pre-wrap break-words text-sm">{message.body_text ?? "(No body stored)"}</p>
+            </li>)}
+            {viewThreadId && !messagesQ.isPending && !messagesQ.isError && !(messagesQ.data?.messages ?? []).length ? <li className="text-sm text-muted">No messages recorded for this thread yet.</li> : null}
+          </ol>
         </section>
 
         <section className="rounded-2xl border border-line bg-surface p-5">
