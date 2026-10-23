@@ -17,6 +17,7 @@ create table if not exists public.bridge_buyer_prospects (
     check (pipeline_stage in ('DISCOVERED','RESEARCHING','CONTACT_READY','ENQUIRY','IN_NEGOTIATION','CONTRACT_REVIEW','CONTRACTED','DECLINED','DORMANT')),
   verification_status text not null default 'UNVERIFIED'
     check (verification_status in ('UNVERIFIED','IDENTITY_REVIEW','VERIFIED_BUYER','CONTRACTED_PARTNER','REJECTED')),
+  verification_evidence_ref text,
   owner_user_id text not null,
   organization_scope text,
   notes_internal text,
