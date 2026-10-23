@@ -39,6 +39,14 @@ create table if not exists public.bridge_distribution_deliveries (
   asset_version_ids uuid[] not null check (cardinality(asset_version_ids) > 0),
   scope_snapshot jsonb not null default '{}'::jsonb,
 
+  -- Sublicensing is prohibited by default. A delivery or licence never implies
+  -- a right to sublicense. Exceptions require explicit, auditable legal approval.
+  sublicensing_permitted boolean not null default false,
+  sublicensing_authorized_by text,
+  sublicensing_authorized_at timestamptz,
+  sublicensing_legal_reference text,
+  sublicensing_scope_snapshot jsonb not null default '{}'::jsonb,
+
   authorization_status text not null default 'PENDING'
     check (authorization_status in ('PENDING','AUTHORIZED','REVOKED','EXPIRED','REJECTED')),
   authorized_by text,
@@ -82,7 +90,20 @@ create table if not exists public.bridge_distribution_deliveries (
   constraint bridge_distribution_delivery_ack_evidence_chk
     check (delivery_status not in ('ACKNOWLEDGED','TAKEN_DOWN') or acknowledged_at is not null),
   constraint bridge_distribution_delivery_idempotency_chk
-    check (length(trim(idempotency_key)) > 0)
+    check (length(trim(idempotency_key)) > 0),
+  constraint bridge_distribution_delivery_sublicensing_evidence_chk
+    check (
+      not sublicensing_permitted
+      or (
+        authorization_status = 'AUTHORIZED'
+        and legal_case_id is not null
+        and length(trim(coalesce(sublicensing_authorized_by, ''))) > 0
+        and sublicensing_authorized_at is not null
+        and length(trim(coalesce(sublicensing_legal_reference, ''))) > 0
+        and jsonb_typeof(sublicensing_scope_snapshot) = 'object'
+        and sublicensing_scope_snapshot <> '{}'::jsonb
+      )
+    )
 );
 
 create unique index if not exists bridge_distribution_deliveries_partner_idempotency_uidx
@@ -105,4 +126,6 @@ revoke all on public.bridge_distribution_deliveries from anon, authenticated;
 comment on table public.bridge_distribution_partners is
   'Private partner registry. Credentials must live in a secret manager, never in this table.';
 comment on table public.bridge_distribution_deliveries is
-  'Partner-specific delivery ledger. Authorization, delivery, acknowledgement and takedown remain separate states; no implicit publication.';
+  'Partner-specific delivery ledger. Authorization, delivery, acknowledgement and takedown remain separate states; no implicit publication. Sublicensing is denied by default and needs explicit legal evidence.';
+comment on column public.bridge_distribution_deliveries.sublicensing_permitted is
+  'False by default. True only with explicit, scoped, auditable legal approval; never inferred from distribution or delivery.';
