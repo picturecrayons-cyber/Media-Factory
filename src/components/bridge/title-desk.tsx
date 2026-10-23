@@ -6,6 +6,43 @@ import { Button } from "@/components/ui/button";
 import { StatusChip } from "@/components/bridge/status-rail";
 import { createTitle, listTitles } from "@/lib/bridge/titles";
 import { BRIDGE_LOOP_LANES } from "@/lib/bridge/loop-lanes";
+import { listTitleAssets, requestAssetDownload } from "@/lib/bridge/assets";
+
+function TitlePoster({ titleId, titleName }: { titleId: string; titleName: string }) {
+  const assetsQ = useQuery({
+    queryKey: ["bridge-title-poster-assets", titleId],
+    queryFn: () => listTitleAssets({ data: { titleId } }),
+    staleTime: 60_000,
+    retry: false,
+  });
+  const poster = (assetsQ.data?.assets ?? [])
+    .filter((asset) => asset.verified && asset.contentType?.startsWith("image/") && ["poster_vertical", "poster", "thumbnail"].includes(asset.kind))
+    .sort((a, b) => {
+      const priority = (kind: string) => kind === "poster_vertical" ? 0 : kind === "poster" ? 1 : 2;
+      return priority(a.kind) - priority(b.kind);
+    })[0];
+  const previewQ = useQuery({
+    queryKey: ["bridge-title-poster-preview", poster?.id],
+    queryFn: () => requestAssetDownload({ data: { assetId: poster!.id } }),
+    enabled: Boolean(poster?.verified && poster.contentType?.startsWith("image/")),
+    staleTime: 4 * 60_000,
+    retry: false,
+  });
+  const src = previewQ.data?.url;
+  const [imageFailed, setImageFailed] = useState(false);
+  return (
+    <div className="h-24 w-16 shrink-0 overflow-hidden rounded-md border border-line bg-elevated sm:h-28 sm:w-[4.65rem]" aria-label={`Poster for ${titleName}`}>
+      {src && !imageFailed ? (
+        <img src={src} alt={`${titleName} poster`} loading="lazy" className="h-full w-full object-cover" onError={() => setImageFailed(true)} />
+      ) : (
+        <div className="flex h-full w-full flex-col items-center justify-center gap-1 px-1 text-center text-[10px] text-muted">
+          <span aria-hidden="true" className="text-lg leading-none">▧</span>
+          <span>{assetsQ.isPending || Boolean(poster && previewQ.isPending) ? "Loading" : "No poster"}</span>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function TitleList({ empty, query = "" }: { empty: string; query?: string }) {
   const titlesQ = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles() });
@@ -27,10 +64,11 @@ export function TitleList({ empty, query = "" }: { empty: string; query?: string
           <Link
             to="/title/$id"
             params={{ id: t.id }}
-            className="flex flex-wrap items-center justify-between gap-3 px-4 py-4 hover:bg-fg/5"
+            className="flex items-center gap-3 px-3 py-3 hover:bg-fg/5 sm:gap-4 sm:px-4"
           >
-            <div>
-              <p className="font-medium">{t.name}</p>
+            <TitlePoster titleId={t.id} titleName={t.name} />
+            <div className="min-w-0 flex-1">
+              <p className="truncate font-medium">{t.name}</p>
               <p className="text-sm text-muted">
                 {t.contentType ? `${t.contentType} · ` : ""}
                 {t.language}

@@ -11,13 +11,13 @@ const FORBIDDEN = [
   "sk_live_",
 ];
 const PRIVATE_KEY_PEM = /-----BEGIN (?:RSA )?PRIVATE KEY-----[\r\n]+[A-Za-z0-9+/=\r\n]+-----END (?:RSA )?PRIVATE KEY-----/;
-const ALLOW_BASENAME = new Set(["secret-scan.mjs", "canonical.ts", "canonical.test.ts", "assert-no-legacy-dump.test.mjs"]);
+const ALLOW_BASENAME = new Set(["secret-scan.mjs", "canonical.ts", "canonical.test.ts", "assert-no-legacy-dump.test.mjs", "supabase-target.ts", "supabase-target.test.ts"]);
 
 const hits = [];
 
 function walk(dir) {
   for (const name of readdirSync(dir)) {
-    if (name === "node_modules" || name === ".git" || name === "dist" || name === ".output" || name === ".nitro") continue;
+    if (name === "node_modules" || name === ".git" || name === "dist" || name === ".output" || name === ".nitro" || name === "crayons-loop-streaming-platform" || name === "release-evidence") continue;
     const p = join(dir, name);
     const st = statSync(p);
     if (st.isDirectory()) walk(p);

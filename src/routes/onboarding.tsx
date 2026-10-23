@@ -8,7 +8,6 @@ import { createTitle } from "@/lib/bridge/titles";
 import { getBridgeSession } from "@/lib/bridge/session";
 import { retryWorkspaceSession } from "@/lib/auth/workspace-session-retry";
 import { supabase } from "@/lib/supabase";
-import { ACCOUNT_TYPES } from "@/lib/bridge/types";
 import { BRIDGE_LOOP_LANES } from "@/lib/bridge/loop-lanes";
 import { publicOnboardingError } from "@/lib/bridge/onboarding-errors";
 import { BrandMark } from "@/components/bridge/shell";
@@ -130,6 +129,7 @@ function Onboarding() {
   const [busy, setBusy] = useState(false);
   const submitInFlight = useRef(false);
   const [retrying, setRetrying] = useState(false);
+  const [bypassSessionError, setBypassSessionError] = useState(false);
 
   const home = sessionQ.data?.profile ? sessionQ.data.home : null;
 
@@ -169,7 +169,7 @@ function Onboarding() {
     );
   }
 
-  if (sessionQ.isError) {
+  if (sessionQ.isError && !bypassSessionError) {
     async function retrySession() {
       if (retrying) return;
       setRetrying(true);
@@ -190,10 +190,37 @@ function Onboarding() {
       <main className="grid min-h-screen place-items-center bg-bg p-6">
         <div className="w-full max-w-sm space-y-4 rounded-2xl border border-line bg-surface p-6">
           <BrandMark />
-          <h1 className="font-display text-2xl">Could not load Bridge</h1>
-          <p className="text-sm leading-relaxed text-muted">Retry without clearing your session.</p>
+          <h1 className="font-display text-2xl font-semibold">Could not load Bridge</h1>
+          <p className="text-sm leading-relaxed text-muted">
+            Retry without clearing your session, or continue to the onboarding form.
+          </p>
           {error ? <p role="alert" className="text-sm text-accent">{error}</p> : null}
-          <Button type="button" disabled={retrying} className="w-full" onClick={() => void retrySession()}>{retrying ? "Checking…" : "Retry"}</Button>
+          <div className="space-y-2">
+            <Button type="button" disabled={retrying} className="w-full" onClick={() => void retrySession()}>
+              {retrying ? "Checking…" : "Retry"}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full text-xs text-muted hover:text-fg"
+              onClick={() => {
+                setBypassSessionError(true);
+              }}
+            >
+              Continue to Onboarding form
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              className="w-full text-xs text-muted"
+              onClick={async () => {
+                await supabase.auth.signOut({ scope: "local" }).catch(() => undefined);
+                void navigate({ to: "/login", replace: true });
+              }}
+            >
+              Sign out and switch account
+            </Button>
+          </div>
         </div>
       </main>
     );
@@ -209,6 +236,13 @@ function Onboarding() {
     submitInFlight.current = true;
     setBusy(true);
     setError(null);
+
+    if (sessionQ.data && "dbStatus" in sessionQ.data && sessionQ.data.dbStatus === "unconfigured") {
+      setError("Database is not configured on this environment. Profile creation is blocked.");
+      submitInFlight.current = false;
+      setBusy(false);
+      return;
+    }
 
     try {
       let inviteToken: string | undefined;
@@ -289,6 +323,12 @@ function Onboarding() {
           </div>
           <span className="hidden rounded-full border border-line bg-elevated px-3 py-1 text-xs text-muted sm:inline-flex">StreamVista OPC Pvt Ltd.</span>
         </div>
+
+        {sessionQ.data && "dbStatus" in sessionQ.data && sessionQ.data.dbStatus === "unconfigured" ? (
+          <div role="status" className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-400">
+            Preview Environment: Direct database connection is omitted for staging isolation. Profile creation is disabled in this environment.
+          </div>
+        ) : null}
 
         <section className="space-y-4 rounded-2xl border border-line p-5">
           <div>

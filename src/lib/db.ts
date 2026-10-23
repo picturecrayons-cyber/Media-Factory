@@ -39,6 +39,26 @@ function normalizePostgresUrl(value: string | undefined): string | undefined {
     throw new Error(`Invalid Bridge database binding: ${message}`);
   }
 }
+const deployEnv =
+  typeof process !== "undefined"
+    ? (
+        process.env.VERCEL_ENV ??
+        process.env.BRIDGE_ENVIRONMENT ??
+        process.env.VITE_BRIDGE_DEPLOY_ENV ??
+        ""
+      )
+        .trim()
+        .toLowerCase()
+    : "";
+
+if (rawDatabaseUrl && deployEnv === "preview") {
+  if (rawDatabaseUrl.includes("mlmgugivsyoxzdgwkbpu")) {
+    throw new Error(
+      "Preview environment must not target production database: canonical production ref detected.",
+    );
+  }
+}
+
 const databaseUrl = normalizePostgresUrl(
   rawDatabaseUrl && rawDatabaseUrl.trim() ? rawDatabaseUrl : undefined,
 );
@@ -67,6 +87,13 @@ function vercelPostgresRequired(): never {
  * but `getSql()` / `getPglite()` fail closed instead of booting WASM.
  */
 export const dbSource: DbSource = databaseUrl ? "postgres" : "pglite";
+
+export function isDatabaseConfigured(): boolean {
+  if (vercelRuntime) {
+    return Boolean(databaseUrl);
+  }
+  return true;
+}
 
 /**
  * Minimal shared SQL surface, satisfied by both Neon and PGLite. Both the

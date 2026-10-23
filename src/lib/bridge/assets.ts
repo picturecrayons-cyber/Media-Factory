@@ -83,9 +83,14 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
     }),
   )
   .handler(async ({ context, data }) => {
+    const diagnosticStartedAt = Date.now();
+    let diagnosticStage = "authentication";
+    const diagnosticAssetId = data.assetId;
+    try {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
     assertPermission(actor, actor.internalRole ? "title.ingest_internal" : "asset.sign_upload");
+    diagnosticStage = "database_asset_lookup";
     const sql = await getSql();
     const rows = await sql<{
       id: string;
@@ -108,22 +113,84 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
     if (asset.byte_size != null)
       return { assetId: asset.id, byteSize: Number(asset.byte_size), verified: true };
 
+    const startTime = Date.now();
     const { verifyObject, sealVerifiedObject } = await import("./oci-object-storage.server");
-    const object = await verifyObject(asset.s3_key, asset.content_type);
+    diagnosticStage = "oci_source_head_verification";
+
+    // Stage 1: Verify uploaded source object in OCI
+    let object: Awaited<ReturnType<typeof verifyObject>>;
+    try {
+      object = await verifyObject(asset.s3_key, asset.content_type);
+    } catch (err) {
+      console.error("[bridge-asset-confirmation] source head verification failed", {
+        stage: "SOURCE_HEAD",
+        assetId: asset.id,
+        titleId: title.id,
+        kind: asset.kind,
+        elapsedMs: Date.now() - startTime,
+        errorCategory: "SOURCE_HEAD_FAILED",
+        httpStatus: (err as { status?: number })?.status ?? null,
+        ociRequestId: (err as { requestId?: string | null })?.requestId ?? null,
+        error: (err as Error).message,
+      });
+      throw err;
+    }
+
+    // Stage 2: Metadata validation (byte size and ETag)
     if (data.expectedByteSize != null && object.byteSize !== data.expectedByteSize) {
+      console.error("[bridge-asset-confirmation] metadata size mismatch", {
+        stage: "METADATA_VALIDATION",
+        assetId: asset.id,
+        titleId: title.id,
+        kind: asset.kind,
+        elapsedMs: Date.now() - startTime,
+        errorCategory: "METADATA_SIZE_MISMATCH",
+        expectedByteSize: data.expectedByteSize,
+        actualByteSize: object.byteSize,
+      });
       throw new Error("Uploaded object size does not match the file that was sent");
     }
     if (!object.etag) throw new Error("Object ETag is required for immutable verification");
-    // Use the immutable asset row ID, not a per-request UUID. If a browser timeout
-    // leads to a duplicate confirmation while the first server call is still running,
-    // both attempts target the same sealed object instead of creating orphan copies.
+
+    // Stage 3: Immutable seal copy in OCI
     const sealedKey = `${asset.s3_key}.verified/${asset.id}`;
-    const sealed = await sealVerifiedObject(asset.s3_key, sealedKey, object.etag);
+    diagnosticStage = "oci_immutable_copy_and_destination_head";
+    let sealed: Awaited<ReturnType<typeof sealVerifiedObject>>;
+    try {
+      sealed = await sealVerifiedObject(asset.s3_key, sealedKey, object.etag);
+    } catch (err) {
+      console.error("[bridge-asset-confirmation] immutable seal failed", {
+        stage: "IMMUTABLE_SEAL",
+        assetId: asset.id,
+        titleId: title.id,
+        kind: asset.kind,
+        elapsedMs: Date.now() - startTime,
+        errorCategory: (err as { isTimeout?: boolean })?.isTimeout ? "OCI_POLL_TIMEOUT" : "SEAL_COPY_FAILED",
+        httpStatus: (err as { status?: number })?.status ?? null,
+        ociRequestId: (err as { requestId?: string | null })?.requestId ?? null,
+        workRequestId: (err as { workRequestId?: string | null })?.workRequestId ?? null,
+        terminalStatus: (err as { lastStatus?: string | null })?.lastStatus ?? null,
+        error: (err as Error).message,
+      });
+      throw err;
+    }
+
     if (sealed.byteSize !== object.byteSize || !sealed.etag) {
+      console.error("[bridge-asset-confirmation] destination head verification mismatch", {
+        stage: "DESTINATION_HEAD",
+        assetId: asset.id,
+        titleId: title.id,
+        kind: asset.kind,
+        elapsedMs: Date.now() - startTime,
+        errorCategory: "SEALED_COPY_MISMATCH",
+        sourceByteSize: object.byteSize,
+        sealedByteSize: sealed.byteSize,
+      });
       throw new Error("Verified copy differs from the uploaded object");
     }
-    // Only mark the migration queue as UPLOADED after the immutable copy succeeds
-    // and destination object's size, content type, and ETag have been verified.
+
+    // Stage 4: Database persistence and audit logging
+    diagnosticStage = "database_migration_queue_uploaded";
     await sql`
       update loop_media_migration_queue
       set status = 'UPLOADED', target_path = ${sealedKey}, updated_at = now()
@@ -131,19 +198,37 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
         and asset_kind = case when ${asset.kind} = 'screener' then 'TRAILER' else upper(${asset.kind}) end
         and status in ('PENDING_REUPLOAD', 'UPLOADED')
     `;
-    const confirmed = await persistVerifiedAsset(sql, {
-      assetId: asset.id,
-      actorUserId: actor.userId,
-      internalActor: Boolean(actor.internalRole),
-      titleId: title.id,
-      kind: asset.kind,
-      byteSize: sealed.byteSize,
-      contentType: sealed.contentType,
-      checksum: sealed.etag,
-      sourceKey: asset.s3_key,
-      sealedKey,
-    });
+
+    diagnosticStage = "database_persist_verified_asset";
+    let confirmed = false;
+    try {
+      confirmed = await persistVerifiedAsset(sql, {
+        assetId: asset.id,
+        actorUserId: actor.userId,
+        internalActor: Boolean(actor.internalRole),
+        titleId: title.id,
+        kind: asset.kind,
+        byteSize: sealed.byteSize,
+        contentType: sealed.contentType,
+        checksum: sealed.etag,
+        sourceKey: asset.s3_key,
+        sealedKey,
+      });
+    } catch (err) {
+      console.error("[bridge-asset-confirmation] database persistence error", {
+        stage: "DB_PERSISTENCE",
+        assetId: asset.id,
+        titleId: title.id,
+        kind: asset.kind,
+        elapsedMs: Date.now() - startTime,
+        errorCategory: "DB_PERSISTENCE_ERROR",
+        error: (err as Error).message,
+      });
+      throw err;
+    }
+
     if (confirmed) {
+      diagnosticStage = "database_migration_queue_verified";
       await sql`
         update loop_media_migration_queue
         set status = 'VERIFIED', target_path = ${sealedKey}, updated_at = now()
@@ -151,16 +236,65 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
           and asset_kind = case when ${asset.kind} = 'screener' then 'TRAILER' else upper(${asset.kind}) end
           and status in ('UPLOADED', 'PENDING_REUPLOAD')
       `;
-    }
-    if (!confirmed) {
+      console.log("[bridge-asset-confirmation] asset verification completed", {
+        stage: "COMPLETED",
+        assetId: asset.id,
+        titleId: title.id,
+        kind: asset.kind,
+        byteSize: sealed.byteSize,
+        contentType: sealed.contentType,
+        elapsedMs: Date.now() - startTime,
+        dbPersisted: true,
+      });
+    } else {
       const current = await sql<{
         byte_size: number | null;
       }>`select byte_size from bridge_assets where id = ${asset.id}`;
-      if (current[0]?.byte_size != null)
+      if (current[0]?.byte_size != null) {
+        console.log("[bridge-asset-confirmation] asset already verified concurrently", {
+          stage: "COMPLETED",
+          assetId: asset.id,
+          titleId: title.id,
+          kind: asset.kind,
+          byteSize: Number(current[0].byte_size),
+          elapsedMs: Date.now() - startTime,
+          dbPersisted: true,
+        });
         return { assetId: asset.id, byteSize: Number(current[0].byte_size), verified: true };
+      }
+      console.error("[bridge-asset-confirmation] asset persistence failed (state changed)", {
+        stage: "DB_PERSISTENCE",
+        assetId: asset.id,
+        titleId: title.id,
+        kind: asset.kind,
+        elapsedMs: Date.now() - startTime,
+        errorCategory: "DB_PERSISTENCE_FAILED",
+        dbPersisted: false,
+      });
       throw new Error("Asset confirmation changed; retry after refreshing the title");
     }
     return { assetId: asset.id, byteSize: sealed.byteSize, verified: true };
+    } catch (error) {
+      // Emit only safe diagnostics: never log request payloads, object keys, signed URLs,
+      // credentials, private keys, or raw provider error messages.
+      const raw = error instanceof Error ? error.message : "";
+      const statusMatch = raw.match(/\((\d{3})\)/);
+      const category =
+        /database|postgres|sql|connection|pool/i.test(raw) || diagnosticStage.startsWith("database")
+          ? "database_persistence_failure"
+          : /oci|object|copy|work-request|etag|content type|uploaded object/i.test(raw) || diagnosticStage.startsWith("oci")
+            ? "oci_verification_failure"
+            : "request_or_authorization_failure";
+      console.error("[bridge-upload] confirmAssetUpload failed", {
+        stage: diagnosticStage,
+        category,
+        httpStatus: statusMatch ? Number(statusMatch[1]) : null,
+        elapsedMs: Date.now() - diagnosticStartedAt,
+        assetId: /^[a-f0-9-]{8,64}$/i.test(diagnosticAssetId) ? diagnosticAssetId : "redacted",
+        errorName: error instanceof Error ? error.name : "UnknownError",
+      });
+      throw error;
+    }
   });
 
 export const requestAssetDownload = createServerFn({ method: "POST" })

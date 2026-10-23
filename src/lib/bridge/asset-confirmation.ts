@@ -23,7 +23,7 @@ export async function persistVerifiedAsset(sql: Pick<Sql, "query">, opts: {
       returning a.id, a.title_id, a.kind, a.s3_key
     ), title_set as (
       update bridge_titles t set
-        poster_key = case when v.kind = 'poster' then v.s3_key else t.poster_key end,
+        poster_key = case when v.kind in ('poster', 'poster_vertical') then v.s3_key else t.poster_key end,
         master_key = case when v.kind = 'master' then v.s3_key else t.master_key end,
         updated_at = now()
       from verified v where t.id = v.title_id returning t.id

@@ -17,3 +17,12 @@ screenshots
 .DS_Store
 .vscode
 .idea
+crayons-loop-streaming-platform
+release-evidence
+.agents
+.gemini
+supabase/.temp
+scripts/scratch-*
+scripts/setup-oci-env.*
+scripts/audit-prs.mjs
+skills-lock.json
