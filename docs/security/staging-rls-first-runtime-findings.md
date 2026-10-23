@@ -163,3 +163,15 @@ Additional default-branch searches at `3b96a07da0b0706515488552d06ecfd3dcb916ea`
 - `platform_meta`, `qc_jobs`, `revenue_events`, `transfers`: repository results were migration/schema references only in this search pass; do not label them unused until full SQL/source search confirms no dynamic access.
 
 Search results for several other tables in the 63-table inventory returned no exact default-branch hits, including some operational and commercial tables. That absence is not proof of non-use. This register remains **incomplete** until every catalog name is reconciled against schema-qualified SQL, dynamic query builders, all server functions, and migrations; each row must state whether its evidence is application source, migration only, or unresolved.
+
+
+#### Authorization/runtime code-path note
+
+A focused read of default-branch source at `3b96a07da0b0706515488552d06ecfd3dcb916ea` adds two findings for independent review:
+
+1. `src/lib/db.ts` selects the connection from `DATABASE_URL`, then `POSTGRES_URL`, `SUPABASE_DB_URL`, or `SUPABASE_DATABASE_URL`. It rejects missing Postgres configuration on Vercel, but the reviewed code does not show an explicit project-ref/hostname allowlist that would reject a Production database URL when running in Preview. Because Vercel environment values could not be inspected (403), Preview-to-Staging binding is **not proven**. Review should add or verify a fail-closed environment-target guard before tests, without logging connection strings.
+2. `src/lib/loop/catalog.ts` exposes `getLoopCatalog` without `authMiddleware`, as expected for public catalog presentation, and filters to published/listed/approved Loop titles joined to authorized Bridge publications within the active window. Its effective database role and source project remain unknown until the deployment binding is verified. Do not grant client table access as a workaround.
+
+The reviewed `src/lib/loop/profile.ts` handlers use `authMiddleware` and scope profile, progress, and singular `loop_watchlist` queries with `context.userId`. The default profile path can insert records when none exist, so even seemingly read-oriented profile calls must not be used for synthetic tests before runtime isolation is proven.
+
+These are code-review findings, not runtime verification. The checked SHA is the repository default-branch baseline above; PR #376's branch/deployment must be compared separately before certifying any behavior.
