@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { resolveExplicitBridgeProfileId } from "./identity-link-guard.ts";
+import { canUseLegacyEmailFallback, resolveExplicitBridgeProfileId } from "./identity-link-guard.ts";
 import { hasPermission } from "./rbac.ts";
 
 const authUserId = "f4bfb59d-2a9a-43e2-a84a-4e2f1cc7e60b";
@@ -52,4 +52,12 @@ test("identity resolution leaves an existing profile's RBAC role unchanged", () 
   assert.deepEqual(existingActor, before);
   assert.equal(hasPermission(existingActor, "title.create"), false);
   assert.equal(hasPermission(existingActor, "asset.sign_upload"), false);
+});
+
+test("Google identity cannot use legacy email-only profile recovery", () => {
+  assert.equal(canUseLegacyEmailFallback(true), false);
+});
+
+test("non-Google legacy account retains the existing compatibility path", () => {
+  assert.equal(canUseLegacyEmailFallback(false), true);
 });
