@@ -4,7 +4,7 @@ import { useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { StatusChip } from "@/components/bridge/status-rail";
-import { createTitle, listTitles } from "@/lib/bridge/titles";
+import { createTitle, createMetadataFirstTitle, listTitles } from "@/lib/bridge/titles";
 import { BRIDGE_LOOP_LANES } from "@/lib/bridge/loop-lanes";
 import { listTitleAssets, requestAssetDownload } from "@/lib/bridge/assets";
 
@@ -100,24 +100,41 @@ export function CreateTitleForm({ concise = false }: { concise?: boolean } = {})
   const [year, setYear] = useState("");
   const [fee, setFee] = useState("");
   const mut = useMutation({
-    mutationFn: () =>
-      createTitle({
+    mutationFn: () => {
+      const shared = {
+        name,
+        nameMl: nameMl || undefined,
+        licensingFeePaise: fee ? Math.round(Number(fee) * 100) : undefined,
+        contentType: contentType || undefined,
+        countryOfOrigin: country || undefined,
+        releaseDate: releaseDate || undefined,
+        cast: cast ? cast.split(",").map((v) => v.trim()).filter(Boolean) : undefined,
+      };
+      if (concise) {
+        return createTitle({
+          data: {
+            ...shared,
+            synopsis: synopsis || undefined,
+            language: language || undefined,
+            year: year ? Number(year) : undefined,
+            runtimeMinutes: runtimeMinutes ? Number(runtimeMinutes) : undefined,
+            director: director || undefined,
+            producer: producer || undefined,
+          },
+        });
+      }
+      return createMetadataFirstTitle({
         data: {
-          name,
-          nameMl: nameMl || undefined,
-          synopsis: synopsis || undefined,
-          language: language || undefined,
-          year: year ? Number(year) : undefined,
-          runtimeMinutes: runtimeMinutes ? Number(runtimeMinutes) : undefined,
-          licensingFeePaise: fee ? Math.round(Number(fee) * 100) : undefined,
-          contentType: contentType || undefined,
-          countryOfOrigin: country || undefined,
-          releaseDate: releaseDate || undefined,
-          director: director || undefined,
-          producer: producer || undefined,
-          cast: cast ? cast.split(",").map((v) => v.trim()).filter(Boolean) : undefined,
+          ...shared,
+          synopsis,
+          language,
+          year: Number(year),
+          runtimeMinutes: Number(runtimeMinutes),
+          director,
+          producer,
         },
-      }),
+      });
+    },
     onSuccess: (res) => {
       toast("Title opened as DRAFT");
       void qc.invalidateQueries({ queryKey: ["bridge-titles"] });
