@@ -230,37 +230,39 @@ export const advanceBuyerProspectStage = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     const actor = await requireOperator(context.userId);
     const sql = await getSql();
-    const currentRows = await sql<{ id: string; pipeline_stage: string; verification_status: string; verification_evidence_ref: string | null }>`
-      select id, pipeline_stage, verification_status, verification_evidence_ref
-      from bridge_buyer_prospects where id = ${data.prospectId} for update
-    `;
-    const current = currentRows[0];
-    if (!current) throw new Error("Buyer prospect not found");
-    if (!(ALLOWED_STAGE_TRANSITIONS[current.pipeline_stage] ?? []).includes(data.stage)) {
-      throw new Error(`Invalid buyer pipeline transition: ${current.pipeline_stage} → ${data.stage}`);
-    }
-    if (data.stage === "CONTRACTED" &&
-        (current.verification_status !== "CONTRACTED_PARTNER" || !current.verification_evidence_ref)) {
-      throw new Error("A contracted partner requires explicit Super Admin verification and a recorded contract/legal reference.");
-    }
-    await sql`
-      update bridge_buyer_prospects set pipeline_stage = ${data.stage}, updated_at = now()
-      where id = ${data.prospectId}
-    `;
-    await writeAudit({
-      actorUserId: actor.userId, action: "buyer_prospect.stage_change",
-      entityType: "bridge_buyer_prospect", entityId: data.prospectId,
-      metadata: { from: current.pipeline_stage, to: data.stage, note: data.note ?? null },
-    }, sql);
-    await sql`
-      insert into bridge_notifications (recipient_user_id, organization_scope, event_type, entity_type, entity_id, dedupe_key, payload)
-      values (${actor.userId}, ${actor.organizationName}, 'BUYER_PIPELINE_STAGE_CHANGED',
-        'bridge_buyer_prospect', ${data.prospectId},
-        ${`buyer-stage:${data.prospectId}:${data.stage}:${Date.now()}`},
-        ${JSON.stringify({ from: current.pipeline_stage, to: data.stage })}::jsonb)
-      on conflict (dedupe_key) do nothing
-    `;
-    return { id: data.prospectId, from: current.pipeline_stage, stage: data.stage };
+    return sql.transaction(async (tx) => {
+      const currentRows = await tx<{ id: string; pipeline_stage: string; verification_status: string; verification_evidence_ref: string | null }>`
+        select id, pipeline_stage, verification_status, verification_evidence_ref
+        from bridge_buyer_prospects where id = ${data.prospectId} for update
+      `;
+      const current = currentRows[0];
+      if (!current) throw new Error("Buyer prospect not found");
+      if (!(ALLOWED_STAGE_TRANSITIONS[current.pipeline_stage] ?? []).includes(data.stage)) {
+        throw new Error(`Invalid buyer pipeline transition: ${current.pipeline_stage} → ${data.stage}`);
+      }
+      if (data.stage === "CONTRACTED" &&
+          (current.verification_status !== "CONTRACTED_PARTNER" || !current.verification_evidence_ref)) {
+        throw new Error("A contracted partner requires explicit Super Admin verification and a recorded contract/legal reference.");
+      }
+      await tx`
+        update bridge_buyer_prospects set pipeline_stage = ${data.stage}, updated_at = now()
+        where id = ${data.prospectId}
+      `;
+      await writeAudit({
+        actorUserId: actor.userId, action: "buyer_prospect.stage_change",
+        entityType: "bridge_buyer_prospect", entityId: data.prospectId,
+        metadata: { from: current.pipeline_stage, to: data.stage, note: data.note ?? null },
+      }, tx);
+      await tx`
+        insert into bridge_notifications (recipient_user_id, organization_scope, event_type, entity_type, entity_id, dedupe_key, payload)
+        values (${actor.userId}, ${actor.organizationName}, 'BUYER_PIPELINE_STAGE_CHANGED',
+          'bridge_buyer_prospect', ${data.prospectId},
+          ${`buyer-stage:${data.prospectId}:${data.stage}:${Date.now()}`},
+          ${JSON.stringify({ from: current.pipeline_stage, to: data.stage })}::jsonb)
+        on conflict (dedupe_key) do nothing
+      `;
+      return { id: data.prospectId, from: current.pipeline_stage, stage: data.stage };
+    });
   });
 
 /** Verification is separate from discovery and requires a Super Admin plus recorded evidence. */
