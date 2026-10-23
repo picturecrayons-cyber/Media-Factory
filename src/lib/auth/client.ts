@@ -87,6 +87,30 @@ export async function signInWithEmail(email: string, password: string) {
   return data.session;
 }
 
+/**
+ * Google sign-in remains opt-in until a dedicated non-production Supabase Auth
+ * project and identity-linking regression tests are approved.
+ */
+export const googleAuthEnabled = import.meta.env.VITE_GOOGLE_AUTH_ENABLED === "true";
+
+export async function signInWithGoogle() {
+  if (!googleAuthEnabled) {
+    throw new Error("Google sign-in is not enabled for this environment.");
+  }
+  if (typeof window === "undefined") {
+    throw new Error("Google sign-in is only available in a browser.");
+  }
+
+  // Use the current app origin; Supabase's redirect allowlist must explicitly
+  // permit the Preview callback. Never silently fall back to production.
+  const redirectTo = new URL("/auth/callback?auth_provider=google", window.location.origin).toString();
+  const { error } = await supabase.auth.signInWithOAuth({
+    provider: "google",
+    options: { redirectTo },
+  });
+  if (error) throw error;
+}
+
 export async function resetPasswordForEmail(email: string) {
   const redirectTo = getPasswordRecoveryRedirectUrl();
 
