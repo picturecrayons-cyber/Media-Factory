@@ -62,9 +62,18 @@ export async function resolveBridgeUserId(authUserId: string): Promise<string> {
   `;
   if (linked[0]?.bridge_user_id) return linked[0].bridge_user_id;
 
-  // Legacy Bridge profiles may predate the Supabase identity-link table.
-  // Recover the mapping only when the authenticated Supabase user's verified
-  // email exactly matches the existing Bridge profile email.
+  // Google identities must never use the legacy email-only recovery path.
+  // An explicitly linked Google identity returned above remains valid.
+  const googleIdentity = await sql<{ present: boolean }>`
+    select exists (
+      select 1 from auth.identities
+      where user_id = ${authUserId}::uuid and provider = 'google'
+    ) as present
+  `;
+  if (googleIdentity[0]?.present) return authUserId;
+
+  // Legacy non-Google accounts may still use the verified-email recovery path
+  // while the separately reviewed account-linking flow is pending.
   const byEmail = await sql<{ bridge_user_id: string }>`
     select bp.user_id as bridge_user_id
     from bridge_profiles bp
