@@ -12,6 +12,7 @@ import {
   linkBuyerCommunicationThread,
   listMyBuyerCommunicationThreads,
   prepareBuyerMailDraft,
+  sendConfirmedBuyerMailDraft,
 } from "@/lib/bridge/communications";
 
 export const Route = createFileRoute("/admin/communications")({ component: AdminCommunications });
@@ -45,6 +46,8 @@ function CommunicationsDesk({ actor }: { actor: any }) {
   const [recipients, setRecipients] = useState("");
   const [draftSubject, setDraftSubject] = useState("");
   const [bodyText, setBodyText] = useState("");
+  const [savedDraftId, setSavedDraftId] = useState("");
+  const [sendConfirmationText, setSendConfirmationText] = useState("");
   const [notice, setNotice] = useState("");
   const [nextStages, setNextStages] = useState<Record<string, string>>({});
   const [verificationRefs, setVerificationRefs] = useState<Record<string, string>>({});
@@ -73,9 +76,14 @@ function CommunicationsDesk({ actor }: { actor: any }) {
     onSuccess: (result) => { setNotice("Thread link saved. No email was sent."); setThreadId(result.id); setSubject(""); void client.invalidateQueries({ queryKey: ["bridge-my-communication-threads"] }); },
     onError: (error) => setNotice(error instanceof Error ? error.message : "Could not link thread."),
   });
+  const sendDraft = useMutation({
+    mutationFn: () => sendConfirmedBuyerMailDraft({ data: { draftId: savedDraftId, confirmationText: "SEND EMAIL" } }),
+    onSuccess: (result) => { setNotice(`Email sent and audited. Message ID: ${result.externalMessageId}`); setSavedDraftId(""); setSendConfirmationText(""); },
+    onError: (error) => setNotice(error instanceof Error ? error.message : "Email send failed. Reconcile the Sent mailbox before retrying."),
+  });
   const saveDraft = useMutation({
     mutationFn: () => prepareBuyerMailDraft({ data: { threadId, idempotencyKey: `draft-${threadId}-${draftSubject.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-")}`, recipients: recipients.split(/[;,\n]/).map((v) => v.trim()).filter(Boolean), subject: draftSubject, bodyText } }),
-    onSuccess: () => { setNotice("Draft saved to the Bridge outbox. It has not been sent."); setDraftSubject(""); setBodyText(""); },
+    onSuccess: (result) => { setNotice("Draft saved to the Bridge outbox. It has not been sent."); setSavedDraftId(result.id); setSendConfirmationText(""); setDraftSubject(""); setBodyText(""); },
     onError: (error) => setNotice(error instanceof Error ? error.message : "Could not save draft."),
   });
 
@@ -138,6 +146,13 @@ function CommunicationsDesk({ actor }: { actor: any }) {
             <textarea required className="min-h-32 rounded-lg border border-line bg-transparent px-3 py-2 text-sm" placeholder="Draft message" value={bodyText} onChange={(e) => setBodyText(e.target.value)} />
             <button className="w-fit rounded-lg bg-fg px-4 py-2 text-sm font-semibold text-bg disabled:opacity-50" disabled={saveDraft.isPending}>Save unsent draft</button>
           </form>
+          {savedDraftId ? <div className="mt-5 rounded-xl border border-line p-4">
+            <h3 className="font-semibold">Explicit send confirmation</h3>
+            <p className="mt-1 text-sm text-muted">Draft ID: {savedDraftId}. This action sends an external email through configured SMTP. Confirm the recipient above is correct. Sending is limited to the contact email recorded on the linked prospect. Ambiguous SMTP outcomes are never retried automatically.</p>
+            <label className="mt-3 block text-sm" htmlFor="send-confirmation">Type SEND EMAIL to confirm</label>
+            <input id="send-confirmation" className="mt-1 w-full rounded-lg border border-line bg-transparent px-3 py-2 text-sm" value={sendConfirmationText} onChange={(e) => setSendConfirmationText(e.target.value)} placeholder="SEND EMAIL" />
+            {actor.internalRole === "super_admin" ? <button type="button" className="mt-3 rounded-lg bg-fg px-4 py-2 text-sm font-semibold text-bg disabled:opacity-50" disabled={sendConfirmationText !== "SEND EMAIL" || sendDraft.isPending} onClick={() => sendDraft.mutate()}>Send confirmed email</button> : <p className="mt-3 text-sm text-muted">Only Super Admin can send external email.</p>}
+          </div> : null}
         </section>
         {notice ? <p role="status" className="rounded-xl border border-line p-3 text-sm">{notice}</p> : null}
       </div>
