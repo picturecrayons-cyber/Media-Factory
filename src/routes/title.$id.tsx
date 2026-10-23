@@ -205,7 +205,7 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
                 onClick={() => setActiveTab("Files")}
                 className="rounded-full bg-fg px-5 py-2.5 text-sm font-semibold text-bg"
               >
-                Upload Files
+                Step 2: Media &amp; Asset Upload
               </button>
             </div>
           </div>
@@ -232,7 +232,7 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
         <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Metadata</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Step 1 · Saved Metadata</p>
               <h2 className="mt-1 font-display text-xl font-semibold">OTT title details</h2>
             </div>
             <span className="rounded-full border border-line px-3 py-1 text-xs font-semibold">{title.status}</span>

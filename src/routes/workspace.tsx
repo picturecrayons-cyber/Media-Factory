@@ -26,7 +26,7 @@ function Workspace() {
           </div>
           <input aria-label="Search titles" value={query} onChange={(e)=>setQuery(e.target.value)} placeholder="Search titles…" className="mt-5 h-10 w-full rounded-xl border border-line-strong bg-elevated px-3 text-sm sm:max-w-md" />
         </section>
-        {showCreate&&canCreate?<section className="rounded-2xl border border-line bg-surface p-5 sm:p-6"><h3 className="font-display text-xl font-semibold">New Title</h3><p className="mt-1 mb-4 text-sm text-muted">Start with the essentials. You can complete metadata inside the Title Workspace.</p><CreateTitleForm concise /></section>:null}
+        {showCreate&&canCreate?<section className="rounded-2xl border border-line bg-surface p-5 sm:p-6"><h3 className="font-display text-xl font-semibold">New Title</h3><p className="mt-1 mb-4 text-sm text-muted">Step 1 of 2 · Complete and save title metadata first. Asset upload is the next step after the draft is created.</p><CreateTitleForm /></section>:null}
         <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6"><TitleList empty="No titles available for this workspace." query={search} /></section>
       </div>
     </BridgeShell>;
