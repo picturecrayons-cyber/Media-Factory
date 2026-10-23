@@ -68,5 +68,6 @@ select n.nspname as schema_name, p.proname as routine_name,
 from pg_proc p
 join pg_namespace n on n.oid = p.pronamespace
 where n.nspname = 'public'
+  and p.prokind = 'f'
   and pg_get_functiondef(p.oid) ilike '%loop_my_watchlist%'
 order by p.proname;
