@@ -85,7 +85,7 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     const diagnosticStartedAt = Date.now();
     let diagnosticStage = "authentication";
-    let diagnosticAssetId = data.assetId;
+    const diagnosticAssetId = data.assetId;
     try {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
