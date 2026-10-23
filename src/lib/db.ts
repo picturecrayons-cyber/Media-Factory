@@ -60,7 +60,14 @@ const deployEnv =
         .toLowerCase()
     : "";
 
-if (deployEnv === "preview" && rawDatabaseUrl) {
+if (deployEnv === "preview") {
+  // Preview must fail closed even when no database URL is configured. Never
+  // allow a missing binding to bypass the target checks or fall back to PGLite.
+  if (!rawDatabaseUrl) {
+    throw new Error(
+      "Preview database target is not configured: provide a staging-only DATABASE_URL or POSTGRES_URL.",
+    );
+  }
   if (rawDatabaseUrl.toLowerCase().includes("mlmgugivsyoxzdgwkbpu")) {
     throw new Error(
       "Preview environment must not target production database: canonical production ref detected.",
