@@ -8,6 +8,7 @@ import { assertPermission } from "./rbac";
 import { requireVerifiedActor } from "./session";
 import { assertNotDevUser } from "./guards";
 import { writeAudit } from "./audit";
+import { assertSublicensingPolicy, defaultSublicensingMetadata } from "./distribution-policy";
 import { assertPublicationCanExtend, findCoveringRightsGrant, type BridgeRightsGrant } from "./rights-coverage";
 
 export type DistributionAuthorizationStatus =
@@ -342,6 +343,8 @@ export const authorizeLoopPublication = createServerFn({ method: "POST" })
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
     assertPermission(actor, "loop.publish");
+    // Loop receives only the rights explicitly granted to Loop; onward sublicensing is disabled.
+    assertSublicensingPolicy({ permitted: false });
 
     if (
       data.windowStart &&
@@ -385,6 +388,7 @@ export const authorizeLoopPublication = createServerFn({ method: "POST" })
         ${title.language}, ${title.year}, ${title.runtime_minutes}, ${title.poster_key}, ${title.master_key},
         ${JSON.stringify({
           source: "crayons-bridge-master-distribution",
+          ...defaultSublicensingMetadata(),
           lane: loopStageType(title.content_type),
           rightsGrantId: preflight.rightsGrantId,
           authorizedBy: actor.userId,
@@ -436,6 +440,7 @@ export const authorizeLoopPublication = createServerFn({ method: "POST" })
           entityId: title.id,
           metadata: {
             destination: "CRAYONS_LOOP",
+            ...defaultSublicensingMetadata(),
             loopTitleId,
             rightsGrantId: preflight.rightsGrantId,
             territories: data.territories,
