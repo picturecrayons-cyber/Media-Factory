@@ -85,7 +85,30 @@ export const Route = createFileRoute("/api/hostinger-mail/webhook")({
         const eventKey = createHash("sha256")
           .update(mailbox + "|" + threadId + "|" + rawMessageId).digest("hex");
         const receivedAt = receivedDate(payload.message.timestamp);
-        const preview = (payload.message.text ?? payload.message.snippet ?? "").slice(0, 2000);
+        let preview = (payload.message.text ?? payload.message.snippet ?? "").slice(0, 2000);
+        const apiToken = bridgeEnv.hostingerMailApiToken();
+        const mailboxResourceId = bridgeEnv.hostingerMailMailboxResourceId();
+        const messageUid = payload.message.uid;
+        if (apiToken && mailboxResourceId && messageUid !== undefined) {
+          try {
+            const apiResponse = await fetch(
+              `https://api.mail.hostinger.com/api/v1/mailboxes/${encodeURIComponent(mailboxResourceId)}/folders/INBOX/messages/${encodeURIComponent(String(messageUid))}/text`,
+              { headers: { Authorization: `Bearer ${apiToken}`, Accept: "application/json" }, cache: "no-store" },
+            );
+            if (apiResponse.ok) {
+              const apiPayload = await apiResponse.json() as { data?: unknown };
+              const data = apiPayload.data;
+              const fullText = typeof data === "string"
+                ? data
+                : data && typeof data === "object" && "text" in data && typeof (data as { text?: unknown }).text === "string"
+                  ? (data as { text: string }).text
+                  : null;
+              if (fullText) preview = fullText.slice(0, 20000);
+            }
+          } catch {
+            // The authenticated webhook preview remains a safe fallback; no message is dropped.
+          }
+        }
         const sender = senderAddress(payload.message.from);
         const subject = (payload.message.subject ?? "(no subject)").slice(0, 240);
 
