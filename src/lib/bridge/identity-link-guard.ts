@@ -12,3 +12,8 @@ export function resolveExplicitBridgeProfileId(input: {
   if (input.linkedProfileId) return input.linkedProfileId;
   return null;
 }
+
+/** Google identities may not be resolved to a legacy profile by email alone. */
+export function canUseLegacyEmailFallback(hasGoogleIdentity: boolean): boolean {
+  return !hasGoogleIdentity;
+}
