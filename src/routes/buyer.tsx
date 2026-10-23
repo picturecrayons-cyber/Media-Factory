@@ -69,12 +69,12 @@ function Buyer() {
   );
 }
 
-function AdminBuyerDesk({ actor }: { actor: { internalRole: string | null; organizationName?: string | null; displayName?: string } }) {
+function AdminBuyerDesk({ actor }: { actor: any }) {
   const titlesQ = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles() });
   const liveTitles = (titlesQ.data?.titles ?? []).filter((title) => title.status === "LIVE_FOR_BUYERS");
 
   return (
-    <BridgeShell actor={actor as never} title="Buyer Desk · Admin Preview">
+    <BridgeShell actor={actor} title="Buyer Desk · Admin Preview">
       <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
         <p className="text-xs font-semibold uppercase tracking-wider text-accent">Read-only · Admin / Super Admin</p>
         <h2 className="mt-1 font-display text-2xl font-semibold">Buyer-facing catalogue</h2>
