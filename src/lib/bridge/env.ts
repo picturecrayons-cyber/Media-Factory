@@ -29,6 +29,7 @@ export const bridgeEnv = {
   smtpUser: () => read("SMTP_USER") || read("HOSTINGER_SMTP_USER"),
   smtpPass: () => read("SMTP_PASS") || read("HOSTINGER_SMTP_PASS"),
   hostingerMailApiToken: () => read("HOSTINGER_MAIL_API_TOKEN"),
+  hostingerMailMailboxResourceId: () => read("HOSTINGER_MAILBOX_RESOURCE_ID"),
   hostingerMailWebhookSecret: () => read("HOSTINGER_MAIL_WEBHOOK_SECRET"),
   mailFrom: () => read("MAIL_FROM") || "abijithasokan@crayonspictures.com",
   appUrl: () => resolveBridgeConfiguredOrigin(read("APP_URL"), read("SITE_URL")),
