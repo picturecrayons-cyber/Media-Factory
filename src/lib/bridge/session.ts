@@ -75,6 +75,38 @@ export async function resolveBridgeUserId(authUserId: string): Promise<string> {
   return byEmail[0]?.bridge_user_id ?? authUserId;
 }
 
+/**
+ * Resolve only an identity already represented by the auth UUID or an explicit
+ * identity-link row. This intentionally does not use email as proof of ownership.
+ */
+export function resolveExplicitBridgeProfileId(input: {
+  authUserId: string;
+  directProfileId?: string | null;
+  linkedProfileId?: string | null;
+}): string | null {
+  if (input.directProfileId === input.authUserId) return input.authUserId;
+  if (input.linkedProfileId) return input.linkedProfileId;
+  return null;
+}
+
+export async function loadActorExplicit(authUserId: string): Promise<BridgeActor | null> {
+  assertNotDevUser(authUserId);
+  const sql = await getSql();
+  const direct = await sql<{ user_id: string }>`
+    select user_id from bridge_profiles where user_id = ${authUserId} limit 1
+  `;
+  const linked = direct[0]?.user_id ? [] : await sql<{ bridge_user_id: string }>`
+    select bridge_user_id from bridge_loop_identity_links
+    where auth_user_id = ${authUserId}::uuid limit 1
+  `;
+  const profileId = resolveExplicitBridgeProfileId({
+    authUserId,
+    directProfileId: direct[0]?.user_id,
+    linkedProfileId: linked[0]?.bridge_user_id,
+  });
+  return profileId ? loadActorByBridgeUserId(profileId) : null;
+}
+
 export async function loadActor(authUserId: string): Promise<BridgeActor | null> {
   const bridgeUserId = await resolveBridgeUserId(authUserId);
   return loadActorByBridgeUserId(bridgeUserId);
