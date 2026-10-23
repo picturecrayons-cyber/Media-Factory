@@ -5,6 +5,7 @@ import { runInNewContext } from "node:vm";
 import { transpileModule, ModuleKind } from "typescript";
 import { z } from "zod";
 import * as rights from "./rights-coverage.ts";
+import * as distributionPolicy from "./distribution-policy.ts";
 
 // Execute the real server handler with isolated transport/database dependencies.
 // No database or AWS requests are made by this harness.
@@ -55,6 +56,7 @@ function harness(grants: unknown[], allowed = true, existing = false) {
     "./guards": { assertNotDevUser: () => {} },
     "./audit": { writeAudit: async () => {} },
     "./rights-coverage": rights,
+    "./distribution-policy": distributionPolicy,
     "@/lib/bridge/loop-lanes": {
       loopStageType: (raw: string | null | undefined) =>
         (raw || "").toLowerCase().includes("series") ? "Series" : "Film",
