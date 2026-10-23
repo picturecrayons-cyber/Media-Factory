@@ -10,7 +10,8 @@ export type BridgeRightsGrant = {
 };
 
 export type RightsCoverageRequest = {
-  destination: "CRAYONS_LOOP";
+  /** Canonical partner key, e.g. CRAYONS_LOOP, AMAZON_PRIME_VIDEO, or JIOHOTSTAR. */
+  destination: string;
   territories: string[];
   languages: string[];
   exploitationModels: string[];
@@ -36,7 +37,7 @@ function coversRequested(granted: Set<string>, requested: string[], wildcards: s
 
 function mediaCovers(grantedMedia: Set<string>, destination: string, exploitationModels: string[]) {
   const broadStreaming = ["OTT", "STREAMING", "DIGITAL", "ALL", "*"].some((token) => grantedMedia.has(token));
-  const destinationCovered = broadStreaming || grantedMedia.has(destination.toUpperCase());
+  const destinationCovered = broadStreaming || grantedMedia.has(destination.trim().toUpperCase());
   if (!destinationCovered) return false;
 
   const modelTokensPresent = ["SVOD", "TVOD", "AVOD", "FREE", "PROMOTIONAL"].some((token) => grantedMedia.has(token));
@@ -67,8 +68,14 @@ function windowCovers(
   return true;
 }
 
+/**
+ * A valid grant must cover every requested dimension. This is deliberately
+ * partner-neutral: each destination is checked independently, so Loop approval
+ * never implicitly authorizes Amazon, JioHotstar, television, or another partner.
+ */
 export function findCoveringRightsGrant(grants: BridgeRightsGrant[], request: RightsCoverageRequest) {
   const now = request.now ?? new Date();
+  if (!request.destination.trim()) return null;
   if ([request.territories, request.languages, request.exploitationModels].some((values) => values.length === 0 || values.some((value) => !value.trim()))) return null;
 
   return (
