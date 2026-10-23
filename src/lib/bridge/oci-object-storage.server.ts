@@ -252,7 +252,7 @@ async function pollWorkRequest(
 ) {
   const url = new URL(`/workRequests/${encodeURIComponent(workRequestId)}`, endpoint(cfg.region));
   const startTime = Date.now();
-  const deadline = startTime + (opts?.deadlineMs ?? 45_000);
+  const deadline = startTime + (opts?.deadlineMs ?? 120_000);
   const propagationGraceMs = opts?.propagationGracePeriodMs ?? 10_000;
   const pollIntervalMs = opts?.pollIntervalMs ?? 1_000;
   let lastStatus = "unknown";
@@ -318,7 +318,7 @@ async function pollWorkRequest(
     lastStatus,
     elapsedMs: Date.now() - startTime,
   });
-  const deadlineErr = new Error(`OCI object copy did not complete within 45 seconds (last status: ${lastStatus}; work request: ${workRequestId})`);
+  const deadlineErr = new Error(`OCI object copy did not complete within 120 seconds (last status: ${lastStatus}; work request: ${workRequestId})`);
   Object.assign(deadlineErr, { workRequestId, lastStatus, elapsedMs: Date.now() - startTime, isTimeout: true, ociStage: "WORK_REQUEST_POLL" });
   throw deadlineErr;
 }
