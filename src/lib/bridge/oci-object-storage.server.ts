@@ -260,7 +260,7 @@ async function pollWorkRequest(
   while (Date.now() < deadline) {
     const remainingMs = deadline - Date.now();
     const headers = signHeaders({ cfg, method: "GET", url });
-    let res: Response;
+    let res: Response | null = null;
     try {
       res = await fetch(url, {
         method: "GET",
@@ -274,7 +274,7 @@ async function pollWorkRequest(
       lastStatus = "lookup_unreachable";
     }
 
-    if (res!) {
+    if (res) {
       const requestId = res.headers.get("opc-request-id");
       if (!res.ok) {
         if (res.status === 404) {
