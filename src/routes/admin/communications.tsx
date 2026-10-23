@@ -9,7 +9,7 @@ import {
   linkBuyerCommunicationThread,
   listMyBuyerCommunicationThreads,
   prepareBuyerMailDraft,
-} from "@/lib/bridge/communications.server";
+} from "@/lib/bridge/communications";
 
 export const Route = createFileRoute("/admin/communications")({ component: AdminCommunications });
 
