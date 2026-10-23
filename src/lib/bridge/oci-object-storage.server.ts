@@ -214,28 +214,45 @@ export async function verifyObject(key: string, expectedContentType?: string | n
   const namespace = await resolveNamespace(cfg);
   const path = `/n/${encodeURIComponent(namespace)}/b/${encodeURIComponent(cfg.bucket)}/o/${encodedObjectName(key)}`;
   const res = await signedFetch({ cfg, method: "HEAD", path });
-  if (!res.ok) throw new Error(`OCI object verification failed (${res.status})`);
+  const requestId = res.headers.get("opc-request-id");
+  if (!res.ok) {
+    const error = new Error(`OCI object verification failed (${res.status})${requestId ? ` (request: ${requestId})` : ""}`);
+    Object.assign(error, { status: res.status, requestId, ociStage: "HEAD_VERIFICATION" });
+    throw error;
+  }
   const contentLength = Number(res.headers.get("content-length") || 0);
   const contentType = res.headers.get("content-type");
   if (expectedContentType && contentType !== expectedContentType) {
-    throw new Error(`OCI object content type mismatch: expected ${expectedContentType}, received ${contentType || "missing"}`);
+    const error = new Error(`OCI object content type mismatch: expected ${expectedContentType}, received ${contentType || "missing"}`);
+    Object.assign(error, {
+      expectedContentType,
+      receivedContentType: contentType,
+      requestId,
+      ociStage: "CONTENT_TYPE_VALIDATION",
+    });
+    throw error;
   }
-  if (!Number.isSafeInteger(contentLength) || contentLength <= 0) throw new Error("Uploaded object is empty");
+  if (!Number.isSafeInteger(contentLength) || contentLength <= 0) {
+    const error = new Error("Uploaded object is empty");
+    Object.assign(error, { contentLength, requestId, ociStage: "BYTE_SIZE_VALIDATION" });
+    throw error;
+  }
   return {
     byteSize: contentLength,
     contentType,
     etag: res.headers.get("etag")?.replaceAll('"', "") ?? null,
+    requestId,
   };
 }
 
 async function pollWorkRequest(
   cfg: OciConfig,
   workRequestId: string,
-  opts?: { propagationGracePeriodMs?: number; pollIntervalMs?: number },
+  opts?: { propagationGracePeriodMs?: number; pollIntervalMs?: number; deadlineMs?: number },
 ) {
   const url = new URL(`/workRequests/${encodeURIComponent(workRequestId)}`, endpoint(cfg.region));
   const startTime = Date.now();
-  const deadline = startTime + 45_000;
+  const deadline = startTime + (opts?.deadlineMs ?? 45_000);
   const propagationGraceMs = opts?.propagationGracePeriodMs ?? 10_000;
   const pollIntervalMs = opts?.pollIntervalMs ?? 1_000;
   let lastStatus = "unknown";
@@ -251,18 +268,25 @@ async function pollWorkRequest(
         signal: AbortSignal.timeout(Math.min(8_000, Math.max(1, remainingMs))),
       });
     } catch {
-      throw new Error(`OCI copy work-request lookup timed out (last status: ${lastStatus})`);
+      const timeoutErr = new Error(`OCI copy work-request lookup timed out (last status: ${lastStatus})`);
+      Object.assign(timeoutErr, { workRequestId, lastStatus, elapsedMs: Date.now() - startTime, isTimeout: true, ociStage: "WORK_REQUEST_POLL" });
+      throw timeoutErr;
     }
 
+    const requestId = res.headers.get("opc-request-id");
     if (!res.ok) {
       if (res.status === 404) {
         lastStatus = "not_yet_visible (404)";
         const elapsed = Date.now() - startTime;
         if (elapsed >= propagationGraceMs) {
-          throw new Error(`OCI copy work-request lookup failed (404) (last status: ${lastStatus})`);
+          const error = new Error(`OCI copy work-request lookup failed (404) (last status: ${lastStatus})${requestId ? ` (request: ${requestId})` : ""}`);
+          Object.assign(error, { status: 404, workRequestId, lastStatus, requestId, elapsedMs: elapsed, ociStage: "WORK_REQUEST_POLL" });
+          throw error;
         }
       } else {
-        throw new Error(`OCI copy work-request lookup failed (${res.status}) (last status: ${lastStatus})`);
+        const error = new Error(`OCI copy work-request lookup failed (${res.status}) (last status: ${lastStatus})${requestId ? ` (request: ${requestId})` : ""}`);
+        Object.assign(error, { status: res.status, workRequestId, lastStatus, requestId, elapsedMs: Date.now() - startTime, ociStage: "WORK_REQUEST_POLL" });
+        throw error;
       }
     } else {
       const body = (await res.json()) as { status?: string };
@@ -273,7 +297,9 @@ async function pollWorkRequest(
       // below remains mandatory before the caller can persist a verified asset.
       if (normalizedStatus === "SUCCEEDED" || normalizedStatus === "COMPLETED") return;
       if (["FAILED", "CANCELED", "CANCELLED"].includes(normalizedStatus)) {
-        throw new Error(`OCI object copy ${normalizedStatus.toLowerCase()}`);
+        const error = new Error(`OCI object copy ${normalizedStatus.toLowerCase()}`);
+        Object.assign(error, { workRequestId, lastStatus: normalizedStatus, requestId, elapsedMs: Date.now() - startTime, ociStage: "WORK_REQUEST_POLL" });
+        throw error;
       }
     }
 
@@ -287,7 +313,9 @@ async function pollWorkRequest(
     lastStatus,
     elapsedMs: Date.now() - startTime,
   });
-  throw new Error(`OCI object copy did not complete within 45 seconds (last status: ${lastStatus}; work request: ${workRequestId})`);
+  const deadlineErr = new Error(`OCI object copy did not complete within 45 seconds (last status: ${lastStatus}; work request: ${workRequestId})`);
+  Object.assign(deadlineErr, { workRequestId, lastStatus, elapsedMs: Date.now() - startTime, isTimeout: true, ociStage: "WORK_REQUEST_POLL" });
+  throw deadlineErr;
 }
 
 /** Copy a verified upload into an immutable destination key. */
@@ -295,7 +323,7 @@ export async function sealVerifiedObject(
   sourceKey: string,
   destinationKey: string,
   expectedEtag: string,
-  pollOpts?: { propagationGracePeriodMs?: number; pollIntervalMs?: number },
+  pollOpts?: { propagationGracePeriodMs?: number; pollIntervalMs?: number; deadlineMs?: number },
 ) {
   const cfg = config();
   const namespace = await resolveNamespace(cfg);
@@ -313,16 +341,19 @@ export async function sealVerifiedObject(
       destinationObjectName: destinationKey,
     },
   });
+  const requestId = res.headers.get("opc-request-id");
   if (res.status !== 202 && !res.ok) {
-    const requestId = res.headers.get("opc-request-id");
     console.error("[bridge-oci] copy request rejected", { status: res.status, requestId });
-    throw new Error(`OCI object copy failed (${res.status})${requestId ? ` (request: ${requestId})` : ""}`);
+    const error = new Error(`OCI object copy failed (${res.status})${requestId ? ` (request: ${requestId})` : ""}`);
+    Object.assign(error, { status: res.status, requestId, ociStage: "COPY_REQUEST" });
+    throw error;
   }
   const workRequestId = res.headers.get("opc-work-request-id");
   if (res.status === 202 && !workRequestId) {
-    const requestId = res.headers.get("opc-request-id");
     console.error("[bridge-oci] accepted copy response omitted work-request id", { requestId });
-    throw new Error("OCI copy was accepted without a work-request ID; destination verification was not attempted");
+    const error = new Error("OCI copy was accepted without a work-request ID; destination verification was not attempted");
+    Object.assign(error, { status: 202, requestId, ociStage: "COPY_REQUEST" });
+    throw error;
   }
   if (workRequestId) await pollWorkRequest(cfg, workRequestId, pollOpts);
   return verifyObject(destinationKey);
