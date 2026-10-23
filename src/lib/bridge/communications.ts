@@ -1,4 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
+import { randomUUID } from "node:crypto";
+import { createTransport } from "nodemailer";
+import { bridgeEnv } from "@/lib/bridge/env";
 import { z } from "zod";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
@@ -323,4 +326,137 @@ export const listMyBridgeNotifications = createServerFn({ method: "GET" })
       order by created_at desc limit 100
     `;
     return { notifications: rows };
+  });
+
+
+const sendDraftInput = z.object({
+  draftId: z.string().uuid(),
+  confirmationText: z.literal("SEND EMAIL"),
+});
+
+/**
+ * Sends only after an explicit Super Admin confirmation. A row is claimed before SMTP;
+ * an ambiguous SENDING state is never retried automatically because SMTP delivery is not
+ * transactionally coupled to Postgres.
+ */
+export const sendConfirmedBuyerMailDraft = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(sendDraftInput)
+  .handler(async ({ context, data }) => {
+    const actor = await requireOperator(context.userId);
+    if (actor.internalRole !== "super_admin") {
+      throw new Error("Super Admin approval is required to send external email.");
+    }
+
+    const host = bridgeEnv.smtpHost();
+    const user = bridgeEnv.smtpUser();
+    const pass = bridgeEnv.smtpPass();
+    const from = bridgeEnv.mailFrom();
+    const port = Number(bridgeEnv.smtpPort());
+    if (!host || !user || !pass || !from || !Number.isInteger(port) || port < 1 || port > 65535) {
+      throw new Error("Hostinger SMTP is not configured. Draft is unchanged and no email was sent.");
+    }
+
+    const sql = await getSql();
+    const claimed = await sql.transaction(async (tx) => {
+      const rows = await tx<{
+        id: string;
+        thread_id: string;
+        subject: string;
+        body_text: string;
+        recipient_refs: string[];
+        prospect_email: string | null;
+        prospect_id: string;
+      }>`
+        select o.id, o.thread_id, o.subject, o.body_text, o.recipient_refs,
+               p.normalized_contact_email as prospect_email, p.id as prospect_id
+        from bridge_mail_outbox o
+        join bridge_communication_threads t on t.id = o.thread_id
+        join bridge_buyer_prospects p on p.id = t.prospect_id
+        where o.id = ${data.draftId}
+          and o.prepared_by = ${actor.userId}
+          and t.created_by = ${actor.userId}
+          and (${actor.internalRole === "super_admin"} or p.organization_scope = ${actor.organizationName})
+        for update of o
+      `;
+      const draft = rows[0];
+      if (!draft) throw new Error("Draft is unavailable in your authorized scope.");
+      if (!draft.prospect_email) throw new Error("Sending is blocked until the prospect has a verified contact email.");
+      if (!draft.recipient_refs.length ||
+          draft.recipient_refs.some((recipient) => recipient.trim().toLowerCase() !== draft.prospect_email)) {
+        throw new Error("Sending is blocked: recipients must match the linked prospect's recorded contact email.");
+      }
+
+      const attemptId = randomUUID();
+      const updated = await tx<{ id: string }>`
+        update bridge_mail_outbox
+        set status = 'SENDING', confirmed_by = ${actor.userId}, confirmed_at = now(),
+            send_attempt_id = ${attemptId}, updated_at = now()
+        where id = ${draft.id} and status = 'DRAFT'
+        returning id
+      `;
+      if (!updated[0]) throw new Error("Draft is not in DRAFT state. It will not be resent automatically.");
+      await writeAudit({
+        actorUserId: actor.userId, action: "communication.mail_send_confirmed",
+        entityType: "bridge_mail_outbox", entityId: draft.id,
+        metadata: { threadId: draft.thread_id, prospectId: draft.prospect_id, recipientCount: draft.recipient_refs.length, attemptId, status: "SENDING" },
+      }, tx);
+      return { ...draft, attemptId };
+    });
+
+    const transporter = createTransport({
+      host, port, secure: port === 465,
+      auth: { user, pass },
+    });
+    let result: { messageId?: string };
+    try {
+      result = await transporter.sendMail({
+        from, to: claimed.recipient_refs, subject: claimed.subject, text: claimed.body_text,
+      });
+    } catch {
+      await sql.transaction(async (tx) => {
+        await tx`
+          update bridge_mail_outbox
+          set status = 'FAILED', last_error_code = 'SMTP_SEND_FAILED', updated_at = now()
+          where id = ${claimed.id} and send_attempt_id = ${claimed.attemptId} and status = 'SENDING'
+        `;
+        await writeAudit({
+          actorUserId: actor.userId, action: "communication.mail_send_failed",
+          entityType: "bridge_mail_outbox", entityId: claimed.id,
+          metadata: { attemptId: claimed.attemptId, errorCode: "SMTP_SEND_FAILED", automaticRetry: false },
+        }, tx);
+      });
+      throw new Error("SMTP did not confirm the send. The draft is marked FAILED and will not be retried automatically; reconcile mailbox Sent before any retry.");
+    }
+
+    const externalMessageId = result.messageId || claimed.attemptId;
+    await sql.transaction(async (tx) => {
+      const updated = await tx<{ id: string }>`
+        update bridge_mail_outbox
+        set status = 'SENT', sent_external_message_id = ${externalMessageId},
+            sent_at = now(), updated_at = now()
+        where id = ${claimed.id} and send_attempt_id = ${claimed.attemptId} and status = 'SENDING'
+        returning id
+      `;
+      if (!updated[0]) throw new Error("SMTP accepted the email, but the outbox state could not be finalized. Do not retry; reconcile the Sent mailbox first.");
+      await tx`
+        insert into bridge_communication_messages
+          (thread_id, direction, sender_ref, recipient_refs, subject, body_text, external_message_id, sent_at, created_by)
+        values (
+          ${claimed.thread_id}, 'OUTBOUND', ${from}, ${JSON.stringify(claimed.recipient_refs)}::jsonb,
+          ${claimed.subject}, ${claimed.body_text}, ${externalMessageId}, now(), ${actor.userId}
+        )
+        on conflict (external_message_id) do nothing
+      `;
+      await tx`
+        update bridge_communication_threads set last_activity_at = now(), updated_at = now()
+        where id = ${claimed.thread_id} and created_by = ${actor.userId}
+      `;
+      await writeAudit({
+        actorUserId: actor.userId, action: "communication.mail_sent",
+        entityType: "bridge_mail_outbox", entityId: claimed.id,
+        metadata: { threadId: claimed.thread_id, prospectId: claimed.prospect_id, recipientCount: claimed.recipient_refs.length, externalMessageId, status: "SENT" },
+      }, tx);
+    });
+    return { id: claimed.id, status: "SENT" as const, externalMessageId };
   });
