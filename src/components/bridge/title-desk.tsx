@@ -157,7 +157,8 @@ export function CreateTitleForm({ concise = false }: { concise?: boolean } = {})
         <label className="text-sm sm:col-span-2">Synopsis (at least 20 characters, required)<textarea required minLength={20} value={synopsis} onChange={(e) => setSynopsis(e.target.value)} rows={3} className="mt-1 w-full rounded-lg border border-line-strong bg-elevated px-3 py-2" /></label>
         <label className="text-sm">License fee (INR)<input inputMode="decimal" value={fee} onChange={(e) => setFee(e.target.value)} placeholder="Optional" className="mt-1 h-11 w-full rounded-lg border border-line-strong bg-elevated px-3" /></label>
       </>}
-      <p className="text-xs leading-5 text-muted sm:col-span-2">Step 1 saves the draft metadata before any upload begins. Rights, territory windows, and legal authorization remain separate review gates; creating a draft does not authorize publication.</p>\n      <div className="flex items-end sm:col-span-2"><Button type="submit" disabled={mut.isPending} className="rounded-full px-6">{mut.isPending ? "Saving metadata…" : "Save Metadata & Create Draft"}</Button></div>
+      <p className="text-xs leading-5 text-muted sm:col-span-2">Step 1 saves the draft metadata before any upload begins. Rights, territory windows, and legal authorization remain separate review gates; creating a draft does not authorize publication.</p>
+      <div className="flex items-end sm:col-span-2"><Button type="submit" disabled={mut.isPending} className="rounded-full px-6">{mut.isPending ? "Saving metadata…" : "Save Metadata & Create Draft"}</Button></div>
     </form>
   );
 }
