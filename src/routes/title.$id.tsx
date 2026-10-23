@@ -40,6 +40,8 @@ function LaneStore({ titleId, stored, locked }: { titleId: string; stored: strin
     <label className="mt-4 block text-sm">
       Stored for Loop preview
       <select
+        id="loop-preview-category"
+        name="loopPreviewCategory"
         value={value}
         disabled={locked || save.isPending}
         onChange={(event) => {
