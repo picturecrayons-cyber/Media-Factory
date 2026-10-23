@@ -488,3 +488,26 @@ export const sendConfirmedBuyerMailDraft = createServerFn({ method: "POST" })
     });
     return { id: claimed.id, status: "SENT" as const, externalMessageId };
   });
+
+
+/** Unlinked mailbox events are visible only to Super Admin for controlled triage. */
+export const listUnlinkedHostingerEvents = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }) => {
+    const actor = await requireOperator(context.userId);
+    if (actor.internalRole !== "super_admin") throw new Error("Super Admin access required.");
+    const sql = await getSql();
+    const events = await sql<{
+      id: string; mailbox_ref: string; external_thread_id: string;
+      sender_ref: string | null; subject: string | null; preview_text: string | null;
+      received_at: string;
+    }>`
+      select id, mailbox_ref, external_thread_id, sender_ref, subject, preview_text,
+             received_at::text as received_at
+      from bridge_mail_webhook_events
+      where status = 'UNLINKED'
+      order by received_at desc
+      limit 100
+    `;
+    return { events };
+  });
