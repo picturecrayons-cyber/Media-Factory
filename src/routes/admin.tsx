@@ -170,7 +170,7 @@ function AdminBody({ actor }: { actor: any }) {
   );
 }
 
-function CommandCard({ title, description, action, to, searchTab }: { title: string; description: string; action: string; to: string; searchTab?: "ingest" | "licensing" | "publishing" }) {
+function CommandCard({ title, description, action, to, searchTab }: { title: string; description: string; action: string; to: "/workspace" | "/admin/workstations" | "/cms" | "/deliveries" | "/account"; searchTab?: "ingest" | "licensing" | "publishing" }) {
   return (
     <article className="flex min-w-0 flex-col rounded-2xl border border-line bg-surface p-4 transition-colors hover:border-accent/60">
       <h4 className="font-semibold">{title}</h4>
