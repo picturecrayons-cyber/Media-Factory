@@ -118,8 +118,8 @@ export const linkBuyerCommunicationThread = createServerFn({ method: "POST" })
   .validator(threadInput)
   .handler(async ({ context, data }) => {
     const actor = await requireOperator(context.userId);
-    if (data.channel === "HOSTINGER_MAIL" && !data.externalThreadId) {
-      throw new Error("Hostinger Mail thread ID is required to link an email thread.");
+    if (data.channel === "HOSTINGER_MAIL" && (!data.externalThreadId || !data.mailboxAccountRef)) {
+      throw new Error("Hostinger Mail thread ID and exact mailbox address are required to link an email thread.");
     }
     const sql = await getSql();
     const prospect = await sql<{ id: string; organization_scope: string | null }>`
@@ -141,6 +141,34 @@ export const linkBuyerCommunicationThread = createServerFn({ method: "POST" })
     `;
     const id = rows[0]?.id;
     if (!id) throw new Error("Communication thread was not linked");
+    if (data.channel === "HOSTINGER_MAIL" && data.externalThreadId && data.mailboxAccountRef) {
+      await sql.transaction(async (tx) => {
+        await tx`
+          update bridge_mail_webhook_events
+          set status = 'LINKED', linked_thread_id = ${id}
+          where status = 'UNLINKED'
+            and external_thread_id = ${data.externalThreadId}
+            and lower(mailbox_ref) = lower(${data.mailboxAccountRef})
+        `;
+        await tx`
+          insert into bridge_communication_messages
+            (thread_id, direction, sender_ref, recipient_refs, subject, body_text,
+             external_message_id, sent_at, created_by)
+          select ${id}, 'INBOUND', e.sender_ref, jsonb_build_array(e.mailbox_ref),
+                 e.subject, e.preview_text, e.external_message_id, e.received_at, 'hostinger-webhook'
+          from bridge_mail_webhook_events e
+          where e.linked_thread_id = ${id} and e.status = 'LINKED'
+          on conflict (external_message_id) do nothing
+        `;
+        await tx`
+          update bridge_communication_threads
+          set last_activity_at = greatest(last_activity_at, coalesce((
+            select max(received_at) from bridge_mail_webhook_events where linked_thread_id = ${id}
+          ), last_activity_at)), updated_at = now()
+          where id = ${id}
+        `;
+      });
+    }
     await writeAudit({
       actorUserId: actor.userId, action: "communication.thread_link",
       entityType: "bridge_communication_thread", entityId: id,
