@@ -42,9 +42,14 @@ function detectSurface(payload: any) {
   return "unknown";
 }
 
-async function failEvent(supabase: any, id: string, message: string) {
+async function failEvent(supabase: any, id: string, message: string, claimToken?: string) {
   console.error(message);
-  await supabase.from("bridge_webhook_events").update({ status: "failed" }).eq("event_id", id);
+  let update = supabase.from("bridge_webhook_events")
+    .update({ status: "failed", processing_started_at: null, processing_token: null })
+    .eq("event_id", id);
+  if (claimToken) update = update.eq("processing_token", claimToken);
+  const { error } = await update;
+  if (error) console.error("Failed to persist webhook failure state");
   return new Response(message, { status: 503 });
 }
 
@@ -70,60 +75,88 @@ Deno.serve(async (req: Request) => {
 
   const { error: insertError } = await supabase.from("bridge_webhook_events").insert({ event_id: id, event_name: eventName, payload_hash: hash, status: "received" });
   if (insertError && String(insertError.code) !== "23505") return new Response("Persistence failure", { status: 503 });
-  const { data: existing, error: readError } = await supabase.from("bridge_webhook_events").select("status,payload_hash").eq("event_id", id).maybeSingle();
+  const { data: existing, error: readError } = await supabase.from("bridge_webhook_events").select("status,payload_hash,attempts").eq("event_id", id).maybeSingle();
   if (readError || !existing) return new Response("Persistence failure", { status: 503 });
   if (existing.payload_hash !== hash) return new Response("Event collision", { status: 409 });
   if (existing.status === "processed") return Response.json({ ok: true, duplicate: true });
 
+  // Atomically claim the event. Only one concurrent delivery can own the lease;
+  // failed deliveries and abandoned leases are retriable.
+  const claimToken = crypto.randomUUID();
+  const staleBefore = new Date(Date.now() - 2 * 60 * 1000).toISOString();
+  const { data: claimed, error: claimError } = await supabase.from("bridge_webhook_events")
+    .update({
+      status: "processing",
+      processing_started_at: new Date().toISOString(),
+      processing_token: claimToken,
+      attempts: (existing.attempts ?? 0) + 1,
+    })
+    .eq("event_id", id)
+    .or(`status.in.(received,failed),and(status.eq.processing,processing_started_at.lt.${staleBefore})`)
+    .select("event_id")
+    .maybeSingle();
+  if (claimError) return new Response("Webhook claim failed", { status: 503 });
+  if (!claimed) return new Response("Webhook event is already processing", { status: 503 });
+
   if (eventName === "payment.captured") {
     const payment = payload?.payload?.payment?.entity;
-    if (!payment?.order_id || !payment?.id) return await failEvent(supabase, id, "Capture missing payment identifiers");
+    if (!payment?.order_id || !payment?.id) return await failEvent(supabase, id, "Capture missing payment identifiers", claimToken);
 
     // The local provider_order_id is authoritative for Bridge. Razorpay payment webhooks do not reliably copy order notes.
     const { data: localPayment, error: lookupError } = await supabase.from("bridge_payments")
       .select("id,user_id,title_id,purpose,status,provider_payment_id")
       .eq("provider_order_id", payment.order_id).maybeSingle();
-    if (lookupError) return await failEvent(supabase, id, "Bridge payment lookup failed");
+    if (lookupError) return await failEvent(supabase, id, "Bridge payment lookup failed", claimToken);
     if (localPayment) surface = "bridge";
 
     if (surface === "bridge") {
       // A capture can race the local insert after Razorpay order creation. Return 503 so Razorpay retries it.
-      if (!localPayment) return await failEvent(supabase, id, "Bridge order not persisted yet");
+      if (!localPayment) return await failEvent(supabase, id, "Bridge order not persisted yet", claimToken);
       if (localPayment.provider_payment_id && localPayment.provider_payment_id !== payment.id) {
         return new Response("Order linked to another payment", { status: 409 });
       }
-      if (!localPayment.title_id) return await failEvent(supabase, id, "Bridge license order has no title");
+      if (!localPayment.title_id) return await failEvent(supabase, id, "Bridge license order has no title", claimToken);
 
       const now = new Date().toISOString();
       const { data: updated, error: updateError } = await supabase.from("bridge_payments")
         .update({ status: "captured", provider_payment_id: payment.id, verified_at: now })
         .eq("id", localPayment.id).select("id").maybeSingle();
-      if (updateError || !updated) return await failEvent(supabase, id, "Bridge payment update failed");
+      if (updateError || !updated) return await failEvent(supabase, id, "Bridge payment update failed", claimToken);
 
       const { error: entitlementError } = await supabase.from("bridge_entitlements").upsert({
         user_id: localPayment.user_id, title_id: localPayment.title_id, payment_id: localPayment.id, access_type: "license",
       }, { onConflict: "user_id,title_id,access_type", ignoreDuplicates: true });
-      if (entitlementError) return await failEvent(supabase, id, "Bridge entitlement grant failed");
+      if (entitlementError) return await failEvent(supabase, id, "Bridge entitlement grant failed", claimToken);
 
       const { data: title, error: titleError } = await supabase.from("bridge_titles").select("status").eq("id", localPayment.title_id).maybeSingle();
-      if (titleError) return await failEvent(supabase, id, "Bridge title lookup failed");
+      if (titleError) return await failEvent(supabase, id, "Bridge title lookup failed", claimToken);
       if (title && (title.status === "LIVE_FOR_BUYERS" || title.status === "IN_NEGOTIATION")) {
         const { error: transitionError } = await supabase.from("bridge_titles").update({ status: "LICENSED", updated_at: now }).eq("id", localPayment.title_id);
-        if (transitionError) return await failEvent(supabase, id, "Bridge title transition failed");
+        if (transitionError) return await failEvent(supabase, id, "Bridge title transition failed", claimToken);
         const { error: eventError } = await supabase.from("bridge_title_events").insert({
           title_id: localPayment.title_id, from_status: title.status, to_status: "LICENSED", actor_user_id: localPayment.user_id, note: "razorpay captured webhook",
         });
-        if (eventError) return await failEvent(supabase, id, "Bridge title event failed");
+        if (eventError) return await failEvent(supabase, id, "Bridge title event failed", claimToken);
       }
       const { error: auditError } = await supabase.from("bridge_audit_logs").insert({
         actor_user_id: localPayment.user_id, action: "payment.captured", entity_type: "bridge_payment", entity_id: localPayment.id,
         metadata: JSON.stringify({ titleId: localPayment.title_id, source: "razorpay-webhook" }),
       });
-      if (auditError) return await failEvent(supabase, id, "Bridge audit write failed");
+      if (auditError) return await failEvent(supabase, id, "Bridge audit write failed", claimToken);
     }
   }
 
-  const { error: doneError } = await supabase.from("bridge_webhook_events").update({ status: "processed", processed_at: new Date().toISOString() }).eq("event_id", id);
-  if (doneError) return new Response("Persistence failure", { status: 503 });
+  const { data: completed, error: doneError } = await supabase.from("bridge_webhook_events")
+    .update({
+      status: "processed",
+      processed_at: new Date().toISOString(),
+      processing_started_at: null,
+      processing_token: null,
+    })
+    .eq("event_id", id)
+    .eq("processing_token", claimToken)
+    .select("event_id")
+    .maybeSingle();
+  if (doneError || !completed) return new Response("Persistence failure", { status: 503 });
   return Response.json({ ok: true, event: eventName, surface });
 });
