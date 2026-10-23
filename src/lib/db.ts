@@ -60,25 +60,18 @@ const deployEnv =
         .toLowerCase()
     : "";
 
-if (deployEnv === "preview") {
-  if (!expectedSupabaseProjectRef) {
-    throw new Error(
-      "Preview database target is not configured: EXPECTED_SUPABASE_PROJECT_REF is required.",
-    );
-  }
-  if (!rawDatabaseUrl) {
-    throw new Error(
-      "Preview database target is not configured: provide a staging-only DATABASE_URL or POSTGRES_URL.",
-    );
-  }
-  const normalizedExpectedRef = expectedSupabaseProjectRef.toLowerCase();
-  const normalizedDatabaseTarget = rawDatabaseUrl.toLowerCase();
-  if (normalizedDatabaseTarget.includes("mlmgugivsyoxzdgwkbpu")) {
+if (deployEnv === "preview" && rawDatabaseUrl) {
+  if (rawDatabaseUrl.toLowerCase().includes("mlmgugivsyoxzdgwkbpu")) {
     throw new Error(
       "Preview environment must not target production database: canonical production ref detected.",
     );
   }
-  if (!normalizedDatabaseTarget.includes(normalizedExpectedRef)) {
+  if (!expectedSupabaseProjectRef) {
+    throw new Error(
+      "Preview database target is configured without EXPECTED_SUPABASE_PROJECT_REF; refusing an unverified target.",
+    );
+  }
+  if (!rawDatabaseUrl.toLowerCase().includes(expectedSupabaseProjectRef.toLowerCase())) {
     throw new Error(
       "Preview database target does not match EXPECTED_SUPABASE_PROJECT_REF; refusing unknown or production fallback.",
     );
