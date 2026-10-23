@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { resolveExplicitBridgeProfileId } from "./identity-link-guard.ts";
+import { hasPermission } from "./rbac.ts";
 
 const authUserId = "f4bfb59d-2a9a-43e2-a84a-4e2f1cc7e60b";
 
@@ -32,4 +33,23 @@ test("a different direct profile ID is not accepted as the caller's identity", (
     authUserId,
     directProfileId: "some-other-profile",
   }), null);
+});
+
+test("identity resolution leaves an existing profile's RBAC role unchanged", () => {
+  const existingActor = {
+    userId: "legacy-bridge-profile-42",
+    accountType: "independent_creator" as const,
+    internalRole: "viewer" as const,
+    emailVerified: true,
+  };
+  const before = { ...existingActor };
+  const resolvedId = resolveExplicitBridgeProfileId({
+    authUserId,
+    linkedProfileId: existingActor.userId,
+  });
+
+  assert.equal(resolvedId, existingActor.userId);
+  assert.deepEqual(existingActor, before);
+  assert.equal(hasPermission(existingActor, "title.create"), false);
+  assert.equal(hasPermission(existingActor, "asset.sign_upload"), false);
 });
