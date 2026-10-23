@@ -120,6 +120,6 @@ test("verification timeout warns that server-side work may still complete and re
   assert.match(route, /Refresh the asset list and check its status before retrying/);
   assert.match(route, /125_000/);
   const oci = readFileSync(join(process.cwd(), "src/lib/bridge/oci-object-storage.server.ts"), "utf8");
-  assert.match(oci, /deadlineMs \\?\\? 120_000/);
+  assert.match(oci, /deadlineMs \?\? 120_000/);
   assert.match(oci, /within 120 seconds/);
 });
