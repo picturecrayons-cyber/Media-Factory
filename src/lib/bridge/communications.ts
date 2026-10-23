@@ -511,3 +511,33 @@ export const listUnlinkedHostingerEvents = createServerFn({ method: "GET" })
     `;
     return { events };
   });
+
+
+const messagesInput = z.object({ threadId: z.string().uuid() });
+
+/** Conversation history is limited to the operator who linked the thread. */
+export const listMyBuyerCommunicationMessages = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .validator(messagesInput)
+  .handler(async ({ context, data }) => {
+    const actor = await requireOperator(context.userId);
+    const sql = await getSql();
+    const thread = await sql<{ id: string }>`
+      select id from bridge_communication_threads
+      where id = ${data.threadId} and created_by = ${actor.userId}
+      limit 1
+    `;
+    if (!thread[0]) throw new Error("Conversation is unavailable in your authorized scope.");
+    const messages = await sql<{
+      id: string; direction: string; sender_ref: string | null; recipient_refs: string[];
+      subject: string | null; body_text: string | null; sent_at: string | null; created_at: string;
+    }>`
+      select id, direction, sender_ref, recipient_refs, subject, body_text,
+             sent_at::text as sent_at, created_at::text as created_at
+      from bridge_communication_messages
+      where thread_id = ${data.threadId}
+      order by created_at asc
+      limit 500
+    `;
+    return { messages };
+  });
