@@ -144,3 +144,22 @@ This is **still a partial register**, not a claim that all 63 tables have been t
 #### Gate outcome
 
 No migration, grant, policy, function privilege, Auth setting, or application data was changed. No synthetic-user or password-flow tests were run. The Vercel 403 blocks runtime isolation proof; Staging leaked-password protection remains NOT VERIFIED. Keep PR #376 Draft and release status `NO-GO — NOT CERTIFIED`. Production project `mlmgugivsyoxzdgwkbpu` was not queried or changed.
+
+
+#### Source-search supplement for remaining catalog names
+
+Additional default-branch searches at `3b96a07da0b0706515488552d06ecfd3dcb916ea` found:
+- `loop_subscriptions`: `src/lib/loop/subscriptions.ts`, `src/lib/loop/catalog.ts`.
+- `loop_titles`: `src/lib/loop/catalog.ts`, `src/lib/loop/subscriptions.ts`, `src/lib/loop/profile.ts`, and Bridge publication path `src/lib/bridge/loop-publication.ts`.
+- `loop_watch_progress`, `loop_watchlist`: `src/lib/loop/profile.ts`; reviewed query predicates scope records by `context.userId`.
+- `profiles`: `src/lib/bridge/profiles.ts`, `src/lib/loop/profile.ts`, and route/UI references. This name is ambiguous across Bridge/Loop/legacy schemas and must be matched by schema-qualified table name.
+- `screeners`: `src/lib/loop/catalog.ts` and `src/routes/index.tsx`; the exact table access and authorization must be reviewed.
+- `session`, `user`, `verification`: authentication/session source and route references exist, but the generic names also appear in non-table contexts; exact schema-qualified call sites need confirmation.
+- `streamvista_jobs`, `streamvista_orders`: `src/lib/bridge/streamvista.ts`; `streamvista_legacy_links` appeared in migration references.
+- `submissions`: `src/lib/bridge/submissions.ts`, `src/routes/submit-film.tsx`, `src/routes/onboarding.tsx`.
+- `territories`: submission, rights-coverage and workflow-policy references; confirm whether each occurrence is the public table or a domain/type constant.
+- `titles`: `src/lib/bridge/titles.ts` and buyer/admin/studio route references; distinguish schema-qualified `bridge_titles`, `loop_titles`, and legacy `titles`.
+- `subscriptions`: `src/lib/loop/subscriptions.ts`, `src/lib/loop/catalog.ts`, and legacy/canonical migration references; distinguish `subscriptions` from `loop_subscriptions`.
+- `platform_meta`, `qc_jobs`, `revenue_events`, `transfers`: repository results were migration/schema references only in this search pass; do not label them unused until full SQL/source search confirms no dynamic access.
+
+Search results for several other tables in the 63-table inventory returned no exact default-branch hits, including some operational and commercial tables. That absence is not proof of non-use. This register remains **incomplete** until every catalog name is reconciled against schema-qualified SQL, dynamic query builders, all server functions, and migrations; each row must state whether its evidence is application source, migration only, or unresolved.
