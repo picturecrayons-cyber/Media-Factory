@@ -8,6 +8,7 @@ import {
   advanceBuyerProspectStage,
   verifyBuyerProspect,
   listBuyerProspects,
+  listMyBridgeNotifications,
   linkBuyerCommunicationThread,
   listMyBuyerCommunicationThreads,
   prepareBuyerMailDraft,
@@ -50,6 +51,7 @@ function CommunicationsDesk({ actor }: { actor: any }) {
 
   const prospectsQ = useQuery({ queryKey: ["bridge-buyer-prospects"], queryFn: () => listBuyerProspects() });
   const threadsQ = useQuery({ queryKey: ["bridge-my-communication-threads"], queryFn: () => listMyBuyerCommunicationThreads({ data: {} }) });
+  const notificationsQ = useQuery({ queryKey: ["bridge-my-notifications"], queryFn: () => listMyBridgeNotifications() });
 
   const createProspect = useMutation({
     mutationFn: () => createBuyerProspect({ data: { companyName, companyDomain: domain || undefined, contactName: contactName || undefined, contactEmail: email || undefined, source } }),
@@ -102,6 +104,16 @@ function CommunicationsDesk({ actor }: { actor: any }) {
               </tbody>
             </table>
           </div>
+        </section>
+
+        <section className="rounded-2xl border border-line bg-surface p-5">
+          <h2 className="font-display text-xl font-semibold">My Bridge notifications</h2>
+          <p className="mt-1 text-sm text-muted">Persisted events for your account. Duplicate pipeline events are guarded by a deduplication key.</p>
+          <ul className="mt-3 divide-y divide-line">
+            {(notificationsQ.data?.notifications ?? []).slice(0, 10).map((item) => <li key={item.id} className="py-2 text-sm"><span className="font-medium">{item.event_type.replaceAll("_", " ")}</span><span className="ml-2 text-xs text-muted">{item.entity_type}:{item.entity_id}</span></li>)}
+            {!notificationsQ.isPending && !notificationsQ.isError && !(notificationsQ.data?.notifications ?? []).length ? <li className="py-3 text-sm text-muted">No notifications yet.</li> : null}
+            {notificationsQ.isError ? <li className="py-3 text-sm text-muted">Notifications unavailable. Confirm staging migration is applied.</li> : null}
+          </ul>
         </section>
 
         <section className="rounded-2xl border border-line bg-surface p-5">
