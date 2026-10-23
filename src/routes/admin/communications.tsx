@@ -5,6 +5,7 @@ import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import {
   createBuyerProspect,
+  advanceBuyerProspectStage,
   listBuyerProspects,
   linkBuyerCommunicationThread,
   listMyBuyerCommunicationThreads,
@@ -43,6 +44,7 @@ function CommunicationsDesk({ actor }: { actor: any }) {
   const [draftSubject, setDraftSubject] = useState("");
   const [bodyText, setBodyText] = useState("");
   const [notice, setNotice] = useState("");
+  const [nextStages, setNextStages] = useState<Record<string, string>>({});
 
   const prospectsQ = useQuery({ queryKey: ["bridge-buyer-prospects"], queryFn: () => listBuyerProspects() });
   const threadsQ = useQuery({ queryKey: ["bridge-my-communication-threads"], queryFn: () => listMyBuyerCommunicationThreads({ data: {} }) });
@@ -51,6 +53,11 @@ function CommunicationsDesk({ actor }: { actor: any }) {
     mutationFn: () => createBuyerProspect({ data: { companyName, companyDomain: domain || undefined, contactName: contactName || undefined, contactEmail: email || undefined, source } }),
     onSuccess: (result) => { setNotice("Prospect saved as UNVERIFIED."); setProspectId(result.id); setCompanyName(""); setDomain(""); setContactName(""); setEmail(""); void client.invalidateQueries({ queryKey: ["bridge-buyer-prospects"] }); },
     onError: (error) => setNotice(error instanceof Error ? error.message : "Could not save prospect."),
+  });
+  const advanceStage = useMutation({
+    mutationFn: (input: { prospectId: string; stage: string }) => advanceBuyerProspectStage({ data: { prospectId: input.prospectId, stage: input.stage as "DISCOVERED" | "RESEARCHING" | "CONTACT_READY" | "ENQUIRY" | "IN_NEGOTIATION" | "CONTRACT_REVIEW" | "CONTRACTED" | "DECLINED" | "DORMANT" } }),
+    onSuccess: (result) => { setNotice(`Pipeline updated: ${result.from} → ${result.stage}`); void client.invalidateQueries({ queryKey: ["bridge-buyer-prospects"] }); },
+    onError: (error) => setNotice(error instanceof Error ? error.message : "Could not advance pipeline."),
   });
   const linkThread = useMutation({
     mutationFn: () => linkBuyerCommunicationThread({ data: { prospectId, subject, channel, externalThreadId: externalThreadId || undefined, mailboxAccountRef: mailboxAccountRef || undefined } }),
@@ -82,9 +89,9 @@ function CommunicationsDesk({ actor }: { actor: any }) {
           {prospectsQ.isError ? <p role="alert" className="mt-3 text-sm text-muted">Prospects unavailable. Confirm staging migration is applied before testing.</p> : null}
           <div className="mt-4 overflow-auto">
             <table className="w-full min-w-[620px] text-left text-sm">
-              <thead><tr className="border-b border-line text-xs text-muted"><th className="p-2">Company</th><th className="p-2">Contact</th><th className="p-2">Pipeline</th><th className="p-2">Verification</th><th className="p-2">Use</th></tr></thead>
+              <thead><tr className="border-b border-line text-xs text-muted"><th className="p-2">Company</th><th className="p-2">Contact</th><th className="p-2">Pipeline</th><th className="p-2">Verification</th><th className="p-2">Use</th><th className="p-2">Advance pipeline</th></tr></thead>
               <tbody className="divide-y divide-line">
-                {(prospectsQ.data?.prospects ?? []).map((p) => <tr key={p.id}><td className="p-2"><div className="font-medium">{p.company_name}</div><div className="text-xs text-muted">{p.company_domain ?? "No domain"}</div></td><td className="p-2">{p.contact_name ?? "—"}<div className="text-xs text-muted">{p.contact_email ?? ""}</div></td><td className="p-2">{p.pipeline_stage}</td><td className="p-2">{p.verification_status}</td><td className="p-2"><button className="underline" type="button" onClick={() => setProspectId(p.id)}>Link thread</button></td></tr>)}
+                {(prospectsQ.data?.prospects ?? []).map((p) => <tr key={p.id}><td className="p-2"><div className="font-medium">{p.company_name}</div><div className="text-xs text-muted">{p.company_domain ?? "No domain"}</div></td><td className="p-2">{p.contact_name ?? "—"}<div className="text-xs text-muted">{p.contact_email ?? ""}</div></td><td className="p-2">{p.pipeline_stage}</td><td className="p-2">{p.verification_status}</td><td className="p-2"><button className="underline" type="button" onClick={() => setProspectId(p.id)}>Link thread</button></td><td className="p-2"><div className="flex gap-2"><select aria-label={`Next stage for ${p.company_name}`} className="rounded border border-line bg-transparent px-2 py-1 text-xs" value={nextStages[p.id] ?? ""} onChange={(e) => setNextStages((prev) => ({ ...prev, [p.id]: e.target.value }))}><option value="">Choose stage</option>{["RESEARCHING", "CONTACT_READY", "ENQUIRY", "IN_NEGOTIATION", "CONTRACT_REVIEW", "CONTRACTED", "DECLINED", "DORMANT"].map((stage) => <option key={stage} value={stage}>{stage}</option>)}</select><button type="button" className="underline disabled:opacity-50" disabled={!nextStages[p.id] || advanceStage.isPending} onClick={() => advanceStage.mutate({ prospectId: p.id, stage: nextStages[p.id] })}>Save</button></div></td></tr>)}
               </tbody>
             </table>
           </div>
