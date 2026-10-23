@@ -7,6 +7,7 @@ import { assertPermission, canAccessDashboard, workspaceHome } from "./rbac";
 import { PRODUCT_NAME, LEGAL_OWNER, PRODUCTION_DOMAIN } from "./canonical";
 import { integrationStatus } from "./env";
 import { assertNotDevUser } from "./guards";
+import { resolveExplicitBridgeProfileId } from "./identity-link-guard";
 
 export type BridgeActor = Actor & {
   email: string;
@@ -73,20 +74,6 @@ export async function resolveBridgeUserId(authUserId: string): Promise<string> {
     limit 1
   `;
   return byEmail[0]?.bridge_user_id ?? authUserId;
-}
-
-/**
- * Resolve only an identity already represented by the auth UUID or an explicit
- * identity-link row. This intentionally does not use email as proof of ownership.
- */
-export function resolveExplicitBridgeProfileId(input: {
-  authUserId: string;
-  directProfileId?: string | null;
-  linkedProfileId?: string | null;
-}): string | null {
-  if (input.directProfileId === input.authUserId) return input.authUserId;
-  if (input.linkedProfileId) return input.linkedProfileId;
-  return null;
 }
 
 export async function loadActorExplicit(authUserId: string): Promise<BridgeActor | null> {
