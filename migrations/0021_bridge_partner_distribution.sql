@@ -68,6 +68,15 @@ create table if not exists public.bridge_distribution_deliveries (
     check (window_end is null or window_start is null or window_end > window_start),
   constraint bridge_distribution_delivery_authorized_evidence_chk
     check (authorization_status <> 'AUTHORIZED' or (authorized_by is not null and authorized_at is not null)),
+  constraint bridge_distribution_delivery_authorized_dependencies_chk
+    check (
+      authorization_status <> 'AUTHORIZED'
+      or (rights_grant_id is not null and qc_case_id is not null and legal_case_id is not null)
+    ),
+  constraint bridge_distribution_delivery_queued_authorization_chk
+    check (delivery_status not in ('QUEUED','IN_PROGRESS') or authorization_status = 'AUTHORIZED'),
+  constraint bridge_distribution_delivery_external_reference_chk
+    check (delivery_status not in ('DELIVERED','ACKNOWLEDGED') or partner_delivery_ref is not null),
   constraint bridge_distribution_delivery_revocation_evidence_chk
     check (authorization_status <> 'REVOKED' or (revoked_by is not null and revoked_at is not null)),
   constraint bridge_distribution_delivery_ack_evidence_chk
