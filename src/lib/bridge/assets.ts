@@ -83,9 +83,14 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
     }),
   )
   .handler(async ({ context, data }) => {
+    const diagnosticStartedAt = Date.now();
+    let diagnosticStage = "authentication";
+    let diagnosticAssetId = data.assetId;
+    try {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
     assertPermission(actor, actor.internalRole ? "title.ingest_internal" : "asset.sign_upload");
+    diagnosticStage = "database_asset_lookup";
     const sql = await getSql();
     const rows = await sql<{
       id: string;
@@ -109,6 +114,7 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
       return { assetId: asset.id, byteSize: Number(asset.byte_size), verified: true };
 
     const { verifyObject, sealVerifiedObject } = await import("./oci-object-storage.server");
+    diagnosticStage = "oci_source_head_verification";
     const object = await verifyObject(asset.s3_key, asset.content_type);
     if (data.expectedByteSize != null && object.byteSize !== data.expectedByteSize) {
       throw new Error("Uploaded object size does not match the file that was sent");
@@ -118,12 +124,14 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
     // leads to a duplicate confirmation while the first server call is still running,
     // both attempts target the same sealed object instead of creating orphan copies.
     const sealedKey = `${asset.s3_key}.verified/${asset.id}`;
+    diagnosticStage = "oci_immutable_copy_and_destination_head";
     const sealed = await sealVerifiedObject(asset.s3_key, sealedKey, object.etag);
     if (sealed.byteSize !== object.byteSize || !sealed.etag) {
       throw new Error("Verified copy differs from the uploaded object");
     }
     // Only mark the migration queue as UPLOADED after the immutable copy succeeds
     // and destination object's size, content type, and ETag have been verified.
+    diagnosticStage = "database_migration_queue_uploaded";
     await sql`
       update loop_media_migration_queue
       set status = 'UPLOADED', target_path = ${sealedKey}, updated_at = now()
@@ -131,6 +139,7 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
         and asset_kind = case when ${asset.kind} = 'screener' then 'TRAILER' else upper(${asset.kind}) end
         and status in ('PENDING_REUPLOAD', 'UPLOADED')
     `;
+    diagnosticStage = "database_persist_verified_asset";
     const confirmed = await persistVerifiedAsset(sql, {
       assetId: asset.id,
       actorUserId: actor.userId,
@@ -144,6 +153,7 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
       sealedKey,
     });
     if (confirmed) {
+      diagnosticStage = "database_migration_queue_verified";
       await sql`
         update loop_media_migration_queue
         set status = 'VERIFIED', target_path = ${sealedKey}, updated_at = now()
@@ -161,6 +171,27 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
       throw new Error("Asset confirmation changed; retry after refreshing the title");
     }
     return { assetId: asset.id, byteSize: sealed.byteSize, verified: true };
+    } catch (error) {
+      // Emit only safe diagnostics: never log request payloads, object keys, signed URLs,
+      // credentials, private keys, or raw provider error messages.
+      const raw = error instanceof Error ? error.message : "";
+      const statusMatch = raw.match(/\((\d{3})\)/);
+      const category =
+        /database|postgres|sql|connection|pool/i.test(raw) || diagnosticStage.startsWith("database")
+          ? "database_persistence_failure"
+          : /oci|object|copy|work-request|etag|content type|uploaded object/i.test(raw) || diagnosticStage.startsWith("oci")
+            ? "oci_verification_failure"
+            : "request_or_authorization_failure";
+      console.error("[bridge-upload] confirmAssetUpload failed", {
+        stage: diagnosticStage,
+        category,
+        httpStatus: statusMatch ? Number(statusMatch[1]) : null,
+        elapsedMs: Date.now() - diagnosticStartedAt,
+        assetId: /^[a-f0-9-]{8,64}$/i.test(diagnosticAssetId) ? diagnosticAssetId : "redacted",
+        errorName: error instanceof Error ? error.name : "UnknownError",
+      });
+      throw error;
+    }
   });
 
 export const requestAssetDownload = createServerFn({ method: "POST" })
