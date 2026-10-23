@@ -302,7 +302,7 @@ export const verifyBuyerProspect = createServerFn({ method: "POST" })
     const actor = await requireOperator(context.userId);
     if (actor.internalRole !== "super_admin") throw new Error("Super Admin approval required for buyer verification.");
     const sql = await getSql();
-    const rows = await sql<{ id: string; pipeline_stage: string; verification_status: string }>`
+    const rows = await sql<{ id: string; pipeline_stage: string; verification_status: string; organization_scope: string | null }>`
       select id, pipeline_stage, verification_status, organization_scope from bridge_buyer_prospects
       where id = ${data.prospectId}
         and (${actor.internalRole === "super_admin"} or organization_scope = ${actor.organizationName})
