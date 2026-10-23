@@ -9,6 +9,7 @@ import {
   verifyBuyerProspect,
   listBuyerProspects,
   listMyBridgeNotifications,
+  listUnlinkedHostingerEvents,
   linkBuyerCommunicationThread,
   listMyBuyerCommunicationThreads,
   prepareBuyerMailDraft,
@@ -55,6 +56,7 @@ function CommunicationsDesk({ actor }: { actor: any }) {
   const prospectsQ = useQuery({ queryKey: ["bridge-buyer-prospects"], queryFn: () => listBuyerProspects() });
   const threadsQ = useQuery({ queryKey: ["bridge-my-communication-threads"], queryFn: () => listMyBuyerCommunicationThreads({ data: {} }) });
   const notificationsQ = useQuery({ queryKey: ["bridge-my-notifications"], queryFn: () => listMyBridgeNotifications() });
+  const unlinkedEventsQ = useQuery({ queryKey: ["bridge-unlinked-hostinger-events"], queryFn: () => listUnlinkedHostingerEvents(), enabled: actor.internalRole === "super_admin" });
 
   const createProspect = useMutation({
     mutationFn: () => createBuyerProspect({ data: { companyName, companyDomain: domain || undefined, contactName: contactName || undefined, contactEmail: email || undefined, source } }),
@@ -124,6 +126,24 @@ function CommunicationsDesk({ actor }: { actor: any }) {
           </ul>
         </section>
 
+        {actor.internalRole === "super_admin" ? <section className="rounded-2xl border border-line bg-surface p-5">
+          <h2 className="font-display text-xl font-semibold">Incoming Hostinger Mail events</h2>
+          <p className="mt-1 text-sm text-muted">Authenticated webhook metadata awaiting a prospect/thread link. No automatic buyer account or reply is created.</p>
+          {unlinkedEventsQ.isError ? <p className="mt-3 text-sm text-muted">Webhook events unavailable. Confirm migration and webhook configuration.</p> : null}
+          <ul className="mt-3 divide-y divide-line">
+            {(unlinkedEventsQ.data?.events ?? []).map((event) => <li key={event.id} className="flex flex-col gap-2 py-3 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0">
+                <p className="font-medium">{event.subject ?? "(no subject)"}</p>
+                <p className="text-xs text-muted">{event.sender_ref ?? "Unknown sender"} · {event.mailbox_ref} · {event.received_at}</p>
+                <p className="mt-1 text-sm">{event.preview_text ?? "No preview supplied by webhook."}</p>
+                <p className="mt-1 break-all text-xs text-muted">Thread: {event.external_thread_id}</p>
+              </div>
+              <button type="button" className="shrink-0 underline" onClick={() => { setChannel("HOSTINGER_MAIL"); setExternalThreadId(event.external_thread_id); setMailboxAccountRef(event.mailbox_ref); setSubject(event.subject ?? "(no subject)"); setProspectId(""); }}>Link to prospect</button>
+            </li>)}
+            {!unlinkedEventsQ.isPending && !unlinkedEventsQ.isError && !(unlinkedEventsQ.data?.events ?? []).length ? <li className="py-3 text-sm text-muted">No unlinked events.</li> : null}
+          </ul>
+        </section> : null}
+
         <section className="rounded-2xl border border-line bg-surface p-5">
           <h2 className="font-display text-xl font-semibold">Link a conversation</h2>
           <p className="mt-1 text-sm text-muted">Links an existing Hostinger Mail thread to a prospect. This does not fetch mail from Hostinger or send anything.</p>
@@ -131,7 +151,7 @@ function CommunicationsDesk({ actor }: { actor: any }) {
             <select required className="rounded-lg border border-line bg-transparent px-3 py-2 text-sm" value={prospectId} onChange={(e) => setProspectId(e.target.value)}><option value="">Choose prospect</option>{(prospectsQ.data?.prospects ?? []).map((p) => <option key={p.id} value={p.id}>{p.company_name}</option>)}</select>
             <input required className="rounded-lg border border-line bg-transparent px-3 py-2 text-sm" placeholder="Thread subject" value={subject} onChange={(e) => setSubject(e.target.value)} />
             <select className="rounded-lg border border-line bg-transparent px-3 py-2 text-sm" value={channel} onChange={(e) => setChannel(e.target.value as typeof channel)}><option value="HOSTINGER_MAIL">Hostinger Mail</option><option value="BRIDGE_INTERNAL">Bridge internal</option><option value="OTHER">Other</option></select>
-            {channel === "HOSTINGER_MAIL" ? <><input required className="rounded-lg border border-line bg-transparent px-3 py-2 text-sm" placeholder="Exact Hostinger thread ID" value={externalThreadId} onChange={(e) => setExternalThreadId(e.target.value)} /><input className="rounded-lg border border-line bg-transparent px-3 py-2 text-sm" placeholder="Mailbox account reference" value={mailboxAccountRef} onChange={(e) => setMailboxAccountRef(e.target.value)} /></> : null}
+            {channel === "HOSTINGER_MAIL" ? <><input required className="rounded-lg border border-line bg-transparent px-3 py-2 text-sm" placeholder="Exact Hostinger thread ID" value={externalThreadId} onChange={(e) => setExternalThreadId(e.target.value)} /><input required className="rounded-lg border border-line bg-transparent px-3 py-2 text-sm" placeholder="Exact mailbox address configured in Hostinger webhook" value={mailboxAccountRef} onChange={(e) => setMailboxAccountRef(e.target.value)} /></> : null}
             <button className="rounded-lg border border-line px-4 py-2 text-sm font-semibold disabled:opacity-50" disabled={linkThread.isPending}>Save thread link</button>
           </form>
         </section>
