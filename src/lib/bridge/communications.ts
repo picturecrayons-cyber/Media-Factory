@@ -305,9 +305,10 @@ export const listMyBridgeNotifications = createServerFn({ method: "GET" })
     const sql = await getSql();
     const rows = await sql<{
       id: string; event_type: string; entity_type: string; entity_id: string;
-      payload: Record<string, unknown>; read_at: string | Date | null; created_at: string | Date;
+      payload: string; read_at: string | null; created_at: string;
     }>`
-      select id, event_type, entity_type, entity_id, payload, read_at, created_at
+      select id, event_type, entity_type, entity_id, payload::text as payload,
+             read_at::text as read_at, created_at::text as created_at
       from bridge_notifications
       where recipient_user_id = ${actor.userId}
       order by created_at desc limit 100
