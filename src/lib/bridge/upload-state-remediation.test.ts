@@ -43,13 +43,69 @@ test("all 9 supported asset types are valid in OTT ingest specification", () => 
   }
 });
 
-test("asset confirmation uses canonical Bridge persistence, not the legacy Loop migration queue", () => {
-  const assets = readFileSync(join(process.cwd(), "src/lib/bridge/assets.ts"), "utf8");
-  assert.doesNotMatch(assets, /loop_media_migration_queue/);
-  assert.match(assets, /persistVerifiedAsset\(sql,/);
-  assert.match(assets, /database_persist_verified_asset/);
-});
+test("verified asset persistence atomically updates canonical Bridge records without a Loop queue", async () => {
+  const db = new PGlite();
+  try {
+    await db.waitReady;
+    await db.exec("create role anon; create role authenticated;");
+    await db.exec(readFileSync(join(process.cwd(), "migrations/0004_bridge.sql"), "utf8"));
+    await db.exec(`
+      insert into bridge_titles (id, slug, name, owner_user_id, owner_account_type, status)
+      values ('title-verify-test', 'title-verify', 'Verify Test Title', 'owner-1', 'independent_creator', 'PREPARING');
+      insert into bridge_assets (id, title_id, kind, s3_key, content_type, created_by)
+      values ('asset-verify-1', 'title-verify-test', 'master', 'bridge/owner-1/title-verify-test/master/raw.mp4', 'video/mp4', 'owner-1');
+    `);
 
+    const sql = { query: async <T>(query: string, params: unknown[]) => (await db.query<T>(query, params)).rows };
+    const confirmed = await persistVerifiedAsset(sql, {
+      assetId: "asset-verify-1",
+      actorUserId: "owner-1",
+      internalActor: false,
+      titleId: "title-verify-test",
+      kind: "master",
+      byteSize: 52428800,
+      contentType: "video/mp4",
+      checksum: "sealed-etag-abc",
+      sourceKey: "bridge/owner-1/title-verify-test/master/raw.mp4",
+      sealedKey: "bridge/owner-1/title-verify-test/master/raw.mp4.verified/asset-verify-1",
+    });
+    assert.equal(confirmed, true);
+
+    const assetRows = (await db.query<{ byte_size: number; s3_key: string }>(
+      "select byte_size, s3_key from bridge_assets where id = 'asset-verify-1'",
+    )).rows;
+    assert.equal(Number(assetRows[0]?.byte_size), 52428800);
+    assert.equal(assetRows[0]?.s3_key, "bridge/owner-1/title-verify-test/master/raw.mp4.verified/asset-verify-1");
+
+    const titleRows = (await db.query<{ master_key: string | null }>(
+      "select master_key from bridge_titles where id = 'title-verify-test'",
+    )).rows;
+    assert.equal(titleRows[0]?.master_key, "bridge/owner-1/title-verify-test/master/raw.mp4.verified/asset-verify-1");
+
+    const auditRows = (await db.query<{ action: string; entity_id: string }>(
+      "select action, entity_id from bridge_audit_logs where entity_id = 'asset-verify-1'",
+    )).rows;
+    assert.equal(auditRows.length, 1);
+    assert.equal(auditRows[0]?.action, "asset.upload_verified");
+
+    const secondAttempt = await persistVerifiedAsset(sql, {
+      assetId: "asset-verify-1",
+      actorUserId: "owner-1",
+      internalActor: false,
+      titleId: "title-verify-test",
+      kind: "master",
+      byteSize: 52428800,
+      contentType: "video/mp4",
+      checksum: "sealed-etag-abc",
+      sourceKey: "bridge/owner-1/title-verify-test/master/raw.mp4",
+      sealedKey: "bridge/owner-1/title-verify-test/master/raw.mp4.verified/asset-verify-1",
+    });
+    assert.equal(secondAttempt, false);
+    assert.equal((await db.query("select id from bridge_audit_logs where entity_id = 'asset-verify-1'")).rows.length, 1);
+  } finally {
+    await db.close();
+  }
+});
 
 test("duplicate upload confirmations derive the same sealed key from the asset row ID", () => {
   const assets = readFileSync(join(process.cwd(), "src/lib/bridge/assets.ts"), "utf8");
