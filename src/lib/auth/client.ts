@@ -103,7 +103,7 @@ export async function signInWithGoogle() {
 
   // Use the current app origin; Supabase's redirect allowlist must explicitly
   // permit the Preview callback. Never silently fall back to production.
-  const redirectTo = new URL("/auth/callback?auth_provider=google", window.location.origin).toString();
+  const redirectTo = new URL("/auth/callback", window.location.origin).toString();
   const { error } = await supabase.auth.signInWithOAuth({
     provider: "google",
     options: { redirectTo },
