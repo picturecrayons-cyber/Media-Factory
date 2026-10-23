@@ -237,6 +237,13 @@ function Onboarding() {
     setBusy(true);
     setError(null);
 
+    if (sessionQ.data && "dbStatus" in sessionQ.data && sessionQ.data.dbStatus === "unconfigured") {
+      setError("Database is not configured on this environment. Profile creation is blocked.");
+      submitInFlight.current = false;
+      setBusy(false);
+      return;
+    }
+
     try {
       let inviteToken: string | undefined;
       try { inviteToken = sessionStorage.getItem("bridge-invite") ?? undefined; } catch { /* ignore */ }
@@ -316,6 +323,12 @@ function Onboarding() {
           </div>
           <span className="hidden rounded-full border border-line bg-elevated px-3 py-1 text-xs text-muted sm:inline-flex">StreamVista OPC Pvt Ltd.</span>
         </div>
+
+        {sessionQ.data && "dbStatus" in sessionQ.data && sessionQ.data.dbStatus === "unconfigured" ? (
+          <div role="status" className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-400">
+            Preview Environment: Direct database connection is omitted for staging isolation. Profile creation is disabled in this environment.
+          </div>
+        ) : null}
 
         <section className="space-y-4 rounded-2xl border border-line p-5">
           <div>

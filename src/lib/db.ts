@@ -88,6 +88,13 @@ function vercelPostgresRequired(): never {
  */
 export const dbSource: DbSource = databaseUrl ? "postgres" : "pglite";
 
+export function isDatabaseConfigured(): boolean {
+  if (vercelRuntime) {
+    return Boolean(databaseUrl);
+  }
+  return true;
+}
+
 /**
  * Minimal shared SQL surface, satisfied by both Neon and PGLite. Both the
  * tagged-template and `.query()` forms resolve to an array of row objects:

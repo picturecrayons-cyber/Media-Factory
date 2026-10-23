@@ -10,6 +10,7 @@ const SAFE_ONBOARDING_MESSAGES = new Set([
   "Invite is invalid or expired",
   "Invite email does not match this account",
   "Organization name is required",
+  "Database is not configured on this environment. Profile creation is blocked.",
 ]);
 
 export function isBridgeProfileEmailConflict(error: unknown): boolean {

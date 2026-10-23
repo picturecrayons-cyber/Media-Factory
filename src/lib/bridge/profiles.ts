@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { authMiddleware } from "@/lib/auth/middleware";
-import { getSql, type Sql } from "@/lib/db";
+import { getSql, isDatabaseConfigured, type Sql } from "@/lib/db";
 import { ACCOUNT_TYPES, INTERNAL_ROLES } from "./types";
 import { writeAudit } from "./audit";
 import { loadActor, requireVerifiedActor } from "./session";
@@ -72,6 +72,9 @@ export const syncSupabaseSessionUser = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
     assertNotDevUser(context.userId);
+    if (!isDatabaseConfigured()) {
+      return { profile: null, isComplete: false, email: context.userEmail };
+    }
     const sql = await getSql();
     const existing = await loadActor(context.userId);
     const email = context.userEmail || existing?.email;
@@ -102,6 +105,9 @@ export const completeOnboarding = createServerFn({ method: "POST" })
   )
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
+    if (!isDatabaseConfigured()) {
+      throw new Error("Database is not configured on this environment. Profile creation is blocked.");
+    }
     const sql = await getSql();
     const existing = await loadActor(context.userId);
     if (!context.emailConfirmedAt) throw new Error("Confirm your email before entering Bridge.");
