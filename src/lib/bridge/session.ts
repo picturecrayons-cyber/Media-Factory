@@ -112,17 +112,27 @@ export const getBridgeSession = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
     assertNotDevUser(context.userId);
-    let actor = await loadActor(context.userId);
+    let actor: BridgeActor | null = null;
+    try {
+      actor = await loadActor(context.userId);
+    } catch (err) {
+      console.warn("[bridge-session] loadActor failed (profile lookup):", err instanceof Error ? err.message : String(err));
+      actor = null;
+    }
     if (!actor) {
       return { userId: context.userId, profile: null, home: "/onboarding" };
     }
     if (!actor.emailVerified && context.emailConfirmedAt) {
-      const bridgeUserId = await resolveBridgeUserId(context.userId);
-      const sql = await getSql();
-      await sql`update bridge_profiles set email_verified = true, updated_at = now()
-        where user_id = ${bridgeUserId} and email_verified = false`;
-      actor = await loadActor(context.userId);
-      if (!actor) throw new Error("Bridge profile could not be loaded");
+      try {
+        const bridgeUserId = await resolveBridgeUserId(context.userId);
+        const sql = await getSql();
+        await sql`update bridge_profiles set email_verified = true, updated_at = now()
+          where user_id = ${bridgeUserId} and email_verified = false`;
+        actor = await loadActor(context.userId);
+      } catch (err) {
+        console.warn("[bridge-session] email verification sync failed:", err instanceof Error ? err.message : String(err));
+      }
+      if (!actor) return { userId: context.userId, profile: null, home: "/onboarding" };
     }
     return { userId: context.userId, profile: actor, home: workspaceHome(actor) };
   });

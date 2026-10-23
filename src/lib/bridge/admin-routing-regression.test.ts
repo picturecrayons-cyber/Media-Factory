@@ -33,3 +33,12 @@ test("public onboarding does not silently treat a missing profile as an admin se
   assert.match(onboarding, /if \(home\) goHome\(home, navigate\)/);
   assert.doesNotMatch(onboarding, /internal_role\s*=\s*["']super_admin["']/);
 });
+
+test("getBridgeSession catches DB/profile errors gracefully and onboarding provides fallback bypass", () => {
+  const session = read("./session.ts");
+  const onboarding = read("../../routes/onboarding.tsx");
+  assert.match(session, /try\s*\{\s*actor = await loadActor\(context\.userId\);\s*\}\s*catch/);
+  assert.match(onboarding, /bypassSessionError/);
+  assert.match(onboarding, /Continue to Onboarding form/);
+});
+
