@@ -197,3 +197,118 @@ export const listMyBuyerCommunicationThreads = createServerFn({ method: "GET" })
     `;
     return { threads: rows };
   });
+
+
+const stageInput = z.object({
+  prospectId: z.string().uuid(),
+  stage: z.enum(["DISCOVERED", "RESEARCHING", "CONTACT_READY", "ENQUIRY", "IN_NEGOTIATION", "CONTRACT_REVIEW", "CONTRACTED", "DECLINED", "DORMANT"]),
+  note: z.string().max(2000).optional(),
+});
+
+const verifyInput = z.object({
+  prospectId: z.string().uuid(),
+  verificationStatus: z.enum(["IDENTITY_REVIEW", "VERIFIED_BUYER", "CONTRACTED_PARTNER", "REJECTED"]),
+  legalReference: z.string().trim().min(3).max(300),
+});
+
+const ALLOWED_STAGE_TRANSITIONS: Record<string, string[]> = {
+  DISCOVERED: ["RESEARCHING", "CONTACT_READY", "DECLINED"],
+  RESEARCHING: ["CONTACT_READY", "ENQUIRY", "DECLINED"],
+  CONTACT_READY: ["ENQUIRY", "IN_NEGOTIATION", "DECLINED"],
+  ENQUIRY: ["IN_NEGOTIATION", "DECLINED", "DORMANT"],
+  IN_NEGOTIATION: ["CONTRACT_REVIEW", "DECLINED", "DORMANT"],
+  CONTRACT_REVIEW: ["IN_NEGOTIATION", "CONTRACTED", "DECLINED"],
+  CONTRACTED: [],
+  DECLINED: ["RESEARCHING"],
+  DORMANT: ["RESEARCHING"],
+};
+
+/** Explicit, audited pipeline transitions; contract status requires prior verification evidence. */
+export const advanceBuyerProspectStage = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(stageInput)
+  .handler(async ({ context, data }) => {
+    const actor = await requireOperator(context.userId);
+    const sql = await getSql();
+    const currentRows = await sql<{ id: string; pipeline_stage: string; verification_status: string; verification_evidence_ref: string | null }>`
+      select id, pipeline_stage, verification_status, verification_evidence_ref
+      from bridge_buyer_prospects where id = ${data.prospectId} for update
+    `;
+    const current = currentRows[0];
+    if (!current) throw new Error("Buyer prospect not found");
+    if (!(ALLOWED_STAGE_TRANSITIONS[current.pipeline_stage] ?? []).includes(data.stage)) {
+      throw new Error(`Invalid buyer pipeline transition: ${current.pipeline_stage} → ${data.stage}`);
+    }
+    if (data.stage === "CONTRACTED" &&
+        (current.verification_status !== "CONTRACTED_PARTNER" || !current.verification_evidence_ref)) {
+      throw new Error("A contracted partner requires explicit Super Admin verification and a recorded contract/legal reference.");
+    }
+    await sql`
+      update bridge_buyer_prospects set pipeline_stage = ${data.stage}, updated_at = now()
+      where id = ${data.prospectId}
+    `;
+    await writeAudit({
+      actorUserId: actor.userId, action: "buyer_prospect.stage_change",
+      entityType: "bridge_buyer_prospect", entityId: data.prospectId,
+      metadata: { from: current.pipeline_stage, to: data.stage, note: data.note ?? null },
+    }, sql);
+    await sql`
+      insert into bridge_notifications (recipient_user_id, organization_scope, event_type, entity_type, entity_id, dedupe_key, payload)
+      values (${actor.userId}, ${actor.organizationName}, 'BUYER_PIPELINE_STAGE_CHANGED',
+        'bridge_buyer_prospect', ${data.prospectId},
+        ${`buyer-stage:${data.prospectId}:${data.stage}:${Date.now()}`},
+        ${JSON.stringify({ from: current.pipeline_stage, to: data.stage })}::jsonb)
+      on conflict (dedupe_key) do nothing
+    `;
+    return { id: data.prospectId, from: current.pipeline_stage, stage: data.stage };
+  });
+
+/** Verification is separate from discovery and requires a Super Admin plus recorded evidence. */
+export const verifyBuyerProspect = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(verifyInput)
+  .handler(async ({ context, data }) => {
+    const actor = await requireOperator(context.userId);
+    if (actor.internalRole !== "super_admin") throw new Error("Super Admin approval required for buyer verification.");
+    const sql = await getSql();
+    const rows = await sql<{ id: string; pipeline_stage: string; verification_status: string }>`
+      select id, pipeline_stage, verification_status from bridge_buyer_prospects
+      where id = ${data.prospectId} limit 1
+    `;
+    const prospect = rows[0];
+    if (!prospect) throw new Error("Buyer prospect not found");
+    if (data.verificationStatus === "CONTRACTED_PARTNER" && prospect.pipeline_stage !== "CONTRACT_REVIEW") {
+      throw new Error("Contracted-partner status requires the prospect to be in CONTRACT_REVIEW.");
+    }
+    await sql`
+      update bridge_buyer_prospects
+      set verification_status = ${data.verificationStatus},
+          verification_evidence_ref = ${data.legalReference},
+          updated_at = now()
+      where id = ${data.prospectId}
+    `;
+    await writeAudit({
+      actorUserId: actor.userId, action: "buyer_prospect.verify",
+      entityType: "bridge_buyer_prospect", entityId: data.prospectId,
+      metadata: { from: prospect.verification_status, to: data.verificationStatus, evidenceRecorded: true },
+    }, sql);
+    return { id: data.prospectId, verificationStatus: data.verificationStatus, evidenceRecorded: true };
+  });
+
+/** Persistent notifications are always scoped to the authenticated recipient. */
+export const listMyBridgeNotifications = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }) => {
+    const actor = await requireOperator(context.userId);
+    const sql = await getSql();
+    const rows = await sql<{
+      id: string; event_type: string; entity_type: string; entity_id: string;
+      payload: Record<string, unknown>; read_at: string | Date | null; created_at: string | Date;
+    }>`
+      select id, event_type, entity_type, entity_id, payload, read_at, created_at
+      from bridge_notifications
+      where recipient_user_id = ${actor.userId}
+      order by created_at desc limit 100
+    `;
+    return { notifications: rows };
+  });
