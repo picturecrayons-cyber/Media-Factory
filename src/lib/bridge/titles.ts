@@ -11,7 +11,7 @@ import { requireVerifiedActor } from "./session";
 import { writeAudit } from "./audit";
 import { assertNotDevUser } from "./guards";
 import { loopStageType } from "./loop-lanes";
-import { assertBuyerPublishable, getBuyerGateStatus } from "./buyer-visibility";
+import { assertBuyerPublishable } from "./buyer-visibility";
 
 type TitleRow = {
   id: string;
@@ -370,8 +370,8 @@ export const updateTitle = createServerFn({ method: "POST" })
     return { title: next };
   });
 
-async function assertLicensingReady(titleId: string) {
-  const sql = await getSql();
+export async function assertLicensingReady(titleId: string, transaction?: Sql) {
+  const sql = transaction ?? (await getSql());
   const rows = await sql<{
     metadata_ok: boolean;
     rights_ok: boolean;
@@ -408,7 +408,8 @@ async function assertLicensingReady(titleId: string) {
           and r.status = 'VALID'
           and exists (
             select 1 from jsonb_array_elements(r.evidence) e
-            where coalesce(e->>'type', '') not in ('RIGHTS_BASIS', 'AUTHORIZATION_ATTESTATION')
+            where nullif(trim(coalesce(e->>'type', '')), '') is not null
+              and coalesce(e->>'type', '') not in ('RIGHTS_BASIS', 'AUTHORIZATION_ATTESTATION')
           )
       ) as rights_evidence_ok,
       exists (
@@ -421,7 +422,8 @@ async function assertLicensingReady(titleId: string) {
           and l.status = 'APPROVED'
           and exists (
             select 1 from jsonb_array_elements(l.evidence) e
-            where coalesce(e->>'type', '') not in ('AUTHORIZATION_ATTESTATION', 'RIGHTS_BASIS')
+            where nullif(trim(coalesce(e->>'type', '')), '') is not null
+              and coalesce(e->>'type', '') not in ('AUTHORIZATION_ATTESTATION', 'RIGHTS_BASIS')
           )
       ) as legal_evidence_ok,
       exists (

@@ -5,6 +5,7 @@ import { getSql } from "@/lib/db";
 import { assertPermission } from "./rbac";
 import { requireVerifiedActor } from "./session";
 import { writeAudit } from "./audit";
+import { assertLicensingReady } from "./titles";
 import { assertNotDevUser } from "./guards";
 
 async function actorFor(userId: string) {
@@ -77,11 +78,18 @@ export const reviewAdminTitle = createServerFn({ method: "POST" })
       await writeAudit({ actorUserId: actor.userId, action: "rights.reject", entityType: "bridge_title", entityId: title.id, metadata: { notes: data.notes ?? null } });
       return { ok: true, status: "RIGHTS_REVIEW" };
     }
-    await sql`update bridge_titles set status = ${next}, updated_at = now() where id = ${title.id}`;
-    await sql`insert into bridge_title_events (title_id, from_status, to_status, actor_user_id, note) values (${title.id}, ${title.status}, ${next}, ${actor.userId}, ${data.notes ?? null})`;
-    if (data.decision === "PASS") await sql`insert into bridge_qc_cases (title_id, status, reviewer_findings, reviewed_by, reviewed_at) values (${title.id}, 'PASSED', ${JSON.stringify(data.notes ? [{ note: data.notes }] : [])}::jsonb, ${actor.userId}, now())`;
-    if (data.decision === "APPROVE") await sql`insert into bridge_legal_cases (title_id, status, evidence, reviewed_by, reviewed_at) values (${title.id}, 'APPROVED', ${JSON.stringify(data.notes ? [{ note: data.notes }] : [])}::jsonb, ${actor.userId}, now())`;
-    await writeAudit({ actorUserId: actor.userId, action, entityType: "bridge_title", entityId: title.id, metadata: { from: title.status, to: next, notes: data.notes ?? null } });
+    await sql.transaction(async (tx) => {
+      if (data.decision === "PASS") {
+        await tx`insert into bridge_qc_cases (title_id, status, reviewer_findings, reviewed_by, reviewed_at) values (${title.id}, 'PASSED', ${JSON.stringify(data.notes ? [{ note: data.notes }] : [])}::jsonb, ${actor.userId}, now())`;
+      }
+      if (data.decision === "APPROVE") {
+        await tx`insert into bridge_legal_cases (title_id, status, evidence, reviewed_by, reviewed_at) values (${title.id}, 'APPROVED', ${JSON.stringify(data.notes ? [{ note: data.notes }] : [])}::jsonb, ${actor.userId}, now())`;
+        await assertLicensingReady(title.id, tx);
+      }
+      await tx`update bridge_titles set status = ${next}, updated_at = now() where id = ${title.id}`;
+      await tx`insert into bridge_title_events (title_id, from_status, to_status, actor_user_id, note) values (${title.id}, ${title.status}, ${next}, ${actor.userId}, ${data.notes ?? null})`;
+      await writeAudit({ actorUserId: actor.userId, action, entityType: "bridge_title", entityId: title.id, metadata: { from: title.status, to: next, notes: data.notes ?? null } }, tx);
+    });
     return { ok: true, status: next };
   });
 
