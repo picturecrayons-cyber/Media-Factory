@@ -81,6 +81,7 @@ function AdminBody({ actor }: { actor: any }) {
             <CommandCard title="Curation · QC · Rights" description="Review intake, assets, QC findings, legal evidence and the audit trail." action="Open review workstations" to="/admin/workstations" />
             <CommandCard title="Ingest & CMS" description="Create a canonical title and manage the ingest workflow without bypassing approval gates." action="Open ingest" to="/cms" />
             <CommandCard title="Buyer / licensing desk" description="Inspect licensing-stage titles and readiness from the administrator workspace." action="Open licensing desk" to="/cms" searchTab="licensing" />
+            <CommandCard title="Global buyer communications" description="Maintain buyer prospects, link existing mailbox threads and prepare audited unsent drafts." action="Open communications desk" to="/admin/communications" />
             <CommandCard title="Deliveries & vendor jobs" description="Inspect delivery readiness and operational delivery status." action="Open deliveries" to="/deliveries" />
             <CommandCard title="People & organization" description="Review profile and organization information; role grants remain invitation-controlled." action="Open account" to="/account" />
           </div>
