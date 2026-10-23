@@ -117,19 +117,44 @@ create table if not exists public.bridge_notifications (
 create index if not exists bridge_notifications_recipient_idx
   on public.bridge_notifications(recipient_user_id, created_at desc);
 
+-- Authenticated Hostinger message.received webhook inbox. Store only metadata/preview
+-- until an operator links the exact mailbox/thread; never auto-create buyer accounts.
+create table if not exists public.bridge_mail_webhook_events (
+  id uuid primary key default gen_random_uuid(),
+  event_key text not null unique,
+  mailbox_ref text not null,
+  external_thread_id text not null,
+  external_message_id text not null,
+  sender_ref text,
+  subject text,
+  preview_text text,
+  received_at timestamptz not null,
+  status text not null default 'UNLINKED'
+    check (status in ('UNLINKED','LINKED','IGNORED')),
+  linked_thread_id uuid references public.bridge_communication_threads(id) on delete restrict,
+  metadata jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now()
+);
+create index if not exists bridge_mail_webhook_events_unlinked_idx
+  on public.bridge_mail_webhook_events(status, received_at desc);
+
 alter table public.bridge_buyer_prospects enable row level security;
 alter table public.bridge_communication_threads enable row level security;
 alter table public.bridge_communication_messages enable row level security;
 alter table public.bridge_mail_outbox enable row level security;
 alter table public.bridge_notifications enable row level security;
+alter table public.bridge_mail_webhook_events enable row level security;
 
 revoke all on public.bridge_buyer_prospects from anon, authenticated;
 revoke all on public.bridge_communication_threads from anon, authenticated;
 revoke all on public.bridge_communication_messages from anon, authenticated;
 revoke all on public.bridge_mail_outbox from anon, authenticated;
 revoke all on public.bridge_notifications from anon, authenticated;
+revoke all on public.bridge_mail_webhook_events from anon, authenticated;
 
 comment on table public.bridge_buyer_prospects is 'Private CRM prospect registry. Unverified prospects are not buyer accounts or contracted partners.';
 comment on table public.bridge_communication_threads is 'Private, scope-bound communication thread links; external mailbox credentials remain in secret management.';
 comment on table public.bridge_mail_outbox is 'Draft and explicit-confirmation outbox. Insert/update never sends mail by itself.';
 comment on table public.bridge_notifications is 'Deduplicated persisted notification ledger. Emit only from actual state transitions.';
+
+comment on table public.bridge_mail_webhook_events is 'Authenticated Hostinger inbound events. Unlinked messages require operator review; no automatic reply or prospect creation.';
