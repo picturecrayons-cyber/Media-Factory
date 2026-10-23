@@ -4,7 +4,7 @@ import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql, type Sql } from "@/lib/db";
 import { ACCOUNT_TYPES, INTERNAL_ROLES } from "./types";
 import { writeAudit } from "./audit";
-import { loadActor, requireVerifiedActor } from "./session";
+import { loadActor, loadActorExplicit, requireVerifiedActor } from "./session";
 import { verificationProfileId } from "./verification-profile-id";
 import { assertPermission, canGrantInternalRole, workspaceHome } from "./rbac";
 import { createHash, randomBytes } from "node:crypto";
@@ -73,7 +73,7 @@ export const syncSupabaseSessionUser = createServerFn({ method: "POST" })
   .handler(async ({ context }) => {
     assertNotDevUser(context.userId);
     const sql = await getSql();
-    const existing = await loadActor(context.userId);
+    const existing = await loadActorExplicit(context.userId);
     const email = context.userEmail || existing?.email;
     if (!context.emailConfirmedAt) throw new Error("Confirm your email before entering Bridge.");
 
@@ -81,12 +81,21 @@ export const syncSupabaseSessionUser = createServerFn({ method: "POST" })
       await persistSupabaseIdentityLink(sql, existing.userId, context.userId);
       if (!existing.emailVerified) {
         await sql`update bridge_profiles set email_verified = true, updated_at = now() where user_id = ${existing.userId}`;
-        const updated = await loadActor(context.userId);
+        const updated = await loadActorExplicit(context.userId);
         return { profile: updated, isComplete: true, home: workspaceHome(updated!) };
       }
       return { profile: existing, isComplete: true, home: workspaceHome(existing) };
     }
 
+    if (email) {
+      const sql = await getSql();
+      const emailOwner = await sql<{ user_id: string }>`
+        select user_id from bridge_profiles where lower(email) = lower(${email}) limit 1
+      `;
+      if (emailOwner[0]?.user_id && emailOwner[0].user_id !== context.userId) {
+        throw new Error(ONBOARDING_EMAIL_CONFLICT_MESSAGE);
+      }
+    }
     return { profile: null, isComplete: false, email };
   });
 
@@ -103,7 +112,7 @@ export const completeOnboarding = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
     const sql = await getSql();
-    const existing = await loadActor(context.userId);
+    const existing = await loadActorExplicit(context.userId);
     if (!context.emailConfirmedAt) throw new Error("Confirm your email before entering Bridge.");
     if (existing) {
       await persistSupabaseIdentityLink(sql, existing.userId, context.userId);

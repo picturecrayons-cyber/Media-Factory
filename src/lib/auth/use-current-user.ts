@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { getStoredSupabaseUser, getSupabaseSession, subscribeAuthChange } from "./client";
+import { resolveProfilePhotoUrl } from "./profile-photo";
 
 export type AppUser = {
   id: string;
@@ -16,7 +17,7 @@ function normalize(user: ReturnType<typeof getStoredSupabaseUser>): AppUser | nu
     id: user.id,
     displayName: user.user_metadata?.name ?? user.user_metadata?.full_name ?? null,
     primaryEmail: user.email ?? null,
-    profileImageUrl: user.user_metadata?.avatar_url ?? null,
+    profileImageUrl: resolveProfilePhotoUrl(user.user_metadata),
   };
 }
 

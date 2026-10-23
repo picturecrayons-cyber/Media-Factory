@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState, type FormEvent } from "react";
-import { signInWithEmail } from "@/lib/auth/client";
+import { googleAuthEnabled, signInWithEmail, signInWithGoogle } from "@/lib/auth/client";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { BrandMark } from "@/components/bridge/shell";
 import { Button } from "@/components/ui/button";
@@ -22,6 +22,7 @@ function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [googleBusy, setGoogleBusy] = useState(false);
 
   // If already authenticated with Supabase session, resolve profile and route to dashboard
   useEffect(() => {
@@ -42,6 +43,19 @@ function Login() {
         void navigate({ to: "/onboarding" });
       });
   }, [isPending, user, navigate]);
+
+  async function handleGoogleSignIn() {
+    if (googleBusy || busy) return;
+    setGoogleBusy(true);
+    setError(null);
+    try {
+      await signInWithGoogle();
+    } catch (err: unknown) {
+      console.error("[Google sign-in error]", err);
+      setError("Google sign-in is unavailable in this environment. Please use your existing sign-in method.");
+      setGoogleBusy(false);
+    }
+  }
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -170,6 +184,18 @@ function Login() {
             {busy ? "Signing in…" : "Sign in"}
           </Button>
         </form>
+
+        {googleAuthEnabled ? (
+          <Button
+            type="button"
+            variant="outline"
+            disabled={busy || googleBusy}
+            onClick={() => void handleGoogleSignIn()}
+            className="w-full h-11 rounded-full font-semibold transition"
+          >
+            {googleBusy ? "Connecting to Google…" : "Continue with Google"}
+          </Button>
+        ) : null}
 
         <div className="border-t border-line pt-4 text-center text-sm text-muted">
           New to Crayons Bridge?{" "}
