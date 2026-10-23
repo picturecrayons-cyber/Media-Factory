@@ -11,8 +11,6 @@ import { advanceTitle } from "@/lib/bridge/titles";
 import {
   authorizeLoopPublication,
   getLoopPublication,
-  revokeLoopPublication,
-  suspendLoopPublication,
 } from "@/lib/bridge/loop-publication";
 import { hasPermission, canOperateOnTitle } from "@/lib/bridge/rbac";
 import { publicationIsActive } from "@/lib/bridge/workflow-policy";
@@ -345,18 +343,6 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                   )
                 : null}
               {!valid ? <p>Blocked: approved, unexpired Loop license required.</p> : null}
-              {pub && hasPermission(actor, "loop.revoke") ? (
-                <div className="flex gap-2">
-                  {button("Suspend", () =>
-                    suspendLoopPublication({
-                      data: { bridgeTitleId: title.id, reason: note || "Operator suspension" },
-                    }),
-                  )}
-                  {button("Revoke", () =>
-                    revokeLoopPublication({ data: { bridgeTitleId: title.id } }),
-                  )}
-                </div>
-              ) : null}
               {pub ? (
                 <a
                   className="text-accent underline"
