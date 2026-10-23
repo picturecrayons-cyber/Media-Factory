@@ -205,19 +205,51 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
     assertPermission(actor, "title.read_catalog");
     const sql = await getSql();
 
-    // Auto-reevaluate any expired distribution windows
+    // Fail closed when a publication window or its underlying rights grant expires.
     await sql`
-      update bridge_loop_publications
+      update bridge_loop_publications p
       set authorization_status = 'expired', updated_at = now()
-      where window_end is not null and window_end < now() and authorization_status in ('authorized', 'live')
+      where p.authorization_status in ('authorized', 'live')
+        and (
+          (p.window_end is not null and p.window_end <= now())
+          or exists (
+            select 1 from bridge_rights_grants g
+            where g.id::text = p.metadata->>'rightsGrantId'
+              and (g.status = 'EXPIRED' or (g.window_end is not null and g.window_end <= now()))
+          )
+        )
+    `.catch(() => {});
+
+    // A missing, revoked, or no-longer-covering grant must stop Loop visibility.
+    await sql`
+      update bridge_loop_publications p
+      set authorization_status = 'revoked',
+          revoked_at = coalesce(p.revoked_at, now()),
+          updated_at = now()
+      where p.authorization_status in ('authorized', 'live')
+        and (
+          nullif(p.metadata->>'rightsGrantId', '') is null
+          or not exists (
+            select 1 from bridge_rights_grants g
+            where g.id::text = p.metadata->>'rightsGrantId'
+              and g.status = 'VALID'
+              and (g.window_start is null or (p.window_start is not null and p.window_start >= g.window_start))
+              and (g.window_end is null or (p.window_end is not null and p.window_end <= g.window_end))
+              and p.territories <@ array(select jsonb_array_elements_text(g.territories))
+              and p.languages <@ array(select jsonb_array_elements_text(g.languages))
+              and p.exploitation_models <@ array(select jsonb_array_elements_text(g.media))
+          )
+        )
     `.catch(() => {});
 
     await sql`
-      update loop_titles
-      set status = 'expired', published = false, listed = false, updated_at = now()
-      where bridge_title_id in (
-        select bridge_title_id from bridge_loop_publications where authorization_status = 'expired'
-      ) and published = true
+      update loop_titles l
+      set status = case when p.authorization_status = 'expired' then 'expired' else 'revoked' end,
+          published = false, listed = false, updated_at = now()
+      from bridge_loop_publications p
+      where p.loop_title_id = l.id
+        and p.authorization_status in ('expired', 'revoked')
+        and (l.published = true or l.listed = true or l.status not in ('expired', 'revoked'))
     `.catch(() => {});
 
     const rows = await sql<{
