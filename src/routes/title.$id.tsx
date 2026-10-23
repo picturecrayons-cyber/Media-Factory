@@ -444,6 +444,26 @@ function FilesPanel({
       if (timer !== undefined) clearTimeout(timer);
     }
   }
+  // A client-side timeout does not cancel a server confirmation already in flight.
+  // Re-read canonical asset state until persistence is visible instead of asking users
+  // to manually refresh or blindly repeat the upload.
+  async function waitForVerifiedAsset(assetId: string, timeoutMs = 180_000): Promise<boolean> {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      try {
+        const result = await onAssetsChanged() as {
+          data?: { assets?: Array<{ id: string; verified: boolean; byteSize: number | null }> };
+        };
+        if (result.data?.assets?.some((asset) =>
+          asset.id === assetId && asset.verified && asset.byteSize !== null && asset.byteSize > 0
+        )) return true;
+      } catch {
+        // Transient list-refresh errors are retried inside the bounded reconciliation window.
+      }
+      await new Promise((resolve) => setTimeout(resolve, 1_500));
+    }
+    return false;
+  }
 
   function transferWithProgress(kind: SimpleAssetKind, url: string, method: string, file: File, contentType: string) {
     return new Promise<void>((resolve, reject) => {
@@ -512,6 +532,7 @@ function FilesPanel({
     setProgress({ kind, phase: "preparing", percent: null, etaSeconds: null, loaded: 0, total: file.size });
     announce(`Preparing ${kind} upload. You can follow progress here.`);
     let transferTimer: ReturnType<typeof setTimeout> | undefined;
+    let uploadedAssetId: string | null = null;
     try {
       const signed = await withTimeout(
         requestAssetUpload({ data: { titleId, kind, filename, contentType } }),
@@ -519,6 +540,7 @@ function FilesPanel({
         "Upload URL preparation",
       );
 
+      uploadedAssetId = signed.assetId;
       // Cancellation can happen while URL preparation is pending. Never start a PUT for a stale attempt.
       assertAttemptActive();
       // Use the OCI pre-authenticated URL verbatim; rewriting its encoded path can invalidate it.
@@ -550,8 +572,18 @@ function FilesPanel({
       // A cancelled/superseded attempt must not overwrite the status of a newer upload.
       if (uploadAttemptRef.current !== attemptId) return;
       const raw = error instanceof Error ? error.message : "Upload failed";
-      setProgress(null);
       const cancelled = cancelRequestedRef.current;
+      if (raw.includes("Stored-object verification timed out") && uploadedAssetId && !cancelled) {
+        setProgress({ kind, phase: "refreshing", percent: null, etaSeconds: null, loaded: file.size, total: file.size });
+        announce("Verification is taking longer than the initial wait. Checking saved asset status automatically…");
+        const ready = await waitForVerifiedAsset(uploadedAssetId);
+        if (ready) {
+          setProgress(null);
+          announce(`${kind[0].toUpperCase() + kind.slice(1)} is ready after storage verification.`, "success", true);
+          return;
+        }
+      }
+      setProgress(null);
       let detail = raw;
       if (raw.includes("OCI object copy did not complete") || raw.includes("OCI copy was accepted without a work-request ID")) {
         detail = `${raw}. The object was not marked Ready. Do not retry yet; inspect the matching Preview function log and OCI work-request status first.`;
@@ -564,7 +596,7 @@ function FilesPanel({
       } else if (raw.includes("Stored-object verification timed out")) {
         // A browser timeout cannot cancel server-side verification. Avoid claiming
         // the asset is unverified or encouraging a blind retry while that request runs.
-        detail = `${raw} The server may still be finishing verification. Refresh the asset list and check its status before retrying.`;
+        detail = `${raw} Automatic status reconciliation did not confirm Ready. Do not re-upload; inspect the Preview verification logs and persisted asset state first.`;
       } else if (!cancelled && !raw.includes("No Ready status")) {
         detail = `${raw} Refresh the asset list to confirm its status before retrying.`;
       }
