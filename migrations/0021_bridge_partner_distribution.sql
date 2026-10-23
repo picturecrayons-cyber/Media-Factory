@@ -2,6 +2,10 @@
 -- Additive only. This migration is intentionally not applied to any database by this change.
 -- Authorization and delivery are separate persisted states; no row itself publishes a title.
 
+-- Ensure the composite package/title FK below has a matching unique target. The package id is already a PK.
+create unique index if not exists bridge_destination_packages_id_title_uidx
+  on public.bridge_destination_packages(id, title_id);
+
 create table if not exists public.bridge_distribution_partners (
   code text primary key,
   display_name text not null,
