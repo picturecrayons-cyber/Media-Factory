@@ -109,7 +109,8 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
     queryFn: () => requestAssetDownload({ data: { assetId: posterAsset!.id } }),
     enabled: Boolean(posterAsset?.verified && posterAsset.contentType?.startsWith("image/")),
     staleTime: 4 * 60_000,
-    retry: false,
+    retry: 1,
+    refetchOnWindowFocus: true,
   });
   const pub = pubQ.data?.publication;
 
@@ -343,7 +344,8 @@ function VerifiedArtwork({
     queryFn: () => requestAssetDownload({ data: { assetId: asset.id } }),
     enabled: asset.verified && Boolean(asset.contentType?.startsWith("image/")),
     staleTime: 4 * 60_000,
-    retry: false,
+    retry: 1,
+    refetchOnWindowFocus: true,
   });
   return (
     <figure className="overflow-hidden rounded-xl border border-line bg-elevated">
