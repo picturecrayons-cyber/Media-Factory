@@ -453,3 +453,81 @@ test("OCI object verification attaches request ID and HEAD_VERIFICATION stage on
 });
 
 
+
+
+test("OCI work-request polling retries transient 503 responses before reconciling success", async () => {
+  const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  const values = {
+    OCI_TENANCY_OCID: "test-tenancy",
+    OCI_USER_OCID: "test-user",
+    OCI_PRIVATE_KEY: privateKey.export({ type: "pkcs8", format: "pem" }).toString(),
+    OCI_FINGERPRINT: "test-fingerprint",
+    OCI_REGION: "ap-mumbai-1",
+    OCI_NAMESPACE: "test-namespace",
+    OCI_BUCKET_NAME: "test-bucket",
+  };
+  const saved = Object.fromEntries(Object.keys(values).map((key) => [key, process.env[key]]));
+  const originalFetch = globalThis.fetch;
+  Object.assign(process.env, values);
+  try {
+    let polls = 0;
+    globalThis.fetch = async (_input, init) => {
+      const method = init?.method || "GET";
+      if (method === "POST") return new Response(null, { status: 202, headers: { "opc-work-request-id": "wr-retry-503" } });
+      if (method === "GET") {
+        polls += 1;
+        return polls === 1 ? new Response(null, { status: 503 }) : Response.json({ status: "SUCCEEDED" });
+      }
+      return new Response(null, { headers: { "content-length": "42", etag: '"sealed-etag"' } });
+    };
+    const sealed = await sealVerifiedObject("src", "dst", "etag", { deadlineMs: 2_000, pollIntervalMs: 1 });
+    assert.equal(sealed.byteSize, 42);
+    assert.equal(polls, 2);
+  } finally {
+    globalThis.fetch = originalFetch;
+    for (const [key, value] of Object.entries(saved)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+});
+
+test("OCI destination HEAD reconciles an unavailable work-request endpoint", async () => {
+  const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  const values = {
+    OCI_TENANCY_OCID: "test-tenancy",
+    OCI_USER_OCID: "test-user",
+    OCI_PRIVATE_KEY: privateKey.export({ type: "pkcs8", format: "pem" }).toString(),
+    OCI_FINGERPRINT: "test-fingerprint",
+    OCI_REGION: "ap-mumbai-1",
+    OCI_NAMESPACE: "test-namespace",
+    OCI_BUCKET_NAME: "test-bucket",
+  };
+  const saved = Object.fromEntries(Object.keys(values).map((key) => [key, process.env[key]]));
+  const originalFetch = globalThis.fetch;
+  Object.assign(process.env, values);
+  try {
+    let polls = 0;
+    let heads = 0;
+    globalThis.fetch = async (_input, init) => {
+      const method = init?.method || "GET";
+      if (method === "POST") return new Response(null, { status: 202, headers: { "opc-work-request-id": "wr-head-reconcile" } });
+      if (method === "GET") {
+        polls += 1;
+        return new Response(null, { status: 503 });
+      }
+      heads += 1;
+      return new Response(null, { headers: { "content-length": "42", etag: '"sealed-etag"' } });
+    };
+    const sealed = await sealVerifiedObject("src", "dst", "etag", { deadlineMs: 10, pollIntervalMs: 1 });
+    assert.equal(sealed.byteSize, 42);
+    assert.ok(polls >= 1);
+    assert.equal(heads, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+    for (const [key, value] of Object.entries(saved)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+});
