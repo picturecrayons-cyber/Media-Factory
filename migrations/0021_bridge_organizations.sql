@@ -66,3 +66,11 @@ revoke all privileges on table bridge_organization_memberships from anon, authen
 -- Deliberately no automatic name-based backfill. Access to shared titles must
 -- remain denied until an authorized operator verifies the organization and
 -- creates active membership records in the isolated staging environment.
+
+
+-- Organization records and membership links are server-only control-plane data.
+-- Fail closed through RLS and prevent direct browser Data API access.
+alter table bridge_organizations enable row level security;
+alter table bridge_organization_memberships enable row level security;
+revoke all on bridge_organizations from public, anon, authenticated;
+revoke all on bridge_organization_memberships from public, anon, authenticated;
