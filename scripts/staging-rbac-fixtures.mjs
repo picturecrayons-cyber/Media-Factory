@@ -64,10 +64,10 @@ export async function seedStagingRbacFixtures(client) {
 
   await client.query(
     `insert into public.bridge_titles
-      (id, slug, name, owner_user_id, owner_account_type, owner_organization_id, status)
+      (id, slug, name, owner_user_id, owner_account_type, owner_organization_id, status, synopsis)
      values
-      ($1, $2, 'Synthetic staging title A', $3, 'studio', $4, 'PREPARING'),
-      ($5, $6, 'Synthetic staging title B', $3, 'studio', $4, 'PREPARING')`,
+      ($1, $2, 'Synthetic staging title A', $3, 'studio', $4, 'PREPARING', 'Synthetic test fixture only'),
+      ($5, $6, 'Synthetic staging title B', $3, 'studio', $4, 'PREPARING', 'Synthetic test fixture only')`,
     [titleAId, `staging-rbac-a-${suffix}`, ownerId, studioA,
      titleBId, `staging-rbac-b-${suffix}`],
   );
