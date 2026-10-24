@@ -175,17 +175,17 @@ describe("PRD authorization matrix", () => {
   it("shares title access only with verified Studio accounts in the same Studio organization", () => {
     const member: Actor = {
       ...actor("studio-member", "studio"),
-      organizationName: "StreamVista OPC PVT LTD",
+      organizationId: "11111111-1111-4111-8111-111111111111",
     };
     const sameOrgTitle = {
       ownerUserId: "studio-owner",
       ownerAccountType: "studio" as const,
-      ownerOrganizationName: " streamvista opc pvt ltd ",
+      ownerOrganizationId: "11111111-1111-4111-8111-111111111111",
       status: "DRAFT" as const,
     };
     const otherOrgTitle = {
       ...sameOrgTitle,
-      ownerOrganizationName: "Different Studio",
+      ownerOrganizationId: "22222222-2222-4222-8222-222222222222",
     };
     const creatorOwnedSameName = {
       ...sameOrgTitle,
