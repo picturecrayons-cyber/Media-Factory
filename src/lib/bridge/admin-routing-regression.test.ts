@@ -33,3 +33,8 @@ test("public onboarding does not silently treat a missing profile as an admin se
   assert.match(onboarding, /if \(home\) goHome\(home, navigate\)/);
   assert.doesNotMatch(onboarding, /internal_role\s*=\s*["']super_admin["']/);
 });
+
+test("internal staff open title workspaces directly on the Files tab for admin-assisted upload", () => {
+  const titleRoute = read("../../routes/title.$id.tsx");
+  assert.match(titleRoute, /useState<WorkspaceTab>\(actor\.internalRole \? "Files" : "Overview"\)/);
+});
