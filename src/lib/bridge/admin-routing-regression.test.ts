@@ -55,3 +55,14 @@ test("investor CTA requests reviewed access instead of silently signing up as Cr
   assert.match(home, /Request Investor Access/);
   assert.doesNotMatch(home, /search=\{\{ role: "investor" \}\}/);
 });
+
+test("shared title workspace has an explicit role gate and Studio list scope", () => {
+  const workspace = read("../../routes/workspace.tsx");
+  const gate = read("../../components/bridge/gate.tsx");
+  const titles = read("./titles.ts");
+  const rbac = read("./rbac.ts");
+  assert.match(workspace, /<RequireBridge allow="workspace">/);
+  assert.match(gate, /allow === "workspace" && !canAccessTitleWorkspace\(profile\)/);
+  assert.match(rbac, /export function canAccessTitleWorkspace\(actor: Actor\)/);
+  assert.match(titles, /where account_type = 'studio'/);
+});
