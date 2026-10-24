@@ -77,7 +77,7 @@ test("shared title workspace has an explicit role gate and Studio list scope", (
   assert.match(titles, /canMutateTitle\(actor, title, "title.update_own", "title.license"\)/);
   const migration = read("../../../migrations/0021_bridge_organizations.sql");
   assert.match(migration, /enable row level security/i);
-  assert.match(migration, /revoke all privileges on table bridge_organization_memberships from anon, authenticated/i);
+  assert.match(migration, /revoke all privileges on table bridge_organization_memberships from (?:public,\s*)?anon, authenticated/i);
   const profiles = read("./profiles.ts");
   assert.match(profiles, /insert into bridge_organization_memberships/);
 });
