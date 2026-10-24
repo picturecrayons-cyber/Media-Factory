@@ -106,6 +106,7 @@ test("atomic state transition: migration queue and title master/poster only adva
     await db.waitReady;
     await db.exec("create role anon; create role authenticated;");
     await db.exec(readFileSync(join(process.cwd(), "migrations/0004_bridge.sql"), "utf8"));
+    await db.exec(readFileSync(join(process.cwd(), "migrations/0021_bridge_organizations.sql"), "utf8"));
 
     await db.exec(`
       create table if not exists loop_media_migration_queue (
