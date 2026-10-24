@@ -361,13 +361,14 @@ function Onboarding() {
                   <input type="number" min="1" max="600" value={runtimeMinutes} onChange={(e) => setRuntimeMinutes(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5" />
                 </label>
               </div>
-              <CheckGroup label="Additional languages" values={LANGUAGES} selected={additionalLanguages} onChange={(v, c) => toggle(setAdditionalLanguages, additionalLanguages, v, c)} />
               <label className="block text-sm font-medium">Synopsis *
                 <textarea id="onboarding-synopsis" name="synopsis" required minLength={20} maxLength={4000} rows={4} value={synopsis} onChange={(e) => setSynopsis(e.target.value)} className="mt-1 w-full rounded-lg border border-line-strong bg-elevated px-3 py-2" />
               </label>
               <details className="rounded-lg border border-line bg-elevated px-3 py-2">
                 <summary className="cursor-pointer text-sm font-medium">More title details (optional)</summary>
-                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                <div className="mt-3 space-y-4">
+                  <CheckGroup label="Additional languages" values={LANGUAGES} selected={additionalLanguages} onChange={(v, c) => toggle(setAdditionalLanguages, additionalLanguages, v, c)} />
+                  <div className="grid gap-3 sm:grid-cols-2">
                   <label className="text-sm font-medium">Original / local title
                     <input id="onboarding-original-title" name="originalTitle" value={originalTitle} onChange={(e) => setOriginalTitle(e.target.value)} className="mt-1 h-10 w-full rounded-lg border border-line-strong bg-surface px-3" />
                   </label>
@@ -383,10 +384,9 @@ function Onboarding() {
                   <label className="text-sm font-medium">Producer
                     <input value={producer} onChange={(e) => setProducer(e.target.value)} className="mt-1 h-10 w-full rounded-lg border border-line-strong bg-surface px-3" />
                   </label>
+                  </div>
                 </div>
               </details>
-              <div className="grid gap-4 sm:grid-cols-3">
-              </div>
             </section>}
 
             {step === 2 && <section className="space-y-4 rounded-2xl border border-line p-4 sm:p-5">
