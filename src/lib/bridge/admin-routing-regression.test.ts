@@ -44,7 +44,8 @@ test("public signup role selector is accessible and limited to supported public 
 
 test("onboarding preserves the signup-selected role and fails closed for unsupported roles", () => {
   const onboarding = read("../../routes/onboarding.tsx");
-  assert.match(onboarding, /publicAccountTypeFrom\(user\?\.user_metadata\?\.account_type\)/);
+  assert.match(onboarding, /publicAccountTypeFrom\(signupAccountTypeHint\)/);
+  assert.match(read("../../lib/auth/use-current-user.ts"), /signupAccountTypeHint/);
   assert.match(onboarding, /if \(signupAccountType\) setAccountType\(signupAccountType\)/);
   assert.match(onboarding, /if \(unsupportedSignupRole\)/);
 });

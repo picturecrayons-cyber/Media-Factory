@@ -6,6 +6,8 @@ export type AppUser = {
   displayName: string | null;
   primaryEmail: string | null;
   profileImageUrl: string | null;
+  /** Untrusted role hint from signup metadata; server authorization never trusts this field. */
+  signupAccountTypeHint: string | null;
 };
 
 export type CurrentUserState = { user: AppUser | null; isPending: boolean };
@@ -17,6 +19,8 @@ function normalize(user: ReturnType<typeof getStoredSupabaseUser>): AppUser | nu
     displayName: user.user_metadata?.name ?? user.user_metadata?.full_name ?? null,
     primaryEmail: user.email ?? null,
     profileImageUrl: user.user_metadata?.avatar_url ?? null,
+    signupAccountTypeHint:
+      typeof user.user_metadata?.account_type === "string" ? user.user_metadata.account_type : null,
   };
 }
 
