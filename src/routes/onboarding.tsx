@@ -16,12 +16,13 @@ import { Button } from "@/components/ui/button";
 
 export const Route = createFileRoute("/onboarding")({ component: Onboarding });
 
-type PublicAccountType = "independent_creator" | "studio" | "buyer";
+type PublicAccountType = "independent_creator" | "studio" | "buyer" | "investor";
 
 const ACCOUNT_LABELS: Record<PublicAccountType, string> = {
   independent_creator: "Independent Creator",
   studio: "Studio / Company",
   buyer: "Buyer / Acquisitions",
+  investor: "Investor",
 };
 
 const LANGUAGES = ["Malayalam", "Tamil", "Telugu", "Kannada", "Hindi", "English", "Bengali", "Marathi", "Other"];
@@ -98,6 +99,8 @@ function Onboarding() {
   const [displayName, setDisplayName] = useState("");
   const [accountType, setAccountType] = useState<PublicAccountType>("independent_creator");
   const [organizationName, setOrganizationName] = useState("");
+  const [step, setStep] = useState(0);
+  const isTitleSubmitter = accountType === "independent_creator" || accountType === "studio";
 
   const [titleName, setTitleName] = useState("");
   const [originalTitle, setOriginalTitle] = useState("");
@@ -203,6 +206,23 @@ function Onboarding() {
     setter(checked ? [...current, value] : current.filter((item) => item !== value));
   }
 
+  function continueStep() {
+    setError(null);
+    if (step === 0 && (!displayName.trim() || (accountType !== "independent_creator" && !organizationName.trim()))) {
+      setError(accountType === "independent_creator" ? "Enter your name to continue." : "Enter your name and organization to continue.");
+      return;
+    }
+    if (step === 1 && (!titleName.trim() || synopsis.trim().length < 20)) {
+      setError(!titleName.trim() ? "Enter the title name to continue." : "Add a synopsis of at least 20 characters.");
+      return;
+    }
+    if (step === 2) {
+      if (!territories.length || !rightsLanguages.length || !media.length || !destinations.length) { setError("Choose at least one option in each rights group."); return; }
+      if (!windowStart || !windowEnd || new Date(windowEnd) <= new Date(windowStart)) { setError("Choose a valid rights window; the end must be after the start."); return; }
+    }
+    setStep((current) => Math.min(3, current + 1));
+  }
+
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     if (submitInFlight.current) return;
@@ -211,31 +231,41 @@ function Onboarding() {
     setError(null);
 
     try {
+      if (!displayName.trim()) throw new Error("Enter your name");
+      if (accountType !== "independent_creator" && !organizationName.trim()) throw new Error("Organization name is required");
+      if (isTitleSubmitter) {
+        if (!titleName.trim()) throw new Error("Title name is required");
+        if (synopsis.trim().length < 20) throw new Error("Add a synopsis of at least 20 characters");
+        if (!territories.length || !rightsLanguages.length || !media.length || !destinations.length) throw new Error("Select at least one value in each rights package group");
+        if (!windowStart || !windowEnd) throw new Error("Rights window start and end are required");
+        if (new Date(windowEnd) <= new Date(windowStart)) throw new Error("Rights window end must be after start");
+        if (!authorizationAttested) throw new Error("Confirm that you have authority to license the submitted rights");
+      }
       let inviteToken: string | undefined;
       try { inviteToken = sessionStorage.getItem("bridge-invite") ?? undefined; } catch { /* ignore */ }
 
-      await completeOnboarding({
+      const onboardingResult = await completeOnboarding({
         data: {
           displayName: displayName.trim(),
           accountType,
-          organizationName: accountType === "studio" ? organizationName.trim() : undefined,
+          organizationName: accountType === "independent_creator" ? undefined : organizationName.trim(),
           inviteToken,
         },
       });
 
-      if (accountType === "buyer") {
-        void navigate({ to: "/buyer", replace: true });
+      // A trusted invite may establish an internal role. Route that identity to
+      // its server-derived workspace instead of attempting public title intake.
+      if (onboardingResult.profile?.internalRole) {
+        try { sessionStorage.removeItem("bridge-invite"); } catch { /* ignore */ }
+        void navigate({ to: (onboardingResult.home || "/internal") as any, replace: true });
         return;
       }
 
-      if (!titleName.trim()) throw new Error("Title name is required");
-      if (synopsis.trim().length < 20) throw new Error("Add a synopsis of at least 20 characters");
-      if (!territories.length || !rightsLanguages.length || !media.length || !destinations.length) {
-        throw new Error("Select at least one value in each rights package group");
+      if (!isTitleSubmitter) {
+        void navigate({ to: accountType === "investor" ? "/investor" : "/buyer", replace: true });
+        try { sessionStorage.removeItem("bridge-invite"); } catch { /* ignore */ }
+        return;
       }
-      if (!windowStart || !windowEnd) throw new Error("Rights window start and end are required");
-      if (!authorizationAttested) throw new Error("Confirm that you have authority to license the submitted rights");
-      if (new Date(windowEnd) <= new Date(windowStart)) throw new Error("Rights window end must be after start");
 
       const result = await createTitle({
         data: {
@@ -278,55 +308,55 @@ function Onboarding() {
 
   return (
     <main className="min-h-screen bg-bg p-5 sm:p-8">
-      <form onSubmit={(e) => void onSubmit(e)} className="mx-auto max-w-4xl space-y-6 rounded-2xl border border-line bg-surface p-6 sm:p-8">
+      <form noValidate onSubmit={(e) => void onSubmit(e)} className="mx-auto max-w-3xl space-y-5 rounded-2xl border border-line bg-surface p-5 shadow-sm sm:p-7">
         <div className="flex items-start justify-between gap-5">
           <div>
             <BrandMark />
-            <h1 className="mt-5 font-display text-3xl font-semibold tracking-tight">Submit a title to Crayons Bridge</h1>
-            <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted">
-              Upload → Prepare → License → Earn. This intake captures the minimum structured information needed to start rights review and buyer preparation.
-            </p>
+            <h1 className="mt-4 font-display text-2xl font-semibold tracking-tight sm:text-3xl">Submit a title</h1>
+            <p className="mt-1 text-sm text-muted">Creator & studio intake · StreamVista OPC Pvt Ltd.</p>
           </div>
           <span className="hidden rounded-full border border-line bg-elevated px-3 py-1 text-xs text-muted sm:inline-flex">StreamVista OPC Pvt Ltd.</span>
         </div>
 
-        <section className="space-y-4 rounded-2xl border border-line p-5">
+        {isTitleSubmitter && <nav aria-label="Submission steps" className="grid grid-cols-4 gap-2 rounded-xl border border-line bg-elevated p-2">
+          {["Account", "Title", "Rights", "Review"].map((label, index) => <div key={label} aria-current={step === index ? "step" : undefined} className={`rounded-lg px-2 py-2 text-center text-xs font-medium ${step === index ? "bg-surface text-fg shadow-sm" : "text-muted"}`}><span className="mr-1 hidden sm:inline">{index + 1}.</span>{label}</div>)}
+        </nav>}
+
+        {(step === 0 || !isTitleSubmitter) && <section className="space-y-4 rounded-2xl border border-line p-4 sm:p-5">
           <div>
-            <h2 className="font-display text-xl font-semibold">1. Account</h2>
+            <h2 className="font-display text-lg font-semibold">1. Account</h2>
             <p className="mt-1 text-xs text-muted">Legal owner: StreamVista OPC Pvt Ltd. Product: Crayons Bridge.</p>
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="text-sm font-medium">Your name *
-              <input required value={displayName} onChange={(e) => setDisplayName(e.target.value)} autoComplete="name" className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5" />
+              <input id="onboarding-display-name" name="displayName" required value={displayName} onChange={(e) => setDisplayName(e.target.value)} autoComplete="name" className="mt-1 h-10 w-full rounded-lg border border-line-strong bg-elevated px-3" />
             </label>
             <label className="text-sm font-medium">Account type *
               <select value={accountType} onChange={(e) => setAccountType(e.target.value as PublicAccountType)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5">
                 {(Object.keys(ACCOUNT_LABELS) as PublicAccountType[]).map((type) => <option key={type} value={type}>{ACCOUNT_LABELS[type]}</option>)}
               </select>
+              <span className="mt-1 block text-xs font-normal text-muted">Viewer, Super Admin and review-team roles require an authorized internal invite.</span>
             </label>
           </div>
-          {accountType === "studio" ? (
-            <label className="block text-sm font-medium">Studio / company name *
-              <input required value={organizationName} onChange={(e) => setOrganizationName(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5" />
+          {accountType !== "independent_creator" ? (
+            <label className="block text-sm font-medium">Organization name *
+              <input id="onboarding-organization-name" name="organizationName" required value={organizationName} onChange={(e) => setOrganizationName(e.target.value)} autoComplete="organization" className="mt-1 h-10 w-full rounded-lg border border-line-strong bg-elevated px-3" />
             </label>
           ) : null}
-        </section>
+        </section>}
 
-        {accountType === "buyer" ? (
-          <section className="rounded-2xl border border-line bg-elevated p-5">
-            <h2 className="font-display text-xl font-semibold">Buyer access</h2>
-            <p className="mt-2 text-sm text-muted">Buyer accounts discover and license titles. Rights-holder submissions are limited to Independent Creator and Studio / Company accounts.</p>
+        {!isTitleSubmitter ? (
+          <section className="rounded-2xl border border-line bg-elevated p-4">
+            <h2 className="font-display text-lg font-semibold">{accountType === "investor" ? "Investor access" : "Buyer access"}</h2>
+            <p className="mt-2 text-sm text-muted">{accountType === "investor" ? "Investor accounts access permitted investment and entitlement information only; title intake, uploads, licensing and administration are not included." : "Buyer accounts discover and license buyer-approved titles. Rights-holder submissions are limited to Independent Creator and Studio / Company accounts."}</p>
           </section>
         ) : (
           <>
-            <section className="space-y-4 rounded-2xl border border-line p-5">
-              <div><h2 className="font-display text-xl font-semibold">2. Title</h2><p className="mt-1 text-xs text-muted">Use structured fields; only the title synopsis remains free text.</p></div>
+            {step === 1 && <section className="space-y-4 rounded-2xl border border-line p-4 sm:p-5">
+              <div><h2 className="font-display text-lg font-semibold">2. Title</h2><p className="mt-1 text-xs text-muted">Required details first. Keep optional metadata tucked away.</p></div>
               <div className="grid gap-4 sm:grid-cols-2">
                 <label className="text-sm font-medium">Title name *
                   <input required value={titleName} onChange={(e) => setTitleName(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5" />
-                </label>
-                <label className="text-sm font-medium">Original / local title
-                  <input value={originalTitle} onChange={(e) => setOriginalTitle(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5" />
                 </label>
                 <label className="text-sm font-medium">Content type *
                   <select value={contentType} onChange={(e) => setContentType(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5">
@@ -343,28 +373,36 @@ function Onboarding() {
                   <input type="number" min="1" max="600" value={runtimeMinutes} onChange={(e) => setRuntimeMinutes(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5" />
                 </label>
               </div>
-              <CheckGroup label="Additional languages" values={LANGUAGES} selected={additionalLanguages} onChange={(v, c) => toggle(setAdditionalLanguages, additionalLanguages, v, c)} />
               <label className="block text-sm font-medium">Synopsis *
-                <textarea required minLength={20} maxLength={4000} rows={5} value={synopsis} onChange={(e) => setSynopsis(e.target.value)} className="mt-1.5 w-full rounded-xl border border-line-strong bg-elevated px-3.5 py-3" />
+                <textarea id="onboarding-synopsis" name="synopsis" required minLength={20} maxLength={4000} rows={4} value={synopsis} onChange={(e) => setSynopsis(e.target.value)} className="mt-1 w-full rounded-lg border border-line-strong bg-elevated px-3 py-2" />
               </label>
-              <div className="grid gap-4 sm:grid-cols-3">
-                <label className="text-sm font-medium">Country of origin
-                  <input value={countryOfOrigin} onChange={(e) => setCountryOfOrigin(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5" />
-                </label>
-                <label className="text-sm font-medium">Release date
-                  <input type="date" value={releaseDate} onChange={(e) => setReleaseDate(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5" />
-                </label>
-                <label className="text-sm font-medium">Director
-                  <input value={director} onChange={(e) => setDirector(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5" />
-                </label>
-              </div>
-              <label className="block text-sm font-medium">Producer
-                <input value={producer} onChange={(e) => setProducer(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5" />
-              </label>
-            </section>
+              <details className="rounded-lg border border-line bg-elevated px-3 py-2">
+                <summary className="cursor-pointer text-sm font-medium">More title details (optional)</summary>
+                <div className="mt-3 space-y-4">
+                  <CheckGroup label="Additional languages" values={LANGUAGES} selected={additionalLanguages} onChange={(v, c) => toggle(setAdditionalLanguages, additionalLanguages, v, c)} />
+                  <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="text-sm font-medium">Original / local title
+                    <input id="onboarding-original-title" name="originalTitle" value={originalTitle} onChange={(e) => setOriginalTitle(e.target.value)} className="mt-1 h-10 w-full rounded-lg border border-line-strong bg-surface px-3" />
+                  </label>
+                  <label className="text-sm font-medium">Country of origin
+                    <select value={countryOfOrigin} onChange={(e) => setCountryOfOrigin(e.target.value)} className="mt-1 h-10 w-full rounded-lg border border-line-strong bg-surface px-3">{["India", "United Arab Emirates", "United States", "United Kingdom", "Other"].map((item) => <option key={item}>{item}</option>)}</select>
+                  </label>
+                  <label className="text-sm font-medium">Release date
+                    <input type="date" value={releaseDate} onChange={(e) => setReleaseDate(e.target.value)} className="mt-1 h-10 w-full rounded-lg border border-line-strong bg-surface px-3" />
+                  </label>
+                  <label className="text-sm font-medium">Director
+                    <input value={director} onChange={(e) => setDirector(e.target.value)} className="mt-1 h-10 w-full rounded-lg border border-line-strong bg-surface px-3" />
+                  </label>
+                  <label className="text-sm font-medium">Producer
+                    <input value={producer} onChange={(e) => setProducer(e.target.value)} className="mt-1 h-10 w-full rounded-lg border border-line-strong bg-surface px-3" />
+                  </label>
+                  </div>
+                </div>
+              </details>
+            </section>}
 
-            <section className="space-y-4 rounded-2xl border border-line p-5">
-              <div><h2 className="font-display text-xl font-semibold">3. Rights package</h2><p className="mt-1 text-xs text-muted">These controls define what a buyer may license. No open-ended rights description is accepted.</p></div>
+            {step === 2 && <section className="space-y-4 rounded-2xl border border-line p-4 sm:p-5">
+              <div><h2 className="font-display text-lg font-semibold">3. Rights package</h2><p className="mt-1 text-xs text-muted">These controls define what a buyer may license. No open-ended rights description is accepted.</p></div>
               <CheckGroup label="Territories" values={TERRITORIES} selected={territories} onChange={(v, c) => toggle(setTerritories, territories, v, c)} required />
               <CheckGroup label="Rights languages" values={LANGUAGES} selected={rightsLanguages} onChange={(v, c) => toggle(setRightsLanguages, rightsLanguages, v, c)} required />
               <CheckGroup label="Exploitation / media" values={MEDIA} selected={media} onChange={(v, c) => toggle(setMedia, media, v, c)} required />
@@ -387,10 +425,10 @@ function Onboarding() {
                   <select value={String(promotionalRights)} onChange={(e) => setPromotionalRights(e.target.value === "true")} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5"><option value="true">Included</option><option value="false">Not included</option></select>
                 </label>
               </div>
-            </section>
+            </section>}
 
-            <section className="space-y-4 rounded-2xl border border-line p-5">
-              <div><h2 className="font-display text-xl font-semibold">4. Authorization & access</h2><p className="mt-1 text-xs text-muted">Attestation starts the legal review. It does not replace documentary evidence.</p></div>
+            {step === 3 && <section className="space-y-4 rounded-2xl border border-line p-4 sm:p-5">
+              <div><h2 className="font-display text-lg font-semibold">4. Authorization & access</h2><p className="mt-1 text-xs text-muted">Attestation starts the legal review. It does not replace documentary evidence.</p></div>
               <label className="text-sm font-medium">Rights basis *
                 <select value={rightsBasis} onChange={(e) => setRightsBasis(e.target.value as typeof rightsBasis)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5">
                   <option value="OWNER">I am the rights owner</option>
@@ -410,14 +448,22 @@ function Onboarding() {
                 </select>
               </label>
               <CheckGroup label="Intended delivery destinations" values={DESTINATIONS} selected={destinations} onChange={(v, c) => toggle(setDestinations, destinations, v, c)} required />
-            </section>
+            </section>}
           </>
         )}
 
         {error ? <div role="alert" className="rounded-xl border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-600 dark:text-red-400">{error}</div> : null}
-        <div className="flex flex-col gap-3 border-t border-line pt-5 sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-xs leading-relaxed text-muted">© 2026 StreamVista OPC Pvt Ltd. Crayons Bridge is the media supply chain, rights and licensing control plane.</p>
-          <Button type="submit" disabled={busy} className="h-11 rounded-full px-6 font-semibold">{busy ? "Submitting…" : accountType === "buyer" ? "Enter Bridge" : "Submit title for review"}</Button>
+        {isTitleSubmitter && step === 3 && <div className="rounded-xl border border-line bg-elevated p-4 text-sm">
+          <h2 className="font-semibold">Review summary</h2>
+          <dl className="mt-2 grid gap-2 sm:grid-cols-2"><div><dt className="text-muted">Title</dt><dd className="font-medium">{titleName || "Not entered"}</dd></div><div><dt className="text-muted">Account</dt><dd className="font-medium">{ACCOUNT_LABELS[accountType]}</dd></div><div><dt className="text-muted">Territories</dt><dd>{territories.join(", ") || "Not selected"}</dd></div><div><dt className="text-muted">Rights languages</dt><dd>{rightsLanguages.join(", ") || "Not selected"}</dd></div><div><dt className="text-muted">Media</dt><dd>{media.join(", ") || "Not selected"}</dd></div><div><dt className="text-muted">Rights window</dt><dd>{windowStart ? new Date(windowStart).toLocaleDateString() : "—"} – {windowEnd ? new Date(windowEnd).toLocaleDateString() : "—"}</dd></div></dl>
+          <p className="mt-3 text-xs text-muted">Submission starts review only. It does not authorize buyer access or publish to Crayons Loop.</p>
+        </div>}
+        <div className="flex flex-col-reverse gap-3 border-t border-line pt-4 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-xs text-muted">© 2026 StreamVista OPC Pvt Ltd.</p>
+          <div className="flex gap-2 sm:ml-auto">
+            {isTitleSubmitter && step > 0 && <Button type="button" variant="outline" disabled={busy} className="h-10 rounded-full px-4" onClick={() => { setError(null); setStep((current) => Math.max(0, current - 1)); }}>Back</Button>}
+            {!isTitleSubmitter ? <Button type="submit" disabled={busy} className="h-10 rounded-full px-5 font-semibold">{busy ? "Opening…" : accountType === "investor" ? "Enter Investor Workspace" : "Enter Buyer Workspace"}</Button> : step < 3 ? <Button type="button" disabled={busy} className="h-10 rounded-full px-5 font-semibold" onClick={continueStep}>Continue</Button> : <Button type="submit" disabled={busy} className="h-10 rounded-full px-5 font-semibold">{busy ? "Submitting…" : "Submit for review"}</Button>}
+          </div>
         </div>
       </form>
     </main>
