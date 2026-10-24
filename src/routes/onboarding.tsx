@@ -16,12 +16,13 @@ import { Button } from "@/components/ui/button";
 
 export const Route = createFileRoute("/onboarding")({ component: Onboarding });
 
-type PublicAccountType = "independent_creator" | "studio" | "buyer";
+type PublicAccountType = "independent_creator" | "studio" | "buyer" | "investor";
 
 const ACCOUNT_LABELS: Record<PublicAccountType, string> = {
   independent_creator: "Independent Creator",
   studio: "Studio / Company",
   buyer: "Buyer / Acquisitions",
+  investor: "Investor",
 };
 
 const LANGUAGES = ["Malayalam", "Tamil", "Telugu", "Kannada", "Hindi", "English", "Bengali", "Marathi", "Other"];
@@ -99,6 +100,7 @@ function Onboarding() {
   const [accountType, setAccountType] = useState<PublicAccountType>("independent_creator");
   const [organizationName, setOrganizationName] = useState("");
   const [step, setStep] = useState(0);
+  const isTitleSubmitter = accountType === "independent_creator" || accountType === "studio";
 
   const [titleName, setTitleName] = useState("");
   const [originalTitle, setOriginalTitle] = useState("");
@@ -231,7 +233,7 @@ function Onboarding() {
     try {
       if (!displayName.trim()) throw new Error("Enter your name");
       if (accountType !== "independent_creator" && !organizationName.trim()) throw new Error("Organization name is required");
-      if (accountType !== "buyer") {
+      if (isTitleSubmitter) {
         if (!titleName.trim()) throw new Error("Title name is required");
         if (synopsis.trim().length < 20) throw new Error("Add a synopsis of at least 20 characters");
         if (!territories.length || !rightsLanguages.length || !media.length || !destinations.length) throw new Error("Select at least one value in each rights package group");
@@ -246,13 +248,14 @@ function Onboarding() {
         data: {
           displayName: displayName.trim(),
           accountType,
-          organizationName: accountType === "studio" ? organizationName.trim() : undefined,
+          organizationName: accountType === "independent_creator" ? undefined : organizationName.trim(),
           inviteToken,
         },
       });
 
-      if (accountType === "buyer") {
-        void navigate({ to: "/buyer", replace: true });
+      if (!isTitleSubmitter) {
+        void navigate({ to: accountType === "investor" ? "/investor" : "/buyer", replace: true });
+        try { sessionStorage.removeItem("bridge-invite"); } catch { /* ignore */ }
         return;
       }
 
@@ -307,11 +310,11 @@ function Onboarding() {
           <span className="hidden rounded-full border border-line bg-elevated px-3 py-1 text-xs text-muted sm:inline-flex">StreamVista OPC Pvt Ltd.</span>
         </div>
 
-        {accountType !== "buyer" && <nav aria-label="Submission steps" className="grid grid-cols-4 gap-2 rounded-xl border border-line bg-elevated p-2">
+        {isTitleSubmitter && <nav aria-label="Submission steps" className="grid grid-cols-4 gap-2 rounded-xl border border-line bg-elevated p-2">
           {["Account", "Title", "Rights", "Review"].map((label, index) => <div key={label} aria-current={step === index ? "step" : undefined} className={`rounded-lg px-2 py-2 text-center text-xs font-medium ${step === index ? "bg-surface text-fg shadow-sm" : "text-muted"}`}><span className="mr-1 hidden sm:inline">{index + 1}.</span>{label}</div>)}
         </nav>}
 
-        {(step === 0 || accountType === "buyer") && <section className="space-y-4 rounded-2xl border border-line p-4 sm:p-5">
+        {(step === 0 || !isTitleSubmitter) && <section className="space-y-4 rounded-2xl border border-line p-4 sm:p-5">
           <div>
             <h2 className="font-display text-lg font-semibold">1. Account</h2>
             <p className="mt-1 text-xs text-muted">Legal owner: StreamVista OPC Pvt Ltd. Product: Crayons Bridge.</p>
@@ -333,10 +336,10 @@ function Onboarding() {
           ) : null}
         </section>}
 
-        {accountType === "buyer" ? (
+        {!isTitleSubmitter ? (
           <section className="rounded-2xl border border-line bg-elevated p-4">
-            <h2 className="font-display text-lg font-semibold">Buyer access</h2>
-            <p className="mt-2 text-sm text-muted">Buyer accounts discover and license titles. Rights-holder submissions are limited to Independent Creator and Studio / Company accounts.</p>
+            <h2 className="font-display text-lg font-semibold">{accountType === "investor" ? "Investor access" : "Buyer access"}</h2>
+            <p className="mt-2 text-sm text-muted">{accountType === "investor" ? "Investor accounts access permitted investment and entitlement information only; title intake, uploads, licensing and administration are not included." : "Buyer accounts discover and license buyer-approved titles. Rights-holder submissions are limited to Independent Creator and Studio / Company accounts."}</p>
           </section>
         ) : (
           <>
@@ -441,7 +444,7 @@ function Onboarding() {
         )}
 
         {error ? <div role="alert" className="rounded-xl border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-600 dark:text-red-400">{error}</div> : null}
-        {accountType !== "buyer" && step === 3 && <div className="rounded-xl border border-line bg-elevated p-4 text-sm">
+        {isTitleSubmitter && step === 3 && <div className="rounded-xl border border-line bg-elevated p-4 text-sm">
           <h2 className="font-semibold">Review summary</h2>
           <dl className="mt-2 grid gap-2 sm:grid-cols-2"><div><dt className="text-muted">Title</dt><dd className="font-medium">{titleName || "Not entered"}</dd></div><div><dt className="text-muted">Account</dt><dd className="font-medium">{ACCOUNT_LABELS[accountType]}</dd></div><div><dt className="text-muted">Territories</dt><dd>{territories.join(", ") || "Not selected"}</dd></div><div><dt className="text-muted">Rights languages</dt><dd>{rightsLanguages.join(", ") || "Not selected"}</dd></div><div><dt className="text-muted">Media</dt><dd>{media.join(", ") || "Not selected"}</dd></div><div><dt className="text-muted">Rights window</dt><dd>{windowStart ? new Date(windowStart).toLocaleDateString() : "—"} – {windowEnd ? new Date(windowEnd).toLocaleDateString() : "—"}</dd></div></dl>
           <p className="mt-3 text-xs text-muted">Submission starts review only. It does not authorize buyer access or publish to Crayons Loop.</p>
@@ -449,8 +452,8 @@ function Onboarding() {
         <div className="flex flex-col-reverse gap-3 border-t border-line pt-4 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-xs text-muted">© 2026 StreamVista OPC Pvt Ltd.</p>
           <div className="flex gap-2 sm:ml-auto">
-            {accountType !== "buyer" && step > 0 && <Button type="button" variant="outline" disabled={busy} className="h-10 rounded-full px-4" onClick={() => { setError(null); setStep((current) => Math.max(0, current - 1)); }}>Back</Button>}
-            {accountType === "buyer" ? <Button type="submit" disabled={busy} className="h-10 rounded-full px-5 font-semibold">{busy ? "Opening…" : "Enter Bridge"}</Button> : step < 3 ? <Button type="button" disabled={busy} className="h-10 rounded-full px-5 font-semibold" onClick={continueStep}>Continue</Button> : <Button type="submit" disabled={busy} className="h-10 rounded-full px-5 font-semibold">{busy ? "Submitting…" : "Submit for review"}</Button>}
+            {isTitleSubmitter && step > 0 && <Button type="button" variant="outline" disabled={busy} className="h-10 rounded-full px-4" onClick={() => { setError(null); setStep((current) => Math.max(0, current - 1)); }}>Back</Button>}
+            {!isTitleSubmitter ? <Button type="submit" disabled={busy} className="h-10 rounded-full px-5 font-semibold">{busy ? "Opening…" : accountType === "investor" ? "Enter Investor Workspace" : "Enter Buyer Workspace"}</Button> : step < 3 ? <Button type="button" disabled={busy} className="h-10 rounded-full px-5 font-semibold" onClick={continueStep}>Continue</Button> : <Button type="submit" disabled={busy} className="h-10 rounded-full px-5 font-semibold">{busy ? "Submitting…" : "Submit for review"}</Button>}
           </div>
         </div>
       </form>
