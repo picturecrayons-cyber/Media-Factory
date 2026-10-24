@@ -196,6 +196,10 @@ describe("PRD authorization matrix", () => {
     assert.equal(canOperateOnTitle(member, sameOrgTitle, "asset.sign_upload"), true);
     assert.equal(canReadTitle(member, otherOrgTitle), false);
     assert.equal(canMutateTitle(member, otherOrgTitle, "title.update_own", "title.license"), false);
+    assert.equal(canOperateOnTitle(member, otherOrgTitle, "asset.sign_upload"), false);
+    assert.equal(canReadTitle({ ...member, organizationId: null }, sameOrgTitle), false);
+    assert.equal(canReadTitle({ ...member, emailVerified: false }, sameOrgTitle), false);
+    assert.equal(canReadTitle({ ...member, accountType: "buyer" }, sameOrgTitle), false);
     assert.equal(canReadTitle(member, creatorOwnedSameName), false);
   });
 

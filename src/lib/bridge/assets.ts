@@ -100,7 +100,7 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
       from bridge_assets where id = ${data.assetId} limit 1
     `;
     const asset = rows[0];
-    if (!asset || (asset.created_by !== actor.userId && !hasStaffPermission(actor, "asset.sign_upload"))) throw new Error("Asset not found");
+    if (!asset) throw new Error("Asset not found");
     const title = await loadTitle(asset.title_id);
     if (!title || !canOperateOnTitle(actor, title, "asset.sign_upload", "asset.sign_upload") || !UPLOADABLE.has(title.status)) {
       throw new Error("Upload confirmation is closed for this title");

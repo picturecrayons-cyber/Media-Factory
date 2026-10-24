@@ -42,10 +42,14 @@ async function loadActorByBridgeUserId(userId: string): Promise<BridgeActor | nu
   const sql = await getSql();
   const rows = await sql<BridgeProfileRow>`
     select bp.user_id, bp.email, bp.display_name, bp.account_type, bp.organization_name,
-      case when exists (
-        select 1 from bridge_organization_memberships m
+      case when bp.account_type = 'studio' and bp.email_verified = true and exists (
+        select 1
+        from bridge_organization_memberships m
+        join bridge_organizations o on o.id = m.organization_id
         where m.organization_id = bp.organization_id
-          and m.user_id = bp.user_id and m.status = 'active'
+          and m.user_id = bp.user_id
+          and m.status = 'active'
+          and o.status = 'active'
       ) then bp.organization_id else null end as organization_id,
       bp.internal_role, bp.email_verified
     from bridge_profiles bp where bp.user_id = ${userId} limit 1

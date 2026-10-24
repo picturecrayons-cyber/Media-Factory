@@ -72,4 +72,11 @@ test("shared title workspace has an explicit role gate and Studio list scope", (
   assert.match(assets, /canOperateOnTitle\(actor, title, "asset.sign_upload", "asset.sign_upload"\)/);
   assert.match(workflow, /owner_organization_id/);
   assert.match(workflow, /canOperateOnTitle\(/);
+  assert.match(titles, /canReadTitle\(actor, title\)/);
+  assert.match(titles, /canMutateTitle\(actor, title, "title.update_own", "title.license"\)/);
+  const migration = read("../../../migrations/0021_bridge_organizations.sql");
+  assert.match(migration, /enable row level security/i);
+  assert.match(migration, /revoke all privileges on table bridge_organization_memberships from anon, authenticated/i);
+  const profiles = read("./profiles.ts");
+  assert.match(profiles, /insert into bridge_organization_memberships/);
 });

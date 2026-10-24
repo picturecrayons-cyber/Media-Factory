@@ -206,6 +206,43 @@ export const completeOnboarding = createServerFn({ method: "POST" })
           `;
         }
 
+        if (data.accountType === "studio" && !internalRole) {
+          // Create a canonical organization for this new Studio identity. The
+          // display name is metadata only; it is never used to join memberships.
+          const normalizedOrgName = (org ?? "")
+            .normalize("NFKC")
+            .trim()
+            .replace(/\s+/g, " ")
+            .toLocaleLowerCase();
+          const profileRows = await tx<{ organization_id: string | null }>`
+            select organization_id
+            from bridge_profiles
+            where user_id = ${bridgeUserId}
+            for update
+          `;
+          const profileOrgId = profileRows[0]?.organization_id ?? null;
+          if (!profileOrgId) {
+            const created = await tx<{ id: string }>`
+              insert into bridge_organizations (legal_name, normalized_name, status)
+              values (${org}, ${normalizedOrgName}, 'active')
+              returning id::text as id
+            `;
+            const organizationId = created[0]?.id;
+            if (!organizationId) throw new Error("Studio organization creation failed");
+            await tx`
+              update bridge_profiles
+              set organization_id = ${organizationId}::uuid, updated_at = now()
+              where user_id = ${bridgeUserId} and organization_id is null
+            `;
+            await tx`
+              insert into bridge_organization_memberships
+                (organization_id, user_id, membership_role, status, created_by)
+              values (${organizationId}::uuid, ${bridgeUserId}, 'owner', 'active', ${bridgeUserId})
+              on conflict (organization_id, user_id) do update
+                set membership_role = 'owner', status = 'active', updated_at = now()
+            `;
+          }
+        }
         await persistSupabaseIdentityLink(tx, bridgeUserId, context.userId);
         const roleForTransaction: string | null = internalRole;
         return roleForTransaction;
