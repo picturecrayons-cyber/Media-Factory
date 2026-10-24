@@ -1,0 +1,50 @@
+name: Preview DB guard CI
+
+on:
+  pull_request:
+    branches:
+      - main
+      - fix/bridge-oci-poll-reconcile-and-admin-ingest-20261023
+    paths:
+      - "src/lib/db.ts"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/preview-db-guard-ci.yml"
+      - "scripts/**"
+      - "src/lib/bridge/**"
+  push:
+    branches:
+      - fix/preview-db-fail-closed-guard
+
+permissions:
+  contents: read
+
+concurrency:
+  group: preview-db-guard-ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Typecheck, tests, secret scan, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout exact revision
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Check auth invariants
+        run: npm run check:auth
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Run tests
+        run: npm test
+      - name: Scan for secrets
+        run: npm run secret-scan
+      - name: Build
+        run: npm run build
