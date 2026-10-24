@@ -106,6 +106,7 @@ test("atomic state transition: migration queue and title master/poster only adva
     await db.waitReady;
     await db.exec("create role anon; create role authenticated;");
     await db.exec(readFileSync(join(process.cwd(), "migrations/0004_bridge.sql"), "utf8"));
+    await db.exec(readFileSync(join(process.cwd(), "migrations/0021_bridge_organizations.sql"), "utf8"));
 
     await db.exec(`
       create table if not exists loop_media_migration_queue (
@@ -132,23 +133,8 @@ test("atomic state transition: migration queue and title master/poster only adva
 
     const sql = { query: async <T>(query: string, params: unknown[]) => (await db.query<T>(query, params)).rows };
     const sealedKey = "bridge/owner-1/title-pass-test/screener/raw.mp4.verified/sealed-uuid";
-    // After successful sealing and destination verification, queue transitions to UPLOADED
-    await db.query(
-      `update loop_media_migration_queue
-       set status = 'UPLOADED', target_path = $1, updated_at = now()
-       where title_id = 'title-pass-test'
-         and asset_kind = 'TRAILER'
-         and status in ('PENDING_REUPLOAD', 'UPLOADED')`,
-      [sealedKey],
-    );
-
-    const postSealingQueue = (await db.query<{ status: string; target_path: string | null }>(
-      "select status, target_path from loop_media_migration_queue where title_id = 'title-pass-test'",
-    )).rows;
-    assert.equal(postSealingQueue[0]?.status, "UPLOADED");
-    assert.equal(postSealingQueue[0]?.target_path, sealedKey);
-
-    // Call persistVerifiedAsset
+    // Call persistence before advancing the queue. A false result must leave the
+    // migration queue at its original state.
     const confirmed = await persistVerifiedAsset(sql, {
       assetId: "asset-pass-1",
       actorUserId: "owner-1",
@@ -164,6 +150,20 @@ test("atomic state transition: migration queue and title master/poster only adva
     assert.equal(confirmed, true);
 
     if (confirmed) {
+      await db.query(
+        `update loop_media_migration_queue
+         set status = 'UPLOADED', target_path = $1, updated_at = now()
+         where title_id = 'title-pass-test'
+           and asset_kind = 'TRAILER'
+           and status in ('PENDING_REUPLOAD', 'UPLOADED')`,
+        [sealedKey],
+      );
+      const postPersistenceQueue = (await db.query<{ status: string; target_path: string | null }>(
+        "select status, target_path from loop_media_migration_queue where title_id = 'title-pass-test'",
+      )).rows;
+      assert.equal(postPersistenceQueue[0]?.status, "UPLOADED");
+      assert.equal(postPersistenceQueue[0]?.target_path, sealedKey);
+
       await db.query(
         `update loop_media_migration_queue
          set status = 'VERIFIED', target_path = $1, updated_at = now()
@@ -219,4 +219,20 @@ test("verification timeout warns that server-side work may still complete and re
   assert.match(route, /Stored-object verification timed out/);
   assert.match(route, /The server may still be finishing verification/);
   assert.match(route, /Refresh the asset list and check its status before retrying/);
+});
+
+
+test("persistence failure does not advance migration queue state", async () => {
+  const assets = readFileSync(join(process.cwd(), "src/lib/bridge/assets.ts"), "utf8");
+  const persistAt = assets.indexOf("const confirmed = await persistVerifiedAsset(sql, {");
+  const uploadedAt = assets.indexOf("set status = 'UPLOADED'", persistAt);
+  const verifiedAt = assets.indexOf("set status = 'VERIFIED'", persistAt);
+  const failureBranchAt = assets.indexOf("if (!confirmed)", persistAt);
+  assert.ok(persistAt >= 0, "confirmation persistence call must exist");
+  assert.ok(uploadedAt > persistAt, "UPLOADED transition must occur after persistence");
+  assert.ok(verifiedAt > uploadedAt, "VERIFIED transition must follow UPLOADED");
+  assert.ok(failureBranchAt > verifiedAt, "failure handling must be after the success-only queue transitions");
+  const successBlock = assets.slice(assets.indexOf("if (confirmed)", persistAt), failureBranchAt);
+  assert.match(successBlock, /set status = 'UPLOADED'/);
+  assert.match(successBlock, /set status = 'VERIFIED'/);
 });
