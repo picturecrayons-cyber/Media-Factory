@@ -65,3 +65,8 @@ test("only a verified upload sets the master reference, once, with an audit even
     await db.close();
   }
 });
+
+test("verified vertical and horizontal poster variants can set the canonical artwork reference", () => {
+  const source = readFileSync(new URL("./asset-confirmation.ts", import.meta.url), "utf8");
+  assert.match(source, /poster_key = case when v\.kind in \('poster', 'poster_vertical', 'poster_horizontal'\)/);
+});
