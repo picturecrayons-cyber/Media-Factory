@@ -51,26 +51,15 @@ create index if not exists bridge_profiles_organization_id_idx
 create index if not exists bridge_titles_owner_organization_id_idx
   on bridge_titles (owner_organization_id);
 
--- Keep Bridge operational access server-only. RLS remains enabled as defense in
--- depth, while browser Data API roles have no table privileges; no broad client
--- policies are added to these authorization/identity tables.
-alter table bridge_profiles enable row level security;
-alter table bridge_titles enable row level security;
+-- Keep the new organization control-plane tables server-only. Existing
+-- profile/title ACLs are managed by earlier security migrations and are not
+-- changed here. No browser Data API policies are added for these tables.
 alter table bridge_organizations enable row level security;
 alter table bridge_organization_memberships enable row level security;
-revoke all privileges on table bridge_profiles from anon, authenticated;
-revoke all privileges on table bridge_titles from anon, authenticated;
-revoke all privileges on table bridge_organizations from anon, authenticated;
-revoke all privileges on table bridge_organization_memberships from anon, authenticated;
+revoke all privileges on table bridge_organizations from public, anon, authenticated;
+revoke all privileges on table bridge_organization_memberships from public, anon, authenticated;
 
 -- Deliberately no automatic name-based backfill. Access to shared titles must
 -- remain denied until an authorized operator verifies the organization and
 -- creates active membership records in the isolated staging environment.
 
-
--- Organization records and membership links are server-only control-plane data.
--- Fail closed through RLS and prevent direct browser Data API access.
-alter table bridge_organizations enable row level security;
-alter table bridge_organization_memberships enable row level security;
-revoke all on bridge_organizations from public, anon, authenticated;
-revoke all on bridge_organization_memberships from public, anon, authenticated;
