@@ -64,7 +64,6 @@ describe("PRD authorization matrix", () => {
     assert.equal(hasPermission(a, "users.invite_internal"), true);
     assert.equal(hasPermission(a, "title.create"), false);
     assert.equal(hasPermission(a, "title.update_own"), false);
-    assert.equal(hasPermission(a, "title.advance_upload"), false);
     assert.equal(hasPermission(a, "title.ingest_internal"), true);
     assert.equal(hasPermission(a, "title.advance_upload"), true);
     assert.equal(hasPermission(a, "asset.sign_upload"), true);
