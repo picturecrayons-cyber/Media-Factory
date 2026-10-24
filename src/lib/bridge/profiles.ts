@@ -110,6 +110,12 @@ export const completeOnboarding = createServerFn({ method: "POST" })
       return { home: workspaceHome(existing), profile: existing };
     }
 
+    // Investor access is granted only after a reviewed access request. Enforce
+    // this at the authenticated server endpoint, not only in the signup UI.
+    if (data.accountType === "investor") {
+      throw new Error("Investor access requires a reviewed access request.");
+    }
+
     const email = context.userEmail;
     if (!email) throw new Error("Account email is required from Supabase session");
     const verified = true;

@@ -50,6 +50,11 @@ test("onboarding preserves the signup-selected role and fails closed for unsuppo
   assert.match(onboarding, /if \(unsupportedSignupRole\)/);
 });
 
+test("the server rejects direct Investor onboarding without a reviewed access path", () => {
+  const profiles = read("./profiles.ts");
+  assert.match(profiles, /data\.accountType === "investor"[\s\S]{0,120}Investor access requires a reviewed access request/);
+});
+
 test("investor CTA requests reviewed access instead of silently signing up as Creator", () => {
   const home = read("../../routes/index.tsx");
   assert.match(home, /to="\/contact"/);
