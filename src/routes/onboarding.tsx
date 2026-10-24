@@ -244,7 +244,7 @@ function Onboarding() {
       let inviteToken: string | undefined;
       try { inviteToken = sessionStorage.getItem("bridge-invite") ?? undefined; } catch { /* ignore */ }
 
-      await completeOnboarding({
+      const onboardingResult = await completeOnboarding({
         data: {
           displayName: displayName.trim(),
           accountType,
@@ -252,6 +252,14 @@ function Onboarding() {
           inviteToken,
         },
       });
+
+      // A trusted invite may establish an internal role. Route that identity to
+      // its server-derived workspace instead of attempting public title intake.
+      if (onboardingResult.profile?.internalRole) {
+        try { sessionStorage.removeItem("bridge-invite"); } catch { /* ignore */ }
+        void navigate({ to: (onboardingResult.home || "/internal") as any, replace: true });
+        return;
+      }
 
       if (!isTitleSubmitter) {
         void navigate({ to: accountType === "investor" ? "/investor" : "/buyer", replace: true });
@@ -327,6 +335,7 @@ function Onboarding() {
               <select value={accountType} onChange={(e) => setAccountType(e.target.value as PublicAccountType)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5">
                 {(Object.keys(ACCOUNT_LABELS) as PublicAccountType[]).map((type) => <option key={type} value={type}>{ACCOUNT_LABELS[type]}</option>)}
               </select>
+              <span className="mt-1 block text-xs font-normal text-muted">Viewer, Super Admin and review-team roles require an authorized internal invite.</span>
             </label>
           </div>
           {accountType !== "independent_creator" ? (
