@@ -67,4 +67,9 @@ test("shared title workspace has an explicit role gate and Studio list scope", (
   assert.match(titles, /bridge_organization_memberships/);
   assert.match(titles, /owner_organization_id = \$\{orgId\}/);
   assert.doesNotMatch(titles, /lower\(trim\(organization_name\)\)/);
+  const assets = read("./assets.ts");
+  const workflow = read("./workflow.ts");
+  assert.match(assets, /canOperateOnTitle\(actor, title, "asset.sign_upload", "asset.sign_upload"\)/);
+  assert.match(workflow, /owner_organization_id/);
+  assert.match(workflow, /canOperateOnTitle\(/);
 });
