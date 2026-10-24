@@ -37,7 +37,7 @@ export const requestAssetUpload = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
-    assertPermission(actor, actor.internalRole ? "title.ingest_internal" : "asset.sign_upload");
+    assertPermission(actor, "asset.sign_upload");
     const title = await loadTitle(data.titleId);
     if (!title) throw new Error("Not found");
     if (title.ownerUserId !== actor.userId && !hasStaffPermission(actor, "asset.sign_upload")) throw new Error("Forbidden");
