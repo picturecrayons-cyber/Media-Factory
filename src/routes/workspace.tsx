@@ -12,7 +12,7 @@ function Workspace() {
   const [showCreate,setShowCreate]=useState(false);
   const [query,setQuery]=useState("");
   const search=useMemo(()=>query.trim(),[query]);
-  return <RequireBridge>{(actor)=>{
+  return <RequireBridge allow="workspace">{(actor)=>{
     const canCreate=hasPermission(actor,"title.create");
     return <BridgeShell actor={actor} title="Titles">
       <div className="space-y-5">
