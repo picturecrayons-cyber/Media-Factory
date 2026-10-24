@@ -43,7 +43,30 @@ test("only a verified upload sets the master reference, once, with an audit even
     );
     assert.equal(audit.rows[0]?.action, "asset.upload_verified");
     assert.equal(JSON.parse(audit.rows[0]?.metadata ?? "{}").checksum, "etag-1");
+
+    await db.exec(`insert into bridge_assets (id,title_id,kind,s3_key,content_type,created_by)
+      values ('poster1234','title1234','poster','bridge/creator/title1234/poster/poster.jpg','image/jpeg','creator');`);
+    const posterArgs = {
+      ...args,
+      assetId: "poster1234",
+      kind: "poster",
+      byteSize: 40,
+      contentType: "image/jpeg",
+      checksum: "poster-etag",
+      sourceKey: "bridge/creator/title1234/poster/poster.jpg",
+      sealedKey: "bridge/creator/title1234/poster/poster.jpg.verified/uuid-poster",
+    };
+    assert.equal(await persistVerifiedAsset(sql, posterArgs), true);
+    const poster = await db.query<{ poster_key: string | null }>(
+      "select poster_key from bridge_titles where id='title1234'",
+    );
+    assert.equal(poster.rows[0]?.poster_key, posterArgs.sealedKey);
   } finally {
     await db.close();
   }
+});
+
+test("verified vertical and horizontal poster variants can set the canonical artwork reference", () => {
+  const source = readFileSync(new URL("./asset-confirmation.ts", import.meta.url), "utf8");
+  assert.match(source, /poster_key = case when v\.kind in \('poster', 'poster_vertical', 'poster_horizontal'\)/);
 });

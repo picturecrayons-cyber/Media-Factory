@@ -75,7 +75,7 @@ function TitlePage() {
 }
 
 function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
-  const [activeTab, setActiveTab] = useState<WorkspaceTab>("Overview");
+  const [activeTab, setActiveTab] = useState<WorkspaceTab>(actor.internalRole ? "Files" : "Overview");
 
   const titleQ = useQuery({
     queryKey: ["bridge-title", id],
@@ -238,7 +238,7 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
       ) : activeTab === "Files" ? (
         <FilesPanel
           canUpload={
-            canOperateOnTitle(actor, title, "asset.sign_upload", "title.ingest_internal") &&
+            canOperateOnTitle(actor, title, "asset.sign_upload", "asset.sign_upload") &&
             ["DRAFT", "UPLOADING", "PREPARING"].includes(title.status)
           }
           titleId={id}
