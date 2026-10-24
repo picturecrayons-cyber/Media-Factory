@@ -1,12 +1,16 @@
 import { resolveBridgeConfiguredOrigin } from "./origin.ts";
+import { resolveServerSupabaseUrl } from "../supabase-config.server";
+
 function read(key: string): string | undefined {
   const v = typeof process === "undefined" ? undefined : process.env[key]?.trim();
   return v || undefined;
 }
 
 export const bridgeEnv = {
-  supabaseUrl: () => read("SUPABASE_URL") || read("VITE_SUPABASE_URL"),
-  supabaseAnon: () => read("VITE_SUPABASE_PUBLISHABLE_KEY") || read("VITE_SUPABASE_ANON_KEY"),
+  // Shared resolver rejects conflicting aliases rather than choosing a project
+  // differently from auth verification.
+  supabaseUrl: () => resolveServerSupabaseUrl(),
+  supabaseAnon: () => read("VITE_SUPABASE_PUBLISHABLE_KEY") || read("VITE_SUPABASE_ANON_KEY") || read("SUPABASE_PUBLISHABLE_KEY") || read("SUPABASE_ANON_KEY") || read("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY") || read("NEXT_PUBLIC_SUPABASE_ANON_KEY"),
   supabaseService: () => read("SUPABASE_SECRET_KEY") || read("SUPABASE_SERVICE_ROLE_KEY"),
   razorpayKeyId: () => read("RAZORPAY_KEY_ID"),
   razorpayKeySecret: () => read("RAZORPAY_KEY_SECRET"),
