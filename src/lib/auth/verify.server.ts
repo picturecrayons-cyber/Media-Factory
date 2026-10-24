@@ -1,20 +1,14 @@
-function trimUrl(value: string | undefined): string | undefined {
-  const trimmed = value?.trim().replace(/\/$/, "");
-  return trimmed || undefined;
-}
+import { createClient } from "@supabase/supabase-js";
+import { resolveServerSupabaseUrl } from "../supabase-config.server";
 
 function trimKey(value: string | undefined): string | undefined {
   const trimmed = value?.trim();
   return trimmed || undefined;
 }
 
-// Production client builds already bake the canonical public Supabase project.
-// Server verification must use that same project when Vercel only attached the
-// Supabase integration env to a configuration that is not injected at runtime.
-const supabaseUrl =
-  trimUrl(process.env.SUPABASE_URL) ||
-  trimUrl(process.env.VITE_SUPABASE_URL) ||
-  trimUrl(process.env.NEXT_PUBLIC_SUPABASE_URL);
+// Resolve URL using the shared fail-closed resolver so auth verification cannot
+// silently choose a different Supabase project than Bridge integrations.
+const supabaseUrl = resolveServerSupabaseUrl();
 
 const supabasePublishableKey =
   trimKey(process.env.SUPABASE_PUBLISHABLE_KEY) ??
@@ -72,7 +66,8 @@ export async function getSessionUser(bearerToken?: string): Promise<VerifiedUser
     };
   } catch (err) {
     if (err instanceof UnauthorizedError) throw err;
-    console.error("[auth] Failed to verify Supabase token:", err);
+    // Do not log the original error object; fetch errors may include request URLs.
+    console.error("[auth] Supabase session verification failed.");
     throw err;
   }
 }
