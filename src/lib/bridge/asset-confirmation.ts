@@ -60,7 +60,7 @@ export async function persistVerifiedAsset(sql: Pick<Sql, "query">, opts: {
         'titleId', v.title_id,
         'kind', v.kind,
         'byteSize', $1,
-        'checksum', $9
+        'checksum', $9::text
       )
     from verified v join title_set t on t.id = v.title_id
     returning entity_id
