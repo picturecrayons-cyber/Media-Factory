@@ -42,6 +42,8 @@ export type BridgeTitle = {
   nameMl: string | null;
   ownerUserId: string;
   ownerAccountType: AccountType;
+  /** Present on server-loaded single-title records for Studio organization authorization. */
+  ownerOrganizationName?: string | null;
   status: TitleStatus;
   synopsis: string;
   language: string;
