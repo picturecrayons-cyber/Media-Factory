@@ -134,10 +134,9 @@ function Onboarding() {
 
   // Preserve the role chosen during signup instead of silently defaulting
   // every new account to Creator when onboarding opens.
-  const signupAccountType = publicAccountTypeFrom(user?.user_metadata?.account_type);
-  const unsupportedSignupRole = Boolean(
-    user?.user_metadata?.account_type && !signupAccountType,
-  );
+  const signupAccountTypeHint = user?.signupAccountTypeHint;
+  const signupAccountType = publicAccountTypeFrom(signupAccountTypeHint);
+  const unsupportedSignupRole = Boolean(signupAccountTypeHint && !signupAccountType);
 
   useEffect(() => {
     if (signupAccountType) setAccountType(signupAccountType);
