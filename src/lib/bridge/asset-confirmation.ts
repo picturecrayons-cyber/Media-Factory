@@ -18,8 +18,33 @@ export async function persistVerifiedAsset(sql: Pick<Sql, "query">, opts: {
     with verified as (
       update bridge_assets a set byte_size = $1, content_type = coalesce($2, a.content_type), s3_key = $7
       where a.id = $3 and a.created_by = $4 and a.byte_size is null and a.s3_key = $8
-        and exists (select 1 from bridge_titles t where t.id = a.title_id
-          and ($5 or t.owner_user_id = $4) and t.status in ('DRAFT','UPLOADING','PREPARING'))
+        and exists (
+          select 1
+          from bridge_titles t
+          where t.id = a.title_id
+            and t.status in ('DRAFT','UPLOADING','PREPARING')
+            and (
+              $5
+              or t.owner_user_id = $4
+              or (
+                t.owner_account_type = 'studio'
+                and exists (
+                  select 1
+                  from bridge_profiles p
+                  join bridge_organization_memberships m
+                    on m.user_id = p.user_id
+                   and m.status = 'active'
+                  join bridge_organizations o
+                    on o.id = m.organization_id
+                   and o.status = 'active'
+                  where p.user_id = $4
+                    and p.account_type = 'studio'
+                    and p.email_verified = true
+                    and t.owner_organization_id = m.organization_id
+                )
+              )
+            )
+        )
       returning a.id, a.title_id, a.kind, a.s3_key
     ), title_set as (
       update bridge_titles t set
