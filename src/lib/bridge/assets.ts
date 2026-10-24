@@ -157,8 +157,25 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
       const current = await sql<{
         byte_size: number | null;
       }>`select byte_size from bridge_assets where id = ${asset.id}`;
-      if (current[0]?.byte_size != null)
+      if (current[0]?.byte_size != null) {
+        // A concurrent confirmation persisted the asset successfully. Bring the
+        // queue into line with that durable state before returning idempotently.
+        await sql`
+          update loop_media_migration_queue
+          set status = 'UPLOADED', target_path = ${sealedKey}, updated_at = now()
+          where title_id = ${title.id}
+            and asset_kind = case when ${asset.kind} = 'screener' then 'TRAILER' else upper(${asset.kind}) end
+            and status in ('PENDING_REUPLOAD', 'UPLOADED')
+        `;
+        await sql`
+          update loop_media_migration_queue
+          set status = 'VERIFIED', target_path = ${sealedKey}, updated_at = now()
+          where title_id = ${title.id}
+            and asset_kind = case when ${asset.kind} = 'screener' then 'TRAILER' else upper(${asset.kind}) end
+            and status in ('UPLOADED', 'PENDING_REUPLOAD')
+        `;
         return { assetId: asset.id, byteSize: Number(current[0].byte_size), verified: true };
+      }
       throw new Error("Asset confirmation changed; retry after refreshing the title");
     }
     return { assetId: asset.id, byteSize: sealed.byteSize, verified: true };
