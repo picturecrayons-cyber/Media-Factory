@@ -206,11 +206,10 @@ function Home() {
                 </div>
                 <div className="mt-8 pt-5 border-t border-line">
                   <Link
-                    to="/signup"
-                    search={{ role: "investor" }}
+                    to="/contact"
                     className="inline-flex items-center text-xs font-semibold text-accent hover:underline"
                   >
-                    Create Investor Access →
+                    Request Investor Access →
                   </Link>
                 </div>
               </div>

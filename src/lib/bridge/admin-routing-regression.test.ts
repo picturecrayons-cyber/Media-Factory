@@ -33,3 +33,31 @@ test("public onboarding does not silently treat a missing profile as an admin se
   assert.match(onboarding, /if \(home\) goHome\(home, navigate\)/);
   assert.doesNotMatch(onboarding, /internal_role\s*=\s*["']super_admin["']/);
 });
+
+test("public signup role selector is accessible and limited to supported public roles", () => {
+  const signup = read("../../routes/signup.tsx");
+  assert.match(signup, /role="radiogroup"/);
+  assert.match(signup, /type="radio"/);
+  assert.match(signup, /publicAccountTypeFrom\(search\.role\)/);
+  assert.match(signup, /Investor access/);
+});
+
+test("onboarding preserves the signup-selected role and fails closed for unsupported roles", () => {
+  const onboarding = read("../../routes/onboarding.tsx");
+  assert.match(onboarding, /publicAccountTypeFrom\(signupAccountTypeHint\)/);
+  assert.match(read("../../lib/auth/use-current-user.ts"), /signupAccountTypeHint/);
+  assert.match(onboarding, /if \(signupAccountType\) setAccountType\(signupAccountType\)/);
+  assert.match(onboarding, /if \(unsupportedSignupRole\)/);
+});
+
+test("the server rejects direct Investor onboarding without a reviewed access path", () => {
+  const profiles = read("./profiles.ts");
+  assert.match(profiles, /data\.accountType === "investor"[\s\S]{0,100}Investor access requires a reviewed access request/);
+});
+
+test("investor CTA requests reviewed access instead of silently signing up as Creator", () => {
+  const home = read("../../routes/index.tsx");
+  assert.match(home, /to="\/contact"/);
+  assert.match(home, /Request Investor Access/);
+  assert.doesNotMatch(home, /search=\{\{ role: "investor" \}\}/);
+});

@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: ["main", "feat/crayons-bridge-production", "fix/bridge-production-gate-20260923", "fix/bridge-final-production-gate-20260924"]
+    branches: ["main", "feat/crayons-bridge-production", "fix/bridge-production-gate-20260923", "fix/bridge-final-production-gate-20260924", "fix/canonical-supabase-url-resolution-20261024", "fix/signup-role-dashboards-rbac-20261024", "fix/workspace-studio-rbac-20261024"]
   pull_request:
-    branches: ["main"]
+    branches: ["main", "fix/canonical-supabase-url-resolution-20261024", "fix/signup-role-dashboards-rbac-20261024", "fix/workspace-studio-rbac-20261024"]
   workflow_dispatch:
 
 jobs:
