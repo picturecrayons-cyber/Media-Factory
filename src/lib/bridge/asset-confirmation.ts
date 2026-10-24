@@ -16,8 +16,9 @@ export async function persistVerifiedAsset(sql: Pick<Sql, "query">, opts: {
   if (!Number.isSafeInteger(opts.byteSize) || opts.byteSize <= 0) throw new Error("Uploaded object is empty");
   const rows = await sql.query<{ entity_id: string }>(`
     with verified as (
-      update bridge_assets a set byte_size = $1, content_type = coalesce($2, a.content_type), s3_key = $7
-      where a.id = $3 and a.created_by = $4 and a.byte_size is null and a.s3_key = $8
+      update bridge_assets a set byte_size = $1, content_type = coalesce($2, a.content_type), s3_key = $6
+      where a.id = $3 and a.created_by = $4 and a.byte_size is null and a.s3_key = $7
+        and a.title_id = $8
         and exists (
           select 1
           from bridge_titles t
@@ -54,7 +55,13 @@ export async function persistVerifiedAsset(sql: Pick<Sql, "query">, opts: {
       from verified v where t.id = v.title_id returning t.id
     )
     insert into bridge_audit_logs (actor_user_id, action, entity_type, entity_id, metadata)
-    select $4, 'asset.upload_verified', 'bridge_asset', v.id, $6
+    select $4, 'asset.upload_verified', 'bridge_asset', v.id,
+      jsonb_build_object(
+        'titleId', v.title_id,
+        'kind', v.kind,
+        'byteSize', $1,
+        'checksum', $9
+      )
     from verified v join title_set t on t.id = v.title_id
     returning entity_id
   `, [
@@ -63,14 +70,10 @@ export async function persistVerifiedAsset(sql: Pick<Sql, "query">, opts: {
     opts.assetId,
     opts.actorUserId,
     opts.internalActor,
-    JSON.stringify({
-      titleId: opts.titleId,
-      kind: opts.kind,
-      byteSize: opts.byteSize,
-      checksum: opts.checksum,
-    }),
     opts.sealedKey,
     opts.sourceKey,
+    opts.titleId,
+    opts.checksum,
   ]);
   return Boolean(rows[0]);
 }
