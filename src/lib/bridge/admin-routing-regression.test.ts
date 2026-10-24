@@ -33,3 +33,14 @@ test("public onboarding does not silently treat a missing profile as an admin se
   assert.match(onboarding, /if \(home\) goHome\(home, navigate\)/);
   assert.doesNotMatch(onboarding, /internal_role\s*=\s*["']super_admin["']/);
 });
+
+test("public signup exposes only buyer/creator/studio roles and explains staff invitation boundary", () => {
+  const signup = read("../../routes/signup.tsx");
+  assert.match(signup, /type AccountChoice = "independent_creator" \| "studio" \| "buyer"/);
+  assert.match(signup, /id: "independent_creator", label: "Creator \/ Filmmaker"/);
+  assert.match(signup, /id: "studio", label: "Studio \/ Production"/);
+  assert.match(signup, /id: "buyer", label: "Buyer \/ Platform"/);
+  assert.doesNotMatch(signup, /id: "admin"|id: "super_admin"|internal_role/);
+  assert.match(signup, /use the invitation link provided by your administrator/);
+  assert.match(signup, /Public signup roles do not grant Admin or Super Admin access/);
+});
