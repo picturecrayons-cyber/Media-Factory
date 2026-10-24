@@ -14,7 +14,11 @@ export const authMiddleware = createMiddleware({ type: "function" })
   .server(async ({ next, context }) => {
     const { assertSameSiteRequest } = await import("./isolation.server");
     const { requireUser } = await import("./verify.server");
+    const { logSupabaseBindingTrace } = await import("../supabase-binding-trace.server");
     assertSameSiteRequest();
+    // Emit only a request ID, deployment SHA, and sanitized project reference.
+    // This is correlation metadata, never credentials or personal information.
+    logSupabaseBindingTrace();
     const user = await requireUser(context.bearerToken);
     return next({ context: { userId: user.id, userEmail: user.email, emailConfirmedAt: user.email_confirmed_at } });
   });
