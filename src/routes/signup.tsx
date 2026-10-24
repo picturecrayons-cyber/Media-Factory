@@ -263,6 +263,9 @@ function Signup() {
                 </button>
               ))}
             </div>
+            <p className="text-xs leading-relaxed text-muted">
+              Crayons Bridge team members: use the invitation link provided by your administrator. Public signup roles do not grant Admin or Super Admin access.
+            </p>
           </div>
 
           <label className="block text-sm font-medium text-fg">
