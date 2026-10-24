@@ -125,7 +125,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
     <section className="space-y-4 rounded-2xl border border-line bg-surface p-5">
       <h2 className="font-display text-xl">Title operations</h2>
       <nav className="flex flex-wrap gap-2" aria-label="Operational workflow">
-        {(actor.internalRole ? stages : ["Prepare"]).map((s) => (
+        {((actor.internalRole ? stages : ["Prepare"]) as readonly (typeof stages)[number][]).map((s) => (
           <button
             type="button"
             key={s}
