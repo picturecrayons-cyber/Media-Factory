@@ -347,7 +347,7 @@ export const updateTitle = createServerFn({ method: "POST" })
     const actor = await requireVerifiedActor(context.userId);
     const title = await loadTitle(data.id);
     if (!title) throw new Error("Not found");
-    const owns = title.ownerUserId === actor.userId && !actor.internalRole;
+    const owns = !actor.internalRole && canMutateTitle(actor, title, "title.update_own", "title.license");
     if (!canMutateTitle(actor, title, "title.update_own", "title.license"))
       throw new Error("Forbidden");
     if (
