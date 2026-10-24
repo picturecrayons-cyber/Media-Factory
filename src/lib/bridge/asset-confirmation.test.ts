@@ -39,11 +39,16 @@ test("only a verified upload sets the master reference, once, with an audit even
     assert.deepEqual(await state(), { master_key: "bridge/creator/title1234/master/video.mp4.verified/uuid-1", byte_size: 120 });
     assert.equal(await persistVerifiedAsset(sql, args), false);
     assert.equal(await persistVerifiedAsset(sql, { ...args, assetId: "asset1234", sourceKey: "wrong" }), false);
+    // A caller cannot verify an asset while supplying a different title ID.
+    assert.equal(await persistVerifiedAsset(sql, { ...args, titleId: "different-title" }), false);
     const audit = await db.query<{ action: string; metadata: string }>(
       "select action, metadata from bridge_audit_logs where entity_id='asset1234'",
     );
     assert.equal(audit.rows[0]?.action, "asset.upload_verified");
-    assert.equal(JSON.parse(audit.rows[0]?.metadata ?? "{}").checksum, "etag-1");
+    const metadata = JSON.parse(audit.rows[0]?.metadata ?? "{}");
+    assert.equal(metadata.checksum, "etag-1");
+    assert.equal(metadata.titleId, "title1234");
+    assert.equal(metadata.kind, "master");
   } finally {
     await db.close();
   }
