@@ -110,7 +110,7 @@ export type Actor = {
   accountType: AccountType;
   internalRole: InternalRole | null;
   /** Server-resolved organization scope for Studio account collaboration. */
-  organizationName?: string | null;
+  organizationId?: string | null;
 };
 
 const TRANSITION_PERMISSION: Record<string, Permission> = {
@@ -152,10 +152,10 @@ export function canAccessTitleWorkspace(actor: Actor): boolean {
 
 function sharesStudioOrganization(
   actor: Actor,
-  title: { ownerUserId: string; ownerAccountType?: AccountType; ownerOrganizationName?: string | null },
+  title: { ownerUserId: string; ownerAccountType?: AccountType; ownerOrganizationId?: string | null },
 ): boolean {
-  const actorOrg = actor.organizationName?.trim().toLocaleLowerCase();
-  const ownerOrg = title.ownerOrganizationName?.trim().toLocaleLowerCase();
+  const actorOrg = actor.organizationId;
+  const ownerOrg = title.ownerOrganizationId;
   return Boolean(
     !actor.internalRole &&
     actor.accountType === "studio" &&
@@ -205,7 +205,7 @@ export function assertPermission(actor: Actor, permission: Permission): void {
 
 export function canReadTitle(
   actor: Actor,
-  title: { ownerUserId: string; status: TitleStatus; ownerAccountType?: AccountType; ownerOrganizationName?: string | null },
+  title: { ownerUserId: string; status: TitleStatus; ownerAccountType?: AccountType; ownerOrganizationId?: string | null },
 ): boolean {
   if (!actor.emailVerified) return false;
   if (
@@ -219,7 +219,7 @@ export function canReadTitle(
 
 export function canMutateTitle(
   actor: Actor,
-  title: { ownerUserId: string; ownerAccountType?: AccountType; ownerOrganizationName?: string | null },
+  title: { ownerUserId: string; ownerAccountType?: AccountType; ownerOrganizationId?: string | null },
   ownerPermission: Permission,
   staffPermission: Permission,
 ): boolean {
@@ -233,7 +233,7 @@ export function canMutateTitle(
 
 export function canOperateOnTitle(
   actor: Actor,
-  title: { ownerUserId: string; ownerAccountType?: AccountType; ownerOrganizationName?: string | null },
+  title: { ownerUserId: string; ownerAccountType?: AccountType; ownerOrganizationId?: string | null },
   ownerPermission: Permission,
   staffPermission: Permission | null = null,
 ): boolean {
