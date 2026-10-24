@@ -20,6 +20,7 @@ type TitleRow = {
   name_ml: string | null;
   owner_user_id: string;
   owner_account_type: string;
+  owner_organization_name?: string | null;
   status: string;
   synopsis: string;
   language: string;
@@ -49,6 +50,7 @@ export function mapTitle(r: TitleRow): BridgeTitle {
     nameMl: r.name_ml,
     ownerUserId: r.owner_user_id,
     ownerAccountType: r.owner_account_type as AccountType,
+    ownerOrganizationName: r.owner_organization_name ?? null,
     status: r.status as TitleStatus,
     synopsis: r.synopsis,
     language: r.language,
@@ -106,7 +108,9 @@ async function listOwned(sql: Sql, userId: string, organizationName: string | nu
             t.owner_user_id = ${userId}
             or t.owner_user_id in (
               select user_id from bridge_profiles
-              where organization_name is not null and lower(organization_name) = lower(${org})
+              where account_type = 'studio'
+                and organization_name is not null
+                and lower(trim(organization_name)) = lower(trim(${org}))
             )
           )
         order by t.updated_at desc limit 200
@@ -116,7 +120,9 @@ async function listOwned(sql: Sql, userId: string, organizationName: string | nu
         where t.owner_user_id = ${userId}
           or t.owner_user_id in (
             select user_id from bridge_profiles
-            where organization_name is not null and lower(organization_name) = lower(${org})
+            where account_type = 'studio'
+              and organization_name is not null
+              and lower(trim(organization_name)) = lower(trim(${org}))
           )
         order by t.updated_at desc limit 200
       `;
@@ -133,7 +139,13 @@ function slugify(name: string, id: string): string {
 
 export async function loadTitle(id: string): Promise<BridgeTitle | null> {
   const sql = await getSql();
-  const rows = await sql<TitleRow>`select * from bridge_titles where id = ${id} limit 1`;
+  const rows = await sql<TitleRow>`
+    select t.*, owner.organization_name as owner_organization_name
+    from bridge_titles t
+    left join bridge_profiles owner on owner.user_id = t.owner_user_id
+    where t.id = ${id}
+    limit 1
+  `;
   return rows[0] ? mapTitle(rows[0]) : null;
 }
 
@@ -506,7 +518,11 @@ export const advanceTitle = createServerFn({ method: "POST" })
     const perm = permissionForTransition(title.status, data.to);
     if (!perm) throw new Error("Transition is not available");
     assertPermission(actor, perm);
-    if (perm === "title.advance_upload" && title.ownerUserId !== actor.userId && !hasStaffPermission(actor, perm)) {
+    if (
+      perm === "title.advance_upload" &&
+      title.ownerUserId !== actor.userId &&
+      !canMutateTitle(actor, title, perm, perm)
+    ) {
       throw new Error("Forbidden");
     }
     const expected = nextStatus(title.status);
