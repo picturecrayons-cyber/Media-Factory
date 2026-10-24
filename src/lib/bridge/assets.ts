@@ -85,7 +85,11 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
-    assertPermission(actor, actor.internalRole ? "title.ingest_internal" : "asset.sign_upload");
+    // Signing and confirming an upload use the same explicit permission. Staff
+    // still need asset.sign_upload, and the ownership/staff checks below remain
+    // authoritative; this avoids allowing Admin to sign an upload then failing
+    // confirmation solely because Admin does not hold title.ingest_internal.
+    assertPermission(actor, "asset.sign_upload");
     const sql = await getSql();
     const rows = await sql<{
       id: string;
@@ -114,16 +118,11 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
       throw new Error("Uploaded object size does not match the file that was sent");
     }
     if (!object.etag) throw new Error("Object ETag is required for immutable verification");
-    // Use the immutable asset row ID, not a per-request UUID. If a browser timeout
-    // leads to a duplicate confirmation while the first server call is still running,
-    // both attempts target the same sealed object instead of creating orphan copies.
     const sealedKey = `${asset.s3_key}.verified/${asset.id}`;
     const sealed = await sealVerifiedObject(asset.s3_key, sealedKey, object.etag);
     if (sealed.byteSize !== object.byteSize || !sealed.etag) {
       throw new Error("Verified copy differs from the uploaded object");
     }
-    // Only mark the migration queue as UPLOADED after the immutable copy succeeds
-    // and destination object's size, content type, and ETag have been verified.
     await sql`
       update loop_media_migration_queue
       set status = 'UPLOADED', target_path = ${sealedKey}, updated_at = now()
