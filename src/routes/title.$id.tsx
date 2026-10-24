@@ -75,7 +75,7 @@ function TitlePage() {
 }
 
 function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
-  const [activeTab, setActiveTab] = useState<WorkspaceTab>("Overview");
+  const [activeTab, setActiveTab] = useState<WorkspaceTab>(actor.internalRole ? "Files" : "Overview");
 
   const titleQ = useQuery({
     queryKey: ["bridge-title", id],
