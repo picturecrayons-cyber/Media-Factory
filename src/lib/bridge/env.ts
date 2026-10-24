@@ -1,11 +1,12 @@
 import { resolveBridgeConfiguredOrigin } from "./origin.ts";
+import { resolveCanonicalSupabaseUrl } from "../supabase-url.ts";
 function read(key: string): string | undefined {
   const v = typeof process === "undefined" ? undefined : process.env[key]?.trim();
   return v || undefined;
 }
 
 export const bridgeEnv = {
-  supabaseUrl: () => read("SUPABASE_URL") || read("VITE_SUPABASE_URL"),
+  supabaseUrl: () => resolveCanonicalSupabaseUrl(read("VITE_SUPABASE_URL")),
   supabaseAnon: () => read("VITE_SUPABASE_PUBLISHABLE_KEY") || read("VITE_SUPABASE_ANON_KEY"),
   supabaseService: () => read("SUPABASE_SECRET_KEY") || read("SUPABASE_SERVICE_ROLE_KEY"),
   razorpayKeyId: () => read("RAZORPAY_KEY_ID"),

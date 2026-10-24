@@ -1,20 +1,13 @@
-function trimUrl(value: string | undefined): string | undefined {
-  const trimmed = value?.trim().replace(/\/$/, "");
-  return trimmed || undefined;
-}
+import { resolveCanonicalSupabaseUrl } from "../supabase-url.ts";
 
 function trimKey(value: string | undefined): string | undefined {
   const trimmed = value?.trim();
   return trimmed || undefined;
 }
 
-// Production client builds already bake the canonical public Supabase project.
-// Server verification must use that same project when Vercel only attached the
-// Supabase integration env to a configuration that is not injected at runtime.
-const supabaseUrl =
-  trimUrl(process.env.SUPABASE_URL) ||
-  trimUrl(process.env.VITE_SUPABASE_URL) ||
-  trimUrl(process.env.NEXT_PUBLIC_SUPABASE_URL);
+// Use the same required URL source as the browser client. Server-only aliases must
+// not silently bind auth verification to a different Supabase project.
+const supabaseUrl = resolveCanonicalSupabaseUrl(process.env.VITE_SUPABASE_URL);
 
 const supabasePublishableKey =
   trimKey(process.env.SUPABASE_PUBLISHABLE_KEY) ??
