@@ -125,7 +125,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
     <section className="space-y-4 rounded-2xl border border-line bg-surface p-5">
       <h2 className="font-display text-xl">Title operations</h2>
       <nav className="flex flex-wrap gap-2" aria-label="Operational workflow">
-        {stages.map((s) => (
+        {(actor.internalRole ? stages : ["Prepare"]).map((s) => (
           <button
             type="button"
             key={s}
@@ -153,17 +153,16 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
           {stage === "Prepare" ? (
             <div className="space-y-3">
               <p>
-                Lifecycle: {title.status}. QC: {workflow.data?.qc?.status ?? "Not reviewed"}. Upload
-                verified master and artwork below before submitting.
+                Lifecycle: {title.status}. QC: {workflow.data?.qc?.status ?? "Not reviewed"}. Upload the master video and required artwork first. Once storage verification is complete, submit to Admin for QC. Rights, licensing and partner distribution follow later through authorized staff.
               </p>
               {canOperateOnTitle(actor, title, "title.advance_upload", "title.ingest_internal") &&
               ["DRAFT", "UPLOADING", "PREPARING"].includes(title.status)
                 ? button(
                     title.status === "DRAFT"
-                      ? "Start ingest"
+                      ? "Begin upload stage"
                       : title.status === "UPLOADING"
-                        ? "Prepare package"
-                        : "Submit for QC",
+                        ? "Finish upload step"
+                        : "Submit to Admin for QC",
                     () =>
                       advanceTitle({
                         data: {
