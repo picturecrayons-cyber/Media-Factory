@@ -99,7 +99,7 @@ function AdminBody({ actor }: { actor: any }) {
                     {title.status.replaceAll("_", " ").toLowerCase()}
                   </span>
                 </div>
-                <Link to="/title/$id" params={{ id: title.id }} className="shrink-0 text-sm font-semibold text-accent hover:underline">Open title →</Link>
+                <Link to="/title/$id" params={{ id: title.id }} className="shrink-0 text-sm font-semibold text-accent hover:underline">Open upload workspace →</Link>
               </div>
             ))}
             {loading ? <p className="py-5 text-sm text-muted">Loading title queue…</p> : null}
