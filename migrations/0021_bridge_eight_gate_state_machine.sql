@@ -152,6 +152,8 @@ begin
     raise exception 'TITLE_NOT_FOUND';
   end if;
 
+  perform set_config('bridge.gate_transition', 'on', true);
+
   insert into public.bridge_gate_state(title_id)
   values (p_title_id)
   on conflict (title_id) do nothing;
@@ -291,8 +293,6 @@ begin
       raise exception 'GATE_BLOCKED_REVENUE: reporting reference and reconciliation timestamp are required';
     end if;
   end if;
-
-  perform set_config('bridge.gate_transition', 'on', true);
 
   insert into public.bridge_gate_audit_trail(
     title_id, from_gate, to_gate, action, actor_id, actor_role, evidence
