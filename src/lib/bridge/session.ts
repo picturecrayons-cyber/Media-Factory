@@ -9,6 +9,10 @@ import { integrationStatus } from "./env";
 import { assertNotDevUser } from "./guards";
 import { isMissingOrganizationSchemaError, workspaceFailureCode } from "./workspace-schema";
 
+// Shared client query limits for fast, bounded Preview workspace loading.
+export const BRIDGE_QUERY_CACHE_MS = 60 * 60 * 1000;
+export const BRIDGE_QUERY_TIMEOUT_MS = 5_000;
+
 export type BridgeActor = Actor & {
   email: string;
   displayName: string;

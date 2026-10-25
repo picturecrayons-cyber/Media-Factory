@@ -68,7 +68,10 @@ test("shared title workspace has an explicit role gate and Studio list scope", (
   const titles = read("./titles.ts");
   const rbac = read("./rbac.ts");
   assert.match(workspace, /<RequireBridge allow="workspace">/);
-  assert.match(gate, /allow === "workspace" && !canAccessTitleWorkspace\(profile\)/);
+  // Privileged internal roles may inspect the workspace; buyer mode is explicitly read-only.
+  assert.match(gate, /const privileged = \["super_admin", "admin", "internal_admin"\]/);
+  assert.match(gate, /allow === "workspace" && !privileged && !canAccessTitleWorkspace\(profile\)/);
+  assert.match(gate, /readOnly: privileged && allow === "buyer"/);
   assert.match(rbac, /export function canAccessTitleWorkspace\(actor: Actor\)/);
   assert.match(titles, /bridge_organization_memberships/);
   assert.match(titles, /owner_organization_id = \$\{orgId\}/);

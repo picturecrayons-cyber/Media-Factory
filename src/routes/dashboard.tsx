@@ -4,9 +4,32 @@ import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { listTitles } from "@/lib/bridge/titles";
 import { BRIDGE_LOOP_LANES, loopStageType } from "@/lib/bridge/loop-lanes";
-import { getDashboardSession } from "@/lib/bridge/session";
+import { BRIDGE_QUERY_CACHE_MS, BRIDGE_QUERY_TIMEOUT_MS, getDashboardSession } from "@/lib/bridge/session";
 
 export const Route = createFileRoute("/dashboard")({ component: Dashboard });
+
+function isTestOnlyTitle(title: { id: string; name: string }) {
+  return /internal test only|test-only/i.test(title.name) ||
+    title.id === "bridge-oci-e2e-7be3ab166df28709" ||
+    title.id.startsWith("bridge-oci-e2e-");
+}
+
+async function loadDashboardTitles() {
+  const t0 = performance.now();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const result = await Promise.race([
+      listTitles(),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error("Title reporting timed out after 5 seconds.")), BRIDGE_QUERY_TIMEOUT_MS);
+      }),
+    ]);
+    console.info("[bridge-dashboard] title query completed", { elapsedMs: Math.round(performance.now() - t0) });
+    return result;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
 
 function Dashboard() {
   return (
@@ -67,15 +90,19 @@ function DashboardBody() {
   });
   const titlesQ = useQuery({
     queryKey: ["bridge-titles"],
-    queryFn: () => listTitles(),
+    queryFn: loadDashboardTitles,
     enabled: dashboardQ.isSuccess,
     retry: 1,
+    retryDelay: 250,
+    staleTime: BRIDGE_QUERY_CACHE_MS,
+    gcTime: BRIDGE_QUERY_CACHE_MS,
   });
 
   if (dashboardQ.isPending) return <p className="text-sm text-muted">Checking access…</p>;
   if (dashboardQ.isError) return <p role="alert" className="text-sm text-accent">Super admin access required.</p>;
 
-  const titles = titlesQ.data?.titles ?? [];
+  // Keep operational test records out of the dashboard display; buyer publication remains server-gated.
+  const titles = (titlesQ.data?.titles ?? []).filter((title) => !isTestOnlyTitle(title));
   const live = titles.filter((t) => ["LIVE_FOR_BUYERS", "IN_NEGOTIATION", "LICENSED", "DELIVERED"].includes(t.status));
   const pipeline = titles.filter((t) => t.status === "LICENSING_READY").length;
   const deals = titles.filter((t) => t.status === "LICENSED" || t.status === "IN_NEGOTIATION").length;
@@ -106,6 +133,10 @@ function DashboardBody() {
         </div>
       </section>
 
+      <div role="status" className="inline-flex rounded-full border border-amber-500/40 bg-amber-500/10 px-3 py-1.5 text-xs font-medium text-amber-300">
+        Buyer visibility gated by server-side publication
+      </div>
+
       <section aria-label="Title lanes" className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {BRIDGE_LOOP_LANES.map((lane) => (
           <article key={lane.id} className="rounded-sm border border-line px-4 py-3">
@@ -115,7 +146,7 @@ function DashboardBody() {
                 ? "—"
                 : titles.filter((title) => loopStageType(title.contentType) === lane.loopType).length}
             </p>
-            <p className="text-xs text-muted">Titles in this content lane. Buyer visibility still depends on server-side publication gates.</p>
+            <p className="text-xs text-muted">Canonical titles in this content lane.</p>
           </article>
         ))}
       </section>
@@ -154,7 +185,9 @@ function DashboardBody() {
           <Link to="/workspace" className="text-sm font-semibold text-accent hover:underline">View all titles →</Link>
         </div>
         {titlesQ.isPending ? (
-          <p className="px-4 py-6 text-sm text-muted">Loading title records…</p>
+          <div aria-label="Loading title records" aria-busy="true" className="space-y-3 px-4 py-6">
+            {[0, 1, 2].map((item) => <div key={item} className="h-10 animate-pulse rounded-sm bg-[#1a1a1a]" />)}
+          </div>
         ) : reportingUnavailable ? (
           <div className="px-4 py-6">
             <p role="alert" className="text-sm text-accent">The title queue could not be loaded. Refresh to retry; metrics above are withheld.</p>
