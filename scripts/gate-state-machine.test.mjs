@@ -78,7 +78,13 @@ async function fixture() {
   return db;
 }
 
-async function transition(db, gate, actor = "reviewer-1", role = "super_admin", evidence = { reference: "test-evidence" }) {
+async function transition(
+  db,
+  gate,
+  actor = "reviewer-1",
+  role = "super_admin",
+  evidence = { reference: "test-evidence" },
+) {
   return db.query(
     "select (public.bridge_transition_gate($1,$2,$3,$4,$5::jsonb)).current_gate as current_gate",
     ["synthetic-gate-test", gate, actor, role, JSON.stringify(evidence)],
@@ -88,15 +94,9 @@ async function transition(db, gate, actor = "reviewer-1", role = "super_admin", 
 test("eight-gate state machine rejects skipping gates and missing asset verification", async () => {
   const db = await fixture();
   try {
-    await assert.rejects(
-      transition(db, "ASSET_VERIFICATION"),
-      /GATE_ORDER_BLOCKED/,
-    );
+    await assert.rejects(transition(db, "ASSET_VERIFICATION"), /GATE_ORDER_BLOCKED/);
     await transition(db, "PREPARING", "creator-1", "creator");
-    await assert.rejects(
-      transition(db, "ASSET_VERIFICATION"),
-      /GATE_BLOCKED_ASSET_VERIFICATION/,
-    );
+    await assert.rejects(transition(db, "ASSET_VERIFICATION"), /GATE_BLOCKED_ASSET_VERIFICATION/);
     await db.query(`
       update public.bridge_assets
       set verified = true, verified_at = now(), verified_by = 'reviewer-1',
@@ -104,10 +104,7 @@ test("eight-gate state machine rejects skipping gates and missing asset verifica
       where id = 'asset-1'
     `);
     await transition(db, "ASSET_VERIFICATION");
-    await assert.rejects(
-      transition(db, "LEGAL", "legal-1", "legal_reviewer"),
-      /GATE_ORDER_BLOCKED/,
-    );
+    await assert.rejects(transition(db, "LEGAL", "legal-1", "legal_reviewer"), /GATE_ORDER_BLOCKED/);
   } finally {
     await db.close();
   }
@@ -130,20 +127,17 @@ test("complete synthetic gate flow requires independent QC/legal and explicit pu
       ["synthetic-gate-test"],
     );
     await transition(db, "QC", "qc-1", "qc_reviewer");
-    await assert.rejects(
-      transition(db, "LEGAL", "creator-1", "legal_reviewer"),
-      /SELF_APPROVAL_DENIED/,
-    );
+    await assert.rejects(transition(db, "LEGAL", "creator-1", "legal_reviewer"), /SELF_APPROVAL_DENIED/);
 
     const legal = await db.query(
-      "insert into public.bridge_legal_cases(title_id,status,evidence,reviewed_by,reviewed_at) values ($1,'APPROVED','[{\\"reference\\":\\"rights-doc-test\\"}]'::jsonb,'legal-1',now()) returning id",
-      ["synthetic-gate-test"],
+      "insert into public.bridge_legal_cases(title_id,status,evidence,reviewed_by,reviewed_at) values ($1,'APPROVED',$2::jsonb,'legal-1',now()) returning id",
+      ["synthetic-gate-test", JSON.stringify([{ reference: "rights-doc-test" }])],
     );
     await transition(db, "LEGAL", "legal-1", "legal_reviewer");
 
     const grant = await db.query(
-      "insert into public.bridge_rights_grants(title_id,status,evidence,window_start,window_end) values ($1,'VALID','[{\\"reference\\":\\"grant-test\\"}]'::jsonb,now()-interval '1 day',now()+interval '1 day') returning id",
-      ["synthetic-gate-test"],
+      "insert into public.bridge_rights_grants(title_id,status,evidence,window_start,window_end) values ($1,'VALID',$2::jsonb,now()-interval '1 day',now()+interval '1 day') returning id",
+      ["synthetic-gate-test", JSON.stringify([{ reference: "grant-test" }])],
     );
     await transition(db, "LICENSE", "legal-1", "legal_reviewer");
 
@@ -153,10 +147,9 @@ test("complete synthetic gate flow requires independent QC/legal and explicit pu
     );
     await transition(db, "DISTRIBUTION", "admin-1", "admin");
 
-    await db.query(`
-      insert into public.loop_titles(id,bridge_title_id,published,listed,status)
-      values ('loop-synthetic-gate-test','synthetic-gate-test',true,true,'approved')
-    `);
+    await db.query(
+      "insert into public.loop_titles(id,bridge_title_id,published,listed,status) values ('loop-synthetic-gate-test','synthetic-gate-test',true,true,'approved')",
+    );
     await db.query(
       "insert into public.bridge_loop_publications(bridge_title_id,loop_title_id,authorization_status,approved_by,approved_at,window_start,window_end) values ($1,$2,'authorized','admin-1',now(),now()-interval '1 day',now()+interval '1 day')",
       ["synthetic-gate-test", "loop-synthetic-gate-test"],
@@ -174,7 +167,7 @@ test("complete synthetic gate flow requires independent QC/legal and explicit pu
     );
     assert.equal(state.rows[0].current_gate, "REVENUE");
     const audit = await db.query(
-      "select to_gate from public.bridge_gate_audit_trail where title_id=$1 order by created_at, to_gate",
+      "select to_gate from public.bridge_gate_audit_trail where title_id=$1",
       ["synthetic-gate-test"],
     );
     assert.equal(audit.rows.length, 8);
