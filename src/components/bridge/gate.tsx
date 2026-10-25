@@ -102,11 +102,10 @@ export function RequireBridge({
 
   const profileFields = profile as unknown as Record<string, unknown>;
   const rawRole = profile.internalRole || profileFields.internal_access || profileFields.role || "";
-  const privilegedRolesRaw = ["super_admin", "super admin", "admin", "internal_admin", "internal admin", "superadmin"];
-  const normalizedCheck = (role: unknown) => String(role ?? "").toLowerCase().replace(/[\s_-]+/g, "_").trim();
+  const privilegedRolesRaw = ["super_admin", "super admin", "admin", "internal_admin", "internal admin", "superadmin", "founder", "owner"];
+  const normalizedCheck = (role: unknown) => String(role ?? "").toLowerCase().replace(/[\s_\-]+/g, "_").trim();
   const normalizedRole = normalizedCheck(rawRole);
-  const privileged = ["super_admin", "admin", "internal_admin"].includes(normalizedRole) ||
-    privilegedRolesRaw.map(normalizedCheck).includes(normalizedRole);
+  const privileged = privilegedRolesRaw.map(normalizedCheck).includes(normalizedRole);
 
   // Privileged read-only access for super_admin — no checkout/order/entitlement mutation
   // The generic title workspace remains permission-gated for normal accounts.
