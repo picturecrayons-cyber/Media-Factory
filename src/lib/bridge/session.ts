@@ -151,7 +151,7 @@ export const getBridgeSession = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     assertNotDevUser(context.userId);
     try {
-      let actor = await loadActor(context.userId);
+      const actor = await loadActor(context.userId);
       if (!actor) {
         return { userId: context.userId, profile: null, home: "/onboarding" };
       }
