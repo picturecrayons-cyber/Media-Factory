@@ -110,6 +110,12 @@ export const completeOnboarding = createServerFn({ method: "POST" })
       return { home: workspaceHome(existing), profile: existing };
     }
 
+    // Investor workspaces require a reviewed access request. Do not rely on the
+    // public client role selector to enforce this boundary.
+    if (data.accountType === "investor") {
+      throw new Error("Investor access requires a reviewed access request.");
+    }
+
     const email = context.userEmail;
     if (!email) throw new Error("Account email is required from Supabase session");
     const verified = true;

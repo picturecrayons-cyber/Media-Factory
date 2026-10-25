@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { RedirectToSignIn } from "@/lib/auth/gates";
@@ -9,6 +9,7 @@ import { getBridgeSession } from "@/lib/bridge/session";
 import { retryWorkspaceSession } from "@/lib/auth/workspace-session-retry";
 import { supabase } from "@/lib/supabase";
 import { ACCOUNT_TYPES } from "@/lib/bridge/types";
+import { publicAccountTypeFrom } from "@/lib/auth/public-account-type";
 import { BRIDGE_LOOP_LANES } from "@/lib/bridge/loop-lanes";
 import { publicOnboardingError } from "@/lib/bridge/onboarding-errors";
 import { BrandMark } from "@/components/bridge/shell";
@@ -131,6 +132,16 @@ function Onboarding() {
   const submitInFlight = useRef(false);
   const [retrying, setRetrying] = useState(false);
 
+  // Preserve the role chosen during signup instead of silently defaulting
+  // every new account to Creator when onboarding opens.
+  const signupAccountTypeHint = user?.signupAccountTypeHint;
+  const signupAccountType = publicAccountTypeFrom(signupAccountTypeHint);
+  const unsupportedSignupRole = Boolean(signupAccountTypeHint && !signupAccountType);
+
+  useEffect(() => {
+    if (signupAccountType) setAccountType(signupAccountType);
+  }, [signupAccountType]);
+
   const home = sessionQ.data?.profile ? sessionQ.data.home : null;
 
   useEffect(() => {
@@ -205,6 +216,10 @@ function Onboarding() {
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
+    if (unsupportedSignupRole) {
+      setError("This account type needs an invitation or support review. Please contact Crayons Bridge before continuing.");
+      return;
+    }
     if (submitInFlight.current) return;
     submitInFlight.current = true;
     setBusy(true);
@@ -295,6 +310,11 @@ function Onboarding() {
             <h2 className="font-display text-xl font-semibold">1. Account</h2>
             <p className="mt-1 text-xs text-muted">Legal owner: StreamVista OPC Pvt Ltd. Product: Crayons Bridge.</p>
           </div>
+          {unsupportedSignupRole ? (
+            <div role="alert" className="mb-4 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-fg">
+              This signup link contains a role that is not available through public onboarding. No role has been granted. <Link to="/contact" className="font-semibold underline">Contact Bridge</Link> to request the correct workspace.
+            </div>
+          ) : null}
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="text-sm font-medium">Your name *
               <input required value={displayName} onChange={(e) => setDisplayName(e.target.value)} autoComplete="name" className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5" />
