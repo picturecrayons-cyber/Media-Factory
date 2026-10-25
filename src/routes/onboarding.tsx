@@ -174,7 +174,7 @@ function Onboarding() {
             Your account is signed in, but it is not linked to a Bridge profile. No profile or role has been created.
             Contact support so your identity can be reviewed safely.
           </p>
-          {user.email ? <p className="text-sm text-muted">Signed in as <span className="font-medium text-fg">{user.email}</span></p> : null}
+          {user.primaryEmail ? <p className="text-sm text-muted">Signed in as <span className="font-medium text-fg">{user.primaryEmail}</span></p> : null}
           {error ? <p role="alert" className="text-sm text-accent">{error}</p> : null}
           <div className="flex flex-col gap-3 sm:flex-row">
             <Button type="button" className="w-full" onClick={() => void navigate({ to: "/contact", search: { reason: "missing-profile" } as any })}>
