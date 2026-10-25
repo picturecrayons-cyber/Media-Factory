@@ -1,4 +1,9 @@
 trigger preview deployment
+requested_at: 2026-10-25
+trigger: force redeploy 8c29cccde624d3c2d39bf143155dccc347f95e68
+source_branch: fix/ui-cleanup-navigation-performance
+parent_head: 8c29cccde624d3c2d39bf143155dccc347f95e68
+trigger_commit_sha: this commit (see GitHub commit URL)
 baseline: 623c5add83b11baa43fc12855129b08de9d12597
 purpose: get Preview URL for buyer desk redirect reproduction
 no-db-change, no-migration-0021, no-title-change, no-oci, no-payment
