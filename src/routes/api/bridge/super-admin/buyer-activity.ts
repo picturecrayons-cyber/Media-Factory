@@ -107,7 +107,7 @@ export const Route = createFileRoute("/api/bridge/super-admin/buyer-activity")({
               ") watch on true",
               "order by bp.display_name",
               "limit 500",
-            ].join("\\n"),
+            ].join("\n"),
             [titleId],
           );
 
