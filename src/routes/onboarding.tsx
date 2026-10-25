@@ -108,8 +108,8 @@ function Onboarding() {
     metadata?.role ||
     ""
   ).toString().toLowerCase();
-  const normalized = rawRole.replace(/[\s_-]+/g, "_").trim();
-  const privilegedRoles = ["super_admin", "admin", "internal_admin", "superadmin"];
+  const normalized = rawRole.replace(/[\s_\-]+/g, "_").trim();
+  const privilegedRoles = ["super_admin", "admin", "internal_admin", "superadmin", "founder", "owner"];
   const isPrivileged = privilegedRoles.includes(normalized);
   const orgName = (
     profile?.organizationName ||
@@ -119,7 +119,7 @@ function Onboarding() {
     metadata?.organization_name ||
     ""
   ).toString().toLowerCase();
-  const isStreamVista = orgName.includes("streamvista");
+  const isStreamVista = orgName.includes("streamvista") || orgName.includes("crayons");
   const organizationTitlesQ = useQuery({
     queryKey: ["bridge-onboarding-existing-organization-titles", profile?.userId],
     queryFn: () => listTitles(),
@@ -177,19 +177,25 @@ function Onboarding() {
   const hasTitles = (organizationTitlesQ.data?.titles.length || 33) > 0;
   const hasExistingOrganizationTitles = isStreamVista && hasTitles;
 
+  const isLoading = isPending || Boolean(user && sessionQ.isPending);
+
   useEffect(() => {
-    // FIX: Handle both super_admin and super admin space — super_admin already has 33 titles — onboarding for new creators only — redirect privileged to dashboard — prevent intake render
-    if (isPrivileged || (isStreamVista && hasTitles)) {
+    // Founder/internal StreamVista accounts belong in the dashboard; public intake is only for external creators.
+    if (isLoading) return;
+    if (user && (isPrivileged || isStreamVista)) {
       void navigate({ to: "/dashboard", replace: true });
       return;
     }
-    if (home) goHome(home, navigate);
-  }, [hasTitles, home, isPrivileged, isStreamVista, navigate]);
+    if (profile && home) goHome(home, navigate);
+  }, [home, isLoading, isPrivileged, isStreamVista, navigate, profile, user]);
 
-  if (isPending || (user && sessionQ.isPending) || home || isPrivileged || hasExistingOrganizationTitles) {
-    return <main className="grid min-h-screen place-items-center bg-bg p-6"><p className="text-sm text-muted">{home ? "Opening workspace…" : "Loading Bridge…"}</p></main>;
+  if (isPending) {
+    return <main className="grid min-h-screen place-items-center bg-bg p-6"><p className="text-sm text-muted">Loading Crayons Bridge — checking access…</p></main>;
   }
   if (!user) return <RedirectToSignIn />;
+  if (isLoading || !profile || home || isPrivileged || isStreamVista || hasExistingOrganizationTitles) {
+    return <main className="grid min-h-screen place-items-center bg-bg p-6"><p className="text-sm text-muted">{isLoading || !profile ? "Loading Crayons Bridge — checking access…" : "Opening workspace…"}</p></main>;
+  }
 
   if (submittedTitleId) {
     return (
