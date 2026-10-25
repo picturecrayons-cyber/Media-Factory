@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createAPIFileRoute } from "@tanstack/start/api";
 import { getSessionUser } from "@/lib/auth/verify.server";
 import { requireVerifiedActor } from "@/lib/bridge/session";
 import { assertNotDevUser } from "@/lib/bridge/guards";
@@ -11,7 +11,7 @@ function errorResponse(message: string, status: number) {
   return Response.json({ error: message }, { status, headers: { "Cache-Control": "no-store" } });
 }
 
-export const Route = createFileRoute("/api/bridge/super-admin/verify")({
+export const APIRoute = createAPIFileRoute("/bridge/super-admin/verify")({
   server: {
     handlers: {
       POST: async ({ request }) => {

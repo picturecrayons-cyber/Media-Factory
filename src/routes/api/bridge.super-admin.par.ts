@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createAPIFileRoute } from "@tanstack/start/api";
 import { randomBytes } from "node:crypto";
 import { getSessionUser } from "@/lib/auth/verify.server";
 import { requireVerifiedActor } from "@/lib/bridge/session";
@@ -33,7 +33,7 @@ async function superAdmin(request: Request) {
   return { user, actor } as const;
 }
 
-export const Route = createFileRoute("/api/bridge/super-admin/par")({
+export const APIRoute = createAPIFileRoute("/bridge/super-admin/par")({
   server: {
     handlers: {
       POST: async ({ request }) => {
