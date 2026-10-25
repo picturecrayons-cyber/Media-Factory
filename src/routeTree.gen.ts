@@ -37,11 +37,14 @@ import { Route as WorkspaceRouteImport } from './routes/workspace'
 import { Route as AdminWorkstationsRouteImport } from './routes/admin/workstations'
 import { Route as AuthCallbackRouteImport } from './routes/auth/callback'
 import { Route as AuthConfirmRouteImport } from './routes/auth/confirm'
+import { Route as SuperAdminBuyersRouteImport } from './routes/super-admin/buyers'
 import { Route as TitleIdRouteImport } from './routes/title.$id'
 import { Route as ApiA2aIndexRouteImport } from './routes/api/a2a/index'
 import { Route as ApiA2aAgentCardRouteImport } from './routes/api/a2a/agent-card'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as ApiRazorpayWebhookRouteImport } from './routes/api/razorpay/webhook'
+import { Route as ApiBridgeSuperAdminBuyerActivityRouteImport } from './routes/api/bridge/super-admin/buyer-activity'
+import { Route as ApiBridgeSuperAdminBuyersRouteImport } from './routes/api/bridge/super-admin/buyers'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -183,6 +186,11 @@ const AuthConfirmRoute = AuthConfirmRouteImport.update({
   path: '/auth/confirm',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SuperAdminBuyersRoute = SuperAdminBuyersRouteImport.update({
+  id: '/super-admin/buyers',
+  path: '/super-admin/buyers',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const TitleIdRoute = TitleIdRouteImport.update({
   id: '/title/$id',
   path: '/title/$id',
@@ -208,6 +216,18 @@ const ApiRazorpayWebhookRoute = ApiRazorpayWebhookRouteImport.update({
   path: '/api/razorpay/webhook',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiBridgeSuperAdminBuyerActivityRoute =
+  ApiBridgeSuperAdminBuyerActivityRouteImport.update({
+    id: '/api/bridge/super-admin/buyer-activity',
+    path: '/api/bridge/super-admin/buyer-activity',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiBridgeSuperAdminBuyersRoute =
+  ApiBridgeSuperAdminBuyersRouteImport.update({
+    id: '/api/bridge/super-admin/buyers',
+    path: '/api/bridge/super-admin/buyers',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -238,11 +258,14 @@ export interface FileRoutesByFullPath {
   '/admin/workstations': typeof AdminWorkstationsRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/auth/confirm': typeof AuthConfirmRoute
+  '/super-admin/buyers': typeof SuperAdminBuyersRoute
   '/title/$id': typeof TitleIdRoute
   '/api/a2a/agent-card': typeof ApiA2aAgentCardRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/razorpay/webhook': typeof ApiRazorpayWebhookRoute
   '/api/a2a/': typeof ApiA2aIndexRoute
+  '/api/bridge/super-admin/buyer-activity': typeof ApiBridgeSuperAdminBuyerActivityRoute
+  '/api/bridge/super-admin/buyers': typeof ApiBridgeSuperAdminBuyersRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -273,11 +296,14 @@ export interface FileRoutesByTo {
   '/admin/workstations': typeof AdminWorkstationsRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/auth/confirm': typeof AuthConfirmRoute
+  '/super-admin/buyers': typeof SuperAdminBuyersRoute
   '/title/$id': typeof TitleIdRoute
   '/api/a2a/agent-card': typeof ApiA2aAgentCardRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/razorpay/webhook': typeof ApiRazorpayWebhookRoute
   '/api/a2a': typeof ApiA2aIndexRoute
+  '/api/bridge/super-admin/buyer-activity': typeof ApiBridgeSuperAdminBuyerActivityRoute
+  '/api/bridge/super-admin/buyers': typeof ApiBridgeSuperAdminBuyersRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -309,11 +335,14 @@ export interface FileRoutesById {
   '/admin/workstations': typeof AdminWorkstationsRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/auth/confirm': typeof AuthConfirmRoute
+  '/super-admin/buyers': typeof SuperAdminBuyersRoute
   '/title/$id': typeof TitleIdRoute
   '/api/a2a/agent-card': typeof ApiA2aAgentCardRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/razorpay/webhook': typeof ApiRazorpayWebhookRoute
   '/api/a2a/': typeof ApiA2aIndexRoute
+  '/api/bridge/super-admin/buyer-activity': typeof ApiBridgeSuperAdminBuyerActivityRoute
+  '/api/bridge/super-admin/buyers': typeof ApiBridgeSuperAdminBuyersRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -346,11 +375,14 @@ export interface FileRouteTypes {
     | '/admin/workstations'
     | '/auth/callback'
     | '/auth/confirm'
+    | '/super-admin/buyers'
     | '/title/$id'
     | '/api/a2a/agent-card'
     | '/api/auth/$'
     | '/api/razorpay/webhook'
     | '/api/a2a/'
+    | '/api/bridge/super-admin/buyer-activity'
+    | '/api/bridge/super-admin/buyers'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -381,11 +413,14 @@ export interface FileRouteTypes {
     | '/admin/workstations'
     | '/auth/callback'
     | '/auth/confirm'
+    | '/super-admin/buyers'
     | '/title/$id'
     | '/api/a2a/agent-card'
     | '/api/auth/$'
     | '/api/razorpay/webhook'
     | '/api/a2a'
+    | '/api/bridge/super-admin/buyer-activity'
+    | '/api/bridge/super-admin/buyers'
   id:
     | '__root__'
     | '/'
@@ -416,11 +451,14 @@ export interface FileRouteTypes {
     | '/admin/workstations'
     | '/auth/callback'
     | '/auth/confirm'
+    | '/super-admin/buyers'
     | '/title/$id'
     | '/api/a2a/agent-card'
     | '/api/auth/$'
     | '/api/razorpay/webhook'
     | '/api/a2a/'
+    | '/api/bridge/super-admin/buyer-activity'
+    | '/api/bridge/super-admin/buyers'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -451,11 +489,14 @@ export interface RootRouteChildren {
   WorkspaceRoute: typeof WorkspaceRoute
   AuthCallbackRoute: typeof AuthCallbackRoute
   AuthConfirmRoute: typeof AuthConfirmRoute
+  SuperAdminBuyersRoute: typeof SuperAdminBuyersRoute
   TitleIdRoute: typeof TitleIdRoute
   ApiA2aAgentCardRoute: typeof ApiA2aAgentCardRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiRazorpayWebhookRoute: typeof ApiRazorpayWebhookRoute
   ApiA2aIndexRoute: typeof ApiA2aIndexRoute
+  ApiBridgeSuperAdminBuyerActivityRoute: typeof ApiBridgeSuperAdminBuyerActivityRoute
+  ApiBridgeSuperAdminBuyersRoute: typeof ApiBridgeSuperAdminBuyersRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -656,6 +697,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthConfirmRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/super-admin/buyers': {
+      id: '/super-admin/buyers'
+      path: '/super-admin/buyers'
+      fullPath: '/super-admin/buyers'
+      preLoaderRoute: typeof SuperAdminBuyersRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/title/$id': {
       id: '/title/$id'
       path: '/title/$id'
@@ -689,6 +737,20 @@ declare module '@tanstack/react-router' {
       path: '/api/razorpay/webhook'
       fullPath: '/api/razorpay/webhook'
       preLoaderRoute: typeof ApiRazorpayWebhookRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/bridge/super-admin/buyer-activity': {
+      id: '/api/bridge/super-admin/buyer-activity'
+      path: '/api/bridge/super-admin/buyer-activity'
+      fullPath: '/api/bridge/super-admin/buyer-activity'
+      preLoaderRoute: typeof ApiBridgeSuperAdminBuyerActivityRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/bridge/super-admin/buyers': {
+      id: '/api/bridge/super-admin/buyers'
+      path: '/api/bridge/super-admin/buyers'
+      fullPath: '/api/bridge/super-admin/buyers'
+      preLoaderRoute: typeof ApiBridgeSuperAdminBuyersRouteImport
       parentRoute: typeof rootRouteImport
     }
   }
@@ -732,11 +794,14 @@ const rootRouteChildren: RootRouteChildren = {
   WorkspaceRoute: WorkspaceRoute,
   AuthCallbackRoute: AuthCallbackRoute,
   AuthConfirmRoute: AuthConfirmRoute,
+  SuperAdminBuyersRoute: SuperAdminBuyersRoute,
   TitleIdRoute: TitleIdRoute,
   ApiA2aAgentCardRoute: ApiA2aAgentCardRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiRazorpayWebhookRoute: ApiRazorpayWebhookRoute,
   ApiA2aIndexRoute: ApiA2aIndexRoute,
+  ApiBridgeSuperAdminBuyerActivityRoute: ApiBridgeSuperAdminBuyerActivityRoute,
+  ApiBridgeSuperAdminBuyersRoute: ApiBridgeSuperAdminBuyersRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
