@@ -68,7 +68,13 @@ test("shared title workspace has an explicit role gate and Studio list scope", (
   const titles = read("./titles.ts");
   const rbac = read("./rbac.ts");
   assert.match(workspace, /<RequireBridge allow="workspace">/);
-  assert.match(gate, /allow === "workspace" && !canAccessTitleWorkspace\(profile\)/);
+  // The canonical role model is six roles; super_admin is read-only on buyer/workspace.
+  assert.match(gate, /const normalizedRole = normalizeRole\(profile\.internalRole \?\? ""\)/);
+  assert.match(gate, /isSuperAdminReadOnlySurface\(profile\.internalRole/);
+  assert.match(gate, /allow === "workspace" && !privileged && !canAccessTitleWorkspace\(profile\)/);
+  const types = read("./types.ts");
+  assert.match(types, /"admin",[\s\S]*"super_admin",[\s\S]*"qc_reviewer",[\s\S]*"legal_reviewer",[\s\S]*"finance",[\s\S]*"viewer"/);
+  assert.doesNotMatch(types, /internal_admin/);
   assert.match(rbac, /export function canAccessTitleWorkspace\(actor: Actor\)/);
   assert.match(titles, /bridge_organization_memberships/);
   assert.match(titles, /owner_organization_id = \$\{orgId\}/);

@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { isSuperAdminReadOnlySurface } from "./super-admin-readonly";
 import { z } from "zod";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql, type Sql } from "@/lib/db";
@@ -60,6 +61,9 @@ export const submitLoopLicense = createServerFn({ method: "POST" })
   .validator(loopLicenseInput)
   .handler(async ({ context, data }) => {
     const actor = await requireVerifiedActor(context.userId);
+    if (isSuperAdminReadOnlySurface(actor.internalRole ?? undefined, "workspace")) {
+      throw new Error("Super admin is read-only on the workspace surface");
+    }
     return (await getSql()).transaction((tx) => saveLoopLicense(tx, actor, data));
   });
 
@@ -136,6 +140,9 @@ export const reviewTitleWorkflow = createServerFn({ method: "POST" })
   .validator(reviewInput)
   .handler(async ({ context, data }) => {
     const actor = await requireVerifiedActor(context.userId);
+    if (isSuperAdminReadOnlySurface(actor.internalRole ?? undefined, "workspace")) {
+      throw new Error("Super admin is read-only on the workspace surface");
+    }
     return (await getSql()).transaction((tx) => reviewWorkflow(tx, actor, data));
   });
 

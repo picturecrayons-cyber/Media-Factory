@@ -7,6 +7,8 @@ import { supabase } from "@/lib/supabase";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { getBridgeSession, type BridgeActor } from "@/lib/bridge/session";
 import { canAccessTitleWorkspace } from "@/lib/bridge/rbac";
+import { isSuperAdminReadOnlySurface, normalizeRole } from "@/lib/bridge/super-admin-readonly";
+export { isSuperAdminReadOnlySurface, normalizeRole } from "@/lib/bridge/super-admin-readonly";
 import { requestEmailVerification } from "@/lib/bridge/profiles";
 import { Button } from "@/components/ui/button";
 import { BrandMark } from "./shell";
@@ -26,8 +28,8 @@ export function RequireBridge({
   children,
   allow,
 }: {
-  children: (actor: BridgeActor) => ReactNode;
-  allow?: "creator" | "studio" | "buyer" | "investor" | "internal" | "super_admin" | "workspace";
+  children: (actor: BridgeActor, access: { readOnly: boolean }) => ReactNode;
+  allow?: "creator" | "studio" | "buyer" | "investor" | "reviewer" | "internal" | "super_admin" | "workspace";
 }) {
   const qc = useQueryClient();
   const [retrying, setRetrying] = useState(false);
@@ -100,21 +102,31 @@ export function RequireBridge({
   const profile = sessionQ.data?.profile ?? null;
   if (!profile) return <Navigate to="/onboarding" />;
 
-  // The generic title workspace is not a public catalog. Only Creator/Studio
-  // accounts and internal roles with explicit catalog-read permission may enter.
-  if (allow === "workspace" && !canAccessTitleWorkspace(profile)) {
+  // Privileged access requires an authoritative Bridge profile role and verified email.
+  // Do not grant access from metadata, organization names, or founder/owner labels.
+  const normalizedRole = normalizeRole(profile.internalRole ?? "");
+  const privileged =
+    (normalizedRole === "super_admin" || normalizedRole === "admin") &&
+    profile.emailVerified === true;
+
+  // Privileged read-only access for super_admin — no checkout/order/entitlement mutation
+  // The generic title workspace remains permission-gated for normal accounts.
+  if (allow === "workspace" && !privileged && !canAccessTitleWorkspace(profile)) {
     return <Navigate to={sessionQ.data?.home ?? "/"} />;
   }
 
-  // Role gates are authoritative for role-specific workspaces:
-  // creator/studio/buyer/investor accounts are valid Bridge users and must not be
-  // blocked by the internal-operator gate. Internal surfaces remain protected
-  // by the explicit "internal"/"super_admin" allow checks above.
-  if (allow === "super_admin" && profile.internalRole !== "super_admin") return <Navigate to={sessionQ.data?.home ?? "/"} />;
-  if (allow === "internal" && !profile.internalRole) return <Navigate to={sessionQ.data?.home ?? "/"} />;
-  if (allow && allow !== "internal" && allow !== "super_admin" && (profile.internalRole || profile.accountType !== (
+  // Normal accounts retain their existing role/account-type checks. Privileged
+  // operators may inspect each workspace; buyer routes receive explicit readOnly
+  // context so payment/order actions can be withheld by the UI.
+  if (!privileged && allow === "super_admin" && profile.internalRole !== "super_admin") {
+    return <Navigate to={sessionQ.data?.home ?? "/"} />;
+  }
+  if (!privileged && allow === "internal" && !profile.internalRole) {
+    return <Navigate to={sessionQ.data?.home ?? "/"} />;
+  }
+  if (allow && allow !== "internal" && allow !== "super_admin" && !privileged && profile.accountType !== (
     allow === "creator" ? "independent_creator" : allow
-  ))) {
+  )) {
     return <Navigate to={sessionQ.data?.home ?? "/"} />;
   }
 
@@ -147,5 +159,5 @@ export function RequireBridge({
     );
   }
 
-  return <>{children(profile)}</>;
+  return <>{children(profile, { readOnly: profile.emailVerified === true && isSuperAdminReadOnlySurface(profile.internalRole ?? undefined, allow ?? "") })}</>;
 }

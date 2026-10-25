@@ -49,19 +49,19 @@ function loadRazorpay(): Promise<RzCtor> {
 function Buyer() {
   return (
     <RequireBridge allow="buyer">
-      {(actor) => (
+      {(actor, access) => (
         <BridgeShell actor={actor} title="Buyer dashboard">
           <p className="mb-6 max-w-2xl text-sm leading-relaxed text-muted">
             Discover licensing-ready titles, open a listing, then license only after captured payment.
           </p>
-          <BuyerBody />
+          <BuyerBody readOnly={access.readOnly} />
         </BridgeShell>
       )}
     </RequireBridge>
   );
 }
 
-function BuyerBody() {
+function BuyerBody({ readOnly }: { readOnly: boolean }) {
   const qc = useQueryClient();
   const [tab, setTab] = useState<"discover" | "listing" | "licenses">("discover");
   const [query, setQuery] = useState("");
@@ -73,6 +73,7 @@ function BuyerBody() {
   const entitled = new Set(entQ.data?.entitlements.map((e) => e.titleId));
   const order = useMutation({
     mutationFn: async (titleId: string) => {
+      if (readOnly) throw new Error("Privileged buyer desk is read-only; order creation is disabled.");
       const created = await createLicenseOrder({
         data: { titleId, idempotencyKey: `lic-${titleId}-${Date.now()}` },
       });
@@ -122,6 +123,11 @@ function BuyerBody() {
 
   return (
     <div className="space-y-5">
+      {readOnly ? (
+        <div role="status" className="rounded-sm border border-accent px-4 py-3 text-sm text-accent">
+          Super Admin · Read-only view — No checkout, no order creation, no entitlement mutation
+        </div>
+      ) : null}
       <div className="grid gap-3 sm:grid-cols-3">
         <Stat label="Discover" value={String(titles.length)} note="Live for buyers" />
         <Stat label="Listing" value={String(visible.length)} note="Matching this search" />
@@ -140,9 +146,9 @@ function BuyerBody() {
       {!titles.length ? (
         <p className="text-sm text-muted">No live titles yet. Nothing is for sale until licensing-ready clears.</p>
       ) : tab === "licenses" ? (
-        <TitleList titles={licensed} entitled={entitled} order={order} empty="No licenses yet. Discover a title and complete payment." />
+        <TitleList titles={licensed} entitled={entitled} order={order} readOnly={readOnly} empty="No licenses yet. Discover a title and complete payment." />
       ) : (
-        <TitleList titles={visible} entitled={entitled} order={order} empty="No titles match this search." />
+        <TitleList titles={visible} entitled={entitled} order={order} readOnly={readOnly} empty="No titles match this search." />
       )}
     </div>
   );
@@ -158,7 +164,7 @@ function Stat({ label, value, note }: { label: string; value: string; note: stri
   );
 }
 
-function TitleList({ titles, entitled, order, empty }: { titles: Array<{ id: string; name: string; language: string; licensingFeePaise: number; status: string }>; entitled: Set<string>; order: { isPending: boolean; mutate: (id: string) => void }; empty: string }) {
+function TitleList({ titles, entitled, order, readOnly, empty }: { titles: Array<{ id: string; name: string; language: string; licensingFeePaise: number; status: string }>; entitled: Set<string>; order: { isPending: boolean; mutate: (id: string) => void }; readOnly: boolean; empty: string }) {
   if (!titles.length) return <p className="text-sm text-muted">{empty}</p>;
   return (
     <ul className="divide-y divide-line rounded-sm border border-line">
@@ -170,7 +176,7 @@ function TitleList({ titles, entitled, order, empty }: { titles: Array<{ id: str
           </div>
           <div className="flex items-center gap-3">
             <StatusChip status={t.status as never} />
-            {entitled.has(t.id) ? <span className="text-sm text-accent">Licensed</span> : <Button disabled={order.isPending || t.licensingFeePaise <= 0} onClick={() => order.mutate(t.id)}>License</Button>}
+            {entitled.has(t.id) ? <span className="text-sm text-accent">Licensed</span> : readOnly ? null : <Button disabled={order.isPending || t.licensingFeePaise <= 0} onClick={() => order.mutate(t.id)}>License</Button>}
           </div>
         </li>
       ))}

@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { isSuperAdminReadOnlySurface } from "./super-admin-readonly";
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { authMiddleware } from "@/lib/auth/middleware";
@@ -341,6 +342,9 @@ export const authorizeLoopPublication = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
+    if (isSuperAdminReadOnlySurface(actor.internalRole ?? undefined, "workspace")) {
+      throw new Error("Super admin is read-only on the workspace surface");
+    }
     assertPermission(actor, "loop.publish");
 
     if (
@@ -459,6 +463,9 @@ export const suspendLoopPublication = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
+    if (isSuperAdminReadOnlySurface(actor.internalRole ?? undefined, "workspace")) {
+      throw new Error("Super admin is read-only on the workspace surface");
+    }
     assertPermission(actor, "loop.revoke");
     return (await getSql()).transaction(async (sql) => {
       const pubs = await sql<{ loop_title_id: string }>`
@@ -499,6 +506,9 @@ export const revokeLoopPublication = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
+    if (isSuperAdminReadOnlySurface(actor.internalRole ?? undefined, "workspace")) {
+      throw new Error("Super admin is read-only on the workspace surface");
+    }
     assertPermission(actor, "loop.revoke");
     return (await getSql()).transaction(async (sql) => {
       const pubs = await sql<{ loop_title_id: string }>`
@@ -543,6 +553,9 @@ export const extendDistributionWindow = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
+    if (isSuperAdminReadOnlySurface(actor.internalRole ?? undefined, "workspace")) {
+      throw new Error("Super admin is read-only on the workspace surface");
+    }
     assertPermission(actor, "loop.publish");
     return (await getSql()).transaction(async (sql) => {
       const pubs = await sql<{

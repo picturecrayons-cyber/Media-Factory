@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { isSuperAdminReadOnlySurface } from "./super-admin-readonly";
 import { z } from "zod";
 import { createHash, randomBytes } from "node:crypto";
 import { authMiddleware } from "@/lib/auth/middleware";
@@ -169,6 +170,9 @@ export const createLicenseOrder = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
+    if (isSuperAdminReadOnlySurface(actor.internalRole ?? undefined, "buyer")) {
+      throw new Error("Super admin is read-only on the buyer surface");
+    }
     assertPermission(actor, "payment.create_order");
     const title = await loadTitle(data.titleId);
     if (!title || (!canReadTitle(actor, title) && actor.accountType !== "buyer")) throw new Error("Not found");
@@ -300,6 +304,9 @@ export const verifyLicensePayment = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
+    if (isSuperAdminReadOnlySurface(actor.internalRole ?? undefined, "buyer")) {
+      throw new Error("Super admin is read-only on the buyer surface");
+    }
     const { keySecret } = requireRazorpayKeys();
     const ok = verifyRazorpaySignature({
       secret: keySecret,

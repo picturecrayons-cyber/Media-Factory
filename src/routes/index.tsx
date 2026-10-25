@@ -1,6 +1,5 @@
 import { createFileRoute, Link, Navigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { BrandMark } from "@/components/bridge/shell";
 import { Button } from "@/components/ui/button";
 import { SignedOut } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
@@ -54,7 +53,7 @@ function Home() {
   if (isPending || (user && sessionQ.isPending)) {
     return (
       <main className="grid min-h-screen place-items-center bg-bg p-6">
-        <p className="text-sm text-muted">Opening workspace…</p>
+        <p className="text-sm text-gray-400">Opening workspace…</p>
       </main>
     );
   }
@@ -65,17 +64,19 @@ function Home() {
   }
 
   return (
-    <div className="min-h-screen bg-white text-fg antialiased selection:bg-accent/20 selection:text-fg">
-      <header className="sticky top-0 z-50 border-b border-line bg-white/95 backdrop-blur-md">
+    <div className="min-h-screen bg-[#0a0a0a] text-white antialiased selection:bg-amber-500/30 selection:text-white">
+      <header className="sticky top-0 z-50 border-b border-[#1a1a1a] bg-[#0a0a0a]/95 backdrop-blur-md">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-5 px-5 py-3.5 sm:px-6 lg:px-8">
-          <div className="flex min-w-0 items-center gap-6 lg:gap-8">
-            <BrandMark />
-          </div>
+          <Link to="/" aria-label="Crayons Bridge home" className="flex items-center gap-3">
+            <img src="/logo/crayons-bridge-logo-3d.png" width={32} height={32} alt="" className="h-8 w-8 object-contain" />
+            <span className="text-sm font-semibold tracking-wide text-white">Crayons Bridge</span>
+          </Link>
 
           <div className="flex items-center gap-3 text-sm">
             <SignedOut>
+              <Link to="/login" className="rounded-full px-4 py-2 text-sm font-medium text-gray-300 hover:text-white">Sign in</Link>
               <Link to="/signup">
-                <Button size="sm" className="rounded-full px-4 py-1.5 text-xs font-semibold shadow-xs">
+                <Button size="sm" className="rounded-full border border-amber-400 bg-amber-500 px-4 py-1.5 text-xs font-semibold text-black hover:bg-amber-400">
                   Create account
                 </Button>
               </Link>
@@ -85,16 +86,13 @@ function Home() {
       </header>
 
       <main>
-        <section className="bridge-home-hero border-b border-line bg-white">
+        <section className="bridge-home-hero border-b border-[#1a1a1a] bg-[#0a0a0a]">
           <div className="mx-auto max-w-7xl px-5 py-14 text-center sm:px-6 sm:py-16 lg:py-20">
             <div className="mx-auto max-w-5xl">
-              <div className="mx-auto flex justify-center">
-                <BrandMark className="text-3xl sm:text-4xl lg:text-5xl" />
-              </div>
-              <h1 className="bridge-hero-copy mx-auto mt-8 max-w-4xl font-display text-[2.45rem] font-semibold leading-[1.02] tracking-[-0.04em] text-fg sm:text-5xl lg:text-[3.9rem]">
+                            <h1 className="bridge-hero-copy mx-auto mt-8 max-w-4xl font-display text-[2.45rem] font-semibold leading-[1.02] tracking-[-0.04em] text-white sm:text-5xl lg:text-[3.9rem]">
                 One bridge from content to market.
               </h1>
-              <p className="bridge-hero-subcopy mx-auto mt-4 max-w-2xl text-base leading-7 text-muted sm:text-lg">
+              <p className="bridge-hero-subcopy mx-auto mt-4 max-w-2xl text-base leading-7 text-gray-300 sm:text-lg">
                 Prepare. Protect. License. Deliver.
               </p>
 
@@ -104,29 +102,29 @@ function Home() {
                     Create account
                   </Button>
                 </Link>
-                <Link to="/login" className="px-2 text-sm font-semibold text-muted hover:text-fg transition-colors">Sign in</Link>
+                <Link to="/login" className="px-2 text-sm font-semibold text-gray-300 transition-colors hover:text-white">Sign in</Link>
               </div>
             </div>
           </div>
         </section>
 
-        <section id="how-it-works" className="border-b border-line bg-surface/50 py-10 sm:py-12">
+        <section id="how-it-works" className="border-b border-[#1a1a1a] bg-[#111111] py-10 sm:py-12">
           <div className="mx-auto max-w-7xl px-4 sm:px-6">
             <div className="max-w-2xl">
-              <h2 className="font-display text-3xl font-semibold tracking-tight text-fg sm:text-4xl">
+              <h2 className="font-display text-3xl font-semibold tracking-tight text-white sm:text-4xl">
                 From upload to delivery.
               </h2>
             </div>
 
-            <div className="mt-8 grid gap-px overflow-hidden rounded-2xl border border-line bg-line sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+            <div className="mt-8 grid gap-px overflow-hidden rounded-2xl border border-[#1a1a1a] bg-line sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
               {WORKFLOW_STEPS.map((step, idx) => (
                 <div
                   key={step.step}
-                  className="bridge-workflow-card flex min-h-40 flex-col justify-between bg-surface p-5"
+                  className="bridge-workflow-card flex min-h-40 flex-col justify-between bg-[#111111] p-5"
                 >
                   <div>
                     <div className="flex items-center justify-between">
-                      <span className="font-mono text-xs font-bold text-accent">{step.step}</span>
+                      <span className="font-mono text-xs font-bold text-amber-400">{step.step}</span>
                       {idx < WORKFLOW_STEPS.length - 1 ? (
                         <span className="hidden lg:inline text-faint text-xs">→</span>
                       ) : null}
@@ -142,7 +140,7 @@ function Home() {
           </div>
         </section>
 
-        <section id="creators" className="border-b border-line bg-surface py-14 sm:py-20">
+        <section id="creators" className="border-b border-[#1a1a1a] bg-[#0a0a0a] py-14 sm:py-20">
           <div className="mx-auto max-w-7xl px-4 sm:px-6">
             <div className="max-w-2xl">
               <h2 className="font-display text-3xl font-semibold tracking-tight text-fg sm:text-4xl">
@@ -151,7 +149,7 @@ function Home() {
             </div>
 
             <div className="mt-10 grid gap-6 lg:grid-cols-2 xl:grid-cols-4">
-              <div className="flex flex-col justify-between rounded-3xl border border-line bg-elevated p-7 sm:p-8">
+              <div className="flex flex-col justify-between rounded-2xl border border-[#1a1a1a] bg-[#111111] p-7 sm:p-8">
                 <div>
                   <h3 className="font-display text-2xl font-semibold text-fg">
                     Creators
@@ -164,7 +162,7 @@ function Home() {
                   <Link
                     to="/signup"
                     search={{ role: "creator" }}
-                    className="inline-flex items-center text-xs font-semibold text-accent hover:underline"
+                    className="inline-flex items-center text-xs font-semibold text-amber-400 hover:underline"
                   >
                     Start as Creator →
                   </Link>
@@ -240,7 +238,7 @@ function Home() {
           </div>
         </section>
 
-        <section className="border-b border-line bg-surface/50 py-12 sm:py-16">
+        <section className="border-b border-[#1a1a1a] bg-[#111111] py-12 sm:py-16">
           <div className="mx-auto max-w-7xl px-4 sm:px-6">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 rounded-2xl border border-line bg-surface p-6 sm:p-8">
               <div>
@@ -284,7 +282,7 @@ function Home() {
         </section>
       </main>
 
-      <footer className="bg-surface py-10 px-4 sm:px-6 text-xs text-muted">
+      <footer className="bg-[#0a0a0a] py-10 px-4 sm:px-6 text-xs text-gray-400">
         <div className="mx-auto max-w-7xl flex flex-col sm:flex-row items-center justify-between gap-4">
           <div>
             <span className="font-semibold text-fg">Crayons Bridge</span>

@@ -1,11 +1,12 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, redirect, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { RedirectToSignIn } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { completeOnboarding } from "@/lib/bridge/profiles";
-import { createTitle } from "@/lib/bridge/titles";
+import { createTitle, listTitles } from "@/lib/bridge/titles";
 import { getBridgeSession } from "@/lib/bridge/session";
+import { normalizeRole } from "@/lib/bridge/super-admin-readonly";
 import { retryWorkspaceSession } from "@/lib/auth/workspace-session-retry";
 import { supabase } from "@/lib/supabase";
 import { ACCOUNT_TYPES } from "@/lib/bridge/types";
@@ -15,7 +16,18 @@ import { publicOnboardingError } from "@/lib/bridge/onboarding-errors";
 import { BrandMark } from "@/components/bridge/shell";
 import { Button } from "@/components/ui/button";
 
-export const Route = createFileRoute("/onboarding")({ component: Onboarding });
+export const Route = createFileRoute("/onboarding")({
+  beforeLoad: async () => {
+    const session = await getBridgeSession();
+    if (
+      session.profile?.emailVerified === true &&
+      normalizeRole(session.profile.internalRole ?? "") === "super_admin"
+    ) {
+      throw redirect({ to: "/dashboard" });
+    }
+  },
+  component: Onboarding,
+});
 
 type PublicAccountType = "independent_creator" | "studio" | "buyer";
 
@@ -96,6 +108,15 @@ function Onboarding() {
     retryDelay: 500,
   });
 
+  const profile = sessionQ.data?.profile;
+  const isStreamVista = false;
+  const organizationTitlesQ = useQuery({
+    queryKey: ["bridge-onboarding-existing-organization-titles", profile?.userId],
+    queryFn: () => listTitles(),
+    enabled: Boolean(profile && isStreamVista),
+    retry: false,
+  });
+
   const [displayName, setDisplayName] = useState("");
   const [accountType, setAccountType] = useState<PublicAccountType>("independent_creator");
   const [organizationName, setOrganizationName] = useState("");
@@ -143,43 +164,25 @@ function Onboarding() {
   }, [signupAccountType]);
 
   const home = sessionQ.data?.profile ? sessionQ.data.home : null;
+  const hasTitles = (organizationTitlesQ.data?.titles.length || 33) > 0;
+  const hasExistingOrganizationTitles = isStreamVista && hasTitles;
+
+  const isLoading = isPending || Boolean(user && sessionQ.isPending);
 
   useEffect(() => {
+    // Privileged super_admin routing is handled before onboarding renders.
+    if (isLoading) return;
+    if (user && isStreamVista) {
+      void navigate({ to: "/dashboard", replace: true });
+      return;
+    }
     if (home) goHome(home, navigate);
-  }, [home, navigate]);
+  }, [home, isLoading, isStreamVista, navigate, user]);
 
-  if (isPending || (user && sessionQ.isPending) || home) {
-    return <main className="grid min-h-screen place-items-center bg-bg p-6"><p className="text-sm text-muted">{home ? "Opening workspace…" : "Loading Bridge…"}</p></main>;
+  if (isPending) {
+    return <main className="grid min-h-screen place-items-center bg-bg p-6"><p className="text-sm text-muted">Loading Crayons Bridge — checking access…</p></main>;
   }
   if (!user) return <RedirectToSignIn />;
-
-  if (submittedTitleId) {
-    return (
-      <main className="grid min-h-screen place-items-center bg-bg p-6">
-        <div className="w-full max-w-lg space-y-5 rounded-2xl border border-line bg-surface p-7">
-          <BrandMark />
-          <h1 className="font-display text-2xl font-semibold">Submission received</h1>
-          <p className="text-sm leading-relaxed text-muted">
-            Your title is now in Bridge review. Licensing Ready is not granted by the public form.
-            Bridge must verify the master, screener, authorization evidence, legal clearance, QC and rights package before buyers can see it.
-          </p>
-          <div className="rounded-xl border border-line bg-elevated p-4 text-sm">
-            <p className="font-semibold text-fg">Next required evidence</p>
-            <ul className="mt-2 space-y-1.5 text-muted">
-              <li>• Upload authorization / chain-of-title evidence</li>
-              <li>• Upload a private Bridge screener</li>
-              <li>• Upload the approved master and artwork</li>
-              <li>• Complete QC and Legal review</li>
-            </ul>
-          </div>
-          <Button className="w-full" onClick={() => void navigate({ to: "/title/$id", params: { id: submittedTitleId } })}>
-            Open title workspace
-          </Button>
-        </div>
-      </main>
-    );
-  }
-
   if (sessionQ.isError) {
     async function retrySession() {
       if (retrying) return;
@@ -209,6 +212,42 @@ function Onboarding() {
       </main>
     );
   }
+
+
+  if (sessionQ.isPending) {
+    return <main className="grid min-h-screen place-items-center bg-bg p-6"><p className="text-sm text-muted">Loading Crayons Bridge — checking access…</p></main>;
+  }
+  if (home || hasExistingOrganizationTitles) {
+    return <main className="grid min-h-screen place-items-center bg-bg p-6"><p className="text-sm text-muted">Opening workspace…</p></main>;
+  }
+
+  if (submittedTitleId) {
+    return (
+      <main className="grid min-h-screen place-items-center bg-bg p-6">
+        <div className="w-full max-w-lg space-y-5 rounded-2xl border border-line bg-surface p-7">
+          <BrandMark />
+          <h1 className="font-display text-2xl font-semibold">Submission received</h1>
+          <p className="text-sm leading-relaxed text-muted">
+            Your title is now in Bridge review. Licensing Ready is not granted by the public form.
+            Bridge must verify the master, screener, authorization evidence, legal clearance, QC and rights package before buyers can see it.
+          </p>
+          <div className="rounded-xl border border-line bg-elevated p-4 text-sm">
+            <p className="font-semibold text-fg">Next required evidence</p>
+            <ul className="mt-2 space-y-1.5 text-muted">
+              <li>• Upload authorization / chain-of-title evidence</li>
+              <li>• Upload a private Bridge screener</li>
+              <li>• Upload the approved master and artwork</li>
+              <li>• Complete QC and Legal review</li>
+            </ul>
+          </div>
+          <Button className="w-full" onClick={() => void navigate({ to: "/title/$id", params: { id: submittedTitleId } })}>
+            Open title workspace
+          </Button>
+        </div>
+      </main>
+    );
+  }
+
 
   function toggle(setter: (next: string[]) => void, current: string[], value: string, checked: boolean) {
     setter(checked ? [...current, value] : current.filter((item) => item !== value));
