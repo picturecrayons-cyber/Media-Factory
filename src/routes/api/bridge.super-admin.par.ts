@@ -73,8 +73,8 @@ export const Route = createFileRoute("/api/bridge/super-admin/par")({
           const assetId = randomBytes(16).toString("hex");
           const sql = await getSql();
           await sql`
-            insert into bridge_assets (id, title_id, kind, s3_key, content_type, created_by)
-            values (${assetId}, ${title.id}, ${kindInfo.kind}, ${key}, ${input.content_type}, ${auth.actor.userId})
+            insert into bridge_assets (id, title_id, kind, s3_key, content_type, created_by, storage_business_state)
+            values (${assetId}, ${title.id}, ${kindInfo.kind}, ${key}, ${input.content_type}, ${auth.actor.userId}, 'UNVERIFIED')
           `;
           await writeAudit({
             actorUserId: auth.actor.userId,
