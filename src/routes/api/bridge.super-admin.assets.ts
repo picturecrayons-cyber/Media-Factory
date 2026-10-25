@@ -26,17 +26,17 @@ export const Route = createFileRoute("/api/bridge/super-admin/assets")({
           const sql = await getSql();
           const rows = await sql<{
             id: string; title_id: string; title_name: string; kind: string;
-            byte_size: number | null; content_type: string | null; s3_key: string | null; created_at: string | Date;
+            byte_size: number | null; content_type: string | null; s3_key: string | null; storage_business_state: string | null; created_at: string | Date;
           }>`
             select a.id, a.title_id, t.name as title_name, a.kind, a.byte_size,
-                   a.content_type, a.s3_key, a.created_at
+                   a.content_type, a.s3_key, a.storage_business_state, a.created_at
             from bridge_assets a
             join bridge_titles t on t.id = a.title_id
             where (${titleId}::text is null or a.title_id = ${titleId})
             order by a.created_at desc limit 100
           `;
           const assets = await Promise.all(rows.map(async (asset) => {
-            const verified = Number(asset.byte_size ?? 0) > 0 && Boolean(asset.s3_key?.includes(".verified/"));
+            const verified = asset.storage_business_state === "ACTIVE" && Number(asset.byte_size ?? 0) > 0 && Boolean(asset.s3_key?.includes(".verified/"));
             let preview_url: string | null = null;
             if (verified && asset.s3_key && ["poster", "poster_vertical", "poster_horizontal", "thumbnail"].includes(asset.kind)) {
               try { preview_url = (await signDownload({ key: asset.s3_key, expiresIn: 300 })).url; } catch { /* no preview URL */ }
