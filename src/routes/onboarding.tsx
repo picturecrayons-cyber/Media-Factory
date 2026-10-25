@@ -1,4 +1,4 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, redirect, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { RedirectToSignIn } from "@/lib/auth/gates";
@@ -6,6 +6,7 @@ import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { completeOnboarding } from "@/lib/bridge/profiles";
 import { createTitle, listTitles } from "@/lib/bridge/titles";
 import { getBridgeSession } from "@/lib/bridge/session";
+import { normalizeRole } from "@/lib/bridge/super-admin-readonly";
 import { retryWorkspaceSession } from "@/lib/auth/workspace-session-retry";
 import { supabase } from "@/lib/supabase";
 import { ACCOUNT_TYPES } from "@/lib/bridge/types";
@@ -15,7 +16,18 @@ import { publicOnboardingError } from "@/lib/bridge/onboarding-errors";
 import { BrandMark } from "@/components/bridge/shell";
 import { Button } from "@/components/ui/button";
 
-export const Route = createFileRoute("/onboarding")({ component: Onboarding });
+export const Route = createFileRoute("/onboarding")({
+  beforeLoad: async () => {
+    const session = await getBridgeSession();
+    if (
+      session.profile?.emailVerified === true &&
+      normalizeRole(session.profile.internalRole ?? "") === "super_admin"
+    ) {
+      throw redirect({ to: "/dashboard" });
+    }
+  },
+  component: Onboarding,
+});
 
 type PublicAccountType = "independent_creator" | "studio" | "buyer";
 
@@ -99,9 +111,6 @@ function Onboarding() {
   const profile = sessionQ.data?.profile;
   // Privileged access is derived only from the authoritative Bridge profile.
   // Never infer it from user metadata, email, or organization names.
-  const isPrivileged =
-    (profile?.internalRole === "super_admin" || profile?.internalRole === "admin") &&
-    profile.emailVerified === true;
   const isStreamVista = false;
   const organizationTitlesQ = useQuery({
     queryKey: ["bridge-onboarding-existing-organization-titles", profile?.userId],
@@ -163,14 +172,14 @@ function Onboarding() {
   const isLoading = isPending || Boolean(user && sessionQ.isPending);
 
   useEffect(() => {
-    // Founder/internal StreamVista accounts belong in the dashboard; public intake is only for external creators.
+    // Privileged super_admin routing is enforced by the server route loader.
     if (isLoading) return;
-    if (user && (isPrivileged || isStreamVista)) {
+    if (user && isStreamVista) {
       void navigate({ to: "/dashboard", replace: true });
       return;
     }
     if (home) goHome(home, navigate);
-  }, [home, isLoading, isPrivileged, isStreamVista, navigate, profile, user]);
+  }, [home, isLoading, isStreamVista, navigate, user]);
 
   if (isPending) {
     return <main className="grid min-h-screen place-items-center bg-bg p-6"><p className="text-sm text-muted">Loading Crayons Bridge — checking access…</p></main>;
@@ -210,7 +219,7 @@ function Onboarding() {
   if (sessionQ.isPending) {
     return <main className="grid min-h-screen place-items-center bg-bg p-6"><p className="text-sm text-muted">Loading Crayons Bridge — checking access…</p></main>;
   }
-  if (home || isPrivileged || hasExistingOrganizationTitles) {
+  if (home || hasExistingOrganizationTitles) {
     return <main className="grid min-h-screen place-items-center bg-bg p-6"><p className="text-sm text-muted">Opening workspace…</p></main>;
   }
 
