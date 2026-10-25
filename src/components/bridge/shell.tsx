@@ -24,9 +24,15 @@ export function BrandMark({ className }: { className?: string }) {
       className={cn("inline-flex items-center shrink-0", className)}
       aria-label="Crayons Bridge home"
     >
-      <svg viewBox="0 0 168 48" role="img" aria-label="Crayons Bridge" className="bridge-logo block h-[42px] w-auto sm:h-[46px] lg:h-[48px]">
-        <text x="0" y="16" fill="#6f6f6f" fontFamily="ui-sans-serif, system-ui, sans-serif" fontSize="13" fontWeight="600" letterSpacing="0.5">crayons</text>
-        <text x="0" y="40" fill="#08b8e8" fontFamily="ui-sans-serif, system-ui, sans-serif" fontSize="26" fontWeight="700" letterSpacing="-0.5">bridge</text>
+      <svg viewBox="0 0 208 48" role="img" aria-label="Crayons Bridge" className="bridge-logo block h-[42px] w-auto sm:h-[46px] lg:h-[48px]">
+        <g fill="none" stroke="#08b8e8" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.6">
+          <path d="M7 30V25C7 15 14 9 23 9S39 15 39 25V30" />
+          <path d="M7 30H39M15 24V30M31 24V30" />
+        </g>
+        <circle cx="7" cy="33" r="2" fill="#08b8e8" />
+        <circle cx="39" cy="33" r="2" fill="#08b8e8" />
+        <text x="49" y="18" fill="currentColor" fontFamily="ui-sans-serif, system-ui, sans-serif" fontSize="12" fontWeight="700" letterSpacing="1.1">CRAYONS</text>
+        <text x="48" y="39" fill="#08b8e8" fontFamily="ui-sans-serif, system-ui, sans-serif" fontSize="25" fontWeight="800" letterSpacing="-0.7">bridge</text>
       </svg>
     </Link>
   );
