@@ -108,11 +108,9 @@ function Onboarding() {
     metadata?.role ||
     ""
   ).toString().toLowerCase();
-  const normalized = rawRole.replace(/[\s_-]+/g, "_");
+  const normalized = rawRole.replace(/[\s_-]+/g, "_").trim();
   const privilegedRoles = ["super_admin", "admin", "internal_admin", "superadmin"];
-  const isPrivileged =
-    privilegedRoles.includes(normalized) ||
-    (rawRole.includes("super") && rawRole.includes("admin"));
+  const isPrivileged = privilegedRoles.includes(normalized);
   const orgName = (
     profile?.organizationName ||
     profileFields?.organization ||
