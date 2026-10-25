@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { isSuperAdminReadOnlySurface } from "./super-admin-readonly";
 import { z } from "zod";
 import { randomBytes } from "node:crypto";
 import { authMiddleware } from "@/lib/auth/middleware";
@@ -208,6 +209,9 @@ export const createTitle = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
+    if (isSuperAdminReadOnlySurface(actor.internalRole ?? undefined, "workspace")) {
+      throw new Error("Super admin is read-only on the workspace surface");
+    }
     assertPermission(actor, actor.internalRole ? "title.ingest_internal" : "title.create");
     const id = randomBytes(16).toString("hex");
     const slug = slugify(data.name, id);
@@ -347,6 +351,9 @@ export const updateTitle = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
+    if (isSuperAdminReadOnlySurface(actor.internalRole ?? undefined, "workspace")) {
+      throw new Error("Super admin is read-only on the workspace surface");
+    }
     const title = await loadTitle(data.id);
     if (!title) throw new Error("Not found");
     const owns = !actor.internalRole && canMutateTitle(actor, title, "title.update_own", "title.license");
@@ -498,6 +505,9 @@ export const advanceTitle = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
+    if (isSuperAdminReadOnlySurface(actor.internalRole ?? undefined, "workspace")) {
+      throw new Error("Super admin is read-only on the workspace surface");
+    }
     const title = await loadTitle(data.id);
     if (!title || !canReadTitle(actor, title)) throw new Error("Not found");
     if (data.to === "LICENSED") {
