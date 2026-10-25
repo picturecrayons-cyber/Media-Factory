@@ -68,19 +68,46 @@ begin
   end if;
 end $$;
 
+create or replace function public.bridge_guard_gate_state_write()
+returns trigger
+language plpgsql
+set search_path = pg_catalog, public
+as $
+begin
+  if tg_op = 'DELETE' then
+    raise exception 'GATE_STATE_DELETE_DENIED: gate state must be retained';
+  end if;
+  if current_setting('bridge.gate_transition', true) is distinct from 'on' then
+    raise exception 'GATE_STATE_WRITE_DENIED: use bridge_transition_gate';
+  end if;
+  return new;
+end;
+$;
+
+drop trigger if exists bridge_gate_state_guard on public.bridge_gate_state;
+create trigger bridge_gate_state_guard
+before insert or update or delete on public.bridge_gate_state
+for each row execute function public.bridge_guard_gate_state_write();
+
 create or replace function public.bridge_reject_gate_audit_mutation()
 returns trigger
 language plpgsql
 set search_path = pg_catalog, public
-as $$
+as $
 begin
+  if tg_op = 'INSERT' then
+    if current_setting('bridge.gate_transition', true) is distinct from 'on' then
+      raise exception 'GATE_AUDIT_INSERT_DENIED: use bridge_transition_gate';
+    end if;
+    return new;
+  end if;
   raise exception 'GATE_AUDIT_IMMUTABLE: audit rows cannot be updated or deleted';
 end;
-$$;
+$;
 
 drop trigger if exists bridge_gate_audit_immutable on public.bridge_gate_audit_trail;
 create trigger bridge_gate_audit_immutable
-before update or delete on public.bridge_gate_audit_trail
+before insert or update or delete on public.bridge_gate_audit_trail
 for each row execute function public.bridge_reject_gate_audit_mutation();
 
 create or replace function public.bridge_transition_gate(
@@ -265,6 +292,8 @@ begin
     end if;
   end if;
 
+  perform set_config('bridge.gate_transition', 'on', true);
+
   insert into public.bridge_gate_audit_trail(
     title_id, from_gate, to_gate, action, actor_id, actor_role, evidence
   ) values (
@@ -293,7 +322,7 @@ begin
 end $$;
 
 comment on table public.bridge_gate_state is
-  'Current eight-gate progression. State changes must use bridge_transition_gate; no client-role grants.';
+  'Current eight-gate progression. A transaction-local guard requires bridge_transition_gate for writes; no client-role grants.';
 comment on table public.bridge_gate_audit_trail is
   'Append-only gate decision evidence. Direct client access revoked; audit records retained when titles are retired.';
 comment on function public.bridge_transition_gate(text,text,text,text,jsonb) is
