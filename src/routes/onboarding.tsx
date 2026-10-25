@@ -29,7 +29,7 @@ const TERRITORIES = ["India", "Worldwide", "South Asia", "GCC", "North America",
 const MEDIA = ["SVOD", "TVOD", "AVOD", "FAST", "Broadcast", "Theatrical", "Airline", "Educational", "Festival", "Crayons Loop"];
 const DESTINATIONS = ["Crayons Loop", "External OTT", "Broadcast / TV", "TVOD / EST", "FAST", "Festival / Educational", "Buyer delivery"];
 
-const SESSION_TIMEOUT_MS = 12_000;
+const SESSION_TIMEOUT_MS = 8_000;
 
 async function getBridgeSessionWithTimeout() {
   let timer: ReturnType<typeof setTimeout> | undefined;
