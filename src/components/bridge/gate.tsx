@@ -100,13 +100,11 @@ export function RequireBridge({
   const profile = sessionQ.data?.profile ?? null;
   if (!profile) return <Navigate to="/onboarding" />;
 
-  const profileFields = profile as unknown as Record<string, unknown>;
-  const rawRole = profile.internalRole || profileFields.internal_access || profileFields.role || "";
-  const privilegedRolesRaw = ["super_admin", "super admin", "admin", "internal_admin", "internal admin", "superadmin", "founder", "owner"];
-  const normalizedCheck = (role: unknown) => String(role ?? "").toLowerCase().replace(/[\s_-]+/g, "_").trim();
-  const normalizedRole = normalizedCheck(rawRole);
-  const privileged = ["super_admin", "admin", "internal_admin"].includes(normalizedRole) ||
-    privilegedRolesRaw.map(normalizedCheck).includes(normalizedRole);
+  // Privileged access requires an authoritative Bridge profile role and verified email.
+  // Do not grant access from metadata, organization names, or founder/owner labels.
+  const privileged =
+    (profile.internalRole === "super_admin" || profile.internalRole === "admin") &&
+    profile.emailVerified === true;
 
   // Privileged read-only access for super_admin — no checkout/order/entitlement mutation
   // The generic title workspace remains permission-gated for normal accounts.
