@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { getBearerToken } from "@/lib/auth/client";
 
 type BridgeAsset = {
   id: string;
@@ -27,8 +28,11 @@ export default function AdminAssetGallery({ titleId }: Props) {
       try {
         const query = new URLSearchParams();
         if (titleId) query.set("title_id", titleId);
+        const token = await getBearerToken();
+        if (!token) throw new Error("Sign in again to view assets.");
         const response = await fetch(`/api/bridge/assets?${query.toString()}`, {
           credentials: "include",
+          headers: { Accept: "application/json", Authorization: `Bearer ${token}` },
           signal: controller.signal,
           headers: { Accept: "application/json" },
         });
