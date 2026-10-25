@@ -96,6 +96,17 @@ test("eight-gate state machine rejects skipping gates and missing asset verifica
   try {
     await assert.rejects(transition(db, "ASSET_VERIFICATION"), /GATE_ORDER_BLOCKED/);
     await transition(db, "PREPARING", "creator-1", "creator");
+    await assert.rejects(
+      db.query("update public.bridge_gate_state set current_gate='REVENUE' where title_id=$1", ["synthetic-gate-test"]),
+      /GATE_STATE_WRITE_DENIED/,
+    );
+    await assert.rejects(
+      db.query(
+        "insert into public.bridge_gate_audit_trail(title_id,to_gate,action,actor_id,actor_role,evidence) values ($1,'REVENUE','PASS','forged','finance',$2::jsonb)",
+        ["synthetic-gate-test", JSON.stringify({ reference: "forged" })],
+      ),
+      /GATE_AUDIT_INSERT_DENIED/,
+    );
     await assert.rejects(transition(db, "ASSET_VERIFICATION"), /GATE_BLOCKED_ASSET_VERIFICATION/);
     await db.query(`
       update public.bridge_assets
