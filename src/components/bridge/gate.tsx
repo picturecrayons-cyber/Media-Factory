@@ -103,7 +103,7 @@ export function RequireBridge({
   const profileFields = profile as unknown as Record<string, unknown>;
   const rawRole = profile.internalRole || profileFields.internal_access || profileFields.role || "";
   const privilegedRolesRaw = ["super_admin", "super admin", "admin", "internal_admin", "internal admin", "superadmin", "founder", "owner"];
-  const normalizedCheck = (role: unknown) => String(role ?? "").toLowerCase().replace(/[\s_\-]+/g, "_").trim();
+  const normalizedCheck = (role: unknown) => String(role ?? "").toLowerCase().replace(/[\s_-]+/g, "_").trim();
   const normalizedRole = normalizedCheck(rawRole);
   const privileged = privilegedRolesRaw.map(normalizedCheck).includes(normalizedRole);
 
