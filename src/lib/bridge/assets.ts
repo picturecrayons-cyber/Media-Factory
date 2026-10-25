@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { isSuperAdminReadOnlySurface } from "@/lib/bridge/super-admin-readonly";
 import { z } from "zod";
 import { randomBytes } from "node:crypto";
 import { authMiddleware } from "@/lib/auth/middleware";
@@ -37,6 +38,9 @@ export const requestAssetUpload = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
+    if (isSuperAdminReadOnlySurface(actor.internalRole ?? undefined, "workspace")) {
+      throw new Error("Super admin is read-only on the workspace surface");
+    }
     assertPermission(actor, actor.internalRole ? "title.ingest_internal" : "asset.sign_upload");
     const title = await loadTitle(data.titleId);
     if (!title) throw new Error("Not found");
@@ -85,6 +89,9 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
+    if (isSuperAdminReadOnlySurface(actor.internalRole ?? undefined, "workspace")) {
+      throw new Error("Super admin is read-only on the workspace surface");
+    }
     assertPermission(actor, actor.internalRole ? "title.ingest_internal" : "asset.sign_upload");
     const sql = await getSql();
     const rows = await sql<{

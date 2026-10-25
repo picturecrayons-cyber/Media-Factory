@@ -64,7 +64,7 @@ function LaneStore({ titleId, stored, locked }: { titleId: string; stored: strin
 function TitlePage() {
   const { id } = Route.useParams();
   return (
-    <RequireBridge>
+    <RequireBridge allow="workspace">
       {(actor) => (
         <BridgeShell actor={actor} title="Title Workspace">
           <TitleBody id={id} actor={actor} />
