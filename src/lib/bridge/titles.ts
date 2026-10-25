@@ -20,6 +20,7 @@ type TitleRow = {
   name_ml: string | null;
   owner_user_id: string;
   owner_account_type: string;
+  owner_organization_id?: string | null;
   status: string;
   synopsis: string;
   language: string;
@@ -49,6 +50,7 @@ export function mapTitle(r: TitleRow): BridgeTitle {
     nameMl: r.name_ml,
     ownerUserId: r.owner_user_id,
     ownerAccountType: r.owner_account_type as AccountType,
+    ownerOrganizationId: r.owner_organization_id ?? null,
     status: r.status as TitleStatus,
     synopsis: r.synopsis,
     language: r.language,
@@ -86,16 +88,12 @@ async function listCatalog(sql: Sql): Promise<TitleRow[]> {
   return sql<TitleRow>`select * from bridge_titles where merged_into_title_id is null order by updated_at desc limit 200`;
 }
 
-async function listOwned(sql: Sql, userId: string, organizationName: string | null): Promise<TitleRow[]> {
-  const org = organizationName?.trim() || null;
+async function listOwned(sql: Sql, userId: string, organizationId: string | null | undefined): Promise<TitleRow[]> {
+  const orgId = organizationId || null;
   const mergeColumnAvailable = await hasTitleMergeColumn(sql);
-  if (!org) {
+  if (!orgId) {
     return mergeColumnAvailable
-      ? sql<TitleRow>`
-          select * from bridge_titles
-          where owner_user_id = ${userId} and merged_into_title_id is null
-          order by updated_at desc limit 200
-        `
+      ? sql<TitleRow>`select * from bridge_titles where owner_user_id = ${userId} and merged_into_title_id is null order by updated_at desc limit 200`
       : sql<TitleRow>`select * from bridge_titles where owner_user_id = ${userId} order by updated_at desc limit 200`;
   }
   return mergeColumnAvailable
@@ -104,9 +102,15 @@ async function listOwned(sql: Sql, userId: string, organizationName: string | nu
         where t.merged_into_title_id is null
           and (
             t.owner_user_id = ${userId}
-            or t.owner_user_id in (
-              select user_id from bridge_profiles
-              where organization_name is not null and lower(organization_name) = lower(${org})
+            or (
+              t.owner_account_type = 'studio'
+              and t.owner_organization_id = ${orgId}
+              and exists (
+                select 1 from bridge_organization_memberships m
+                where m.organization_id = ${orgId}
+                  and m.user_id = ${userId}
+                  and m.status = 'active'
+              )
             )
           )
         order by t.updated_at desc limit 200
@@ -114,9 +118,15 @@ async function listOwned(sql: Sql, userId: string, organizationName: string | nu
     : sql<TitleRow>`
         select t.* from bridge_titles t
         where t.owner_user_id = ${userId}
-          or t.owner_user_id in (
-            select user_id from bridge_profiles
-            where organization_name is not null and lower(organization_name) = lower(${org})
+          or (
+            t.owner_account_type = 'studio'
+            and t.owner_organization_id = ${orgId}
+            and exists (
+              select 1 from bridge_organization_memberships m
+              where m.organization_id = ${orgId}
+                and m.user_id = ${userId}
+                and m.status = 'active'
+            )
           )
         order by t.updated_at desc limit 200
       `;
@@ -133,7 +143,11 @@ function slugify(name: string, id: string): string {
 
 export async function loadTitle(id: string): Promise<BridgeTitle | null> {
   const sql = await getSql();
-  const rows = await sql<TitleRow>`select * from bridge_titles where id = ${id} limit 1`;
+  const rows = await sql<TitleRow>`
+    select t.* from bridge_titles t
+    where t.id = ${id}
+    limit 1
+  `;
   return rows[0] ? mapTitle(rows[0]) : null;
 }
 
@@ -202,7 +216,7 @@ export const createTitle = createServerFn({ method: "POST" })
       insert into bridge_titles (
         id, slug, name, name_ml, owner_user_id, owner_account_type, status,
         synopsis, language, year, runtime_minutes, licensing_fee_paise,
-        content_type, country_of_origin, release_date, credits
+        content_type, country_of_origin, release_date, credits, owner_organization_id
       ) values (
         ${id}, ${slug}, ${data.name}, ${data.nameMl ?? null}, ${actor.userId}, ${actor.accountType},
         ${"DRAFT"}, ${data.synopsis ?? ""}, ${data.language ?? "Malayalam"},
@@ -212,7 +226,7 @@ export const createTitle = createServerFn({ method: "POST" })
           ...(data.director ? [{ role: "Director", name: data.director }] : []),
           ...(data.producer ? [{ role: "Producer", name: data.producer }] : []),
           ...(data.cast ?? []).map((name) => ({ role: "Cast", name })),
-        ])}::jsonb
+        ])}::jsonb, ${actor.accountType === "studio" ? actor.organizationId ?? null : null}
       )
     `;
     const isPublicSubmission = Boolean((data as { publicSubmission?: boolean }).publicSubmission);
@@ -264,7 +278,7 @@ export const listTitles = createServerFn({ method: "GET" })
       }
     } else {
       assertPermission(actor, "title.read_own");
-      rows = await listOwned(sql, actor.userId, actor.accountType === "studio" ? actor.organizationName : null);
+      rows = await listOwned(sql, actor.userId, actor.accountType === "studio" ? actor.organizationId : null);
     }
     return { titles: rows.flatMap((row) => {
       try {
@@ -335,7 +349,7 @@ export const updateTitle = createServerFn({ method: "POST" })
     const actor = await requireVerifiedActor(context.userId);
     const title = await loadTitle(data.id);
     if (!title) throw new Error("Not found");
-    const owns = title.ownerUserId === actor.userId && !actor.internalRole;
+    const owns = !actor.internalRole && canMutateTitle(actor, title, "title.update_own", "title.license");
     if (!canMutateTitle(actor, title, "title.update_own", "title.license"))
       throw new Error("Forbidden");
     if (
@@ -506,7 +520,11 @@ export const advanceTitle = createServerFn({ method: "POST" })
     const perm = permissionForTransition(title.status, data.to);
     if (!perm) throw new Error("Transition is not available");
     assertPermission(actor, perm);
-    if (perm === "title.advance_upload" && title.ownerUserId !== actor.userId && !hasStaffPermission(actor, perm)) {
+    if (
+      perm === "title.advance_upload" &&
+      title.ownerUserId !== actor.userId &&
+      !canMutateTitle(actor, title, perm, perm)
+    ) {
       throw new Error("Forbidden");
     }
     const expected = nextStatus(title.status);

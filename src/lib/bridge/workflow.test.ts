@@ -71,7 +71,16 @@ async function testDatabase(): Promise<{ db: TestDb; schema: string }> {
 async function fixture() {
   const { db, schema } = await testDatabase();
   try {
-    await db.exec(`create table bridge_titles(id text primary key,owner_user_id text,status text,master_key text,poster_key text,updated_at timestamptz);
+    await db.exec(`create table bridge_titles(
+      id text primary key,
+      owner_user_id text,
+      owner_account_type text not null default 'independent_creator',
+      owner_organization_id uuid,
+      status text,
+      master_key text,
+      poster_key text,
+      updated_at timestamptz
+    );
     create table bridge_assets(id text,title_id text,kind text,s3_key text,byte_size bigint);
     create table bridge_title_events(title_id text,from_status text,to_status text,actor_user_id text,note text);
     create table bridge_audit_logs(actor_user_id text,action text,entity_type text,entity_id text,metadata text);`);
@@ -81,7 +90,8 @@ async function fixture() {
         "utf8",
       ).replaceAll("public.", `${schema}.`),
     );
-    await db.exec(`insert into bridge_titles values('title-123','owner','QC_REVIEW','sealed/master','sealed/poster',now());
+    await db.exec(`insert into bridge_titles(id,owner_user_id,status,master_key,poster_key,updated_at)
+      values('title-123','owner','QC_REVIEW','sealed/master','sealed/poster',now());
     insert into bridge_assets values('master','title-123','master','sealed/master',100),('poster','title-123','poster','sealed/poster',100);`);
     function adapter(query: (text: string, params?: unknown[]) => Promise<{ rows: unknown[] }>) {
       const sql = (async (strings: TemplateStringsArray, ...params: unknown[]) => {

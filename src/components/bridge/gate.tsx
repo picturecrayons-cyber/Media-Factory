@@ -6,6 +6,7 @@ import { retryWorkspaceSession } from "@/lib/auth/workspace-session-retry";
 import { supabase } from "@/lib/supabase";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { getBridgeSession, type BridgeActor } from "@/lib/bridge/session";
+import { canAccessTitleWorkspace } from "@/lib/bridge/rbac";
 import { requestEmailVerification } from "@/lib/bridge/profiles";
 import { Button } from "@/components/ui/button";
 import { BrandMark } from "./shell";
@@ -26,7 +27,7 @@ export function RequireBridge({
   allow,
 }: {
   children: (actor: BridgeActor) => ReactNode;
-  allow?: "creator" | "studio" | "buyer" | "investor" | "internal" | "super_admin";
+  allow?: "creator" | "studio" | "buyer" | "investor" | "internal" | "super_admin" | "workspace";
 }) {
   const qc = useQueryClient();
   const [retrying, setRetrying] = useState(false);
@@ -92,6 +93,12 @@ export function RequireBridge({
 
   const profile = sessionQ.data?.profile ?? null;
   if (!profile) return <Navigate to="/onboarding" />;
+
+  // The generic title workspace is not a public catalog. Only Creator/Studio
+  // accounts and internal roles with explicit catalog-read permission may enter.
+  if (allow === "workspace" && !canAccessTitleWorkspace(profile)) {
+    return <Navigate to={sessionQ.data?.home ?? "/"} />;
+  }
 
   // Role gates are authoritative for role-specific workspaces:
   // creator/studio/buyer/investor accounts are valid Bridge users and must not be
