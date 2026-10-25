@@ -7,6 +7,8 @@ import { supabase } from "@/lib/supabase";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { getBridgeSession, type BridgeActor } from "@/lib/bridge/session";
 import { canAccessTitleWorkspace } from "@/lib/bridge/rbac";
+import { isSuperAdminReadOnlySurface, normalizeRole } from "@/lib/bridge/super-admin-readonly";
+export { isSuperAdminReadOnlySurface, normalizeRole } from "@/lib/bridge/super-admin-readonly";
 import { requestEmailVerification } from "@/lib/bridge/profiles";
 import { Button } from "@/components/ui/button";
 import { BrandMark } from "./shell";
@@ -102,8 +104,9 @@ export function RequireBridge({
 
   // Privileged access requires an authoritative Bridge profile role and verified email.
   // Do not grant access from metadata, organization names, or founder/owner labels.
+  const normalizedRole = normalizeRole(profile.internalRole ?? "");
   const privileged =
-    (profile.internalRole === "super_admin" || profile.internalRole === "admin") &&
+    (normalizedRole === "super_admin" || normalizedRole === "admin") &&
     profile.emailVerified === true;
 
   // Privileged read-only access for super_admin — no checkout/order/entitlement mutation
@@ -156,5 +159,5 @@ export function RequireBridge({
     );
   }
 
-  return <>{children(profile, { readOnly: privileged && allow === "buyer" })}</>;
+  return <>{children(profile, { readOnly: profile.emailVerified === true && isSuperAdminReadOnlySurface(profile.internalRole ?? undefined, allow ?? "") })}</>;
 }
