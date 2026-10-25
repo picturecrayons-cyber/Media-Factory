@@ -5,9 +5,12 @@ function trimKey(value: string | undefined): string | undefined {
   return trimmed || undefined;
 }
 
-// Use the same required URL source as the browser client. Server-only aliases must
-// not silently bind auth verification to a different Supabase project.
-const supabaseUrl = resolveCanonicalSupabaseUrl(process.env.VITE_SUPABASE_URL);
+// Use the same URL aliases as the browser client. If both are configured,
+// resolveCanonicalSupabaseUrl fails closed when they identify different projects.
+const supabaseUrl = resolveCanonicalSupabaseUrl(
+  process.env.VITE_SUPABASE_URL,
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+);
 
 const supabasePublishableKey =
   trimKey(process.env.SUPABASE_PUBLISHABLE_KEY) ??
