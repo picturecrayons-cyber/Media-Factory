@@ -121,6 +121,32 @@ test("eight-gate state machine rejects skipping gates and missing asset verifica
   }
 });
 
+test("creator and studio can start PREPARING; buyer and investor cannot certify gates", async () => {
+  const db = await fixture();
+  try {
+    await transition(db, "PREPARING", "studio-1", "studio");
+    const audit = await db.query(
+      "select actor_role from public.bridge_gate_audit_trail where title_id=$1",
+      ["synthetic-gate-test"],
+    );
+    assert.equal(audit.rows[0].actor_role, "studio");
+  } finally {
+    await db.close();
+  }
+
+  for (const role of ["buyer", "investor"]) {
+    const isolated = await fixture();
+    try {
+      await assert.rejects(
+        transition(isolated, "PREPARING", `${role}-1`, role),
+        /FORBIDDEN/,
+      );
+    } finally {
+      await isolated.close();
+    }
+  }
+});
+
 test("complete synthetic gate flow requires independent QC/legal and explicit publication evidence", async () => {
   const db = await fixture();
   try {
