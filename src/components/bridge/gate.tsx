@@ -105,8 +105,8 @@ export function RequireBridge({
   const privilegedRolesRaw = ["super_admin", "super admin", "admin", "internal_admin", "internal admin"];
   const normalizedCheck = (role: unknown) => String(role ?? "").toLowerCase().replace(/[\s_-]+/g, "_");
   const normalizedRole = normalizedCheck(rawRole);
-  const privileged =
-    privilegedRolesRaw.some((role) => normalizedCheck(role) === normalizedRole) ||
+  const privileged = ["super_admin", "admin", "internal_admin"].includes(normalizedRole) ||
+    ["super admin", "internal admin"].some((role) => normalizedCheck(role) === normalizedRole) ||
     (normalizedRole.includes("super") && normalizedRole.includes("admin"));
 
   // Privileged read-only access for super_admin — no checkout/order/entitlement mutation
