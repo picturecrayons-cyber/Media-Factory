@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { getBearerToken } from "@/lib/auth/client";
 
 const ASSET_KINDS = [
   { value: "main_film", label: "Main film", accept: "video/*" },
@@ -47,6 +48,12 @@ export default function SuperAdminDirectUpload({ titleId }: Props) {
     const xhr = new XMLHttpRequest();
     xhr.open("POST", "/api/bridge/direct-upload");
     xhr.withCredentials = true;
+    const token = await getBearerToken();
+    if (!token) {
+      setState(kind, { status: "error", message: "Sign in again to upload." });
+      return;
+    }
+    xhr.setRequestHeader("Authorization", `Bearer ${token}`);
 
     xhr.upload.onprogress = (event) => {
       if (event.lengthComputable) {
@@ -65,13 +72,13 @@ export default function SuperAdminDirectUpload({ titleId }: Props) {
       if (xhr.status >= 200 && xhr.status < 300) {
         // 100% means the server accepted and verified the upload, not merely
         // that the browser finished sending bytes.
-        if (payload.verified === true && payload.storage_business_state === "ACTIVE") {
+        if (payload.verified === true && payload.storage_business_state === "VERIFIED") {
           setState(kind, { progress: 100, status: "uploaded", message: "Uploaded and verified" });
         } else {
           setState(kind, {
             progress: 100,
             status: "error",
-            message: "Upload received, but storage verification is not confirmed. Asset remains inactive.",
+            message: "Upload received, but storage verification is not confirmed. Asset is not marked ACTIVE by the client.",
           });
         }
       } else {
