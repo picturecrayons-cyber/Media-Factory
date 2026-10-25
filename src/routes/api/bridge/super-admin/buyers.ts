@@ -42,7 +42,7 @@ export const Route = createFileRoute("/api/bridge/super-admin/buyers")({
               "group by bp.user_id, bp.display_name, bp.account_type",
               "order by bp.display_name",
               "limit 500",
-            ].join("\\n"),
+            ].join("\n"),
           );
 
           return Response.json({ buyers });
