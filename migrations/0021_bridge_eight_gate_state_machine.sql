@@ -42,8 +42,8 @@ create table if not exists public.bridge_gate_audit_trail (
   ),
   constraint bridge_gate_audit_role_chk check (
     actor_role in (
-      'creator','admin','super_admin','qc_reviewer',
-      'legal_reviewer','finance','viewer'
+      'creator','studio','buyer','investor','admin','super_admin',
+      'qc_reviewer','legal_reviewer','finance','viewer'
     )
   )
 );
@@ -72,7 +72,7 @@ create or replace function public.bridge_guard_gate_state_write()
 returns trigger
 language plpgsql
 set search_path = pg_catalog, public
-as $
+as $$
 begin
   if tg_op = 'DELETE' then
     raise exception 'GATE_STATE_DELETE_DENIED: gate state must be retained';
@@ -82,7 +82,7 @@ begin
   end if;
   return new;
 end;
-$;
+$$;
 
 drop trigger if exists bridge_gate_state_guard on public.bridge_gate_state;
 create trigger bridge_gate_state_guard
@@ -93,7 +93,7 @@ create or replace function public.bridge_reject_gate_audit_mutation()
 returns trigger
 language plpgsql
 set search_path = pg_catalog, public
-as $
+as $$
 begin
   if tg_op = 'INSERT' then
     if current_setting('bridge.gate_transition', true) is distinct from 'on' then
@@ -103,7 +103,7 @@ begin
   end if;
   raise exception 'GATE_AUDIT_IMMUTABLE: audit rows cannot be updated or deleted';
 end;
-$;
+$$;
 
 drop trigger if exists bridge_gate_audit_immutable on public.bridge_gate_audit_trail;
 create trigger bridge_gate_audit_immutable
@@ -179,7 +179,7 @@ begin
   end if;
 
   if p_to_gate = 'PREPARING' then
-    if p_actor_role not in ('creator','admin','super_admin') then
+    if p_actor_role not in ('creator','studio','admin','super_admin') then
       raise exception 'FORBIDDEN: role cannot certify PREPARING';
     end if;
 
