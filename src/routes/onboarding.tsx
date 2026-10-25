@@ -179,10 +179,42 @@ function Onboarding() {
     if (home) goHome(home, navigate);
   }, [home, isLoading, isStreamVista, navigate, user]);
 
+  if (sessionQ.isError) {
+    async function retrySession() {
+      if (retrying) return;
+      setRetrying(true);
+      setError(null);
+      try {
+        await retryWorkspaceSession({
+          checkUser: () => supabase.auth.getUser(),
+          refetch: async () => { const result = await sessionQ.refetch(); if (result.error) throw result.error; },
+          signIn: async () => { await supabase.auth.signOut({ scope: "local" }).catch(() => undefined); void navigate({ to: "/login", replace: true }); },
+        });
+      } catch {
+        setError("Bridge could not load onboarding. Please try again shortly.");
+      } finally {
+        setRetrying(false);
+      }
+    }
+    return (
+      <main className="grid min-h-screen place-items-center bg-bg p-6">
+        <div className="w-full max-w-sm space-y-4 rounded-2xl border border-line bg-surface p-6">
+          <BrandMark />
+          <h1 className="font-display text-2xl">Could not load Bridge</h1>
+          <p className="text-sm leading-relaxed text-muted">Retry without clearing your session.</p>
+          {error ? <p role="alert" className="text-sm text-accent">{error}</p> : null}
+          <Button type="button" disabled={retrying} className="w-full" onClick={() => void retrySession()}>{retrying ? "Checking…" : "Retry"}</Button>
+        </div>
+      </main>
+    );
+  }
+
   if (isPending) {
     return <main className="grid min-h-screen place-items-center bg-bg p-6"><p className="text-sm text-muted">Loading Crayons Bridge — checking access…</p></main>;
   }
   if (!user) return <RedirectToSignIn />;
+
+
   if (sessionQ.isError) {
     async function retrySession() {
       if (retrying) return;
