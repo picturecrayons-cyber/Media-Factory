@@ -52,7 +52,8 @@ export const Route = createFileRoute("/api/bridge/super-admin/par")({
           }
           const requestedKind = input.kind as RequestedKind;
           const kindInfo = KIND_MAP[requestedKind];
-          if (!kindInfo.types.some((prefix) => input.content_type!.startsWith(prefix))) {
+          const contentType = input.content_type as string;
+          if (!kindInfo.types.some((prefix) => contentType.startsWith(prefix))) {
             return errorResponse("File type does not match the selected asset kind", 415);
           }
           // Hard cap is deliberately generous for film uploads; transfer bytes go browser -> OCI,
@@ -74,7 +75,7 @@ export const Route = createFileRoute("/api/bridge/super-admin/par")({
           const sql = await getSql();
           await sql`
             insert into bridge_assets (id, title_id, kind, s3_key, content_type, created_by, storage_business_state)
-            values (${assetId}, ${title.id}, ${kindInfo.kind}, ${key}, ${input.content_type}, ${auth.actor.userId}, 'UNVERIFIED')
+            values (${assetId}, ${title.id}, ${kindInfo.kind}, ${key}, ${contentType}, ${auth.actor.userId}, 'UNVERIFIED')
           `;
           await writeAudit({
             actorUserId: auth.actor.userId,
