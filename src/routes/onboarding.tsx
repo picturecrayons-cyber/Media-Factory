@@ -97,29 +97,12 @@ function Onboarding() {
   });
 
   const profile = sessionQ.data?.profile;
-  const profileFields = profile as unknown as Record<string, unknown> | undefined;
-  const metadata = (user as unknown as { user_metadata?: Record<string, unknown> } | null)?.user_metadata;
-  const rawRole = (
-    profile?.internalRole ||
-    profileFields?.internal_access ||
-    profileFields?.role ||
-    metadata?.internal_access ||
-    metadata?.internalRole ||
-    metadata?.role ||
-    ""
-  ).toString().toLowerCase();
-  const normalized = rawRole.replace(/[\s_-]+/g, "_").trim();
-  const privilegedRoles = ["super_admin", "admin", "internal_admin", "superadmin", "founder", "owner"];
-  const isPrivileged = privilegedRoles.includes(normalized);
-  const orgName = (
-    profile?.organizationName ||
-    profileFields?.organization ||
-    profileFields?.organization_name ||
-    metadata?.organization ||
-    metadata?.organization_name ||
-    ""
-  ).toString().toLowerCase();
-  const isStreamVista = orgName.includes("streamvista") || orgName.includes("crayons");
+  // Privileged access is derived only from the authoritative Bridge profile.
+  // Never infer it from user metadata, email, or organization names.
+  const isPrivileged =
+    (profile?.internalRole === "super_admin" || profile?.internalRole === "admin") &&
+    profile.emailVerified === true;
+  const isStreamVista = false;
   const organizationTitlesQ = useQuery({
     queryKey: ["bridge-onboarding-existing-organization-titles", profile?.userId],
     queryFn: () => listTitles(),
@@ -193,37 +176,6 @@ function Onboarding() {
     return <main className="grid min-h-screen place-items-center bg-bg p-6"><p className="text-sm text-muted">Loading Crayons Bridge — checking access…</p></main>;
   }
   if (!user) return <RedirectToSignIn />;
-  if (isLoading || !profile || home || isPrivileged || isStreamVista || hasExistingOrganizationTitles) {
-    return <main className="grid min-h-screen place-items-center bg-bg p-6"><p className="text-sm text-muted">{isLoading || !profile ? "Loading Crayons Bridge — checking access…" : "Opening workspace…"}</p></main>;
-  }
-
-  if (submittedTitleId) {
-    return (
-      <main className="grid min-h-screen place-items-center bg-bg p-6">
-        <div className="w-full max-w-lg space-y-5 rounded-2xl border border-line bg-surface p-7">
-          <BrandMark />
-          <h1 className="font-display text-2xl font-semibold">Submission received</h1>
-          <p className="text-sm leading-relaxed text-muted">
-            Your title is now in Bridge review. Licensing Ready is not granted by the public form.
-            Bridge must verify the master, screener, authorization evidence, legal clearance, QC and rights package before buyers can see it.
-          </p>
-          <div className="rounded-xl border border-line bg-elevated p-4 text-sm">
-            <p className="font-semibold text-fg">Next required evidence</p>
-            <ul className="mt-2 space-y-1.5 text-muted">
-              <li>• Upload authorization / chain-of-title evidence</li>
-              <li>• Upload a private Bridge screener</li>
-              <li>• Upload the approved master and artwork</li>
-              <li>• Complete QC and Legal review</li>
-            </ul>
-          </div>
-          <Button className="w-full" onClick={() => void navigate({ to: "/title/$id", params: { id: submittedTitleId } })}>
-            Open title workspace
-          </Button>
-        </div>
-      </main>
-    );
-  }
-
   if (sessionQ.isError) {
     async function retrySession() {
       if (retrying) return;
@@ -253,6 +205,42 @@ function Onboarding() {
       </main>
     );
   }
+
+
+  if (sessionQ.isPending) {
+    return <main className="grid min-h-screen place-items-center bg-bg p-6"><p className="text-sm text-muted">Loading Crayons Bridge — checking access…</p></main>;
+  }
+  if (home || isPrivileged || hasExistingOrganizationTitles) {
+    return <main className="grid min-h-screen place-items-center bg-bg p-6"><p className="text-sm text-muted">Opening workspace…</p></main>;
+  }
+
+  if (submittedTitleId) {
+    return (
+      <main className="grid min-h-screen place-items-center bg-bg p-6">
+        <div className="w-full max-w-lg space-y-5 rounded-2xl border border-line bg-surface p-7">
+          <BrandMark />
+          <h1 className="font-display text-2xl font-semibold">Submission received</h1>
+          <p className="text-sm leading-relaxed text-muted">
+            Your title is now in Bridge review. Licensing Ready is not granted by the public form.
+            Bridge must verify the master, screener, authorization evidence, legal clearance, QC and rights package before buyers can see it.
+          </p>
+          <div className="rounded-xl border border-line bg-elevated p-4 text-sm">
+            <p className="font-semibold text-fg">Next required evidence</p>
+            <ul className="mt-2 space-y-1.5 text-muted">
+              <li>• Upload authorization / chain-of-title evidence</li>
+              <li>• Upload a private Bridge screener</li>
+              <li>• Upload the approved master and artwork</li>
+              <li>• Complete QC and Legal review</li>
+            </ul>
+          </div>
+          <Button className="w-full" onClick={() => void navigate({ to: "/title/$id", params: { id: submittedTitleId } })}>
+            Open title workspace
+          </Button>
+        </div>
+      </main>
+    );
+  }
+
 
   function toggle(setter: (next: string[]) => void, current: string[], value: string, checked: boolean) {
     setter(checked ? [...current, value] : current.filter((item) => item !== value));
