@@ -727,6 +727,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiRazorpayWebhookRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/bridge/super-admin/par': {
+      id: '/api/bridge/super-admin/par'
+      path: '/api/bridge/super-admin/par'
+      fullPath: '/api/bridge/super-admin/par'
+      preLoaderRoute: typeof ApiBridgeSuperAdminParRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/bridge/super-admin/verify': {
+      id: '/api/bridge/super-admin/verify'
+      path: '/api/bridge/super-admin/verify'
+      fullPath: '/api/bridge/super-admin/verify'
+      preLoaderRoute: typeof ApiBridgeSuperAdminVerifyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/bridge/super-admin/assets': {
+      id: '/api/bridge/super-admin/assets'
+      path: '/api/bridge/super-admin/assets'
+      fullPath: '/api/bridge/super-admin/assets'
+      preLoaderRoute: typeof ApiBridgeSuperAdminAssetsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
