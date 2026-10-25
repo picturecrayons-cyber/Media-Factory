@@ -16,7 +16,7 @@ export async function persistVerifiedAsset(sql: Pick<Sql, "query">, opts: {
   if (!Number.isSafeInteger(opts.byteSize) || opts.byteSize <= 0) throw new Error("Uploaded object is empty");
   const rows = await sql.query<{ entity_id: string }>(`
     with verified as (
-      update bridge_assets a set byte_size = $1, content_type = coalesce($2, a.content_type), s3_key = $6
+      update bridge_assets a set byte_size = $1, content_type = coalesce($2, a.content_type), s3_key = $6, storage_business_state = 'ACTIVE'
       where a.id = $3 and a.created_by = $4 and a.byte_size is null and a.s3_key = $7
         and a.title_id = $8
         and exists (
