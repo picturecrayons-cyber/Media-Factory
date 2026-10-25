@@ -145,34 +145,48 @@ function DashboardBody() {
         </div>
       </section>
 
-      <section aria-labelledby="title-queue-title" className="rounded-sm border border-line">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-4 py-3">
+      <section aria-labelledby="title-queue-title" className="space-y-4">
+        <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <h3 id="title-queue-title" className="font-semibold">Recent title records</h3>
-            <p className="text-xs text-muted">Canonical records only; no synthetic or fallback counts.</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Catalogue</p>
+            <h3 id="title-queue-title" className="mt-1 font-display text-2xl font-semibold">Title gallery</h3>
+            <p className="mt-1 text-sm text-muted">Canonical title records · IDs and workflow status at a glance.</p>
           </div>
-          <Link to="/workspace" className="text-sm font-semibold text-accent hover:underline">View all titles →</Link>
+          <Link to="/workspace" className="inline-flex items-center rounded-lg border border-line bg-surface px-4 py-2 text-sm font-semibold transition hover:bg-fg/5">View all titles <span aria-hidden="true" className="ml-2">↗</span></Link>
         </div>
         {titlesQ.isPending ? (
-          <p className="px-4 py-6 text-sm text-muted">Loading title records…</p>
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="Loading title gallery">
+            {[0, 1, 2, 3].map((n) => <div key={n} className="h-36 animate-pulse rounded-xl border border-line bg-surface" />)}
+          </div>
         ) : reportingUnavailable ? (
-          <div className="px-4 py-6">
-            <p role="alert" className="text-sm text-accent">The title queue could not be loaded. Refresh to retry; metrics above are withheld.</p>
+          <div className="rounded-xl border border-line bg-surface p-5">
+            <p role="alert" className="text-sm text-accent">The title gallery could not be loaded. Refresh to retry; metrics above are withheld.</p>
           </div>
         ) : (
-          <ul className="divide-y divide-line">
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             {titles.slice(0, 8).map((title) => (
-              <li key={title.id} className="flex items-center justify-between gap-3 px-4 py-3 text-sm">
-                <div className="min-w-0">
-                  <span className="font-medium">{title.name}</span>
-                  <p className="break-all font-mono text-[10px] text-muted">ID: {title.id}</p>
+              <article key={title.id} className="group flex min-w-0 flex-col rounded-xl border border-line bg-surface p-4 transition duration-200 hover:-translate-y-0.5 hover:border-accent/50 hover:shadow-lg">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-line bg-elevated text-sm font-bold text-accent" aria-hidden="true">
+                    {(title.name.trim()[0] || "T").toUpperCase()}
+                  </div>
+                  <span className="rounded-full border border-line bg-elevated px-2.5 py-1 text-[11px] font-semibold capitalize text-muted">{title.status.replaceAll("_", " ").toLowerCase()}</span>
                 </div>
-                <span className="shrink-0 text-muted">{title.status.replaceAll("_", " ").toLowerCase()}</span>
-              </li>
+                <h4 className="mt-4 line-clamp-2 min-h-10 font-semibold leading-snug">{title.name}</h4>
+                <p className="mt-1 text-xs text-muted">{title.contentType || "Title"}{title.language ? ` · ${title.language}` : ""}{title.year ? ` · ${title.year}` : ""}</p>
+                <div className="mt-4 border-t border-line pt-3">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-muted">Title ID</p>
+                  <p className="mt-1 break-all font-mono text-[10px] leading-relaxed text-muted">{title.id}</p>
+                </div>
+                <Link to="/title/$id" params={{ id: title.id }} className="mt-4 inline-flex items-center justify-between rounded-lg bg-fg/5 px-3 py-2.5 text-sm font-semibold transition group-hover:bg-accent/10">
+                  Open title <span aria-hidden="true">→</span>
+                </Link>
+              </article>
             ))}
-            {!titles.length && <li className="px-4 py-6 text-sm text-muted">No title records were returned by the canonical query.</li>}
-          </ul>
+            {!titles.length && <div className="rounded-xl border border-dashed border-line p-6 text-sm text-muted sm:col-span-2 xl:col-span-4">No title records were returned by the canonical query.</div>}
+          </div>
         )}
+        <p className="text-xs text-muted">Artwork and buyer visibility are not inferred from title metadata. Publication remains controlled by the server-side authorization gates.</p>
       </section>
     </div>
   );
