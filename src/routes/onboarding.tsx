@@ -186,7 +186,7 @@ function Onboarding() {
       void navigate({ to: "/dashboard", replace: true });
       return;
     }
-    if (profile && home) goHome(home, navigate);
+    if (home) goHome(home, navigate);
   }, [home, isLoading, isPrivileged, isStreamVista, navigate, profile, user]);
 
   if (isPending) {
