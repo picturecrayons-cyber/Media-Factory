@@ -142,6 +142,59 @@ function Onboarding() {
   }
   if (!user) return <RedirectToSignIn />;
 
+  // An authenticated identity without a resolved Bridge profile is not a new
+  // account. Keep it out of public onboarding until an explicit recovery flow
+  // has verified ownership; never create or link a profile from this screen.
+  if (sessionQ.data && sessionQ.data.profile === null) {
+    async function retryProfileResolution() {
+      if (retrying) return;
+      setRetrying(true);
+      setError(null);
+      try {
+        const result = await sessionQ.refetch();
+        if (result.error) throw result.error;
+      } catch {
+        setError("Bridge could not resolve your profile. Please retry or sign in with the account originally linked to Bridge.");
+      } finally {
+        setRetrying(false);
+      }
+    }
+
+    async function signOutForDifferentAccount() {
+      await supabase.auth.signOut({ scope: "local" });
+      void navigate({ to: "/login", replace: true });
+    }
+
+    return (
+      <main className="grid min-h-screen place-items-center bg-bg p-6">
+        <section aria-labelledby="missing-profile-title" className="w-full max-w-lg space-y-5 rounded-2xl border border-line bg-surface p-7">
+          <BrandMark />
+          <h1 id="missing-profile-title" className="font-display text-2xl font-semibold">We couldn't find your Bridge profile</h1>
+          <p className="text-sm leading-relaxed text-muted">
+            Your account is signed in, but it is not linked to a Bridge profile. No profile or role has been created.
+            Contact support so your identity can be reviewed safely.
+          </p>
+          {user.email ? <p className="text-sm text-muted">Signed in as <span className="font-medium text-fg">{user.email}</span></p> : null}
+          {error ? <p role="alert" className="text-sm text-accent">{error}</p> : null}
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <Button type="button" className="w-full" onClick={() => void navigate({ to: "/contact", search: { reason: "missing-profile" } as any })}>
+              Contact Support
+            </Button>
+            <Button type="button" variant="outline" className="w-full" disabled={retrying} onClick={() => void signOutForDifferentAccount()}>
+              Try Different Account
+            </Button>
+            <Button type="button" variant="outline" className="w-full" disabled={retrying} onClick={() => void retryProfileResolution()}>
+              {retrying ? "Checking…" : "Retry"}
+            </Button>
+          </div>
+          <p aria-live="polite" className="text-xs text-muted">
+            {retrying ? "Checking your Bridge identity…" : "Access is granted only after your identity link is verified."}
+          </p>
+        </section>
+      </main>
+    );
+  }
+
   if (submittedTitleId) {
     return (
       <main className="grid min-h-screen place-items-center bg-bg p-6">
