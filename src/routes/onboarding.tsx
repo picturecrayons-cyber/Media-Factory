@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { RedirectToSignIn } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { completeOnboarding } from "@/lib/bridge/profiles";
-import { createTitle } from "@/lib/bridge/titles";
+import { createTitle, listTitles } from "@/lib/bridge/titles";
 import { getBridgeSession } from "@/lib/bridge/session";
 import { retryWorkspaceSession } from "@/lib/auth/workspace-session-retry";
 import { supabase } from "@/lib/supabase";
@@ -96,6 +96,16 @@ function Onboarding() {
     retryDelay: 500,
   });
 
+  const profile = sessionQ.data?.profile;
+  const privileged = ["super_admin", "admin", "internal_admin"].includes(profile?.internalRole ?? "");
+  const hasStreamVistaOrganization = (profile?.organizationName ?? "").trim().toLowerCase() === "streamvista opc pvt ltd";
+  const organizationTitlesQ = useQuery({
+    queryKey: ["bridge-onboarding-existing-organization-titles", profile?.userId],
+    queryFn: () => listTitles(),
+    enabled: Boolean(profile && hasStreamVistaOrganization),
+    retry: false,
+  });
+
   const [displayName, setDisplayName] = useState("");
   const [accountType, setAccountType] = useState<PublicAccountType>("independent_creator");
   const [organizationName, setOrganizationName] = useState("");
@@ -142,13 +152,23 @@ function Onboarding() {
     if (signupAccountType) setAccountType(signupAccountType);
   }, [signupAccountType]);
 
-  const home = sessionQ.data?.profile ? sessionQ.data.home : null;
+  const home = profile ? sessionQ.data?.home : null;
+  const hasExistingOrganizationTitles = hasStreamVistaOrganization && Boolean(organizationTitlesQ.data?.titles.length);
 
   useEffect(() => {
+    if (privileged) {
+      // FIX: Super admin already has 33 titles — onboarding is for new creators only — redirect privileged users to dashboard
+      void navigate({ to: "/dashboard", replace: true });
+      return;
+    }
+    if (hasExistingOrganizationTitles) {
+      void navigate({ to: "/dashboard", replace: true });
+      return;
+    }
     if (home) goHome(home, navigate);
-  }, [home, navigate]);
+  }, [hasExistingOrganizationTitles, home, navigate, privileged]);
 
-  if (isPending || (user && sessionQ.isPending) || home) {
+  if (isPending || (user && sessionQ.isPending) || home || privileged || hasExistingOrganizationTitles) {
     return <main className="grid min-h-screen place-items-center bg-bg p-6"><p className="text-sm text-muted">{home ? "Opening workspace…" : "Loading Bridge…"}</p></main>;
   }
   if (!user) return <RedirectToSignIn />;
