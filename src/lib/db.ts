@@ -1,4 +1,4 @@
-import { pendingMigrations } from "../../scripts/migration-plan.mjs";
+﻿import { pendingMigrations } from "../../scripts/migration-plan.mjs";
 
 /** Which database backend is active. */
 export type DbSource = "postgres" | "pglite";
@@ -60,7 +60,7 @@ function vercelPostgresRequired(): never {
 /**
  * Active backend: real **Postgres** when `DATABASE_URL` is set (deployed / configured
  * sandbox), otherwise a local embedded **PGLite** (Postgres compiled to WASM) so
- * the app has a working database even with nothing configured — the live preview
+ * the app has a working database even with nothing configured â€” the live preview
  * included. Set `DATABASE_URL` or `POSTGRES_URL` to use the canonical production Postgres database.
  *
  * Exception: on Vercel without `DATABASE_URL`, `dbSource` still reports `pglite`
@@ -92,7 +92,7 @@ export interface Sql {
  * Init state lives on globalThis as promises: dev HMR creates new instances of
  * this module, and two instances racing module-level state would open a second
  * pool or run two concurrent PGLite migration passes (whose duplicate
- * `_migrations` insert rejects — and would get memoized, poisoning every later
+ * `_migrations` insert rejects â€” and would get memoized, poisoning every later
  * `getSql()`). A failed init clears its slot so the next call retries.
  */
 const globalRef = globalThis as typeof globalThis & {
@@ -102,12 +102,12 @@ const globalRef = globalThis as typeof globalThis & {
 };
 
 /**
- * Result-type parity: Postgres sends every value as text plus a type OID — the
+ * Result-type parity: Postgres sends every value as text plus a type OID â€” the
  * JS value is the DRIVER's parsing choice, and pg and PGLite disagree (pg:
  * int8 -> string, date -> local-midnight Date; PGLite: int8 -> BigInt, which
  * JSON.stringify rejects, date -> UTC Date). Normalize both so preview and
  * production return identical, JSON-safe shapes:
- *   int8/bigint (incl. count(*)) -> number (past 2^53 loses precision — cast
+ *   int8/bigint (incl. count(*)) -> number (past 2^53 loses precision â€” cast
  *                                   `::text` if you ever need huge integers)
  *   date                         -> 'YYYY-MM-DD' string
  *   interval                     -> Postgres interval text
@@ -126,7 +126,7 @@ function toSql(run: Run, transaction?: <T>(fn: (tx: Sql) => Promise<T>) => Promi
     strings: TemplateStringsArray,
     ...values: unknown[]
   ): Promise<T[]> => {
-    // Rebuild with $1, $2, … placeholders so values stay parameterized.
+    // Rebuild with $1, $2, â€¦ placeholders so values stay parameterized.
     let text = strings[0];
     for (let i = 0; i < values.length; i += 1) text += `$${i + 1}${strings[i + 1]}`;
     return run<T>(text, values);
@@ -139,7 +139,7 @@ function toSql(run: Run, transaction?: <T>(fn: (tx: Sql) => Promise<T>) => Promi
 
 function createPostgresSql(): Promise<Sql> {
   globalRef.__pgSqlPromise__ ??= (async () => {
-    // Regular Postgres driver: node-postgres (`pg`) — works directly with Neon's
+    // Regular Postgres driver: node-postgres (`pg`) â€” works directly with Neon's
     // pooled endpoint. One pool per process; warm serverless instances reuse it.
     const { Pool, types } = await import("pg");
     types.setTypeParser(OID_INT8, Number);
@@ -190,6 +190,15 @@ async function createPgliteSql(): Promise<Sql> {
       },
     });
     await pg.waitReady;
+  // PGLite local-dev: ensure Supabase browser roles exist before migrations that REVOKE FROM them (local-only, no shared migration change)
+  try {
+    const _r1 = await pg.query("SELECT 1 FROM pg_roles WHERE rolname='anon'");
+    if (!_r1?.rows?.length) { await pg.exec("CREATE ROLE anon NOLOGIN"); }
+  } catch {}
+  try {
+    const _r2 = await pg.query("SELECT 1 FROM pg_roles WHERE rolname='authenticated'");
+    if (!_r2?.rows?.length) { await pg.exec("CREATE ROLE authenticated NOLOGIN"); }
+  } catch {}
     await pg.exec(
       "create table if not exists _migrations (name text primary key, applied_at timestamptz not null default now())",
     );
@@ -204,7 +213,7 @@ async function createPgliteSql(): Promise<Sql> {
   // SQL is inlined by the bundler via import.meta.glob (no runtime fs); applied
   // files are tracked in _migrations. The glob does not descend, so the opt-in
   // auth schema under migrations/auth/ stays out. Runs once per module instance
-  // — so an HMR reload after adding a migration file applies it live — with
+  // â€” so an HMR reload after adding a migration file applies it live â€” with
   // passes serialized on a global chain so concurrent callers never
   // double-apply.
   const migrate = async (): Promise<void> => {
@@ -253,7 +262,7 @@ let sqlPromise: Promise<Sql> | null = null;
 async function createSql(): Promise<Sql> {
   if (typeof window !== "undefined") {
     throw new Error(
-      "@/lib/db is server-only — call getSql() from a createServerFn handler " +
+      "@/lib/db is server-only â€” call getSql() from a createServerFn handler " +
         "or a server route loader, never from client code.",
     );
   }
@@ -263,14 +272,14 @@ async function createSql(): Promise<Sql> {
 
 /**
  * Get the shared, **server-only** SQL client. Postgres when `DATABASE_URL`/`POSTGRES_URL` is set,
- * otherwise the local PGLite fallback. Memoized — safe to call per request.
+ * otherwise the local PGLite fallback. Memoized â€” safe to call per request.
  *
  * Schema comes from `migrations/*.sql`, auto-applied before the first query on
- * both backends — define tables there, never inline in server functions.
+ * both backends â€” define tables there, never inline in server functions.
  */
 export function getSql(): Promise<Sql> {
   sqlPromise ??= createSql().catch((err) => {
-    sqlPromise = null; // don't memoize failures — let the next call retry
+    sqlPromise = null; // don't memoize failures â€” let the next call retry
     throw err;
   });
   return sqlPromise;
@@ -296,7 +305,7 @@ export async function getPglite(): Promise<import("@electric-sql/pglite").PGlite
  * Finish DB bootstrap before the server handles traffic.
  *
  * - **PGLite** (preview / no `DATABASE_URL`): open the in-memory DB and apply
- *   `migrations/*.sql`. Idempotent — concurrent callers share one promise.
+ *   `migrations/*.sql`. Idempotent â€” concurrent callers share one promise.
  * - **Postgres**: no-op (pool is created lazily on first query).
  * - **Vercel without `DATABASE_URL`**: no-op. Do not boot PGLite (ENOENT on
  *   `/var/task/_libs/pglite.data`). Queries fail closed via `getSql()`.
@@ -310,7 +319,7 @@ export function ensureDbReady(): Promise<void> {
 }
 
 // Server-only eager start: kick PGLite bootstrap as soon as this module loads in
-// Node. Skip on Vercel — serverless has no wasm data file. Client bundles never
+// Node. Skip on Vercel â€” serverless has no wasm data file. Client bundles never
 // hit this path (`getSql` throws in the browser).
 const globalBoot = globalThis as typeof globalThis & {
   __pgBootstrapPromise__?: Promise<void>;
