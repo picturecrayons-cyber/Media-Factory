@@ -4,7 +4,6 @@ import { requireVerifiedActor } from "@/lib/bridge/session";
 import { assertNotDevUser } from "@/lib/bridge/guards";
 import { getSql } from "@/lib/db";
 import { loadTitle } from "@/lib/bridge/titles";
-import { writeAudit } from "@/lib/bridge/audit";
 import { persistVerifiedAsset } from "@/lib/bridge/asset-confirmation";
 import { verifyObject, sealVerifiedObject } from "@/lib/bridge/oci-object-storage.server";
 
@@ -80,13 +79,6 @@ export const Route = createFileRoute("/api/bridge/super-admin/verify")({
               return errorResponse("Verified object could not be persisted; asset remains unverified", 409);
             }
           }
-          await writeAudit({
-            actorUserId: actor.userId,
-            action: "asset.super_admin_verified",
-            entityType: "bridge_asset",
-            entityId: asset.id,
-            metadata: { titleId: title.id, kind: asset.kind, byteSize: sealed.byteSize, checksum: sealed.etag },
-          });
           return Response.json({
             assetId: asset.id,
             verified: true,
