@@ -55,6 +55,10 @@ export function RequireBridge({
   }
   if (!user) return <RedirectToSignIn />;
   if (sessionQ.error) {
+    const workspaceErrorCode =
+      sessionQ.error instanceof Error
+        ? sessionQ.error.message.match(/\b(CONFIG_MISSING|MISSING_RELATION|WORKSPACE_QUERY_FAILED)\b/)?.[1]
+        : undefined;
     async function retrySession() {
       if (retrying) return;
       setRetrying(true);
@@ -82,7 +86,9 @@ export function RequireBridge({
       <Frame>
         <h1 className="font-display text-2xl">Could not open workspace</h1>
         <p role="alert" className="text-sm text-muted">
-          Bridge could not load your workspace. Retry to check the service without clearing your session.
+          {workspaceErrorCode
+            ? `Workspace service error: ${workspaceErrorCode}. Retry to check the service without clearing your session.`
+            : "Bridge could not load your workspace. Retry to check the service without clearing your session."}
         </p>
         {retryError ? <p role="alert" className="text-sm text-accent">{retryError}</p> : null}
         <Button type="button" disabled={retrying} onClick={() => void retrySession()}>{retrying ? "Checking…" : "Retry workspace"}</Button>

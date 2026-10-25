@@ -66,6 +66,19 @@ async function main() {
     assert.equal(acl.authenticated_membership_select, false, "authenticated browser role must not SELECT memberships");
 
     const fixtures = await seedStagingRbacFixtures(client);
+
+    // Exercise the fail-closed base workspace profile query without touching
+    // optional organization tables/columns. Organization scope is deliberately null.
+    const workspaceProfile = await client.query(
+      `select user_id, email, display_name, account_type, organization_name,
+              null::text as organization_id, internal_role, email_verified
+         from public.bridge_profiles where user_id = $1 limit 1`,
+      [fixtures.memberAId],
+    );
+    assert.equal(workspaceProfile.rows.length, 1, "workspace profile query should load a staged profile without organization joins");
+    assert.equal(workspaceProfile.rows[0].organization_id, null, "base workspace profile must not infer organization scope");
+    assert.equal(workspaceProfile.rows[0].account_type, "studio", "staged workspace profile type should be preserved");
+
     const sql = {
       query: async (query, params) => (await client.query(query, params)).rows,
     };
@@ -107,6 +120,7 @@ async function main() {
 
     await client.query("ROLLBACK");
     transactionOpen = false;
+    console.log("PASS: profile-only workspace query loads without organization joins and leaves organization scope null.");
     console.log("PASS: staging schema/RLS grants verified; same-organization upload confirmation allowed; cross-organization confirmation denied.");
     console.log("PASS: all synthetic fixture rows were rolled back; no lasting staging records or storage objects were created.");
   } finally {
