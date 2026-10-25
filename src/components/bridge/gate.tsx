@@ -57,7 +57,7 @@ export function RequireBridge({
   if (sessionQ.error) {
     const workspaceErrorCode =
       sessionQ.error instanceof Error
-        ? sessionQ.error.message.match(/\\b(CONFIG_MISSING|MISSING_RELATION|WORKSPACE_QUERY_FAILED)\\b/)?.[1]
+        ? sessionQ.error.message.match(/\b(CONFIG_MISSING|MISSING_RELATION|WORKSPACE_QUERY_FAILED)\b/)?.[1]
         : undefined;
     async function retrySession() {
       if (retrying) return;
