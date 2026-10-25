@@ -152,12 +152,12 @@ function Onboarding() {
     if (signupAccountType) setAccountType(signupAccountType);
   }, [signupAccountType]);
 
-  const home = profile ? sessionQ.data?.home : null;
+  const home = sessionQ.data?.profile ? sessionQ.data.home : null;
   const hasExistingOrganizationTitles = hasStreamVistaOrganization && Boolean(organizationTitlesQ.data?.titles.length);
 
   useEffect(() => {
     if (privileged) {
-      // FIX: Super admin already has 33 titles — onboarding is for new creators only — redirect privileged users to dashboard
+      // Super admin already has 33 titles — onboarding for new creators only — redirect privileged to dashboard
       void navigate({ to: "/dashboard", replace: true });
       return;
     }
