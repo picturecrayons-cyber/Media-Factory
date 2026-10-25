@@ -33,3 +33,15 @@ test("public onboarding does not silently treat a missing profile as an admin se
   assert.match(onboarding, /if \(home\) goHome\(home, navigate\)/);
   assert.doesNotMatch(onboarding, /internal_role\s*=\s*["']super_admin["']/);
 });
+
+test("authenticated missing-profile sessions render explicit recovery instead of public onboarding", () => {
+  const onboarding = read("../../routes/onboarding.tsx");
+  assert.match(onboarding, /const SESSION_TIMEOUT_MS = 8_000/);
+  assert.match(onboarding, /sessionQ\.data && sessionQ\.data\.profile === null/);
+  assert.match(onboarding, /We couldn't find your Bridge profile/);
+  assert.match(onboarding, /Contact Support/);
+  assert.match(onboarding, /Try Different Account/);
+  assert.match(onboarding, /retryProfileResolution/);
+  assert.match(onboarding, /No profile or role has been created/);
+  assert.match(onboarding, /Access is granted only after your identity link is verified/);
+});
