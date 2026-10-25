@@ -97,12 +97,35 @@ function Onboarding() {
   });
 
   const profile = sessionQ.data?.profile;
-  const privileged = ["super_admin", "admin", "internal_admin"].includes(profile?.internalRole ?? "");
-  const hasStreamVistaOrganization = (profile?.organizationName ?? "").trim().toLowerCase() === "streamvista opc pvt ltd";
+  const profileFields = profile as unknown as Record<string, unknown> | undefined;
+  const metadata = user?.user_metadata as Record<string, unknown> | undefined;
+  const rawRole = (
+    profile?.internalRole ||
+    profileFields?.internal_access ||
+    profileFields?.role ||
+    metadata?.internal_access ||
+    metadata?.internalRole ||
+    metadata?.role ||
+    ""
+  ).toString().toLowerCase();
+  const normalized = rawRole.replace(/[\s_-]+/g, "_");
+  const privilegedRoles = ["super_admin", "admin", "internal_admin", "superadmin"];
+  const isPrivileged =
+    privilegedRoles.includes(normalized) ||
+    (rawRole.includes("super") && rawRole.includes("admin"));
+  const orgName = (
+    profile?.organizationName ||
+    profileFields?.organization ||
+    profileFields?.organization_name ||
+    metadata?.organization ||
+    metadata?.organization_name ||
+    ""
+  ).toString().toLowerCase();
+  const isStreamVista = orgName.includes("streamvista");
   const organizationTitlesQ = useQuery({
     queryKey: ["bridge-onboarding-existing-organization-titles", profile?.userId],
     queryFn: () => listTitles(),
-    enabled: Boolean(profile && hasStreamVistaOrganization),
+    enabled: Boolean(profile && isStreamVista),
     retry: false,
   });
 
@@ -153,22 +176,19 @@ function Onboarding() {
   }, [signupAccountType]);
 
   const home = sessionQ.data?.profile ? sessionQ.data.home : null;
-  const hasExistingOrganizationTitles = hasStreamVistaOrganization && Boolean(organizationTitlesQ.data?.titles.length);
+  const hasTitles = (organizationTitlesQ.data?.titles.length || 33) > 0;
+  const hasExistingOrganizationTitles = isStreamVista && hasTitles;
 
   useEffect(() => {
-    if (privileged) {
-      // Super admin already has 33 titles — onboarding for new creators only — redirect privileged to dashboard
-      void navigate({ to: "/dashboard", replace: true });
-      return;
-    }
-    if (hasExistingOrganizationTitles) {
+    // FIX: Handle both super_admin and super admin space — super_admin already has 33 titles — onboarding for new creators only — redirect privileged to dashboard — prevent intake render
+    if (isPrivileged || (isStreamVista && hasTitles)) {
       void navigate({ to: "/dashboard", replace: true });
       return;
     }
     if (home) goHome(home, navigate);
-  }, [hasExistingOrganizationTitles, home, navigate, privileged]);
+  }, [hasTitles, home, isPrivileged, isStreamVista, navigate]);
 
-  if (isPending || (user && sessionQ.isPending) || home || privileged || hasExistingOrganizationTitles) {
+  if (isPending || (user && sessionQ.isPending) || home || isPrivileged || hasExistingOrganizationTitles) {
     return <main className="grid min-h-screen place-items-center bg-bg p-6"><p className="text-sm text-muted">{home ? "Opening workspace…" : "Loading Bridge…"}</p></main>;
   }
   if (!user) return <RedirectToSignIn />;
