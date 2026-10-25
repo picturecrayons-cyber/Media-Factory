@@ -92,7 +92,7 @@ export const Route = createFileRoute("/api/bridge/super-admin/par")({
           }, { status: 201, headers: { "Cache-Control": "no-store" } });
         } catch (error) {
           const message = error instanceof Error ? error.message : "";
-          if (/super-admin|forbidden|access required/i.test(message)) return errorResponse("Verified super-admin access required", 403);
+          if (/super-admin|forbidden|access required|not authorized|profile|dev user|development user/i.test(message)) return errorResponse("Verified super-admin access required", 403);
           if (/authentication|session/i.test(message)) return errorResponse("Authentication required", 401);
           console.error("[bridge-super-admin-par] failed", { message });
           return errorResponse("Could not prepare OCI upload", 500);
