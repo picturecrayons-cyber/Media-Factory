@@ -98,7 +98,7 @@ function Onboarding() {
 
   const profile = sessionQ.data?.profile;
   const profileFields = profile as unknown as Record<string, unknown> | undefined;
-  const metadata = user?.user_metadata as Record<string, unknown> | undefined;
+  const metadata = (user as unknown as { user_metadata?: Record<string, unknown> } | null)?.user_metadata;
   const rawRole = (
     profile?.internalRole ||
     profileFields?.internal_access ||
