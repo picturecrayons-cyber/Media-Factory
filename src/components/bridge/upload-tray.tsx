@@ -157,7 +157,7 @@ export function UploadTray() {
                 <div className="h-full bg-[#102433]" style={{ width: `${job.status === "stopped" ? pct : pct}%` }} />
               </div>
               <p className="mt-1 text-xs text-muted">
-                {job.status === "waiting" ? "Waiting" : job.status === "stopped" ? "Stopped" : `${pct}%${timeLeft(job.secondsLeft)}`}
+                {job.status === "waiting" ? "Waiting. You can keep working." : job.status === "stopped" ? "Stopped. Nothing was kept." : `Saving. ${pct}%${timeLeft(job.secondsLeft)}. You can leave this page.`}
               </p>
             </li>
           );

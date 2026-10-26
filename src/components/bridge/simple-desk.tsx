@@ -175,7 +175,7 @@ export function SimpleDesk({
     onSuccess: async () => {
       setNote("");
       setError("");
-      setNotice("Saved.");
+      setNotice("Message sent. The studio and the desk can both see it.");
       await refresh();
     },
     onError: (e) => setError(e instanceof Error ? e.message : "Could not save"),
@@ -269,9 +269,8 @@ export function SimpleDesk({
 
   return (
     <section className="space-y-5">
-      {error ? <p role="alert" className="text-sm text-red-500">{error}</p> : null}
-      {notice ? <p className="text-sm text-muted">{notice}</p> : null}
-
+      {error ? <p role="alert" className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">{error}</p> : null}
+      {notice ? <p className="rounded-2xl border border-line bg-white px-4 py-3 text-sm">{notice}</p> : null}
       <section className="rounded-2xl border border-line bg-white p-4">
         <div className="flex items-center justify-between gap-3">
           <h2 className="text-lg font-semibold">Data</h2>
@@ -327,8 +326,12 @@ export function SimpleDesk({
       </section>
 
       <div className="rounded-2xl border border-line bg-surface p-4">
-        <h2 className="mb-3 text-lg font-semibold">Files</h2>
-        <p className="mb-2 text-sm text-muted">One file in each slot. A new file replaces the old one.</p>
+        <h2 className="mb-1 text-lg font-semibold">Files</h2>
+        <p className="mb-3 text-sm text-muted">
+          {ready.some((row) => row.kind === "master" || row.kind === "screener")
+            ? "The film is here. Submit when the record is ready. The desk and the studio both get the message."
+            : "Add the film when it is ready. You can keep using the desk while it saves."}
+        </p>
         <ul className="divide-y divide-line">
           {SLOTS.map(([kind, label, accept]) => {
             const item = ready.find((row) => row.kind === kind)
@@ -339,7 +342,7 @@ export function SimpleDesk({
               <li key={kind} className="flex flex-wrap items-center gap-3 py-3">
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-semibold">{label}</p>
-                  <p className="text-xs text-muted">{item?.byteSize ? `${Math.max(1, Math.round(Number(item.byteSize) / 1024 / 1024))} MB` : "Empty"}</p>
+                  <p className="text-xs text-muted">{item?.byteSize ? `${Math.max(1, Math.round(Number(item.byteSize) / 1024 / 1024))} MB · Saved` : "Not added yet"}</p>
                 </div>
                 {item ? <button type="button" onClick={() => void view(item.id)} className="text-sm font-semibold">{visual ? "Play" : "View"}</button> : null}
                 <label className="cursor-pointer text-sm font-semibold">
@@ -407,41 +410,53 @@ export function SimpleDesk({
         </section>
       ) : null}
 
-      <form
-        className="grid gap-2"
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (note.trim()) act.mutate("note");
-        }}
-      >
-        <label className="text-sm">
-          Message
-          <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} className="mt-1 w-full rounded-xl border border-line bg-surface px-3 py-2" placeholder="Write a note" />
-        </label>
-        <div className="flex flex-wrap gap-2">
-          <button type="submit" disabled={act.isPending || !note.trim()} className="rounded-full border border-line px-4 py-2 text-sm">
-            Send
-          </button>
-          {staff ? (
-            <>
-              <button type="button" disabled={act.isPending} onClick={() => act.mutate("park")} className="rounded-full border border-line px-4 py-2 text-sm">Park</button>
-              <button type="button" disabled={act.isPending} onClick={() => act.mutate("approve")} className="rounded-full border border-line px-4 py-2 text-sm">Approve</button>
-              <button type="button" disabled={act.isPending} onClick={() => act.mutate("replace")} className="rounded-full border border-line px-4 py-2 text-sm">Ask replace</button>
-            </>
-          ) : null}
-        </div>
-      </form>
-
-      {(desk.data?.notes.length ?? 0) > 0 ? (
-        <ul className="space-y-2">
-          {desk.data?.notes.map((item) => (
-            <li key={item.id} className="rounded-xl border border-line px-3 py-2 text-sm">
-              <p className="font-semibold">{({ upload: "File", submit: "Submitted", note: "Note", park: "Parked", approve: "Approved", replace: "Replace" } as Record<string, string>)[item.action] || "Update"} · {item.actor}</p>
-              <p className="text-muted">{item.body}</p>
-            </li>
-          ))}
-        </ul>
-      ) : null}
+      <section className="rounded-2xl border border-line bg-white p-4">
+        <h2 className="text-lg font-semibold">Messages</h2>
+        <p className="mt-1 text-sm text-muted">The studio and the desk both see this. A copy also goes by mail.</p>
+        {error ? <p role="alert" className="mt-3 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p> : null}
+        {notice ? <p className="mt-3 rounded-xl bg-[#f4f7f8] px-3 py-2 text-sm">Bridge · {notice}</p> : null}
+        {(desk.data?.notes.length ?? 0) === 0 && !notice ? (
+          <p className="mt-3 rounded-xl bg-[#f4f7f8] px-3 py-3 text-sm">No messages yet. Write here, or submit the title and the update will appear.</p>
+        ) : null}
+        {(desk.data?.notes.length ?? 0) > 0 ? (
+          <ul className="mt-3 space-y-2">
+            {desk.data?.notes.map((item) => {
+              const mine = item.actor === actor.displayName || item.actor === actor.email;
+              const label = ({ upload: "File saved", submit: "Submitted", note: "Message", park: "Parked", approve: "Approved", replace: "Please replace a file" } as Record<string, string>)[item.action] || "Update";
+              return (
+                <li key={item.id} className={`max-w-[36rem] rounded-2xl px-3 py-2 text-sm ${mine ? "ml-auto bg-[#102433] text-white" : "bg-[#f4f7f8]"}`}>
+                  <p className={`text-xs font-semibold ${mine ? "text-white/70" : "text-muted"}`}>{mine ? "You" : item.actor} · {label}</p>
+                  <p className="mt-1">{item.body}</p>
+                </li>
+              );
+            })}
+          </ul>
+        ) : null}
+        <form
+          className="mt-4 grid gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (note.trim()) act.mutate("note");
+          }}
+        >
+          <label className="text-sm font-semibold">
+            Write
+            <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={3} className="mt-1 w-full rounded-xl border border-line bg-white px-3 py-2 font-normal" placeholder="Ask a question or leave an update" />
+          </label>
+          <div className="flex flex-wrap gap-2">
+            <button type="submit" disabled={act.isPending || !note.trim()} className="rounded-full bg-[#102433] px-4 py-2 text-sm font-semibold text-white">
+              {act.isPending ? "Sending…" : "Send"}
+            </button>
+            {staff ? (
+              <>
+                <button type="button" disabled={act.isPending} onClick={() => act.mutate("park")} className="rounded-full border border-line px-4 py-2 text-sm">Park</button>
+                <button type="button" disabled={act.isPending} onClick={() => act.mutate("approve")} className="rounded-full border border-line px-4 py-2 text-sm">Approve</button>
+                <button type="button" disabled={act.isPending} onClick={() => act.mutate("replace")} className="rounded-full border border-line px-4 py-2 text-sm">Ask replace</button>
+              </>
+            ) : null}
+          </div>
+        </form>
+      </section>
       {player ? (
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/80 p-4" onClick={() => setPlayer(null)}>
           <div className="w-full max-w-4xl" onClick={(event) => event.stopPropagation()}>
