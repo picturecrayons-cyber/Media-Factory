@@ -1,5 +1,5 @@
 import { createFileRoute, Link, Navigate } from "@tanstack/react-router";
-import { useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { BrandMark } from "@/components/bridge/shell";
 import { Button } from "@/components/ui/button";
@@ -58,6 +58,47 @@ const WORKFLOW_STEPS = [
     description: "Track revenue activity.",
   },
 ];
+
+function PosterHero({ posters }: { posters: Array<{ name: string; url: string }> }) {
+  const [index, setIndex] = useState(0);
+  const [paused, setPaused] = useState(false);
+  const startX = useRef(0);
+  useEffect(() => {
+    if (posters.length < 2 || paused) return;
+    const timer = window.setInterval(() => setIndex((value) => (value + 1) % posters.length), 4500);
+    return () => window.clearInterval(timer);
+  }, [posters.length, paused]);
+  const poster = posters[index];
+  if (!poster) return null;
+  const step = (direction: number) => setIndex((value) => (value + direction + posters.length) % posters.length);
+  return (
+    <section
+      className="relative overflow-hidden border-b border-line bg-[#071018]"
+      aria-label="Posters"
+      onMouseEnter={() => setPaused(true)}
+      onMouseLeave={() => setPaused(false)}
+      onTouchStart={(event) => {
+        startX.current = event.touches[0]?.clientX ?? 0;
+        setPaused(true);
+      }}
+      onTouchEnd={(event) => {
+        const delta = (event.changedTouches[0]?.clientX ?? 0) - startX.current;
+        if (delta > 48) step(-1);
+        if (delta < -48) step(1);
+        setPaused(false);
+      }}
+    >
+      <img src={poster.url} alt={poster.name} className="mx-auto h-[62vh] max-h-[720px] w-full object-contain" />
+      <p className="absolute bottom-4 left-5 right-24 truncate text-sm font-semibold text-white">{poster.name}</p>
+      {posters.length > 1 ? (
+        <div className="absolute bottom-3 right-4 flex gap-2">
+          <button type="button" aria-label="Previous poster" onClick={() => step(-1)} className="h-11 w-11 rounded-full bg-white/90 text-lg font-semibold text-[#071018]">‹</button>
+          <button type="button" aria-label="Next poster" onClick={() => step(1)} className="h-11 w-11 rounded-full bg-white/90 text-lg font-semibold text-[#071018]">›</button>
+        </div>
+      ) : null}
+    </section>
+  );
+}
 
 function Enquiry() {
   const [sent, setSent] = useState(false);
@@ -149,6 +190,7 @@ function Home() {
       </header>
 
       <main>
+        <PosterHero posters={postersQ.data?.posters ?? []} />
         <section className="bridge-home-hero border-b border-line bg-white">
           <div className="mx-auto max-w-7xl px-5 py-14 text-center sm:px-6 sm:py-16 lg:py-20">
             <div className="mx-auto max-w-5xl">
@@ -173,22 +215,6 @@ function Home() {
             </div>
           </div>
         </section>
-
-        {(postersQ.data?.posters.length ?? 0) > 0 ? (
-          <section className="border-b border-line bg-white py-8">
-            <div className="mx-auto max-w-7xl px-5 sm:px-6">
-              <h2 className="text-lg font-semibold">Public</h2>
-              <div className="mt-4 flex gap-3 overflow-x-auto pb-2">
-                {postersQ.data?.posters.map((poster) => (
-                  <figure key={poster.url} className="w-36 shrink-0">
-                    <img src={poster.url} alt="" className="aspect-[2/3] w-full rounded-2xl object-cover" />
-                    <figcaption className="mt-2 line-clamp-2 text-xs font-semibold">{poster.name}</figcaption>
-                  </figure>
-                ))}
-              </div>
-            </div>
-          </section>
-        ) : null}
 
         <section className="border-b border-line bg-white py-8">
           <div className="mx-auto max-w-7xl px-5 sm:px-6">
