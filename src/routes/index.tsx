@@ -88,7 +88,7 @@ function PosterHero({ posters }: { posters: Array<{ name: string; url: string }>
         setPaused(false);
       }}
     >
-      <img src={poster.url} alt={poster.name} className="mx-auto h-[62vh] max-h-[720px] w-full object-contain" />
+      <img src={poster.url} alt={poster.name} className="mx-auto h-[78svh] min-h-[460px] w-full object-contain" />
       <p className="absolute bottom-4 left-5 right-24 truncate text-sm font-semibold text-white">{poster.name}</p>
       {posters.length > 1 ? (
         <div className="absolute bottom-3 right-4 flex gap-2">
@@ -191,6 +191,7 @@ function Home() {
 
       <main>
         <PosterHero posters={postersQ.data?.posters ?? []} />
+        {(postersQ.data?.posters.length ?? 0) > 0 ? null : (
         <section className="bridge-home-hero border-b border-line bg-white">
           <div className="mx-auto max-w-7xl px-5 py-14 text-center sm:px-6 sm:py-16 lg:py-20">
             <div className="mx-auto max-w-5xl">
@@ -215,6 +216,7 @@ function Home() {
             </div>
           </div>
         </section>
+        )}
 
         <section className="border-b border-line bg-white py-8">
           <div className="mx-auto max-w-7xl px-5 sm:px-6">

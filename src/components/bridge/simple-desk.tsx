@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { listTitleAssets } from "@/lib/bridge/assets";
@@ -10,6 +10,40 @@ import { nextStatus } from "@/lib/bridge/lifecycle";
 import type { BridgeActor } from "@/lib/bridge/session";
 import type { TitleStatus } from "@/lib/bridge/types";
 import { toast } from "sonner";
+
+function DeskVideo({ url }: { url: string }) {
+  const ref = useRef<HTMLVideoElement>(null);
+  useEffect(() => {
+    const video = ref.current;
+    if (!video) return;
+    let hls: { destroy: () => void } | null = null;
+    let cancelled = false;
+    const hlsFile = url.includes(".m3u8");
+    if (!hlsFile) {
+      video.src = url;
+      void video.play().catch(() => undefined);
+      return;
+    }
+    void import("hls.js").then(({ default: Hls }) => {
+      if (cancelled || !ref.current) return;
+      if (video.canPlayType("application/vnd.apple.mpegurl")) {
+        video.src = url;
+        void video.play().catch(() => undefined);
+        return;
+      }
+      if (!Hls.isSupported()) return;
+      const player = new Hls({ capLevelToPlayerSize: true, startLevel: -1, testBandwidth: true });
+      player.loadSource(url);
+      player.attachMedia(video);
+      hls = player;
+    });
+    return () => {
+      cancelled = true;
+      hls?.destroy();
+    };
+  }, [url]);
+  return <video ref={ref} controls autoPlay playsInline className="max-h-[78vh] w-full bg-black" />;
+}
 
 const SLOTS = [
   ["master", "Film", "video/*"],
@@ -498,7 +532,7 @@ export function SimpleDesk({
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/80 p-4" onClick={() => setPlayer(null)}>
           <div className="w-full max-w-4xl" onClick={(event) => event.stopPropagation()}>
             {player.visual === "video" ? (
-              <video src={player.url} controls autoPlay className="max-h-[78vh] w-full bg-black" />
+              <DeskVideo url={player.url} />
             ) : (
               <img src={player.url} alt="" className="max-h-[78vh] w-full object-contain" />
             )}
