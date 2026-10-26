@@ -7,6 +7,7 @@ import { BridgeShell } from "@/components/bridge/shell";
 import { StatusChip } from "@/components/bridge/status-rail";
 import { Button } from "@/components/ui/button";
 import { listTitles } from "@/lib/bridge/titles";
+import { requestScreener } from "@/lib/bridge/partners";
 import {
   createLicenseOrder,
   listOwnEntitlements,
@@ -131,6 +132,19 @@ function BuyerBody() {
   );
 }
 
+function ScreenerAsk({ titleId }: { titleId: string }) {
+  const ask = useMutation({
+    mutationFn: () => requestScreener({ data: { titleId, days: 3 } }),
+    onSuccess: () => toast.success("Screener requested for 3 days."),
+    onError: (error) => toast.error(error instanceof Error ? error.message : "Could not request a screener"),
+  });
+  return (
+    <button type="button" disabled={ask.isPending} onClick={() => ask.mutate()} className="text-sm font-semibold">
+      {ask.isPending ? "Asking…" : "Ask screener"}
+    </button>
+  );
+}
+
 function TitleList({ titles, entitled, order, empty }: { titles: Array<{ id: string; name: string; language: string; licensingFeePaise: number; status: string }>; entitled: Set<string>; order: { isPending: boolean; mutate: (id: string) => void }; empty: string }) {
   if (!titles.length) return <p className="text-sm text-muted">{empty}</p>;
   return (
@@ -143,7 +157,12 @@ function TitleList({ titles, entitled, order, empty }: { titles: Array<{ id: str
           </div>
           <div className="flex items-center gap-3">
             <StatusChip status={t.status as never} />
-            {entitled.has(t.id) ? <span className="text-sm text-accent">Licensed</span> : <Button disabled={order.isPending || t.licensingFeePaise <= 0} onClick={() => order.mutate(t.id)}>License</Button>}
+            {entitled.has(t.id) ? <span className="text-sm text-accent">Licensed</span> : (
+              <>
+                <ScreenerAsk titleId={t.id} />
+                <Button disabled={order.isPending || t.licensingFeePaise <= 0} onClick={() => order.mutate(t.id)}>License</Button>
+              </>
+            )}
           </div>
         </li>
       ))}
