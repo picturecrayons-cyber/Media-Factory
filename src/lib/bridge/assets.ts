@@ -12,6 +12,7 @@ import { assertNotDevUser } from "./guards";
 import { persistVerifiedAsset } from "./asset-confirmation";
 import { downloadDecision } from "./delivery-policy";
 import { validateOttIngestFile, type OttIngestKind } from "./ott-ingest-spec";
+import { verifyObject } from "./oci-object-storage.server";
 import { FILE_STORAGE_ENABLED } from "./mvp-lock";
 
 const UPLOADABLE: ReadonlySet<string> = new Set(["DRAFT", "UPLOADING", "PREPARING"]);
@@ -252,11 +253,10 @@ export const listTitleAssets = createServerFn({ method: "GET" })
       byte_size: number | null;
       created_at: string | Date;
     }>`
-      select id, kind, s3_key, content_type, byte_size, created_at
+      select distinct on (kind) id, kind, s3_key, content_type, byte_size, created_at
       from bridge_assets
       where title_id = ${title.id} and byte_size > 0
-      order by created_at desc
-      limit 24
+      order by kind, created_at desc
     `;
     const unfinished = await sql<{
       id: string;
@@ -271,6 +271,46 @@ export const listTitleAssets = createServerFn({ method: "GET" })
       where title_id = ${title.id} and coalesce(byte_size, 0) = 0
       order by created_at desc
       limit 12
+    `;
+    const picture = ready.some((row) => ["poster", "poster_vertical", "poster_horizontal", "thumbnail"].includes(row.kind));
+    const film = ready.some((row) => row.kind === "master" || row.kind === "screener");
+    if (!buyer && (!picture || !film)) {
+      for (const row of unfinished.slice(0, 6)) {
+        if (!row.s3_key.startsWith("bridge/")) continue;
+        try {
+          const object = await verifyObject(row.s3_key);
+          await sql`
+            update bridge_assets
+            set byte_size = ${object.byteSize}, content_type = coalesce(content_type, ${object.contentType})
+            where id = ${row.id}
+          `;
+          row.byte_size = object.byteSize;
+          if (object.contentType) row.content_type = object.contentType;
+        } catch {
+          // Still not in storage.
+        }
+      }
+    }
+    await sql`
+      update bridge_titles t set
+        poster_key = coalesce((
+          select a.s3_key from bridge_assets a
+          where a.title_id = t.id
+            and a.kind in ('poster_vertical', 'poster', 'poster_horizontal', 'thumbnail')
+            and coalesce(a.byte_size, 0) > 0
+          order by case a.kind when 'poster_vertical' then 0 when 'poster' then 1 when 'poster_horizontal' then 2 else 3 end,
+            a.created_at desc
+          limit 1
+        ), t.poster_key),
+        master_key = coalesce((
+          select a.s3_key from bridge_assets a
+          where a.title_id = t.id
+            and a.kind in ('master', 'screener')
+            and coalesce(a.byte_size, 0) > 0
+          order by case a.kind when 'master' then 0 else 1 end, a.created_at desc
+          limit 1
+        ), t.master_key)
+      where t.id = ${title.id}
     `;
     const rows = [...ready, ...unfinished];
     return {

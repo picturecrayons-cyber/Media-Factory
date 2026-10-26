@@ -60,7 +60,20 @@ export const listStudioFiles = createServerFn({ method: "GET" })
       order by created_at desc
       limit 80
     `;
+    const used = await sql<{ bytes: number | string | null }>`
+      select coalesce(sum(byte_size), 0) as bytes
+      from bridge_studio_files
+      where owner_user_id = ${actor.userId} and coalesce(byte_size, 0) > 0
+    `;
+    const onTitles = await sql<{ bytes: number | string | null }>`
+      select coalesce(sum(a.byte_size), 0) as bytes
+      from bridge_assets a
+      join bridge_titles t on t.id = a.title_id
+      where t.owner_user_id = ${actor.userId} and coalesce(a.byte_size, 0) > 0
+    `;
     return {
+      usedBytes: Number(used[0]?.bytes ?? 0),
+      titleBytes: Number(onTitles[0]?.bytes ?? 0),
       files: rows.map((row) => ({
         id: row.id,
         titleName: row.title_name,

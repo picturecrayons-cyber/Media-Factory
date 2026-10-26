@@ -324,7 +324,9 @@ export function SimpleDesk({
         <p className="mb-2 text-sm text-muted">One file in each slot. A new file replaces the old one.</p>
         <ul className="divide-y divide-line">
           {SLOTS.map(([kind, label, accept]) => {
-            const item = ready.find((row) => row.kind === kind) || (kind === "master" ? ready.find((row) => row.kind === "screener") : undefined);
+            const item = ready.find((row) => row.kind === kind)
+              || (kind === "master" ? ready.find((row) => row.kind === "screener") : undefined)
+              || (kind === "poster_vertical" ? ready.find((row) => row.kind === "poster") : undefined);
             const visual = kind === "master" || kind === "trailer";
             return (
               <li key={kind} className="flex flex-wrap items-center gap-3 py-3">

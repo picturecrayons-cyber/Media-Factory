@@ -3,6 +3,13 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { confirmStudioUpload, listStudioFiles, openStudioFile, prepareStudioUpload } from "@/lib/bridge/studio-storage";
 
+function mb(bytes: number | undefined) {
+  const value = Number(bytes ?? 0);
+  if (value <= 0) return "0 MB";
+  if (value < 1024 * 1024) return `${Math.max(1, Math.round(value / 1024))} KB`;
+  return `${Math.max(1, Math.round(value / 1024 / 1024))} MB`;
+}
+
 const AREAS = [
   {
     id: "working" as const,
@@ -91,7 +98,9 @@ export function StudioStorage() {
     <section className="space-y-4">
       <div>
         <h2 className="text-lg font-semibold">Studio storage</h2>
-        <p className="mt-1 text-sm text-muted">{rows.length ? `${rows.length} files held. Private until you put one on a title.` : "Empty. A file you add here stays private. It is not for sale."}</p>
+        <p className="mt-1 text-sm text-muted">
+          {files.isPending ? "Checking storage…" : `${mb(files.data?.usedBytes)} in private storage · ${mb(files.data?.titleBytes)} on titles`}
+        </p>
       </div>
       <div className="grid gap-2 sm:grid-cols-3">
         <input value={titleName} onChange={(e) => setTitleName(e.target.value)} placeholder="Film name" className="h-11 rounded-xl border border-line bg-white px-3 text-sm" />

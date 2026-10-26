@@ -21,6 +21,31 @@ function isAdmin(role: string | null | undefined) {
   return role === "admin" || role === "super_admin";
 }
 
+async function mapTitleFiles(sql: Awaited<ReturnType<typeof getSql>>, titleId: string) {
+  await sql`
+    update bridge_titles t set
+      poster_key = coalesce((
+        select a.s3_key from bridge_assets a
+        where a.title_id = t.id
+          and a.kind in ('poster_vertical', 'poster', 'poster_horizontal', 'thumbnail')
+          and coalesce(a.byte_size, 0) > 0
+        order by case a.kind when 'poster_vertical' then 0 when 'poster' then 1 when 'poster_horizontal' then 2 else 3 end,
+          a.created_at desc
+        limit 1
+      ), t.poster_key),
+      master_key = coalesce((
+        select a.s3_key from bridge_assets a
+        where a.title_id = t.id
+          and a.kind in ('master', 'screener')
+          and coalesce(a.byte_size, 0) > 0
+        order by case a.kind when 'master' then 0 else 1 end, a.created_at desc
+        limit 1
+      ), t.master_key),
+      updated_at = now()
+    where t.id = ${titleId}
+  `;
+}
+
 export const matchTitleStorage = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(z.object({ titleId: z.string().min(8) }))
@@ -31,11 +56,11 @@ export const matchTitleStorage = createServerFn({ method: "POST" })
     const title = await loadTitle(data.titleId);
     if (!title) throw new Error("Not found");
     const sql = await getSql();
-    const rows = await sql<{ id: string; s3_key: string }>`
-      select id, s3_key from bridge_assets
+    const rows = await sql<{ id: string; kind: string; s3_key: string }>`
+      select id, kind, s3_key from bridge_assets
       where title_id = ${title.id} and coalesce(byte_size, 0) = 0 and s3_key like 'bridge/%'
       order by created_at desc
-      limit 8
+      limit 40
     `;
     let found = 0;
     for (const row of rows) {
@@ -51,6 +76,7 @@ export const matchTitleStorage = createServerFn({ method: "POST" })
         // The row stays unfinished. Oracle did not have this object.
       }
     }
+    await mapTitleFiles(sql, title.id);
     return { found, checked: rows.length };
   });
 
@@ -298,6 +324,7 @@ export const confirmSimpleUpload = createServerFn({ method: "POST" })
       await sql`delete from bridge_assets where title_id = ${title.id} and kind = ${data.kind} and id <> ${id}`;
       await Promise.all(older.map((row) => deleteObject(row.s3_key).catch(() => undefined)));
     }
+    await mapTitleFiles(sql, title.id);
     const noteId = randomBytes(16).toString("hex");
     const admins = await sql<{ email: string }>`
       select email from bridge_profiles
