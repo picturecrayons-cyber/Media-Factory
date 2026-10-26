@@ -7,6 +7,7 @@ import { writeAudit } from "./audit";
 import { assertNotDevUser } from "./guards";
 import { loadTitle } from "./titles";
 import { requireVerifiedActor } from "./session";
+import { signDownload, signUpload, titleAssetKey, verifyObject } from "./oci-object-storage.server";
 import { hasPermission } from "./rbac";
 
 const BUCKET = "bridge-simple";
@@ -136,17 +137,22 @@ export const prepareSimpleUpload = createServerFn({ method: "POST" })
     if (!title) throw new Error("Not found");
     const staff = isStaff(actor.internalRole);
     if (!staff && title.ownerUserId !== actor.userId) throw new Error("Forbidden");
-    await ensureSimpleStorage();
     const safe = data.filename.replace(/[^a-zA-Z0-9._-]/g, "-").slice(0, 80) || "file";
-    const path = `${actor.userId}/${title.id}/${Date.now()}-${safe}`;
-    return { bucket: BUCKET, path, contentType: data.contentType };
+    const path = titleAssetKey({
+      ownerUserId: actor.userId,
+      titleId: title.id,
+      kind: "master",
+      filename: safe,
+    });
+    const signed = await signUpload({ key: path, contentType: data.contentType });
+    return { url: signed.url, path, method: "PUT" as const };
   });
 
 export const confirmSimpleUpload = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(z.object({
     titleId: z.string().min(8),
-    path: z.string().min(8).max(300),
+    path: z.string().min(8).max(500),
     contentType: z.string().min(3).max(120),
     byteSize: z.number().int().positive().max(200 * 1024 * 1024),
   }))
@@ -155,14 +161,15 @@ export const confirmSimpleUpload = createServerFn({ method: "POST" })
     const actor = await requireVerifiedActor(context.userId);
     const title = await loadTitle(data.titleId);
     if (!title) throw new Error("Not found");
-    if (!data.path.startsWith(`${actor.userId}/${title.id}/`)) throw new Error("Upload path is not yours");
+    if (!data.path.startsWith(`bridge/${actor.userId}/${title.id}/`)) throw new Error("Upload path is not yours");
     const staff = isStaff(actor.internalRole);
     if (!staff && title.ownerUserId !== actor.userId) throw new Error("Forbidden");
+    const verified = await verifyObject(data.path, data.contentType);
     const sql = await getSql();
     const id = randomBytes(16).toString("hex");
     await sql`
       insert into bridge_assets (id, title_id, kind, s3_key, content_type, byte_size, created_by)
-      values (${id}, ${title.id}, 'master', ${data.path}, ${data.contentType}, ${data.byteSize}, ${actor.userId})
+      values (${id}, ${title.id}, 'master', ${data.path}, ${verified.contentType || data.contentType}, ${verified.byteSize}, ${actor.userId})
     `;
     const noteId = randomBytes(16).toString("hex");
     const admins = await sql<{ email: string }>`
@@ -186,6 +193,30 @@ export const confirmSimpleUpload = createServerFn({ method: "POST" })
       metadata: { titleId: title.id },
     });
     return { assetId: id, path: data.path, mailed };
+  });
+
+export const openSimpleFile = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({ titleId: z.string().min(8) }))
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    const title = await loadTitle(data.titleId);
+    if (!title) throw new Error("Not found");
+    const staff = isStaff(actor.internalRole);
+    if (!staff && title.ownerUserId !== actor.userId) throw new Error("Forbidden");
+    const sql = await getSql();
+    const rows = await sql<{ s3_key: string }>`
+      select s3_key from bridge_assets
+      where title_id = ${title.id} and kind = 'master' and coalesce(byte_size, 0) > 0
+      order by created_at desc
+      limit 1
+    `;
+    const key = rows[0]?.s3_key;
+    if (!key) throw new Error("No file yet");
+    if (!key.startsWith("bridge/")) throw new Error("This file is not in Oracle storage");
+    const signed = await signDownload({ key, expiresIn: 600 });
+    return { url: signed.url };
   });
 
 export const getSimpleDesk = createServerFn({ method: "GET" })

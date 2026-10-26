@@ -1,9 +1,8 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { confirmSimpleUpload, getSimpleDesk, postSimpleDesk, prepareSimpleUpload } from "@/lib/bridge/simple-desk";
+import { confirmSimpleUpload, getSimpleDesk, openSimpleFile, postSimpleDesk, prepareSimpleUpload } from "@/lib/bridge/simple-desk";
 import { advanceTitle, updateTitle } from "@/lib/bridge/titles";
 import { nextStatus } from "@/lib/bridge/lifecycle";
-import { supabase } from "@/lib/supabase";
 import type { BridgeActor } from "@/lib/bridge/session";
 import type { TitleStatus } from "@/lib/bridge/types";
 
@@ -46,11 +45,12 @@ export function SimpleDesk({
       const prepared = await prepareSimpleUpload({
         data: { titleId, filename: file.name, contentType, byteSize: file.size },
       });
-      const sent = await supabase.storage.from(prepared.bucket).upload(prepared.path, file, {
-        contentType,
-        upsert: false,
+      const sent = await fetch(prepared.url, {
+        method: "PUT",
+        body: file,
+        headers: { "content-type": contentType },
       });
-      if (sent.error) throw new Error(sent.error.message);
+      if (!sent.ok) throw new Error(`Upload failed (${sent.status})`);
       return confirmSimpleUpload({
         data: { titleId, path: prepared.path, contentType, byteSize: file.size },
       });
@@ -96,14 +96,12 @@ export function SimpleDesk({
   });
 
   async function view() {
-    const file = desk.data?.file;
-    if (!file) return;
-    const signed = await supabase.storage.from(BUCKET(desk.data?.bucket)).createSignedUrl(file.path, 600);
-    if (signed.error || !signed.data?.signedUrl) {
-      setError(signed.error?.message || "Could not open the file");
-      return;
+    try {
+      const opened = await openSimpleFile({ data: { titleId } });
+      window.open(opened.url, "_blank", "noopener,noreferrer");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not open the file");
     }
-    window.open(signed.data.signedUrl, "_blank", "noopener,noreferrer");
   }
 
   const staff = actor.internalRole === "admin" || actor.internalRole === "super_admin" || actor.internalRole === "qc_reviewer";
@@ -205,8 +203,4 @@ export function SimpleDesk({
       </ul>
     </section>
   );
-}
-
-function BUCKET(name: string | undefined) {
-  return name || "bridge-simple";
 }
