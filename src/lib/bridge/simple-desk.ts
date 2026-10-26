@@ -7,7 +7,7 @@ import { writeAudit } from "./audit";
 import { assertNotDevUser } from "./guards";
 import { loadTitle } from "./titles";
 import { requireVerifiedActor } from "./session";
-import { beginMultipart, commitMultipart, deleteObject, signDownload, signUpload, titleAssetKey, verifyObject } from "./oci-object-storage.server";
+import { abortMultipart, beginMultipart, commitMultipart, deleteObject, signDownload, signUpload, titleAssetKey, verifyObject } from "./oci-object-storage.server";
 import { hasPermission } from "./rbac";
 
 const BUCKET = "bridge-simple";
@@ -301,6 +301,16 @@ export const prepareSimpleUpload = createServerFn({ method: "POST" })
     return { url: signed.url, path, method: "PUT" as const, partBase, partBytes: PART_BYTES };
   });
 
+export const abortSimpleUpload = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({ partBase: z.string().url().max(2000) }))
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    await requireVerifiedActor(context.userId);
+    await abortMultipart(data.partBase);
+    return { ok: true };
+  });
+
 export const confirmSimpleUpload = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(z.object({
@@ -343,10 +353,13 @@ export const confirmSimpleUpload = createServerFn({ method: "POST" })
       select email from bridge_profiles
       where internal_role in ('admin', 'super_admin', 'qc_reviewer')
     `;
+    const owner = await sql<{ email: string }>`
+      select email from bridge_profiles where user_id = ${title.ownerUserId} limit 1
+    `;
     const mailed = await mailPeople(
-      admins.map((row) => row.email),
-      `File ready · ${title.name}`,
-      `${actor.displayName || actor.email} uploaded a file for “${title.name}”. Open https://www.crayonspictures.in/title/${title.id}`,
+      [...admins.map((row) => row.email), owner[0]?.email ?? "", actor.email],
+      `File saved · ${title.name}`,
+      `A file was saved on “${title.name}”. Open https://www.crayonspictures.in/title/${title.id}`,
     );
     await sql`
       insert into bridge_desk_notes (id, title_id, actor_user_id, action, body, mailed)

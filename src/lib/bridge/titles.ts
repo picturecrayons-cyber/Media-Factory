@@ -666,8 +666,72 @@ export const advanceTitle = createServerFn({ method: "POST" })
         tx,
       );
       return { title: { ...title, status: data.to } };
+    }).then(async (result) => {
+      await notifySubmission({
+        titleId: title.id,
+        titleName: title.name,
+        ownerUserId: title.ownerUserId,
+        actorUserId: actor.userId,
+        actorEmail: actor.email,
+        actorName: actor.displayName || actor.email,
+      });
+      return result;
     });
   });
+
+async function notifySubmission(input: {
+  titleId: string;
+  titleName: string;
+  ownerUserId: string;
+  actorUserId: string;
+  actorEmail: string;
+  actorName: string;
+}) {
+  try {
+    const sql = await getSql();
+    const admins = await sql<{ email: string }>`
+      select email from bridge_profiles
+      where internal_role in ('admin', 'super_admin', 'qc_reviewer')
+    `;
+    const owner = await sql<{ email: string }>`
+      select email from bridge_profiles where user_id = ${input.ownerUserId} limit 1
+    `;
+    const people = [...new Set([
+      ...admins.map((row) => row.email),
+      owner[0]?.email ?? "",
+      input.actorEmail,
+    ].map((value) => value.trim()).filter(Boolean))];
+    let mailed = false;
+    try {
+      const { sendTransactionalEmail } = await import("./mail.server");
+      await Promise.all(people.map((address) => sendTransactionalEmail({
+        to: address,
+        subject: `Submitted · ${input.titleName}`,
+        text: `${input.actorName} submitted “${input.titleName}”. Open https://www.crayonspictures.in/title/${input.titleId}`,
+      })));
+      mailed = people.length > 0;
+    } catch (error) {
+      console.error("[bridge] submit mail skipped", error instanceof Error ? error.message : error);
+    }
+    await sql.query(`
+      create table if not exists bridge_desk_notes (
+        id text primary key,
+        title_id text not null,
+        actor_user_id text not null,
+        action text not null,
+        body text not null,
+        mailed boolean not null default false,
+        created_at timestamptz not null default now()
+      )
+    `);
+    await sql`
+      insert into bridge_desk_notes (id, title_id, actor_user_id, action, body, mailed)
+      values (${randomBytes(16).toString("hex")}, ${input.titleId}, ${input.actorUserId}, 'submit', ${"Submitted."}, ${mailed})
+    `;
+  } catch (error) {
+    console.error("[bridge] submit notice skipped", error instanceof Error ? error.message : error);
+  }
+}
 
 export const listAuditLogs = createServerFn({ method: "GET" })
   .middleware([authMiddleware])

@@ -1,6 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 import { UserButton } from "@/lib/auth/gates";
+import { UploadTray } from "@/components/bridge/upload-tray";
 import type { BridgeActor } from "@/lib/bridge/session";
 import { cn } from "@/lib/cn";
 
@@ -131,6 +132,7 @@ export function BridgeShell({ actor, title, children }: { actor: BridgeActor; ti
           ))}
         </div>
       </nav>
+      <UploadTray />
     </div>
   );
 }

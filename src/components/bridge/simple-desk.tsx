@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { listTitleAssets } from "@/lib/bridge/assets";
 import { confirmSimpleUpload, deleteTitleAsset, deleteUnfinishedAssets, getSimpleDesk, listDeskOffers, listTitleLog, matchTitleStorage, openTitleAsset, postDeskOffer, postSimpleDesk, prepareSimpleUpload } from "@/lib/bridge/simple-desk";
 import { sendFile, uploadLimit } from "@/lib/bridge/upload-parts";
+import { enqueueUpload } from "@/components/bridge/upload-tray";
 import { advanceTitle, updateTitle } from "@/lib/bridge/titles";
 import { nextStatus } from "@/lib/bridge/lifecycle";
 import type { BridgeActor } from "@/lib/bridge/session";
@@ -107,7 +108,6 @@ export function SimpleDesk({
   const [editing, setEditing] = useState(false);
   const [player, setPlayer] = useState<null | { url: string; visual: "video" | "image" }>(null);
   const [showUnfinished, setShowUnfinished] = useState(false);
-  const [progress, setProgress] = useState<null | { loaded: number; total: number; secondsLeft: number | null; label: string }>(null);
 
   const refresh = async () => {
     await Promise.all([
@@ -117,38 +117,38 @@ export function SimpleDesk({
     ]);
   };
 
-  const upload = useMutation({
-    mutationFn: async (input: { file: File; kind: (typeof SLOTS)[number][0] }) => {
-      const limit = uploadLimit(input.kind);
-      if (input.file.size > limit) throw new Error(limit > 200 * 1024 * 1024 ? "Keep the film under 8 GB." : "Keep this file under 200 MB.");
-      const contentType = input.file.type || "application/octet-stream";
-      setProgress({ loaded: 0, total: input.file.size, secondsLeft: null, label: "Uploading" });
-      await sendFile({
-        file: input.file,
-        resumeKey: `${titleId}:${input.kind}:${input.file.name}:${input.file.size}`,
-        prepare: () => prepareSimpleUpload({
-          data: { titleId, filename: input.file.name, contentType, byteSize: input.file.size, kind: input.kind },
-        }),
-        confirm: ({ path, partBase }) => confirmSimpleUpload({
-          data: { titleId, path, contentType, byteSize: input.file.size, kind: input.kind, partBase },
-        }),
-        onProgress: (next) => setProgress({ ...next, label: "Uploading" }),
-      });
-    },
-    onSuccess: async () => {
-      setError("");
-      setProgress((current) => current ? { ...current, label: "Saved" } : null);
-      setNotice("Saved.");
-      toast.success("File saved.");
-      await refresh();
-    },
-    onError: (e) => {
-      const message = e instanceof Error ? e.message : "Upload failed";
-      setProgress((current) => current ? { ...current, label: "Failed" } : { loaded: 0, total: 1, secondsLeft: null, label: "Failed" });
+  const upload = (file: File, kind: (typeof SLOTS)[number][0], label: string) => {
+    const limit = uploadLimit(kind);
+    if (file.size > limit) {
+      const message = limit > 200 * 1024 * 1024 ? "Keep the film under 8 GB." : "Keep this file under 200 MB.";
       setError(message);
       toast.error(message);
-    },
-  });
+      return;
+    }
+    const contentType = file.type || "application/octet-stream";
+    setError("");
+    enqueueUpload({
+      label,
+      file,
+      run: ({ signal, onProgress }) => sendFile({
+        file,
+        signal,
+        prepare: () => prepareSimpleUpload({
+          data: { titleId, filename: file.name, contentType, byteSize: file.size, kind },
+        }),
+        confirm: ({ path, partBase }) => confirmSimpleUpload({
+          data: { titleId, path, contentType, byteSize: file.size, kind, partBase },
+        }),
+        onProgress,
+      }),
+      onDone: () => {
+        setNotice("Saved.");
+        toast.success("Saved.");
+        void refresh();
+      },
+      onFail: () => toast.error("Saving stopped."),
+    });
+  };
 
   const next = nextStatus(status);
   const send = useMutation({
@@ -156,8 +156,11 @@ export function SimpleDesk({
     onSuccess: async () => {
       setError("");
       setNotice("Submitted.");
-      toast.success("Submitted.");
-      await qc.invalidateQueries({ queryKey: ["bridge-title", titleId] });
+      toast.success("Submitted. The desk and the studio have the update.");
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["bridge-title", titleId] }),
+        qc.invalidateQueries({ queryKey: ["simple-desk", titleId] }),
+      ]);
     },
     onError: (e) => {
       const message = e instanceof Error ? e.message : "Could not submit";
@@ -231,7 +234,7 @@ export function SimpleDesk({
   const match = useMutation({
     mutationFn: () => matchTitleStorage({ data: { titleId } }),
     onSuccess: async (res) => {
-      toast.success(res.found ? `Found ${res.found} file${res.found === 1 ? "" : "s"} in Oracle.` : "No matching file in Oracle.");
+      toast.success(res.found ? "Checked." : "Nothing new found.");
       await refresh();
     },
     onError: (e) => toast.error(e instanceof Error ? e.message : "Could not check storage"),
@@ -326,17 +329,6 @@ export function SimpleDesk({
       <div className="rounded-2xl border border-line bg-surface p-4">
         <h2 className="mb-3 text-lg font-semibold">Files</h2>
         <p className="mb-2 text-sm text-muted">One file in each slot. A new file replaces the old one.</p>
-        {progress ? (
-          <div className="mb-3">
-            <div className="h-2 overflow-hidden rounded-full bg-[#e7edf2]">
-              <div className="h-full bg-[#102433]" style={{ width: `${Math.min(100, Math.round((progress.loaded / Math.max(1, progress.total)) * 100))}%` }} />
-            </div>
-            <p className="mt-1 text-xs text-muted">
-              {progress.label} · {Math.min(100, Math.round((progress.loaded / Math.max(1, progress.total)) * 100))}%
-              {progress.secondsLeft != null && progress.label === "Uploading" ? ` · ${progress.secondsLeft}s left` : ""}
-            </p>
-          </div>
-        ) : null}
         <ul className="divide-y divide-line">
           {SLOTS.map(([kind, label, accept]) => {
             const item = ready.find((row) => row.kind === kind)
@@ -352,10 +344,10 @@ export function SimpleDesk({
                 {item ? <button type="button" onClick={() => void view(item.id)} className="text-sm font-semibold">{visual ? "Play" : "View"}</button> : null}
                 <label className="cursor-pointer text-sm font-semibold">
                   {item ? "Replace" : "Add"}
-                  <input type="file" accept={accept} className="sr-only" disabled={upload.isPending} onChange={(e) => {
+                  <input type="file" accept={accept} className="sr-only" onChange={(e) => {
                     const nextFile = e.target.files?.[0];
                     e.target.value = "";
-                    if (nextFile) upload.mutate({ file: nextFile, kind });
+                    if (nextFile) upload(nextFile, kind, label);
                   }} />
                 </label>
                 {item ? <button type="button" onClick={() => remove.mutate(item.id)} className="text-sm font-semibold text-red-700">Remove</button> : null}
@@ -444,7 +436,7 @@ export function SimpleDesk({
         <ul className="space-y-2">
           {desk.data?.notes.map((item) => (
             <li key={item.id} className="rounded-xl border border-line px-3 py-2 text-sm">
-              <p className="font-semibold">{item.action} · {item.actor}</p>
+              <p className="font-semibold">{({ upload: "File", submit: "Submitted", note: "Note", park: "Parked", approve: "Approved", replace: "Replace" } as Record<string, string>)[item.action] || "Update"} · {item.actor}</p>
               <p className="text-muted">{item.body}</p>
             </li>
           ))}

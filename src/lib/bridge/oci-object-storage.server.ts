@@ -228,6 +228,12 @@ export async function commitMultipart(partBase: string) {
   if (!res.ok) throw new Error(`Could not finish the upload (${res.status})`);
 }
 
+export async function abortMultipart(partBase: string) {
+  const url = assertStorageUrl(partBase);
+  const res = await fetch(url, { method: "DELETE", signal: AbortSignal.timeout(20_000) });
+  if (!res.ok && res.status !== 404) throw new Error(`Could not clear the upload (${res.status})`);
+}
+
 export async function signDownload(opts: { key: string; expiresIn?: number }) {
   const signed = await createPar({
     key: opts.key,
