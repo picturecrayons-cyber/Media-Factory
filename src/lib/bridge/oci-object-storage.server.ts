@@ -200,6 +200,34 @@ export async function signUpload(opts: { key: string; contentType: string; expir
   return { url: signed.url, key: opts.key, bucket: signed.bucket, method: "PUT" as const };
 }
 
+function assertStorageUrl(value: string) {
+  const url = new URL(value);
+  if (url.protocol !== "https:" || !url.hostname.endsWith(".oraclecloud.com")) {
+    throw new Error("Upload address is not storage");
+  }
+  return url;
+}
+
+export async function beginMultipart(parUrl: string) {
+  const url = assertStorageUrl(parUrl);
+  const res = await fetch(url, {
+    method: "PUT",
+    headers: { "opc-multipart": "true" },
+    signal: AbortSignal.timeout(20_000),
+  });
+  if (!res.ok) throw new Error(`Could not open a multi-part upload (${res.status})`);
+  const parsed = (await res.json()) as { accessUri?: string };
+  if (!parsed.accessUri?.startsWith("/p/")) throw new Error("Multi-part upload did not return an address");
+  const base = parsed.accessUri.endsWith("/") ? parsed.accessUri : `${parsed.accessUri}/`;
+  return `${url.origin}${base}`;
+}
+
+export async function commitMultipart(partBase: string) {
+  const url = assertStorageUrl(partBase);
+  const res = await fetch(url, { method: "POST", signal: AbortSignal.timeout(30_000) });
+  if (!res.ok) throw new Error(`Could not finish the upload (${res.status})`);
+}
+
 export async function signDownload(opts: { key: string; expiresIn?: number }) {
   const signed = await createPar({
     key: opts.key,

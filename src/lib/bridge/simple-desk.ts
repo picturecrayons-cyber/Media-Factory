@@ -7,7 +7,7 @@ import { writeAudit } from "./audit";
 import { assertNotDevUser } from "./guards";
 import { loadTitle } from "./titles";
 import { requireVerifiedActor } from "./session";
-import { deleteObject, signDownload, signUpload, titleAssetKey, verifyObject } from "./oci-object-storage.server";
+import { beginMultipart, commitMultipart, deleteObject, signDownload, signUpload, titleAssetKey, verifyObject } from "./oci-object-storage.server";
 import { hasPermission } from "./rbac";
 
 const BUCKET = "bridge-simple";
@@ -246,6 +246,12 @@ export const listGalleryFiles = createServerFn({ method: "GET" })
   });
 
 const FILE_KINDS = ["master", "trailer", "poster", "poster_vertical", "poster_horizontal", "thumbnail", "subtitle", "subtitle_extra", "audio", "audio_dub", "audio_description", "screener", "censor_certificate"] as const;
+const FILE_LIMIT = 8 * 1024 * 1024 * 1024;
+const PART_BYTES = 16 * 1024 * 1024;
+const SMALL_FILE = 200 * 1024 * 1024;
+const LARGE_KINDS = new Set(["master", "trailer", "screener", "audio", "audio_dub", "audio_description"]);
+const SMALL_FILE = 200 * 1024 * 1024;
+const LARGE_KINDS = new Set(["master", "trailer", "screener", "audio", "audio_dub", "audio_description"]);
 
 let assetKindsReady = false;
 
@@ -270,7 +276,7 @@ export const prepareSimpleUpload = createServerFn({ method: "POST" })
     titleId: z.string().min(8),
     filename: z.string().min(1).max(160),
     contentType: z.string().min(3).max(120),
-    byteSize: z.number().int().positive().max(200 * 1024 * 1024),
+    byteSize: z.number().int().positive().max(FILE_LIMIT),
     kind: z.enum(FILE_KINDS).default("master"),
   }))
   .handler(async ({ context, data }) => {
@@ -280,6 +286,7 @@ export const prepareSimpleUpload = createServerFn({ method: "POST" })
     if (!title) throw new Error("Not found");
     const staff = isStaff(actor.internalRole);
     if (!staff && title.ownerUserId !== actor.userId) throw new Error("Forbidden");
+    if (!LARGE_KINDS.has(data.kind) && data.byteSize > SMALL_FILE) throw new Error("Keep this file under 200 MB.");
     const safe = data.filename.replace(/[^a-zA-Z0-9._-]/g, "-").slice(0, 80) || "file";
     const path = titleAssetKey({
       ownerUserId: actor.userId,
@@ -287,8 +294,13 @@ export const prepareSimpleUpload = createServerFn({ method: "POST" })
       kind: data.kind,
       filename: safe,
     });
-    const signed = await signUpload({ key: path, contentType: data.contentType });
-    return { url: signed.url, path, method: "PUT" as const };
+    const signed = await signUpload({
+      key: path,
+      contentType: data.contentType,
+      expiresIn: data.byteSize > PART_BYTES ? 12 * 60 * 60 : 900,
+    });
+    const partBase = data.byteSize > PART_BYTES ? await beginMultipart(signed.url) : null;
+    return { url: signed.url, path, method: "PUT" as const, partBase, partBytes: PART_BYTES };
   });
 
 export const confirmSimpleUpload = createServerFn({ method: "POST" })
@@ -297,8 +309,9 @@ export const confirmSimpleUpload = createServerFn({ method: "POST" })
     titleId: z.string().min(8),
     path: z.string().min(8).max(500),
     contentType: z.string().min(3).max(120),
-    byteSize: z.number().int().positive().max(200 * 1024 * 1024),
+    byteSize: z.number().int().positive().max(FILE_LIMIT),
     kind: z.enum(FILE_KINDS).default("master"),
+    partBase: z.string().url().max(2000).optional(),
   }))
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
@@ -308,6 +321,8 @@ export const confirmSimpleUpload = createServerFn({ method: "POST" })
     if (!data.path.startsWith(`bridge/${actor.userId}/${title.id}/`)) throw new Error("Upload path is not yours");
     const staff = isStaff(actor.internalRole);
     if (!staff && title.ownerUserId !== actor.userId) throw new Error("Forbidden");
+    if (!LARGE_KINDS.has(data.kind) && data.byteSize > SMALL_FILE) throw new Error("Keep this file under 200 MB.");
+    if (data.partBase) await commitMultipart(data.partBase);
     const verified = await verifyObject(data.path, data.contentType);
     const sql = await getSql();
     await widenAssetKinds(sql);

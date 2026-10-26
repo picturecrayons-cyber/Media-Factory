@@ -2,13 +2,13 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { listTitleAssets } from "@/lib/bridge/assets";
 import { confirmSimpleUpload, deleteTitleAsset, deleteUnfinishedAssets, getSimpleDesk, listDeskOffers, listTitleLog, matchTitleStorage, openTitleAsset, postDeskOffer, postSimpleDesk, prepareSimpleUpload } from "@/lib/bridge/simple-desk";
+import { sendFile, uploadLimit } from "@/lib/bridge/upload-parts";
 import { advanceTitle, updateTitle } from "@/lib/bridge/titles";
 import { nextStatus } from "@/lib/bridge/lifecycle";
 import type { BridgeActor } from "@/lib/bridge/session";
 import type { TitleStatus } from "@/lib/bridge/types";
 import { toast } from "sonner";
 
-const MAX_BYTES = 200 * 1024 * 1024;
 const SLOTS = [
   ["master", "Film", "video/*"],
   ["trailer", "Trailer", "video/*"],
@@ -107,6 +107,7 @@ export function SimpleDesk({
   const [editing, setEditing] = useState(false);
   const [player, setPlayer] = useState<null | { url: string; visual: "video" | "image" }>(null);
   const [showUnfinished, setShowUnfinished] = useState(false);
+  const [progress, setProgress] = useState<null | { loaded: number; total: number; secondsLeft: number | null; label: string }>(null);
 
   const refresh = async () => {
     await Promise.all([
@@ -118,29 +119,32 @@ export function SimpleDesk({
 
   const upload = useMutation({
     mutationFn: async (input: { file: File; kind: (typeof SLOTS)[number][0] }) => {
-      if (input.file.size > MAX_BYTES) throw new Error("Keep the file under 200 MB.");
+      const limit = uploadLimit(input.kind);
+      if (input.file.size > limit) throw new Error(limit > 200 * 1024 * 1024 ? "Keep the film under 8 GB." : "Keep this file under 200 MB.");
       const contentType = input.file.type || "application/octet-stream";
-      const prepared = await prepareSimpleUpload({
-        data: { titleId, filename: input.file.name, contentType, byteSize: input.file.size, kind: input.kind },
-      });
-      const sent = await fetch(prepared.url, {
-        method: "PUT",
-        body: input.file,
-        headers: { "content-type": contentType },
-      });
-      if (!sent.ok) throw new Error(`Upload failed (${sent.status})`);
-      return confirmSimpleUpload({
-        data: { titleId, path: prepared.path, contentType, byteSize: input.file.size, kind: input.kind },
+      setProgress({ loaded: 0, total: input.file.size, secondsLeft: null, label: "Uploading" });
+      await sendFile({
+        file: input.file,
+        resumeKey: `${titleId}:${input.kind}:${input.file.name}:${input.file.size}`,
+        prepare: () => prepareSimpleUpload({
+          data: { titleId, filename: input.file.name, contentType, byteSize: input.file.size, kind: input.kind },
+        }),
+        confirm: ({ path, partBase }) => confirmSimpleUpload({
+          data: { titleId, path, contentType, byteSize: input.file.size, kind: input.kind, partBase },
+        }),
+        onProgress: (next) => setProgress({ ...next, label: "Uploading" }),
       });
     },
     onSuccess: async () => {
       setError("");
+      setProgress((current) => current ? { ...current, label: "Saved" } : null);
       setNotice("Saved.");
       toast.success("File saved.");
       await refresh();
     },
     onError: (e) => {
       const message = e instanceof Error ? e.message : "Upload failed";
+      setProgress((current) => current ? { ...current, label: "Failed" } : { loaded: 0, total: 1, secondsLeft: null, label: "Failed" });
       setError(message);
       toast.error(message);
     },
@@ -322,6 +326,17 @@ export function SimpleDesk({
       <div className="rounded-2xl border border-line bg-surface p-4">
         <h2 className="mb-3 text-lg font-semibold">Files</h2>
         <p className="mb-2 text-sm text-muted">One file in each slot. A new file replaces the old one.</p>
+        {progress ? (
+          <div className="mb-3">
+            <div className="h-2 overflow-hidden rounded-full bg-[#e7edf2]">
+              <div className="h-full bg-[#102433]" style={{ width: `${Math.min(100, Math.round((progress.loaded / Math.max(1, progress.total)) * 100))}%` }} />
+            </div>
+            <p className="mt-1 text-xs text-muted">
+              {progress.label} · {Math.min(100, Math.round((progress.loaded / Math.max(1, progress.total)) * 100))}%
+              {progress.secondsLeft != null && progress.label === "Uploading" ? ` · ${progress.secondsLeft}s left` : ""}
+            </p>
+          </div>
+        ) : null}
         <ul className="divide-y divide-line">
           {SLOTS.map(([kind, label, accept]) => {
             const item = ready.find((row) => row.kind === kind)
