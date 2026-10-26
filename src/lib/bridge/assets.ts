@@ -244,6 +244,7 @@ export const listTitleAssets = createServerFn({ method: "GET" })
     const title = await loadTitle(data.titleId);
     if (!title || !canReadTitle(actor, title)) throw new Error("Not found");
     const sql = await getSql();
+    await sql.query(`alter table bridge_assets add column if not exists public_face boolean not null default false`);
     const buyer = actor.accountType === "buyer" && !actor.internalRole;
     const ready = await sql<{
       id: string;
@@ -251,9 +252,10 @@ export const listTitleAssets = createServerFn({ method: "GET" })
       s3_key: string;
       content_type: string | null;
       byte_size: number | null;
+      public_face: boolean | null;
       created_at: string | Date;
     }>`
-      select distinct on (kind) id, kind, s3_key, content_type, byte_size, created_at
+      select distinct on (kind) id, kind, s3_key, content_type, byte_size, public_face, created_at
       from bridge_assets
       where title_id = ${title.id} and byte_size > 0
       order by kind, created_at desc
@@ -264,9 +266,10 @@ export const listTitleAssets = createServerFn({ method: "GET" })
       s3_key: string;
       content_type: string | null;
       byte_size: number | null;
+      public_face: boolean | null;
       created_at: string | Date;
     }>`
-      select id, kind, s3_key, content_type, byte_size, created_at
+      select id, kind, s3_key, content_type, byte_size, false as public_face, created_at
       from bridge_assets
       where title_id = ${title.id} and coalesce(byte_size, 0) = 0
       order by created_at desc
@@ -327,6 +330,7 @@ export const listTitleAssets = createServerFn({ method: "GET" })
           contentType: r.content_type,
           byteSize: r.byte_size,
           verified: Number(r.byte_size) > 0,
+          publicFace: Boolean(r.public_face),
           pending: !(Number(r.byte_size) > 0),
           createdAt:
             r.created_at instanceof Date ? r.created_at.toISOString() : String(r.created_at),

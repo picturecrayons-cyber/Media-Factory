@@ -640,14 +640,17 @@ export const postDeskOffer = createServerFn({ method: "POST" })
 export const listPublicPosters = createServerFn({ method: "GET" })
   .handler(async () => {
     const sql = await getSql();
+    await sql.query(`alter table bridge_assets add column if not exists public_face boolean not null default false`);
     const rows = await sql<{ id: string; name: string; s3_key: string }>`
-      select distinct on (a.title_id) a.id, t.name, a.s3_key
+      select a.id, t.name, a.s3_key
       from bridge_assets a
       join bridge_titles t on t.id = a.title_id
-      where a.kind in ('poster_vertical', 'poster_horizontal', 'poster', 'thumbnail')
+      where a.public_face = true
+        and t.status <> 'DRAFT'
+        and a.kind in ('poster_vertical', 'poster_horizontal', 'poster', 'thumbnail')
         and coalesce(a.byte_size, 0) > 0
-      order by a.title_id, a.created_at desc
-      limit 8
+      order by a.created_at desc
+      limit 12
     `;
     const posters = [];
     for (const row of rows) {
@@ -659,4 +662,80 @@ export const listPublicPosters = createServerFn({ method: "GET" })
       }
     }
     return { posters };
+  });
+
+const POSTER_KINDS = ["poster_vertical", "poster_horizontal", "poster", "thumbnail"];
+
+export const setPublicPoster = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({ assetId: z.string().min(8), publicFace: z.boolean() }))
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    if (!isAdmin(actor.internalRole)) throw new Error("Forbidden");
+    const sql = await getSql();
+    await sql.query(`alter table bridge_assets add column if not exists public_face boolean not null default false`);
+    const rows = await sql<{ id: string; title_id: string; kind: string }>`
+      select id, title_id, kind from bridge_assets where id = ${data.assetId} limit 1
+    `;
+    const asset = rows[0];
+    if (!asset || !POSTER_KINDS.includes(asset.kind)) throw new Error("Choose a poster");
+    await sql`update bridge_assets set public_face = false where title_id = ${asset.title_id} and kind in ('poster_vertical', 'poster_horizontal', 'poster', 'thumbnail')`;
+    if (data.publicFace) {
+      await sql`update bridge_assets set public_face = true where id = ${asset.id}`;
+    }
+    await writeAudit({
+      actorUserId: actor.userId,
+      action: data.publicFace ? "poster.public" : "poster.private",
+      entityType: "bridge_asset",
+      entityId: asset.id,
+      metadata: { titleId: asset.title_id },
+    });
+    return { ok: true };
+  });
+
+export const deleteBridgeTitle = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({ titleId: z.string().min(8) }))
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    if (actor.internalRole !== "super_admin") throw new Error("Forbidden");
+    const sql = await getSql();
+    const titles = await sql<{ id: string; name: string }>`select id, name from bridge_titles where id = ${data.titleId} limit 1`;
+    const title = titles[0];
+    if (!title) throw new Error("Title not found");
+    const files = await sql<{ s3_key: string }>`select s3_key from bridge_assets where title_id = ${title.id} and s3_key is not null`;
+    for (const file of files) {
+      if (!file.s3_key) continue;
+      try { await deleteObject(file.s3_key); } catch { /* the record still goes */ }
+    }
+    const links = await sql<{ table_schema: string; table_name: string; column_name: string }>`
+      select tc.table_schema, tc.table_name, kcu.column_name
+      from information_schema.table_constraints tc
+      join information_schema.key_column_usage kcu
+        on tc.constraint_name = kcu.constraint_name and tc.table_schema = kcu.table_schema
+      join information_schema.constraint_column_usage ccu
+        on ccu.constraint_name = tc.constraint_name and ccu.table_schema = tc.table_schema
+      where tc.constraint_type = 'FOREIGN KEY'
+        and ccu.table_name = 'bridge_titles'
+        and ccu.column_name = 'id'
+    `;
+    const safe = /^[a-z_][a-z0-9_]*$/;
+    for (const link of links) {
+      if (link.table_name === "bridge_titles") continue;
+      if (![link.table_schema, link.table_name, link.column_name].every((part) => safe.test(part))) continue;
+      await sql.query(`delete from ${link.table_schema}.${link.table_name} where ${link.column_name} = $1`, [title.id]);
+    }
+    await sql.query(`delete from bridge_clearance where title_id = $1`, [title.id]).catch(() => undefined);
+    await sql.query(`delete from bridge_desk_notes where title_id = $1`, [title.id]).catch(() => undefined);
+    await sql`delete from bridge_titles where id = ${title.id}`;
+    await writeAudit({
+      actorUserId: actor.userId,
+      action: "title.deleted",
+      entityType: "bridge_title",
+      entityId: title.id,
+      metadata: { name: title.name },
+    });
+    return { ok: true };
   });

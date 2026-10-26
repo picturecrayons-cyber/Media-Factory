@@ -177,7 +177,7 @@ function Home() {
         {(postersQ.data?.posters.length ?? 0) > 0 ? (
           <section className="border-b border-line bg-white py-8">
             <div className="mx-auto max-w-7xl px-5 sm:px-6">
-              <h2 className="text-lg font-semibold">In storage</h2>
+              <h2 className="text-lg font-semibold">Public</h2>
               <div className="mt-4 flex gap-3 overflow-x-auto pb-2">
                 {postersQ.data?.posters.map((poster) => (
                   <figure key={poster.url} className="w-36 shrink-0">

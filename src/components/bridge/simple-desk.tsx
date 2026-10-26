@@ -1,7 +1,8 @@
 import { useState } from "react";
+import { useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { listTitleAssets } from "@/lib/bridge/assets";
-import { confirmSimpleUpload, deleteTitleAsset, deleteUnfinishedAssets, getSimpleDesk, listDeskOffers, listTitleLog, matchTitleStorage, openTitleAsset, postDeskOffer, postSimpleDesk, prepareSimpleUpload } from "@/lib/bridge/simple-desk";
+import { confirmSimpleUpload, deleteBridgeTitle, deleteTitleAsset, deleteUnfinishedAssets, getSimpleDesk, listDeskOffers, listTitleLog, matchTitleStorage, openTitleAsset, postDeskOffer, postSimpleDesk, prepareSimpleUpload, setPublicPoster } from "@/lib/bridge/simple-desk";
 import { sendFile, uploadLimit } from "@/lib/bridge/upload-parts";
 import { enqueueUpload } from "@/components/bridge/upload-tray";
 import { advanceTitle, updateTitle } from "@/lib/bridge/titles";
@@ -227,6 +228,25 @@ export function SimpleDesk({
   }
 
   const admin = actor.internalRole === "admin" || actor.internalRole === "super_admin";
+  const navigate = useNavigate();
+  const posterKinds = new Set(["poster_vertical", "poster_horizontal", "poster", "thumbnail"]);
+  const publish = useMutation({
+    mutationFn: (input: { assetId: string; publicFace: boolean }) => setPublicPoster({ data: input }),
+    onSuccess: async () => {
+      toast.success("Public poster updated.");
+      await qc.invalidateQueries({ queryKey: ["bridge-assets", titleId] });
+      await qc.invalidateQueries({ queryKey: ["public-posters"] });
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Could not update the poster"),
+  });
+  const wipe = useMutation({
+    mutationFn: () => deleteBridgeTitle({ data: { titleId } }),
+    onSuccess: async () => {
+      toast.success("Title deleted.");
+      await navigate({ to: "/dashboard" });
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Could not delete the title"),
+  });
   const rows = assets.data?.assets ?? [];
   const ready = rows.filter((item) => item.verified);
   const unfinished = rows.filter((item) => item.pending);
@@ -342,7 +362,7 @@ export function SimpleDesk({
               <li key={kind} className="flex flex-wrap items-center gap-3 py-3">
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-semibold">{label}</p>
-                  <p className="text-xs text-muted">{item?.byteSize ? `${Math.max(1, Math.round(Number(item.byteSize) / 1024 / 1024))} MB · Saved` : "Not added yet"}</p>
+                  <p className="text-xs text-muted">{item?.byteSize ? `${Math.max(1, Math.round(Number(item.byteSize) / 1024 / 1024))} MB · Saved${item.publicFace ? " · Public" : ""}` : "Not added yet"}</p>
                 </div>
                 {item ? <button type="button" onClick={() => void view(item.id)} className="text-sm font-semibold">{visual ? "Play" : "View"}</button> : null}
                 <label className="cursor-pointer text-sm font-semibold">
@@ -353,6 +373,11 @@ export function SimpleDesk({
                     if (nextFile) upload(nextFile, kind, label);
                   }} />
                 </label>
+                {item && staff && posterKinds.has(kind) ? (
+                  <button type="button" onClick={() => publish.mutate({ assetId: item.id, publicFace: !item.publicFace })} className="text-sm font-semibold">
+                    {item.publicFace ? "Hide" : "Public"}
+                  </button>
+                ) : null}
                 {item ? <button type="button" onClick={() => remove.mutate(item.id)} className="text-sm font-semibold text-red-700">Remove</button> : null}
               </li>
             );
@@ -371,6 +396,18 @@ export function SimpleDesk({
             {admin && unfinished.length ? (
               <button type="button" disabled={clearUnfinished.isPending} onClick={() => clearUnfinished.mutate()} className="rounded-full border border-red-700 px-3 py-1.5 text-sm font-semibold text-red-700">
                 Delete unfinished
+              </button>
+            ) : null}
+            {actor.internalRole === "super_admin" ? (
+              <button
+                type="button"
+                disabled={wipe.isPending}
+                onClick={() => {
+                  if (window.confirm(`Delete “${name}”? The title and its files are removed.`)) wipe.mutate();
+                }}
+                className="rounded-full border border-red-700 px-3 py-1.5 text-sm font-semibold text-red-700"
+              >
+                {wipe.isPending ? "Deleting…" : "Delete title"}
               </button>
             ) : null}
           </div>
