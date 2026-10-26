@@ -1,9 +1,11 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { confirmSimpleUpload, getSimpleDesk, postSimpleDesk, prepareSimpleUpload } from "@/lib/bridge/simple-desk";
-import { updateTitle } from "@/lib/bridge/titles";
+import { advanceTitle, updateTitle } from "@/lib/bridge/titles";
+import { nextStatus } from "@/lib/bridge/lifecycle";
 import { supabase } from "@/lib/supabase";
 import type { BridgeActor } from "@/lib/bridge/session";
+import type { TitleStatus } from "@/lib/bridge/types";
 
 const MAX_BYTES = 200 * 1024 * 1024;
 
@@ -12,11 +14,13 @@ export function SimpleDesk({
   actor,
   name,
   synopsis,
+  status,
 }: {
   titleId: string;
   actor: BridgeActor;
   name: string;
   synopsis: string;
+  status: TitleStatus;
 }) {
   const qc = useQueryClient();
   const desk = useQuery({
@@ -26,13 +30,13 @@ export function SimpleDesk({
   const [note, setNote] = useState("");
   const [editName, setEditName] = useState(name);
   const [editSynopsis, setEditSynopsis] = useState(synopsis);
-  const [status, setStatus] = useState("");
+  const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
 
   const refresh = () => qc.invalidateQueries({ queryKey: ["simple-desk", titleId] });
   const say = (mailed: boolean, what: string) => {
     setError("");
-    setStatus(mailed ? `${what} Saved in the app and sent by mail.` : `${what} Saved in the app. Mail is still the Supabase mailbox; this copy stays here if mail is busy.`);
+    setNotice(mailed ? `${what} Saved in the app and sent by mail.` : `${what} Saved in the app.`);
   };
 
   const upload = useMutation({
@@ -69,11 +73,23 @@ export function SimpleDesk({
     onError: (e) => setError(e instanceof Error ? e.message : "Could not save"),
   });
 
+  const next = nextStatus(status);
+  const stepLabel = status === "DRAFT" ? "Start" : status === "UPLOADING" ? "Continue" : status === "PREPARING" ? "Submit" : "";
+  const send = useMutation({
+    mutationFn: () => advanceTitle({ data: { id: titleId, to: next! } }),
+    onSuccess: async () => {
+      setError("");
+      setNotice("Sent.");
+      await qc.invalidateQueries({ queryKey: ["bridge-title", titleId] });
+    },
+    onError: (e) => setError(e instanceof Error ? e.message : "Could not send"),
+  });
+
   const saveEdit = useMutation({
     mutationFn: () => updateTitle({ data: { id: titleId, name: editName, synopsis: editSynopsis } }),
     onSuccess: async () => {
       setError("");
-      setStatus("Title details saved.");
+      setNotice("Title details saved.");
       await qc.invalidateQueries({ queryKey: ["bridge-title", titleId] });
     },
     onError: (e) => setError(e instanceof Error ? e.message : "Could not save details"),
@@ -97,10 +113,9 @@ export function SimpleDesk({
     <section className="space-y-4 rounded-2xl border border-line bg-surface p-5">
       <div>
         <h2 className="font-display text-xl">File</h2>
-        <p className="mt-1 text-sm text-muted">One file. Upload, view, replace. Admin can park or approve. Messages stay in the app and go by mail.</p>
       </div>
       {error ? <p role="alert" className="text-sm text-red-500">{error}</p> : null}
-      {status ? <p className="text-sm text-muted">{status}</p> : null}
+      {notice ? <p className="text-sm text-muted">{notice}</p> : null}
       {desk.isError ? <p role="alert" className="text-sm text-red-500">{desk.error.message}</p> : null}
 
       <div className="flex flex-wrap items-center gap-2">
@@ -121,9 +136,12 @@ export function SimpleDesk({
           <button type="button" onClick={() => void view()} className="rounded-full border border-line px-4 py-2 text-sm">
             View
           </button>
-        ) : (
-          <span className="text-sm text-muted">No file yet</span>
-        )}
+        ) : null}
+        {stepLabel && next ? (
+          <button type="button" disabled={send.isPending} onClick={() => send.mutate()} className="rounded-full border border-line px-4 py-2 text-sm font-semibold">
+            {send.isPending ? "Sending…" : stepLabel}
+          </button>
+        ) : null}
       </div>
       {file ? (
         <p className="text-xs text-muted">

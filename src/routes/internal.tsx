@@ -25,10 +25,7 @@ function Internal() {
   return (
     <RequireBridge allow="internal">
       {(actor) => (
-        <BridgeShell actor={actor} title="Distribution & Operations Desk">
-          <p className="mb-6 text-xs text-muted">
-            {actor.internalRole?.replaceAll("_", " ")} · {actor.email}
-          </p>
+        <BridgeShell actor={actor} title="Operations">
           <InternalBody
             canInvite={hasPermission(actor, "users.invite_internal")}
             canPublish={hasPermission(actor, "loop.publish")}
@@ -67,8 +64,7 @@ function InternalBody({
       <section className="space-y-4">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="font-display text-2xl font-semibold text-fg">Catalog Titles</h2>
-            <p className="text-xs text-muted">Master titles currently recorded in Crayons Bridge</p>
+            <h2 className="font-display text-xl font-semibold text-fg">Titles</h2>
           </div>
           <span className="text-xs font-mono text-muted">
             {titles.length} title{titles.length === 1 ? "" : "s"}

@@ -11,7 +11,7 @@ function Investor() {
   return (
     <RequireBridge allow="investor">
       {(actor) => (
-        <BridgeShell actor={actor} title="Investor desk">
+        <BridgeShell actor={actor} title="Investor">
           <InvestorBody userId={actor.userId} />
         </BridgeShell>
       )}
@@ -30,16 +30,12 @@ function InvestorBody({ userId }: { userId: string }) {
 
   return (
     <div className="space-y-6">
-      <section className="grid gap-3 sm:grid-cols-3">
-        <article className="rounded-sm border border-line p-4"><p className="text-xs uppercase tracking-widest text-muted">Scope</p><p className="mt-2 text-sm">Assigned titles only. Read participation. No title edits.</p></article>
-        <article className="rounded-sm border border-line p-4"><p className="text-xs uppercase tracking-widest text-muted">Opportunity</p><p className="mt-2 text-sm">Capital is recorded by Bridge. You see only titles assigned to this account.</p></article>
-        <article className="rounded-sm border border-line p-4"><p className="text-xs uppercase tracking-widest text-muted">Recorded capital</p><p className="mt-2 text-2xl font-semibold">₹{Math.round(totalCapital / 100).toLocaleString("en-IN")}</p></article>
+      <section className="grid grid-cols-2 gap-3">
+        <article className="rounded-2xl border border-line p-4"><p className="text-xs text-muted">Capital</p><p className="mt-1 text-2xl font-semibold">₹{Math.round(totalCapital / 100).toLocaleString("en-IN")}</p></article>
+        <article className="rounded-2xl border border-line p-4"><p className="text-xs text-muted">Participation</p><p className="mt-1 text-2xl font-semibold">{totalParticipation.toFixed(1)}%</p></article>
       </section>
-
-      <section className="rounded-3xl border border-line bg-surface p-6">
-        <div className="flex items-end justify-between gap-3">
-          <div><p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">Portfolio</p><h3 className="mt-1 font-display text-2xl font-semibold">Your investments</h3></div>
-        </div>
+      <section>
+        <h2 className="mb-3 text-lg font-semibold">Titles</h2>
         <div className="mt-5 overflow-x-auto">
           <table className="w-full min-w-[700px] text-left text-sm">
             <thead className="border-b border-line text-xs uppercase tracking-wider text-muted"><tr><th className="px-3 py-3">Title</th><th className="px-3 py-3">Reference</th><th className="px-3 py-3">Capital</th><th className="px-3 py-3">Participation</th><th className="px-3 py-3">Recorded</th></tr></thead>

@@ -50,10 +50,7 @@ function Buyer() {
   return (
     <RequireBridge allow="buyer">
       {(actor) => (
-        <BridgeShell actor={actor} title="Buyer dashboard">
-          <p className="mb-6 max-w-2xl text-sm leading-relaxed text-muted">
-            Discover licensing-ready titles, open a listing, then license only after captured payment.
-          </p>
+        <BridgeShell actor={actor} title="Buyer">
           <BuyerBody />
         </BridgeShell>
       )}
@@ -123,9 +120,9 @@ function BuyerBody() {
   return (
     <div className="space-y-5">
       <div className="grid gap-3 sm:grid-cols-3">
-        <Stat label="Discover" value={String(titles.length)} note="Live for buyers" />
-        <Stat label="Listing" value={String(visible.length)} note="Matching this search" />
-        <Stat label="Licenses" value={String(licensed.length)} note="Captured entitlements" />
+        <Stat label="Discover" value={String(titles.length)} />
+        <Stat label="Listing" value={String(visible.length)} />
+        <Stat label="Licenses" value={String(licensed.length)} />
       </div>
       <div className="flex flex-wrap gap-2">
         {(["discover", "listing", "licenses"] as const).map((id) => (
@@ -148,12 +145,11 @@ function BuyerBody() {
   );
 }
 
-function Stat({ label, value, note }: { label: string; value: string; note: string }) {
+function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-sm border border-line px-4 py-3">
-      <div className="text-xs uppercase tracking-widest text-muted">{label}</div>
+    <div className="rounded-2xl border border-line px-4 py-3">
+      <div className="text-xs text-muted">{label}</div>
       <div className="mt-1 text-2xl font-semibold">{value}</div>
-      <div className="text-xs text-muted">{note}</div>
     </div>
   );
 }

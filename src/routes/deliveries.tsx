@@ -56,10 +56,7 @@ function VendorJobs({ actor }: { actor: Actor }) {
 
   return (
     <section className="mb-6 rounded-2xl border border-line bg-surface p-5 sm:p-6">
-      <h2 className="font-display text-xl font-semibold">Vendor jobs</h2>
-      <p className="mt-1 text-sm text-muted">
-        Dubbing, loudness, IMF, DCP, and human QC open as requested. No auto Dolby, IMF, or DCP master. Delivery only after sign-off.
-      </p>
+      <h2 className="font-display text-xl font-semibold">Jobs</h2>
       {canRequest ? (
         <div className="mt-4 flex flex-wrap gap-2">
           <select

@@ -124,7 +124,7 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
 
   return (
     <div className="space-y-5">
-      <SimpleDesk titleId={id} actor={actor} name={title.name} synopsis={title.synopsis || ""} />
+      <SimpleDesk titleId={id} actor={actor} name={title.name} synopsis={title.synopsis || ""} status={title.status} />
       {actor.internalRole ? <WorkflowDesk title={title} actor={actor} /> : null}
       {assetsQ.isError ? <p role="alert">Assets unavailable: {assetsQ.error.message}</p> : null}
       <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
@@ -177,9 +177,6 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
                     .join(", ")}
                 </span>
               ) : null}
-            </div>
-            <div className="mt-5">
-              <p className="text-sm text-muted">The file box is at the top. One upload, then view or replace.</p>
             </div>
           </div>
         </div>
