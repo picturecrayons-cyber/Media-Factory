@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { listTitleAssets } from "@/lib/bridge/assets";
-import { confirmSimpleUpload, deleteTitleAsset, deleteUnfinishedAssets, getSimpleDesk, matchTitleStorage, openTitleAsset, postSimpleDesk, prepareSimpleUpload } from "@/lib/bridge/simple-desk";
+import { confirmSimpleUpload, deleteTitleAsset, deleteUnfinishedAssets, getSimpleDesk, listDeskOffers, matchTitleStorage, openTitleAsset, postDeskOffer, postSimpleDesk, prepareSimpleUpload } from "@/lib/bridge/simple-desk";
 import { advanceTitle, updateTitle } from "@/lib/bridge/titles";
 import { nextStatus } from "@/lib/bridge/lifecycle";
 import type { BridgeActor } from "@/lib/bridge/session";
@@ -64,6 +64,10 @@ export function SimpleDesk({
   const assets = useQuery({
     queryKey: ["bridge-assets", titleId],
     queryFn: () => listTitleAssets({ data: { titleId } }),
+  });
+  const offers = useQuery({
+    queryKey: ["desk-offers", titleId],
+    queryFn: () => listDeskOffers({ data: { titleId } }),
   });
   const [note, setNote] = useState("");
   const [editName, setEditName] = useState(name);
@@ -377,6 +381,8 @@ export function SimpleDesk({
         ) : null}
       </div>
 
+      <DeskOffers titleId={titleId} staff={staff} offers={offers.data?.offers ?? []} />
+
       <form
         className="grid gap-2"
         onSubmit={(e) => {
@@ -424,6 +430,92 @@ export function SimpleDesk({
           </div>
         </div>
       ) : null}
+    </section>
+  );
+}
+
+function DeskOffers({
+  titleId,
+  staff,
+  offers,
+}: {
+  titleId: string;
+  staff: boolean;
+  offers: Array<{ id: string; kind: string; partner: string; chargePaise: number; status: string; note: string }>;
+}) {
+  const qc = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const [kind, setKind] = useState<"qc" | "mastering" | "conversion" | "pitch">("pitch");
+  const [status, setStatus] = useState<"offered" | "interested" | "rejected" | "done">("offered");
+  const [partner, setPartner] = useState("");
+  const [rupees, setRupees] = useState("");
+  const [note, setNote] = useState("");
+  const post = useMutation({
+    mutationFn: () => postDeskOffer({
+      data: {
+        titleId,
+        kind,
+        partner,
+        chargePaise: Math.round((Number(rupees) || 0) * 100),
+        status,
+        note,
+      },
+    }),
+    onSuccess: async () => {
+      setOpen(false);
+      setNote("");
+      setPartner("");
+      setRupees("");
+      toast.success("Update sent to the owner.");
+      await qc.invalidateQueries({ queryKey: ["desk-offers", titleId] });
+    },
+    onError: (error) => toast.error(error instanceof Error ? error.message : "Could not send"),
+  });
+  if (!staff && !offers.length) return null;
+  return (
+    <section className="rounded-2xl border border-line bg-white p-4">
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="text-lg font-semibold">Desk</h2>
+        {staff ? (
+          <button type="button" onClick={() => setOpen((value) => !value)} className="rounded-full border border-line px-4 py-2 text-sm font-semibold">{open ? "Close" : "Update"}</button>
+        ) : null}
+      </div>
+      {open ? (
+        <form
+          className="mt-3 grid gap-2"
+          onSubmit={(event) => {
+            event.preventDefault();
+            post.mutate();
+          }}
+        >
+          <div className="grid gap-2 sm:grid-cols-2">
+            <select value={kind} onChange={(e) => setKind(e.target.value as typeof kind)} className="h-11 rounded-xl border border-line px-3">
+              <option value="pitch">Pitch</option>
+              <option value="qc">QC</option>
+              <option value="mastering">Mastering</option>
+              <option value="conversion">Conversion</option>
+            </select>
+            <select value={status} onChange={(e) => setStatus(e.target.value as typeof status)} className="h-11 rounded-xl border border-line px-3">
+              <option value="offered">Offered</option>
+              <option value="interested">Interested</option>
+              <option value="rejected">Rejected</option>
+              <option value="done">Done</option>
+            </select>
+          </div>
+          <input value={partner} onChange={(e) => setPartner(e.target.value)} placeholder="Partner, if this is a pitch" className="h-11 rounded-xl border border-line px-3" />
+          <input value={rupees} onChange={(e) => setRupees(e.target.value)} inputMode="numeric" placeholder="Charge in ₹, or leave empty" className="h-11 rounded-xl border border-line px-3" />
+          <textarea value={note} onChange={(e) => setNote(e.target.value)} required minLength={2} rows={2} placeholder="What the owner should know" className="rounded-xl border border-line px-3 py-2" />
+          <button type="submit" disabled={post.isPending} className="h-11 rounded-full bg-[#0b1220] text-sm font-semibold text-white">{post.isPending ? "Sending…" : "Send update"}</button>
+        </form>
+      ) : null}
+      <ul className="mt-3 divide-y divide-line">
+        {offers.map((item) => (
+          <li key={item.id} className="py-3">
+            <p className="text-sm font-semibold">{item.kind} · {item.status}{item.partner ? ` · ${item.partner}` : ""}</p>
+            <p className="text-sm text-muted">{item.chargePaise > 0 ? `₹${Math.round(item.chargePaise / 100)} · ` : "No charge · "}{item.note}</p>
+          </li>
+        ))}
+      </ul>
     </section>
   );
 }

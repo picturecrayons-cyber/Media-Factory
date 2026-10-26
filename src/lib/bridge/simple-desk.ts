@@ -439,3 +439,97 @@ export const postSimpleDesk = createServerFn({ method: "POST" })
     `;
     return { id, mailed };
   });
+
+export const listDeskOffers = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .validator(z.object({ titleId: z.string().min(8) }))
+  .handler(async ({ context, data }) => {
+    const actor = await requireVerifiedActor(context.userId);
+    const title = await loadTitle(data.titleId);
+    if (!title) throw new Error("Not found");
+    const staff = isStaff(actor.internalRole);
+    if (!staff && title.ownerUserId !== actor.userId) return { offers: [] };
+    const sql = await getSql();
+    await sql.query(`
+      create table if not exists bridge_desk_offers (
+        id text primary key,
+        title_id text not null,
+        kind text not null,
+        partner text,
+        charge_paise integer not null default 0,
+        status text not null,
+        note text not null,
+        created_at timestamptz not null default now()
+      )
+    `);
+    const rows = await sql<{ id: string; kind: string; partner: string | null; charge_paise: number; status: string; note: string }>`
+      select id, kind, partner, charge_paise, status, note
+      from bridge_desk_offers
+      where title_id = ${title.id}
+      order by created_at desc
+      limit 20
+    `;
+    return {
+      offers: rows.map((row) => ({
+        id: row.id,
+        kind: row.kind,
+        partner: row.partner || "",
+        chargePaise: Number(row.charge_paise),
+        status: row.status,
+        note: row.note,
+      })),
+    };
+  });
+
+export const postDeskOffer = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({
+    titleId: z.string().min(8),
+    kind: z.enum(["qc", "mastering", "conversion", "pitch"]),
+    partner: z.string().trim().max(80).optional(),
+    chargePaise: z.number().int().min(0).max(100_000_000).default(0),
+    status: z.enum(["offered", "interested", "rejected", "done"]),
+    note: z.string().trim().min(2).max(500),
+  }))
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    if (!isStaff(actor.internalRole)) throw new Error("Only staff can post a desk update");
+    const title = await loadTitle(data.titleId);
+    if (!title) throw new Error("Not found");
+    const sql = await getSql();
+    await sql.query(`
+      create table if not exists bridge_desk_offers (
+        id text primary key,
+        title_id text not null,
+        kind text not null,
+        partner text,
+        charge_paise integer not null default 0,
+        status text not null,
+        note text not null,
+        created_at timestamptz not null default now()
+      )
+    `);
+    const id = randomBytes(16).toString("hex");
+    await sql`
+      insert into bridge_desk_offers (id, title_id, kind, partner, charge_paise, status, note)
+      values (${id}, ${title.id}, ${data.kind}, ${data.partner || null}, ${data.chargePaise}, ${data.status}, ${data.note})
+    `;
+    const owner = await sql<{ email: string }>`
+      select email from bridge_profiles where user_id = ${title.ownerUserId} limit 1
+    `;
+    const label = data.kind === "pitch" ? `Pitch ${data.status}` : data.kind;
+    await mailPeople(
+      [owner[0]?.email ?? ""],
+      `${label} · ${title.name}`,
+      `${label}${data.partner ? ` · ${data.partner}` : ""}. ${data.chargePaise > 0 ? `Bridge charge ₹${Math.round(data.chargePaise / 100)}.` : "No charge."} ${data.note}`,
+    );
+    await writeAudit({
+      actorUserId: actor.userId,
+      action: "desk.offer",
+      entityType: "bridge_desk_offer",
+      entityId: id,
+      metadata: { titleId: title.id, kind: data.kind, status: data.status, chargePaise: data.chargePaise },
+    });
+    return { id };
+  });
