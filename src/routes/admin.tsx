@@ -4,6 +4,7 @@ import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { Button } from "@/components/ui/button";
 import { listTitles, listAuditLogs } from "@/lib/bridge/titles";
+import { listEnquiries } from "@/lib/bridge/leads";
 import { listLoopPublicationReadiness } from "@/lib/bridge/loop-publication";
 import { listAdminProfiles } from "@/lib/bridge/profiles";
 
@@ -35,6 +36,7 @@ function AdminBody({ actor }: { actor: any }) {
   const auditQ = useQuery({ queryKey: ["bridge-audit"], queryFn: () => listAuditLogs() });
   const distQ = useQuery({ queryKey: ["loop-publication-readiness"], queryFn: () => listLoopPublicationReadiness() });
   const profilesQ = useQuery({ queryKey: ["bridge-admin-profiles"], queryFn: () => listAdminProfiles() });
+  const enquiriesQ = useQuery({ queryKey: ["bridge-enquiries"], queryFn: () => listEnquiries() });
 
   const titles = titlesQ.data?.titles ?? [];
   const distribution = distQ.data?.titles ?? [];
@@ -79,6 +81,25 @@ function AdminBody({ actor }: { actor: any }) {
             <CompactMetric label="Loop publications" value={distQ.isPending ? "—" : String(live)} />
             <CompactMetric label="Bridge profiles" value={profilesQ.isPending ? "—" : String(profiles.length)} />
             <CompactMetric label="Organizations" value={profilesQ.isPending ? "—" : String(organizations.size)} />
+          </div>
+        </section>
+
+        <section className="rounded-2xl border border-line bg-surface p-4 sm:p-5">
+          <h3 className="font-display text-xl font-semibold">Desk enquiries</h3>
+          <p className="mt-1 text-sm text-muted">Sent from the public desk. Nothing here is a sample.</p>
+          {enquiriesQ.isPending ? <p className="mt-3 text-sm text-muted">Loading…</p> : null}
+          {enquiriesQ.isError ? <p role="alert" className="mt-3 text-sm text-muted">Could not load enquiries.</p> : null}
+          <div className="mt-3 divide-y divide-line">
+            {(enquiriesQ.data?.enquiries ?? []).map((row) => (
+              <article key={row.id} className="py-3">
+                <p className="text-sm font-semibold">{row.name} · {row.email}</p>
+                <p className="text-xs text-muted">{row.organization || "No company"} · {new Date(row.created_at).toLocaleString()}</p>
+                <p className="mt-1 text-sm">{row.message}</p>
+              </article>
+            ))}
+            {!enquiriesQ.isPending && !enquiriesQ.isError && (enquiriesQ.data?.enquiries.length ?? 0) === 0 ? (
+              <p className="py-4 text-sm text-muted">No enquiries yet.</p>
+            ) : null}
           </div>
         </section>
 

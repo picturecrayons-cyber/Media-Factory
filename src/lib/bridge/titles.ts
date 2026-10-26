@@ -129,6 +129,12 @@ async function readTitleSeo(sql: Sql, titleId: string) {
   }
 }
 
+async function ensureOwnerOrganizationColumn(sql: Sql) {
+  await sql`alter table bridge_titles add column if not exists owner_organization_id uuid`;
+}
+
+export { ensureOwnerOrganizationColumn };
+
 async function hasTitleMergeColumn(sql: Sql): Promise<boolean> {
   const rows = await sql<{ exists: boolean }>`
     select exists (
@@ -273,6 +279,7 @@ export const createTitle = createServerFn({ method: "POST" })
     const id = randomBytes(16).toString("hex");
     const slug = slugify(data.name, id);
     const sql = await getSql();
+    await ensureOwnerOrganizationColumn(sql);
     await sql`
       insert into bridge_titles (
         id, slug, name, name_ml, owner_user_id, owner_account_type, status,
@@ -316,6 +323,7 @@ export const listTitles = createServerFn({ method: "GET" })
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
     const sql = await getSql();
+    await ensureOwnerOrganizationColumn(sql);
     let rows: TitleRow[] = [];
     if (actor.internalRole && hasPermission(actor, "title.read_catalog")) {
       rows = await listCatalog(sql);

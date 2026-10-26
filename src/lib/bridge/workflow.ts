@@ -4,7 +4,7 @@ import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql, type Sql } from "@/lib/db";
 import { requireVerifiedActor } from "./session";
 import { assertPermission, canReadTitle, canOperateOnTitle, type Actor } from "./rbac";
-import { loadTitle } from "./titles";
+import { loadTitle, ensureOwnerOrganizationColumn } from "./titles";
 import { loopLicenseInput, producerSharePaise } from "./workflow-policy";
 import { bridgeEnv } from "./env";
 
@@ -20,6 +20,7 @@ export async function saveLoopLicense(
   data: z.infer<typeof loopLicenseInput>,
 ) {
   data = loopLicenseInput.parse(data);
+  await ensureOwnerOrganizationColumn(tx);
   const [title] = await tx<{
     owner_user_id: string;
     owner_account_type: string;
