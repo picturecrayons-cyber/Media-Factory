@@ -16,7 +16,7 @@ function Business() {
       </section>
       <section>
         <h2 className="font-semibold text-fg">What this release is not</h2>
-        <p>It is not the consumer streaming site. That is Crayons Loop. It is not a cluttered file uploader. Master-file storage is Oracle Cloud Infrastructure, and it stays closed in this release until a simple upload is opened.</p>
+        <p>It is not the consumer streaming site. That is Crayons Loop. The title page is one file: upload, view, edit, and replace. Admin can park, approve, or ask for a replace. Messages stay in the app and are mailed.</p>
       </section>
       <section>
         <h2 className="font-semibold text-fg">Who it is for</h2>

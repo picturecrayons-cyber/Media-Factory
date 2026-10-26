@@ -1,4 +1,3 @@
-import { canOperateOnTitle } from "@/lib/bridge/rbac";
 import { getTitleWorkflow } from "@/lib/bridge/workflow";
 import { WorkflowDesk } from "@/components/bridge/workflow-desk";
 import { publicationIsActive } from "@/lib/bridge/workflow-policy";
@@ -23,11 +22,11 @@ import {
   validateOttIngestFile,
 } from "@/lib/bridge/ott-ingest-spec";
 import { asciiUploadName } from "@/lib/bridge/latin1";
-import { FILE_STORAGE_ENABLED } from "@/lib/bridge/mvp-lock";
+import { SimpleDesk } from "@/components/bridge/simple-desk";
 
 export const Route = createFileRoute("/title/$id")({ component: TitlePage });
 
-const WORKSPACE_TABS = ["Overview", "Files"] as const;
+const WORKSPACE_TABS = ["Overview"] as const;
 type WorkspaceTab = (typeof WORKSPACE_TABS)[number];
 
 function LaneStore({ titleId, stored, locked }: { titleId: string; stored: string; locked: boolean }) {
@@ -125,7 +124,8 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
 
   return (
     <div className="space-y-5">
-      <WorkflowDesk title={title} actor={actor} />
+      <SimpleDesk titleId={id} actor={actor} name={title.name} synopsis={title.synopsis || ""} />
+      {actor.internalRole ? <WorkflowDesk title={title} actor={actor} /> : null}
       {assetsQ.isError ? <p role="alert">Assets unavailable: {assetsQ.error.message}</p> : null}
       <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
         <div className="grid gap-5 md:grid-cols-[180px_1fr]">
@@ -133,7 +133,7 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
             <div className="grid h-full place-items-center px-4 text-center text-xs text-muted">
               {assets.some((asset) => ["poster_vertical", "poster"].includes(asset.kind))
                 ? "Vertical poster ready"
-                : "Poster is not part of this release"}
+                : "File"}
             </div>
           </div>
           <div className="min-w-0">
@@ -179,11 +179,7 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
               ) : null}
             </div>
             <div className="mt-5">
-              <p className="text-sm text-muted">
-                {FILE_STORAGE_ENABLED
-                  ? "Add masters from the Files tab."
-                  : "File upload is locked out of this release. Submit the title record for QC."}
-              </p>
+              <p className="text-sm text-muted">The file box is at the top. One upload, then view or replace.</p>
             </div>
           </div>
         </div>
@@ -227,24 +223,7 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
           </div>
           <LaneStore key={title.contentType} titleId={title.id} stored={loopStageType(title.contentType)} locked={!actor.internalRole && !["DRAFT", "UPLOADING", "PREPARING"].includes(title.status)} />
           {title.synopsis ? <p className="mt-4 text-sm leading-6 text-muted">{title.synopsis}</p> : null}
-          <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <Metric label="QC" value={qcReady ? "READY" : "PENDING"} />
-            <Metric label="Rights" value={rightsReady ? "READY" : "PENDING"} />
-            <Metric label="Licensing" value={legalReady ? "READY" : "PENDING"} />
-            <Metric label="Publish" value={distributionReady ? "LIVE" : packageReady ? "READY" : "PENDING"} />
-          </div>
         </section>
-      ) : activeTab === "Files" ? (
-        <FilesPanel
-          canUpload={
-            FILE_STORAGE_ENABLED &&
-            canOperateOnTitle(actor, title, "asset.sign_upload", "title.ingest_internal") &&
-            ["DRAFT", "UPLOADING", "PREPARING"].includes(title.status)
-          }
-          titleId={id}
-          assets={assets}
-          onAssetsChanged={() => assetsQ.refetch()}
-        />
       ) : null}
     </div>
   );

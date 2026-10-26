@@ -13,7 +13,7 @@ const WORKFLOW_STEPS = [
   {
     step: "01",
     title: "Record",
-    description: "Add the title. File masters are not part of this release.",
+    description: "Add the title and one file.",
   },
   {
     step: "02",

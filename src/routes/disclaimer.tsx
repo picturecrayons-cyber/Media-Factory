@@ -13,7 +13,7 @@ function Disclaimer() {
       <p>Crayons Bridge is a workspace for title records, review, rights notes, and licensing workflow. It is not a law firm, not a guarantee of ownership, and not a promise that a buyer, licence, or payment will result.</p>
       <p>Listing a title, passing a workflow step, or showing a title to a role does not transfer copyright or grant a licence. A licence exists only in a written agreement the rights holder authorizes.</p>
       <p>Information on the public site and inside a workspace can change. The service is provided as available. See the <Link to="/terms" className="font-semibold text-accent underline">Terms</Link>.</p>
-      <p>File masters are not part of this release. Do not treat the site as a delivery vault until file storage is opened for your account.</p>
+      <p>A simple file can be uploaded, viewed, and replaced on the title. The old multi-file vault is closed. Listing a file does not transfer copyright.</p>
     </PublicPage>
   );
 }
