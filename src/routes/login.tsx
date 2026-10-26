@@ -5,14 +5,11 @@ import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { BrandMark } from "@/components/bridge/shell";
 import { Button } from "@/components/ui/button";
 import { getBridgeSession } from "@/lib/bridge/session";
+import { isSafeInternalRedirect } from "@/lib/auth/safe-redirect";
 
 export const Route = createFileRoute("/login")({ component: Login });
 
-function isSafeRedirect(url: string | null): boolean {
-  if (!url) return false;
-  // Allow only safe relative internal paths starting with /
-  return url.startsWith("/") && !url.startsWith("//") && !url.includes("://");
-}
+const isSafeRedirect = isSafeInternalRedirect;
 
 function Login() {
   const { user, isPending } = useCurrentUserState();
