@@ -7,13 +7,111 @@ import { writeAudit } from "./audit";
 import { assertNotDevUser } from "./guards";
 import { loadTitle } from "./titles";
 import { requireVerifiedActor } from "./session";
-import { signDownload, signUpload, titleAssetKey, verifyObject } from "./oci-object-storage.server";
+import { deleteObject, signDownload, signUpload, titleAssetKey, verifyObject } from "./oci-object-storage.server";
 import { hasPermission } from "./rbac";
 
 const BUCKET = "bridge-simple";
 const STAFF = new Set(["admin", "super_admin", "qc_reviewer"]);
 
 function isStaff(role: string | null | undefined) {
+  return Boolean(role && STAFF.has(role));
+}
+
+function isAdmin(role: string | null | undefined) {
+  return role === "admin" || role === "super_admin";
+}
+
+export const matchTitleStorage = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({ titleId: z.string().min(8) }))
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    if (!isStaff(actor.internalRole)) throw new Error("Only staff can check storage");
+    const title = await loadTitle(data.titleId);
+    if (!title) throw new Error("Not found");
+    const sql = await getSql();
+    const rows = await sql<{ id: string; s3_key: string }>`
+      select id, s3_key from bridge_assets
+      where title_id = ${title.id} and coalesce(byte_size, 0) = 0 and s3_key like 'bridge/%'
+      order by created_at desc
+      limit 8
+    `;
+    let found = 0;
+    for (const row of rows) {
+      try {
+        const object = await verifyObject(row.s3_key);
+        await sql`
+          update bridge_assets
+          set byte_size = ${object.byteSize}, content_type = coalesce(content_type, ${object.contentType})
+          where id = ${row.id}
+        `;
+        found += 1;
+      } catch {
+        // The row stays unfinished. Oracle did not have this object.
+      }
+    }
+    return { found, checked: rows.length };
+  });
+
+export const deleteTitleAsset = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({ assetId: z.string().min(8) }))
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    if (!isAdmin(actor.internalRole)) throw new Error("Only an admin can delete a file");
+    const sql = await getSql();
+    const rows = await sql<{ id: string; title_id: string; s3_key: string }>`
+      select id, title_id, s3_key from bridge_assets where id = ${data.assetId} limit 1
+    `;
+    const asset = rows[0];
+    if (!asset) throw new Error("Not found");
+    if (asset.s3_key.startsWith("bridge/")) {
+      try {
+        await deleteObject(asset.s3_key);
+      } catch (error) {
+        console.error("[bridge] storage delete skipped", error instanceof Error ? error.message : error);
+      }
+    }
+    await sql`delete from bridge_assets where id = ${asset.id}`;
+    await writeAudit({
+      actorUserId: actor.userId,
+      action: "asset.deleted",
+      entityType: "bridge_asset",
+      entityId: asset.id,
+      metadata: { titleId: asset.title_id },
+    });
+    return { id: asset.id };
+  });
+
+export const deleteUnfinishedAssets = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({ titleId: z.string().min(8) }))
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    if (!isAdmin(actor.internalRole)) throw new Error("Only an admin can delete unfinished files");
+    const title = await loadTitle(data.titleId);
+    if (!title) throw new Error("Not found");
+    const sql = await getSql();
+    const rows = await sql<{ id: string; s3_key: string }>`
+      select id, s3_key from bridge_assets
+      where title_id = ${title.id} and coalesce(byte_size, 0) = 0
+      limit 40
+    `;
+    for (const row of rows) {
+      if (row.s3_key.startsWith("bridge/")) {
+        try {
+          await deleteObject(row.s3_key);
+        } catch {
+          // Keep going. The record is the clutter the admin asked to remove.
+        }
+      }
+      await sql`delete from bridge_assets where id = ${row.id}`;
+    }
+    return { deleted: rows.length };
+  });
   return Boolean(role && STAFF.has(role));
 }
 

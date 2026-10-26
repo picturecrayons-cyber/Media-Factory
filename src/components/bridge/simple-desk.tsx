@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { listTitleAssets } from "@/lib/bridge/assets";
-import { confirmSimpleUpload, getSimpleDesk, openTitleAsset, postSimpleDesk, prepareSimpleUpload } from "@/lib/bridge/simple-desk";
+import { confirmSimpleUpload, deleteTitleAsset, deleteUnfinishedAssets, getSimpleDesk, matchTitleStorage, openTitleAsset, postSimpleDesk, prepareSimpleUpload } from "@/lib/bridge/simple-desk";
 import { advanceTitle, updateTitle } from "@/lib/bridge/titles";
 import { nextStatus } from "@/lib/bridge/lifecycle";
 import type { BridgeActor } from "@/lib/bridge/session";
@@ -143,7 +143,51 @@ export function SimpleDesk({
   }
 
   const staff = actor.internalRole === "admin" || actor.internalRole === "super_admin" || actor.internalRole === "qc_reviewer";
+  const admin = actor.internalRole === "admin" || actor.internalRole === "super_admin";
   const rows = assets.data?.assets ?? [];
+  const ready = rows.filter((item) => item.verified);
+  const unfinished = rows.filter((item) => item.pending);
+  const posters = ready.filter((item) => item.kind === "poster" || item.kind === "poster_vertical").slice(0, 4);
+  const previews = useQuery({
+    queryKey: ["title-posters", titleId, posters.map((item) => item.id).join(",")],
+    enabled: posters.length > 0,
+    queryFn: async () => {
+      const found = await Promise.all(posters.map(async (item) => {
+        try {
+          const opened = await openTitleAsset({ data: { assetId: item.id } });
+          return opened.url;
+        } catch {
+          return "";
+        }
+      }));
+      return found.filter(Boolean);
+    },
+  });
+
+  const match = useMutation({
+    mutationFn: () => matchTitleStorage({ data: { titleId } }),
+    onSuccess: async (res) => {
+      toast.success(res.found ? `Found ${res.found} file${res.found === 1 ? "" : "s"} in Oracle.` : "No matching file in Oracle.");
+      await refresh();
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Could not check storage"),
+  });
+  const remove = useMutation({
+    mutationFn: (assetId: string) => deleteTitleAsset({ data: { assetId } }),
+    onSuccess: async () => {
+      toast.success("Deleted.");
+      await refresh();
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Could not delete"),
+  });
+  const clearUnfinished = useMutation({
+    mutationFn: () => deleteUnfinishedAssets({ data: { titleId } }),
+    onSuccess: async (res) => {
+      toast.success(res.deleted ? `Deleted ${res.deleted} unfinished.` : "Nothing unfinished to delete.");
+      await refresh();
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Could not delete"),
+  });
 
   return (
     <section className="space-y-5">
@@ -191,27 +235,56 @@ export function SimpleDesk({
             </button>
           ) : null}
         </div>
+        {previews.data?.length ? (
+          <div className="mt-4 grid grid-cols-4 gap-2">
+            {previews.data.map((url) => (
+              <a key={url} href={url} target="_blank" rel="noreferrer" className="block aspect-[2/3] overflow-hidden rounded-xl border border-line">
+                <img src={url} alt="" className="h-full w-full object-cover" />
+              </a>
+            ))}
+          </div>
+        ) : null}
+        {staff ? (
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button type="button" disabled={match.isPending} onClick={() => match.mutate()} className="rounded-full border-2 border-[#0b1220] px-3 py-1.5 text-sm font-semibold">
+              {match.isPending ? "Checking Oracle…" : "Check storage"}
+            </button>
+            {admin && unfinished.length ? (
+              <button type="button" disabled={clearUnfinished.isPending} onClick={() => clearUnfinished.mutate()} className="rounded-full border border-red-700 px-3 py-1.5 text-sm font-semibold text-red-700">
+                {clearUnfinished.isPending ? "Deleting…" : "Delete unfinished"}
+              </button>
+            ) : null}
+          </div>
+        ) : null}
         {assets.isError ? <p role="alert" className="mt-3 text-sm text-red-500">{assets.error.message}</p> : null}
         {assets.isPending ? <p className="mt-3 text-sm text-muted">Loading files…</p> : null}
         {!assets.isPending && rows.length === 0 ? <p className="mt-3 text-sm text-muted">No file yet.</p> : null}
         <ul className="mt-3 divide-y divide-line">
-          {rows.map((item) => (
+          {ready.map((item) => (
             <li key={item.id} className="flex items-center gap-3 py-3">
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-semibold">{KIND_LABEL[item.kind] || item.kind}</p>
                 <p className="text-xs text-muted">
-                  {item.pending ? "Pending" : item.byteSize ? `${Math.max(1, Math.round(Number(item.byteSize) / 1024 / 1024))} MB` : "Ready"}
+                  {item.byteSize ? `${Math.max(1, Math.round(Number(item.byteSize) / 1024 / 1024))} MB` : "Ready"}
                   {" · "}
                   {new Date(item.createdAt).toLocaleString()}
                 </p>
               </div>
-              {item.verified ? (
-                <button type="button" onClick={() => void view(item.id)} className="rounded-full border border-line px-3 py-1.5 text-sm">
-                  View
-                </button>
-              ) : (
-                <span className="text-xs text-muted">Saving</span>
-              )}
+              <button type="button" onClick={() => void view(item.id)} className="rounded-full border border-line px-3 py-1.5 text-sm">View</button>
+              {admin ? (
+                <button type="button" onClick={() => remove.mutate(item.id)} className="text-sm font-semibold text-red-700">Delete</button>
+              ) : null}
+            </li>
+          ))}
+          {unfinished.map((item) => (
+            <li key={item.id} className="flex items-center gap-3 py-3">
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold">{KIND_LABEL[item.kind] || item.kind}</p>
+                <p className="text-xs text-muted">Not saved · {new Date(item.createdAt).toLocaleString()}</p>
+              </div>
+              {admin ? (
+                <button type="button" onClick={() => remove.mutate(item.id)} className="text-sm font-semibold text-red-700">Delete</button>
+              ) : null}
             </li>
           ))}
         </ul>

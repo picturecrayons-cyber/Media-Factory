@@ -244,7 +244,7 @@ export const listTitleAssets = createServerFn({ method: "GET" })
     if (!title || !canReadTitle(actor, title)) throw new Error("Not found");
     const sql = await getSql();
     const buyer = actor.accountType === "buyer" && !actor.internalRole;
-    const rows = await sql<{
+    const ready = await sql<{
       id: string;
       kind: string;
       s3_key: string;
@@ -254,10 +254,25 @@ export const listTitleAssets = createServerFn({ method: "GET" })
     }>`
       select id, kind, s3_key, content_type, byte_size, created_at
       from bridge_assets
-      where title_id = ${title.id}
+      where title_id = ${title.id} and byte_size > 0
       order by created_at desc
-      limit 40
+      limit 24
     `;
+    const unfinished = await sql<{
+      id: string;
+      kind: string;
+      s3_key: string;
+      content_type: string | null;
+      byte_size: number | null;
+      created_at: string | Date;
+    }>`
+      select id, kind, s3_key, content_type, byte_size, created_at
+      from bridge_assets
+      where title_id = ${title.id} and coalesce(byte_size, 0) = 0
+      order by created_at desc
+      limit 12
+    `;
+    const rows = [...ready, ...unfinished];
     return {
       assets: rows
         .filter((r) => {
