@@ -82,6 +82,8 @@ export function SimpleDesk({
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
   const [editing, setEditing] = useState(false);
+  const [player, setPlayer] = useState<null | { url: string; visual: "video" | "image" }>(null);
+  const [showUnfinished, setShowUnfinished] = useState(false);
 
   const refresh = async () => {
     await Promise.all([
@@ -180,8 +182,12 @@ export function SimpleDesk({
 
   async function view(assetId: string) {
     try {
+      const item = rows.find((row) => row.id === assetId);
       const opened = await openTitleAsset({ data: { assetId } });
-      window.open(opened.url, "_blank", "noopener,noreferrer");
+      const image = item && ["poster", "poster_vertical", "poster_horizontal", "thumbnail"].includes(item.kind);
+      const video = item && ["master", "screener"].includes(item.kind);
+      if (image || video) setPlayer({ url: opened.url, visual: video ? "video" : "image" });
+      else window.open(opened.url, "_blank", "noopener,noreferrer");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not open the file");
     }
@@ -195,6 +201,22 @@ export function SimpleDesk({
   const video = ready.filter((item) => item.kind === "master" || item.kind === "screener");
   const documents = ready.filter((item) => item.kind === "censor_certificate" || item.kind === "technical");
   const audio = ready.filter((item) => item.kind === "subtitle");
+  const artwork = ready.filter((item) => ["poster", "poster_vertical", "poster_horizontal", "thumbnail"].includes(item.kind));
+  const artQ = useQuery({
+    queryKey: ["title-art", titleId, artwork.map((item) => item.id).join(",")],
+    enabled: artwork.length > 0,
+    queryFn: async () => {
+      const found = await Promise.all(artwork.slice(0, 4).map(async (item) => {
+        try {
+          const opened = await openTitleAsset({ data: { assetId: item.id } });
+          return { id: item.id, url: opened.url };
+        } catch {
+          return null;
+        }
+      }));
+      return found.filter((item): item is { id: string; url: string } => Boolean(item));
+    },
+  });
 
   const match = useMutation({
     mutationFn: () => matchTitleStorage({ data: { titleId } }),
@@ -310,7 +332,15 @@ export function SimpleDesk({
             </button>
           ) : null}
         </div>
-        {assets.isError ? <p role="alert" className="mt-3 text-sm text-red-500">{assets.error.message}</p> : null}
+        {artQ.data?.length ? (
+          <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            {artQ.data.map((item) => (
+              <button key={item.id} type="button" onClick={() => setPlayer({ url: item.url, visual: "image" })} className="aspect-[2/3] overflow-hidden rounded-2xl border border-line">
+                <img src={item.url} alt="" className="h-full w-full object-cover" />
+              </button>
+            ))}
+          </div>
+        ) : null}
         {assets.isPending ? <p className="mt-3 text-sm text-muted">Loading files…</p> : null}
         <FileGroup title="Video" rows={video} onView={view} onDelete={admin ? (id) => remove.mutate(id) : undefined} />
         <FileGroup title="Documents" rows={documents} onView={view} onDelete={admin ? (id) => remove.mutate(id) : undefined} />
@@ -328,6 +358,11 @@ export function SimpleDesk({
           </div>
         ) : null}
         {unfinished.length ? (
+          <button type="button" onClick={() => setShowUnfinished((open) => !open)} className="mt-4 text-sm font-semibold text-muted">
+            {showUnfinished ? "Hide" : "Show"} {unfinished.length} unfinished
+          </button>
+        ) : null}
+        {showUnfinished ? (
           <ul className="mt-3 divide-y divide-line">
             {unfinished.map((item) => (
               <li key={item.id} className="flex items-center gap-3 py-3">
@@ -377,6 +412,18 @@ export function SimpleDesk({
           ))}
         </ul>
       ) : null}
+      {player ? (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/80 p-4" onClick={() => setPlayer(null)}>
+          <div className="w-full max-w-4xl" onClick={(event) => event.stopPropagation()}>
+            {player.visual === "video" ? (
+              <video src={player.url} controls autoPlay className="max-h-[78vh] w-full bg-black" />
+            ) : (
+              <img src={player.url} alt="" className="max-h-[78vh] w-full object-contain" />
+            )}
+            <button type="button" onClick={() => setPlayer(null)} className="mt-3 rounded-full bg-white px-4 py-2 text-sm font-semibold">Close</button>
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -410,7 +457,7 @@ function FileGroup({
           {rows.map((item) => (
             <li key={item.id} className="flex items-center gap-3 py-2">
               <p className="min-w-0 flex-1 text-sm">{KIND_LABEL[item.kind] || item.kind}{item.byteSize ? ` · ${Math.max(1, Math.round(Number(item.byteSize) / 1024 / 1024))} MB` : ""}</p>
-              <button type="button" onClick={() => onView(item.id)} className="text-sm font-semibold">View</button>
+              <button type="button" onClick={() => onView(item.id)} className="text-sm font-semibold">{item.kind === "master" || item.kind === "screener" ? "Play" : "View"}</button>
               {onDelete ? <button type="button" onClick={() => onDelete(item.id)} className="text-sm font-semibold text-red-700">Delete</button> : null}
             </li>
           ))}

@@ -4,6 +4,8 @@ import { useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { createTitle, listTitles } from "@/lib/bridge/titles";
+import { listTitleAssets } from "@/lib/bridge/assets";
+import { openTitleAsset } from "@/lib/bridge/simple-desk";
 
 const STATUS: Record<string, string> = {
   DRAFT: "Draft",
@@ -18,16 +20,29 @@ const STATUS: Record<string, string> = {
   DELIVERED: "Delivered",
 };
 
-function plate(name: string) {
-  const tones = ["#102433", "#1b2433", "#141c28", "#1a2230", "#101820", "#1c2630"];
-  let n = 0;
-  for (const char of name) n = (n + char.charCodeAt(0)) % tones.length;
-  return tones[n];
-}
-
 export function TitleList({ empty, query = "" }: { empty: string; query?: string }) {
   const titlesQ = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles() });
   const titles = (titlesQ.data?.titles ?? []).filter((t) => !query || `${t.name} ${t.language} ${t.year ?? ""}`.toLowerCase().includes(query.toLowerCase()));
+  const posters = useQuery({
+    queryKey: ["poster-board", titles.map((title) => title.id).join(",")],
+    enabled: titles.length > 0,
+    queryFn: async () => {
+      const pairs = await Promise.all(titles.slice(0, 12).map(async (title) => {
+        try {
+          const listed = await listTitleAssets({ data: { titleId: title.id } });
+          const art = ["poster_vertical", "poster", "poster_horizontal", "thumbnail"]
+            .map((kind) => listed.assets.find((asset) => asset.verified && asset.kind === kind))
+            .find(Boolean);
+          if (!art) return [title.id, ""] as const;
+          const opened = await openTitleAsset({ data: { assetId: art.id } });
+          return [title.id, opened.url] as const;
+        } catch {
+          return [title.id, ""] as const;
+        }
+      }));
+      return Object.fromEntries(pairs);
+    },
+  });
   if (titlesQ.isPending) return <p className="text-sm text-muted">Loading titles…</p>;
   if (titlesQ.isError) {
     return (
@@ -43,7 +58,9 @@ export function TitleList({ empty, query = "" }: { empty: string; query?: string
       {titles.map((t) => (
         <li key={t.id}>
           <Link to="/title/$id" params={{ id: t.id }} className="block overflow-hidden rounded-2xl border border-line bg-white">
-            <div className="aspect-[2/3]" style={{ background: plate(t.name) }} />
+            <div className="aspect-[2/3] bg-[#102433]">
+              {posters.data?.[t.id] ? <img src={posters.data[t.id]} alt="" className="h-full w-full object-cover" /> : null}
+            </div>
             <div className="space-y-1 p-3">
               <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">{STATUS[t.status] || t.status}</p>
               <p className="line-clamp-2 text-sm font-semibold leading-5">{t.name}</p>

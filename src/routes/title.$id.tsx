@@ -33,9 +33,9 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
     queryFn: () => listTitleAssets({ data: { titleId: id } }),
   });
   const title = titleQ.data?.title;
-  const poster = (assetsQ.data?.assets ?? []).find(
-    (asset) => asset.verified && (asset.kind === "poster_vertical" || asset.kind === "poster"),
-  );
+  const poster = ["poster_vertical", "poster", "poster_horizontal", "thumbnail"]
+    .map((kind) => (assetsQ.data?.assets ?? []).find((asset) => asset.verified && asset.kind === kind))
+    .find(Boolean);
   const posterQ = useQuery({
     queryKey: ["title-poster", id, poster?.id],
     queryFn: () => openTitleAsset({ data: { assetId: poster!.id } }),
@@ -50,11 +50,13 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
 
   return (
     <div className="mx-auto grid max-w-3xl gap-6">
-      <section className="grid grid-cols-[88px_minmax(0,1fr)] items-end gap-4 sm:grid-cols-[128px_minmax(0,1fr)]">
-        <div className="aspect-[2/3] overflow-hidden rounded-2xl border border-line bg-[#102433]">
+      <section className="grid items-end gap-5 sm:grid-cols-[240px_minmax(0,1fr)]">
+        <div className="aspect-[2/3] w-full max-w-[240px] overflow-hidden rounded-3xl border border-line bg-[#102433]">
           {posterQ.data?.url ? (
             <img src={posterQ.data.url} alt="" className="h-full w-full object-cover" />
-          ) : null}
+          ) : (
+            <div className="grid h-full place-items-end p-4 text-lg font-semibold text-white">{title.name}</div>
+          )}
         </div>
         <div className="min-w-0 pb-1">
           <p className="text-xs font-semibold uppercase tracking-wide text-muted">{title.status}</p>
