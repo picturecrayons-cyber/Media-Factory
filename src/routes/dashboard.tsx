@@ -4,6 +4,7 @@ import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { listTitles } from "@/lib/bridge/titles";
 import { BRIDGE_LOOP_LANES, loopStageType } from "@/lib/bridge/loop-lanes";
+import { PublishingDesk } from "@/components/bridge/publishing-desk";
 import { getDashboardSession } from "@/lib/bridge/session";
 
 export const Route = createFileRoute("/dashboard")({ component: Dashboard });
@@ -80,6 +81,8 @@ function DashboardBody() {
           </Link>
         ))}
       </section>
+
+      <PublishingDesk />
 
       <section className="space-y-3">
         <h2 className="text-lg font-semibold">Titles</h2>
