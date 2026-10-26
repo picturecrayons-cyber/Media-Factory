@@ -94,19 +94,16 @@ function DashboardBody() {
         <p className="mt-2 text-xs text-muted">The bar is the share that is live. Money above is recorded license value only.</p>
       </section>
 
-      <section className="rounded-2xl border border-[#102433] bg-[#102433] p-4 text-white">
-        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-white/60">Loop</p>
-        <h2 className="mt-2 text-xl font-semibold">Launching soon</h2>
-        <p className="mt-2 max-w-xl text-sm leading-6 text-white/75">The public page is live with placeholders. A film shows there only after you authorize it for Loop.</p>
-        <a href="https://crayonsloop.in/" target="_blank" rel="noreferrer" className="mt-4 inline-flex rounded-full bg-white px-4 py-2 text-sm font-semibold text-[#102433]">Open public page</a>
-      </section>
-
       <section className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         {ADMIN_MODULES.map((module) => (
           <Link key={module.title} to={module.to} className="rounded-2xl border border-line bg-surface px-4 py-5 text-sm font-semibold">
             {module.title}
           </Link>
         ))}
+        <a href="https://crayonsloop.in/" target="_blank" rel="noreferrer" className="rounded-2xl border border-line bg-surface px-4 py-5">
+          <span className="block text-sm font-semibold">Loop</span>
+          <span className="mt-1 block text-xs font-medium text-muted">Launching soon</span>
+        </a>
       </section>
 
       <PublishingDesk />
