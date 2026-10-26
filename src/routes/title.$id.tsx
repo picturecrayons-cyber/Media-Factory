@@ -62,7 +62,7 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
           {facts.length ? <p className="mt-2 text-sm text-muted">{facts.join(" · ")}</p> : null}
         </div>
       </section>
-      <SimpleDesk titleId={id} actor={actor} name={title.name} synopsis={title.synopsis || ""} />
+      <SimpleDesk titleId={id} actor={actor} name={title.name} synopsis={title.synopsis || ""} status={title.status} />
     </div>
   );
 }

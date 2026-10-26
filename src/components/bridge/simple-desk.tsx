@@ -2,8 +2,11 @@ import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { listTitleAssets } from "@/lib/bridge/assets";
 import { confirmSimpleUpload, getSimpleDesk, openTitleAsset, postSimpleDesk, prepareSimpleUpload } from "@/lib/bridge/simple-desk";
-import { updateTitle } from "@/lib/bridge/titles";
+import { advanceTitle, updateTitle } from "@/lib/bridge/titles";
+import { nextStatus } from "@/lib/bridge/lifecycle";
 import type { BridgeActor } from "@/lib/bridge/session";
+import type { TitleStatus } from "@/lib/bridge/types";
+import { toast } from "sonner";
 
 const MAX_BYTES = 200 * 1024 * 1024;
 const KIND_LABEL: Record<string, string> = {
@@ -18,24 +21,18 @@ const KIND_LABEL: Record<string, string> = {
   technical: "Technical",
 };
 
-function kindFor(file: File) {
-  const name = file.name.toLowerCase();
-  if (file.type.startsWith("image/")) return "poster_vertical" as const;
-  if (name.endsWith(".srt") || name.endsWith(".vtt")) return "subtitle" as const;
-  if (file.type.startsWith("video/")) return "master" as const;
-  return "master" as const;
-}
-
 export function SimpleDesk({
   titleId,
   actor,
   name,
   synopsis,
+  status,
 }: {
   titleId: string;
   actor: BridgeActor;
   name: string;
   synopsis: string;
+  status: TitleStatus;
 }) {
   const qc = useQueryClient();
   const desk = useQuery({
@@ -61,29 +58,49 @@ export function SimpleDesk({
   };
 
   const upload = useMutation({
-    mutationFn: async (file: File) => {
-      if (file.size > MAX_BYTES) throw new Error("Keep the file under 200 MB.");
-      const contentType = file.type || "application/octet-stream";
-      const kind = kindFor(file);
+    mutationFn: async (input: { file: File; kind: "poster_vertical" | "master" | "subtitle" }) => {
+      if (input.file.size > MAX_BYTES) throw new Error("Keep the file under 200 MB.");
+      const contentType = input.file.type || "application/octet-stream";
       const prepared = await prepareSimpleUpload({
-        data: { titleId, filename: file.name, contentType, byteSize: file.size, kind },
+        data: { titleId, filename: input.file.name, contentType, byteSize: input.file.size, kind: input.kind },
       });
       const sent = await fetch(prepared.url, {
         method: "PUT",
-        body: file,
+        body: input.file,
         headers: { "content-type": contentType },
       });
       if (!sent.ok) throw new Error(`Upload failed (${sent.status})`);
       return confirmSimpleUpload({
-        data: { titleId, path: prepared.path, contentType, byteSize: file.size, kind },
+        data: { titleId, path: prepared.path, contentType, byteSize: input.file.size, kind: input.kind },
       });
     },
     onSuccess: async () => {
       setError("");
       setNotice("Saved.");
+      toast.success("File saved.");
       await refresh();
     },
-    onError: (e) => setError(e instanceof Error ? e.message : "Upload failed"),
+    onError: (e) => {
+      const message = e instanceof Error ? e.message : "Upload failed";
+      setError(message);
+      toast.error(message);
+    },
+  });
+
+  const next = nextStatus(status);
+  const send = useMutation({
+    mutationFn: () => advanceTitle({ data: { id: titleId, to: next! } }),
+    onSuccess: async () => {
+      setError("");
+      setNotice("Submitted.");
+      toast.success("Submitted.");
+      await qc.invalidateQueries({ queryKey: ["bridge-title", titleId] });
+    },
+    onError: (e) => {
+      const message = e instanceof Error ? e.message : "Could not submit";
+      setError(message);
+      toast.error(message);
+    },
   });
 
   const act = useMutation({
@@ -146,21 +163,33 @@ export function SimpleDesk({
       </div>
 
       <div className="rounded-2xl border border-line bg-surface p-4">
-        <div className="flex items-center justify-between gap-3">
-          <h2 className="font-display text-xl">Files</h2>
-          <label className="cursor-pointer rounded-full bg-fg px-4 py-2 text-sm font-semibold text-bg">
-            {upload.isPending ? "Saving…" : "Upload"}
-            <input
-              type="file"
-              className="sr-only"
-              disabled={upload.isPending}
-              onChange={(e) => {
-                const next = e.target.files?.[0];
-                e.target.value = "";
-                if (next) upload.mutate(next);
-              }}
-            />
-          </label>
+        <h2 className="mb-3 text-lg font-semibold">Files</h2>
+        <div className="flex flex-wrap gap-2">
+          {([
+            ["poster_vertical", "Upload poster", "image/*"],
+            ["master", "Upload video", "video/*"],
+            ["subtitle", "Upload subtitles", ".srt,.vtt,text/vtt"],
+          ] as const).map(([kind, label, accept]) => (
+            <label key={kind} className="cursor-pointer rounded-full bg-[#0b1220] px-4 py-2 text-sm font-semibold text-white">
+              {upload.isPending ? "Saving…" : label}
+              <input
+                type="file"
+                accept={accept}
+                className="sr-only"
+                disabled={upload.isPending}
+                onChange={(e) => {
+                  const nextFile = e.target.files?.[0];
+                  e.target.value = "";
+                  if (nextFile) upload.mutate({ file: nextFile, kind });
+                }}
+              />
+            </label>
+          ))}
+          {next ? (
+            <button type="button" disabled={send.isPending} onClick={() => send.mutate()} className="rounded-full border-2 border-[#0b1220] px-4 py-2 text-sm font-semibold">
+              {send.isPending ? "Submitting…" : "Submit"}
+            </button>
+          ) : null}
         </div>
         {assets.isError ? <p role="alert" className="mt-3 text-sm text-red-500">{assets.error.message}</p> : null}
         {assets.isPending ? <p className="mt-3 text-sm text-muted">Loading files…</p> : null}

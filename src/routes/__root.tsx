@@ -55,7 +55,21 @@ export const Route = createRootRoute({
         <QueryClientProvider client={queryClient}>
           <AuthProvider>
             <Outlet />
-            <Toaster theme="dark" position="bottom-center" />
+            <Toaster
+              theme="light"
+              position="top-center"
+              closeButton
+              toastOptions={{
+                style: {
+                  background: "#ffffff",
+                  color: "#0b1220",
+                  border: "2px solid #0b1220",
+                  borderRadius: "16px",
+                  fontSize: "15px",
+                  fontWeight: 600,
+                },
+              }}
+            />
           </AuthProvider>
         </QueryClientProvider>
         <Scripts />

@@ -38,6 +38,7 @@ export function RequireBridge({
     queryFn: () => getBridgeSession(),
     enabled: !isPending && Boolean(user),
     retry: false,
+    staleTime: 5 * 60_000,
   });
   const verifyMail = useMutation({
     mutationFn: () => requestEmailVerification(),
@@ -47,11 +48,7 @@ export function RequireBridge({
   });
 
   if (isPending || (user && sessionQ.isPending)) {
-    return (
-      <Frame>
-        <p className="text-sm text-muted">Opening your desk…</p>
-      </Frame>
-    );
+    return <p className="px-6 pt-8 text-sm font-semibold text-fg">Opening…</p>;
   }
   if (!user) return <RedirectToSignIn />;
   if (sessionQ.error) {

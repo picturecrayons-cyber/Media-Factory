@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { confirmStudioUpload, listStudioFiles, openStudioFile, prepareStudioUpload } from "@/lib/bridge/studio-storage";
 
 const AREAS = [
@@ -75,9 +76,14 @@ export function StudioStorage() {
     },
     onSuccess: async () => {
       setError("");
+      toast.success("Saved in your storage.");
       await qc.invalidateQueries({ queryKey: ["studio-files"] });
     },
-    onError: (e) => setError(e instanceof Error ? e.message : "Could not save"),
+    onError: (e) => {
+      const message = e instanceof Error ? e.message : "Could not save";
+      setError(message);
+      toast.error(message);
+    },
   });
 
   async function view(id: string) {

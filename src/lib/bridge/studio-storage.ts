@@ -13,7 +13,9 @@ const SLOTS = ["raw", "stills", "pilot", "picture", "sound", "catalog", "hold"] 
 async function requireStudio(userId: string) {
   assertNotDevUser(userId);
   const actor = await requireVerifiedActor(userId);
-  if (actor.accountType !== "studio" && !actor.internalRole) throw new Error("Studio storage is for studio accounts.");
+  if (actor.accountType !== "studio" && actor.accountType !== "independent_creator" && !actor.internalRole) {
+    throw new Error("Storage is for creator and studio accounts.");
+  }
   return actor;
 }
 
