@@ -190,15 +190,21 @@ async function createPgliteSql(): Promise<Sql> {
       },
     });
     await pg.waitReady;
-  // PGLite local-dev: ensure Supabase browser roles exist before migrations that REVOKE FROM them (local-only, no shared migration change)
+  await pg.exec("CREATE SCHEMA IF NOT EXISTS auth;");
+  await pg.exec(
+    "CREATE TABLE IF NOT EXISTS auth.users (id uuid PRIMARY KEY, email text, created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now(), raw_user_meta_data jsonb NOT NULL DEFAULT '{}'::jsonb, raw_app_meta_data jsonb NOT NULL DEFAULT '{}'::jsonb, aud text, role text);"
+  );
+  await pg.exec(
+    "CREATE OR REPLACE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $f$ SELECT NULLIF(current_setting('request.jwt.claim.sub', true), '')::uuid; $f$;"
+  );
   try {
     const _r1 = await pg.query("SELECT 1 FROM pg_roles WHERE rolname='anon'");
     if (!_r1?.rows?.length) { await pg.exec("CREATE ROLE anon NOLOGIN"); }
-  } catch {}
+  } catch { /* role already exists */ }
   try {
     const _r2 = await pg.query("SELECT 1 FROM pg_roles WHERE rolname='authenticated'");
     if (!_r2?.rows?.length) { await pg.exec("CREATE ROLE authenticated NOLOGIN"); }
-  } catch {}
+  } catch { /* role already exists */ }
     await pg.exec(
       "create table if not exists _migrations (name text primary key, applied_at timestamptz not null default now())",
     );
@@ -217,11 +223,23 @@ async function createPgliteSql(): Promise<Sql> {
   // passes serialized on a global chain so concurrent callers never
   // double-apply.
   const migrate = async (): Promise<void> => {
-    const migrations = import.meta.glob("/migrations/*.sql", {
-      query: "?raw",
-      import: "default",
-      eager: true,
-    }) as Record<string, string>;
+    let migrations: Record<string, string>;
+    try {
+      migrations = import.meta.glob("/migrations/*.sql", {
+        query: "?raw",
+        import: "default",
+        eager: true,
+      }) as Record<string, string>;
+    } catch {
+      const { readdirSync, readFileSync } = await import("node:fs");
+      const { join } = await import("node:path");
+      const dir = join(process.cwd(), "migrations");
+      const files = readdirSync(dir).filter((f) => f.endsWith(".sql"));
+      migrations = {};
+      for (const f of files) {
+        migrations[`/migrations/${f}`] = readFileSync(join(dir, f), "utf8");
+      }
+    }
     const doneRows = await pg.query<{ name: string }>(
       "select name from _migrations",
     );

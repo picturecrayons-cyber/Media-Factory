@@ -1,4 +1,4 @@
-import { createAPIFileRoute } from "@tanstack/start/api";
+import { createFileRoute } from "@tanstack/react-router";
 import { getSessionUser } from "@/lib/auth/verify.server";
 import { requireVerifiedActor } from "@/lib/bridge/session";
 import { assertNotDevUser } from "@/lib/bridge/guards";
@@ -11,9 +11,20 @@ function errorResponse(message: string, status: number) {
   return Response.json({ error: message }, { status, headers: { "Cache-Control": "no-store" } });
 }
 
-export const APIRoute = createAPIFileRoute("/bridge/super-admin/verify")({
+export const Route = createFileRoute("/api/bridge/super-admin/verify")({
   server: {
     handlers: {
+      GET: async ({ request }) => {
+        const token = request.headers.get("authorization")?.match(/^Bearer\s+(.+)$/i)?.[1];
+        const user = await getSessionUser(token);
+        if (!user) return errorResponse("Authentication required", 401);
+        assertNotDevUser(user.id);
+        const actor = await requireVerifiedActor(user.id);
+        if (actor.internalRole !== "super_admin" || actor.emailVerified !== true || !user.email_confirmed_at) {
+          return errorResponse("Verified super-admin access required", 403);
+        }
+        return errorResponse("Method not allowed", 405);
+      },
       POST: async ({ request }) => {
         try {
           const token = request.headers.get("authorization")?.match(/^Bearer\s+(.+)$/i)?.[1];
