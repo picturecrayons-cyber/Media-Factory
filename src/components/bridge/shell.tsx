@@ -19,24 +19,25 @@ const LEGAL = [
 ] as const;
 
 function navFor(actor: BridgeActor): NavItem[] {
-  const desk: NavItem =
-    actor.internalRole === "super_admin"
+  const staff = Boolean(actor.internalRole);
+  const desk: NavItem | null = staff
+    ? actor.internalRole === "super_admin"
       ? { to: "/dashboard", label: "Ops" }
-      : actor.internalRole
-        ? { to: "/internal", label: "Ops" }
-        : actor.accountType === "studio"
-          ? { to: "/studio", label: "Desk" }
-          : actor.accountType === "buyer"
-            ? { to: "/buyer", label: "Desk" }
-            : actor.accountType === "investor"
-              ? { to: "/investor", label: "Desk" }
-              : { to: "/creator", label: "Desk" };
-  const items: NavItem[] = [
-    { to: "/gallery", label: "Library" },
-    desk,
-  ];
-  if (actor.accountType !== "buyer" && actor.accountType !== "investor") items.push({ to: "/workspace", label: "Titles" });
-  items.push({ to: "/deliveries", label: "Deliveries" }, { to: "/account", label: "Account" });
+      : { to: "/internal", label: "Ops" }
+    : actor.accountType === "studio"
+      ? { to: "/studio", label: "Desk" }
+      : actor.accountType === "buyer"
+        ? { to: "/buyer", label: "Desk" }
+        : actor.accountType === "investor"
+          ? { to: "/investor", label: "Desk" }
+          : { to: "/creator", label: "Desk" };
+  const items: NavItem[] = [];
+  if (actor.accountType !== "investor" || staff) items.push({ to: "/gallery", label: "Library" });
+  if (desk) items.push(desk);
+  if (actor.accountType === "studio" || actor.accountType === "independent_creator" || staff) {
+    items.push({ to: "/deliveries", label: "Deliveries" });
+  }
+  items.push({ to: "/account", label: "Account" });
   return items;
 }
 
@@ -53,7 +54,7 @@ const ROLE: Record<string, string> = {
   viewer: "Viewer",
 };
 
-function roleLabel(actor: BridgeActor) {
+export function roleLabel(actor: BridgeActor) {
   const account = ROLE[actor.accountType] || "Account";
   const internal = actor.internalRole ? ROLE[actor.internalRole] : "";
   return internal ? `${account} · ${internal}` : account;

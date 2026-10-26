@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { RequireBridge } from "@/components/bridge/gate";
-import { BridgeShell } from "@/components/bridge/shell";
+import { BridgeShell, roleLabel } from "@/components/bridge/shell";
 import { Button } from "@/components/ui/button";
 import { requestEmailVerification } from "@/lib/bridge/profiles";
 
@@ -15,54 +15,41 @@ function Account() {
         const isInternal = Boolean(actor.internalRole);
         return (
           <BridgeShell actor={actor} title="Account">
-            <div className="max-w-2xl space-y-8">
-              <section>
-                <p className="text-xs font-medium uppercase tracking-[0.16em] text-muted">Profile</p>
-                <div className="mt-4 divide-y divide-line border-y border-line">
-                  <div className="grid gap-1 py-4 sm:grid-cols-[140px_1fr]">
-                    <span className="text-sm text-muted">Email</span>
-                    <span className="text-sm font-medium">{actor.email}</span>
-                  </div>
-                  <div className="grid gap-1 py-4 sm:grid-cols-[140px_1fr]">
-                    <span className="text-sm text-muted">Account</span>
-                    <span className="text-sm font-medium">{actor.accountType.replaceAll("_", " ")}</span>
-                  </div>
-                  <div className="grid gap-1 py-4 sm:grid-cols-[140px_1fr]">
-                    <span className="text-sm text-muted">Organization</span>
-                    <span className="text-sm font-medium">{actor.organizationName ?? "—"}</span>
-                  </div>
-                  <div className="grid gap-1 py-4 sm:grid-cols-[140px_1fr]">
-                    <span className="text-sm text-muted">Verification</span>
-                    <span className="text-sm font-medium">{actor.emailVerified ? "Verified" : "Verification required"}</span>
-                  </div>
+            <section className="max-w-xl overflow-hidden rounded-2xl border border-line bg-white">
+              <Row label="Email" value={actor.email} />
+              <Row label="Role" value={roleLabel(actor)} />
+              <Row label="Organization" value={actor.organizationName || "Not set"} />
+              <Row label="Verification" value={actor.emailVerified ? "Verified" : "Verification required"} />
+              {!actor.emailVerified ? (
+                <div className="border-t border-line px-4 py-4">
+                  <ResendVerify />
                 </div>
-
-                {!actor.emailVerified ? (
-                  <div className="mt-5">
-                    <ResendVerify />
-                  </div>
-                ) : null}
-              </section>
-
-              {isInternal && (actor.internalRole === "admin" || actor.internalRole === "super_admin") ? (
-                <section className="border-t border-line pt-6">
-                  <Link to="/admin/workstations" className="flex min-h-12 items-center text-sm font-semibold">Operations</Link>
-                </section>
               ) : null}
-
-              <section className="border-t border-line pt-2">
-                <Link to="/privacy" className="flex min-h-12 items-center border-b border-line text-sm">Privacy</Link>
-                <Link to="/terms" className="flex min-h-12 items-center border-b border-line text-sm">Terms</Link>
-                <Link to="/dmca" className="flex min-h-12 items-center border-b border-line text-sm">DMCA</Link>
-                <Link to="/disclaimer" className="flex min-h-12 items-center border-b border-line text-sm">Disclaimer</Link>
-                <Link to="/business" className="flex min-h-12 items-center border-b border-line text-sm">Business</Link>
-                <Link to="/contact" className="flex min-h-12 items-center text-sm">Contact</Link>
-              </section>
-            </div>
+              {isInternal && (actor.internalRole === "admin" || actor.internalRole === "super_admin") ? (
+                <Link to="/admin/workstations" className="flex min-h-12 items-center border-t border-line px-4 text-sm font-semibold">Operations</Link>
+              ) : null}
+            </section>
+            <nav aria-label="Legal" className="mt-6 grid max-w-xl gap-px overflow-hidden rounded-2xl border border-line bg-line md:hidden">
+              <Link to="/privacy" className="bg-white px-4 py-3 text-sm">Privacy</Link>
+              <Link to="/terms" className="bg-white px-4 py-3 text-sm">Terms</Link>
+              <Link to="/dmca" className="bg-white px-4 py-3 text-sm">DMCA</Link>
+              <Link to="/disclaimer" className="bg-white px-4 py-3 text-sm">Disclaimer</Link>
+              <Link to="/business" className="bg-white px-4 py-3 text-sm">Business</Link>
+              <Link to="/contact" className="bg-white px-4 py-3 text-sm">Contact</Link>
+            </nav>
           </BridgeShell>
         );
       }}
     </RequireBridge>
+  );
+}
+
+function Row({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="grid grid-cols-[8.5rem_1fr] items-center gap-3 border-t border-line px-4 py-3 first:border-t-0">
+      <span className="text-sm text-muted">{label}</span>
+      <span className="truncate text-sm font-semibold">{value}</span>
+    </div>
   );
 }
 
