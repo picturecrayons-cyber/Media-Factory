@@ -26,7 +26,6 @@ const ADMIN_MODULES = [
   { title: "Buyers", to: "/buyer" },
   { title: "Deliveries", to: "/deliveries" },
   { title: "People", to: "/internal" },
-  { title: "Site", to: "/cms" },
 ] as const;
 
 function DashboardBody() {

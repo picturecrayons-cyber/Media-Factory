@@ -44,26 +44,20 @@ function Account() {
                 ) : null}
               </section>
 
-              {isInternal ? (
-                <section className="border-t border-line pt-8">
-                  <p className="text-xs font-medium uppercase tracking-[0.16em] text-muted">Internal access</p>
-                  <p className="mt-2 text-sm text-muted">
-                    {actor.internalRole?.replaceAll("_", " ")}
-                  </p>
-                  <div className="mt-4 flex flex-wrap gap-3">
-                    {actor.internalRole === "admin" || actor.internalRole === "super_admin" ? (
-                      <Link to="/admin"><Button>Open Admin</Button></Link>
-                    ) : null}
-                    {actor.internalRole === "super_admin" ? (
-                      <Link to="/cms"><Button variant="outline">Open CMS</Button></Link>
-                    ) : null}
-                  </div>
+              {isInternal && (actor.internalRole === "admin" || actor.internalRole === "super_admin") ? (
+                <section className="border-t border-line pt-6">
+                  <Link to="/admin/workstations" className="flex min-h-12 items-center text-sm font-semibold">Operations</Link>
                 </section>
               ) : null}
 
-              <Link to="/" className="inline-block text-sm font-medium text-accent hover:text-accent-strong">
-                Back to Bridge
-              </Link>
+              <section className="border-t border-line pt-2">
+                <Link to="/privacy" className="flex min-h-12 items-center border-b border-line text-sm">Privacy</Link>
+                <Link to="/terms" className="flex min-h-12 items-center border-b border-line text-sm">Terms</Link>
+                <Link to="/dmca" className="flex min-h-12 items-center border-b border-line text-sm">DMCA</Link>
+                <Link to="/disclaimer" className="flex min-h-12 items-center border-b border-line text-sm">Disclaimer</Link>
+                <Link to="/business" className="flex min-h-12 items-center border-b border-line text-sm">Business</Link>
+                <Link to="/contact" className="flex min-h-12 items-center text-sm">Contact</Link>
+              </section>
             </div>
           </BridgeShell>
         );

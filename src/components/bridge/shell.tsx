@@ -9,6 +9,15 @@ type NavItem = {
   label: string;
 };
 
+const LEGAL = [
+  { to: "/privacy", label: "Privacy" },
+  { to: "/terms", label: "Terms" },
+  { to: "/dmca", label: "DMCA" },
+  { to: "/disclaimer", label: "Disclaimer" },
+  { to: "/business", label: "Business" },
+  { to: "/contact", label: "Contact" },
+] as const;
+
 function navFor(actor: BridgeActor): NavItem[] {
   const desk: NavItem =
     actor.internalRole === "super_admin"
@@ -22,62 +31,83 @@ function navFor(actor: BridgeActor): NavItem[] {
             : actor.accountType === "investor"
               ? { to: "/investor", label: "Desk" }
               : { to: "/creator", label: "Desk" };
-  const items = [ { to: "/gallery", label: "Library" }, desk ];
+  const items: NavItem[] = [
+    { to: "/gallery", label: "Library" },
+    desk,
+  ];
   if (actor.accountType !== "buyer" && actor.accountType !== "investor") items.push({ to: "/workspace", label: "Titles" });
   items.push({ to: "/deliveries", label: "Deliveries" }, { to: "/account", label: "Account" });
   return items;
 }
 
-function NavLink({ item }: { item: NavItem }) {
-  return <Link to={item.to} className="bridge-nav-item" activeProps={{ className: "bridge-nav-item bridge-nav-active" }}>{item.label}</Link>;
-}
+const row = "flex min-h-11 items-center rounded-xl px-3 text-sm font-semibold text-muted";
+const rowOn = "flex min-h-11 items-center rounded-xl bg-accent-soft px-3 text-sm font-semibold text-fg";
+const tab = "flex min-h-14 items-center justify-center px-1 text-[11px] font-semibold text-muted";
+const tabOn = "flex min-h-14 items-center justify-center px-1 text-[11px] font-semibold text-fg";
 
-export function BrandMark({ className }: { className?: string }) {
+export function BrandMark({ className, to = "/" }: { className?: string; to?: "/" | "/gallery" }) {
   return (
-    <Link
-      to="/"
-      className={cn("inline-flex items-center shrink-0", className)}
-      aria-label="Crayons Bridge home"
-    >
-      <svg viewBox="0 0 208 48" role="img" aria-label="Crayons Bridge" className="bridge-logo block h-[42px] w-auto sm:h-[46px] lg:h-[48px]">
-        <g fill="none" stroke="#08b8e8" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.6">
-          <path d="M7 30V25C7 15 14 9 23 9S39 15 39 25V30" />
-          <path d="M7 30H39M15 24V30M31 24V30" />
+    <Link to={to} className={cn("inline-flex items-center", className)} aria-label="Crayons Bridge">
+      <svg viewBox="0 0 168 36" role="img" aria-label="Crayons Bridge" className="block h-8 w-auto">
+        <g fill="none" stroke="#08b8e8" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.4">
+          <path d="M6 24V20C6 13 11 8 18 8s12 5 12 12v4" />
+          <path d="M6 24h24M12 19v5M24 19v5" />
         </g>
-        <circle cx="7" cy="33" r="2" fill="#08b8e8" />
-        <circle cx="39" cy="33" r="2" fill="#08b8e8" />
-        <text x="49" y="18" fill="currentColor" fontFamily="ui-sans-serif, system-ui, sans-serif" fontSize="12" fontWeight="700" letterSpacing="1.1">CRAYONS</text>
-        <text x="48" y="39" fill="#08b8e8" fontFamily="ui-sans-serif, system-ui, sans-serif" fontSize="25" fontWeight="800" letterSpacing="-0.7">bridge</text>
+        <text x="40" y="15" fill="currentColor" fontFamily="ui-sans-serif, system-ui, sans-serif" fontSize="9" fontWeight="700" letterSpacing="1">CRAYONS</text>
+        <text x="39" y="31" fill="#08b8e8" fontFamily="ui-sans-serif, system-ui, sans-serif" fontSize="18" fontWeight="800">bridge</text>
       </svg>
     </Link>
   );
 }
 
 export function BridgeShell({ actor, title, children }: { actor: BridgeActor; title: string; children: ReactNode }) {
+  const items = navFor(actor);
   return (
-    <div className="min-h-screen bg-bg text-fg">
-      <header className="sticky top-0 z-50 border-b border-line bg-surface/88 backdrop-blur-xl">
-        <div className="mx-auto flex max-w-[1440px] items-center gap-6 px-4 py-3.5 sm:px-6 lg:px-8">
-          <BrandMark />
-          <nav className="flex flex-1 items-center gap-1 overflow-x-auto">{navFor(actor).map((item) => <NavLink key={item.label} item={item} />)}</nav>
-          <div className="ml-auto flex items-center gap-3">
-            {actor.internalRole ? <span className="hidden rounded-full border border-line px-3 py-1 text-xs text-muted sm:inline">{actor.internalRole.replaceAll("_", " ")}</span> : null}
-            <UserButton />
+    <div className="min-h-dvh bg-[#f4f7f8] text-fg">
+      <aside className="fixed inset-y-0 left-0 z-40 hidden w-60 flex-col border-r border-line bg-white md:flex">
+        <div className="px-4 py-5">
+          <BrandMark to="/gallery" />
+        </div>
+        <nav className="flex flex-1 flex-col gap-1 px-3">
+          {items.map((item) => (
+            <Link key={item.to} to={item.to} className={row} activeProps={{ className: rowOn }}>
+              {item.label}
+            </Link>
+          ))}
+        </nav>
+        <div className="border-t border-line px-4 py-4">
+          <UserButton />
+          <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted">
+            {LEGAL.map((item) => (
+              <Link key={item.to} to={item.to}>{item.label}</Link>
+            ))}
           </div>
         </div>
-      </header>
-      <main className="mx-auto max-w-[1440px] px-4 py-6 sm:px-6 lg:px-8">
-        <h1 className="mb-5 font-display text-2xl font-semibold tracking-tight">{title}</h1>
-        {children}
-      </main>
-      <footer className="mx-auto flex max-w-[1440px] flex-wrap gap-x-4 gap-y-2 px-4 pb-8 text-xs text-muted sm:px-6 lg:px-8">
-        <Link to="/privacy">Privacy</Link>
-        <Link to="/terms">Terms</Link>
-        <Link to="/dmca">DMCA</Link>
-        <Link to="/disclaimer">Disclaimer</Link>
-        <Link to="/business">Business</Link>
-        <Link to="/contact">Contact</Link>
-      </footer>
+      </aside>
+
+      <div className="md:pl-60">
+        <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-line bg-white px-4 md:hidden">
+          <BrandMark to="/gallery" />
+          <UserButton />
+        </header>
+        <main className="mx-auto w-full max-w-6xl px-4 pb-28 pt-5 md:px-8 md:pb-12 md:pt-8">
+          <h1 className="mb-5 text-xl font-semibold tracking-tight md:mb-6 md:text-2xl">{title}</h1>
+          {children}
+        </main>
+      </div>
+
+      <nav
+        className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-white md:hidden"
+        style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+      >
+        <div className="grid" style={{ gridTemplateColumns: `repeat(${items.length}, minmax(0, 1fr))` }}>
+          {items.map((item) => (
+            <Link key={item.to} to={item.to} className={tab} activeProps={{ className: tabOn }}>
+              {item.label}
+            </Link>
+          ))}
+        </div>
+      </nav>
     </div>
   );
 }
