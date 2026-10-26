@@ -121,18 +121,8 @@ function Home() {
     retry: false,
   });
 
-  if (isPending || (user && sessionQ.isPending)) {
-    return (
-      <main className="grid min-h-screen place-items-center bg-bg p-6">
-        <p className="text-sm text-muted">Opening workspace…</p>
-      </main>
-    );
-  }
-
-  if (user) {
-    if (sessionQ.data?.home) return <Navigate to={sessionQ.data.home as any} replace />;
-    if (!sessionQ.data?.profile) return <Navigate to="/onboarding" replace />;
-  }
+  if (user && sessionQ.data?.home) return <Navigate to={sessionQ.data.home as any} replace />;
+  if (user && sessionQ.isSuccess && !sessionQ.data?.profile) return <Navigate to="/onboarding" replace />;
 
   return (
     <div className="min-h-screen bg-white text-fg antialiased selection:bg-accent/20 selection:text-fg">
