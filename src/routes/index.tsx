@@ -114,7 +114,7 @@ function Home() {
           <div className="mx-auto max-w-7xl px-4 sm:px-6">
             <div className="max-w-2xl">
               <h2 className="font-display text-3xl font-semibold tracking-tight text-fg sm:text-4xl">
-                From upload to delivery.
+                From record to delivery.
               </h2>
             </div>
 
@@ -157,7 +157,7 @@ function Home() {
                     Creators
                   </h3>
                   <p className="mt-3 text-sm leading-relaxed text-muted">
-                    Manage your titles from upload to delivery.
+                    Manage your titles from the record to delivery.
                   </p>
                 </div>
                 <div className="mt-8 pt-5 border-t border-line">
@@ -296,15 +296,14 @@ function Home() {
             aria-label="Footer Legal and External Links"
             className="flex flex-wrap items-center gap-5 text-xs text-muted"
           >
-            <Link to="/privacy" className="hover:text-fg transition-colors">
-              Privacy
-            </Link>
-            <Link to="/terms" className="hover:text-fg transition-colors">
-              Terms
-            </Link>
-            <Link to="/contact" className="hover:text-fg transition-colors">
-              Contact
-            </Link>
+            <Link to="/privacy" className="hover:text-fg transition-colors">Privacy</Link>
+            <Link to="/terms" className="hover:text-fg transition-colors">Terms</Link>
+            <Link to="/dmca" className="hover:text-fg transition-colors">DMCA</Link>
+            <Link to="/disclaimer" className="hover:text-fg transition-colors">Disclaimer</Link>
+            <Link to="/refund" className="hover:text-fg transition-colors">Refunds</Link>
+            <Link to="/grievance" className="hover:text-fg transition-colors">Grievance</Link>
+            <Link to="/business" className="hover:text-fg transition-colors">Business</Link>
+            <Link to="/contact" className="hover:text-fg transition-colors">Contact</Link>
           </nav>
         </div>
       </footer>

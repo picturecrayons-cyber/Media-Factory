@@ -62,6 +62,14 @@ export function BridgeShell({ actor, title, children }: { actor: BridgeActor; ti
         </div>
         {children}
       </main>
+      <footer className="mx-auto flex max-w-[1440px] flex-wrap gap-x-4 gap-y-2 px-4 pb-8 text-xs text-muted sm:px-6 lg:px-8">
+        <Link to="/privacy">Privacy</Link>
+        <Link to="/terms">Terms</Link>
+        <Link to="/dmca">DMCA</Link>
+        <Link to="/disclaimer">Disclaimer</Link>
+        <Link to="/business">Business</Link>
+        <Link to="/contact">Contact</Link>
+      </footer>
     </div>
   );
 }

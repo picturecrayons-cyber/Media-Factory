@@ -81,12 +81,11 @@ function Terms() {
           <div>
             <h2 className="font-semibold text-fg">5. Refunds and cancellations</h2>
             <p>
-              Refund and cancellation requests are handled under the applicable
-              Refund Policy and Cancellation Policy shown for the service or
-              transaction, together with any specific written agreement and
-              applicable law. Please review those policies before completing a
-              purchase or subscription. Nothing in these Terms limits rights
-              that cannot lawfully be excluded.
+              Refund and cancellation requests are handled under the{" "}
+              <Link to="/refund" className="font-semibold text-accent underline">
+                Refund Policy
+              </Link>
+              , together with any specific written agreement and applicable law.
             </p>
           </div>
 

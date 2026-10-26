@@ -1,24 +1,41 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { PUBLIC_CONTACT, PublicPage } from "@/components/bridge/public-page";
 
 export const Route = createFileRoute("/privacy")({ component: Privacy });
 
 function Privacy() {
   return (
-    <main className="min-h-screen bg-white px-5 py-12 text-fg sm:px-6">
-      <article className="mx-auto max-w-3xl space-y-6 rounded-3xl border border-line bg-surface p-7 sm:p-10">
-        <Link to="/" className="text-sm font-semibold text-accent">← Crayons Bridge</Link>
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-wider text-muted">StreamVista OPC Pvt Ltd.</p>
-          <h1 className="mt-2 font-display text-4xl font-semibold">Privacy</h1>
-          <p className="mt-3 text-sm leading-7 text-muted">Crayons Bridge uses account, workspace, title, rights, licensing, delivery, billing, and security information to provide and protect the service.</p>
-        </div>
-        <section className="space-y-3 text-sm leading-7 text-muted">
-          <p>We process information needed to authenticate users, operate workspaces, secure media workflows, maintain audit records, and support transactions and customer requests.</p>
-          <p>Access to operational data is limited according to workspace permissions and service requirements. We do not publish private workspace information as part of the public site.</p>
-          <p>For privacy questions or requests, email <a className="font-semibold text-accent underline" href="mailto:privacy@streamvista.com">privacy@streamvista.com</a>.</p>
-        </section>
-        <p className="border-t border-line pt-5 text-xs text-muted">Last updated: 1 October 2026.</p>
-      </article>
-    </main>
+    <PublicPage
+      title="Privacy"
+      updated="26 October 2026"
+      lede="This policy explains what Crayons Bridge collects on www.crayonspictures.in and how StreamVista OPC Pvt Ltd uses it."
+    >
+      <section>
+        <h2 className="font-semibold text-fg">What we collect</h2>
+        <p>Account data: name, email, role, and sign-in records.</p>
+        <p>Workspace data: title records, rights notes, QC decisions, and audit events you or your team create.</p>
+        <p>Technical data: browser, device, and security logs needed to keep the service available.</p>
+      </section>
+      <section>
+        <h2 className="font-semibold text-fg">Why we use it</h2>
+        <p>To create your account, apply role permissions, run the title workflow, investigate abuse, and answer support requests. We do not sell personal information.</p>
+      </section>
+      <section>
+        <h2 className="font-semibold text-fg">Where it is kept</h2>
+        <p>Accounts and title records are stored in our application database. Authentication is handled by Supabase. When file storage is enabled for a title, media files are stored in Oracle Cloud Infrastructure object storage. This public release does not require a master file.</p>
+      </section>
+      <section>
+        <h2 className="font-semibold text-fg">Sharing</h2>
+        <p>We share data with the infrastructure providers needed to run the service, and when a law, order, or rights complaint requires it. Buyers see only titles that the workflow has cleared for them.</p>
+      </section>
+      <section>
+        <h2 className="font-semibold text-fg">Your requests</h2>
+        <p>
+          For access, correction, or deletion requests, email{" "}
+          <a className="font-semibold text-accent underline" href={`mailto:${PUBLIC_CONTACT}`}>{PUBLIC_CONTACT}</a>.
+          See also the <Link to="/grievance" className="font-semibold text-accent underline">grievance</Link> page.
+        </p>
+      </section>
+    </PublicPage>
   );
 }
