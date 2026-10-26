@@ -122,6 +122,8 @@ export const listGalleryFiles = createServerFn({ method: "GET" })
     };
   });
 
+const FILE_KINDS = ["master", "poster", "poster_vertical", "poster_horizontal", "thumbnail", "subtitle", "screener", "censor_certificate"] as const;
+
 export const prepareSimpleUpload = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(z.object({
@@ -129,6 +131,7 @@ export const prepareSimpleUpload = createServerFn({ method: "POST" })
     filename: z.string().min(1).max(160),
     contentType: z.string().min(3).max(120),
     byteSize: z.number().int().positive().max(200 * 1024 * 1024),
+    kind: z.enum(FILE_KINDS).default("master"),
   }))
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
@@ -141,7 +144,7 @@ export const prepareSimpleUpload = createServerFn({ method: "POST" })
     const path = titleAssetKey({
       ownerUserId: actor.userId,
       titleId: title.id,
-      kind: "master",
+      kind: data.kind,
       filename: safe,
     });
     const signed = await signUpload({ key: path, contentType: data.contentType });
@@ -155,6 +158,7 @@ export const confirmSimpleUpload = createServerFn({ method: "POST" })
     path: z.string().min(8).max(500),
     contentType: z.string().min(3).max(120),
     byteSize: z.number().int().positive().max(200 * 1024 * 1024),
+    kind: z.enum(FILE_KINDS).default("master"),
   }))
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
@@ -169,7 +173,7 @@ export const confirmSimpleUpload = createServerFn({ method: "POST" })
     const id = randomBytes(16).toString("hex");
     await sql`
       insert into bridge_assets (id, title_id, kind, s3_key, content_type, byte_size, created_by)
-      values (${id}, ${title.id}, 'master', ${data.path}, ${verified.contentType || data.contentType}, ${verified.byteSize}, ${actor.userId})
+      values (${id}, ${title.id}, ${data.kind}, ${data.path}, ${verified.contentType || data.contentType}, ${verified.byteSize}, ${actor.userId})
     `;
     const noteId = randomBytes(16).toString("hex");
     const admins = await sql<{ email: string }>`
@@ -193,6 +197,30 @@ export const confirmSimpleUpload = createServerFn({ method: "POST" })
       metadata: { titleId: title.id },
     });
     return { assetId: id, path: data.path, mailed };
+  });
+
+export const openTitleAsset = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({ assetId: z.string().min(8) }))
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    const sql = await getSql();
+    const rows = await sql<{ title_id: string; s3_key: string; byte_size: number | null; owner_user_id: string }>`
+      select a.title_id, a.s3_key, a.byte_size, t.owner_user_id
+      from bridge_assets a
+      join bridge_titles t on t.id = a.title_id
+      where a.id = ${data.assetId}
+      limit 1
+    `;
+    const asset = rows[0];
+    if (!asset) throw new Error("Not found");
+    const staff = isStaff(actor.internalRole);
+    if (!staff && asset.owner_user_id !== actor.userId) throw new Error("Forbidden");
+    if (!(Number(asset.byte_size) > 0)) throw new Error("Still saving this file.");
+    if (!asset.s3_key.startsWith("bridge/")) throw new Error("This file is not in Oracle storage.");
+    const signed = await signDownload({ key: asset.s3_key, expiresIn: 600 });
+    return { url: signed.url };
   });
 
 export const openSimpleFile = createServerFn({ method: "POST" })

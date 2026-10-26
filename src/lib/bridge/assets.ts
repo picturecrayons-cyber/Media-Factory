@@ -253,11 +253,18 @@ export const listTitleAssets = createServerFn({ method: "GET" })
       created_at: string | Date;
     }>`
       select id, kind, s3_key, content_type, byte_size, created_at
-      from bridge_assets where title_id = ${title.id} and byte_size > 0 order by created_at desc
+      from bridge_assets
+      where title_id = ${title.id}
+      order by created_at desc
+      limit 40
     `;
     return {
       assets: rows
-        .filter((r) => !buyer || !["master", "technical", "censor_certificate"].includes(r.kind))
+        .filter((r) => {
+          if (!buyer) return true;
+          if (["master", "technical", "censor_certificate"].includes(r.kind)) return false;
+          return Number(r.byte_size) > 0;
+        })
         .map((r) => ({
           id: r.id,
           kind: r.kind,
@@ -265,6 +272,7 @@ export const listTitleAssets = createServerFn({ method: "GET" })
           contentType: r.content_type,
           byteSize: r.byte_size,
           verified: Number(r.byte_size) > 0,
+          pending: !(Number(r.byte_size) > 0),
           createdAt:
             r.created_at instanceof Date ? r.created_at.toISOString() : String(r.created_at),
         })),
