@@ -232,7 +232,6 @@ export const getSimpleDesk = createServerFn({ method: "GET" })
     return {
       bucket: BUCKET,
       staff,
-      supabaseUrl: bridgeEnv.supabaseUrl() ?? null,
       file: assets[0]
         ? {
             id: assets[0].id,
