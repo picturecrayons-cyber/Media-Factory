@@ -3,8 +3,27 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { StatusChip } from "@/components/bridge/status-rail";
 import { createTitle, listTitles } from "@/lib/bridge/titles";
+
+const STATUS: Record<string, string> = {
+  DRAFT: "Draft",
+  UPLOADING: "Uploading",
+  PREPARING: "Preparing",
+  QC_REVIEW: "In review",
+  RIGHTS_REVIEW: "Rights",
+  LICENSING_READY: "Ready",
+  LIVE_FOR_BUYERS: "Live",
+  IN_NEGOTIATION: "Negotiation",
+  LICENSED: "Licensed",
+  DELIVERED: "Delivered",
+};
+
+function plate(name: string) {
+  const tones = ["#102433", "#1b2433", "#141c28", "#1a2230", "#101820", "#1c2630"];
+  let n = 0;
+  for (const char of name) n = (n + char.charCodeAt(0)) % tones.length;
+  return tones[n];
+}
 
 export function TitleList({ empty, query = "" }: { empty: string; query?: string }) {
   const titlesQ = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles() });
@@ -20,23 +39,20 @@ export function TitleList({ empty, query = "" }: { empty: string; query?: string
   }
   if (!titles.length) return <p className="text-sm text-muted">{empty}</p>;
   return (
-    <ul className="divide-y divide-line rounded-sm border border-line">
+    <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
       {titles.map((t) => (
         <li key={t.id}>
-          <Link
-            to="/title/$id"
-            params={{ id: t.id }}
-            className="flex flex-wrap items-center justify-between gap-3 px-4 py-4 hover:bg-fg/5"
-          >
-            <div>
-              <p className="font-medium">{t.name}</p>
-              <p className="text-sm text-muted">
-                {t.contentType ? `${t.contentType} · ` : ""}
+          <Link to="/title/$id" params={{ id: t.id }} className="block overflow-hidden rounded-2xl border border-line bg-white">
+            <div className="grid aspect-[2/3] place-items-end p-3" style={{ background: plate(t.name) }}>
+              <span className="rounded-full bg-black/40 px-2 py-1 text-[10px] font-semibold text-white">{STATUS[t.status] || t.status}</span>
+            </div>
+            <div className="p-3">
+              <p className="line-clamp-2 text-sm font-semibold">{t.name}</p>
+              <p className="mt-1 text-xs text-muted">
                 {t.language}
                 {t.year ? ` · ${t.year}` : ""}
               </p>
             </div>
-            <StatusChip status={t.status} />
           </Link>
         </li>
       ))}

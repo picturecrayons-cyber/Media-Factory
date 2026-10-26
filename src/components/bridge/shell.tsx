@@ -40,6 +40,25 @@ function navFor(actor: BridgeActor): NavItem[] {
   return items;
 }
 
+const ROLE: Record<string, string> = {
+  independent_creator: "Creator",
+  studio: "Studio",
+  buyer: "Buyer",
+  investor: "Investor",
+  admin: "Admin",
+  super_admin: "Super admin",
+  qc_reviewer: "QC",
+  legal_reviewer: "Legal",
+  finance: "Finance",
+  viewer: "Viewer",
+};
+
+function roleLabel(actor: BridgeActor) {
+  const account = ROLE[actor.accountType] || "Account";
+  const internal = actor.internalRole ? ROLE[actor.internalRole] : "";
+  return internal ? `${account} · ${internal}` : account;
+}
+
 const row = "flex min-h-11 items-center rounded-xl px-3 text-sm font-semibold text-muted";
 const rowOn = "flex min-h-11 items-center rounded-xl bg-accent-soft px-3 text-sm font-semibold text-fg";
 const tab = "flex min-h-14 items-center justify-center px-1 text-[11px] font-semibold text-muted";
@@ -91,7 +110,10 @@ export function BridgeShell({ actor, title, children }: { actor: BridgeActor; ti
           <UserButton />
         </header>
         <main className="mx-auto w-full max-w-6xl px-4 pb-28 pt-5 md:px-8 md:pb-12 md:pt-8">
-          <h1 className="mb-5 text-xl font-semibold tracking-tight md:mb-6 md:text-2xl">{title}</h1>
+          <div className="mb-5 flex items-center justify-between gap-3 md:mb-6">
+            <h1 className="text-xl font-semibold tracking-tight md:text-2xl">{title}</h1>
+            <p className="shrink-0 rounded-full border border-line bg-white px-3 py-1 text-xs font-semibold">{roleLabel(actor)}</p>
+          </div>
           {children}
         </main>
       </div>
