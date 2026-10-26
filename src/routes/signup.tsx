@@ -231,9 +231,11 @@ function Signup() {
         </div>
 
         <form className="space-y-4" onSubmit={(e) => void onSubmit(e)}>
-          <label className="block text-sm font-medium text-fg">
+          <label className="block text-sm font-medium text-fg" htmlFor="bridge-signup-name">
             Full name
             <input
+              id="bridge-signup-name"
+              name="name"
               required
               autoComplete="name"
               type="text"
@@ -244,9 +246,11 @@ function Signup() {
             />
           </label>
 
-          <label className="block text-sm font-medium text-fg">
+          <label className="block text-sm font-medium text-fg" htmlFor="bridge-signup-email">
             Email address
             <input
+              id="bridge-signup-email"
+              name="email"
               required
               autoComplete="email"
               type="email"
@@ -294,9 +298,11 @@ function Signup() {
             </div>
           </fieldset>
 
-          <label className="block text-sm font-medium text-fg">
+          <label className="block text-sm font-medium text-fg" htmlFor="bridge-signup-password">
             Password
             <input
+              id="bridge-signup-password"
+              name="password"
               required
               autoComplete="new-password"
               type="password"
@@ -308,9 +314,11 @@ function Signup() {
             />
           </label>
 
-          <label className="block text-sm font-medium text-fg">
+          <label className="block text-sm font-medium text-fg" htmlFor="bridge-signup-confirm">
             Confirm password
             <input
+              id="bridge-signup-confirm"
+              name="confirm"
               required
               autoComplete="new-password"
               type="password"

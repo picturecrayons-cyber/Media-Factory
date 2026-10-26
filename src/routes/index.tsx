@@ -143,10 +143,14 @@ function Enquiry() {
       </div>
       {sent ? <p className="rounded-2xl border border-line bg-[#f4f7f8] p-6 text-sm font-semibold">Received. We will reply by email.</p> : (
         <form onSubmit={(event) => void onSubmit(event)} className="grid gap-3">
-          <input name="name" required placeholder="Name" className="h-12 rounded-xl border border-line-strong bg-white px-3" />
-          <input name="email" type="email" required placeholder="Work email" className="h-12 rounded-xl border border-line-strong bg-white px-3" />
-          <input name="organization" placeholder="Company" className="h-12 rounded-xl border border-line-strong bg-white px-3" />
-          <textarea name="message" required minLength={8} rows={4} placeholder="What do you need?" className="rounded-xl border border-line-strong bg-white px-3 py-2" />
+          <label className="sr-only" htmlFor="enquiry-name">Name</label>
+          <input id="enquiry-name" name="name" autoComplete="name" required placeholder="Name" className="h-12 rounded-xl border border-line-strong bg-white px-3" />
+          <label className="sr-only" htmlFor="enquiry-email">Work email</label>
+          <input id="enquiry-email" name="email" type="email" autoComplete="email" required placeholder="Work email" className="h-12 rounded-xl border border-line-strong bg-white px-3" />
+          <label className="sr-only" htmlFor="enquiry-organization">Company</label>
+          <input id="enquiry-organization" name="organization" autoComplete="organization" placeholder="Company" className="h-12 rounded-xl border border-line-strong bg-white px-3" />
+          <label className="sr-only" htmlFor="enquiry-message">Message</label>
+          <textarea id="enquiry-message" name="message" autoComplete="off" required minLength={8} rows={4} placeholder="What do you need?" className="rounded-xl border border-line-strong bg-white px-3 py-2" />
           {error ? <p role="alert" className="text-sm text-red-600">{error}</p> : null}
           <button type="submit" disabled={busy} className="h-12 rounded-full bg-[#0b1220] text-sm font-semibold text-white">{busy ? "Sending…" : "Send enquiry"}</button>
         </form>

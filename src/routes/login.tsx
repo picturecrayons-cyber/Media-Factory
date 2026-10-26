@@ -94,9 +94,11 @@ function Login() {
         </div>
 
         <form className="space-y-4" onSubmit={(e) => void onSubmit(e)}>
-          <label className="block text-sm font-medium text-fg">
+          <label className="block text-sm font-medium text-fg" htmlFor="bridge-email">
             Email
             <input
+              id="bridge-email"
+              name="email"
               required
               autoComplete="email"
               type="email"
@@ -107,7 +109,7 @@ function Login() {
             />
           </label>
 
-          <label className="block text-sm font-medium text-fg">
+          <label className="block text-sm font-medium text-fg" htmlFor="bridge-password">
             <span className="flex items-center justify-between gap-3">
               <span>Password</span>
               <Link
@@ -119,6 +121,8 @@ function Login() {
             </span>
             <div className="relative mt-1.5">
               <input
+                id="bridge-password"
+                name="password"
                 required
                 autoComplete="current-password"
                 type={showPassword ? "text" : "password"}

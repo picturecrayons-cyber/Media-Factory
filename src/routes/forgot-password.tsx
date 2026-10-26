@@ -54,10 +54,13 @@ function Forgot() {
           </div>
         ) : (
           <form className="space-y-4" onSubmit={(e) => void onSubmit(e)}>
-            <label className="block text-sm font-medium text-fg">
+            <label className="block text-sm font-medium text-fg" htmlFor="bridge-reset-email">
               Email address
               <input
+                id="bridge-reset-email"
+                name="email"
                 required
+                autoComplete="email"
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
