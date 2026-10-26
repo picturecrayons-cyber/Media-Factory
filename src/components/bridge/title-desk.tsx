@@ -43,11 +43,10 @@ export function TitleList({ empty, query = "" }: { empty: string; query?: string
       {titles.map((t) => (
         <li key={t.id}>
           <Link to="/title/$id" params={{ id: t.id }} className="block overflow-hidden rounded-2xl border border-line bg-white">
-            <div className="grid aspect-[2/3] place-items-end p-3" style={{ background: plate(t.name) }}>
-              <span className="rounded-full bg-black/40 px-2 py-1 text-[10px] font-semibold text-white">{STATUS[t.status] || t.status}</span>
-            </div>
-            <div className="p-3">
-              <p className="line-clamp-2 text-sm font-semibold">{t.name}</p>
+            <div className="aspect-[2/3]" style={{ background: plate(t.name) }} />
+            <div className="space-y-1 p-3">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">{STATUS[t.status] || t.status}</p>
+              <p className="line-clamp-2 text-sm font-semibold leading-5">{t.name}</p>
               <p className="mt-1 text-xs text-muted">
                 {t.language}
                 {t.year ? ` · ${t.year}` : ""}

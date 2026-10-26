@@ -77,6 +77,8 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
         director={title.credits?.find((credit) => credit.role === "Director")?.name || ""}
         producer={title.credits?.find((credit) => credit.role === "Producer")?.name || ""}
         contentType={title.contentType || "Film"}
+        seoTitle={titleQ.data?.seo?.title || ""}
+        seoDescription={titleQ.data?.seo?.description || ""}
       />
     </div>
   );

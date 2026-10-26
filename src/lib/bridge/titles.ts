@@ -69,6 +69,24 @@ export function mapTitle(r: TitleRow): BridgeTitle {
   };
 }
 
+async function readTitleSeo(sql: Sql, titleId: string) {
+  try {
+    await sql.query(`
+      create table if not exists bridge_title_seo (
+        title_id text primary key,
+        seo_title text,
+        seo_description text
+      )
+    `);
+    const rows = await sql<{ seo_title: string | null; seo_description: string | null }>`
+      select seo_title, seo_description from bridge_title_seo where title_id = ${titleId} limit 1
+    `;
+    return { title: rows[0]?.seo_title || "", description: rows[0]?.seo_description || "" };
+  } catch {
+    return { title: "", description: "" };
+  }
+}
+
 async function hasTitleMergeColumn(sql: Sql): Promise<boolean> {
   const rows = await sql<{ exists: boolean }>`
     select exists (
@@ -320,6 +338,7 @@ export const getTitle = createServerFn({ method: "GET" })
     `;
     return {
       title,
+      seo: await readTitleSeo(sql, title.id),
       events: events.map((e) => ({
         from: e.from_status,
         to: e.to_status,
@@ -347,6 +366,8 @@ export const updateTitle = createServerFn({ method: "POST" })
       releaseDate: z.string().max(40).nullable().optional(),
       director: z.string().max(120).optional(),
       producer: z.string().max(120).optional(),
+      seoTitle: z.string().max(70).optional(),
+      seoDescription: z.string().max(160).optional(),
     }),
   )
   .handler(async ({ context, data }) => {
@@ -399,6 +420,22 @@ export const updateTitle = createServerFn({ method: "POST" })
       entityType: "bridge_title",
       entityId: title.id,
     });
+    if (data.seoTitle !== undefined || data.seoDescription !== undefined) {
+      await sql.query(`
+        create table if not exists bridge_title_seo (
+          title_id text primary key,
+          seo_title text,
+          seo_description text
+        )
+      `);
+      await sql`
+        insert into bridge_title_seo (title_id, seo_title, seo_description)
+        values (${title.id}, ${data.seoTitle || null}, ${data.seoDescription || null})
+        on conflict (title_id) do update set
+          seo_title = excluded.seo_title,
+          seo_description = excluded.seo_description
+      `;
+    }
     const next = await loadTitle(title.id);
     return { title: next };
   });

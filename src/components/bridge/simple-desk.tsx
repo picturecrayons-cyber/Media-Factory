@@ -36,6 +36,8 @@ export function SimpleDesk({
   director,
   producer,
   contentType,
+  seoTitle,
+  seoDescription,
 }: {
   titleId: string;
   actor: BridgeActor;
@@ -51,6 +53,8 @@ export function SimpleDesk({
   director: string;
   producer: string;
   contentType: string;
+  seoTitle: string;
+  seoDescription: string;
 }) {
   const qc = useQueryClient();
   const desk = useQuery({
@@ -73,6 +77,8 @@ export function SimpleDesk({
   const [editDirector, setEditDirector] = useState(director);
   const [editProducer, setEditProducer] = useState(producer);
   const [editType, setEditType] = useState(contentType || "Film");
+  const [editSeoTitle, setEditSeoTitle] = useState(seoTitle);
+  const [editSeoDescription, setEditSeoDescription] = useState(seoDescription);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
   const [editing, setEditing] = useState(false);
@@ -158,6 +164,8 @@ export function SimpleDesk({
         releaseDate: editRelease.trim() || null,
         director: editDirector,
         producer: editProducer,
+        seoTitle: editSeoTitle.trim(),
+        seoDescription: editSeoDescription.trim(),
       },
     }),
     onSuccess: async () => {
@@ -198,11 +206,22 @@ export function SimpleDesk({
   });
   const remove = useMutation({
     mutationFn: (assetId: string) => deleteTitleAsset({ data: { assetId } }),
+    onMutate: async (assetId) => {
+      await qc.cancelQueries({ queryKey: ["bridge-assets", titleId] });
+      const previous = qc.getQueryData(["bridge-assets", titleId]);
+      qc.setQueryData(["bridge-assets", titleId], (old: { assets?: Array<{ id: string }> } | undefined) =>
+        old?.assets ? { ...old, assets: old.assets.filter((item) => item.id !== assetId) } : old,
+      );
+      return { previous };
+    },
     onSuccess: async () => {
       toast.success("Deleted.");
       await refresh();
     },
-    onError: (e) => toast.error(e instanceof Error ? e.message : "Could not delete"),
+    onError: (e, _id, context) => {
+      if (context?.previous) qc.setQueryData(["bridge-assets", titleId], context.previous);
+      toast.error(e instanceof Error ? e.message : "Could not delete");
+    },
   });
   const clearUnfinished = useMutation({
     mutationFn: () => deleteUnfinishedAssets({ data: { titleId } }),
@@ -239,6 +258,14 @@ export function SimpleDesk({
               Synopsis
               <textarea value={editSynopsis} onChange={(e) => setEditSynopsis(e.target.value)} rows={3} className="mt-1 w-full rounded-xl border border-line-strong bg-white px-3 py-2 font-normal" />
             </label>
+            <label className="text-sm font-semibold sm:col-span-2">
+              Search title
+              <input value={editSeoTitle} onChange={(e) => setEditSeoTitle(e.target.value)} maxLength={70} className="mt-1 h-12 w-full rounded-xl border border-line-strong bg-white px-3 font-normal" />
+            </label>
+            <label className="text-sm font-semibold sm:col-span-2">
+              Search description
+              <textarea value={editSeoDescription} onChange={(e) => setEditSeoDescription(e.target.value)} maxLength={160} rows={2} className="mt-1 w-full rounded-xl border border-line-strong bg-white px-3 py-2 font-normal" />
+            </label>
           </div>
         ) : (
           <dl className="mt-3 grid gap-3 sm:grid-cols-2">
@@ -247,6 +274,8 @@ export function SimpleDesk({
             <Fact label="Year" value={year ? String(year) : ""} />
             <Fact label="Runtime" value={runtimeMinutes ? `${runtimeMinutes} min` : ""} />
             {synopsis ? <Fact label="Synopsis" value={synopsis} wide /> : null}
+            {seoTitle ? <Fact label="Search title" value={seoTitle} wide /> : null}
+            {seoDescription ? <Fact label="Search description" value={seoDescription} wide /> : null}
           </dl>
         )}
       </section>

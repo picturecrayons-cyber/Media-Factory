@@ -7,7 +7,7 @@ const AREAS = [
   {
     id: "working" as const,
     title: "Working",
-    note: "Rushes, location stills, and pilot audio. These stay in the studio.",
+    note: "Rushes stay in the studio.",
     slots: [
       { id: "raw" as const, label: "Raw footage" },
       { id: "stills" as const, label: "Location stills" },
@@ -17,7 +17,7 @@ const AREAS = [
   {
     id: "archive" as const,
     title: "Archive",
-    note: "The finished out. Picture, sound, and the catalog.",
+    note: "Finished picture, sound, and the catalog.",
     slots: [
       { id: "picture" as const, label: "Final picture" },
       { id: "sound" as const, label: "Final sound" },
@@ -27,7 +27,7 @@ const AREAS = [
   {
     id: "keep" as const,
     title: "Keep",
-    note: "Paid holding. Files stay private until you release them.",
+    note: "Paid. Private until you release it.",
     slots: [{ id: "hold" as const, label: "Hold" }],
   },
 ];
