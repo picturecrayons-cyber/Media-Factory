@@ -73,8 +73,8 @@ export const listPublishingPartners = createServerFn({ method: "GET" })
 export const listPublicPartners = createServerFn({ method: "GET" })
   .handler(async () => {
     const sql = await ensurePartners();
-    const rows = await sql<{ name: string; kind: string; share_pct: number; contact: string | null; public_url: string | null }>`
-      select name, kind, share_pct, contact, public_url
+    const rows = await sql<{ name: string; public_url: string | null }>`
+      select name, public_url
       from bridge_publishing_partners
       where public_url is not null
       order by created_at asc
@@ -83,9 +83,7 @@ export const listPublicPartners = createServerFn({ method: "GET" })
     return {
       partners: rows.map((row) => ({
         name: row.name,
-        kind: row.kind === "in_house" ? "In-house" : "Partner",
-        sharePct: Number(row.share_pct),
-        contact: row.contact || "",
+        line: "Official consumer streaming partner",
         publicUrl: row.public_url || "",
       })),
     };

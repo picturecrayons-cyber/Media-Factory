@@ -30,7 +30,7 @@ const WORKFLOW_STEPS = [
   {
     step: "01",
     title: "Record",
-    description: "Add the title and one file.",
+    description: "Onboard the title and the screening master.",
   },
   {
     step: "02",
@@ -45,7 +45,7 @@ const WORKFLOW_STEPS = [
   {
     step: "04",
     title: "License",
-    description: "Manage screeners and deals.",
+    description: "Verified buyer licensing. No sub-licensing.",
   },
   {
     step: "05",
@@ -115,8 +115,8 @@ function Enquiry() {
         data: {
           name: String(form.get("name") || ""),
           email: String(form.get("email") || ""),
-          organization: String(form.get("organization") || ""),
-          message: String(form.get("message") || ""),
+          organization: String(form.get("company") || ""),
+          message: [String(form.get("need") || ""), String(form.get("message") || "")].filter(Boolean).join("\n"),
         },
       });
       setSent(true);
@@ -143,14 +143,21 @@ function Enquiry() {
       </div>
       {sent ? <p className="rounded-2xl border border-line bg-[#f4f7f8] p-6 text-sm font-semibold">Received. We will reply by email.</p> : (
         <form onSubmit={(event) => void onSubmit(event)} className="grid gap-3">
-          <label className="sr-only" htmlFor="enquiry-name">Name</label>
-          <input id="enquiry-name" name="name" autoComplete="name" required placeholder="Name" className="h-12 rounded-xl border border-line-strong bg-white px-3" />
-          <label className="sr-only" htmlFor="enquiry-email">Work email</label>
-          <input id="enquiry-email" name="email" type="email" autoComplete="email" required placeholder="Work email" className="h-12 rounded-xl border border-line-strong bg-white px-3" />
-          <label className="sr-only" htmlFor="enquiry-organization">Company</label>
-          <input id="enquiry-organization" name="organization" autoComplete="organization" placeholder="Company" className="h-12 rounded-xl border border-line-strong bg-white px-3" />
-          <label className="sr-only" htmlFor="enquiry-message">Message</label>
-          <textarea id="enquiry-message" name="message" autoComplete="off" required minLength={8} rows={4} placeholder="What do you need?" className="rounded-xl border border-line-strong bg-white px-3 py-2" />
+          <label className="sr-only" htmlFor="desk-name">Name</label>
+          <input id="desk-name" name="name" autoComplete="name" required placeholder="Name" className="h-12 rounded-xl border border-line-strong bg-white px-3" />
+          <label className="sr-only" htmlFor="desk-email">Work email</label>
+          <input id="desk-email" name="email" type="email" autoComplete="email" required placeholder="Work email" className="h-12 rounded-xl border border-line-strong bg-white px-3" />
+          <label className="sr-only" htmlFor="desk-company">Company</label>
+          <input id="desk-company" name="company" autoComplete="organization" placeholder="Company" className="h-12 rounded-xl border border-line-strong bg-white px-3" />
+          <label className="sr-only" htmlFor="desk-need">What do you need?</label>
+          <select id="desk-need" name="need" autoComplete="off" className="h-12 rounded-xl border border-line-strong bg-white px-3">
+            <option value="Licensing enquiry">Licensing enquiry</option>
+            <option value="Content submission">Content submission</option>
+            <option value="Studio workspace">Studio workspace</option>
+            <option value="Investor access">Investor access</option>
+          </select>
+          <label className="sr-only" htmlFor="desk-message">Message</label>
+          <textarea id="desk-message" name="message" autoComplete="off" required minLength={8} rows={4} placeholder="What do you need?" className="rounded-xl border border-line-strong bg-white px-3 py-2" />
           {error ? <p role="alert" className="text-sm text-red-600">{error}</p> : null}
           <button type="submit" disabled={busy} className="h-12 rounded-full bg-[#0b1220] text-sm font-semibold text-white">{busy ? "Sending…" : "Send enquiry"}</button>
         </form>
@@ -183,11 +190,7 @@ function Home() {
 
           <div className="flex items-center gap-3 text-sm">
             <SignedOut>
-              <Link to="/signup">
-                <Button size="sm" className="rounded-full px-4 py-1.5 text-xs font-semibold shadow-xs">
-                  Create account
-                </Button>
-              </Link>
+              <Link to="/login" className="text-sm font-semibold">Sign in</Link>
             </SignedOut>
           </div>
         </div>
@@ -199,10 +202,7 @@ function Home() {
         <section className="bridge-home-hero border-b border-line bg-white">
           <div className="mx-auto max-w-7xl px-5 py-14 text-center sm:px-6 sm:py-16 lg:py-20">
             <div className="mx-auto max-w-5xl">
-              <div className="mx-auto flex justify-center">
-                <BrandMark className="text-3xl sm:text-4xl lg:text-5xl" />
-              </div>
-              <h1 className="bridge-hero-copy mx-auto mt-8 max-w-4xl font-display text-[2.45rem] font-semibold leading-[1.02] tracking-[-0.04em] text-fg sm:text-5xl lg:text-[3.9rem]">
+              <h1 className="bridge-hero-copy mx-auto max-w-4xl font-display text-[2.45rem] font-semibold leading-[1.02] tracking-[-0.04em] text-fg sm:text-5xl lg:text-[3.9rem]">
                 The title network.
               </h1>
               <p className="bridge-hero-subcopy mx-auto mt-4 max-w-2xl text-base leading-7 text-muted sm:text-lg">
@@ -215,23 +215,25 @@ function Home() {
                     Create account
                   </Button>
                 </Link>
-                <Link to="/login" className="px-2 text-sm font-semibold text-muted hover:text-fg transition-colors">Sign in</Link>
               </div>
             </div>
           </div>
         </section>
         )}
 
+        <p className="border-b border-line px-5 py-3 text-center text-xs font-medium text-muted">Protected vault storage · Chain-of-title verification · Direct-to-buyer delivery</p>
+
         <section className="border-b border-line bg-white py-8">
           <div className="mx-auto max-w-7xl px-5 sm:px-6">
             <h2 className="text-lg font-semibold">Partners</h2>
+            <p className="mt-1 max-w-2xl text-sm text-muted">Distribution and delivery readiness for leading OTT and satellite networks.</p>
             <div className="mt-4 flex gap-3 overflow-x-auto pb-2">
               {(partnersQ.data?.partners ?? []).map((partner) => (
                 <a key={partner.publicUrl} href={partner.publicUrl} className="flex min-w-64 items-center gap-3 rounded-2xl border border-line p-4" target="_blank" rel="noreferrer">
                   <span className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-[#102433] text-xs font-semibold text-white">LOOP</span>
                   <span>
                     <span className="block text-sm font-semibold">{partner.name}</span>
-                    <span className="block text-xs text-muted">{partner.kind} · {partner.sharePct}% · {partner.contact}</span>
+                    <span className="block text-xs text-muted">{partner.line}</span>
                   </span>
                 </a>
               ))}
@@ -403,14 +405,6 @@ function Home() {
                     Create account
                   </Button>
                 </Link>
-                <Link to="/login">
-                  <Button
-                    variant="outline"
-                    className="h-11 rounded-full border-line px-6 text-sm font-semibold hover:border-line-strong"
-                  >
-                    Sign in
-                  </Button>
-                </Link>
               </div>
             </div>
           </div>
@@ -420,9 +414,7 @@ function Home() {
       <footer className="bg-surface py-10 px-4 sm:px-6 text-xs text-muted">
         <div className="mx-auto max-w-7xl flex flex-col sm:flex-row items-center justify-between gap-4">
           <div>
-            <span className="font-semibold text-fg">Crayons Bridge</span>
-            <span className="mx-2 text-muted/40">·</span>
-            <span>© 2026 StreamVista OPC Pvt Ltd.</span>
+            <span className="font-semibold text-fg">Crayons Bridge · © 2026 StreamVista (OPC) Pvt Ltd.</span>
           </div>
 
           <nav
