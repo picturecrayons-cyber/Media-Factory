@@ -667,14 +667,17 @@ export const advanceTitle = createServerFn({ method: "POST" })
       );
       return { title: { ...title, status: data.to } };
     }).then(async (result) => {
-      await notifySubmission({
-        titleId: title.id,
-        titleName: title.name,
-        ownerUserId: title.ownerUserId,
-        actorUserId: actor.userId,
-        actorEmail: actor.email,
-        actorName: actor.displayName || actor.email,
-      });
+      await Promise.race([
+        notifySubmission({
+          titleId: title.id,
+          titleName: title.name,
+          ownerUserId: title.ownerUserId,
+          actorUserId: actor.userId,
+          actorEmail: actor.email,
+          actorName: actor.displayName || actor.email,
+        }),
+        new Promise((resolve) => setTimeout(resolve, 8000)),
+      ]);
       return result;
     });
   });

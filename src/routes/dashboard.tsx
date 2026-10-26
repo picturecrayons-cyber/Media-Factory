@@ -5,6 +5,7 @@ import { BridgeShell } from "@/components/bridge/shell";
 import { listTitles, resetCatalogToDraft } from "@/lib/bridge/titles";
 import { BRIDGE_LOOP_LANES, loopStageType } from "@/lib/bridge/loop-lanes";
 import { PublishingDesk } from "@/components/bridge/publishing-desk";
+import { ClearanceDesk } from "@/components/bridge/clearance-desk";
 import { getDashboardSession } from "@/lib/bridge/session";
 
 export const Route = createFileRoute("/dashboard")({ component: Dashboard });
@@ -105,6 +106,8 @@ function DashboardBody() {
           <span className="mt-1 block text-xs font-medium text-muted">Launching soon</span>
         </a>
       </section>
+
+      <ClearanceDesk />
 
       <PublishingDesk />
 
