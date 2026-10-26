@@ -6,7 +6,7 @@ import appCss from "../styles.css?url";
 
 const APP_NAME = "Crayons Bridge";
 const queryClient = new QueryClient({
-  defaultOptions: { queries: { staleTime: 15_000, retry: 1 } },
+  defaultOptions: { queries: { staleTime: 60_000, retry: 1, refetchOnWindowFocus: false } },
 });
 
 export const Route = createRootRoute({

@@ -69,6 +69,34 @@ export function mapTitle(r: TitleRow): BridgeTitle {
   };
 }
 
+export const resetCatalogToDraft = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    if (actor.internalRole !== "super_admin") throw new Error("Super admin only");
+    const sql = await getSql();
+    await sql.query(`create table if not exists bridge_ops_flags (id text primary key, done_at timestamptz not null default now())`);
+    const marked = await sql<{ id: string }>`
+      select id from bridge_ops_flags where id = 'catalog-draft-2026-10-26' limit 1
+    `;
+    if (marked[0]) return { changed: 0 };
+    const updated = await sql<{ id: string }>`
+      update bridge_titles set status = 'DRAFT', updated_at = now()
+      where status <> 'DRAFT'
+      returning id
+    `;
+    await sql`insert into bridge_ops_flags (id) values ('catalog-draft-2026-10-26') on conflict (id) do nothing`;
+    await writeAudit({
+      actorUserId: actor.userId,
+      action: "catalog.draft",
+      entityType: "bridge_titles",
+      entityId: "catalog",
+      metadata: { changed: updated.length },
+    });
+    return { changed: updated.length };
+  });
+
 async function readTitleSeo(sql: Sql, titleId: string) {
   try {
     await sql.query(`
@@ -78,10 +106,19 @@ async function readTitleSeo(sql: Sql, titleId: string) {
         seo_description text
       )
     `);
-    const rows = await sql<{ seo_title: string | null; seo_description: string | null }>`
-      select seo_title, seo_description from bridge_title_seo where title_id = ${titleId} limit 1
+    await sql.query(`alter table bridge_title_seo add column if not exists genre text`);
+    await sql.query(`alter table bridge_title_seo add column if not exists rating text`);
+    await sql.query(`alter table bridge_title_seo add column if not exists play_url text`);
+    const rows = await sql<{ seo_title: string | null; seo_description: string | null; genre: string | null; rating: string | null; play_url: string | null }>`
+      select seo_title, seo_description, genre, rating, play_url from bridge_title_seo where title_id = ${titleId} limit 1
     `;
-    return { title: rows[0]?.seo_title || "", description: rows[0]?.seo_description || "" };
+    return {
+      title: rows[0]?.seo_title || "",
+      description: rows[0]?.seo_description || "",
+      genre: rows[0]?.genre || "",
+      rating: rows[0]?.rating || "",
+      playUrl: rows[0]?.play_url || "",
+    };
   } catch {
     return { title: "", description: "" };
   }
@@ -368,6 +405,9 @@ export const updateTitle = createServerFn({ method: "POST" })
       producer: z.string().max(120).optional(),
       seoTitle: z.string().max(70).optional(),
       seoDescription: z.string().max(160).optional(),
+      genre: z.string().max(40).optional(),
+      rating: z.string().max(20).optional(),
+      playUrl: z.string().max(300).optional(),
     }),
   )
   .handler(async ({ context, data }) => {
@@ -420,7 +460,7 @@ export const updateTitle = createServerFn({ method: "POST" })
       entityType: "bridge_title",
       entityId: title.id,
     });
-    if (data.seoTitle !== undefined || data.seoDescription !== undefined) {
+    if (data.seoTitle !== undefined || data.seoDescription !== undefined || data.genre !== undefined || data.rating !== undefined || data.playUrl !== undefined) {
       await sql.query(`
         create table if not exists bridge_title_seo (
           title_id text primary key,
@@ -428,12 +468,18 @@ export const updateTitle = createServerFn({ method: "POST" })
           seo_description text
         )
       `);
+      await sql.query(`alter table bridge_title_seo add column if not exists genre text`);
+      await sql.query(`alter table bridge_title_seo add column if not exists rating text`);
+      await sql.query(`alter table bridge_title_seo add column if not exists play_url text`);
       await sql`
-        insert into bridge_title_seo (title_id, seo_title, seo_description)
-        values (${title.id}, ${data.seoTitle || null}, ${data.seoDescription || null})
+        insert into bridge_title_seo (title_id, seo_title, seo_description, genre, rating, play_url)
+        values (${title.id}, ${data.seoTitle || null}, ${data.seoDescription || null}, ${data.genre || null}, ${data.rating || null}, ${data.playUrl || null})
         on conflict (title_id) do update set
-          seo_title = excluded.seo_title,
-          seo_description = excluded.seo_description
+          seo_title = coalesce(excluded.seo_title, bridge_title_seo.seo_title),
+          seo_description = coalesce(excluded.seo_description, bridge_title_seo.seo_description),
+          genre = coalesce(excluded.genre, bridge_title_seo.genre),
+          rating = coalesce(excluded.rating, bridge_title_seo.rating),
+          play_url = coalesce(excluded.play_url, bridge_title_seo.play_url)
       `;
     }
     const next = await loadTitle(title.id);

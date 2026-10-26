@@ -218,7 +218,19 @@ export const listGalleryFiles = createServerFn({ method: "GET" })
     };
   });
 
-const FILE_KINDS = ["master", "poster", "poster_vertical", "poster_horizontal", "thumbnail", "subtitle", "screener", "censor_certificate"] as const;
+const FILE_KINDS = ["master", "trailer", "poster", "poster_vertical", "poster_horizontal", "thumbnail", "subtitle", "audio", "screener", "censor_certificate"] as const;
+
+async function widenAssetKinds(sql: Awaited<ReturnType<typeof getSql>>) {
+  await sql.query(`
+    alter table bridge_assets drop constraint if exists bridge_assets_kind_chk;
+    alter table bridge_assets add constraint bridge_assets_kind_chk check (
+      kind in (
+        'poster', 'poster_vertical', 'poster_horizontal', 'thumbnail',
+        'screener', 'master', 'trailer', 'subtitle', 'audio', 'censor_certificate', 'technical'
+      )
+    );
+  `);
+}
 
 export const prepareSimpleUpload = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
@@ -266,6 +278,7 @@ export const confirmSimpleUpload = createServerFn({ method: "POST" })
     if (!staff && title.ownerUserId !== actor.userId) throw new Error("Forbidden");
     const verified = await verifyObject(data.path, data.contentType);
     const sql = await getSql();
+    await widenAssetKinds(sql);
     const id = randomBytes(16).toString("hex");
     await sql`
       insert into bridge_assets (id, title_id, kind, s3_key, content_type, byte_size, created_by)

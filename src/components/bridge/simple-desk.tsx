@@ -10,12 +10,14 @@ import { toast } from "sonner";
 
 const MAX_BYTES = 200 * 1024 * 1024;
 const KIND_LABEL: Record<string, string> = {
-  master: "Master",
+  master: "Film",
+  trailer: "Trailer",
   poster: "Poster",
-  poster_vertical: "Poster",
-  poster_horizontal: "Landscape",
+  poster_vertical: "Vertical poster",
+  poster_horizontal: "Horizontal poster",
   thumbnail: "Thumbnail",
   subtitle: "Subtitle",
+  audio: "Audio",
   screener: "Screener",
   censor_certificate: "Certificate",
   technical: "Technical",
@@ -38,6 +40,9 @@ export function SimpleDesk({
   contentType,
   seoTitle,
   seoDescription,
+  genre,
+  rating,
+  playUrl,
 }: {
   titleId: string;
   actor: BridgeActor;
@@ -55,6 +60,9 @@ export function SimpleDesk({
   contentType: string;
   seoTitle: string;
   seoDescription: string;
+  genre: string;
+  rating: string;
+  playUrl: string;
 }) {
   const qc = useQueryClient();
   const desk = useQuery({
@@ -83,6 +91,9 @@ export function SimpleDesk({
   const [editType, setEditType] = useState(contentType || "Film");
   const [editSeoTitle, setEditSeoTitle] = useState(seoTitle);
   const [editSeoDescription, setEditSeoDescription] = useState(seoDescription);
+  const [editGenre, setEditGenre] = useState(genre);
+  const [editRating, setEditRating] = useState(rating);
+  const [editPlayUrl, setEditPlayUrl] = useState(playUrl);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
   const [editing, setEditing] = useState(false);
@@ -172,6 +183,9 @@ export function SimpleDesk({
         producer: editProducer,
         seoTitle: editSeoTitle.trim(),
         seoDescription: editSeoDescription.trim(),
+        genre: editGenre.trim(),
+        rating: editRating.trim(),
+        playUrl: editPlayUrl.trim(),
       },
     }),
     onSuccess: async () => {
@@ -189,8 +203,8 @@ export function SimpleDesk({
       const item = rows.find((row) => row.id === assetId);
       const opened = await openTitleAsset({ data: { assetId } });
       const image = item && ["poster", "poster_vertical", "poster_horizontal", "thumbnail"].includes(item.kind);
-      const video = item && ["master", "screener"].includes(item.kind);
-      if (image || video) setPlayer({ url: opened.url, visual: video ? "video" : "image" });
+      const videoFile = item && ["master", "screener", "trailer"].includes(item.kind);
+      if (image || videoFile) setPlayer({ url: opened.url, visual: videoFile ? "video" : "image" });
       else window.open(opened.url, "_blank", "noopener,noreferrer");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not open the file");
@@ -202,9 +216,9 @@ export function SimpleDesk({
   const rows = assets.data?.assets ?? [];
   const ready = rows.filter((item) => item.verified);
   const unfinished = rows.filter((item) => item.pending);
-  const video = ready.filter((item) => item.kind === "master" || item.kind === "screener");
+  const video = ready.filter((item) => item.kind === "master" || item.kind === "screener" || item.kind === "trailer");
   const documents = ready.filter((item) => item.kind === "censor_certificate" || item.kind === "technical");
-  const audio = ready.filter((item) => item.kind === "subtitle");
+  const audio = ready.filter((item) => item.kind === "subtitle" || item.kind === "audio");
   const artwork = ready.filter((item) => ["poster", "poster_vertical", "poster_horizontal", "thumbnail"].includes(item.kind));
   const artQ = useQuery({
     queryKey: ["title-art", titleId, artwork.map((item) => item.id).join(",")],
@@ -280,6 +294,8 @@ export function SimpleDesk({
             <Field label="Language" value={editLanguage} onChange={setEditLanguage} />
             <Field label="Year" value={editYear} onChange={setEditYear} inputMode="numeric" />
             <Field label="Runtime, minutes" value={editRuntime} onChange={setEditRuntime} inputMode="numeric" />
+            <Field label="Genre" value={editGenre} onChange={setEditGenre} />
+            <Field label="Rating" value={editRating} onChange={setEditRating} />
             <label className="text-sm font-semibold sm:col-span-2">
               Synopsis
               <textarea value={editSynopsis} onChange={(e) => setEditSynopsis(e.target.value)} rows={3} className="mt-1 w-full rounded-xl border border-line-strong bg-white px-3 py-2 font-normal" />
@@ -292,6 +308,10 @@ export function SimpleDesk({
               Search description
               <textarea value={editSeoDescription} onChange={(e) => setEditSeoDescription(e.target.value)} maxLength={160} rows={2} className="mt-1 w-full rounded-xl border border-line-strong bg-white px-3 py-2 font-normal" />
             </label>
+            <label className="text-sm font-semibold sm:col-span-2">
+              Play or delivery link
+              <input value={editPlayUrl} onChange={(e) => setEditPlayUrl(e.target.value)} placeholder="https://" className="mt-1 h-12 w-full rounded-xl border border-line-strong bg-white px-3 font-normal" />
+            </label>
           </div>
         ) : (
           <dl className="mt-3 grid gap-3 sm:grid-cols-2">
@@ -302,6 +322,9 @@ export function SimpleDesk({
             {synopsis ? <Fact label="Synopsis" value={synopsis} wide /> : null}
             {seoTitle ? <Fact label="Search title" value={seoTitle} wide /> : null}
             {seoDescription ? <Fact label="Search description" value={seoDescription} wide /> : null}
+            {genre ? <Fact label="Genre" value={genre} /> : null}
+            {rating ? <Fact label="Rating" value={rating} /> : null}
+            {playUrl ? <Fact label="Delivery" value={playUrl} wide /> : null}
           </dl>
         )}
       </section>
@@ -310,12 +333,17 @@ export function SimpleDesk({
         <h2 className="mb-3 text-lg font-semibold">Files</h2>
         <div className="flex flex-wrap gap-2">
           {([
-            ["poster_vertical", "Poster", "image/*"],
-            ["master", "Video", "video/*"],
-            ["censor_certificate", "Document", "application/pdf,image/*"],
-            ["subtitle", "Subtitles", ".srt,.vtt,text/vtt"],
+            ["master", "Film", "video/*"],
+            ["trailer", "Trailer", "video/*"],
+            ["poster_vertical", "Vertical poster", "image/*"],
+            ["poster_horizontal", "Horizontal poster", "image/*"],
+            ["thumbnail", "Thumbnail", "image/*"],
+            ["subtitle", "English subtitles", ".srt,.vtt,text/vtt"],
+            ["subtitle", "More subtitles", ".srt,.vtt,text/vtt"],
+            ["audio", "Audio", "audio/*"],
+            ["censor_certificate", "Certificate", "application/pdf,image/*"],
           ] as const).map(([kind, label, accept]) => (
-            <label key={kind} className="cursor-pointer rounded-full bg-[#0b1220] px-4 py-2 text-sm font-semibold text-white">
+            <label key={label} className="cursor-pointer rounded-full bg-[#0b1220] px-4 py-2 text-sm font-semibold text-white">
               {upload.isPending ? "Saving…" : label}
               <input
                 type="file"
@@ -549,7 +577,7 @@ function FileGroup({
           {rows.map((item) => (
             <li key={item.id} className="flex items-center gap-3 py-2">
               <p className="min-w-0 flex-1 text-sm">{KIND_LABEL[item.kind] || item.kind}{item.byteSize ? ` · ${Math.max(1, Math.round(Number(item.byteSize) / 1024 / 1024))} MB` : ""}</p>
-              <button type="button" onClick={() => onView(item.id)} className="text-sm font-semibold">{item.kind === "master" || item.kind === "screener" ? "Play" : "View"}</button>
+              <button type="button" onClick={() => onView(item.id)} className="text-sm font-semibold">{item.kind === "master" || item.kind === "screener" || item.kind === "trailer" ? "Play" : "View"}</button>
               {onDelete ? <button type="button" onClick={() => onDelete(item.id)} className="text-sm font-semibold text-red-700">Delete</button> : null}
             </li>
           ))}

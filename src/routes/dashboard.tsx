@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
-import { listTitles } from "@/lib/bridge/titles";
+import { listTitles, resetCatalogToDraft } from "@/lib/bridge/titles";
 import { BRIDGE_LOOP_LANES, loopStageType } from "@/lib/bridge/loop-lanes";
 import { PublishingDesk } from "@/components/bridge/publishing-desk";
 import { getDashboardSession } from "@/lib/bridge/session";
@@ -41,6 +41,17 @@ function DashboardBody() {
     enabled: dashboardQ.isSuccess,
     retry: 1,
   });
+  useQuery({
+    queryKey: ["catalog-draft-once"],
+    queryFn: async () => {
+      const result = await resetCatalogToDraft();
+      if (result.changed > 0) await titlesQ.refetch();
+      return result;
+    },
+    enabled: dashboardQ.isSuccess,
+    staleTime: Infinity,
+    retry: false,
+  });
 
   if (dashboardQ.isPending) return <p className="text-sm text-muted">Checking access…</p>;
   if (dashboardQ.isError) return <p role="alert" className="text-sm text-accent">Super admin access required.</p>;
@@ -72,6 +83,15 @@ function DashboardBody() {
         <Stat label="Live" value={metricValue(live.length)} />
         <Stat label="Ready" value={metricValue(pipeline)} />
         <Stat label="Deals" value={metricValue(deals)} />
+      </section>
+
+      <section className="rounded-2xl border border-line p-4">
+        <p className="text-sm font-semibold">Catalog</p>
+        <p className="mt-1 text-sm text-muted">{titlesQ.isPending ? "Loading…" : `${titles.filter((title) => title.status === "DRAFT").length} draft · ${titles.length} titles · ${titles.length ? Math.round((titles.filter((title) => title.status === "DRAFT").length / titles.length) * 100) : 0}% still in draft`}</p>
+        <div className="mt-3 h-2 overflow-hidden rounded-full bg-[#e7edf2]">
+          <div className="h-full bg-[#102433]" style={{ width: `${titles.length ? Math.round((live.length / titles.length) * 100) : 0}%` }} />
+        </div>
+        <p className="mt-2 text-xs text-muted">The bar is the share that is live. Money above is recorded license value only.</p>
       </section>
 
       <section className="grid grid-cols-2 gap-3 sm:grid-cols-3">

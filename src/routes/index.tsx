@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { SignedOut } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { createEnquiry } from "@/lib/bridge/leads";
+import { listPublicPartners } from "@/lib/bridge/partners";
 import { getBridgeSession } from "@/lib/bridge/session";
 
 
@@ -114,6 +115,7 @@ function Enquiry() {
 
 function Home() {
   const { user, isPending } = useCurrentUserState();
+  const partnersQ = useQuery({ queryKey: ["public-partners"], queryFn: () => listPublicPartners(), staleTime: 120_000 });
   const sessionQ = useQuery({
     queryKey: ["bridge-session", user?.id],
     queryFn: () => getBridgeSession(),
@@ -166,6 +168,23 @@ function Home() {
                 </Link>
                 <Link to="/login" className="px-2 text-sm font-semibold text-muted hover:text-fg transition-colors">Sign in</Link>
               </div>
+            </div>
+          </div>
+        </section>
+
+        <section className="border-b border-line bg-white py-8">
+          <div className="mx-auto max-w-7xl px-5 sm:px-6">
+            <h2 className="text-lg font-semibold">Partners</h2>
+            <div className="mt-4 flex gap-3 overflow-x-auto pb-2">
+              {(partnersQ.data?.partners ?? []).map((partner) => (
+                <a key={partner.publicUrl} href={partner.publicUrl} className="flex min-w-64 items-center gap-3 rounded-2xl border border-line p-4" target="_blank" rel="noreferrer">
+                  <span className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-[#102433] text-xs font-semibold text-white">LOOP</span>
+                  <span>
+                    <span className="block text-sm font-semibold">{partner.name}</span>
+                    <span className="block text-xs text-muted">{partner.kind} · {partner.sharePct}% · {partner.contact}</span>
+                  </span>
+                </a>
+              ))}
             </div>
           </div>
         </section>

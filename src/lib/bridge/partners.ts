@@ -21,6 +21,15 @@ async function ensurePartners() {
       created_at timestamptz not null default now()
     )
   `);
+  await sql.query(`alter table bridge_publishing_partners add column if not exists public_url text`);
+  await sql`
+    insert into bridge_publishing_partners (id, name, kind, share_pct, contract_ref, contact, public_url)
+    values ('crayons-loop', 'Crayons Loop', 'in_house', 50, 'in-house', 'Sarin Chandrashekharan', 'https://crayonsloop.in/')
+    on conflict (id) do update set
+      public_url = excluded.public_url,
+      contact = excluded.contact,
+      share_pct = excluded.share_pct
+  `;
   return sql;
 }
 
@@ -37,8 +46,9 @@ export const listPublishingPartners = createServerFn({ method: "GET" })
       share_pct: number;
       contract_ref: string | null;
       contact: string | null;
+      public_url: string | null;
     }>`
-      select id, name, kind, share_pct, contract_ref, contact
+      select id, name, kind, share_pct, contract_ref, contact, public_url
       from bridge_publishing_partners
       order by created_at desc
       limit 50
@@ -47,10 +57,32 @@ export const listPublishingPartners = createServerFn({ method: "GET" })
       partners: rows.map((row) => ({
         id: row.id,
         name: row.name,
-        kind: row.kind === "in_house" ? "in_house" : "external",
+        kind: row.kind === "in_house" ? "in_house" as const : "external" as const,
         sharePct: Number(row.share_pct),
         contractRef: row.contract_ref || "",
         contact: row.contact || "",
+        publicUrl: row.public_url || "",
+      })),
+    };
+  });
+
+export const listPublicPartners = createServerFn({ method: "GET" })
+  .handler(async () => {
+    const sql = await ensurePartners();
+    const rows = await sql<{ name: string; kind: string; share_pct: number; contact: string | null; public_url: string | null }>`
+      select name, kind, share_pct, contact, public_url
+      from bridge_publishing_partners
+      where public_url is not null
+      order by created_at asc
+      limit 12
+    `;
+    return {
+      partners: rows.map((row) => ({
+        name: row.name,
+        kind: row.kind === "in_house" ? "In-house" : "Partner",
+        sharePct: Number(row.share_pct),
+        contact: row.contact || "",
+        publicUrl: row.public_url || "",
       })),
     };
   });

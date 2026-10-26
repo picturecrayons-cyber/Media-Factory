@@ -81,6 +81,9 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
         contentType={title.contentType || "Film"}
         seoTitle={titleQ.data?.seo?.title || ""}
         seoDescription={titleQ.data?.seo?.description || ""}
+        genre={titleQ.data?.seo?.genre || ""}
+        rating={titleQ.data?.seo?.rating || ""}
+        playUrl={titleQ.data?.seo?.playUrl || ""}
       />
     </div>
   );
