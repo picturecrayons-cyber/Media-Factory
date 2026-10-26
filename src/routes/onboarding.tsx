@@ -96,7 +96,7 @@ function Onboarding() {
     retryDelay: 500,
   });
 
-  const [displayName, setDisplayName] = useState("");
+  const [displayName, setDisplayName] = useState(user?.displayName ?? "");
   const [accountType, setAccountType] = useState<PublicAccountType>("independent_creator");
   const [organizationName, setOrganizationName] = useState("");
 
@@ -140,7 +140,8 @@ function Onboarding() {
 
   useEffect(() => {
     if (signupAccountType) setAccountType(signupAccountType);
-  }, [signupAccountType]);
+    if (user?.displayName) setDisplayName((current) => current || user.displayName || "");
+  }, [signupAccountType, user?.displayName]);
 
   const home = sessionQ.data?.profile ? sessionQ.data.home : null;
 
@@ -306,25 +307,29 @@ function Onboarding() {
         </div>
 
         <section className="space-y-4 rounded-2xl border border-line p-5">
-          <div>
-            <h2 className="font-display text-xl font-semibold">1. Account</h2>
-            <p className="mt-1 text-xs text-muted">Legal owner: StreamVista OPC Pvt Ltd. Product: Crayons Bridge.</p>
-          </div>
+          <h2 className="font-display text-xl font-semibold">Account</h2>
           {unsupportedSignupRole ? (
-            <div role="alert" className="mb-4 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-fg">
+            <div role="alert" className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-fg">
               This signup link contains a role that is not available through public onboarding. No role has been granted. <Link to="/contact" className="font-semibold underline">Contact Bridge</Link> to request the correct workspace.
             </div>
           ) : null}
-          <div className="grid gap-4 sm:grid-cols-2">
-            <label className="text-sm font-medium">Your name *
+          <p className="text-sm">
+            {displayName || user?.displayName || "Your account"}
+            {user?.primaryEmail ? ` · ${user.primaryEmail}` : ""}
+            {signupAccountType ? ` · ${ACCOUNT_LABELS[signupAccountType]}` : ""}
+          </p>
+          {!user?.displayName ? (
+            <label className="block text-sm font-medium">Your name *
               <input required value={displayName} onChange={(e) => setDisplayName(e.target.value)} autoComplete="name" className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5" />
             </label>
-            <label className="text-sm font-medium">Account type *
+          ) : null}
+          {!signupAccountType ? (
+            <label className="block text-sm font-medium">Account type *
               <select value={accountType} onChange={(e) => setAccountType(e.target.value as PublicAccountType)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5">
                 {(Object.keys(ACCOUNT_LABELS) as PublicAccountType[]).map((type) => <option key={type} value={type}>{ACCOUNT_LABELS[type]}</option>)}
               </select>
             </label>
-          </div>
+          ) : null}
           {accountType === "studio" ? (
             <label className="block text-sm font-medium">Studio / company name *
               <input required value={organizationName} onChange={(e) => setOrganizationName(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5" />

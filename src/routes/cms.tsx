@@ -102,7 +102,7 @@ function IngestDesk({ actor }: { actor: any }) {
         </p>
         <div className="mt-5">
           {canCreate ? (
-            <CreateTitleForm concise />
+            <CreateTitleForm />
           ) : (
             <p className="text-sm text-muted">Your current role cannot create titles.</p>
           )}
