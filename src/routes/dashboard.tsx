@@ -22,10 +22,10 @@ function Dashboard() {
 
 const ADMIN_MODULES = [
   {
-    title: "Titles & media",
-    description: "Canonical title records, metadata, artwork, uploads, QC and rights workflow.",
-    to: "/workspace",
-    action: "Open title workspace",
+    title: "Library",
+    description: "Browse stored titles. Open one to view the file.",
+    to: "/gallery",
+    action: "Open library",
   },
   {
     title: "Operations & approvals",

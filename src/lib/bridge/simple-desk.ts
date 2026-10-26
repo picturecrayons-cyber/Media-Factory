@@ -7,7 +7,7 @@ import { writeAudit } from "./audit";
 import { assertNotDevUser } from "./guards";
 import { loadTitle } from "./titles";
 import { requireVerifiedActor } from "./session";
-import { bridgeEnv } from "./env";
+import { hasPermission } from "./rbac";
 
 const BUCKET = "bridge-simple";
 const STAFF = new Set(["admin", "super_admin", "qc_reviewer"]);
@@ -91,6 +91,35 @@ async function mailPeople(to: string[], subject: string, text: string) {
     return false;
   }
 }
+
+export const listGalleryFiles = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    if (actor.accountType === "buyer" && !actor.internalRole) return { files: [] };
+    const sql = await getSql();
+    const staff = Boolean(actor.internalRole && hasPermission(actor, "title.read_catalog"));
+    const rows = staff
+      ? await sql<{ title_id: string; byte_size: number | null }>`
+          select distinct on (title_id) title_id, byte_size
+          from bridge_assets
+          where kind = 'master' and coalesce(byte_size, 0) > 0
+          order by title_id, created_at desc
+        `
+      : await sql<{ title_id: string; byte_size: number | null }>`
+          select distinct on (a.title_id) a.title_id, a.byte_size
+          from bridge_assets a
+          join bridge_titles t on t.id = a.title_id
+          where a.kind = 'master'
+            and coalesce(a.byte_size, 0) > 0
+            and t.owner_user_id = ${actor.userId}
+          order by a.title_id, a.created_at desc
+        `;
+    return {
+      files: rows.map((row) => ({ titleId: row.title_id, byteSize: Number(row.byte_size ?? 0) })),
+    };
+  });
 
 export const prepareSimpleUpload = createServerFn({ method: "POST" })
   .middleware([authMiddleware])

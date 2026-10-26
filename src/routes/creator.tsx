@@ -23,7 +23,7 @@ function Creator() {
           <section className="mt-8">
             <div className="mb-3 flex items-center justify-between">
               <h2 className="text-lg font-semibold">Your titles</h2>
-              <Link to="/account" className="text-sm text-muted">Account</Link>
+              <Link to="/gallery" className="text-sm text-muted">Library</Link>
             </div>
             <TitleList empty="No titles yet. Create a draft to start." />
           </section>

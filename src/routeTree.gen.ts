@@ -18,6 +18,7 @@ import { Route as BusinessRouteImport } from './routes/business'
 import { Route as BuyerRouteImport } from './routes/buyer'
 import { Route as DisclaimerRouteImport } from './routes/disclaimer'
 import { Route as DmcaRouteImport } from './routes/dmca'
+import { Route as GalleryRouteImport } from './routes/gallery'
 import { Route as GrievanceRouteImport } from './routes/grievance'
 import { Route as RefundRouteImport } from './routes/refund'
 import { Route as CmsRouteImport } from './routes/cms'
@@ -121,6 +122,11 @@ const DmcaRoute = DmcaRouteImport.update({
 const ForgotPasswordRoute = ForgotPasswordRouteImport.update({
   id: '/forgot-password',
   path: '/forgot-password',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const GalleryRoute = GalleryRouteImport.update({
+  id: '/gallery',
+  path: '/gallery',
   getParentRoute: () => rootRouteImport,
 } as any)
 const GrievanceRoute = GrievanceRouteImport.update({
@@ -255,6 +261,7 @@ export interface FileRoutesByFullPath {
   '/disclaimer': typeof DisclaimerRoute
   '/dmca': typeof DmcaRoute
   '/forgot-password': typeof ForgotPasswordRoute
+  '/gallery': typeof GalleryRoute
   '/grievance': typeof GrievanceRoute
   '/internal': typeof InternalRoute
   '/investor': typeof InvestorRoute
@@ -295,6 +302,7 @@ export interface FileRoutesByTo {
   '/disclaimer': typeof DisclaimerRoute
   '/dmca': typeof DmcaRoute
   '/forgot-password': typeof ForgotPasswordRoute
+  '/gallery': typeof GalleryRoute
   '/grievance': typeof GrievanceRoute
   '/internal': typeof InternalRoute
   '/investor': typeof InvestorRoute
@@ -336,6 +344,7 @@ export interface FileRoutesById {
   '/disclaimer': typeof DisclaimerRoute
   '/dmca': typeof DmcaRoute
   '/forgot-password': typeof ForgotPasswordRoute
+  '/gallery': typeof GalleryRoute
   '/grievance': typeof GrievanceRoute
   '/internal': typeof InternalRoute
   '/investor': typeof InvestorRoute
@@ -378,6 +387,7 @@ export interface FileRouteTypes {
     | '/disclaimer'
     | '/dmca'
     | '/forgot-password'
+    | '/gallery'
     | '/grievance'
     | '/internal'
     | '/investor'
@@ -418,6 +428,7 @@ export interface FileRouteTypes {
     | '/disclaimer'
     | '/dmca'
     | '/forgot-password'
+    | '/gallery'
     | '/grievance'
     | '/internal'
     | '/investor'
@@ -458,6 +469,7 @@ export interface FileRouteTypes {
     | '/disclaimer'
     | '/dmca'
     | '/forgot-password'
+    | '/gallery'
     | '/grievance'
     | '/internal'
     | '/investor'
@@ -499,6 +511,7 @@ export interface RootRouteChildren {
   DisclaimerRoute: typeof DisclaimerRoute
   DmcaRoute: typeof DmcaRoute
   ForgotPasswordRoute: typeof ForgotPasswordRoute
+  GalleryRoute: typeof GalleryRoute
   GrievanceRoute: typeof GrievanceRoute
   InternalRoute: typeof InternalRoute
   InvestorRoute: typeof InvestorRoute
@@ -628,6 +641,13 @@ declare module '@tanstack/react-router' {
       path: '/forgot-password'
       fullPath: '/forgot-password'
       preLoaderRoute: typeof ForgotPasswordRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/gallery': {
+      id: '/gallery'
+      path: '/gallery'
+      fullPath: '/gallery'
+      preLoaderRoute: typeof GalleryRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/grievance': {
@@ -820,6 +840,7 @@ const rootRouteChildren: RootRouteChildren = {
   DisclaimerRoute: DisclaimerRoute,
   DmcaRoute: DmcaRoute,
   ForgotPasswordRoute: ForgotPasswordRoute,
+  GalleryRoute: GalleryRoute,
   GrievanceRoute: GrievanceRoute,
   InternalRoute: InternalRoute,
   InvestorRoute: InvestorRoute,

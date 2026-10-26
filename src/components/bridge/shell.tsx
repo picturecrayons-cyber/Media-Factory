@@ -7,7 +7,7 @@ import { cn } from "@/lib/cn";
 type NavItem = { to: string; label: string };
 
 const NAV: NavItem[] = [
-  { to: "/dashboard", label: "Dashboard" },
+  { to: "/gallery", label: "Library" },
   { to: "/workspace", label: "Titles" },
   { to: "/deliveries", label: "Deliveries" },
   { to: "/account", label: "Account" },
