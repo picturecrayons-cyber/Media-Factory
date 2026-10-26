@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { listTitleAssets } from "@/lib/bridge/assets";
-import { confirmSimpleUpload, deleteTitleAsset, deleteUnfinishedAssets, getSimpleDesk, listDeskOffers, matchTitleStorage, openTitleAsset, postDeskOffer, postSimpleDesk, prepareSimpleUpload } from "@/lib/bridge/simple-desk";
+import { confirmSimpleUpload, deleteTitleAsset, deleteUnfinishedAssets, getSimpleDesk, listDeskOffers, listTitleLog, matchTitleStorage, openTitleAsset, postDeskOffer, postSimpleDesk, prepareSimpleUpload } from "@/lib/bridge/simple-desk";
 import { advanceTitle, updateTitle } from "@/lib/bridge/titles";
 import { nextStatus } from "@/lib/bridge/lifecycle";
 import type { BridgeActor } from "@/lib/bridge/session";
@@ -77,6 +77,12 @@ export function SimpleDesk({
     queryKey: ["desk-offers", titleId],
     queryFn: () => listDeskOffers({ data: { titleId } }),
   });
+  const staff = actor.internalRole === "admin" || actor.internalRole === "super_admin" || actor.internalRole === "qc_reviewer";
+  const log = useQuery({
+    queryKey: ["title-log", titleId],
+    queryFn: () => listTitleLog({ data: { titleId } }),
+    enabled: staff,
+  });
   const [note, setNote] = useState("");
   const [editName, setEditName] = useState(name);
   const [editSynopsis, setEditSynopsis] = useState(synopsis);
@@ -104,12 +110,12 @@ export function SimpleDesk({
     await Promise.all([
       qc.invalidateQueries({ queryKey: ["simple-desk", titleId] }),
       qc.invalidateQueries({ queryKey: ["bridge-assets", titleId] }),
-      qc.invalidateQueries({ queryKey: ["title-poster", titleId] }),
+      qc.invalidateQueries({ queryKey: ["title-log", titleId] }),
     ]);
   };
 
   const upload = useMutation({
-    mutationFn: async (input: { file: File; kind: "poster_vertical" | "master" | "subtitle" | "censor_certificate" }) => {
+    mutationFn: async (input: { file: File; kind: "master" | "trailer" | "poster_vertical" | "poster_horizontal" | "thumbnail" | "subtitle" | "audio" | "censor_certificate" }) => {
       if (input.file.size > MAX_BYTES) throw new Error("Keep the file under 200 MB.");
       const contentType = input.file.type || "application/octet-stream";
       const prepared = await prepareSimpleUpload({
@@ -211,7 +217,6 @@ export function SimpleDesk({
     }
   }
 
-  const staff = actor.internalRole === "admin" || actor.internalRole === "super_admin" || actor.internalRole === "qc_reviewer";
   const admin = actor.internalRole === "admin" || actor.internalRole === "super_admin";
   const rows = assets.data?.assets ?? [];
   const ready = rows.filter((item) => item.verified);
@@ -220,21 +225,6 @@ export function SimpleDesk({
   const documents = ready.filter((item) => item.kind === "censor_certificate" || item.kind === "technical");
   const audio = ready.filter((item) => item.kind === "subtitle" || item.kind === "audio");
   const artwork = ready.filter((item) => ["poster", "poster_vertical", "poster_horizontal", "thumbnail"].includes(item.kind));
-  const artQ = useQuery({
-    queryKey: ["title-art", titleId, artwork.map((item) => item.id).join(",")],
-    enabled: artwork.length > 0,
-    queryFn: async () => {
-      const found = await Promise.all(artwork.slice(0, 4).map(async (item) => {
-        try {
-          const opened = await openTitleAsset({ data: { assetId: item.id } });
-          return { id: item.id, url: opened.url };
-        } catch {
-          return null;
-        }
-      }));
-      return found.filter((item): item is { id: string; url: string } => Boolean(item));
-    },
-  });
 
   const match = useMutation({
     mutationFn: () => matchTitleStorage({ data: { titleId } }),
@@ -294,8 +284,8 @@ export function SimpleDesk({
             <Field label="Language" value={editLanguage} onChange={setEditLanguage} />
             <Field label="Year" value={editYear} onChange={setEditYear} inputMode="numeric" />
             <Field label="Runtime, minutes" value={editRuntime} onChange={setEditRuntime} inputMode="numeric" />
-            <Field label="Genre" value={editGenre} onChange={setEditGenre} />
-            <Field label="Rating" value={editRating} onChange={setEditRating} />
+            {staff ? <Field label="Genre" value={editGenre} onChange={setEditGenre} /> : null}
+            {staff ? <Field label="Rating" value={editRating} onChange={setEditRating} /> : null}
             <label className="text-sm font-semibold sm:col-span-2">
               Synopsis
               <textarea value={editSynopsis} onChange={(e) => setEditSynopsis(e.target.value)} rows={3} className="mt-1 w-full rounded-xl border border-line-strong bg-white px-3 py-2 font-normal" />
@@ -308,10 +298,12 @@ export function SimpleDesk({
               Search description
               <textarea value={editSeoDescription} onChange={(e) => setEditSeoDescription(e.target.value)} maxLength={160} rows={2} className="mt-1 w-full rounded-xl border border-line-strong bg-white px-3 py-2 font-normal" />
             </label>
-            <label className="text-sm font-semibold sm:col-span-2">
-              Play or delivery link
-              <input value={editPlayUrl} onChange={(e) => setEditPlayUrl(e.target.value)} placeholder="https://" className="mt-1 h-12 w-full rounded-xl border border-line-strong bg-white px-3 font-normal" />
-            </label>
+            {staff ? (
+              <label className="text-sm font-semibold sm:col-span-2">
+                Play or delivery link
+                <input value={editPlayUrl} onChange={(e) => setEditPlayUrl(e.target.value)} placeholder="https://" className="mt-1 h-12 w-full rounded-xl border border-line-strong bg-white px-3 font-normal" />
+              </label>
+            ) : null}
           </div>
         ) : (
           <dl className="mt-3 grid gap-3 sm:grid-cols-2">
@@ -322,9 +314,9 @@ export function SimpleDesk({
             {synopsis ? <Fact label="Synopsis" value={synopsis} wide /> : null}
             {seoTitle ? <Fact label="Search title" value={seoTitle} wide /> : null}
             {seoDescription ? <Fact label="Search description" value={seoDescription} wide /> : null}
-            {genre ? <Fact label="Genre" value={genre} /> : null}
-            {rating ? <Fact label="Rating" value={rating} /> : null}
-            {playUrl ? <Fact label="Delivery" value={playUrl} wide /> : null}
+            {staff && genre ? <Fact label="Genre" value={genre} /> : null}
+            {staff && rating ? <Fact label="Rating" value={rating} /> : null}
+            {staff && playUrl ? <Fact label="Delivery" value={playUrl} wide /> : null}
           </dl>
         )}
       </section>
@@ -364,16 +356,8 @@ export function SimpleDesk({
             </button>
           ) : null}
         </div>
-        {artQ.data?.length ? (
-          <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-            {artQ.data.map((item) => (
-              <button key={item.id} type="button" onClick={() => setPlayer({ url: item.url, visual: "image" })} className="aspect-[2/3] overflow-hidden rounded-2xl border border-line">
-                <img src={item.url} alt="" className="h-full w-full object-cover" />
-              </button>
-            ))}
-          </div>
-        ) : null}
         {assets.isPending ? <p className="mt-3 text-sm text-muted">Loading files…</p> : null}
+        <FileGroup title="Artwork" rows={artwork} onView={view} onDelete={admin ? (id) => remove.mutate(id) : undefined} />
         <FileGroup title="Video" rows={video} onView={view} onDelete={admin ? (id) => remove.mutate(id) : undefined} />
         <FileGroup title="Documents" rows={documents} onView={view} onDelete={admin ? (id) => remove.mutate(id) : undefined} />
         <FileGroup title="Audio and subtitles" rows={audio} onView={view} onDelete={admin ? (id) => remove.mutate(id) : undefined} />
@@ -410,6 +394,19 @@ export function SimpleDesk({
       </div>
 
       <DeskOffers titleId={titleId} staff={staff} offers={offers.data?.offers ?? []} />
+      {staff && (log.data?.rows.length ?? 0) > 0 ? (
+        <section className="rounded-2xl border border-line bg-white p-4">
+          <h2 className="text-lg font-semibold">Record</h2>
+          <ul className="mt-2 divide-y divide-line">
+            {log.data?.rows.map((row, index) => (
+              <li key={`${row.at}-${index}`} className="flex justify-between gap-3 py-2 text-sm">
+                <span>{row.action}</span>
+                <span className="text-muted">{row.at.slice(0, 16).replace("T", " ")}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
 
       <form
         className="grid gap-2"

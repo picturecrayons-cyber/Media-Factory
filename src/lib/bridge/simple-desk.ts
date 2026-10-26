@@ -220,7 +220,10 @@ export const listGalleryFiles = createServerFn({ method: "GET" })
 
 const FILE_KINDS = ["master", "trailer", "poster", "poster_vertical", "poster_horizontal", "thumbnail", "subtitle", "audio", "screener", "censor_certificate"] as const;
 
+let assetKindsReady = false;
+
 async function widenAssetKinds(sql: Awaited<ReturnType<typeof getSql>>) {
+  if (assetKindsReady) return;
   await sql.query(`
     alter table bridge_assets drop constraint if exists bridge_assets_kind_chk;
     alter table bridge_assets add constraint bridge_assets_kind_chk check (
@@ -230,6 +233,7 @@ async function widenAssetKinds(sql: Awaited<ReturnType<typeof getSql>>) {
       )
     );
   `);
+  assetKindsReady = true;
 }
 
 export const prepareSimpleUpload = createServerFn({ method: "POST" })
@@ -306,6 +310,29 @@ export const confirmSimpleUpload = createServerFn({ method: "POST" })
       metadata: { titleId: title.id },
     });
     return { assetId: id, path: data.path, mailed };
+  });
+
+export const listTitleLog = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .validator(z.object({ titleId: z.string().min(8) }))
+  .handler(async ({ context, data }) => {
+    const actor = await requireVerifiedActor(context.userId);
+    if (!isStaff(actor.internalRole)) return { rows: [] };
+    const sql = await getSql();
+    const rows = await sql<{ action: string; created_at: string | Date }>`
+      select action, created_at
+      from bridge_audit_logs
+      where entity_id = ${data.titleId}
+         or coalesce(metadata::text, '') like ${"%" + data.titleId + "%"}
+      order by created_at desc
+      limit 8
+    `;
+    return {
+      rows: rows.map((row) => ({
+        action: row.action,
+        at: row.created_at instanceof Date ? row.created_at.toISOString() : String(row.created_at),
+      })),
+    };
   });
 
 export const openTitleAsset = createServerFn({ method: "POST" })

@@ -8,8 +8,11 @@ import { assertNotDevUser } from "./guards";
 import { assertPermission } from "./rbac";
 import { requireVerifiedActor } from "./session";
 
+let partnersReady = false;
+
 async function ensurePartners() {
   const sql = await getSql();
+  if (partnersReady) return sql;
   await sql.query(`
     create table if not exists bridge_publishing_partners (
       id text primary key,
@@ -30,6 +33,7 @@ async function ensurePartners() {
       contact = excluded.contact,
       share_pct = excluded.share_pct
   `;
+  partnersReady = true;
   return sql;
 }
 

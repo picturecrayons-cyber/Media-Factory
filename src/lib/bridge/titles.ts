@@ -97,18 +97,23 @@ export const resetCatalogToDraft = createServerFn({ method: "POST" })
     return { changed: updated.length };
   });
 
+let seoReady = false;
+
 async function readTitleSeo(sql: Sql, titleId: string) {
   try {
-    await sql.query(`
-      create table if not exists bridge_title_seo (
-        title_id text primary key,
-        seo_title text,
-        seo_description text
-      )
-    `);
-    await sql.query(`alter table bridge_title_seo add column if not exists genre text`);
-    await sql.query(`alter table bridge_title_seo add column if not exists rating text`);
-    await sql.query(`alter table bridge_title_seo add column if not exists play_url text`);
+    if (!seoReady) {
+      await sql.query(`
+        create table if not exists bridge_title_seo (
+          title_id text primary key,
+          seo_title text,
+          seo_description text
+        )
+      `);
+      await sql.query(`alter table bridge_title_seo add column if not exists genre text`);
+      await sql.query(`alter table bridge_title_seo add column if not exists rating text`);
+      await sql.query(`alter table bridge_title_seo add column if not exists play_url text`);
+      seoReady = true;
+    }
     const rows = await sql<{ seo_title: string | null; seo_description: string | null; genre: string | null; rating: string | null; play_url: string | null }>`
       select seo_title, seo_description, genre, rating, play_url from bridge_title_seo where title_id = ${titleId} limit 1
     `;
@@ -120,7 +125,7 @@ async function readTitleSeo(sql: Sql, titleId: string) {
       playUrl: rows[0]?.play_url || "",
     };
   } catch {
-    return { title: "", description: "" };
+    return { title: "", description: "", genre: "", rating: "", playUrl: "" };
   }
 }
 

@@ -6,9 +6,10 @@ import { listOutletActivity, listPublishingPartners, recordOutletDeal, savePubli
 
 export function PublishingDesk() {
   const qc = useQueryClient();
+  const [distributionOpen, setDistributionOpen] = useState(false);
   const partnersQ = useQuery({ queryKey: ["bridge-partners"], queryFn: () => listPublishingPartners() });
-  const loopQ = useQuery({ queryKey: ["loop-publication-readiness"], queryFn: () => listLoopPublicationReadiness() });
-  const activityQ = useQuery({ queryKey: ["outlet-activity"], queryFn: () => listOutletActivity() });
+  const loopQ = useQuery({ queryKey: ["loop-publication-readiness"], queryFn: () => listLoopPublicationReadiness(), enabled: distributionOpen });
+  const activityQ = useQuery({ queryKey: ["outlet-activity"], queryFn: () => listOutletActivity(), enabled: distributionOpen });
   const [adding, setAdding] = useState(false);
   const [editId, setEditId] = useState("");
   const [openId, setOpenId] = useState("");
@@ -112,8 +113,13 @@ export function PublishingDesk() {
       </section>
 
       <section className="rounded-2xl border border-line bg-white p-4">
-        <h2 className="text-lg font-semibold">Distribution</h2>
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-lg font-semibold">Distribution</h2>
+          <button type="button" onClick={() => setDistributionOpen((open) => !open)} className="rounded-full border border-line px-4 py-2 text-sm font-semibold">{distributionOpen ? "Close" : "Open"}</button>
+        </div>
         <p className="mt-1 text-sm text-muted">Loop is one outlet. A buyer or another platform can be authorized on its own contract.</p>
+        {distributionOpen ? (
+        <>
         <ul className="mt-3 divide-y divide-line">
           {titles.map((title) => (
             <li key={title.id} className="py-3">
@@ -135,6 +141,8 @@ export function PublishingDesk() {
               <p key={item.id}>Screener requested · {item.days} days · {item.status}</p>
             ))}
           </div>
+        ) : null}
+        </>
         ) : null}
       </section>
     </div>
