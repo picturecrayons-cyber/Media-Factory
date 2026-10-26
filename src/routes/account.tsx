@@ -51,11 +51,21 @@ function Account() {
                     {actor.internalRole?.replaceAll("_", " ")}
                   </p>
                   <div className="mt-4 flex flex-wrap gap-3">
-                    {actor.internalRole === "admin" || actor.internalRole === "super_admin" ? (
-                      <Link to="/admin"><Button>Open Admin</Button></Link>
+                    {(actor.internalRole === "admin" || actor.internalRole === "super_admin") ? (
+                      <Link
+                        to="/admin"
+                        className="inline-flex items-center justify-center rounded-md bg-black px-4 py-2 text-sm font-medium text-white"
+                      >
+                        Open Admin
+                      </Link>
                     ) : null}
                     {actor.internalRole === "super_admin" ? (
-                      <Link to="/cms"><Button variant="outline">Open CMS</Button></Link>
+                      <Link
+                        to="/cms"
+                        className="inline-flex items-center justify-center rounded-md border border-line px-4 py-2 text-sm font-medium"
+                      >
+                        Open CMS
+                      </Link>
                     ) : null}
                   </div>
                 </section>

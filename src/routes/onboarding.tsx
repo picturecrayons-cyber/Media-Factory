@@ -179,10 +179,6 @@ function Onboarding() {
     if (home) goHome(home, navigate);
   }, [home, isLoading, isStreamVista, navigate, user]);
 
-  if (isPending) {
-    return <main className="grid min-h-screen place-items-center bg-bg p-6"><p className="text-sm text-muted">Loading Crayons Bridge — checking access…</p></main>;
-  }
-  if (!user) return <RedirectToSignIn />;
   if (sessionQ.isError) {
     async function retrySession() {
       if (retrying) return;
@@ -212,6 +208,11 @@ function Onboarding() {
       </main>
     );
   }
+
+  if (isPending) {
+    return <main className="grid min-h-screen place-items-center bg-bg p-6"><p className="text-sm text-muted">Loading Crayons Bridge — checking access…</p></main>;
+  }
+  if (!user) return <RedirectToSignIn />;
 
 
   if (sessionQ.isPending) {

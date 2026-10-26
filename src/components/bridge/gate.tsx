@@ -118,7 +118,7 @@ export function RequireBridge({
   // Normal accounts retain their existing role/account-type checks. Privileged
   // operators may inspect each workspace; buyer routes receive explicit readOnly
   // context so payment/order actions can be withheld by the UI.
-  if (!privileged && allow === "super_admin" && profile.internalRole !== "super_admin") {
+  if (allow === "super_admin" && (profile.internalRole !== "super_admin" || profile.emailVerified !== true)) {
     return <Navigate to={sessionQ.data?.home ?? "/"} />;
   }
   if (!privileged && allow === "internal" && !profile.internalRole) {

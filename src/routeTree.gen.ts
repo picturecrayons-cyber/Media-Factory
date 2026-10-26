@@ -42,6 +42,9 @@ import { Route as ApiA2aIndexRouteImport } from './routes/api/a2a/index'
 import { Route as ApiA2aAgentCardRouteImport } from './routes/api/a2a/agent-card'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as ApiRazorpayWebhookRouteImport } from './routes/api/razorpay/webhook'
+import { Route as ApiBridgeSuperAdminAssetsRouteImport } from './routes/api/bridge.super-admin.assets'
+import { Route as ApiBridgeSuperAdminParRouteImport } from './routes/api/bridge.super-admin.par'
+import { Route as ApiBridgeSuperAdminVerifyRouteImport } from './routes/api/bridge.super-admin.verify'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -208,6 +211,23 @@ const ApiRazorpayWebhookRoute = ApiRazorpayWebhookRouteImport.update({
   path: '/api/razorpay/webhook',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiBridgeSuperAdminAssetsRoute =
+  ApiBridgeSuperAdminAssetsRouteImport.update({
+    id: '/api/bridge/super-admin/assets',
+    path: '/api/bridge/super-admin/assets',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiBridgeSuperAdminParRoute = ApiBridgeSuperAdminParRouteImport.update({
+  id: '/api/bridge/super-admin/par',
+  path: '/api/bridge/super-admin/par',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiBridgeSuperAdminVerifyRoute =
+  ApiBridgeSuperAdminVerifyRouteImport.update({
+    id: '/api/bridge/super-admin/verify',
+    path: '/api/bridge/super-admin/verify',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -243,6 +263,9 @@ export interface FileRoutesByFullPath {
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/razorpay/webhook': typeof ApiRazorpayWebhookRoute
   '/api/a2a/': typeof ApiA2aIndexRoute
+  '/api/bridge/super-admin/assets': typeof ApiBridgeSuperAdminAssetsRoute
+  '/api/bridge/super-admin/par': typeof ApiBridgeSuperAdminParRoute
+  '/api/bridge/super-admin/verify': typeof ApiBridgeSuperAdminVerifyRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -278,6 +301,9 @@ export interface FileRoutesByTo {
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/razorpay/webhook': typeof ApiRazorpayWebhookRoute
   '/api/a2a': typeof ApiA2aIndexRoute
+  '/api/bridge/super-admin/assets': typeof ApiBridgeSuperAdminAssetsRoute
+  '/api/bridge/super-admin/par': typeof ApiBridgeSuperAdminParRoute
+  '/api/bridge/super-admin/verify': typeof ApiBridgeSuperAdminVerifyRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -314,6 +340,9 @@ export interface FileRoutesById {
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/razorpay/webhook': typeof ApiRazorpayWebhookRoute
   '/api/a2a/': typeof ApiA2aIndexRoute
+  '/api/bridge/super-admin/assets': typeof ApiBridgeSuperAdminAssetsRoute
+  '/api/bridge/super-admin/par': typeof ApiBridgeSuperAdminParRoute
+  '/api/bridge/super-admin/verify': typeof ApiBridgeSuperAdminVerifyRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -351,6 +380,9 @@ export interface FileRouteTypes {
     | '/api/auth/$'
     | '/api/razorpay/webhook'
     | '/api/a2a/'
+    | '/api/bridge/super-admin/assets'
+    | '/api/bridge/super-admin/par'
+    | '/api/bridge/super-admin/verify'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -386,6 +418,9 @@ export interface FileRouteTypes {
     | '/api/auth/$'
     | '/api/razorpay/webhook'
     | '/api/a2a'
+    | '/api/bridge/super-admin/assets'
+    | '/api/bridge/super-admin/par'
+    | '/api/bridge/super-admin/verify'
   id:
     | '__root__'
     | '/'
@@ -421,6 +456,9 @@ export interface FileRouteTypes {
     | '/api/auth/$'
     | '/api/razorpay/webhook'
     | '/api/a2a/'
+    | '/api/bridge/super-admin/assets'
+    | '/api/bridge/super-admin/par'
+    | '/api/bridge/super-admin/verify'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -456,6 +494,9 @@ export interface RootRouteChildren {
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiRazorpayWebhookRoute: typeof ApiRazorpayWebhookRoute
   ApiA2aIndexRoute: typeof ApiA2aIndexRoute
+  ApiBridgeSuperAdminAssetsRoute: typeof ApiBridgeSuperAdminAssetsRoute
+  ApiBridgeSuperAdminParRoute: typeof ApiBridgeSuperAdminParRoute
+  ApiBridgeSuperAdminVerifyRoute: typeof ApiBridgeSuperAdminVerifyRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -691,6 +732,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiRazorpayWebhookRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/bridge/super-admin/assets': {
+      id: '/api/bridge/super-admin/assets'
+      path: '/api/bridge/super-admin/assets'
+      fullPath: '/api/bridge/super-admin/assets'
+      preLoaderRoute: typeof ApiBridgeSuperAdminAssetsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/bridge/super-admin/par': {
+      id: '/api/bridge/super-admin/par'
+      path: '/api/bridge/super-admin/par'
+      fullPath: '/api/bridge/super-admin/par'
+      preLoaderRoute: typeof ApiBridgeSuperAdminParRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/bridge/super-admin/verify': {
+      id: '/api/bridge/super-admin/verify'
+      path: '/api/bridge/super-admin/verify'
+      fullPath: '/api/bridge/super-admin/verify'
+      preLoaderRoute: typeof ApiBridgeSuperAdminVerifyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -737,6 +799,9 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiRazorpayWebhookRoute: ApiRazorpayWebhookRoute,
   ApiA2aIndexRoute: ApiA2aIndexRoute,
+  ApiBridgeSuperAdminAssetsRoute: ApiBridgeSuperAdminAssetsRoute,
+  ApiBridgeSuperAdminParRoute: ApiBridgeSuperAdminParRoute,
+  ApiBridgeSuperAdminVerifyRoute: ApiBridgeSuperAdminVerifyRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

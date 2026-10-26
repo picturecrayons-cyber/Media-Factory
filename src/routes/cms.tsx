@@ -1,5 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { Button } from "@/components/ui/button";
@@ -7,10 +8,12 @@ import { CreateTitleForm } from "@/components/bridge/title-desk";
 import { listTitles } from "@/lib/bridge/titles";
 import { listLoopPublicationReadiness } from "@/lib/bridge/loop-publication";
 import { hasPermission } from "@/lib/bridge/rbac";
+import SuperAdminDirectUpload from "@/components/bridge/SuperAdminDirectUpload";
+import AdminAssetGallery from "@/components/bridge/AdminAssetGallery";
 
 export const Route = createFileRoute("/cms")({ component: OperationalCms });
 
-const tabs = ["ingest", "licensing", "publishing"] as const;
+const tabs = ["ingest", "licensing", "publishing", "assets"] as const;
 type Tab = (typeof tabs)[number];
 
 function OperationalCms() {
@@ -27,6 +30,8 @@ function CmsBody({ actor }: { actor: any }) {
   });
   const titles = titlesQ.data?.titles ?? [];
   const publications = pubQ.data?.titles ?? [];
+  const [selectedAssetTitleId, setSelectedAssetTitleId] = useState("");
+  const uploadTitleId = selectedAssetTitleId || titles[0]?.id || "";
   if (titlesQ.isPending || pubQ.isPending)
     return (
       <BridgeShell actor={actor} title="Bridge CMS">
@@ -81,8 +86,44 @@ function CmsBody({ actor }: { actor: any }) {
         {tab === "ingest" ? <IngestDesk actor={actor} /> : null}
         {tab === "licensing" ? <LicensingDesk titles={titles} /> : null}
         {tab === "publishing" ? <PublishingDesk publications={publications} /> : null}
+        {tab === "assets" ? <AssetsDesk titles={titles} selectedTitleId={uploadTitleId} onSelectTitle={setSelectedAssetTitleId} /> : null}
       </div>
     </BridgeShell>
+  );
+}
+
+type AssetTitleOption = { id: string; name: string };
+
+function AssetsDesk({
+  titles,
+  selectedTitleId,
+  onSelectTitle,
+}: {
+  titles: AssetTitleOption[];
+  selectedTitleId: string;
+  onSelectTitle: (id: string) => void;
+}) {
+  return (
+    <section className="space-y-5">
+      <div className="rounded-3xl border border-line bg-surface p-6">
+        <label htmlFor="asset-title" className="block text-sm font-semibold">Title for asset upload</label>
+        <select
+          id="asset-title"
+          value={selectedTitleId}
+          onChange={(event) => onSelectTitle(event.currentTarget.value)}
+          className="mt-2 w-full max-w-2xl rounded-xl border border-line bg-bg px-3 py-2 text-sm"
+          disabled={titles.length === 0}
+        >
+          {titles.length === 0 ? <option value="">No titles available</option> : null}
+          {titles.map((title) => <option key={title.id} value={title.id}>{title.name}</option>)}
+        </select>
+        <p className="mt-2 text-xs text-muted">Uploads use the isolated super-admin API, direct-to-OCI transfer and server-side verification. This does not publish a title or bypass rights/QC gates.</p>
+      </div>
+      {selectedTitleId ? <SuperAdminDirectUpload titleId={selectedTitleId} /> : (
+        <p className="rounded-xl border border-dashed border-line p-6 text-sm text-muted">Create or select a title before uploading assets.</p>
+      )}
+      <AdminAssetGallery titleId={selectedTitleId || undefined} />
+    </section>
   );
 }
 
