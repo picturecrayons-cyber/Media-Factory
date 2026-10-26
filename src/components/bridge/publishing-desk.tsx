@@ -119,7 +119,7 @@ export function PublishingDesk() {
             <li key={title.id} className="py-3">
               <button type="button" onClick={() => setOpenId(openId === title.id ? "" : title.id)} className="flex w-full items-center justify-between gap-3 text-left">
                 <span className="min-w-0 truncate text-sm font-semibold">{title.name}</span>
-                <span className={`shrink-0 text-xs font-semibold ${title.ready ? "text-emerald-700" : "text-red-700"}`}>{title.ready ? "Green" : "Blocked"}</span>
+                <span className="shrink-0 text-xs font-semibold text-muted">{title.ready ? "Loop ready" : title.bridgeStatus.replaceAll("_", " ").toLowerCase()}</span>
               </button>
               {openId === title.id ? <LoopGate title={title} partnerShare={partners[0]?.sharePct ?? 0} /> : null}
             </li>
@@ -206,16 +206,16 @@ function LoopGate({
     ["Legal and rights", title.ready || !title.blockers.some((item) => item.toLowerCase().includes("rights"))],
     ["License terms", Boolean(start && end && territory && model)],
   ] as const;
-  const green = outlet === "loop" ? checks.every(([, ok]) => ok) && title.ready : title.hasPoster && title.hasMaster && checks[3][1];
+  const green = outlet === "loop" ? title.ready && checks[3][1] : checks[3][1];
 
   return (
     <div className="mt-3 grid gap-3">
       <ul className="grid gap-1 text-sm">
         {checks.map(([label, ok]) => (
-          <li key={label} className={ok ? "text-emerald-700" : "text-red-700"}>{ok ? "Ready" : "Missing"} · {label}</li>
+          <li key={label} className={ok ? "text-emerald-700" : "text-muted"}>{ok ? "In place" : "Open"} · {label}</li>
         ))}
       </ul>
-      {title.blockers.length ? <p className="text-sm text-red-700">{title.blockers[0]}</p> : null}
+      {outlet === "loop" && title.blockers.length ? <p className="text-sm text-muted">{title.blockers[0]}</p> : null}
       <div className="grid gap-2 sm:grid-cols-2">
         <select value={outlet} onChange={(e) => setOutlet(e.target.value as "loop" | "buyer" | "platform")} className="h-11 rounded-xl border border-line px-3 sm:col-span-2">
           <option value="buyer">Direct buyer</option>
