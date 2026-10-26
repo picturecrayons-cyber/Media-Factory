@@ -12,6 +12,7 @@ import { assertNotDevUser } from "./guards";
 import { persistVerifiedAsset } from "./asset-confirmation";
 import { downloadDecision } from "./delivery-policy";
 import { validateOttIngestFile, type OttIngestKind } from "./ott-ingest-spec";
+import { FILE_STORAGE_ENABLED } from "./mvp-lock";
 
 const UPLOADABLE: ReadonlySet<string> = new Set(["DRAFT", "UPLOADING", "PREPARING"]);
 
@@ -35,6 +36,7 @@ export const requestAssetUpload = createServerFn({ method: "POST" })
     }),
   )
   .handler(async ({ context, data }) => {
+    if (!FILE_STORAGE_ENABLED) throw new Error("File storage is not part of this release.");
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
     assertPermission(actor, actor.internalRole ? "title.ingest_internal" : "asset.sign_upload");
@@ -83,6 +85,7 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
     }),
   )
   .handler(async ({ context, data }) => {
+    if (!FILE_STORAGE_ENABLED) throw new Error("File storage is not part of this release.");
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
     assertPermission(actor, actor.internalRole ? "title.ingest_internal" : "asset.sign_upload");
@@ -185,6 +188,7 @@ export const requestAssetDownload = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(z.object({ assetId: z.string().min(8) }))
   .handler(async ({ context, data }) => {
+    if (!FILE_STORAGE_ENABLED) throw new Error("File storage is not part of this release.");
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
     assertPermission(actor, "asset.sign_download");

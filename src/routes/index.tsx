@@ -12,8 +12,8 @@ export const Route = createFileRoute("/")({ component: Home });
 const WORKFLOW_STEPS = [
   {
     step: "01",
-    title: "Upload",
-    description: "Add masters and supporting assets.",
+    title: "Record",
+    description: "Add the title. File masters are not part of this release.",
   },
   {
     step: "02",

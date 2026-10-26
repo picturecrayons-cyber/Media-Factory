@@ -23,6 +23,7 @@ import {
   validateOttIngestFile,
 } from "@/lib/bridge/ott-ingest-spec";
 import { asciiUploadName } from "@/lib/bridge/latin1";
+import { FILE_STORAGE_ENABLED } from "@/lib/bridge/mvp-lock";
 
 export const Route = createFileRoute("/title/$id")({ component: TitlePage });
 
@@ -132,7 +133,7 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
             <div className="grid h-full place-items-center px-4 text-center text-xs text-muted">
               {assets.some((asset) => ["poster_vertical", "poster"].includes(asset.kind))
                 ? "Vertical poster ready"
-                : "Add vertical poster"}
+                : "Poster is not part of this release"}
             </div>
           </div>
           <div className="min-w-0">
@@ -178,13 +179,11 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
               ) : null}
             </div>
             <div className="mt-5">
-              <button
-                type="button"
-                onClick={() => setActiveTab("Files")}
-                className="rounded-full bg-fg px-5 py-2.5 text-sm font-semibold text-bg"
-              >
-                Upload Files
-              </button>
+              <p className="text-sm text-muted">
+                {FILE_STORAGE_ENABLED
+                  ? "Add masters from the Files tab."
+                  : "File upload is locked out of this release. Submit the title record for QC."}
+              </p>
             </div>
           </div>
         </div>
@@ -238,6 +237,7 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
       ) : activeTab === "Files" ? (
         <FilesPanel
           canUpload={
+            FILE_STORAGE_ENABLED &&
             canOperateOnTitle(actor, title, "asset.sign_upload", "title.ingest_internal") &&
             ["DRAFT", "UPLOADING", "PREPARING"].includes(title.status)
           }

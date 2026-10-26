@@ -17,7 +17,7 @@ function Studio() {
               role="Studio"
               scope="Studio-owned titles only. Same rights gate as creators. No buyer catalog access."
               opportunity="Submit a slate. Production services stay optional and separate from licensing."
-              steps={["Add title", "Prepare assets", "Rights clearance", "License", "Deliver"]}
+              steps={["Add title", "Submit for QC", "Rights clearance", "License", "Deliver"]}
             />
             <section id="add-title">
               <h2 className="text-lg font-semibold">Add title</h2>

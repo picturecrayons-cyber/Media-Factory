@@ -12,9 +12,9 @@ function Creator() {
         <BridgeShell actor={actor} title="Creator desk">
           <Desk
             role="Creator"
-            scope="Own titles only. Upload, update drafts, and read your deliveries."
+            scope="Own titles only. Create the record, submit it for QC, and read your deliveries."
             opportunity="Submit a title. Bridge clears QC and rights before any buyer can see it."
-            steps={["Create title", "Upload assets", "QC and rights", "License", "Delivery"]}
+            steps={["Create title", "Submit for QC", "Rights", "License", "Delivery"]}
           />
           <section className="mt-8">
             <h2 className="text-lg font-semibold">New title</h2>

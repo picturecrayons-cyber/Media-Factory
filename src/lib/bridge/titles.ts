@@ -12,6 +12,7 @@ import { writeAudit } from "./audit";
 import { assertNotDevUser } from "./guards";
 import { loopStageType } from "./loop-lanes";
 import { assertBuyerPublishable, getBuyerGateStatus } from "./buyer-visibility";
+import { FILE_STORAGE_ENABLED } from "./mvp-lock";
 
 type TitleRow = {
   id: string;
@@ -476,8 +477,11 @@ async function assertLicensingReady(titleId: string) {
     ["required artwork", row.poster_ok],
     ["destination package", row.package_ok],
   ].filter(([, ok]) => !ok).map(([name]) => name);
-  if (missing.length) {
-    throw new Error(`LICENSING_READY blocked: ${missing.join(", ")}`);
+  const blocked = FILE_STORAGE_ENABLED
+    ? missing
+    : missing.filter((name) => !["private screener", "verified master", "required artwork"].includes(String(name)));
+  if (blocked.length) {
+    throw new Error(`LICENSING_READY blocked: ${blocked.join(", ")}`);
   }
   await sql`
     update bridge_titles
@@ -505,7 +509,7 @@ export const advanceTitle = createServerFn({ method: "POST" })
     }
     if (["RIGHTS_REVIEW", "LICENSING_READY"].includes(data.to))
       throw new Error("Use the recorded QC or legal review action");
-    if (data.to === "QC_REVIEW") {
+    if (data.to === "QC_REVIEW" && FILE_STORAGE_ENABLED) {
       const verified = await (await getSql())<{
         kind: string;
         s3_key: string;
