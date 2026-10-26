@@ -343,6 +343,10 @@ export const updateTitle = createServerFn({ method: "POST" })
       runtimeMinutes: z.number().int().min(1).max(600).nullable().optional(),
       licensingFeePaise: z.number().int().min(0).max(2_000_000_000).optional(),
       contentType: z.string().min(1).max(80).optional(),
+      countryOfOrigin: z.string().max(80).nullable().optional(),
+      releaseDate: z.string().max(40).nullable().optional(),
+      director: z.string().max(120).optional(),
+      producer: z.string().max(120).optional(),
     }),
   )
   .handler(async ({ context, data }) => {
@@ -362,6 +366,17 @@ export const updateTitle = createServerFn({ method: "POST" })
       throw new Error("Title is locked after prepare");
     }
     const sql = await getSql();
+    const creditsNow = title.credits ?? [];
+    const named = (role: string, value: string | undefined) => {
+      if (value === undefined) return creditsNow.filter((credit) => credit.role === role);
+      const clean = value.trim();
+      return clean ? [{ role, name: clean }] : [];
+    };
+    const credits = [
+      ...named("Director", data.director),
+      ...named("Producer", data.producer),
+      ...creditsNow.filter((credit) => credit.role === "Cast"),
+    ];
     await sql`
       update bridge_titles set
         name = ${data.name ?? title.name},
@@ -372,6 +387,9 @@ export const updateTitle = createServerFn({ method: "POST" })
         runtime_minutes = ${data.runtimeMinutes === undefined ? title.runtimeMinutes : data.runtimeMinutes},
         licensing_fee_paise = ${data.licensingFeePaise ?? title.licensingFeePaise},
         content_type = ${data.contentType ? loopStageType(data.contentType) : title.contentType},
+        country_of_origin = ${data.countryOfOrigin === undefined ? title.countryOfOrigin : data.countryOfOrigin},
+        release_date = ${data.releaseDate === undefined ? title.releaseDate : data.releaseDate || null},
+        credits = ${JSON.stringify(credits)}::jsonb,
         updated_at = now()
       where id = ${title.id}
     `;

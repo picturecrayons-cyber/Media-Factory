@@ -27,12 +27,30 @@ export function SimpleDesk({
   name,
   synopsis,
   status,
+  language,
+  year,
+  runtimeMinutes,
+  nameMl,
+  country,
+  releaseDate,
+  director,
+  producer,
+  contentType,
 }: {
   titleId: string;
   actor: BridgeActor;
   name: string;
   synopsis: string;
   status: TitleStatus;
+  language: string;
+  year: number | null;
+  runtimeMinutes: number | null;
+  nameMl: string;
+  country: string;
+  releaseDate: string;
+  director: string;
+  producer: string;
+  contentType: string;
 }) {
   const qc = useQueryClient();
   const desk = useQuery({
@@ -46,6 +64,15 @@ export function SimpleDesk({
   const [note, setNote] = useState("");
   const [editName, setEditName] = useState(name);
   const [editSynopsis, setEditSynopsis] = useState(synopsis);
+  const [editLanguage, setEditLanguage] = useState(language);
+  const [editYear, setEditYear] = useState(year ? String(year) : "");
+  const [editRuntime, setEditRuntime] = useState(runtimeMinutes ? String(runtimeMinutes) : "");
+  const [editOriginal, setEditOriginal] = useState(nameMl);
+  const [editCountry, setEditCountry] = useState(country);
+  const [editRelease, setEditRelease] = useState(releaseDate.slice(0, 10));
+  const [editDirector, setEditDirector] = useState(director);
+  const [editProducer, setEditProducer] = useState(producer);
+  const [editType, setEditType] = useState(contentType || "Film");
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
 
@@ -116,7 +143,22 @@ export function SimpleDesk({
   });
 
   const saveEdit = useMutation({
-    mutationFn: () => updateTitle({ data: { id: titleId, name: editName.trim(), synopsis: editSynopsis } }),
+    mutationFn: () => updateTitle({
+      data: {
+        id: titleId,
+        name: editName.trim(),
+        nameMl: editOriginal.trim(),
+        synopsis: editSynopsis,
+        language: editLanguage.trim() || language,
+        year: editYear.trim() ? Number(editYear) : null,
+        runtimeMinutes: editRuntime.trim() ? Number(editRuntime) : null,
+        contentType: editType,
+        countryOfOrigin: editCountry.trim() || null,
+        releaseDate: editRelease.trim() || null,
+        director: editDirector,
+        producer: editProducer,
+      },
+    }),
     onSuccess: async () => {
       setError("");
       setNotice("Saved.");
@@ -126,12 +168,22 @@ export function SimpleDesk({
   });
 
   useEffect(() => {
-    if (editName.trim() === name && editSynopsis === synopsis) return;
-    const timer = window.setTimeout(() => {
-      if (editName.trim()) saveEdit.mutate();
-    }, 700);
+    const same =
+      editName.trim() === name &&
+      editSynopsis === synopsis &&
+      editLanguage.trim() === language &&
+      editYear === (year ? String(year) : "") &&
+      editRuntime === (runtimeMinutes ? String(runtimeMinutes) : "") &&
+      editOriginal.trim() === nameMl &&
+      editCountry.trim() === country &&
+      editRelease === releaseDate.slice(0, 10) &&
+      editDirector === director &&
+      editProducer === producer &&
+      editType === (contentType || "Film");
+    if (same || !editName.trim()) return;
+    const timer = window.setTimeout(() => saveEdit.mutate(), 700);
     return () => window.clearTimeout(timer);
-  }, [editName, editSynopsis, name, synopsis, saveEdit.mutate]);
+  }, [editName, editSynopsis, editLanguage, editYear, editRuntime, editOriginal, editCountry, editRelease, editDirector, editProducer, editType, name, synopsis, language, year, runtimeMinutes, nameMl, country, releaseDate, director, producer, contentType, saveEdit.mutate]);
 
   async function view(assetId: string) {
     try {
@@ -194,16 +246,27 @@ export function SimpleDesk({
       {error ? <p role="alert" className="text-sm text-red-500">{error}</p> : null}
       {notice ? <p className="text-sm text-muted">{notice}</p> : null}
 
-      <div className="grid gap-3">
-        <label className="text-sm">
-          Title
-          <input value={editName} onChange={(e) => setEditName(e.target.value)} className="mt-1 h-12 w-full rounded-xl border border-line bg-surface px-3 text-base" />
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Field label="Title" value={editName} onChange={setEditName} />
+        <Field label="Original title" value={editOriginal} onChange={setEditOriginal} />
+        <Field label="Language" value={editLanguage} onChange={setEditLanguage} />
+        <label className="text-sm font-semibold">
+          Type
+          <select value={editType} onChange={(e) => setEditType(e.target.value)} className="mt-1 h-12 w-full rounded-xl border border-line-strong bg-white px-3 text-base font-normal">
+            {["Film", "Series", "Vertical drama", "Short"].map((item) => <option key={item}>{item}</option>)}
+          </select>
         </label>
-        <label className="text-sm">
+        <Field label="Year" value={editYear} onChange={setEditYear} inputMode="numeric" />
+        <Field label="Runtime, minutes" value={editRuntime} onChange={setEditRuntime} inputMode="numeric" />
+        <Field label="Country" value={editCountry} onChange={setEditCountry} />
+        <Field label="Release date" value={editRelease} onChange={setEditRelease} type="date" />
+        <Field label="Director" value={editDirector} onChange={setEditDirector} />
+        <Field label="Producer" value={editProducer} onChange={setEditProducer} />
+        <label className="text-sm font-semibold sm:col-span-2">
           Synopsis
-          <textarea value={editSynopsis} onChange={(e) => setEditSynopsis(e.target.value)} rows={4} className="mt-1 w-full rounded-xl border border-line bg-surface px-3 py-2" />
+          <textarea value={editSynopsis} onChange={(e) => setEditSynopsis(e.target.value)} rows={4} className="mt-1 w-full rounded-xl border border-line-strong bg-white px-3 py-2 font-normal" />
         </label>
-        <p className="text-xs text-muted">{saveEdit.isPending || upload.isPending ? "Saving…" : "Edits save on their own."}</p>
+        <p className="text-xs text-muted sm:col-span-2">{saveEdit.isPending || upload.isPending ? "Saving…" : "The record saves on its own."}</p>
       </div>
 
       <div className="rounded-2xl border border-line bg-surface p-4">
@@ -326,5 +389,14 @@ export function SimpleDesk({
         </ul>
       ) : null}
     </section>
+  );
+}
+
+function Field({ label, value, onChange, type = "text", inputMode }: { label: string; value: string; onChange: (value: string) => void; type?: string; inputMode?: "numeric" | "text" }) {
+  return (
+    <label className="text-sm font-semibold">
+      {label}
+      <input value={value} type={type} inputMode={inputMode} onChange={(e) => onChange(e.target.value)} className="mt-1 h-12 w-full rounded-xl border border-line-strong bg-white px-3 text-base font-normal" />
+    </label>
   );
 }
