@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { listTitleAssets } from "@/lib/bridge/assets";
 import { confirmSimpleUpload, deleteTitleAsset, deleteUnfinishedAssets, getSimpleDesk, matchTitleStorage, openTitleAsset, postSimpleDesk, prepareSimpleUpload } from "@/lib/bridge/simple-desk";
@@ -75,6 +75,7 @@ export function SimpleDesk({
   const [editType, setEditType] = useState(contentType || "Film");
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
+  const [editing, setEditing] = useState(false);
 
   const refresh = async () => {
     await Promise.all([
@@ -85,7 +86,7 @@ export function SimpleDesk({
   };
 
   const upload = useMutation({
-    mutationFn: async (input: { file: File; kind: "poster_vertical" | "master" | "subtitle" }) => {
+    mutationFn: async (input: { file: File; kind: "poster_vertical" | "master" | "subtitle" | "censor_certificate" }) => {
       if (input.file.size > MAX_BYTES) throw new Error("Keep the file under 200 MB.");
       const contentType = input.file.type || "application/octet-stream";
       const prepared = await prepareSimpleUpload({
@@ -162,28 +163,12 @@ export function SimpleDesk({
     onSuccess: async () => {
       setError("");
       setNotice("Saved.");
+      setEditing(false);
+      toast.success("Saved.");
       await qc.invalidateQueries({ queryKey: ["bridge-title", titleId] });
     },
     onError: (e) => setError(e instanceof Error ? e.message : "Could not save details"),
   });
-
-  useEffect(() => {
-    const same =
-      editName.trim() === name &&
-      editSynopsis === synopsis &&
-      editLanguage.trim() === language &&
-      editYear === (year ? String(year) : "") &&
-      editRuntime === (runtimeMinutes ? String(runtimeMinutes) : "") &&
-      editOriginal.trim() === nameMl &&
-      editCountry.trim() === country &&
-      editRelease === releaseDate.slice(0, 10) &&
-      editDirector === director &&
-      editProducer === producer &&
-      editType === (contentType || "Film");
-    if (same || !editName.trim()) return;
-    const timer = window.setTimeout(() => saveEdit.mutate(), 700);
-    return () => window.clearTimeout(timer);
-  }, [editName, editSynopsis, editLanguage, editYear, editRuntime, editOriginal, editCountry, editRelease, editDirector, editProducer, editType, name, synopsis, language, year, runtimeMinutes, nameMl, country, releaseDate, director, producer, contentType, saveEdit.mutate]);
 
   async function view(assetId: string) {
     try {
@@ -199,22 +184,9 @@ export function SimpleDesk({
   const rows = assets.data?.assets ?? [];
   const ready = rows.filter((item) => item.verified);
   const unfinished = rows.filter((item) => item.pending);
-  const posters = ready.filter((item) => item.kind === "poster" || item.kind === "poster_vertical").slice(0, 4);
-  const previews = useQuery({
-    queryKey: ["title-posters", titleId, posters.map((item) => item.id).join(",")],
-    enabled: posters.length > 0,
-    queryFn: async () => {
-      const found = await Promise.all(posters.map(async (item) => {
-        try {
-          const opened = await openTitleAsset({ data: { assetId: item.id } });
-          return opened.url;
-        } catch {
-          return "";
-        }
-      }));
-      return found.filter(Boolean);
-    },
-  });
+  const video = ready.filter((item) => item.kind === "master" || item.kind === "screener");
+  const documents = ready.filter((item) => item.kind === "censor_certificate" || item.kind === "technical");
+  const audio = ready.filter((item) => item.kind === "subtitle");
 
   const match = useMutation({
     mutationFn: () => matchTitleStorage({ data: { titleId } }),
@@ -246,36 +218,47 @@ export function SimpleDesk({
       {error ? <p role="alert" className="text-sm text-red-500">{error}</p> : null}
       {notice ? <p className="text-sm text-muted">{notice}</p> : null}
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        <Field label="Title" value={editName} onChange={setEditName} />
-        <Field label="Original title" value={editOriginal} onChange={setEditOriginal} />
-        <Field label="Language" value={editLanguage} onChange={setEditLanguage} />
-        <label className="text-sm font-semibold">
-          Type
-          <select value={editType} onChange={(e) => setEditType(e.target.value)} className="mt-1 h-12 w-full rounded-xl border border-line-strong bg-white px-3 text-base font-normal">
-            {["Film", "Series", "Vertical drama", "Short"].map((item) => <option key={item}>{item}</option>)}
-          </select>
-        </label>
-        <Field label="Year" value={editYear} onChange={setEditYear} inputMode="numeric" />
-        <Field label="Runtime, minutes" value={editRuntime} onChange={setEditRuntime} inputMode="numeric" />
-        <Field label="Country" value={editCountry} onChange={setEditCountry} />
-        <Field label="Release date" value={editRelease} onChange={setEditRelease} type="date" />
-        <Field label="Director" value={editDirector} onChange={setEditDirector} />
-        <Field label="Producer" value={editProducer} onChange={setEditProducer} />
-        <label className="text-sm font-semibold sm:col-span-2">
-          Synopsis
-          <textarea value={editSynopsis} onChange={(e) => setEditSynopsis(e.target.value)} rows={4} className="mt-1 w-full rounded-xl border border-line-strong bg-white px-3 py-2 font-normal" />
-        </label>
-        <p className="text-xs text-muted sm:col-span-2">{saveEdit.isPending || upload.isPending ? "Saving…" : "The record saves on its own."}</p>
-      </div>
+      <section className="rounded-2xl border border-line bg-white p-4">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-lg font-semibold">Data</h2>
+          {editing ? (
+            <button type="button" disabled={saveEdit.isPending || !editName.trim()} onClick={() => saveEdit.mutate()} className="rounded-full bg-[#0b1220] px-4 py-2 text-sm font-semibold text-white">
+              {saveEdit.isPending ? "Saving…" : "Save"}
+            </button>
+          ) : (
+            <button type="button" onClick={() => setEditing(true)} className="rounded-full border border-line px-4 py-2 text-sm font-semibold">Edit</button>
+          )}
+        </div>
+        {editing ? (
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <Field label="Title" value={editName} onChange={setEditName} />
+            <Field label="Language" value={editLanguage} onChange={setEditLanguage} />
+            <Field label="Year" value={editYear} onChange={setEditYear} inputMode="numeric" />
+            <Field label="Runtime, minutes" value={editRuntime} onChange={setEditRuntime} inputMode="numeric" />
+            <label className="text-sm font-semibold sm:col-span-2">
+              Synopsis
+              <textarea value={editSynopsis} onChange={(e) => setEditSynopsis(e.target.value)} rows={3} className="mt-1 w-full rounded-xl border border-line-strong bg-white px-3 py-2 font-normal" />
+            </label>
+          </div>
+        ) : (
+          <dl className="mt-3 grid gap-3 sm:grid-cols-2">
+            <Fact label="Title" value={name} />
+            <Fact label="Language" value={language} />
+            <Fact label="Year" value={year ? String(year) : ""} />
+            <Fact label="Runtime" value={runtimeMinutes ? `${runtimeMinutes} min` : ""} />
+            {synopsis ? <Fact label="Synopsis" value={synopsis} wide /> : null}
+          </dl>
+        )}
+      </section>
 
       <div className="rounded-2xl border border-line bg-surface p-4">
         <h2 className="mb-3 text-lg font-semibold">Files</h2>
         <div className="flex flex-wrap gap-2">
           {([
-            ["poster_vertical", "Upload poster", "image/*"],
-            ["master", "Upload video", "video/*"],
-            ["subtitle", "Upload subtitles", ".srt,.vtt,text/vtt"],
+            ["poster_vertical", "Poster", "image/*"],
+            ["master", "Video", "video/*"],
+            ["censor_certificate", "Document", "application/pdf,image/*"],
+            ["subtitle", "Subtitles", ".srt,.vtt,text/vtt"],
           ] as const).map(([kind, label, accept]) => (
             <label key={kind} className="cursor-pointer rounded-full bg-[#0b1220] px-4 py-2 text-sm font-semibold text-white">
               {upload.isPending ? "Saving…" : label}
@@ -298,59 +281,36 @@ export function SimpleDesk({
             </button>
           ) : null}
         </div>
-        {previews.data?.length ? (
-          <div className="mt-4 grid grid-cols-4 gap-2">
-            {previews.data.map((url) => (
-              <a key={url} href={url} target="_blank" rel="noreferrer" className="block aspect-[2/3] overflow-hidden rounded-xl border border-line">
-                <img src={url} alt="" className="h-full w-full object-cover" />
-              </a>
-            ))}
-          </div>
-        ) : null}
+        {assets.isError ? <p role="alert" className="mt-3 text-sm text-red-500">{assets.error.message}</p> : null}
+        {assets.isPending ? <p className="mt-3 text-sm text-muted">Loading files…</p> : null}
+        <FileGroup title="Video" rows={video} onView={view} onDelete={admin ? (id) => remove.mutate(id) : undefined} />
+        <FileGroup title="Documents" rows={documents} onView={view} onDelete={admin ? (id) => remove.mutate(id) : undefined} />
+        <FileGroup title="Audio and subtitles" rows={audio} onView={view} onDelete={admin ? (id) => remove.mutate(id) : undefined} />
         {staff ? (
           <div className="mt-3 flex flex-wrap gap-2">
             <button type="button" disabled={match.isPending} onClick={() => match.mutate()} className="rounded-full border-2 border-[#0b1220] px-3 py-1.5 text-sm font-semibold">
-              {match.isPending ? "Checking Oracle…" : "Check storage"}
+              {match.isPending ? "Checking…" : "Check storage"}
             </button>
             {admin && unfinished.length ? (
               <button type="button" disabled={clearUnfinished.isPending} onClick={() => clearUnfinished.mutate()} className="rounded-full border border-red-700 px-3 py-1.5 text-sm font-semibold text-red-700">
-                {clearUnfinished.isPending ? "Deleting…" : "Delete unfinished"}
+                Delete unfinished
               </button>
             ) : null}
           </div>
         ) : null}
-        {assets.isError ? <p role="alert" className="mt-3 text-sm text-red-500">{assets.error.message}</p> : null}
-        {assets.isPending ? <p className="mt-3 text-sm text-muted">Loading files…</p> : null}
-        {!assets.isPending && rows.length === 0 ? <p className="mt-3 text-sm text-muted">No file yet.</p> : null}
-        <ul className="mt-3 divide-y divide-line">
-          {ready.map((item) => (
-            <li key={item.id} className="flex items-center gap-3 py-3">
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold">{KIND_LABEL[item.kind] || item.kind}</p>
-                <p className="text-xs text-muted">
-                  {item.byteSize ? `${Math.max(1, Math.round(Number(item.byteSize) / 1024 / 1024))} MB` : "Ready"}
-                  {" · "}
-                  {new Date(item.createdAt).toLocaleString()}
-                </p>
-              </div>
-              <button type="button" onClick={() => void view(item.id)} className="rounded-full border border-line px-3 py-1.5 text-sm">View</button>
-              {admin ? (
-                <button type="button" onClick={() => remove.mutate(item.id)} className="text-sm font-semibold text-red-700">Delete</button>
-              ) : null}
-            </li>
-          ))}
-          {unfinished.map((item) => (
-            <li key={item.id} className="flex items-center gap-3 py-3">
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold">{KIND_LABEL[item.kind] || item.kind}</p>
-                <p className="text-xs text-muted">Not saved · {new Date(item.createdAt).toLocaleString()}</p>
-              </div>
-              {admin ? (
-                <button type="button" onClick={() => remove.mutate(item.id)} className="text-sm font-semibold text-red-700">Delete</button>
-              ) : null}
-            </li>
-          ))}
-        </ul>
+        {unfinished.length ? (
+          <ul className="mt-3 divide-y divide-line">
+            {unfinished.map((item) => (
+              <li key={item.id} className="flex items-center gap-3 py-3">
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold">{KIND_LABEL[item.kind] || item.kind}</p>
+                  <p className="text-xs text-muted">Not saved</p>
+                </div>
+                {admin ? <button type="button" onClick={() => remove.mutate(item.id)} className="text-sm font-semibold text-red-700">Delete</button> : null}
+              </li>
+            ))}
+          </ul>
+        ) : null}
       </div>
 
       <form
@@ -389,6 +349,45 @@ export function SimpleDesk({
         </ul>
       ) : null}
     </section>
+  );
+}
+
+function Fact({ label, value, wide }: { label: string; value: string; wide?: boolean }) {
+  if (!value) return null;
+  return (
+    <div className={wide ? "sm:col-span-2" : ""}>
+      <dt className="text-xs text-muted">{label}</dt>
+      <dd className="mt-1 text-sm font-semibold leading-6">{value}</dd>
+    </div>
+  );
+}
+
+function FileGroup({
+  title,
+  rows,
+  onView,
+  onDelete,
+}: {
+  title: string;
+  rows: Array<{ id: string; kind: string; byteSize: number | null }>;
+  onView: (id: string) => void;
+  onDelete?: (id: string) => void;
+}) {
+  return (
+    <div className="mt-4">
+      <h3 className="text-sm font-semibold">{title}</h3>
+      {rows.length ? (
+        <ul className="mt-1 divide-y divide-line">
+          {rows.map((item) => (
+            <li key={item.id} className="flex items-center gap-3 py-2">
+              <p className="min-w-0 flex-1 text-sm">{KIND_LABEL[item.kind] || item.kind}{item.byteSize ? ` · ${Math.max(1, Math.round(Number(item.byteSize) / 1024 / 1024))} MB` : ""}</p>
+              <button type="button" onClick={() => onView(item.id)} className="text-sm font-semibold">View</button>
+              {onDelete ? <button type="button" onClick={() => onDelete(item.id)} className="text-sm font-semibold text-red-700">Delete</button> : null}
+            </li>
+          ))}
+        </ul>
+      ) : <p className="mt-1 text-sm text-muted">None yet.</p>}
+    </div>
   );
 }
 

@@ -15,7 +15,7 @@ function TitlePage() {
   return (
     <RequireBridge>
       {(actor) => (
-        <BridgeShell actor={actor} title="Title">
+        <BridgeShell actor={actor} title="">
           <TitleBody id={id} actor={actor} />
         </BridgeShell>
       )}
@@ -50,16 +50,16 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
 
   return (
     <div className="mx-auto grid max-w-3xl gap-6">
-      <section className="grid grid-cols-[96px_1fr] gap-4 sm:grid-cols-[140px_1fr]">
-        <div className="aspect-[2/3] overflow-hidden rounded-2xl border border-line bg-elevated">
+      <section className="grid grid-cols-[88px_minmax(0,1fr)] items-end gap-4 sm:grid-cols-[128px_minmax(0,1fr)]">
+        <div className="aspect-[2/3] overflow-hidden rounded-2xl border border-line bg-[#102433]">
           {posterQ.data?.url ? (
             <img src={posterQ.data.url} alt="" className="h-full w-full object-cover" />
           ) : null}
         </div>
-        <div className="min-w-0 self-end">
+        <div className="min-w-0 pb-1">
           <p className="text-xs font-semibold uppercase tracking-wide text-muted">{title.status}</p>
-          <h1 className="mt-1 font-display text-3xl font-semibold leading-tight">{title.name}</h1>
-          {facts.length ? <p className="mt-2 text-sm text-muted">{facts.join(" · ")}</p> : null}
+          <h1 className="mt-1 break-words font-display text-2xl font-semibold leading-tight sm:text-3xl">{title.name}</h1>
+          {facts.length ? <p className="mt-2 break-words text-sm text-muted">{facts.join(" · ")}</p> : null}
         </div>
       </section>
       <SimpleDesk

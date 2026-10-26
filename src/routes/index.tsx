@@ -1,13 +1,28 @@
 import { createFileRoute, Link, Navigate } from "@tanstack/react-router";
+import { useState, type FormEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { BrandMark } from "@/components/bridge/shell";
 import { Button } from "@/components/ui/button";
 import { SignedOut } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
+import { createEnquiry } from "@/lib/bridge/leads";
 import { getBridgeSession } from "@/lib/bridge/session";
 
 
-export const Route = createFileRoute("/")({ component: Home });
+export const Route = createFileRoute("/")({
+  head: () => ({
+    meta: [
+      { title: "Crayons Bridge — film rights, licensing and delivery" },
+      { name: "description", content: "Crayons Bridge is the business desk for film titles, rights, licensing and delivery. Operated by StreamVista OPC Pvt Ltd." },
+      { name: "robots", content: "index, follow" },
+      { property: "og:title", content: "Crayons Bridge" },
+      { property: "og:description", content: "Film titles, rights, licensing and delivery." },
+      { property: "og:url", content: "https://www.crayonspictures.in/" },
+    ],
+    links: [{ rel: "canonical", href: "https://www.crayonspictures.in/" }],
+  }),
+  component: Home,
+});
 
 const WORKFLOW_STEPS = [
   {
@@ -41,6 +56,61 @@ const WORKFLOW_STEPS = [
     description: "Track revenue activity.",
   },
 ];
+
+function Enquiry() {
+  const [sent, setSent] = useState(false);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function onSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    setBusy(true);
+    setError("");
+    try {
+      await createEnquiry({
+        data: {
+          name: String(form.get("name") || ""),
+          email: String(form.get("email") || ""),
+          organization: String(form.get("organization") || ""),
+          message: String(form.get("message") || ""),
+        },
+      });
+      setSent(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not send");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="mx-auto grid max-w-7xl gap-8 px-4 sm:px-6 lg:grid-cols-[1fr_1.1fr] lg:items-start">
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify({
+        "@context": "https://schema.org",
+        "@type": "Organization",
+        name: "Crayons Bridge",
+        url: "https://www.crayonspictures.in/",
+        email: "abijithasokan@crayonspictures.com",
+        parentOrganization: { "@type": "Organization", name: "StreamVista OPC Pvt Ltd" },
+      }) }} />
+      <div>
+        <h2 className="font-display text-3xl font-semibold tracking-tight">Talk to the desk.</h2>
+        <p className="mt-3 max-w-md text-sm leading-6 text-muted">Licensing, delivery, and catalogue enquiries come here. A person replies.</p>
+      </div>
+      {sent ? <p className="rounded-2xl border border-line bg-[#f4f7f8] p-6 text-sm font-semibold">Received. We will reply by email.</p> : (
+        <form onSubmit={(event) => void onSubmit(event)} className="grid gap-3">
+          <input name="name" required placeholder="Name" className="h-12 rounded-xl border border-line-strong bg-white px-3" />
+          <input name="email" type="email" required placeholder="Work email" className="h-12 rounded-xl border border-line-strong bg-white px-3" />
+          <input name="organization" placeholder="Company" className="h-12 rounded-xl border border-line-strong bg-white px-3" />
+          <textarea name="message" required minLength={8} rows={4} placeholder="What do you need?" className="rounded-xl border border-line-strong bg-white px-3 py-2" />
+          {error ? <p role="alert" className="text-sm text-red-600">{error}</p> : null}
+          <button type="submit" disabled={busy} className="h-12 rounded-full bg-[#0b1220] text-sm font-semibold text-white">{busy ? "Sending…" : "Send enquiry"}</button>
+        </form>
+      )}
+    </div>
+  );
+}
 
 function Home() {
   const { user, isPending } = useCurrentUserState();
@@ -256,6 +326,10 @@ function Home() {
 
             </div>
           </div>
+        </section>
+
+        <section className="border-b border-line bg-white py-12 sm:py-16">
+          <Enquiry />
         </section>
 
         <section className="border-b border-line bg-surface py-14 sm:py-20">

@@ -112,7 +112,7 @@ export function BridgeShell({ actor, title, children }: { actor: BridgeActor; ti
         </header>
         <main className="mx-auto w-full max-w-6xl px-4 pb-28 pt-5 md:px-8 md:pb-12 md:pt-8">
           <div className="mb-5 flex items-center justify-between gap-3 md:mb-6">
-            <h1 className="text-xl font-semibold tracking-tight md:text-2xl">{title}</h1>
+            {title ? <h1 className="min-w-0 break-words text-xl font-semibold tracking-tight md:text-2xl">{title}</h1> : <span />}
             <p className="shrink-0 rounded-full border border-line bg-white px-3 py-1 text-xs font-semibold">{roleLabel(actor)}</p>
           </div>
           {children}
