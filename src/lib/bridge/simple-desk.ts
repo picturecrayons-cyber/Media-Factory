@@ -60,13 +60,14 @@ export const deleteTitleAsset = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
-    if (!isAdmin(actor.internalRole)) throw new Error("Only an admin can delete a file");
     const sql = await getSql();
     const rows = await sql<{ id: string; title_id: string; s3_key: string }>`
       select id, title_id, s3_key from bridge_assets where id = ${data.assetId} limit 1
     `;
     const asset = rows[0];
     if (!asset) throw new Error("Not found");
+    const title = await loadTitle(asset.title_id);
+    if (!title || (!isAdmin(actor.internalRole) && title.ownerUserId !== actor.userId)) throw new Error("You cannot remove this file");
     if (asset.s3_key.startsWith("bridge/")) {
       try {
         await deleteObject(asset.s3_key);
@@ -218,7 +219,7 @@ export const listGalleryFiles = createServerFn({ method: "GET" })
     };
   });
 
-const FILE_KINDS = ["master", "trailer", "poster", "poster_vertical", "poster_horizontal", "thumbnail", "subtitle", "audio", "screener", "censor_certificate"] as const;
+const FILE_KINDS = ["master", "trailer", "poster", "poster_vertical", "poster_horizontal", "thumbnail", "subtitle", "subtitle_extra", "audio", "audio_dub", "audio_description", "screener", "censor_certificate"] as const;
 
 let assetKindsReady = false;
 
@@ -229,7 +230,8 @@ async function widenAssetKinds(sql: Awaited<ReturnType<typeof getSql>>) {
     alter table bridge_assets add constraint bridge_assets_kind_chk check (
       kind in (
         'poster', 'poster_vertical', 'poster_horizontal', 'thumbnail',
-        'screener', 'master', 'trailer', 'subtitle', 'audio', 'censor_certificate', 'technical'
+        'screener', 'master', 'trailer', 'subtitle', 'subtitle_extra',
+        'audio', 'audio_dub', 'audio_description', 'censor_certificate', 'technical'
       )
     );
   `);
@@ -288,6 +290,14 @@ export const confirmSimpleUpload = createServerFn({ method: "POST" })
       insert into bridge_assets (id, title_id, kind, s3_key, content_type, byte_size, created_by)
       values (${id}, ${title.id}, ${data.kind}, ${data.path}, ${verified.contentType || data.contentType}, ${verified.byteSize}, ${actor.userId})
     `;
+    const older = await sql<{ id: string; s3_key: string }>`
+      select id, s3_key from bridge_assets
+      where title_id = ${title.id} and kind = ${data.kind} and id <> ${id}
+    `;
+    if (older.length) {
+      await sql`delete from bridge_assets where title_id = ${title.id} and kind = ${data.kind} and id <> ${id}`;
+      await Promise.all(older.map((row) => deleteObject(row.s3_key).catch(() => undefined)));
+    }
     const noteId = randomBytes(16).toString("hex");
     const admins = await sql<{ email: string }>`
       select email from bridge_profiles
@@ -572,4 +582,28 @@ export const postDeskOffer = createServerFn({ method: "POST" })
       metadata: { titleId: title.id, kind: data.kind, status: data.status, chargePaise: data.chargePaise },
     });
     return { id };
+  });
+
+export const listPublicPosters = createServerFn({ method: "GET" })
+  .handler(async () => {
+    const sql = await getSql();
+    const rows = await sql<{ id: string; name: string; s3_key: string }>`
+      select distinct on (a.title_id) a.id, t.name, a.s3_key
+      from bridge_assets a
+      join bridge_titles t on t.id = a.title_id
+      where a.kind in ('poster_vertical', 'poster_horizontal', 'poster', 'thumbnail')
+        and coalesce(a.byte_size, 0) > 0
+      order by a.title_id, a.created_at desc
+      limit 8
+    `;
+    const posters = [];
+    for (const row of rows) {
+      try {
+        const signed = await signDownload({ key: row.s3_key });
+        if (signed.url) posters.push({ name: row.name, url: signed.url });
+      } catch {
+        // A missing object should not hide the rest.
+      }
+    }
+    return { posters };
   });

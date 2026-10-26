@@ -9,19 +9,21 @@ import type { TitleStatus } from "@/lib/bridge/types";
 import { toast } from "sonner";
 
 const MAX_BYTES = 200 * 1024 * 1024;
-const KIND_LABEL: Record<string, string> = {
-  master: "Film",
-  trailer: "Trailer",
-  poster: "Poster",
-  poster_vertical: "Vertical poster",
-  poster_horizontal: "Horizontal poster",
-  thumbnail: "Thumbnail",
-  subtitle: "Subtitle",
-  audio: "Audio",
-  screener: "Screener",
-  censor_certificate: "Certificate",
-  technical: "Technical",
-};
+const SLOTS = [
+  ["master", "Film", "video/*"],
+  ["trailer", "Trailer", "video/*"],
+  ["poster_vertical", "Vertical poster", "image/*"],
+  ["poster_horizontal", "Horizontal poster", "image/*"],
+  ["thumbnail", "Thumbnail", "image/*"],
+  ["subtitle", "English subtitles", ".srt,.vtt,text/vtt"],
+  ["subtitle_extra", "More subtitles", ".srt,.vtt,text/vtt"],
+  ["audio", "Film audio", "audio/*"],
+  ["audio_dub", "Dubbed", "audio/*"],
+  ["audio_description", "Description audio", "audio/*"],
+  ["censor_certificate", "Certificate", "application/pdf,image/*"],
+] as const;
+
+const KIND_LABEL: Record<string, string> = Object.fromEntries(SLOTS.map(([kind, label]) => [kind, label]));
 
 export function SimpleDesk({
   titleId,
@@ -115,7 +117,7 @@ export function SimpleDesk({
   };
 
   const upload = useMutation({
-    mutationFn: async (input: { file: File; kind: "master" | "trailer" | "poster_vertical" | "poster_horizontal" | "thumbnail" | "subtitle" | "audio" | "censor_certificate" }) => {
+    mutationFn: async (input: { file: File; kind: (typeof SLOTS)[number][0] }) => {
       if (input.file.size > MAX_BYTES) throw new Error("Keep the file under 200 MB.");
       const contentType = input.file.type || "application/octet-stream";
       const prepared = await prepareSimpleUpload({
@@ -221,10 +223,6 @@ export function SimpleDesk({
   const rows = assets.data?.assets ?? [];
   const ready = rows.filter((item) => item.verified);
   const unfinished = rows.filter((item) => item.pending);
-  const video = ready.filter((item) => item.kind === "master" || item.kind === "screener" || item.kind === "trailer");
-  const documents = ready.filter((item) => item.kind === "censor_certificate" || item.kind === "technical");
-  const audio = ready.filter((item) => item.kind === "subtitle" || item.kind === "audio");
-  const artwork = ready.filter((item) => ["poster", "poster_vertical", "poster_horizontal", "thumbnail"].includes(item.kind));
 
   const match = useMutation({
     mutationFn: () => matchTitleStorage({ data: { titleId } }),
@@ -323,44 +321,36 @@ export function SimpleDesk({
 
       <div className="rounded-2xl border border-line bg-surface p-4">
         <h2 className="mb-3 text-lg font-semibold">Files</h2>
-        <div className="flex flex-wrap gap-2">
-          {([
-            ["master", "Film", "video/*"],
-            ["trailer", "Trailer", "video/*"],
-            ["poster_vertical", "Vertical poster", "image/*"],
-            ["poster_horizontal", "Horizontal poster", "image/*"],
-            ["thumbnail", "Thumbnail", "image/*"],
-            ["subtitle", "English subtitles", ".srt,.vtt,text/vtt"],
-            ["subtitle", "More subtitles", ".srt,.vtt,text/vtt"],
-            ["audio", "Audio", "audio/*"],
-            ["censor_certificate", "Certificate", "application/pdf,image/*"],
-          ] as const).map(([kind, label, accept]) => (
-            <label key={label} className="cursor-pointer rounded-full bg-[#0b1220] px-4 py-2 text-sm font-semibold text-white">
-              {upload.isPending ? "Saving…" : label}
-              <input
-                type="file"
-                accept={accept}
-                className="sr-only"
-                disabled={upload.isPending}
-                onChange={(e) => {
-                  const nextFile = e.target.files?.[0];
-                  e.target.value = "";
-                  if (nextFile) upload.mutate({ file: nextFile, kind });
-                }}
-              />
-            </label>
-          ))}
-          {next ? (
-            <button type="button" disabled={send.isPending} onClick={() => send.mutate()} className="rounded-full border-2 border-[#0b1220] px-4 py-2 text-sm font-semibold">
-              {send.isPending ? "Submitting…" : "Submit"}
-            </button>
-          ) : null}
-        </div>
-        {assets.isPending ? <p className="mt-3 text-sm text-muted">Loading files…</p> : null}
-        <FileGroup title="Artwork" rows={artwork} onView={view} onDelete={admin ? (id) => remove.mutate(id) : undefined} />
-        <FileGroup title="Video" rows={video} onView={view} onDelete={admin ? (id) => remove.mutate(id) : undefined} />
-        <FileGroup title="Documents" rows={documents} onView={view} onDelete={admin ? (id) => remove.mutate(id) : undefined} />
-        <FileGroup title="Audio and subtitles" rows={audio} onView={view} onDelete={admin ? (id) => remove.mutate(id) : undefined} />
+        <p className="mb-2 text-sm text-muted">One file in each slot. A new file replaces the old one.</p>
+        <ul className="divide-y divide-line">
+          {SLOTS.map(([kind, label, accept]) => {
+            const item = ready.find((row) => row.kind === kind) || (kind === "master" ? ready.find((row) => row.kind === "screener") : undefined);
+            const visual = kind === "master" || kind === "trailer";
+            return (
+              <li key={kind} className="flex flex-wrap items-center gap-3 py-3">
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold">{label}</p>
+                  <p className="text-xs text-muted">{item?.byteSize ? `${Math.max(1, Math.round(Number(item.byteSize) / 1024 / 1024))} MB` : "Empty"}</p>
+                </div>
+                {item ? <button type="button" onClick={() => void view(item.id)} className="text-sm font-semibold">{visual ? "Play" : "View"}</button> : null}
+                <label className="cursor-pointer text-sm font-semibold">
+                  {item ? "Replace" : "Add"}
+                  <input type="file" accept={accept} className="sr-only" disabled={upload.isPending} onChange={(e) => {
+                    const nextFile = e.target.files?.[0];
+                    e.target.value = "";
+                    if (nextFile) upload.mutate({ file: nextFile, kind });
+                  }} />
+                </label>
+                {item ? <button type="button" onClick={() => remove.mutate(item.id)} className="text-sm font-semibold text-red-700">Remove</button> : null}
+              </li>
+            );
+          })}
+        </ul>
+        {next ? (
+          <button type="button" disabled={send.isPending} onClick={() => send.mutate()} className="mt-3 rounded-full border-2 border-[#0b1220] px-4 py-2 text-sm font-semibold">
+            {send.isPending ? "Submitting…" : "Submit"}
+          </button>
+        ) : null}
         {staff ? (
           <div className="mt-3 flex flex-wrap gap-2">
             <button type="button" disabled={match.isPending} onClick={() => match.mutate()} className="rounded-full border-2 border-[#0b1220] px-3 py-1.5 text-sm font-semibold">
@@ -551,35 +541,6 @@ function Fact({ label, value, wide }: { label: string; value: string; wide?: boo
     <div className={wide ? "sm:col-span-2" : ""}>
       <dt className="text-xs text-muted">{label}</dt>
       <dd className="mt-1 text-sm font-semibold leading-6">{value}</dd>
-    </div>
-  );
-}
-
-function FileGroup({
-  title,
-  rows,
-  onView,
-  onDelete,
-}: {
-  title: string;
-  rows: Array<{ id: string; kind: string; byteSize: number | null }>;
-  onView: (id: string) => void;
-  onDelete?: (id: string) => void;
-}) {
-  return (
-    <div className="mt-4">
-      <h3 className="text-sm font-semibold">{title}</h3>
-      {rows.length ? (
-        <ul className="mt-1 divide-y divide-line">
-          {rows.map((item) => (
-            <li key={item.id} className="flex items-center gap-3 py-2">
-              <p className="min-w-0 flex-1 text-sm">{KIND_LABEL[item.kind] || item.kind}{item.byteSize ? ` · ${Math.max(1, Math.round(Number(item.byteSize) / 1024 / 1024))} MB` : ""}</p>
-              <button type="button" onClick={() => onView(item.id)} className="text-sm font-semibold">{item.kind === "master" || item.kind === "screener" || item.kind === "trailer" ? "Play" : "View"}</button>
-              {onDelete ? <button type="button" onClick={() => onDelete(item.id)} className="text-sm font-semibold text-red-700">Delete</button> : null}
-            </li>
-          ))}
-        </ul>
-      ) : <p className="mt-1 text-sm text-muted">None yet.</p>}
     </div>
   );
 }

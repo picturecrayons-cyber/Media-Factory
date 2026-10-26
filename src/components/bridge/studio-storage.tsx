@@ -32,16 +32,6 @@ const AREAS = [
   },
 ];
 
-const SLOT_LABEL: Record<string, string> = {
-  raw: "Raw footage",
-  stills: "Stills",
-  pilot: "Pilot audio",
-  picture: "Final picture",
-  sound: "Final sound",
-  catalog: "Catalog",
-  hold: "Hold",
-};
-
 export function StudioStorage() {
   const qc = useQueryClient();
   const files = useQuery({ queryKey: ["studio-files"], queryFn: () => listStudioFiles() });
@@ -101,7 +91,7 @@ export function StudioStorage() {
     <section className="space-y-4">
       <div>
         <h2 className="text-lg font-semibold">Studio storage</h2>
-        <p className="mt-1 text-sm text-muted">Private. A file stays here until you open the title and add it there.</p>
+        <p className="mt-1 text-sm text-muted">{rows.length ? `${rows.length} files held. Private until you put one on a title.` : "Empty. A file you add here stays private. It is not for sale."}</p>
       </div>
       <div className="grid gap-2 sm:grid-cols-3">
         <input value={titleName} onChange={(e) => setTitleName(e.target.value)} placeholder="Film name" className="h-11 rounded-xl border border-line bg-white px-3 text-sm" />
@@ -115,43 +105,30 @@ export function StudioStorage() {
           return (
             <article key={area.id} className="rounded-2xl border border-line bg-white p-4">
               <h3 className="font-semibold">{area.title}</h3>
-              <p className="mt-1 text-xs leading-5 text-muted">{area.note}</p>
-              <div className="mt-3 flex flex-wrap gap-2">
-                {area.slots.map((slot) => (
-                  <label key={slot.id} className="cursor-pointer rounded-full border border-line px-3 py-1.5 text-xs font-semibold">
-                    {upload.isPending ? "Saving…" : slot.label}
-                    <input
-                      type="file"
-                      className="sr-only"
-                      disabled={upload.isPending}
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        e.target.value = "";
-                        if (file) upload.mutate({ file, area: area.id, slot: slot.id });
-                      }}
-                    />
-                  </label>
-                ))}
-              </div>
-              <ul className="mt-3 space-y-2">
-                {mine.map((row) => (
-                  <li key={row.id} className="flex items-center justify-between gap-2 text-sm">
-                    <span className="min-w-0">
-                      <span className="block truncate font-medium">{row.titleName}</span>
-                      <span className="text-xs text-muted">
-                        {SLOT_LABEL[row.slot] || row.slot}
-                        {row.day ? ` · Day ${row.day}` : ""}
-                        {row.card ? ` · Card ${row.card}` : ""}
-                        {row.pending ? " · Saving" : ""}
+              <p className="mt-1 text-xs text-muted">{mine.length ? `${mine.length} saved` : "Nothing saved"}</p>
+              <ul className="mt-3 divide-y divide-line">
+                {area.slots.map((slot) => {
+                  const saved = mine.filter((row) => row.slot === slot.id);
+                  return (
+                    <li key={slot.id} className="flex items-center justify-between gap-2 py-2">
+                      <span className="min-w-0">
+                        <span className="block text-sm font-semibold">{slot.label}</span>
+                        <span className="block truncate text-xs text-muted">{saved[0] ? saved[0].titleName : "Empty"}</span>
                       </span>
-                    </span>
-                    {row.pending ? null : (
-                      <button type="button" onClick={() => void view(row.id)} className="shrink-0 text-xs font-semibold">
-                        View
-                      </button>
-                    )}
-                  </li>
-                ))}
+                      <span className="flex shrink-0 items-center gap-3">
+                        {saved[0] && !saved[0].pending ? <button type="button" onClick={() => void view(saved[0].id)} className="text-xs font-semibold">View</button> : null}
+                        <label className="cursor-pointer text-xs font-semibold">
+                          {saved.length ? "Replace" : "Add"}
+                          <input type="file" className="sr-only" disabled={upload.isPending} onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            e.target.value = "";
+                            if (file) upload.mutate({ file, area: area.id, slot: slot.id });
+                          }} />
+                        </label>
+                      </span>
+                    </li>
+                  );
+                })}
               </ul>
             </article>
           );

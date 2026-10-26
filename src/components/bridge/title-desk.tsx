@@ -32,19 +32,15 @@ export function TitleList({ empty, query = "" }: { empty: string; query?: string
   }
   if (!titles.length) return <p className="text-sm text-muted">{empty}</p>;
   return (
-    <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+    <ul className="divide-y divide-line overflow-hidden rounded-2xl border border-line bg-white">
       {titles.map((t) => (
         <li key={t.id}>
-          <Link to="/title/$id" params={{ id: t.id }} className="block overflow-hidden rounded-2xl border border-line bg-white">
-            <div className="aspect-[2/3] bg-[#102433]" />
-            <div className="space-y-1 p-3">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">{STATUS[t.status] || t.status}</p>
-              <p className="line-clamp-2 text-sm font-semibold leading-5">{t.name}</p>
-              <p className="mt-1 text-xs text-muted">
-                {t.language}
-                {t.year ? ` · ${t.year}` : ""}
-              </p>
-            </div>
+          <Link to="/title/$id" params={{ id: t.id }} className="flex items-center justify-between gap-3 px-4 py-3">
+            <span className="min-w-0">
+              <span className="block truncate text-sm font-semibold">{t.name}</span>
+              <span className="text-xs text-muted">{t.language}{t.year ? ` · ${t.year}` : ""}</span>
+            </span>
+            <span className="shrink-0 text-xs font-semibold text-muted">{STATUS[t.status] || t.status}</span>
           </Link>
         </li>
       ))}

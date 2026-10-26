@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { SignedOut } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { createEnquiry } from "@/lib/bridge/leads";
+import { listPublicPosters } from "@/lib/bridge/simple-desk";
 import { listPublicPartners } from "@/lib/bridge/partners";
 import { getBridgeSession } from "@/lib/bridge/session";
 
@@ -116,6 +117,7 @@ function Enquiry() {
 function Home() {
   const { user, isPending } = useCurrentUserState();
   const partnersQ = useQuery({ queryKey: ["public-partners"], queryFn: () => listPublicPartners(), staleTime: 120_000 });
+  const postersQ = useQuery({ queryKey: ["public-posters"], queryFn: () => listPublicPosters(), staleTime: 120_000 });
   const sessionQ = useQuery({
     queryKey: ["bridge-session", user?.id],
     queryFn: () => getBridgeSession(),
@@ -171,6 +173,22 @@ function Home() {
             </div>
           </div>
         </section>
+
+        {(postersQ.data?.posters.length ?? 0) > 0 ? (
+          <section className="border-b border-line bg-white py-8">
+            <div className="mx-auto max-w-7xl px-5 sm:px-6">
+              <h2 className="text-lg font-semibold">In storage</h2>
+              <div className="mt-4 flex gap-3 overflow-x-auto pb-2">
+                {postersQ.data?.posters.map((poster) => (
+                  <figure key={poster.url} className="w-36 shrink-0">
+                    <img src={poster.url} alt="" className="aspect-[2/3] w-full rounded-2xl object-cover" />
+                    <figcaption className="mt-2 line-clamp-2 text-xs font-semibold">{poster.name}</figcaption>
+                  </figure>
+                ))}
+              </div>
+            </div>
+          </section>
+        ) : null}
 
         <section className="border-b border-line bg-white py-8">
           <div className="mx-auto max-w-7xl px-5 sm:px-6">
