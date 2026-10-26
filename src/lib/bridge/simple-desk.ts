@@ -250,8 +250,6 @@ const FILE_LIMIT = 8 * 1024 * 1024 * 1024;
 const PART_BYTES = 16 * 1024 * 1024;
 const SMALL_FILE = 200 * 1024 * 1024;
 const LARGE_KINDS = new Set(["master", "trailer", "screener", "audio", "audio_dub", "audio_description"]);
-const SMALL_FILE = 200 * 1024 * 1024;
-const LARGE_KINDS = new Set(["master", "trailer", "screener", "audio", "audio_dub", "audio_description"]);
 
 let assetKindsReady = false;
 
