@@ -3,6 +3,7 @@ import { z } from "zod";
 import { randomBytes } from "node:crypto";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
+import { writeAudit } from "./audit";
 import { assertNotDevUser } from "./guards";
 import { requireVerifiedActor } from "./session";
 import { canReadTitle } from "./rbac";
