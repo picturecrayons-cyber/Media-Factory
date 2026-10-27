@@ -161,7 +161,7 @@ function Onboarding() {
           <BrandMark />
           <h1 className="font-display text-2xl font-semibold">Submission received</h1>
           <p className="text-sm leading-relaxed text-muted">
-            Your title is now in Bridge review. Licensing Ready is not granted by the public form.
+            Your title submission has been recorded as DRAFT. It is not approved, licensed, or visible to buyers. Licensing Ready is not granted by this form.
             Bridge must verify the master, screener, authorization evidence, legal clearance, QC and rights package before buyers can see it.
           </p>
           <div className="rounded-xl border border-line bg-elevated p-4 text-sm">
