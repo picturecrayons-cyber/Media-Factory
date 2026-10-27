@@ -238,6 +238,8 @@ function Onboarding() {
   ];
   const progress = accountType === "buyer" ? (marks[0] ? 100 : 0) : Math.round((marks.filter(Boolean).length / marks.length) * 100);
   const field = "mt-1 h-11 w-full rounded-xl border border-[#d5dbe3] bg-white px-3 text-sm";
+  const chip = (on: boolean) => `h-10 shrink-0 rounded-full border px-3 text-sm ${on ? "border-[#102033] bg-[#102033] text-white" : "border-[#d5dbe3] bg-white"}`;
+  const missing = accountType !== "buyer" && (!genre || !rating) ? "Choose a genre and a rating." : "";
 
   return (
     <main className="min-h-screen bg-[#eef1f4] text-[#102033]">
@@ -248,7 +250,7 @@ function Onboarding() {
           <p className="mt-1 font-display text-4xl font-semibold">{progress}%</p>
           <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/15"><div className="h-full bg-white" style={{ width: `${progress}%` }} /></div>
           <ol className="mt-6 space-y-2 text-sm">
-            {["Account", "Title", "Genre", "Synopsis", "Confirm"].map((label, index) => (
+            {["Account", "Title", "Genre and rating", "Synopsis", "Confirm"].map((label, index) => (
               <li key={label} className={marks[index] ? "text-white" : "text-white/40"}>{marks[index] ? "Done" : "Open"} · {label}</li>
             ))}
           </ol>
@@ -287,14 +289,14 @@ function Onboarding() {
                 </div>
                 <div>
                   <p className="text-sm">Genre</p>
-                  <div className="mt-2 flex flex-wrap gap-2">{GENRES.map((item) => <button key={item} type="button" onClick={() => setGenre(item)} className={`h-10 rounded-full px-3 text-sm ${genre === item ? "bg-[#102033] text-white" : "bg-white"}`}>{item}</button>)}</div>
+                  <div className="mt-2 flex flex-wrap gap-2">{GENRES.map((item) => <button key={item} type="button" onClick={() => setGenre(item)} className={chip(genre === item)}>{item}</button>)}</div>
                 </div>
                 <div>
                   <p className="text-sm">Rating</p>
-                  <div className="mt-2 flex gap-2">{RATINGS.map((item) => <button key={item} type="button" onClick={() => setRating(item)} className={`h-10 rounded-full px-4 text-sm ${rating === item ? "bg-[#102033] text-white" : "bg-white"}`}>{item}</button>)}</div>
+                  <div className="mt-2 flex flex-wrap gap-2">{RATINGS.map((item) => <button key={item} type="button" onClick={() => setRating(item)} className={chip(rating === item)}>{item}</button>)}</div>
                 </div>
                 <label className="block text-sm">Synopsis<textarea required id="onboard-synopsis" name="synopsis" autoComplete="off" minLength={20} rows={3} value={synopsis} onChange={(e) => setSynopsis(e.target.value)} className="mt-1 w-full rounded-xl border border-[#d5dbe3] bg-white px-3 py-2 text-sm" /></label>
-                <label className="flex items-center gap-3 text-sm"><input type="checkbox" checked={authorizationAttested} onChange={(e) => setAuthorizationAttested(e.target.checked)} />I can submit this title.</label>
+                <label className="flex items-center gap-3 rounded-xl border border-[#d5dbe3] bg-white px-3 py-3 text-sm"><input type="checkbox" checked={authorizationAttested} onChange={(e) => setAuthorizationAttested(e.target.checked)} />I can submit this title.</label>
                 <div>
                   <p className="text-sm">Added on the title</p>
                   <div className="mt-2 flex flex-wrap gap-2">{LATER.map((item) => <span key={item} className="rounded-full bg-white px-3 py-2 text-xs text-[#5c6b7a]">{item}</span>)}</div>
@@ -303,7 +305,7 @@ function Onboarding() {
             )}
           </div>
           <div className="sticky bottom-0 flex items-center justify-between gap-3 border-t border-[#d5dbe3] bg-white px-5 py-3">
-            {error ? <p role="alert" className="text-sm text-red-600">{error}</p> : <p className="text-sm text-[#5c6b7a]">{progress}% ready</p>}
+            {error ? <p role="alert" className="text-sm text-red-600">{error}</p> : <p className="text-sm text-[#5c6b7a]">{missing || `${progress}% ready`}</p>}
             <Button type="submit" disabled={busy} className="h-11 rounded-full px-6">{busy ? "Saving…" : accountType === "buyer" ? "Open desk" : "Save record"}</Button>
           </div>
         </div>
