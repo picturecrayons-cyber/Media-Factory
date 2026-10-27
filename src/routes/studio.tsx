@@ -10,7 +10,7 @@ export const Route = createFileRoute("/studio")({ component: Studio });
 
 function Studio() {
   return (
-    <RequireBridge allow="studio">
+    <RequireBridge allow="creator_studio">
       {(actor) => (
         <BridgeShell actor={actor} title="Studio">
           <div className="mx-auto max-w-3xl space-y-10 px-1 pb-16">
