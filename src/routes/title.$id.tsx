@@ -313,6 +313,7 @@ function FilesPanel({
     typeof window === "undefined" || !("Notification" in window) ? "unsupported" : Notification.permission,
   );
   const [progress, setProgress] = useState<UploadProgress | null>(null);
+  const [refreshingStatus, setRefreshingStatus] = useState(false);
   const uploadXhrRef = useRef<XMLHttpRequest | null>(null);
   const cancelRequestedRef = useRef(false);
   // Invalidates any in-flight preparation/confirmation continuation after cancel or a newer attempt.
@@ -501,16 +502,16 @@ function FilesPanel({
         <button
           type="button"
           onClick={() => {
-            setProgress({ kind: "master", phase: "refreshing", percent: null, etaSeconds: null, loaded: 0, total: 0 });
+            setRefreshingStatus(true);
             void Promise.resolve(onAssetsChanged()).then(
-              () => { setProgress(null); announce("File status refreshed.", "success"); },
-              () => { setProgress(null); announce("Could not refresh file status. Please try again.", "error"); },
-            );
+              () => announce("File status refreshed.", "success"),
+              () => announce("Could not refresh file status. Please try again.", "error"),
+            ).finally(() => setRefreshingStatus(false));
           }}
-          disabled={progress?.phase === "refreshing"}
+          disabled={refreshingStatus}
           className="rounded-full border border-line px-4 py-2 text-sm font-semibold disabled:opacity-50"
         >
-          {progress?.phase === "refreshing" ? "Refreshing…" : "Refresh status"}
+          {refreshingStatus ? "Refreshing…" : "Refresh status"}
         </button>
       </div>
 
