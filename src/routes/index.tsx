@@ -1,4 +1,4 @@
-import { createFileRoute, Link, Navigate } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { BrandMark } from "@/components/bridge/shell";
@@ -8,7 +8,6 @@ import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { createEnquiry } from "@/lib/bridge/leads";
 import { listPublicPosters } from "@/lib/bridge/simple-desk";
 import { listPublicPartners } from "@/lib/bridge/partners";
-import { getBridgeSession } from "@/lib/bridge/session";
 
 
 export const Route = createFileRoute("/")({
@@ -167,18 +166,17 @@ function Enquiry() {
 }
 
 function Home() {
-  const { user, isPending } = useCurrentUserState();
+  const { user } = useCurrentUserState();
   const partnersQ = useQuery({ queryKey: ["public-partners"], queryFn: () => listPublicPartners(), staleTime: 120_000 });
   const postersQ = useQuery({ queryKey: ["public-posters"], queryFn: () => listPublicPosters(), staleTime: 120_000 });
-  const sessionQ = useQuery({
-    queryKey: ["bridge-session", user?.id],
-    queryFn: () => getBridgeSession(),
-    enabled: !isPending && Boolean(user),
-    retry: false,
-  });
-
-  if (user && sessionQ.data?.home) return <Navigate to={sessionQ.data.home as any} replace />;
-  if (user && sessionQ.isSuccess && !sessionQ.data?.profile) return <Navigate to="/onboarding" replace />;
+  const signedIn = Boolean(user);
+  const desks = [
+    ["Creator", "/creator"],
+    ["Studio", "/studio"],
+    ["Buyer", "/buyer"],
+    ["Admin", "/admin"],
+    ["Submit a title", "/onboarding"],
+  ] as const;
 
   return (
     <div className="min-h-screen bg-white text-fg antialiased selection:bg-accent/20 selection:text-fg">
@@ -197,17 +195,12 @@ function Home() {
       </header>
 
       <section className="border-b border-line bg-[#071018] text-white">
-        <div className="mx-auto grid max-w-7xl gap-3 px-5 py-6 sm:grid-cols-2 sm:px-6 lg:grid-cols-4 lg:px-8">
-          {[
-            ["Creator", "/login?next=/creator", "www.crayonspictures.in/creator"],
-            ["Studio", "/login?next=/studio", "www.crayonspictures.in/studio"],
-            ["Buyer", "/login?next=/buyer", "www.crayonspictures.in/buyer"],
-            ["Admin", "/login?next=/admin", "www.crayonspictures.in/admin"],
-          ].map(([label, href, address]) => (
-            <a key={label} href={href} className="rounded-2xl border border-white/15 bg-white/5 px-4 py-4">
+        <div className="mx-auto grid max-w-7xl gap-3 px-5 py-6 sm:grid-cols-2 sm:px-6 lg:grid-cols-5 lg:px-8">
+          {desks.map(([label, path]) => (
+            <a key={path} href={signedIn ? path : `/login?next=${path}`} className="rounded-2xl border border-white/15 bg-white/5 px-4 py-4">
               <span className="block text-sm font-semibold">{label}</span>
-              <span className="mt-1 block text-xs text-white/70">{address}</span>
-              <span className="mt-3 inline-flex h-10 items-center rounded-full bg-white px-4 text-sm font-semibold text-[#071018]">Sign in</span>
+              <span className="mt-1 block text-xs text-white/70">www.crayonspictures.in{path}</span>
+              <span className="mt-3 inline-flex h-10 items-center rounded-full bg-white px-4 text-sm font-semibold text-[#071018]">{signedIn ? "Open" : "Sign in"}</span>
             </a>
           ))}
         </div>
