@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { listTitles, resetCatalogToDraft } from "@/lib/bridge/titles";
+import { getBridgeSession } from "@/lib/bridge/session";
 import { BRIDGE_LOOP_LANES, loopStageType } from "@/lib/bridge/loop-lanes";
 import { PublishingDesk } from "@/components/bridge/publishing-desk";
 import { ClearanceDesk } from "@/components/bridge/clearance-desk";
@@ -33,7 +34,7 @@ const ADMIN_MODULES = [
 function DashboardBody() {
   const dashboardQ = useQuery({
     queryKey: ["bridge-dashboard-session"],
-    queryFn: () => getDashboardSession(),
+    queryFn: () => getBridgeSession(),
     retry: false,
   });
   const titlesQ = useQuery({
