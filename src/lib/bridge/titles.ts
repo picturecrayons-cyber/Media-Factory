@@ -10,6 +10,7 @@ import { assertPermission, canMutateTitle, canReadTitle, hasPermission, hasStaff
 import { requireVerifiedActor } from "./session";
 import { writeAudit } from "./audit";
 import { assertNotDevUser } from "./guards";
+import { FILE_STORAGE_ENABLED } from "./mvp-lock";
 import { loopStageType } from "./loop-lanes";
 import { assertBuyerPublishable, getBuyerGateStatus } from "./buyer-visibility";
 import { legacyCatalog } from "./legacy-catalog";
