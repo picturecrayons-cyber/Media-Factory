@@ -124,7 +124,7 @@ function Onboarding() {
   const [rightsBasis, setRightsBasis] = useState<"OWNER" | "EXCLUSIVE_LICENSEE" | "AUTHORIZED_DISTRIBUTOR" | "PRODUCER_AUTHORITY">("OWNER");
   const [authorizationAttested, setAuthorizationAttested] = useState(false);
   const [authorizationEvidenceType, setAuthorizationEvidenceType] = useState<"" | "RIGHTS_AGREEMENT" | "CHAIN_OF_TITLE" | "AUTHORIZATION_LETTER" | "DISTRIBUTION_AGREEMENT" | "OTHER">("");
-  const [screenerAccess, setScreenerAccess] = useState<"BRIDGE_PRIVATE_SCREENER" | "SCREENER_PENDING">("SCREENER_PENDING");
+
   const [destinations, setDestinations] = useState<string[]>(["Buyer delivery"]);
 
   const [submittedTitleId, setSubmittedTitleId] = useState<string | null>(null);
