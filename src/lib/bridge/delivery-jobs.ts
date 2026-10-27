@@ -21,7 +21,7 @@ const updateJobInput = z.object({
   jobId: z.string().uuid(),
   status: z.enum(["requested", "in_progress", "completed", "failed"]).optional(),
   assignedVendor: z.string().trim().max(200).nullable().optional(),
-  deliveryReceiptUrl: z.string().url().max(2048).nullable().optional(),
+  deliveryReceiptUrl: z.string().url().max(2048).refine((value) => value.startsWith("https://"), "Delivery receipt must use HTTPS").nullable().optional(),
 }).refine((v) => v.status !== undefined || v.assignedVendor !== undefined || v.deliveryReceiptUrl !== undefined, {
   message: "At least one field must be updated",
 });
@@ -55,7 +55,7 @@ async function loadTitleAccess(tx: Sql, titleId: string): Promise<TitleAccessRow
   return rows[0];
 }
 
-function canReadJobsForTitle(actor: Actor, title: TitleAccessRow): boolean {
+function isSecureReceiptUrl(value: string): boolean {\n  try {\n    const url = new URL(value);\n    return url.protocol === "https:" && Boolean(url.hostname) && !url.username && !url.password;\n  } catch {\n    return false;\n  }\n}\n\nfunction canReadJobsForTitle(actor: Actor, title: TitleAccessRow): boolean {
   return canOperateOnTitle(actor, {
     ownerUserId: title.owner_user_id,
     ownerAccountType: title.owner_account_type as Actor["accountType"],
@@ -191,7 +191,7 @@ export const signOffDeliveryJob = createServerFn({ method: "POST" })
         throw new Error("Delivery job is already signed off");
       }
       if (current.status !== "completed") throw new Error("Only completed jobs can be signed off");
-      if (!current.delivery_receipt_url) throw new Error("A delivery receipt is required before sign-off");
+      if (!current.delivery_receipt_url || !isSecureReceiptUrl(current.delivery_receipt_url)) throw new Error("A valid HTTPS delivery receipt is required before sign-off");
       const [updated] = await tx<JobRow>`
         update public.bridge_delivery_jobs
         set status = 'approved', admin_sign_off = true, updated_at = now()
@@ -316,10 +316,32 @@ export const createBuyerInterest = createServerFn({ method: "POST" })
       }
       await writeAudit({
         actorUserId: actor.userId,
-        action: "buyer_interest.create",
+        action: existing[0] ? "buyer_interest.update" : "buyer_interest.create",
         entityType: "bridge_buyer_interest",
         entityId: row.id,
-        metadata: { titleId, conceptSubmissionId: conceptId, interestLevel: row.interest_level },
+        metadata: {
+          operation: existing[0] ? "re-register-interest" : "register-interest",
+          titleId,
+          conceptSubmissionId: conceptId,
+          before: existing[0] ? {
+            interestLevel: existing[0].interest_level,
+            commercialModel: existing[0].commercial_model,
+            currency: existing[0].currency,
+            licenseFeeMinor: existing[0].license_fee_minor,
+            revenueSharePercent: existing[0].revenue_share_percent,
+            termsStatus: existing[0].terms_status,
+            contractReference: existing[0].contract_reference,
+          } : null,
+          after: {
+            interestLevel: row.interest_level,
+            commercialModel: row.commercial_model,
+            currency: row.currency,
+            licenseFeeMinor: row.license_fee_minor,
+            revenueSharePercent: row.revenue_share_percent,
+            termsStatus: row.terms_status,
+            contractReference: row.contract_reference,
+          },
+        },
       }, tx);
       return row;
     });
@@ -408,8 +430,24 @@ export const updateBuyerInterest = createServerFn({ method: "POST" })
         entityType: "bridge_buyer_interest",
         entityId: current.id,
         metadata: {
-          before: { interestLevel: current.interest_level, termsStatus: current.terms_status },
-          after: { interestLevel: updated.interest_level, termsStatus: updated.terms_status },
+          before: {
+            interestLevel: current.interest_level,
+            commercialModel: current.commercial_model,
+            currency: current.currency,
+            licenseFeeMinor: current.license_fee_minor,
+            revenueSharePercent: current.revenue_share_percent,
+            termsStatus: current.terms_status,
+            contractReference: current.contract_reference,
+          },
+          after: {
+            interestLevel: updated.interest_level,
+            commercialModel: updated.commercial_model,
+            currency: updated.currency,
+            licenseFeeMinor: updated.license_fee_minor,
+            revenueSharePercent: updated.revenue_share_percent,
+            termsStatus: updated.terms_status,
+            contractReference: updated.contract_reference,
+          },
         },
       }, tx);
       return updated;
