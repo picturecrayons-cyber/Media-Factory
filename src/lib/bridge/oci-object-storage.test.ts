@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { generateKeyPairSync, verify } from "node:crypto";
-import { sealVerifiedObject, verifyObject } from "./oci-object-storage.server.ts";
+import { sealVerifiedObject, signUpload, verifyObject } from "./oci-object-storage.server.ts";
 
 test("OCI private key normalization accepts escaped and quoted PEM secrets", async () => {
   const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
@@ -315,3 +315,61 @@ test("OCI copy fails closed when copyObject returns precondition error 412", asy
   }
 });
 
+test("OCI PAR expiry must be a bounded safe integer before any request", async () => {
+  const originalFetch = globalThis.fetch;
+  let fetchCalls = 0;
+  globalThis.fetch = async () => { fetchCalls += 1; return Response.json({ accessUri: "/p/test-token" }); };
+  try {
+    for (const expiresIn of [0, -1, 29, 30.5, 3601, Number.NaN, Number.POSITIVE_INFINITY]) {
+      await assert.rejects(signUpload({ key: "synthetic/asset.txt", contentType: "text/plain", expiresIn }), /expiry must be an integer between 30 and 3600 seconds/);
+    }
+    assert.equal(fetchCalls, 0, "invalid expiry must fail before contacting OCI");
+  } finally { globalThis.fetch = originalFetch; }
+});
+
+test("OCI PAR expiry accepts the inclusive minimum and maximum bounds", async () => {
+  const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  const values = { OCI_TENANCY_OCID: "test-tenancy", OCI_USER_OCID: "test-user", OCI_PRIVATE_KEY: privateKey.export({ type: "pkcs8", format: "pem" }).toString(), OCI_FINGERPRINT: "test-fingerprint", OCI_REGION: "ap-mumbai-1", OCI_NAMESPACE: "test-namespace", OCI_BUCKET_NAME: "test-bucket" };
+  const saved = Object.fromEntries(Object.keys(values).map((key) => [key, process.env[key]]));
+  const originalFetch = globalThis.fetch;
+  Object.assign(process.env, values);
+  const expiries: string[] = [];
+  globalThis.fetch = async (input, init) => {
+    const url = new URL(String(input));
+    assert.equal(url.origin, "https://objectstorage.ap-mumbai-1.oraclecloud.com");
+    assert.equal(init?.method, "POST");
+    const body = JSON.parse(String(init?.body)) as { timeExpires: string };
+    expiries.push(body.timeExpires);
+    return Response.json({ accessUri: "/p/synthetic-test-token" });
+  };
+  try {
+    for (const expiresIn of [30, 3600]) {
+      const before = Date.now();
+      const result = await signUpload({ key: "synthetic/asset.txt", contentType: "text/plain", expiresIn });
+      const remaining = (Date.parse(expiries[expiries.length - 1]!) - before) / 1000;
+      assert.ok(remaining >= expiresIn - 1 && remaining <= expiresIn + 2);
+      assert.equal(new URL(result.url).origin, "https://objectstorage.ap-mumbai-1.oraclecloud.com");
+    }
+    assert.equal(expiries.length, 2);
+  } finally {
+    globalThis.fetch = originalFetch;
+    for (const [key, value] of Object.entries(saved)) { if (value === undefined) delete process.env[key]; else process.env[key] = value; }
+  }
+});
+
+test("OCI PAR rejects access URIs outside the exact HTTPS Object Storage origin", async () => {
+  const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  const values = { OCI_TENANCY_OCID: "test-tenancy", OCI_USER_OCID: "test-user", OCI_PRIVATE_KEY: privateKey.export({ type: "pkcs8", format: "pem" }).toString(), OCI_FINGERPRINT: "test-fingerprint", OCI_REGION: "ap-mumbai-1", OCI_NAMESPACE: "test-namespace", OCI_BUCKET_NAME: "test-bucket" };
+  const saved = Object.fromEntries(Object.keys(values).map((key) => [key, process.env[key]]));
+  const originalFetch = globalThis.fetch;
+  Object.assign(process.env, values);
+  try {
+    for (const accessUri of ["https://evil.example/p/token", "http://objectstorage.ap-mumbai-1.oraclecloud.com/p/token", "https://objectstorage.ap-mumbai-1.oraclecloud.com:444/p/token", "https://user@objectstorage.ap-mumbai-1.oraclecloud.com/p/token", "//evil.example/p/token"]) {
+      globalThis.fetch = async () => Response.json({ accessUri });
+      await assert.rejects(signUpload({ key: "synthetic/asset.txt", contentType: "text/plain" }), /outside the allowed Object Storage origin/, "must reject " + accessUri);
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
+    for (const [key, value] of Object.entries(saved)) { if (value === undefined) delete process.env[key]; else process.env[key] = value; }
+  }
+});
