@@ -202,7 +202,8 @@ function Onboarding() {
         if (typeof d.sublicensingAllowed === "boolean") setSublicensingAllowed(d.sublicensingAllowed);
         if (typeof d.promotionalRights === "boolean") setPromotionalRights(d.promotionalRights);
         if (d.rightsBasis === "OWNER" || d.rightsBasis === "EXCLUSIVE_LICENSEE" || d.rightsBasis === "AUTHORIZED_DISTRIBUTOR" || d.rightsBasis === "PRODUCER_AUTHORITY") setRightsBasis(d.rightsBasis);
-        if (typeof d.authorizationAttested === "boolean") setAuthorizationAttested(d.authorizationAttested);
+        // Legal rights attestation is never restored from local storage. Require a fresh, explicit affirmation for every submission.
+        setAuthorizationAttested(false);
         if (d.screenerAccess === "BRIDGE_PRIVATE_SCREENER" || d.screenerAccess === "SCREENER_PENDING") setScreenerAccess(d.screenerAccess);
         if (Array.isArray(d.destinations)) setDestinations(d.destinations.filter((x): x is string => typeof x === "string"));
         setDraftStatus("Saved draft restored from this browser.");
