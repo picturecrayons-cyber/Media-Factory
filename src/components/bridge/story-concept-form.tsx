@@ -135,12 +135,19 @@ export function StoryConceptForm() {
 
       <label className="text-sm">
         Estimated budget range
-        <input
+        <select
           value={estimatedBudgetRange}
           onChange={(e) => setEstimatedBudgetRange(e.target.value)}
           className="mt-1 h-11 w-full rounded-lg border border-line-strong bg-elevated px-3"
-          placeholder="e.g. under 1 Cr / 1–3 Cr / 3–10 Cr"
-        />
+        >
+          <option value="">Select a budget range</option>
+          <option value="Under 25 Lakhs">Under 25 Lakhs</option>
+          <option value="25–50 Lakhs">25–50 Lakhs</option>
+          <option value="50 Lakhs – 1 Cr">50 Lakhs – 1 Cr</option>
+          <option value="1–3 Cr">1–3 Cr</option>
+          <option value="3–10 Cr">3–10 Cr</option>
+          <option value="10+ Cr">10+ Cr</option>
+        </select>
       </label>
 
       <div className="sm:col-span-2">
