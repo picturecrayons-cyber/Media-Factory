@@ -299,9 +299,8 @@ function Onboarding() {
           <div>
             <BrandMark />
             <h1 className="mt-5 font-display text-3xl font-semibold tracking-tight">Submit a title to Crayons Bridge</h1>
-            <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted">
-              Upload → Prepare → License → Earn. This intake captures the minimum structured information needed to start rights review and buyer preparation.
-            </p>
+            <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted">This is the first title form for a new account. It is not the admin desk.</p>
+            <Link to="/admin" className="mt-3 inline-flex text-sm font-semibold">Open admin</Link>
           </div>
           <span className="hidden rounded-full border border-line bg-elevated px-3 py-1 text-xs text-muted sm:inline-flex">StreamVista OPC Pvt Ltd.</span>
         </div>

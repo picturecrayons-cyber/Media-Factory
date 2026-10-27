@@ -95,7 +95,18 @@ export function RequireBridge({
   }
 
   const profile = sessionQ.data?.profile ?? null;
-  if (!profile) return <Navigate to="/onboarding" />;
+  if (!profile) {
+    if (allow === "internal" || allow === "super_admin") {
+      return (
+        <Frame>
+          <h1 className="font-display text-2xl">This sign-in is not an admin</h1>
+          <p className="text-sm leading-relaxed text-muted">The page you opened is the admin desk. This account has no Bridge profile, so it cannot enter. Sign in with the operator account.</p>
+          <Link to="/login" className="block text-sm font-semibold text-accent">Sign in</Link>
+        </Frame>
+      );
+    }
+    return <Navigate to="/onboarding" />;
+  }
 
   // The generic title workspace is not a public catalog. Only Creator/Studio
   // accounts and internal roles with explicit catalog-read permission may enter.

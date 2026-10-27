@@ -6,7 +6,7 @@ import type { BridgeActor } from "@/lib/bridge/session";
 import { cn } from "@/lib/cn";
 
 type NavItem = {
-  to: "/gallery" | "/dashboard" | "/internal" | "/studio" | "/buyer" | "/investor" | "/creator" | "/workspace" | "/deliveries" | "/account";
+  to: "/gallery" | "/dashboard" | "/internal" | "/studio" | "/buyer" | "/investor" | "/creator" | "/workspace" | "/deliveries" | "/account" | "/admin";
   label: string;
 };
 
@@ -35,6 +35,7 @@ function navFor(actor: BridgeActor): NavItem[] {
   const items: NavItem[] = [];
   if (actor.accountType !== "investor" || staff) items.push({ to: "/gallery", label: "Library" });
   if (desk) items.push(desk);
+  if (actor.internalRole === "admin" || actor.internalRole === "super_admin") items.push({ to: "/admin", label: "Admin" });
   if (actor.accountType === "studio" || actor.accountType === "independent_creator" || staff) {
     items.push({ to: "/deliveries", label: "Deliveries" });
   }
