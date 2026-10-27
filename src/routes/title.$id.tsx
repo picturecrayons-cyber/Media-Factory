@@ -129,11 +129,24 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
       <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
         <div className="grid gap-5 md:grid-cols-[180px_1fr]">
           <div className="aspect-[2/3] overflow-hidden rounded-xl border border-line bg-elevated">
-            <div className="grid h-full place-items-center px-4 text-center text-xs text-muted">
-              {assets.some((asset) => ["poster_vertical", "poster"].includes(asset.kind))
-                ? "Vertical poster ready"
-                : "Add vertical poster"}
-            </div>
+            {(() => {
+              const poster = assets.find((asset) => ["poster_vertical", "poster"].includes(asset.kind) && asset.verified);
+              return poster ? (
+                <AssetVisualPreview
+                  assetId={poster.id}
+                  kind={poster.kind}
+                  contentType={poster.contentType}
+                  verified={poster.verified}
+                  byteSize={poster.byteSize}
+                />
+              ) : (
+                <div className="grid h-full place-items-center px-4 text-center text-xs text-muted">
+                  {assets.some((asset) => ["poster_vertical", "poster"].includes(asset.kind))
+                    ? "Poster is awaiting verification"
+                    : "Add vertical poster"}
+                </div>
+              );
+            })()}
           </div>
           <div className="min-w-0">
             <div className="flex flex-wrap items-start justify-between gap-3">
@@ -660,7 +673,7 @@ function AssetVisualPreview({
     return () => { active = false; };
   }, [assetId, isImage, verified]);
   return (
-    <div className={`grid h-40 place-items-center overflow-hidden border-b border-line ${isImage ? "bg-slate-950" : "bg-elevated"}`}>
+    <div className={`relative grid h-40 place-items-center overflow-hidden border-b border-line ${isImage ? "bg-slate-950" : "bg-elevated"}`}>
       {previewUrl && isImage ? (
         <img
           src={previewUrl}
@@ -677,7 +690,7 @@ function AssetVisualPreview({
           {dimensions ? <span className="text-[11px] text-muted">{dimensions}</span> : null}
         </div>
       )}
-      {previewUrl && dimensions ? <span className="sr-only">{dimensions}</span> : null}
+      {previewUrl && dimensions ? <span className="absolute bottom-2 right-2 rounded-md bg-black/75 px-2 py-1 text-[10px] font-medium text-white">{dimensions}</span> : null}
     </div>
   );
 }
