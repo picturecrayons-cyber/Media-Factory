@@ -118,6 +118,7 @@ export async function loadActor(authUserId: string): Promise<BridgeActor | null>
   return loadActorByBridgeUserId(bridgeUserId);
 }
 
+// Creator home routing depends on persisted intake state, not merely profile existence.
 async function resolveWorkspaceHome(actor: BridgeActor): Promise<string> {
   const fallback = workspaceHome(actor);
   if (actor.internalRole || !["independent_creator", "studio"].includes(actor.accountType)) {
