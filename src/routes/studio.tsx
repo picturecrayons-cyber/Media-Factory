@@ -3,6 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { StudioStorage } from "@/components/bridge/studio-storage";
+import { ServiceAsk } from "@/components/bridge/service-requests";
 import { CreateTitleForm, OwnerReport, TitleList } from "@/components/bridge/title-desk";
 
 export const Route = createFileRoute("/studio")({ component: Studio });
@@ -15,6 +16,7 @@ function StudioDesk() {
       <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search titles" className="h-12 w-full rounded-xl border border-line-strong bg-white px-3" />
       <TitleList empty="No titles yet." query={query} />
       <OwnerReport />
+      <ServiceAsk />
       <StudioStorage />
     </div>
   );
