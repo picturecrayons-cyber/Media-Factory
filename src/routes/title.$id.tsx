@@ -553,7 +553,7 @@ function FilesPanel({
             aria-valuenow={progress.phase === "transferring" ? progress.percent ?? 0 : undefined}
           >
             <div
-              className={`h-full rounded-full bg-accent transition-[width] duration-200 ${progress.percent === null ? "w-1/3 animate-pulse" : ""}`}
+              className={`h-full rounded-full transition-[width] duration-200 ${progress.phase === "transferring" && progress.percent === 100 ? "bg-emerald-500" : "bg-amber-500"} ${progress.percent === null ? "w-1/3 animate-pulse" : ""}`}
               style={progress.percent === null ? undefined : { width: `${progress.percent}%` }}
             />
           </div>
@@ -716,7 +716,9 @@ function FileTypeCard({
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-sm font-semibold">{label}</p>
-          <p className="mt-1 text-xs text-muted">{status}</p>
+          <span className={`mt-1 inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${status === "Ready" ? "border-emerald-300 bg-emerald-50 text-emerald-800" : busy ? "border-amber-300 bg-amber-50 text-amber-800" : status === "Required" || status === "Add" ? "border-red-300 bg-red-50 text-red-800" : "border-line bg-elevated text-muted"}`}>
+            <span aria-hidden="true">●</span> {busy ? "Uploading" : status === "Ready" ? "Verified / Ready" : status === "Optional" ? "Optional" : "Missing · Action required"}
+          </span>
           <p className="mt-2 text-[11px] leading-5 text-muted">
             Allowed: {spec.extensions.map((ext) => ext.replace(".", "").toUpperCase()).join(", ")}
           </p>
