@@ -196,6 +196,23 @@ function Home() {
         </div>
       </header>
 
+      <section className="border-b border-line bg-[#071018] text-white">
+        <div className="mx-auto grid max-w-7xl gap-3 px-5 py-6 sm:grid-cols-2 sm:px-6 lg:grid-cols-4 lg:px-8">
+          {[
+            ["Creator", "/login?next=/creator", "www.crayonspictures.in/creator"],
+            ["Studio", "/login?next=/studio", "www.crayonspictures.in/studio"],
+            ["Buyer", "/login?next=/buyer", "www.crayonspictures.in/buyer"],
+            ["Admin", "/login?next=/admin", "www.crayonspictures.in/admin"],
+          ].map(([label, href, address]) => (
+            <a key={label} href={href} className="rounded-2xl border border-white/15 bg-white/5 px-4 py-4">
+              <span className="block text-sm font-semibold">{label}</span>
+              <span className="mt-1 block text-xs text-white/70">{address}</span>
+              <span className="mt-3 inline-flex h-10 items-center rounded-full bg-white px-4 text-sm font-semibold text-[#071018]">Sign in</span>
+            </a>
+          ))}
+        </div>
+      </section>
+
       <main>
         <PosterHero posters={postersQ.data?.posters ?? []} />
         {(postersQ.data?.posters.length ?? 0) > 0 ? null : (
