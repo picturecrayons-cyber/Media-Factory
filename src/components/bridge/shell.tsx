@@ -70,14 +70,7 @@ const tabOn = "flex min-h-14 items-center justify-center px-1 text-[11px] font-s
 export function BrandMark({ className, to = "/" }: { className?: string; to?: "/" | "/gallery" }) {
   return (
     <Link to={to} className={cn("inline-flex items-center", className)} aria-label="Crayons Bridge">
-      <svg viewBox="0 0 168 36" role="img" aria-label="Crayons Bridge" className="block h-8 w-auto">
-        <g fill="none" stroke="#08b8e8" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.4">
-          <path d="M6 24V20C6 13 11 8 18 8s12 5 12 12v4" />
-          <path d="M6 24h24M12 19v5M24 19v5" />
-        </g>
-        <text x="40" y="15" fill="currentColor" fontFamily="ui-sans-serif, system-ui, sans-serif" fontSize="9" fontWeight="700" letterSpacing="1">CRAYONS</text>
-        <text x="39" y="31" fill="#08b8e8" fontFamily="ui-sans-serif, system-ui, sans-serif" fontSize="18" fontWeight="800">bridge</text>
-      </svg>
+      <img src="/logo/crayons-bridge.png" alt="" className="h-11 w-auto rounded-md bg-black" />
     </Link>
   );
 }

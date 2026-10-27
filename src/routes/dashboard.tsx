@@ -6,7 +6,7 @@ import { listTitles, resetCatalogToDraft } from "@/lib/bridge/titles";
 import { BRIDGE_LOOP_LANES, loopStageType } from "@/lib/bridge/loop-lanes";
 import { PublishingDesk } from "@/components/bridge/publishing-desk";
 import { ClearanceDesk } from "@/components/bridge/clearance-desk";
-import { getDashboardSession } from "@/lib/bridge/session";
+import { legacyCatalog } from "@/lib/bridge/legacy-catalog";
 
 export const Route = createFileRoute("/dashboard")({ component: Dashboard });
 
@@ -88,11 +88,12 @@ function DashboardBody() {
 
       <section className="rounded-2xl border border-line p-4">
         <p className="text-sm font-semibold">Catalog</p>
-        <p className="mt-1 text-sm text-muted">{titlesQ.isPending ? "Loading…" : `${titles.filter((title) => title.status === "DRAFT").length} draft · ${titles.length} titles · ${titles.length ? Math.round((titles.filter((title) => title.status === "DRAFT").length / titles.length) * 100) : 0}% still in draft`}</p>
+        <p className="mt-1 text-sm text-muted">{titlesQ.isPending ? "Loading…" : `Bridge library · ${titles.filter((title) => title.status === "DRAFT").length} draft · ${titles.length} titles`}</p>
         <div className="mt-3 h-2 overflow-hidden rounded-full bg-[#e7edf2]">
           <div className="h-full bg-[#102433]" style={{ width: `${titles.length ? Math.round((live.length / titles.length) * 100) : 0}%` }} />
         </div>
-        <p className="mt-2 text-xs text-muted">The bar is the share that is live. Money above is recorded license value only.</p>
+        <p className="mt-2 text-xs text-muted">The bar is the share that is live. Every Bridge record stays a draft. Money above is recorded license value only.</p>
+        <p className="mt-2 text-xs text-muted">Old catalog on file · {legacyCatalog.titles.filter((row) => row.source === "film").length} films · {legacyCatalog.titles.filter((row) => row.source === "draft").length} named drafts · {legacyCatalog.empty.reduce((sum, row) => sum + row.count, 0)} empty contacts. Held as drafts. Not written into this library.</p>
       </section>
 
       <section className="grid grid-cols-2 gap-3 sm:grid-cols-3">
