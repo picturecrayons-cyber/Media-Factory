@@ -43,6 +43,7 @@ ALTER TABLE public.bridge_buyer_interest
   ADD COLUMN IF NOT EXISTS license_fee_minor bigint,
   ADD COLUMN IF NOT EXISTS revenue_share_percent numeric(5,2),
   ADD COLUMN IF NOT EXISTS terms_status text NOT NULL DEFAULT 'not_proposed',
+  ADD COLUMN IF NOT EXISTS contract_reference text,
   ADD COLUMN IF NOT EXISTS updated_at timestamptz NOT NULL DEFAULT now(),
   ADD COLUMN IF NOT EXISTS updated_by text;
 
@@ -90,6 +91,12 @@ ALTER TABLE public.bridge_buyer_interest
 ALTER TABLE public.bridge_buyer_interest
   ADD CONSTRAINT bridge_buyer_interest_terms_status_chk
   CHECK (terms_status IN ('not_proposed', 'proposed', 'under_negotiation', 'agreed', 'contracted'));
+
+ALTER TABLE public.bridge_buyer_interest
+  DROP CONSTRAINT IF EXISTS bridge_buyer_interest_contract_evidence_chk;
+ALTER TABLE public.bridge_buyer_interest
+  ADD CONSTRAINT bridge_buyer_interest_contract_evidence_chk
+  CHECK (interest_level <> 'LICENSED' OR (terms_status = 'contracted' AND contract_reference IS NOT NULL AND length(trim(contract_reference)) >= 3));
 
 ALTER TABLE public.bridge_buyer_interest
   DROP CONSTRAINT IF EXISTS bridge_buyer_interest_currency_chk;
