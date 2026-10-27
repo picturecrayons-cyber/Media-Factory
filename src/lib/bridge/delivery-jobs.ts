@@ -21,7 +21,7 @@ const updateJobInput = z.object({
   jobId: z.string().uuid(),
   status: z.enum(["requested", "in_progress", "completed", "failed"]).optional(),
   assignedVendor: z.string().trim().max(200).nullable().optional(),
-  deliveryReceiptUrl: z.string().url().max(2048).nullable().optional(),
+  deliveryReceiptUrl: z.string().url().max(2048).refine((value) => value.startsWith("https://"), "Delivery receipt must use HTTPS").nullable().optional(),
 }).refine((v) => v.status !== undefined || v.assignedVendor !== undefined || v.deliveryReceiptUrl !== undefined, {
   message: "At least one field must be updated",
 });
@@ -53,6 +53,15 @@ async function loadTitleAccess(tx: Sql, titleId: string): Promise<TitleAccessRow
   `;
   if (!rows[0]) throw new Error("Title not found");
   return rows[0];
+}
+
+function isSecureReceiptUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" && Boolean(url.hostname) && !url.username && !url.password;
+  } catch {
+    return false;
+  }
 }
 
 function canReadJobsForTitle(actor: Actor, title: TitleAccessRow): boolean {
@@ -191,7 +200,7 @@ export const signOffDeliveryJob = createServerFn({ method: "POST" })
         throw new Error("Delivery job is already signed off");
       }
       if (current.status !== "completed") throw new Error("Only completed jobs can be signed off");
-      if (!current.delivery_receipt_url) throw new Error("A delivery receipt is required before sign-off");
+      if (!current.delivery_receipt_url || !isSecureReceiptUrl(current.delivery_receipt_url)) throw new Error("A valid HTTPS delivery receipt is required before sign-off");
       const [updated] = await tx<JobRow>`
         update public.bridge_delivery_jobs
         set status = 'approved', admin_sign_off = true, updated_at = now()
@@ -316,10 +325,32 @@ export const createBuyerInterest = createServerFn({ method: "POST" })
       }
       await writeAudit({
         actorUserId: actor.userId,
-        action: "buyer_interest.create",
+        action: existing[0] ? "buyer_interest.update" : "buyer_interest.create",
         entityType: "bridge_buyer_interest",
         entityId: row.id,
-        metadata: { titleId, conceptSubmissionId: conceptId, interestLevel: row.interest_level },
+        metadata: {
+          operation: existing[0] ? "re-register-interest" : "register-interest",
+          titleId,
+          conceptSubmissionId: conceptId,
+          before: existing[0] ? {
+            interestLevel: existing[0].interest_level,
+            commercialModel: existing[0].commercial_model,
+            currency: existing[0].currency,
+            licenseFeeMinor: existing[0].license_fee_minor,
+            revenueSharePercent: existing[0].revenue_share_percent,
+            termsStatus: existing[0].terms_status,
+            contractReference: existing[0].contract_reference,
+          } : null,
+          after: {
+            interestLevel: row.interest_level,
+            commercialModel: row.commercial_model,
+            currency: row.currency,
+            licenseFeeMinor: row.license_fee_minor,
+            revenueSharePercent: row.revenue_share_percent,
+            termsStatus: row.terms_status,
+            contractReference: row.contract_reference,
+          },
+        },
       }, tx);
       return row;
     });
@@ -383,8 +414,33 @@ export const updateBuyerInterest = createServerFn({ method: "POST" })
       const nextLevel = data.interestLevel ?? current.interest_level;
       const nextTermsStatus = data.termsStatus ?? current.terms_status;
       const nextContractRef = data.contractReference === undefined ? current.contract_reference : data.contractReference;
-      if (nextLevel === "LICENSED" && (!internal || nextTermsStatus !== "contracted" || !nextContractRef)) {
-        throw new Error("LICENSED requires an authorized internal operator, contracted terms, and a contract reference");
+      if (nextLevel === "LICENSED") {
+        if (!internal || nextTermsStatus !== "contracted" || !nextContractRef) {
+          throw new Error("LICENSED requires an authorized internal operator, contracted terms, and verified contract evidence");
+        }
+        if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(nextContractRef)) {
+          throw new Error("LICENSED requires a verified contract evidence record ID");
+        }
+        const targetRows = current.title_id
+          ? [{ title_id: current.title_id }]
+          : await tx<{ title_id: string }>`
+              select title_id from public.bridge_story_concept_submissions
+              where id = ${current.concept_submission_id}::uuid limit 1
+            `;
+        const targetTitleId = targetRows[0]?.title_id;
+        if (!targetTitleId) throw new Error("Could not resolve the buyer-interest title for contract verification");
+        const evidence = await tx<{ id: string }>`
+          select id
+          from public.bridge_contract_evidence
+          where id = ${nextContractRef}::uuid
+            and bridge_title_id = ${targetTitleId}
+            and status = 'verified'
+            and verified_by is not null
+            and verified_at is not null
+            and document_url like 'https://%'
+          limit 1
+        `;
+        if (!evidence[0]) throw new Error("Contract evidence is missing, unverified, or belongs to another title");
       }
       const [updated] = await tx<InterestRow>`
         update public.bridge_buyer_interest
@@ -408,8 +464,24 @@ export const updateBuyerInterest = createServerFn({ method: "POST" })
         entityType: "bridge_buyer_interest",
         entityId: current.id,
         metadata: {
-          before: { interestLevel: current.interest_level, termsStatus: current.terms_status },
-          after: { interestLevel: updated.interest_level, termsStatus: updated.terms_status },
+          before: {
+            interestLevel: current.interest_level,
+            commercialModel: current.commercial_model,
+            currency: current.currency,
+            licenseFeeMinor: current.license_fee_minor,
+            revenueSharePercent: current.revenue_share_percent,
+            termsStatus: current.terms_status,
+            contractReference: current.contract_reference,
+          },
+          after: {
+            interestLevel: updated.interest_level,
+            commercialModel: updated.commercial_model,
+            currency: updated.currency,
+            licenseFeeMinor: updated.license_fee_minor,
+            revenueSharePercent: updated.revenue_share_percent,
+            termsStatus: updated.terms_status,
+            contractReference: updated.contract_reference,
+          },
         },
       }, tx);
       return updated;

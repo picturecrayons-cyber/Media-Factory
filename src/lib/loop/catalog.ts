@@ -90,8 +90,10 @@ export const getLoopCatalog = createServerFn({ method: "GET" })
         and l.published = true
         and l.listed = true
         and l.status = 'approved'
-        and (p.window_start is null or p.window_start <= now())
-        and (p.window_end is null or p.window_end >= now())
+        and p.window_start is not null
+        and p.window_end is not null
+        and p.window_start < now()
+        and now() < p.window_end
       order by l.featured desc, l.created_at desc
       limit 100
     `;
@@ -184,7 +186,12 @@ export const getLoopTitleDetails = createServerFn({ method: "GET" })
       where (l.id = ${data.slugOrId} or l.slug = ${data.slugOrId})
         and p.authorization_status = 'authorized'
         and l.published = true
+        and l.listed = true
         and l.status = 'approved'
+        and p.window_start is not null
+        and p.window_end is not null
+        and p.window_start < now()
+        and now() < p.window_end
       limit 1
     `;
 
@@ -209,6 +216,12 @@ export const getLoopTitleDetails = createServerFn({ method: "GET" })
       where l.id != ${title.id}
         and p.authorization_status = 'authorized'
         and l.published = true
+        and l.listed = true
+        and l.status = 'approved'
+        and p.window_start is not null
+        and p.window_end is not null
+        and p.window_start < now()
+        and now() < p.window_end
       limit 6
     `;
 
