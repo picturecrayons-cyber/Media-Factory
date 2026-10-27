@@ -62,6 +62,20 @@ test("investor CTA requests reviewed access instead of silently signing up as Cr
   assert.doesNotMatch(home, /search=\{\{ role: "investor" \}\}/);
 });
 
+
+test("investor portfolio reads use an authenticated server function and server-resolved ownership", () => {
+  const route = read("../../routes/investor.tsx");
+  const investor = read("./investor.ts");
+  assert.match(route, /from "@\/lib\/bridge\/investor"/);
+  assert.doesNotMatch(route, /from "@\/lib\/db"|getSql\(/);
+  assert.match(investor, /createServerFn\(\{ method: "GET" \}\)/);
+  assert.match(investor, /\.middleware\(\[authMiddleware\]\)/);
+  assert.match(investor, /requireVerifiedActor\(context\.userId\)/);
+  assert.match(investor, /actor\.accountType !== "investor"/);
+  assert.match(investor, /where i\.investor_user_id = \$\{actor\.userId\}/);
+  assert.doesNotMatch(investor, /data\.userId|investorUserId/);
+});
+
 test("shared title workspace has an explicit role gate and Studio list scope", () => {
   const workspace = read("../../routes/workspace.tsx");
   const gate = read("../../components/bridge/gate.tsx");
