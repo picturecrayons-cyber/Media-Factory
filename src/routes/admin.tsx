@@ -1,10 +1,11 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { Button } from "@/components/ui/button";
-import { listTitles, listAuditLogs } from "@/lib/bridge/titles";
+import { listTitles, listAuditLogs, importNamedLegacyDrafts } from "@/lib/bridge/titles";
 import { listEnquiries } from "@/lib/bridge/leads";
 import { CreateTitleForm } from "@/components/bridge/title-desk";
 import { listLoopPublicationReadiness } from "@/lib/bridge/loop-publication";
@@ -36,6 +37,8 @@ function AdminControlPlane() {
 
 function AdminBody({ actor }: { actor: any }) {
   const [legacyQuery, setLegacyQuery] = useState("");
+  const [peopleQuery, setPeopleQuery] = useState("");
+  const qc = useQueryClient();
   const titlesQ = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles() });
   const auditQ = useQuery({ queryKey: ["bridge-audit"], queryFn: () => listAuditLogs() });
   const distQ = useQuery({ queryKey: ["loop-publication-readiness"], queryFn: () => listLoopPublicationReadiness() });
@@ -52,6 +55,19 @@ function AdminBody({ actor }: { actor: any }) {
   const live = distribution.filter((title) => title.publication?.published).length;
   const attention = titles.filter((title) => ["PREPARING", "QC_REVIEW", "RIGHTS_REVIEW", "LICENSING_READY"].includes(title.status)).slice(0, 5);
   const loading = titlesQ.isPending;
+  const importDrafts = useMutation({
+    mutationFn: () => importNamedLegacyDrafts(),
+    onSuccess: async (result) => {
+      toast.success(result.added.length ? `Added ${result.added.length} drafts.` : "Those drafts are already in the library.");
+      await qc.invalidateQueries({ queryKey: ["bridge-titles"] });
+    },
+    onError: (error) => toast.error(error instanceof Error ? error.message : "Could not add drafts"),
+  });
+  const needle = peopleQuery.trim().toLowerCase();
+  const people = profiles.filter((profile) => {
+    if (!needle) return true;
+    return [profile.displayName, profile.email, profile.accountType, profile.organizationName || ""].join(" ").toLowerCase().includes(needle);
+  });
 
   return (
     <BridgeShell actor={actor} title="Admin dashboard">
@@ -110,6 +126,44 @@ function AdminBody({ actor }: { actor: any }) {
             {!enquiriesQ.isPending && !enquiriesQ.isError && (enquiriesQ.data?.enquiries.length ?? 0) === 0 ? (
               <p className="py-4 text-sm text-muted">No enquiries yet.</p>
             ) : null}
+          </div>
+        </section>
+
+        <section className="rounded-2xl border border-line bg-surface p-4 sm:p-5">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <h3 className="font-display text-xl font-semibold">People</h3>
+              <p className="mt-1 text-sm text-muted">Bridge accounts, then the old contacts. Test names are not added as titles.</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <input id="people-search" name="people" autoComplete="off" value={peopleQuery} onChange={(event) => setPeopleQuery(event.target.value)} placeholder="Name or email" className="h-10 w-full rounded-xl border border-line bg-bg px-3 text-sm sm:w-56" />
+              {actor.internalRole === "super_admin" ? (
+                <button type="button" disabled={importDrafts.isPending} onClick={() => importDrafts.mutate()} className="h-10 rounded-full bg-[#102433] px-4 text-sm font-semibold text-white">
+                  {importDrafts.isPending ? "Adding…" : "Add named drafts"}
+                </button>
+              ) : null}
+            </div>
+          </div>
+          <div className="mt-4 divide-y divide-line">
+            {profilesQ.isPending ? <p className="py-3 text-sm text-muted">Loading accounts…</p> : null}
+            {people.map((profile) => (
+              <article key={profile.userId} className="py-3">
+                <p className="text-sm font-semibold">{profile.displayName || "No name"}</p>
+                <p className="text-xs text-muted">{profile.email} · {profile.accountType}{profile.internalRole ? ` · ${profile.internalRole}` : ""}{profile.organizationName ? ` · ${profile.organizationName}` : ""}</p>
+              </article>
+            ))}
+          </div>
+          <h4 className="mt-5 text-sm font-semibold">Old contacts with no title · {legacyCatalog.empty.reduce((sum, row) => sum + row.count, 0)}</h4>
+          <div className="mt-2 divide-y divide-line">
+            {legacyCatalog.empty.filter((row) => !needle || [row.owner, row.email, row.phone].join(" ").toLowerCase().includes(needle)).map((row) => (
+              <article key={row.email || row.owner} className="flex items-center justify-between gap-3 py-2">
+                <div>
+                  <p className="text-sm">{row.owner || "Owner not named"}</p>
+                  <p className="text-xs text-muted">{row.email || "No email"}{row.phone ? ` · ${row.phone}` : ""}</p>
+                </div>
+                <span className="text-sm tabular-nums">{row.count}</span>
+              </article>
+            ))}
           </div>
         </section>
 

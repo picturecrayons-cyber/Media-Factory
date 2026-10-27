@@ -12,7 +12,7 @@ import { writeAudit } from "./audit";
 import { assertNotDevUser } from "./guards";
 import { loopStageType } from "./loop-lanes";
 import { assertBuyerPublishable, getBuyerGateStatus } from "./buyer-visibility";
-import { FILE_STORAGE_ENABLED } from "./mvp-lock";
+import { legacyCatalog } from "./legacy-catalog";
 
 type TitleRow = {
   id: string;
@@ -337,6 +337,61 @@ export const createTitle = createServerFn({ method: "POST" })
     const title = await loadTitle(id);
     if (!title) throw new Error("Title create failed");
     return { title, submission: isPublicSubmission };
+  });
+
+const LEGACY_DRAFT_SKIP = new Set(["jajlskj", "test", "sdsd", "test film", "aasss"]);
+
+export const importNamedLegacyDrafts = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    if (actor.internalRole !== "super_admin") throw new Error("Super admin only");
+    const sql = await getSql();
+    await ensureOwnerOrganizationColumn(sql);
+    const existing = await sql<{ name: string }>`select name from bridge_titles`;
+    const have = new Set(existing.map((row) => row.name.trim().toLowerCase()));
+    const added: string[] = [];
+    const already: string[] = [];
+    const skipped: string[] = [];
+    for (const row of legacyCatalog.titles.filter((item) => item.source === "draft")) {
+      const name = row.title.trim();
+      if (LEGACY_DRAFT_SKIP.has(name.toLowerCase())) {
+        skipped.push(name);
+        continue;
+      }
+      if (have.has(name.toLowerCase())) {
+        already.push(name);
+        continue;
+      }
+      const id = randomBytes(16).toString("hex");
+      const synopsis = `Old draft kept for ${row.owner || "the owner"}. ${row.email || "No email"}.`;
+      await sql`
+        insert into bridge_titles (
+          id, slug, name, owner_user_id, owner_account_type, status,
+          synopsis, language, content_type, credits
+        ) values (
+          ${id}, ${slugify(name, id)}, ${name}, ${actor.userId}, ${actor.accountType},
+          ${"DRAFT"}, ${synopsis}, ${row.language || "Malayalam"},
+          ${loopStageType(row.type)}, ${JSON.stringify([
+            { role: "Owner", name: row.owner || "Not named" },
+            { role: "Email", name: row.email || "" },
+            { role: "Phone", name: row.phone || "" },
+          ])}::jsonb
+        )
+      `;
+      await recordTransition({ titleId: id, from: null, to: "DRAFT", actorUserId: actor.userId, note: "old named draft" });
+      await writeAudit({
+        actorUserId: actor.userId,
+        action: "title.create",
+        entityType: "bridge_title",
+        entityId: id,
+        metadata: { legacyDraft: true, email: row.email },
+      });
+      have.add(name.toLowerCase());
+      added.push(name);
+    }
+    return { added, already, skipped };
   });
 
 export const listTitles = createServerFn({ method: "GET" })
