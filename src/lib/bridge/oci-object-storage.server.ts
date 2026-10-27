@@ -165,11 +165,47 @@ async function resolveNamespace(cfg: OciConfig) {
   return ns;
 }
 
+const MIN_PAR_EXPIRY_SECONDS = 30;
+const MAX_PAR_EXPIRY_SECONDS = 3_600;
+
+function validateParExpiry(expiresIn: number) {
+  if (
+    !Number.isSafeInteger(expiresIn) ||
+    expiresIn < MIN_PAR_EXPIRY_SECONDS ||
+    expiresIn > MAX_PAR_EXPIRY_SECONDS
+  ) {
+    throw new Error(
+      `OCI PAR expiry must be an integer between ${MIN_PAR_EXPIRY_SECONDS} and ${MAX_PAR_EXPIRY_SECONDS} seconds`,
+    );
+  }
+}
+
+function validateParAccessUri(accessUri: string, region: string) {
+  const expected = new URL(endpoint(region));
+  let parsed: URL;
+  try {
+    parsed = new URL(accessUri, expected);
+  } catch {
+    throw new Error("OCI pre-authenticated request returned an invalid access URI");
+  }
+  if (
+    parsed.protocol !== "https:" ||
+    parsed.origin !== expected.origin ||
+    parsed.username !== "" ||
+    parsed.password !== "" ||
+    parsed.port !== ""
+  ) {
+    throw new Error("OCI pre-authenticated request returned an access URI outside the allowed Object Storage origin");
+  }
+  return parsed.toString();
+}
+
 async function createPar(opts: {
   key: string;
   accessType: "ObjectWrite" | "ObjectRead";
   expiresIn: number;
 }) {
+  validateParExpiry(opts.expiresIn);
   const cfg = config();
   const namespace = await resolveNamespace(cfg);
   const timeExpires = new Date(Date.now() + opts.expiresIn * 1000).toISOString();
@@ -185,7 +221,7 @@ async function createPar(opts: {
   const parsed = (await res.json()) as { accessUri?: string };
   if (!parsed.accessUri) throw new Error("OCI pre-authenticated request returned no access URI");
   return {
-    url: new URL(parsed.accessUri, endpoint(cfg.region)).toString(),
+    url: validateParAccessUri(parsed.accessUri, cfg.region),
     bucket: cfg.bucket,
     namespace,
   };
