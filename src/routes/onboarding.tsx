@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { RedirectToSignIn } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { completeOnboarding } from "@/lib/bridge/profiles";
@@ -88,6 +88,7 @@ function CheckGroup({
 function Onboarding() {
   const { user, isPending } = useCurrentUserState();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const sessionQ = useQuery({
     queryKey: ["bridge-session", user?.id],
     queryFn: getBridgeSessionWithTimeout,
@@ -266,6 +267,8 @@ function Onboarding() {
       });
 
       try { sessionStorage.removeItem("bridge-invite"); } catch { /* ignore */ }
+      void queryClient.invalidateQueries({ queryKey: ["bridge-session"] });
+      void queryClient.invalidateQueries({ queryKey: ["bridge-titles"] });
       void navigate({ to: "/studio", replace: true });
     } catch (err) {
       setError(publicOnboardingError(err));
