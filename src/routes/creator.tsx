@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { StudioStorage } from "@/components/bridge/studio-storage";
-import { CreateTitleForm, TitleList } from "@/components/bridge/title-desk";
+import { CreateTitleForm, OwnerReport, TitleList } from "@/components/bridge/title-desk";
 
 export const Route = createFileRoute("/creator")({ component: Creator });
 
@@ -14,6 +14,7 @@ function Creator() {
           <div className="space-y-8">
             <CreateTitleForm defaults={{ producer: actor.displayName, language: "Malayalam", country: "India", contentType: "Film" }} />
             <TitleList empty="No titles yet." />
+            <OwnerReport />
             <StudioStorage />
           </div>
         </BridgeShell>

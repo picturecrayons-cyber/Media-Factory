@@ -18,6 +18,28 @@ const STATUS: Record<string, string> = {
   DELIVERED: "Delivered",
 };
 
+export function OwnerReport() {
+  const titlesQ = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles() });
+  const titles = titlesQ.data?.titles ?? [];
+  const review = titles.filter((title) => ["PREPARING", "QC_REVIEW", "RIGHTS_REVIEW"].includes(title.status));
+  const listed = titles.filter((title) => ["LICENSING_READY", "LIVE_FOR_BUYERS", "IN_NEGOTIATION", "LICENSED", "DELIVERED"].includes(title.status));
+  return (
+    <section className="rounded-2xl border border-line bg-white p-4">
+      <h2 className="text-lg font-semibold">Reports</h2>
+      <p className="mt-1 text-sm text-muted">{titlesQ.isPending ? "Loading…" : `${titles.length} titles · ${review.length} in review · ${listed.length} cleared or listed`}</p>
+      <ul className="mt-3 divide-y divide-line">
+        {listed.map((title) => (
+          <li key={title.id} className="flex items-center justify-between gap-3 py-2 text-sm">
+            <Link to="/title/$id" params={{ id: title.id }} className="font-semibold">{title.name}</Link>
+            <span className="text-muted">{STATUS[title.status] || title.status}</span>
+          </li>
+        ))}
+        {!titlesQ.isPending && listed.length === 0 ? <li className="py-2 text-sm text-muted">Nothing is licensed yet.</li> : null}
+      </ul>
+    </section>
+  );
+}
+
 export function TitleList({ empty, query = "" }: { empty: string; query?: string }) {
   const titlesQ = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles() });
   const titles = (titlesQ.data?.titles ?? []).filter((t) => !query || `${t.name} ${t.language} ${t.year ?? ""}`.toLowerCase().includes(query.toLowerCase()));

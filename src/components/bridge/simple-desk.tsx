@@ -9,7 +9,8 @@ import { advanceTitle, updateTitle } from "@/lib/bridge/titles";
 import { nextStatus } from "@/lib/bridge/lifecycle";
 import type { BridgeActor } from "@/lib/bridge/session";
 import type { TitleStatus } from "@/lib/bridge/types";
-import { toast } from "sonner";
+import { getTitleProcess, openTitleReview, setClearance } from "@/lib/bridge/clearance";
+import { reviewAdminTitle } from "@/lib/bridge/admin-workstations";
 
 function DeskVideo({ url }: { url: string }) {
   const ref = useRef<HTMLVideoElement>(null);
@@ -493,6 +494,8 @@ export function SimpleDesk({
         ) : null}
       </div>
 
+      <TitleProcess titleId={titleId} admin={admin} />
+
       <DeskOffers titleId={titleId} staff={staff} offers={offers.data?.offers ?? []} />
       {staff && (log.data?.rows.length ?? 0) > 0 ? (
         <section className="rounded-2xl border border-line bg-white p-4">
@@ -570,6 +573,78 @@ export function SimpleDesk({
           </div>
         </div>
       ) : null}
+    </section>
+  );
+}
+
+function TitleProcess({ titleId, admin }: { titleId: string; admin: boolean }) {
+  const qc = useQueryClient();
+  const process = useQuery({ queryKey: ["title-process", titleId], queryFn: () => getTitleProcess({ data: { titleId } }) });
+  const refresh = async () => {
+    await Promise.all([
+      qc.invalidateQueries({ queryKey: ["title-process", titleId] }),
+      qc.invalidateQueries({ queryKey: ["bridge-title", titleId] }),
+      qc.invalidateQueries({ queryKey: ["bridge-titles"] }),
+    ]);
+  };
+  const run = useMutation({
+    mutationFn: async (step: "open" | "check" | "owner" | "verify" | "certify" | "clear") => {
+      if (step === "open") return openTitleReview({ data: { titleId } });
+      if (step === "clear") return reviewAdminTitle({ data: { titleId, decision: "APPROVE", notes: "Cleared for licensing" } });
+      return setClearance({ data: { titleId, step } });
+    },
+    onSuccess: async () => {
+      toast.success("Saved.");
+      await refresh();
+    },
+    onError: (error) => toast.error(error instanceof Error ? error.message : "Could not update"),
+  });
+  const row = process.data;
+  const status = row?.status ?? "";
+  const word = status === "DRAFT" || status === "UPLOADING"
+    ? "The files are here. QC is not open yet."
+    : status === "PREPARING"
+      ? "QC is open. Check the files, the owner, then the preview."
+      : status === "QC_REVIEW" || status === "RIGHTS_REVIEW"
+        ? "QC is in progress."
+        : status === "LICENSING_READY"
+          ? "Cleared for licensing. Loop is still closed."
+          : status === "LIVE_FOR_BUYERS"
+            ? "Listed for buyers. Loop still needs its own authorization."
+            : "This record stays where it is until the next check is saved.";
+  return (
+    <section className="rounded-2xl border border-line bg-white p-4">
+      <h2 className="text-lg font-semibold">Next</h2>
+      <p className="mt-1 text-sm text-muted">{process.isPending ? "Loading…" : word}</p>
+      {row ? (
+        <ul className="mt-3 grid grid-cols-2 gap-2">
+          {row.checks.map((item) => (
+            <li key={item.label} className="text-sm">
+              <span className={item.ok ? "font-semibold" : "text-muted"}>{item.ok ? "Yes" : "No"}</span>
+              <span className="text-muted"> · {item.label}</span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {admin && row ? (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {status === "DRAFT" || status === "UPLOADING" ? (
+            <button type="button" disabled={run.isPending || !row.ready} onClick={() => run.mutate("open")} className="rounded-full bg-[#102433] px-4 py-2 text-sm font-semibold text-white disabled:opacity-40">Open QC</button>
+          ) : null}
+          {status === "PREPARING" || status === "QC_REVIEW" ? (
+            <>
+              <button type="button" disabled={run.isPending || row.checked || !row.ready} onClick={() => run.mutate("check")} className="rounded-full border border-line px-4 py-2 text-sm font-semibold disabled:opacity-40">{row.checked ? "Files checked" : "Check files"}</button>
+              <button type="button" disabled={run.isPending || !row.checked || row.ownerVerified} onClick={() => run.mutate("owner")} className="rounded-full border border-line px-4 py-2 text-sm font-semibold disabled:opacity-40">{row.ownerVerified ? "Owner verified" : "Verify owner"}</button>
+              <button type="button" disabled={run.isPending || !row.ownerVerified || row.verified} onClick={() => run.mutate("verify")} className="rounded-full border border-line px-4 py-2 text-sm font-semibold disabled:opacity-40">{row.verified ? "Preview verified" : "Verify preview"}</button>
+              <button type="button" disabled={run.isPending || !row.verified || row.certified} onClick={() => run.mutate("certify")} className="rounded-full bg-[#102433] px-4 py-2 text-sm font-semibold text-white disabled:opacity-40">{row.certified ? "QC passed" : "Pass QC"}</button>
+            </>
+          ) : null}
+          {status === "RIGHTS_REVIEW" ? (
+            <button type="button" disabled={run.isPending} onClick={() => run.mutate("clear")} className="rounded-full bg-[#102433] px-4 py-2 text-sm font-semibold text-white">Clear for licensing</button>
+          ) : null}
+        </div>
+      ) : null}
+      <p className="mt-3 text-sm text-muted">Loop is not published from here.</p>
     </section>
   );
 }

@@ -5,7 +5,8 @@ import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import { assertNotDevUser } from "./guards";
 import { requireVerifiedActor } from "./session";
-import { writeAudit } from "./audit";
+import { canReadTitle } from "./rbac";
+import { loadTitle, recordTransition } from "./titles";
 
 const REQUIRED = ["Data", "Film", "Poster"];
 
@@ -79,7 +80,7 @@ export const setClearance = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(z.object({
     titleId: z.string().min(8),
-    step: z.enum(["check", "verify", "certify"]),
+    step: z.enum(["check", "owner", "verify", "certify"]),
   }))
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
@@ -93,7 +94,8 @@ export const setClearance = createServerFn({ method: "POST" })
       const missing = queue.checks.filter((item) => !item.ok && REQUIRED.includes(item.label as typeof REQUIRED[number])).map((item) => item.label);
       throw new Error(`Still missing: ${missing.join(", ")}`);
     }
-    if (data.step === "verify" && !queue.checked) throw new Error("Check the title first");
+    if (data.step === "owner" && !queue.checked) throw new Error("Check the files first");
+    if (data.step === "verify" && !queue.ownerVerified) throw new Error("Verify the owner first");
     if (data.step === "certify" && !queue.verified) throw new Error("Verify the preview first");
 
     let status = queue.rawStatus;
@@ -107,19 +109,21 @@ export const setClearance = createServerFn({ method: "POST" })
       status = "RIGHTS_REVIEW";
     }
     const checked = true;
-    const verified = data.step !== "check";
+    const ownerVerified = data.step === "owner" || data.step === "verify" || data.step === "certify" || queue.ownerVerified;
+    const verified = data.step === "verify" || data.step === "certify" || queue.verified;
     const certified = data.step === "certify";
     await sql`
-      insert into bridge_clearance (title_id, checked, verified, certified, updated_by, updated_at)
-      values (${data.titleId}, ${checked}, ${verified}, ${certified}, ${actor.userId}, now())
+      insert into bridge_clearance (title_id, checked, owner_verified, verified, certified, updated_by, updated_at)
+      values (${data.titleId}, ${checked}, ${ownerVerified}, ${verified}, ${certified}, ${actor.userId}, now())
       on conflict (title_id) do update set
         checked = bridge_clearance.checked or excluded.checked,
+        owner_verified = bridge_clearance.owner_verified or excluded.owner_verified,
         verified = bridge_clearance.verified or excluded.verified,
         certified = bridge_clearance.certified or excluded.certified,
         updated_by = excluded.updated_by,
         updated_at = now()
     `;
-    const word = data.step === "check" ? "Checking complete" : data.step === "verify" ? "Preview verified" : "QC passed";
+    const word = data.step === "check" ? "Files checked" : data.step === "owner" ? "Owner verified" : data.step === "verify" ? "Preview verified" : "QC passed";
     await writeAudit({ actorUserId: actor.userId, action: `clearance.${data.step}`, entityType: "bridge_title", entityId: data.titleId, metadata: { status } });
     await notice(sql, { titleId: data.titleId, titleName: queue.name, ownerUserId: queue.ownerUserId, actorUserId: actor.userId, actorName: actor.displayName || actor.email, word });
     return { ok: true, word };
@@ -128,9 +132,9 @@ export const setClearance = createServerFn({ method: "POST" })
 async function listOne(sql: Awaited<ReturnType<typeof getSql>>, titleId: string) {
   const listed = await sql<{
     id: string; name: string; status: string; language: string | null; synopsis: string | null; owner_user_id: string;
-    checked: boolean | null; verified: boolean | null;
+    checked: boolean | null; owner_verified: boolean | null; verified: boolean | null;
   }>`
-    select t.id, t.name, t.status, t.language, t.synopsis, t.owner_user_id, c.checked, c.verified
+    select t.id, t.name, t.status, t.language, t.synopsis, t.owner_user_id, c.checked, c.owner_verified, c.verified
     from bridge_titles t
     left join bridge_clearance c on c.title_id = t.id
     where t.id = ${titleId}
@@ -154,6 +158,7 @@ async function listOne(sql: Awaited<ReturnType<typeof getSql>>, titleId: string)
     checks,
     ready: checks.every((item) => item.ok),
     checked: Boolean(title.checked) || title.status !== "PREPARING",
+    ownerVerified: Boolean(title.owner_verified),
     verified: Boolean(title.verified),
   };
 }
@@ -163,12 +168,89 @@ async function ensureClearance(sql: Awaited<ReturnType<typeof getSql>>) {
     create table if not exists bridge_clearance (
       title_id text primary key,
       checked boolean not null default false,
+      owner_verified boolean not null default false,
       verified boolean not null default false,
       certified boolean not null default false,
       updated_by text,
       updated_at timestamptz not null default now()
     )
   `);
+  await sql.query(`alter table bridge_clearance add column if not exists owner_verified boolean not null default false`);
+}
+
+export const getTitleProcess = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .validator(z.object({ titleId: z.string().min(8) }))
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    const title = await loadTitle(data.titleId);
+    if (!title || !canReadTitle(actor, title)) throw new Error("Not found");
+    const sql = await getSql();
+    await ensureClearance(sql);
+    const row = await readProcess(sql, data.titleId);
+    if (!row) throw new Error("Not found");
+    return row;
+  });
+
+export const openTitleReview = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({ titleId: z.string().min(8) }))
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    if (actor.internalRole !== "super_admin" && actor.internalRole !== "admin") throw new Error("Forbidden");
+    const sql = await getSql();
+    await ensureClearance(sql);
+    const row = await readProcess(sql, data.titleId);
+    if (!row) throw new Error("Not found");
+    if (!row.ready) {
+      const missing = row.checks.filter((item) => item.required && !item.ok).map((item) => item.label);
+      throw new Error(`Still missing: ${missing.join(", ")}`);
+    }
+    let status = row.status;
+    const path = status === "DRAFT" ? ["UPLOADING", "PREPARING"] : status === "UPLOADING" ? ["PREPARING"] : [];
+    for (const to of path) {
+      await recordTransition({ titleId: data.titleId, from: status as "DRAFT" | "UPLOADING", to: to as "UPLOADING" | "PREPARING", actorUserId: actor.userId, note: "Opened for QC" });
+      status = to;
+    }
+    return { ok: true, status };
+  });
+
+async function readProcess(sql: Awaited<ReturnType<typeof getSql>>, titleId: string) {
+  const listed = await sql<{
+    id: string; name: string; status: string; language: string | null; synopsis: string | null;
+    checked: boolean | null; owner_verified: boolean | null; verified: boolean | null; certified: boolean | null;
+  }>`
+    select t.id, t.name, t.status, t.language, t.synopsis, c.checked, c.owner_verified, c.verified, c.certified
+    from bridge_titles t
+    left join bridge_clearance c on c.title_id = t.id
+    where t.id = ${titleId}
+    limit 1
+  `;
+  const title = listed[0];
+  if (!title) return null;
+  const assets = await sql<{ kind: string }>`
+    select distinct kind from bridge_assets where title_id = ${titleId} and coalesce(byte_size, 0) > 0
+  `;
+  const has = (kinds: string[]) => assets.some((asset) => kinds.includes(asset.kind));
+  const checks = [
+    { label: "Data", ok: Boolean(title.name && title.language && title.synopsis), required: true },
+    { label: "Film", ok: has(["master", "screener"]), required: true },
+    { label: "Poster", ok: has(["poster_vertical", "poster", "poster_horizontal", "thumbnail"]), required: true },
+    { label: "Trailer", ok: has(["trailer"]), required: false },
+    { label: "English subtitles", ok: has(["subtitle"]), required: false },
+    { label: "Certificate", ok: has(["censor_certificate"]), required: false },
+  ];
+  return {
+    status: title.status,
+    checks,
+    ready: checks.filter((item) => item.required).every((item) => item.ok),
+    checked: Boolean(title.checked),
+    ownerVerified: Boolean(title.owner_verified),
+    verified: Boolean(title.verified),
+    certified: Boolean(title.certified) || title.status === "RIGHTS_REVIEW" || title.status === "LICENSING_READY" || title.status === "LIVE_FOR_BUYERS",
+  };
 }
 
 async function notice(sql: Awaited<ReturnType<typeof getSql>>, input: {
