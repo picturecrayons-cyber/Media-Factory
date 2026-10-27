@@ -152,9 +152,9 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
         <>
           {stage === "Prepare" ? (
             <div className="space-y-3">
-              <p>
-                Lifecycle: {title.status}. QC: {workflow.data?.qc?.status ?? "Not reviewed"}. Upload
-                verified master and artwork below before submitting.
+              <p className="text-sm text-muted">
+                Keep adding files and editing your draft. When you’re ready, submit the package for
+                Network / Curation review. Submission closes filmmaker edits while QC and Rights checks run.
               </p>
               {canOperateOnTitle(actor, title, "title.advance_upload", "title.ingest_internal") &&
               ["DRAFT", "UPLOADING", "PREPARING"].includes(title.status)
@@ -163,7 +163,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                       ? "Start ingest"
                       : title.status === "UPLOADING"
                         ? "Prepare package"
-                        : "Submit for QC",
+                        : "Submit to Network / Curation",
                     () =>
                       advanceTitle({
                         data: {
