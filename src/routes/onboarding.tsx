@@ -158,7 +158,7 @@ function Onboarding() {
   const [busy, setBusy] = useState(false);
   const submitInFlight = useRef(false);
   const [retrying, setRetrying] = useState(false);
-  const [draftLoaded, setDraftLoaded] = useState(false);
+  const [draftLoadedFor, setDraftLoadedFor] = useState<string | null>(null);
   const [draftStatus, setDraftStatus] = useState("Draft is saved only in this browser.");
   const draftKey = user?.id ? `${DRAFT_KEY_PREFIX}${user.id}` : null;
 
@@ -207,12 +207,12 @@ function Onboarding() {
     } catch {
       setDraftStatus("Could not restore the local draft. You can continue or save a new draft.");
     } finally {
-      setDraftLoaded(true);
+      setDraftLoadedFor(draftKey);
     }
   }, [draftKey, isPending]);
 
   useEffect(() => {
-    if (!draftKey || !draftLoaded) return;
+    if (!draftKey || draftLoadedFor !== draftKey) return;
     try {
       window.localStorage.setItem(draftKey, JSON.stringify(currentDraft));
       setDraftStatus("Draft saved in this browser.");
@@ -221,7 +221,7 @@ function Onboarding() {
     }
   // currentDraft is an intentional snapshot of every intake field.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [draftKey, draftLoaded, displayName, accountType, organizationName, titleName, originalTitle, contentType, language, additionalLanguages, year, runtimeMinutes, synopsis, countryOfOrigin, releaseDate, director, producer, territories, rightsLanguages, media, windowStart, windowEnd, exclusivity, sublicensingAllowed, promotionalRights, rightsBasis, authorizationAttested, screenerAccess, destinations]);
+  }, [draftKey, draftLoadedFor, displayName, accountType, organizationName, titleName, originalTitle, contentType, language, additionalLanguages, year, runtimeMinutes, synopsis, countryOfOrigin, releaseDate, director, producer, territories, rightsLanguages, media, windowStart, windowEnd, exclusivity, sublicensingAllowed, promotionalRights, rightsBasis, authorizationAttested, screenerAccess, destinations]);
 
   // Preserve the role chosen during signup instead of silently defaulting
   // every new account to Creator when onboarding opens.
