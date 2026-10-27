@@ -249,6 +249,33 @@ function Onboarding() {
   }
   if (!user) return <RedirectToSignIn />;
 
+  if (submittedTitleId) {
+    return (
+      <main className="grid min-h-screen place-items-center bg-bg p-6">
+        <div className="w-full max-w-lg space-y-5 rounded-2xl border border-line bg-surface p-7">
+          <BrandMark />
+          <h1 className="font-display text-2xl font-semibold">Submission received</h1>
+          <p className="text-sm leading-relaxed text-muted">
+            Your title submission has been recorded as DRAFT. It is not approved, licensed, or visible to buyers. Licensing Ready is not granted by this form.
+            Bridge must verify the master, screener, authorization evidence, legal clearance, QC and rights package before buyers can see it.
+          </p>
+          <div className="rounded-xl border border-line bg-elevated p-4 text-sm">
+            <p className="font-semibold text-fg">Next required evidence</p>
+            <ul className="mt-2 space-y-1.5 text-muted">
+              <li>• Upload authorization / chain-of-title evidence</li>
+              <li>• Upload a private Bridge screener</li>
+              <li>• Upload the approved master and artwork</li>
+              <li>• Complete QC and Legal review</li>
+            </ul>
+          </div>
+          <Button className="w-full" onClick={() => void navigate({ to: "/title/$id", params: { id: submittedTitleId } })}>
+            Open title workspace
+          </Button>
+        </div>
+      </main>
+    );
+  }
+
   if (sessionQ.isError) {
     async function retrySession() {
       if (retrying) return;
@@ -508,25 +535,26 @@ function Onboarding() {
                   <option value="PRODUCER_AUTHORITY">Producer authority</option>
                 </select>
               </label>
-              <label className="text-sm font-medium">Authorization evidence type *
+              <label className="block text-sm font-medium">Authorization evidence to provide *
                 <select required value={authorizationEvidenceType} onChange={(e) => setAuthorizationEvidenceType(e.target.value as typeof authorizationEvidenceType)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5">
-                  <option value="">Select evidence type</option>
+                  <option value="">Choose evidence type</option>
                   <option value="RIGHTS_AGREEMENT">Rights agreement</option>
-                  <option value="CHAIN_OF_TITLE">Chain of title</option>
+                  <option value="CHAIN_OF_TITLE">Chain-of-title documents</option>
                   <option value="AUTHORIZATION_LETTER">Authorization letter</option>
                   <option value="DISTRIBUTION_AGREEMENT">Distribution agreement</option>
-                  <option value="OTHER">Other</option>
+                  <option value="OTHER">Other supporting evidence</option>
                 </select>
+                <span className="mt-1 block text-xs text-muted">This records the evidence type you intend to provide; it does not mark the document as uploaded or verified.</span>
               </label>
               <label className="flex items-start gap-3 rounded-xl border border-line bg-elevated p-4 text-sm">
                 <input required type="checkbox" checked={authorizationAttested} onChange={(e) => setAuthorizationAttested(e.target.checked)} className="mt-0.5 accent-current" />
                 <span>I confirm that I am authorized to submit and license the selected rights. I understand Bridge will require supporting authorization / chain-of-title evidence before Licensing Ready.</span>
               </label>
-              <label className="text-sm font-medium">Screener status *
-                <select value={screenerAccess} onChange={(e) => setScreenerAccess(e.target.value as typeof screenerAccess)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5">
-                  <option value="SCREENER_PENDING">I will upload a screener in Bridge after submission</option>
-                  <option value="BRIDGE_PRIVATE_SCREENER">Private Bridge screener is ready to upload</option>
+              <label className="text-sm font-medium">Screener upload
+                <select value="SCREENER_PENDING" disabled className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5">
+                  <option value="SCREENER_PENDING">Upload after submission in the private title workspace</option>
                 </select>
+                <span className="mt-1 block text-xs text-muted">No screener file is uploaded by this form. The submission remains pending until a private asset is uploaded and verified.</span>
               </label>
               <CheckGroup label="Intended delivery destinations" values={DESTINATIONS} selected={destinations} onChange={(v, c) => toggle(setDestinations, destinations, v, c)} required />
             </section>
