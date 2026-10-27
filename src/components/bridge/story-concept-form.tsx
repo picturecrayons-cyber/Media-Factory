@@ -20,6 +20,8 @@ const GENRES = [
   "Other",
 ];
 
+type EstimatedBudgetRange = "Under 25 Lakhs" | "25–50 Lakhs" | "50 Lakhs – 1 Cr" | "1–3 Cr" | "3–10 Cr" | "10+ Cr";
+
 const PLATFORMS = [
   "OTT",
   "Theatrical",
@@ -38,7 +40,7 @@ export function StoryConceptForm() {
   const [language, setLanguage] = useState("Malayalam");
   const [genre, setGenre] = useState<string[]>([]);
   const [targetPlatforms, setTargetPlatforms] = useState<string[]>([]);
-  const [estimatedBudgetRange, setEstimatedBudgetRange] = useState("");
+  const [estimatedBudgetRange, setEstimatedBudgetRange] = useState<EstimatedBudgetRange | "">("");
   const [treatmentUrl, setTreatmentUrl] = useState("");
   const [screenplayUrl, setScreenplayUrl] = useState("");
 
@@ -140,7 +142,7 @@ export function StoryConceptForm() {
         Estimated budget range
         <select
           value={estimatedBudgetRange}
-          onChange={(e) => setEstimatedBudgetRange(e.target.value)}
+          onChange={(e) => setEstimatedBudgetRange(e.target.value as EstimatedBudgetRange | "")}
           className="mt-1 h-11 w-full rounded-lg border border-line-strong bg-elevated px-3"
         >
           <option value="">Select a budget range</option>
