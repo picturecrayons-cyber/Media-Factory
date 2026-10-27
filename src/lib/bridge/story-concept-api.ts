@@ -1,7 +1,6 @@
 /**
  * Story / Concept submission – server functions (RPC).
- * Must NOT be named *.server.ts — client components call createServerFn via RPC.
- * Pattern matches titles.ts.
+ * Pattern matches titles.ts (not named *.server.ts).
  */
 
 import { createServerFn } from "@tanstack/react-start";
@@ -10,11 +9,12 @@ import { randomBytes } from "node:crypto";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import { requireVerifiedActor } from "./session";
-import { assertPermission, hasStaffPermission } from "./rbac";
+import { assertPermission } from "./rbac";
 import { writeAudit } from "./audit";
 import { assertNotDevUser } from "./guards";
 import {
   STORY_CONCEPT_ENABLED,
+  CURATION_TRANSITIONS,
   type CurationStatus,
   type StoryConceptSubmission,
 } from "./story-concept";
@@ -81,6 +81,12 @@ function migrationHint(err: unknown): never {
     );
   }
   throw err instanceof Error ? err : new Error(msg);
+}
+
+function requireCurationStaff(actor: { internalRole?: string | null }) {
+  if (!actor.internalRole) throw new Error("Forbidden");
+  // Align with rights/QC operators — not read-only viewers.
+  assertPermission(actor as Parameters<typeof assertPermission>[0], "title.rights_review");
 }
 
 const createPayloadSchema = z.object({
@@ -216,9 +222,7 @@ export const listPendingStoryConcepts = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
-    if (!hasStaffPermission(actor, "title.read_catalog") && !actor.internalRole) {
-      throw new Error("Forbidden");
-    }
+    requireCurationStaff(actor);
 
     const sql = await getSql();
     try {
@@ -255,12 +259,22 @@ export const updateStoryConceptCuration = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
-    if (!hasStaffPermission(actor, "title.read_catalog") && !actor.internalRole) {
-      throw new Error("Forbidden");
-    }
+    requireCurationStaff(actor);
 
     const sql = await getSql();
     try {
+      const existing = await sql<ConceptRow>`
+        select * from bridge_story_concept_submissions where id = ${data.id} limit 1
+      `;
+      const current = existing[0];
+      if (!current) throw new Error("Not found");
+
+      const from = current.curation_status as CurationStatus;
+      const allowed = CURATION_TRANSITIONS[from] ?? [];
+      if (!allowed.includes(data.status)) {
+        throw new Error(`Invalid curation transition: ${from} → ${data.status}`);
+      }
+
       const rows = await sql<ConceptRow>`
         update bridge_story_concept_submissions
         set
@@ -283,7 +297,7 @@ export const updateStoryConceptCuration = createServerFn({ method: "POST" })
         action: "story_concept.curation_update",
         entityType: "bridge_story_concept_submission",
         entityId: concept.id,
-        metadata: { status: data.status },
+        metadata: { from, status: data.status },
       });
 
       return { concept: mapConcept(concept) };
