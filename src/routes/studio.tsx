@@ -8,6 +8,7 @@ import { StreamVistaOrders } from "@/components/bridge/streamvista-orders";
 
 export const Route = createFileRoute("/studio")({ component: Studio });
 
+// Creator and Studio accounts share this workspace; operational workstations stay separately gated.
 function Studio() {
   return (
     <RequireBridge allow="creator_studio">
