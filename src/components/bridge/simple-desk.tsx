@@ -45,21 +45,37 @@ function DeskVideo({ url }: { url: string }) {
   return <video ref={ref} controls autoPlay playsInline className="max-h-[78vh] w-full bg-black" />;
 }
 
-const SLOTS = [
+const CORE = [
   ["master", "Film", "video/*"],
   ["trailer", "Trailer", "video/*"],
   ["poster_vertical", "Vertical poster", "image/*"],
   ["poster_horizontal", "Horizontal poster", "image/*"],
   ["thumbnail", "Thumbnail", "image/*"],
   ["subtitle", "English subtitles", ".srt,.vtt,text/vtt"],
+  ["censor_certificate", "Certificate", "application/pdf,image/*"],
+] as const;
+
+const OPTIONAL = [
   ["subtitle_extra", "More subtitles", ".srt,.vtt,text/vtt"],
   ["audio", "Film audio", "audio/*"],
   ["audio_dub", "Dubbed", "audio/*"],
   ["audio_description", "Description audio", "audio/*"],
-  ["censor_certificate", "Certificate", "application/pdf,image/*"],
 ] as const;
 
+const SLOTS = [...CORE, ...OPTIONAL] as const;
+
 const KIND_LABEL: Record<string, string> = Object.fromEntries(SLOTS.map(([kind, label]) => [kind, label]));
+
+function groupLog(rows: Array<{ action: string; at: string }>) {
+  const groups: Array<{ action: string; at: string; count: number }> = [];
+  for (const row of rows) {
+    const minute = row.at.slice(0, 16);
+    const last = groups[groups.length - 1];
+    if (last && last.action === row.action && last.at.slice(0, 16) === minute) last.count += 1;
+    else groups.push({ action: row.action, at: row.at, count: 1 });
+  }
+  return groups;
+}
 
 export function SimpleDesk({
   titleId,
@@ -143,6 +159,7 @@ export function SimpleDesk({
   const [editing, setEditing] = useState(false);
   const [player, setPlayer] = useState<null | { url: string; visual: "video" | "image" }>(null);
   const [showUnfinished, setShowUnfinished] = useState(false);
+  const [optionalOpen, setOptionalOpen] = useState(false);
 
   const refresh = async () => {
     await Promise.all([
@@ -321,6 +338,36 @@ export function SimpleDesk({
     onError: (e) => toast.error(e instanceof Error ? e.message : "Could not delete"),
   });
 
+  function slotRow([kind, label, accept]: (typeof SLOTS)[number]) {
+    const item = ready.find((row) => row.kind === kind)
+      || (kind === "master" ? ready.find((row) => row.kind === "screener") : undefined)
+      || (kind === "poster_vertical" ? ready.find((row) => row.kind === "poster") : undefined);
+    const visual = kind === "master" || kind === "trailer";
+    return (
+      <li key={kind} className="flex flex-wrap items-center gap-3 py-3">
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold">{label}</p>
+          <p className="text-xs text-muted">{item?.byteSize ? `${Math.max(1, Math.round(Number(item.byteSize) / 1024 / 1024))} MB · Saved${item.publicFace ? " · Public" : ""}` : "Not added yet"}</p>
+        </div>
+        {item ? <button type="button" onClick={() => void view(item.id)} className="text-sm font-semibold">{visual ? "Play" : "View"}</button> : null}
+        <label className="cursor-pointer text-sm font-semibold">
+          {item ? "Replace" : "Add"}
+          <input type="file" accept={accept} className="sr-only" onChange={(e) => {
+            const nextFile = e.target.files?.[0];
+            e.target.value = "";
+            if (nextFile) upload(nextFile, kind, label);
+          }} />
+        </label>
+        {item && staff && posterKinds.has(kind) ? (
+          <button type="button" onClick={() => publish.mutate({ assetId: item.id, publicFace: !item.publicFace })} className="text-sm font-semibold">
+            {item.publicFace ? "Hide" : "Public"}
+          </button>
+        ) : null}
+        {item ? <button type="button" onClick={() => remove.mutate(item.id)} className="text-sm font-semibold text-red-700">Remove</button> : null}
+      </li>
+    );
+  }
+
   return (
     <section className="space-y-5">
       {error ? <p role="alert" className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">{error}</p> : null}
@@ -387,36 +434,16 @@ export function SimpleDesk({
             : "Add the film when it is ready. You can keep using the desk while it saves."}
         </p>
         <ul className="divide-y divide-line">
-          {SLOTS.map(([kind, label, accept]) => {
-            const item = ready.find((row) => row.kind === kind)
-              || (kind === "master" ? ready.find((row) => row.kind === "screener") : undefined)
-              || (kind === "poster_vertical" ? ready.find((row) => row.kind === "poster") : undefined);
-            const visual = kind === "master" || kind === "trailer";
-            return (
-              <li key={kind} className="flex flex-wrap items-center gap-3 py-3">
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-semibold">{label}</p>
-                  <p className="text-xs text-muted">{item?.byteSize ? `${Math.max(1, Math.round(Number(item.byteSize) / 1024 / 1024))} MB · Saved${item.publicFace ? " · Public" : ""}` : "Not added yet"}</p>
-                </div>
-                {item ? <button type="button" onClick={() => void view(item.id)} className="text-sm font-semibold">{visual ? "Play" : "View"}</button> : null}
-                <label className="cursor-pointer text-sm font-semibold">
-                  {item ? "Replace" : "Add"}
-                  <input type="file" accept={accept} className="sr-only" onChange={(e) => {
-                    const nextFile = e.target.files?.[0];
-                    e.target.value = "";
-                    if (nextFile) upload(nextFile, kind, label);
-                  }} />
-                </label>
-                {item && staff && posterKinds.has(kind) ? (
-                  <button type="button" onClick={() => publish.mutate({ assetId: item.id, publicFace: !item.publicFace })} className="text-sm font-semibold">
-                    {item.publicFace ? "Hide" : "Public"}
-                  </button>
-                ) : null}
-                {item ? <button type="button" onClick={() => remove.mutate(item.id)} className="text-sm font-semibold text-red-700">Remove</button> : null}
-              </li>
-            );
-          })}
+          {CORE.map((slot) => slotRow(slot))}
         </ul>
+        <button type="button" onClick={() => setOptionalOpen((open) => !open)} className="mt-3 text-sm font-semibold">
+          {optionalOpen ? "Hide optional files" : `Add optional files${OPTIONAL.filter(([kind]) => ready.some((row) => row.kind === kind)).length ? ` · ${OPTIONAL.filter(([kind]) => ready.some((row) => row.kind === kind)).length} saved` : ""}`}
+        </button>
+        {optionalOpen ? (
+          <ul className="mt-2 divide-y divide-line">
+            {OPTIONAL.map((slot) => slotRow(slot))}
+          </ul>
+        ) : null}
         {next ? (
           <button type="button" disabled={send.isPending} onClick={() => send.mutate()} className="mt-3 rounded-full border-2 border-[#0b1220] px-4 py-2 text-sm font-semibold">
             {send.isPending ? "Submitting…" : "Submit"}
@@ -471,9 +498,9 @@ export function SimpleDesk({
         <section className="rounded-2xl border border-line bg-white p-4">
           <h2 className="text-lg font-semibold">Record</h2>
           <ul className="mt-2 divide-y divide-line">
-            {log.data?.rows.map((row, index) => (
-              <li key={`${row.at}-${index}`} className="flex justify-between gap-3 py-2 text-sm">
-                <span>{row.action}</span>
+            {groupLog(log.data?.rows ?? []).map((row) => (
+              <li key={`${row.action}-${row.at}`} className="flex justify-between gap-3 py-2 text-sm">
+                <span>{row.action}{row.count > 1 ? ` (×${row.count})` : ""}</span>
                 <span className="text-muted">{row.at.slice(0, 16).replace("T", " ")}</span>
               </li>
             ))}
@@ -491,7 +518,10 @@ export function SimpleDesk({
         ) : null}
         {(desk.data?.notes.length ?? 0) > 0 ? (
           <ul className="mt-3 space-y-2">
-            {desk.data?.notes.map((item) => {
+            {desk.data?.notes.filter((item, index, notes) => {
+              const previous = notes[index - 1];
+              return !previous || previous.action !== item.action || previous.body !== item.body || previous.actor !== item.actor;
+            }).map((item) => {
               const mine = item.actor === actor.displayName || item.actor === actor.email;
               const label = ({ upload: "File saved", submit: "Submitted", note: "Message", park: "Parked", approve: "Approved", replace: "Please replace a file" } as Record<string, string>)[item.action] || "Update";
               return (
