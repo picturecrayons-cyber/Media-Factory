@@ -3,6 +3,7 @@ import { useState } from "react";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { CreateTitleForm, TitleList } from "@/components/bridge/title-desk";
+import { StoryConceptForm } from "@/components/bridge/story-concept-form";
 import { StreamVistaOrders } from "@/components/bridge/streamvista-orders";
 import { Button } from "@/components/ui/button";
 import { STORY_CONCEPT_ENABLED } from "@/lib/bridge/story-concept";
@@ -19,7 +20,6 @@ function Studio() {
       {(actor) => (
         <BridgeShell actor={actor} title="Studio">
           <div className="mx-auto max-w-3xl space-y-10 px-1 pb-16">
-            {/* Header + single CTA */}
             <header className="space-y-4">
               <div className="flex flex-wrap items-end justify-between gap-4">
                 <div>
@@ -39,7 +39,6 @@ function Studio() {
                 )}
               </div>
 
-              {/* Path choice — only when CTA opened */}
               {path !== "none" && (
                 <div className="rounded-2xl border border-line bg-surface p-4 sm:p-5">
                   <div className="flex flex-wrap items-center justify-between gap-3">
@@ -81,20 +80,19 @@ function Studio() {
                       >
                         <p className="font-medium">Story / Concept</p>
                         <p className="mt-1 text-xs leading-relaxed text-muted">
-                          Paid network submission. Admin curation → buyers & investors.
+                          Network submission. Admin curation → buyers & investors.
                         </p>
                       </button>
                     ) : (
                       <div className="rounded-xl border border-dashed border-line p-4 text-left opacity-60">
                         <p className="font-medium">Story / Concept</p>
                         <p className="mt-1 text-xs leading-relaxed text-muted">
-                          Coming soon. Network submission for stories and concepts.
+                          Coming soon. Enable STORY_CONCEPT_ENABLED after migration.
                         </p>
                       </div>
                     )}
                   </div>
 
-                  {/* Finished Film form */}
                   {path === "finished_film" && (
                     <div className="mt-6 border-t border-line pt-6">
                       <h2 className="text-sm font-semibold">Add finished title</h2>
@@ -110,38 +108,29 @@ function Studio() {
                     </div>
                   )}
 
-                  {/* Story / Concept placeholder (enabled only when flag is on) */}
                   {path === "story_concept" && STORY_CONCEPT_ENABLED && (
                     <div className="mt-6 border-t border-line pt-6">
                       <h2 className="text-sm font-semibold">Story / Concept</h2>
-                      <p className="mt-2 text-sm text-muted">
-                        Form and payment gate will appear here. Feature is flag-gated and
-                        currently under final wiring.
+                      <p className="mt-1 text-xs text-muted">
+                        Submit for admin curation. Not published to Loop automatically.
                       </p>
-                      <p className="mt-3 text-xs text-muted">
-                        After submit → admin curation → introduction to verified buyers /
-                        investors. Never auto-publishes to Loop.
-                      </p>
+                      <div className="mt-4">
+                        <StoryConceptForm />
+                      </div>
                     </div>
                   )}
                 </div>
               )}
             </header>
 
-            {/* Titles */}
             <section>
-              <div className="mb-3 flex items-baseline justify-between gap-3">
-                <h2 className="text-lg font-semibold">Your titles</h2>
-              </div>
+              <h2 className="mb-3 text-lg font-semibold">Your titles</h2>
               <TitleList empty="No titles yet. Start with a new submission." />
             </section>
 
-            {/* Secondary: production services (collapsed feel) */}
             <section className="border-t border-line pt-8">
               <h2 className="text-sm font-semibold text-muted">Production services</h2>
-              <p className="mt-1 text-xs text-muted">
-                Optional. Separate from licensing.
-              </p>
+              <p className="mt-1 text-xs text-muted">Optional. Separate from licensing.</p>
               <div className="mt-4">
                 <StreamVistaOrders />
               </div>
