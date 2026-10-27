@@ -12,12 +12,13 @@ const STATUS_LABEL: Record<string, string> = {
 };
 
 export function MyStoryConcepts() {
-  if (!STORY_CONCEPT_ENABLED) return null;
-
   const query = useQuery({
     queryKey: ["my-story-concepts"],
     queryFn: () => listMyStoryConcepts(),
+    enabled: STORY_CONCEPT_ENABLED,
   });
+
+  if (!STORY_CONCEPT_ENABLED) return null;
 
   if (query.isLoading) {
     return <p className="text-sm text-muted">Loading concepts…</p>;
