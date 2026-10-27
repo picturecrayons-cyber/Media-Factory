@@ -14,6 +14,7 @@ import { BRIDGE_LOOP_LANES } from "@/lib/bridge/loop-lanes";
 import { publicOnboardingError } from "@/lib/bridge/onboarding-errors";
 import { BrandMark } from "@/components/bridge/shell";
 import { UserButton } from "@/lib/auth/gates";
+import { useCurrentUser } from "@/lib/auth/use-current-user";
 import { Button } from "@/components/ui/button";
 
 export const Route = createFileRoute("/onboarding")({ component: Onboarding });
@@ -46,12 +47,14 @@ type OnboardingDraft = {
 };
 
 function OnboardingHeader() {
+  const user = useCurrentUser();
   return (
     <header className="sticky top-0 z-50 border-b border-line bg-surface/95 backdrop-blur-xl">
       <div className="mx-auto flex max-w-[1440px] items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-8">
         <BrandMark />
         <div className="ml-auto flex min-w-0 items-center justify-end gap-3">
           <span className="hidden text-xs text-muted sm:inline">Creator onboarding</span>
+          <span className="max-w-[42vw] truncate text-xs text-muted sm:max-w-none">{user?.primaryEmail ?? user?.displayName ?? "Account"}</span>
           <UserButton />
         </div>
       </div>
