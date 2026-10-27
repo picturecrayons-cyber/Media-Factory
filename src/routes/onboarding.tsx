@@ -358,6 +358,7 @@ function Onboarding() {
       });
 
       try { sessionStorage.removeItem("bridge-invite"); } catch { /* ignore */ }
+      if (draftKey) { try { window.localStorage.removeItem(draftKey); } catch { /* ignore */ } }
       void queryClient.invalidateQueries({ queryKey: ["bridge-session"] });
       void queryClient.invalidateQueries({ queryKey: ["bridge-titles"] });
       void navigate({ to: "/studio", replace: true });
