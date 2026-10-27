@@ -1,100 +1,261 @@
 /**
- * Server-side data access for Story / Concept submissions.
- * Additive only. Uses existing getSql() + auth patterns.
- * Feature remains gated by STORY_CONCEPT_ENABLED.
+ * Story / Concept submission – server functions.
+ * Pattern matches titles.ts (createServerFn + authMiddleware + getSql + RBAC).
+ * Feature gated by STORY_CONCEPT_ENABLED.
  */
 
+import { createServerFn } from "@tanstack/react-start";
+import { z } from "zod";
+import { randomBytes } from "node:crypto";
+import { authMiddleware } from "@/lib/auth/middleware";
+import { getSql } from "@/lib/db";
+import { requireVerifiedActor } from "./session";
+import { assertPermission, hasStaffPermission } from "./rbac";
+import { writeAudit } from "./audit";
+import { assertNotDevUser } from "./guards";
 import {
   STORY_CONCEPT_ENABLED,
-  type CreateStoryConceptPayload,
   type CurationStatus,
-  type BuyerInterestLevel,
   type StoryConceptSubmission,
-  type BuyerInterest,
-} from './story-concept';
+} from "./story-concept";
 
-// NOTE: Import getSql and auth helpers from the existing bridge patterns.
-// Adjust the import paths to match the actual project structure if needed.
-// import { getSql } from '@/lib/db'; // or whatever the canonical helper is
-// import { requireUserId, requireAdmin } from '@/lib/auth/...';
+type ConceptRow = {
+  id: string;
+  title_id: string;
+  logline: string | null;
+  synopsis: string | null;
+  treatment_url: string | null;
+  screenplay_url: string | null;
+  genre: string[] | null;
+  estimated_budget_range: string | null;
+  target_platforms: string[] | null;
+  curation_status: string;
+  admin_notes: string | null;
+  introduced_to_buyers_at: string | Date | null;
+  created_at: string | Date;
+  updated_at: string | Date;
+};
 
-/**
- * Create a story/concept submission linked to an existing bridge_title.
- * Also sets bridge_titles.submission_type = 'story_concept'.
- */
-export async function createStoryConceptSubmission(
-  titleId: string,
-  payload: CreateStoryConceptPayload,
-  actorUserId: string,
-): Promise<StoryConceptSubmission> {
-  if (!STORY_CONCEPT_ENABLED) {
-    throw new Error('Story/Concept submissions are not enabled.');
-  }
-
-  // TODO: Replace with real getSql() implementation matching project conventions.
-  // Example shape (pseudo):
-  //
-  // const sql = getSql();
-  // await sql`
-  //   UPDATE bridge_titles
-  //   SET submission_type = 'story_concept', updated_at = now()
-  //   WHERE id = ${titleId}
-  // `;
-  //
-  // const [row] = await sql`
-  //   INSERT INTO bridge_story_concept_submissions (
-  //     title_id, logline, synopsis, treatment_url, screenplay_url,
-  //     genre, estimated_budget_range, target_platforms
-  //   ) VALUES (
-  //     ${titleId},
-  //     ${payload.logline ?? null},
-  //     ${payload.synopsis ?? null},
-  //     ${payload.treatment_url ?? null},
-  //     ${payload.screenplay_url ?? null},
-  //     ${payload.genre ?? []},
-  //     ${payload.estimated_budget_range ?? null},
-  //     ${payload.target_platforms ?? []}
-  //   )
-  //   RETURNING *
-  // `;
-  //
-  // return row as StoryConceptSubmission;
-
-  throw new Error('createStoryConceptSubmission: wire to getSql() + auth');
+function asIso(v: string | Date | null | undefined): string | null {
+  if (v == null) return null;
+  return v instanceof Date ? v.toISOString() : String(v);
 }
 
-export async function getStoryConceptByTitleId(
-  titleId: string,
-): Promise<StoryConceptSubmission | null> {
-  // TODO: implement with getSql()
-  throw new Error('getStoryConceptByTitleId: wire to getSql()');
+function mapConcept(r: ConceptRow): StoryConceptSubmission {
+  return {
+    id: r.id,
+    title_id: r.title_id,
+    logline: r.logline,
+    synopsis: r.synopsis,
+    treatment_url: r.treatment_url,
+    screenplay_url: r.screenplay_url,
+    genre: r.genre ?? [],
+    estimated_budget_range: r.estimated_budget_range,
+    target_platforms: r.target_platforms ?? [],
+    curation_status: r.curation_status as CurationStatus,
+    admin_notes: r.admin_notes,
+    introduced_to_buyers_at: asIso(r.introduced_to_buyers_at),
+    created_at: asIso(r.created_at) ?? "",
+    updated_at: asIso(r.updated_at) ?? "",
+  };
 }
 
-export async function updateCurationStatus(
-  submissionId: string,
-  status: CurationStatus,
-  adminUserId: string,
-  adminNotes?: string | null,
-): Promise<StoryConceptSubmission> {
-  // TODO: requireAdmin(adminUserId) then update
-  throw new Error('updateCurationStatus: wire to getSql() + requireAdmin');
+function slugify(name: string, id: string): string {
+  const base = name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 48);
+  return `${base || "concept"}-${id.slice(0, 6)}`;
 }
 
-export async function introduceToBuyers(
-  submissionId: string,
-  adminUserId: string,
-): Promise<StoryConceptSubmission> {
-  // Only allowed when status is APPROVED
-  // Sets curation_status = 'INTRODUCED_TO_BUYERS' and introduced_to_buyers_at = now()
-  throw new Error('introduceToBuyers: wire to getSql() + requireAdmin');
-}
+const createPayloadSchema = z.object({
+  titleName: z.string().min(1).max(160),
+  logline: z.string().min(10).max(500),
+  synopsis: z.string().min(40).max(8000),
+  genre: z.array(z.string().min(1).max(40)).max(12).default([]),
+  estimatedBudgetRange: z.string().max(80).optional(),
+  targetPlatforms: z.array(z.string().min(1).max(40)).max(12).default([]),
+  treatmentUrl: z.string().url().max(500).optional().or(z.literal("")),
+  screenplayUrl: z.string().url().max(500).optional().or(z.literal("")),
+  language: z.string().min(2).max(40).default("Malayalam"),
+});
 
-export async function recordBuyerInterest(
-  conceptSubmissionId: string,
-  buyerUserId: string,
-  interestLevel: BuyerInterestLevel,
-  notes?: string | null,
-): Promise<BuyerInterest> {
-  // Admin-mediated only
-  throw new Error('recordBuyerInterest: wire to getSql() + requireAdmin');
-}
+export const createStoryConceptSubmission = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(createPayloadSchema)
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    if (!STORY_CONCEPT_ENABLED) {
+      throw new Error("Story / Concept submissions are not enabled yet.");
+    }
+
+    const actor = await requireVerifiedActor(context.userId);
+    assertPermission(actor, actor.internalRole ? "title.ingest_internal" : "title.create");
+
+    const titleId = randomBytes(16).toString("hex");
+    const slug = slugify(data.titleName, titleId);
+    const sql = await getSql();
+
+    // 1. Create canonical title as DRAFT + story_concept
+    await sql`
+      insert into bridge_titles (
+        id, slug, name, owner_user_id, owner_account_type, status,
+        synopsis, language, content_type, owner_organization_id, submission_type
+      ) values (
+        ${titleId},
+        ${slug},
+        ${data.titleName},
+        ${actor.userId},
+        ${actor.accountType},
+        ${"DRAFT"},
+        ${data.synopsis},
+        ${data.language},
+        ${"OTHER"},
+        ${actor.accountType === "studio" ? actor.organizationId ?? null : null},
+        ${"story_concept"}
+      )
+    `;
+
+    await sql`
+      insert into bridge_title_events (title_id, from_status, to_status, actor_user_id, note)
+      values (${titleId}, null, ${"DRAFT"}, ${actor.userId}, ${"story concept submission received"})
+    `;
+
+    // 2. Concept-specific row
+    const conceptRows = await sql<ConceptRow>`
+      insert into bridge_story_concept_submissions (
+        title_id, logline, synopsis, treatment_url, screenplay_url,
+        genre, estimated_budget_range, target_platforms, curation_status
+      ) values (
+        ${titleId},
+        ${data.logline},
+        ${data.synopsis},
+        ${data.treatmentUrl || null},
+        ${data.screenplayUrl || null},
+        ${data.genre},
+        ${data.estimatedBudgetRange ?? null},
+        ${data.targetPlatforms},
+        ${"PENDING"}
+      )
+      returning *
+    `;
+
+    const concept = conceptRows[0];
+    if (!concept) throw new Error("Story concept create failed");
+
+    await writeAudit({
+      actorUserId: actor.userId,
+      action: "story_concept.create",
+      entityType: "bridge_story_concept_submission",
+      entityId: concept.id,
+      metadata: { titleId },
+    });
+
+    return {
+      titleId,
+      concept: mapConcept(concept),
+    };
+  });
+
+export const listMyStoryConcepts = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    const sql = await getSql();
+
+    const rows = await sql<ConceptRow & { title_name: string }>`
+      select c.*, t.name as title_name
+      from bridge_story_concept_submissions c
+      join bridge_titles t on t.id = c.title_id
+      where t.owner_user_id = ${actor.userId}
+         or (
+           t.owner_account_type = 'studio'
+           and t.owner_organization_id is not null
+           and t.owner_organization_id = ${actor.organizationId ?? null}
+         )
+      order by c.created_at desc
+      limit 100
+    `;
+
+    return {
+      concepts: rows.map((r) => ({
+        ...mapConcept(r),
+        titleName: r.title_name,
+      })),
+    };
+  });
+
+export const listPendingStoryConcepts = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    if (!hasStaffPermission(actor, "title.read_catalog") && !actor.internalRole) {
+      throw new Error("Forbidden");
+    }
+
+    const sql = await getSql();
+    const rows = await sql<ConceptRow & { title_name: string; owner_user_id: string }>`
+      select c.*, t.name as title_name, t.owner_user_id
+      from bridge_story_concept_submissions c
+      join bridge_titles t on t.id = c.title_id
+      where c.curation_status in ('PENDING', 'UNDER_REVIEW', 'APPROVED')
+      order by c.created_at asc
+      limit 200
+    `;
+
+    return {
+      concepts: rows.map((r) => ({
+        ...mapConcept(r),
+        titleName: r.title_name,
+        ownerUserId: r.owner_user_id,
+      })),
+    };
+  });
+
+export const updateStoryConceptCuration = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(
+    z.object({
+      id: z.string().uuid(),
+      status: z.enum(["PENDING", "UNDER_REVIEW", "APPROVED", "REJECTED", "INTRODUCED_TO_BUYERS"]),
+      adminNotes: z.string().max(2000).optional(),
+    }),
+  )
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    if (!hasStaffPermission(actor, "title.read_catalog") && !actor.internalRole) {
+      throw new Error("Forbidden");
+    }
+
+    const sql = await getSql();
+    const rows = await sql<ConceptRow>`
+      update bridge_story_concept_submissions
+      set
+        curation_status = ${data.status},
+        admin_notes = ${data.adminNotes ?? null},
+        updated_at = now(),
+        introduced_to_buyers_at = case
+          when ${data.status} = 'INTRODUCED_TO_BUYERS' then coalesce(introduced_to_buyers_at, now())
+          else introduced_to_buyers_at
+        end
+      where id = ${data.id}
+      returning *
+    `;
+
+    const concept = rows[0];
+    if (!concept) throw new Error("Not found");
+
+    await writeAudit({
+      actorUserId: actor.userId,
+      action: "story_concept.curation_update",
+      entityType: "bridge_story_concept_submission",
+      entityId: concept.id,
+      metadata: { status: data.status },
+    });
+
+    return { concept: mapConcept(concept) };
+  });
