@@ -15,7 +15,7 @@ test("authenticated profiles route through the server-resolved workspace home", 
   const session = read("./session.ts");
   const onboarding = read("../../routes/onboarding.tsx");
   assert.match(session, /profile: actor, home: await resolveWorkspaceHome\(actor\)/);
-  assert.match(onboarding, /const home = sessionQ\.data\?\.profile \? sessionQ\.data\.home : null/);
+  assert.match(onboarding, /const home = sessionQ\.data\?\.home && sessionQ\.data\.home !== "\/onboarding" \? sessionQ\.data\.home : null/);
   assert.match(onboarding, /if \(home\) goHome\(home, navigate\)/);
 });
 
