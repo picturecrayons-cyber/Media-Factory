@@ -4,7 +4,7 @@ import { WorkflowDesk } from "@/components/bridge/workflow-desk";
 import { publicationIsActive } from "@/lib/bridge/workflow-policy";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { getTitle, updateTitle } from "@/lib/bridge/titles";
@@ -591,27 +591,97 @@ function FilesPanel({
           <span className="text-xs text-muted">Desktop notifications enabled</span>
         ) : null}
       </div>
-      <div className="mt-5 space-y-2">
+      <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {assets.map((a) => (
-          <div key={a.id} className="flex items-center justify-between gap-3 rounded-xl border border-line p-4">
-            <div>
-              <p className="text-sm font-semibold">{a.kind}</p>
-              <p className="text-xs text-muted">{a.verified ? "Ready" : "Processing"}</p>
+          <article key={a.id} className="overflow-hidden rounded-xl border border-line bg-elevated/30">
+            <AssetVisualPreview
+              assetId={a.id}
+              kind={a.kind}
+              contentType={a.contentType}
+              verified={a.verified}
+              byteSize={a.byteSize}
+            />
+            <div className="p-4">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold">{a.kind.replaceAll("_", " ")}</p>
+                  <p className="mt-1 text-xs text-muted">
+                    {a.contentType || "Unknown format"} · {formatAssetSize(a.byteSize)}
+                  </p>
+                </div>
+                <span className={`shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${a.verified ? "border-emerald-300 bg-emerald-50 text-emerald-800" : "border-amber-300 bg-amber-50 text-amber-800"}`}>
+                  <span aria-hidden="true">{a.verified ? "●" : "●"}</span> {a.verified ? "Verified" : "Processing"}
+                </span>
+              </div>
+              {a.verified ? (
+                <button
+                  type="button"
+                  onClick={() => void download(a.id)}
+                  className="mt-3 rounded-full border border-line px-4 py-2 text-xs font-semibold"
+                >
+                  Download asset
+                </button>
+              ) : (
+                <p className="mt-3 text-xs font-medium text-amber-700">Validation pending</p>
+              )}
             </div>
-            {a.verified ? (
-              <button
-                onClick={() => void download(a.id)}
-                className="rounded-full border border-line px-4 py-2 text-xs font-semibold"
-              >
-                Download
-              </button>
-            ) : null}
-          </div>
+          </article>
         ))}
       </div>
     </section>
   );
 }
+function formatAssetSize(bytes: number | null): string {
+  if (bytes == null || !Number.isFinite(bytes) || bytes < 0) return "Size unavailable";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+}
+
+function AssetVisualPreview({
+  assetId, kind, contentType, verified, byteSize,
+}: {
+  assetId: string; kind: string; contentType: string | null; verified: boolean; byteSize: number | null;
+}) {
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [dimensions, setDimensions] = useState<string | null>(null);
+  const isImage = Boolean(contentType?.startsWith("image/")) ||
+    ["poster_vertical", "poster_horizontal", "thumbnail", "banner", "still"].includes(kind);
+  const isVideo = Boolean(contentType?.startsWith("video/")) || ["master", "screener", "trailer"].includes(kind);
+  const isDocument = ["subtitle", "censor_certificate"].includes(kind) ||
+    Boolean(contentType?.includes("pdf") || contentType?.includes("text"));
+  useEffect(() => {
+    let active = true;
+    if (!verified || !isImage) return () => { active = false; };
+    void requestAssetDownload({ data: { assetId } })
+      .then((signed) => { if (active) setPreviewUrl(signed.url); })
+      .catch(() => { if (active) setPreviewUrl(null); });
+    return () => { active = false; };
+  }, [assetId, isImage, verified]);
+  return (
+    <div className={`grid h-40 place-items-center overflow-hidden border-b border-line ${isImage ? "bg-slate-950" : "bg-elevated"}`}>
+      {previewUrl && isImage ? (
+        <img
+          src={previewUrl}
+          alt={`${kind.replaceAll("_", " ")} preview`}
+          className="h-full w-full object-contain"
+          onLoad={(event) => setDimensions(`${event.currentTarget.naturalWidth} × ${event.currentTarget.naturalHeight}`)}
+        />
+      ) : (
+        <div className="flex flex-col items-center gap-2 px-4 text-center">
+          <span className="text-4xl" aria-hidden="true">{isImage ? "▧" : isVideo ? "▶" : isDocument ? "▤" : "▣"}</span>
+          <span className="text-xs font-semibold uppercase tracking-wide text-muted">
+            {isImage ? "Image artwork" : isVideo ? "Video asset" : isDocument ? "Document / captions" : "Media asset"}
+          </span>
+          {dimensions ? <span className="text-[11px] text-muted">{dimensions}</span> : null}
+        </div>
+      )}
+      {previewUrl && dimensions ? <span className="sr-only">{dimensions}</span> : null}
+    </div>
+  );
+}
+
 function FileTypeCard({
   kind,
   label,
