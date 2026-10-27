@@ -405,8 +405,33 @@ export const updateBuyerInterest = createServerFn({ method: "POST" })
       const nextLevel = data.interestLevel ?? current.interest_level;
       const nextTermsStatus = data.termsStatus ?? current.terms_status;
       const nextContractRef = data.contractReference === undefined ? current.contract_reference : data.contractReference;
-      if (nextLevel === "LICENSED" && (!internal || nextTermsStatus !== "contracted" || !nextContractRef)) {
-        throw new Error("LICENSED requires an authorized internal operator, contracted terms, and a contract reference");
+      if (nextLevel === "LICENSED") {
+        if (!internal || nextTermsStatus !== "contracted" || !nextContractRef) {
+          throw new Error("LICENSED requires an authorized internal operator, contracted terms, and verified contract evidence");
+        }
+        if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(nextContractRef)) {
+          throw new Error("LICENSED requires a verified contract evidence record ID");
+        }
+        const targetRows = current.title_id
+          ? [{ title_id: current.title_id }]
+          : await tx<{ title_id: string }>`
+              select title_id from public.bridge_story_concept_submissions
+              where id = ${current.concept_submission_id}::uuid limit 1
+            `;
+        const targetTitleId = targetRows[0]?.title_id;
+        if (!targetTitleId) throw new Error("Could not resolve the buyer-interest title for contract verification");
+        const evidence = await tx<{ id: string }>`
+          select id
+          from public.bridge_contract_evidence
+          where id = ${nextContractRef}::uuid
+            and bridge_title_id = ${targetTitleId}
+            and status = 'verified'
+            and verified_by is not null
+            and verified_at is not null
+            and document_url like 'https://%'
+          limit 1
+        `;
+        if (!evidence[0]) throw new Error("Contract evidence is missing, unverified, or belongs to another title");
       }
       const [updated] = await tx<InterestRow>`
         update public.bridge_buyer_interest
