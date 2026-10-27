@@ -201,6 +201,8 @@ export const createTitle = createServerFn({ method: "POST" })
       promotionalRights: z.boolean().optional(),
       rightsBasis: z.enum(["OWNER", "EXCLUSIVE_LICENSEE", "AUTHORIZED_DISTRIBUTOR", "PRODUCER_AUTHORITY"]).optional(),
       authorizationAttested: z.boolean().optional(),
+      authorizationEvidenceType: z.enum(["RIGHTS_AGREEMENT", "CHAIN_OF_TITLE", "AUTHORIZATION_LETTER", "DISTRIBUTION_AGREEMENT", "OTHER"]).optional(),
+      publicSubmission: z.boolean().optional(),
       screenerAccess: z.enum(["BRIDGE_PRIVATE_SCREENER", "SCREENER_PENDING"]).optional(),
       intendedDestinations: z.array(z.string().min(2).max(80)).min(1).max(20).optional(),
     }),
@@ -212,37 +214,105 @@ export const createTitle = createServerFn({ method: "POST" })
     const id = randomBytes(16).toString("hex");
     const slug = slugify(data.name, id);
     const sql = await getSql();
-    await sql`
-      insert into bridge_titles (
-        id, slug, name, name_ml, owner_user_id, owner_account_type, status,
-        synopsis, language, year, runtime_minutes, licensing_fee_paise,
-        content_type, country_of_origin, release_date, credits, owner_organization_id
-      ) values (
-        ${id}, ${slug}, ${data.name}, ${data.nameMl ?? null}, ${actor.userId}, ${actor.accountType},
-        ${"DRAFT"}, ${data.synopsis ?? ""}, ${data.language ?? "Malayalam"},
-        ${data.year ?? null}, ${data.runtimeMinutes ?? null}, ${data.licensingFeePaise ?? 0},
-        ${loopStageType(data.contentType)}, ${data.countryOfOrigin ?? null},
-        ${data.releaseDate ?? null}, ${JSON.stringify([
-          ...(data.director ? [{ role: "Director", name: data.director }] : []),
-          ...(data.producer ? [{ role: "Producer", name: data.producer }] : []),
-          ...(data.cast ?? []).map((name) => ({ role: "Cast", name })),
-        ])}::jsonb, ${actor.accountType === "studio" ? actor.organizationId ?? null : null}
-      )
-    `;
-    const isPublicSubmission = Boolean((data as { publicSubmission?: boolean }).publicSubmission);
-    await recordTransition({
-      titleId: id,
-      from: null,
-      to: "DRAFT",
-      actorUserId: actor.userId,
-      note: isPublicSubmission ? "public rights-ready submission received" : "created",
-    });
-    await writeAudit({
-      actorUserId: actor.userId,
-      action: isPublicSubmission ? "title.public_submission" : "title.create",
-      entityType: "bridge_title",
-      entityId: id,
-      metadata: { publicSubmission: isPublicSubmission },
+    const isPublicSubmission = data.publicSubmission === true;
+
+    if (isPublicSubmission) {
+      if (
+        !data.territories?.length ||
+        !data.rightsLanguages?.length ||
+        !data.media?.length ||
+        !data.windowStart ||
+        !data.windowEnd ||
+        !data.rightsBasis ||
+        !data.authorizationEvidenceType ||
+        data.authorizationAttested !== true ||
+        !data.intendedDestinations?.length
+      ) {
+        throw new Error("Complete the rights package and authorization evidence details before submitting.");
+      }
+      const windowStart = new Date(data.windowStart);
+      const windowEnd = new Date(data.windowEnd);
+      if (!Number.isFinite(windowStart.getTime()) || !Number.isFinite(windowEnd.getTime()) || windowEnd <= windowStart) {
+        throw new Error("Rights window dates are invalid.");
+      }
+    }
+
+    const authorityType = {
+      OWNER: "RIGHTS_OWNER",
+      EXCLUSIVE_LICENSEE: "LICENSEE_WITH_ONWARD_RIGHTS",
+      AUTHORIZED_DISTRIBUTOR: "DISTRIBUTOR_SALES_AGENT",
+      PRODUCER_AUTHORITY: "PRODUCER",
+    } as const;
+
+    await sql.transaction(async (tx) => {
+      await tx`
+        insert into bridge_titles (
+          id, slug, name, name_ml, owner_user_id, owner_account_type, status,
+          synopsis, language, year, runtime_minutes, licensing_fee_paise,
+          content_type, country_of_origin, release_date, credits, owner_organization_id
+        ) values (
+          ${id}, ${slug}, ${data.name}, ${data.nameMl ?? null}, ${actor.userId}, ${actor.accountType},
+          ${"DRAFT"}, ${data.synopsis ?? ""}, ${data.language ?? "Malayalam"},
+          ${data.year ?? null}, ${data.runtimeMinutes ?? null}, ${data.licensingFeePaise ?? 0},
+          ${loopStageType(data.contentType)}, ${data.countryOfOrigin ?? null},
+          ${data.releaseDate ?? null}, ${JSON.stringify([
+            ...(data.director ? [{ role: "Director", name: data.director }] : []),
+            ...(data.producer ? [{ role: "Producer", name: data.producer }] : []),
+            ...(data.cast ?? []).map((name) => ({ role: "Cast", name })),
+          ])}::jsonb, ${actor.accountType === "studio" ? actor.organizationId ?? null : null}
+        )
+      `;
+
+      if (isPublicSubmission) {
+        const evidence = JSON.stringify([{
+          type: "AUTHORIZATION_ATTESTATION",
+          rightsBasis: data.rightsBasis,
+          authorizationConfirmed: true,
+        }]);
+        await tx`
+          insert into bridge_rights_grants (
+            title_id, territories, languages, media, window_start, window_end,
+            exclusivity, holdbacks, sublicensing_allowed, promotional_rights,
+            restrictions, evidence, status, created_by
+          ) values (
+            ${id}, ${JSON.stringify(data.territories)}::jsonb,
+            ${JSON.stringify(data.rightsLanguages)}::jsonb,
+            ${JSON.stringify(data.media)}::jsonb,
+            ${data.windowStart}, ${data.windowEnd},
+            ${data.exclusivity ?? "NON_EXCLUSIVE"},
+            ${JSON.stringify(data.holdbacks ?? [])}::jsonb,
+            ${data.sublicensingAllowed ?? false}, ${data.promotionalRights ?? false},
+            '[]'::jsonb, ${evidence}::jsonb, 'DRAFT', ${actor.userId}
+          )
+        `;
+
+        await tx`
+          insert into bridge_title_submission_intake (
+            title_id, authority_type, authorization_evidence_type,
+            authorization_confirmed, buyer_channels, screener_mode, screener_url
+          ) values (
+            ${id}, ${authorityType[data.rightsBasis!]},
+            ${data.authorizationEvidenceType}, true,
+            ${JSON.stringify(data.intendedDestinations)}::jsonb,
+            'NONE', null
+          )
+        `;
+      }
+
+      await recordTransition({
+        titleId: id,
+        from: null,
+        to: "DRAFT",
+        actorUserId: actor.userId,
+        note: isPublicSubmission ? "public rights-ready submission received; evidence review pending" : "created",
+      }, tx);
+      await writeAudit({
+        actorUserId: actor.userId,
+        action: isPublicSubmission ? "title.public_submission" : "title.create",
+        entityType: "bridge_title",
+        entityId: id,
+        metadata: { publicSubmission: isPublicSubmission, rightsGrantStatus: isPublicSubmission ? "DRAFT" : undefined },
+      }, tx);
     });
     const title = await loadTitle(id);
     if (!title) throw new Error("Title create failed");
