@@ -126,7 +126,6 @@ function Onboarding() {
   const [screenerAccess, setScreenerAccess] = useState<"BRIDGE_PRIVATE_SCREENER" | "SCREENER_PENDING">("SCREENER_PENDING");
   const [destinations, setDestinations] = useState<string[]>(["Buyer delivery"]);
 
-  const [submittedTitleId, setSubmittedTitleId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const submitInFlight = useRef(false);
@@ -142,7 +141,7 @@ function Onboarding() {
     if (signupAccountType) setAccountType(signupAccountType);
   }, [signupAccountType]);
 
-  const home = sessionQ.data?.profile ? sessionQ.data.home : null;
+  const home = sessionQ.data?.home && sessionQ.data.home !== "/onboarding" ? sessionQ.data.home : null;
 
   useEffect(() => {
     if (home) goHome(home, navigate);
@@ -152,33 +151,6 @@ function Onboarding() {
     return <main className="grid min-h-screen place-items-center bg-bg p-6"><p className="text-sm text-muted">{home ? "Opening workspace…" : "Loading Bridge…"}</p></main>;
   }
   if (!user) return <RedirectToSignIn />;
-
-  if (submittedTitleId) {
-    return (
-      <main className="grid min-h-screen place-items-center bg-bg p-6">
-        <div className="w-full max-w-lg space-y-5 rounded-2xl border border-line bg-surface p-7">
-          <BrandMark />
-          <h1 className="font-display text-2xl font-semibold">Submission received</h1>
-          <p className="text-sm leading-relaxed text-muted">
-            Your title is now in Bridge review. Licensing Ready is not granted by the public form.
-            Bridge must verify the master, screener, authorization evidence, legal clearance, QC and rights package before buyers can see it.
-          </p>
-          <div className="rounded-xl border border-line bg-elevated p-4 text-sm">
-            <p className="font-semibold text-fg">Next required evidence</p>
-            <ul className="mt-2 space-y-1.5 text-muted">
-              <li>• Upload authorization / chain-of-title evidence</li>
-              <li>• Upload a private Bridge screener</li>
-              <li>• Upload the approved master and artwork</li>
-              <li>• Complete QC and Legal review</li>
-            </ul>
-          </div>
-          <Button className="w-full" onClick={() => void navigate({ to: "/title/$id", params: { id: submittedTitleId } })}>
-            Open title workspace
-          </Button>
-        </div>
-      </main>
-    );
-  }
 
   if (sessionQ.isError) {
     async function retrySession() {
@@ -229,16 +201,16 @@ function Onboarding() {
       let inviteToken: string | undefined;
       try { inviteToken = sessionStorage.getItem("bridge-invite") ?? undefined; } catch { /* ignore */ }
 
-      await completeOnboarding({
-        data: {
-          displayName: displayName.trim(),
-          accountType,
-          organizationName: accountType === "studio" ? organizationName.trim() : undefined,
-          inviteToken,
-        },
-      });
-
       if (accountType === "buyer") {
+        await completeOnboarding({
+          data: {
+            displayName: displayName.trim(),
+            accountType,
+            organizationName: undefined,
+            inviteToken,
+          },
+        });
+        try { sessionStorage.removeItem("bridge-invite"); } catch { /* ignore */ }
         void navigate({ to: "/buyer", replace: true });
         return;
       }
@@ -251,6 +223,18 @@ function Onboarding() {
       if (!windowStart || !windowEnd) throw new Error("Rights window start and end are required");
       if (!authorizationAttested) throw new Error("Confirm that you have authority to license the submitted rights");
       if (new Date(windowEnd) <= new Date(windowStart)) throw new Error("Rights window end must be after start");
+
+      // Create the server-backed profile only after intake validation passes.
+      // If title creation fails, the server-side intake-state check keeps the
+      // creator on /onboarding so they can retry without being stranded.
+      await completeOnboarding({
+        data: {
+          displayName: displayName.trim(),
+          accountType,
+          organizationName: accountType === "studio" ? organizationName.trim() : undefined,
+          inviteToken,
+        },
+      });
 
       const result = await createTitle({
         data: {
@@ -281,8 +265,8 @@ function Onboarding() {
         },
       });
 
-      setSubmittedTitleId(result.title.id);
       try { sessionStorage.removeItem("bridge-invite"); } catch { /* ignore */ }
+      void navigate({ to: "/studio", replace: true });
     } catch (err) {
       setError(publicOnboardingError(err));
     } finally {
