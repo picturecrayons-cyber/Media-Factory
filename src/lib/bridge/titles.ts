@@ -243,6 +243,16 @@ export const createTitle = createServerFn({ method: "POST" })
       AUTHORIZED_DISTRIBUTOR: "DISTRIBUTOR_SALES_AGENT",
       PRODUCER_AUTHORITY: "PRODUCER",
     } as const;
+    const rightsPackage = isPublicSubmission ? {
+      territories: data.territories!,
+      languages: data.rightsLanguages!,
+      media: data.media!,
+      windowStart: data.windowStart!,
+      windowEnd: data.windowEnd!,
+      rightsBasis: data.rightsBasis!,
+      evidenceType: data.authorizationEvidenceType!,
+      destinations: data.intendedDestinations!,
+    } : null;
 
     await sql.transaction(async (tx) => {
       await tx`
@@ -263,10 +273,10 @@ export const createTitle = createServerFn({ method: "POST" })
         )
       `;
 
-      if (isPublicSubmission) {
+      if (rightsPackage) {
         const evidence = JSON.stringify([{
           type: "AUTHORIZATION_ATTESTATION",
-          rightsBasis: data.rightsBasis,
+          rightsBasis: rightsPackage.rightsBasis,
           authorizationConfirmed: true,
         }]);
         await tx`
@@ -275,10 +285,10 @@ export const createTitle = createServerFn({ method: "POST" })
             exclusivity, holdbacks, sublicensing_allowed, promotional_rights,
             restrictions, evidence, status, created_by
           ) values (
-            ${id}, ${JSON.stringify(data.territories)}::jsonb,
-            ${JSON.stringify(data.rightsLanguages)}::jsonb,
-            ${JSON.stringify(data.media)}::jsonb,
-            ${data.windowStart}, ${data.windowEnd},
+            ${id}, ${JSON.stringify(rightsPackage.territories)}::jsonb,
+            ${JSON.stringify(rightsPackage.languages)}::jsonb,
+            ${JSON.stringify(rightsPackage.media)}::jsonb,
+            ${rightsPackage.windowStart}, ${rightsPackage.windowEnd},
             ${data.exclusivity ?? "NON_EXCLUSIVE"},
             ${JSON.stringify(data.holdbacks ?? [])}::jsonb,
             ${data.sublicensingAllowed ?? false}, ${data.promotionalRights ?? false},
@@ -291,9 +301,9 @@ export const createTitle = createServerFn({ method: "POST" })
             title_id, authority_type, authorization_evidence_type,
             authorization_confirmed, buyer_channels, screener_mode, screener_url
           ) values (
-            ${id}, ${authorityType[data.rightsBasis!]},
-            ${data.authorizationEvidenceType}, true,
-            ${JSON.stringify(data.intendedDestinations)}::jsonb,
+            ${id}, ${authorityType[rightsPackage.rightsBasis]},
+            ${rightsPackage.evidenceType}, true,
+            ${JSON.stringify(rightsPackage.destinations)}::jsonb,
             'NONE', null
           )
         `;
