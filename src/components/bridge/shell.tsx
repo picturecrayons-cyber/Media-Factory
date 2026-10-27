@@ -1,4 +1,4 @@
-import { Link } from "@tanstack/react-router";
+import { Link, useRouterState } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 import { UserButton } from "@/lib/auth/gates";
 import { UploadTray } from "@/components/bridge/upload-tray";
@@ -82,8 +82,17 @@ export function BrandMark({ className, to = "/" }: { className?: string; to?: "/
   );
 }
 
+const ROLE_DESKS = [
+  { to: "/admin" as const, label: "Admin" },
+  { to: "/studio" as const, label: "Studio" },
+  { to: "/buyer" as const, label: "Buyer" },
+  { to: "/creator" as const, label: "Creator" },
+];
+
 export function BridgeShell({ actor, title, children }: { actor: BridgeActor; title: string; children: ReactNode }) {
   const items = navFor(actor);
+  const path = useRouterState({ select: (state) => state.location.pathname });
+  const canOpenRoles = actor.internalRole === "admin" || actor.internalRole === "super_admin";
   return (
     <div className="min-h-dvh bg-[#f4f7f8] text-fg">
       <aside className="fixed inset-y-0 left-0 z-40 hidden w-60 flex-col border-r border-line bg-white md:flex">
@@ -117,6 +126,17 @@ export function BridgeShell({ actor, title, children }: { actor: BridgeActor; ti
             {title ? <h1 className="min-w-0 break-words text-xl font-semibold tracking-tight md:text-2xl">{title}</h1> : <span />}
             <p className="shrink-0 rounded-full border border-line bg-white px-3 py-1 text-xs font-semibold">{roleLabel(actor)}</p>
           </div>
+          <p className="mb-4 text-xs text-muted">www.crayonspictures.in{path}</p>
+          {canOpenRoles ? (
+            <nav className="mb-5 flex flex-wrap gap-2" aria-label="Role desks">
+              {ROLE_DESKS.map((desk) => (
+                <Link key={desk.to} to={desk.to} className="rounded-full border border-line bg-white px-3 py-2 text-xs font-semibold">
+                  {desk.label}
+                  <span className="mt-0.5 block font-normal text-muted">www.crayonspictures.in{desk.to}</span>
+                </Link>
+              ))}
+            </nav>
+          ) : null}
           {children}
         </main>
       </div>
