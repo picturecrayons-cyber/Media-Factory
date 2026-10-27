@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
@@ -8,6 +9,7 @@ import { listEnquiries } from "@/lib/bridge/leads";
 import { CreateTitleForm } from "@/components/bridge/title-desk";
 import { listLoopPublicationReadiness } from "@/lib/bridge/loop-publication";
 import { listAdminProfiles } from "@/lib/bridge/profiles";
+import { legacyCatalog } from "@/lib/bridge/legacy-catalog";
 
 export const Route = createFileRoute("/admin")({ component: AdminControlPlane });
 
@@ -33,6 +35,7 @@ function AdminControlPlane() {
 }
 
 function AdminBody({ actor }: { actor: any }) {
+  const [legacyQuery, setLegacyQuery] = useState("");
   const titlesQ = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles() });
   const auditQ = useQuery({ queryKey: ["bridge-audit"], queryFn: () => listAuditLogs() });
   const distQ = useQuery({ queryKey: ["loop-publication-readiness"], queryFn: () => listLoopPublicationReadiness() });
@@ -109,6 +112,8 @@ function AdminBody({ actor }: { actor: any }) {
             ) : null}
           </div>
         </section>
+
+        <LegacyCatalog query={legacyQuery} onQuery={setLegacyQuery} />
 
         <section className="rounded-2xl border border-line bg-surface p-4 sm:p-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -198,5 +203,62 @@ function CompactMetric({ label, value }: { label: string; value: string }) {
       <span className="text-sm text-muted">{label}</span>
       <span className="text-lg font-semibold tabular-nums">{value}</span>
     </div>
+  );
+}
+
+function LegacyCatalog({ query, onQuery }: { query: string; onQuery: (value: string) => void }) {
+  const needle = query.trim().toLowerCase();
+  const titles = legacyCatalog.titles.filter((row) => {
+    if (!needle) return true;
+    return [row.title, row.owner, row.email, row.phone, row.language].join(" ").toLowerCase().includes(needle);
+  });
+  const empty = legacyCatalog.empty.filter((row) => {
+    if (!needle) return true;
+    return [row.owner, row.email, row.phone].join(" ").toLowerCase().includes(needle);
+  });
+  return (
+    <section className="rounded-2xl border border-line bg-surface p-4 sm:p-5">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h3 className="font-display text-xl font-semibold">Old catalog</h3>
+          <p className="mt-1 text-sm text-muted">Every old record stays a draft. Nothing here is live, and nothing was written into the title library.</p>
+        </div>
+        <input
+          id="legacy-search"
+          name="legacy"
+          autoComplete="off"
+          value={query}
+          onChange={(event) => onQuery(event.target.value)}
+          placeholder="Title, email, or phone"
+          className="h-10 w-full rounded-xl border border-line bg-bg px-3 text-sm sm:w-64"
+        />
+      </div>
+      <div className="mt-4 divide-y divide-line">
+        {titles.map((row) => (
+          <article key={`${row.source}-${row.oldId}`} className="grid gap-1 py-3 sm:grid-cols-[1fr_auto]">
+            <div>
+              <p className="text-sm font-semibold">{row.title}</p>
+              <p className="text-xs text-muted">{row.type} · {row.language || "Language not set"} · Draft</p>
+              <p className="mt-1 text-sm">{row.owner || "Owner not named"}</p>
+              <p className="text-xs text-muted">{row.email || "No email"}{row.phone ? ` · ${row.phone}` : ""}</p>
+            </div>
+            <p className="text-xs text-muted">{row.video ? "Video on the old app" : "No video"} · {row.poster ? "Poster" : "No poster"}</p>
+          </article>
+        ))}
+      </div>
+      <h4 className="mt-5 text-sm font-semibold">Empty drafts · {legacyCatalog.empty.reduce((sum, row) => sum + row.count, 0)}</h4>
+      <p className="mt-1 text-xs text-muted">No title was saved. The contact is kept so you can write to them later.</p>
+      <div className="mt-2 divide-y divide-line">
+        {empty.map((row) => (
+          <article key={row.email || row.owner} className="flex items-center justify-between gap-3 py-2">
+            <div>
+              <p className="text-sm">{row.owner || "Owner not named"}</p>
+              <p className="text-xs text-muted">{row.email || "No email"}{row.phone ? ` · ${row.phone}` : ""}</p>
+            </div>
+            <span className="text-sm tabular-nums">{row.count}</span>
+          </article>
+        ))}
+      </div>
+    </section>
   );
 }
