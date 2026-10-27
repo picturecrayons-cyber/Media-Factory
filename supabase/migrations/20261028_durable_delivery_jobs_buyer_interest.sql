@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS public.bridge_delivery_jobs (
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
   CONSTRAINT bridge_delivery_jobs_signoff_state_chk
-    CHECK (NOT admin_sign_off OR status = 'approved')
+    CHECK ((status = 'approved') = admin_sign_off)
 );
 
 CREATE INDEX IF NOT EXISTS bridge_delivery_jobs_title_created_idx
