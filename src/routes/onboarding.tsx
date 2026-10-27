@@ -249,33 +249,6 @@ function Onboarding() {
   }
   if (!user) return <RedirectToSignIn />;
 
-  if (submittedTitleId) {
-    return (
-      <main className="grid min-h-screen place-items-center bg-bg p-6">
-        <div className="w-full max-w-lg space-y-5 rounded-2xl border border-line bg-surface p-7">
-          <BrandMark />
-          <h1 className="font-display text-2xl font-semibold">Submission received</h1>
-          <p className="text-sm leading-relaxed text-muted">
-            Your title submission has been recorded as DRAFT. It is not approved, licensed, or visible to buyers. Licensing Ready is not granted by this form.
-            Bridge must verify the master, screener, authorization evidence, legal clearance, QC and rights package before buyers can see it.
-          </p>
-          <div className="rounded-xl border border-line bg-elevated p-4 text-sm">
-            <p className="font-semibold text-fg">Next required evidence</p>
-            <ul className="mt-2 space-y-1.5 text-muted">
-              <li>• Upload authorization / chain-of-title evidence</li>
-              <li>• Upload a private Bridge screener</li>
-              <li>• Upload the approved master and artwork</li>
-              <li>• Complete QC and Legal review</li>
-            </ul>
-          </div>
-          <Button className="w-full" onClick={() => void navigate({ to: "/title/$id", params: { id: submittedTitleId } })}>
-            Open title workspace
-          </Button>
-        </div>
-      </main>
-    );
-  }
-
   if (sessionQ.isError) {
     async function retrySession() {
       if (retrying) return;
