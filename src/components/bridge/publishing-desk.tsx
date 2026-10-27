@@ -171,7 +171,7 @@ function LoopGate({
   const [start, setStart] = useState("");
   const [end, setEnd] = useState("");
   const [share, setShare] = useState(String(partnerShare || 33));
-  const authorize = useMutation({
+  const authorize = useMutation<unknown, Error, void>({
     mutationFn: () => outlet === "loop"
       ? authorizeLoopPublication({
           data: {
@@ -180,7 +180,7 @@ function LoopGate({
             territories: [territory],
             languages: [title.language || "Malayalam"],
             exploitationModels: [model],
-            accessTier: model,
+            accessTier: model === "AVOD" ? "FREE" : model,
             windowStart: new Date(start).toISOString(),
             windowEnd: new Date(end).toISOString(),
             commercialTerms: {
