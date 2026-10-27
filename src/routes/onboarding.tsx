@@ -237,7 +237,7 @@ function Onboarding() {
         },
       });
 
-      const result = await createTitle({
+      await createTitle({
         data: {
           name: titleName.trim(),
           originalTitle: originalTitle.trim() || undefined,
