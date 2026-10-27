@@ -114,6 +114,9 @@ export const createStoryConceptSubmission = createServerFn({ method: "POST" })
     if (actor.internalRole || !["independent_creator", "studio"].includes(actor.accountType)) {
       throw new Error("Only creator and studio accounts can submit story concepts");
     }
+    if (actor.accountType === "studio" && !actor.organizationId) {
+      throw new Error("An active Studio organization membership is required");
+    }
     assertPermission(actor, "title.create");
 
     const titleId = randomBytes(16).toString("hex");
@@ -190,6 +193,9 @@ export const listMyStoryConcepts = createServerFn({ method: "GET" })
     const actor = await requireVerifiedActor(context.userId);
     if (actor.internalRole || !["independent_creator", "studio"].includes(actor.accountType)) {
       throw new Error("Creator or studio account required");
+    }
+    if (actor.accountType === "studio" && !actor.organizationId) {
+      throw new Error("An active Studio organization membership is required");
     }
     const sql = await getSql();
 
