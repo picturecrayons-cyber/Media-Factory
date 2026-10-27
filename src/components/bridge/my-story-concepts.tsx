@@ -1,6 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { listMyStoryConcepts } from "@/lib/bridge/story-concept.server";
+import { listMyStoryConcepts } from "@/lib/bridge/story-concept-api";
 import { STORY_CONCEPT_ENABLED } from "@/lib/bridge/story-concept";
 
 const STATUS_LABEL: Record<string, string> = {
@@ -47,7 +47,9 @@ export function MyStoryConcepts() {
                 </p>
                 <p className="text-sm text-muted">
                   {STATUS_LABEL[c.curation_status] ?? c.curation_status}
-                  {c.logline ? ` · ${c.logline.slice(0, 80)}${c.logline.length > 80 ? "…" : ""}` : ""}
+                  {c.logline
+                    ? ` · ${c.logline.slice(0, 80)}${c.logline.length > 80 ? "…" : ""}`
+                    : ""}
                 </p>
               </div>
             </Link>

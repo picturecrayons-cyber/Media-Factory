@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import {
   listPendingStoryConcepts,
   updateStoryConceptCuration,
-} from "@/lib/bridge/story-concept.server";
+} from "@/lib/bridge/story-concept-api";
 import type { CurationStatus } from "@/lib/bridge/story-concept";
 
 const STATUS_LABEL: Record<string, string> = {
@@ -143,9 +143,7 @@ export function StoryConceptDesk() {
               </div>
 
               {update.isError ? (
-                <p className="mt-3 text-xs text-accent">
-                  {String(update.error)}
-                </p>
+                <p className="mt-3 text-xs text-accent">{String(update.error)}</p>
               ) : null}
             </article>
           ))}

@@ -3,7 +3,7 @@ import { useMutation } from "@tanstack/react-query";
 import { useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { createStoryConceptSubmission } from "@/lib/bridge/story-concept.server";
+import { createStoryConceptSubmission } from "@/lib/bridge/story-concept-api";
 
 const GENRES = [
   "Drama",
@@ -82,7 +82,7 @@ export function StoryConceptForm() {
   }
 
   return (
-    <form onSubmit={onSubmit} className="grid gap-4">
+    <form onSubmit={onSubmit} className="grid gap-4 sm:grid-cols-2">
       <label className="text-sm sm:col-span-2">
         Working title
         <input
