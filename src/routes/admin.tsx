@@ -1,11 +1,16 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { Button } from "@/components/ui/button";
-import { listTitles, listAuditLogs } from "@/lib/bridge/titles";
+import { listTitles, listAuditLogs, importNamedLegacyDrafts } from "@/lib/bridge/titles";
+import { listEnquiries } from "@/lib/bridge/leads";
+import { CreateTitleForm } from "@/components/bridge/title-desk";
 import { listLoopPublicationReadiness } from "@/lib/bridge/loop-publication";
 import { listAdminProfiles } from "@/lib/bridge/profiles";
+import { legacyCatalog } from "@/lib/bridge/legacy-catalog";
 
 export const Route = createFileRoute("/admin")({ component: AdminControlPlane });
 
@@ -31,10 +36,14 @@ function AdminControlPlane() {
 }
 
 function AdminBody({ actor }: { actor: any }) {
+  const [legacyQuery, setLegacyQuery] = useState("");
+  const [peopleQuery, setPeopleQuery] = useState("");
+  const qc = useQueryClient();
   const titlesQ = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles() });
   const auditQ = useQuery({ queryKey: ["bridge-audit"], queryFn: () => listAuditLogs() });
   const distQ = useQuery({ queryKey: ["loop-publication-readiness"], queryFn: () => listLoopPublicationReadiness() });
   const profilesQ = useQuery({ queryKey: ["bridge-admin-profiles"], queryFn: () => listAdminProfiles() });
+  const enquiriesQ = useQuery({ queryKey: ["bridge-enquiries"], queryFn: () => listEnquiries() });
 
   const titles = titlesQ.data?.titles ?? [];
   const distribution = distQ.data?.titles ?? [];
@@ -46,6 +55,19 @@ function AdminBody({ actor }: { actor: any }) {
   const live = distribution.filter((title) => title.publication?.published).length;
   const attention = titles.filter((title) => ["PREPARING", "QC_REVIEW", "RIGHTS_REVIEW", "LICENSING_READY"].includes(title.status)).slice(0, 5);
   const loading = titlesQ.isPending;
+  const importDrafts = useMutation({
+    mutationFn: () => importNamedLegacyDrafts(),
+    onSuccess: async (result) => {
+      toast.success(result.added.length ? `Added ${result.added.length} drafts.` : "Those drafts are already in the library.");
+      await qc.invalidateQueries({ queryKey: ["bridge-titles"] });
+    },
+    onError: (error) => toast.error(error instanceof Error ? error.message : "Could not add drafts"),
+  });
+  const needle = peopleQuery.trim().toLowerCase();
+  const people = profiles.filter((profile) => {
+    if (!needle) return true;
+    return [profile.displayName, profile.email, profile.accountType, profile.organizationName || ""].join(" ").toLowerCase().includes(needle);
+  });
 
   return (
     <BridgeShell actor={actor} title="Admin dashboard">
@@ -59,7 +81,8 @@ function AdminBody({ actor }: { actor: any }) {
           <div className="flex flex-wrap gap-2">
             <Link to="/admin/workstations"><Button>Open workspace</Button></Link>
             <Link to="/cms"><Button variant="outline">Open CMS</Button></Link>
-            <a href="https://crayonsloop.in/" target="_blank" rel="noreferrer"><Button variant="outline">Open Loop ↗</Button></a>
+            <a href="https://crayonsloop.in/" target="_blank" rel="noreferrer"><Button variant="outline">Open Loop</Button></a>
+            <a href="https://www.streamvista.in/" target="_blank" rel="noreferrer"><Button variant="outline">Open StreamVista</Button></a>
           </div>
         </section>
 
@@ -81,6 +104,71 @@ function AdminBody({ actor }: { actor: any }) {
             <CompactMetric label="Organizations" value={profilesQ.isPending ? "—" : String(organizations.size)} />
           </div>
         </section>
+
+        <section className="rounded-2xl border border-line bg-surface p-4 sm:p-5">
+          <h3 className="font-display text-xl font-semibold">New title</h3>
+          <p className="mt-1 mb-4 text-sm text-muted">Same record a creator or studio opens. Title, rights, and authorization stay together.</p>
+          <CreateTitleForm />
+        </section>
+
+        <section className="rounded-2xl border border-line bg-surface p-4 sm:p-5">
+          <h3 className="font-display text-xl font-semibold">Desk enquiries</h3>
+          <p className="mt-1 text-sm text-muted">Sent from the public desk. Nothing here is a sample.</p>
+          {enquiriesQ.isPending ? <p className="mt-3 text-sm text-muted">Loading…</p> : null}
+          {enquiriesQ.isError ? <p role="alert" className="mt-3 text-sm text-muted">Could not load enquiries.</p> : null}
+          <div className="mt-3 divide-y divide-line">
+            {(enquiriesQ.data?.enquiries ?? []).map((row) => (
+              <article key={row.id} className="py-3">
+                <p className="text-sm font-semibold">{row.name} · {row.email}</p>
+                <p className="text-xs text-muted">{row.organization || "No company"} · {new Date(row.created_at).toLocaleString()}</p>
+                <p className="mt-1 text-sm">{row.message}</p>
+              </article>
+            ))}
+            {!enquiriesQ.isPending && !enquiriesQ.isError && (enquiriesQ.data?.enquiries.length ?? 0) === 0 ? (
+              <p className="py-4 text-sm text-muted">No enquiries yet.</p>
+            ) : null}
+          </div>
+        </section>
+
+        <section className="rounded-2xl border border-line bg-surface p-4 sm:p-5">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <h3 className="font-display text-xl font-semibold">People</h3>
+              <p className="mt-1 text-sm text-muted">Bridge accounts, then the old contacts. Test names are not added as titles.</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <input id="people-search" name="people" autoComplete="off" value={peopleQuery} onChange={(event) => setPeopleQuery(event.target.value)} placeholder="Name or email" className="h-10 w-full rounded-xl border border-line bg-bg px-3 text-sm sm:w-56" />
+              {actor.internalRole === "super_admin" ? (
+                <button type="button" disabled={importDrafts.isPending} onClick={() => importDrafts.mutate()} className="h-10 rounded-full bg-[#102433] px-4 text-sm font-semibold text-white">
+                  {importDrafts.isPending ? "Adding…" : "Add named drafts"}
+                </button>
+              ) : null}
+            </div>
+          </div>
+          <div className="mt-4 divide-y divide-line">
+            {profilesQ.isPending ? <p className="py-3 text-sm text-muted">Loading accounts…</p> : null}
+            {people.map((profile) => (
+              <article key={profile.userId} className="py-3">
+                <p className="text-sm font-semibold">{profile.displayName || "No name"}</p>
+                <p className="text-xs text-muted">{profile.email} · {profile.accountType}{profile.internalRole ? ` · ${profile.internalRole}` : ""}{profile.organizationName ? ` · ${profile.organizationName}` : ""}</p>
+              </article>
+            ))}
+          </div>
+          <h4 className="mt-5 text-sm font-semibold">Old contacts with no title · {legacyCatalog.empty.reduce((sum, row) => sum + row.count, 0)}</h4>
+          <div className="mt-2 divide-y divide-line">
+            {legacyCatalog.empty.filter((row) => !needle || [row.owner, row.email, row.phone].join(" ").toLowerCase().includes(needle)).map((row) => (
+              <article key={row.email || row.owner} className="flex items-center justify-between gap-3 py-2">
+                <div>
+                  <p className="text-sm">{row.owner || "Owner not named"}</p>
+                  <p className="text-xs text-muted">{row.email || "No email"}{row.phone ? ` · ${row.phone}` : ""}</p>
+                </div>
+                <span className="text-sm tabular-nums">{row.count}</span>
+              </article>
+            ))}
+          </div>
+        </section>
+
+        <LegacyCatalog query={legacyQuery} onQuery={setLegacyQuery} />
 
         <section className="rounded-2xl border border-line bg-surface p-4 sm:p-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -170,5 +258,62 @@ function CompactMetric({ label, value }: { label: string; value: string }) {
       <span className="text-sm text-muted">{label}</span>
       <span className="text-lg font-semibold tabular-nums">{value}</span>
     </div>
+  );
+}
+
+function LegacyCatalog({ query, onQuery }: { query: string; onQuery: (value: string) => void }) {
+  const needle = query.trim().toLowerCase();
+  const titles = legacyCatalog.titles.filter((row) => {
+    if (!needle) return true;
+    return [row.title, row.owner, row.email, row.phone, row.language].join(" ").toLowerCase().includes(needle);
+  });
+  const empty = legacyCatalog.empty.filter((row) => {
+    if (!needle) return true;
+    return [row.owner, row.email, row.phone].join(" ").toLowerCase().includes(needle);
+  });
+  return (
+    <section className="rounded-2xl border border-line bg-surface p-4 sm:p-5">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h3 className="font-display text-xl font-semibold">Old catalog</h3>
+          <p className="mt-1 text-sm text-muted">Every old record stays a draft. Nothing here is live, and nothing was written into the title library.</p>
+        </div>
+        <input
+          id="legacy-search"
+          name="legacy"
+          autoComplete="off"
+          value={query}
+          onChange={(event) => onQuery(event.target.value)}
+          placeholder="Title, email, or phone"
+          className="h-10 w-full rounded-xl border border-line bg-bg px-3 text-sm sm:w-64"
+        />
+      </div>
+      <div className="mt-4 divide-y divide-line">
+        {titles.map((row) => (
+          <article key={`${row.source}-${row.oldId}`} className="grid gap-1 py-3 sm:grid-cols-[1fr_auto]">
+            <div>
+              <p className="text-sm font-semibold">{row.title}</p>
+              <p className="text-xs text-muted">{row.type} · {row.language || "Language not set"} · Draft</p>
+              <p className="mt-1 text-sm">{row.owner || "Owner not named"}</p>
+              <p className="text-xs text-muted">{row.email || "No email"}{row.phone ? ` · ${row.phone}` : ""}</p>
+            </div>
+            <p className="text-xs text-muted">{row.video ? "Video on the old app" : "No video"} · {row.poster ? "Poster" : "No poster"}</p>
+          </article>
+        ))}
+      </div>
+      <h4 className="mt-5 text-sm font-semibold">Empty drafts · {legacyCatalog.empty.reduce((sum, row) => sum + row.count, 0)}</h4>
+      <p className="mt-1 text-xs text-muted">No title was saved. The contact is kept so you can write to them later.</p>
+      <div className="mt-2 divide-y divide-line">
+        {empty.map((row) => (
+          <article key={row.email || row.owner} className="flex items-center justify-between gap-3 py-2">
+            <div>
+              <p className="text-sm">{row.owner || "Owner not named"}</p>
+              <p className="text-xs text-muted">{row.email || "No email"}{row.phone ? ` · ${row.phone}` : ""}</p>
+            </div>
+            <span className="text-sm tabular-nums">{row.count}</span>
+          </article>
+        ))}
+      </div>
+    </section>
   );
 }

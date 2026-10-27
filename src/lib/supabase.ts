@@ -1,10 +1,11 @@
 import { createClient } from "@supabase/supabase-js";
+import { assertCanonicalSupabaseUrl } from "./bridge/canonical.ts";
 import { resolveCanonicalSupabaseUrl } from "./supabase-url.ts";
 
-const supabaseUrl = resolveCanonicalSupabaseUrl(
+const supabaseUrl = assertCanonicalSupabaseUrl(resolveCanonicalSupabaseUrl(
   import.meta.env.VITE_SUPABASE_URL as string | undefined,
   import.meta.env.NEXT_PUBLIC_SUPABASE_URL as string | undefined,
-);
+));
 const supabasePublishableKey =
   (import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined)?.trim() ||
   (import.meta.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY as string | undefined)?.trim();

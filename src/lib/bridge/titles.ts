@@ -10,8 +10,10 @@ import { assertPermission, canMutateTitle, canReadTitle, hasPermission, hasStaff
 import { requireVerifiedActor } from "./session";
 import { writeAudit } from "./audit";
 import { assertNotDevUser } from "./guards";
+import { FILE_STORAGE_ENABLED } from "./mvp-lock";
 import { loopStageType } from "./loop-lanes";
 import { assertBuyerPublishable, getBuyerGateStatus } from "./buyer-visibility";
+import { legacyCatalog } from "./legacy-catalog";
 
 type TitleRow = {
   id: string;
@@ -67,6 +69,72 @@ export function mapTitle(r: TitleRow): BridgeTitle {
     updatedAt: asIso(r.updated_at),
   };
 }
+
+export const resetCatalogToDraft = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    if (actor.internalRole !== "super_admin") throw new Error("Super admin only");
+    const sql = await getSql();
+    await sql.query(`create table if not exists bridge_ops_flags (id text primary key, done_at timestamptz not null default now())`);
+    const marked = await sql<{ id: string }>`
+      select id from bridge_ops_flags where id = 'catalog-draft-2026-10-26' limit 1
+    `;
+    if (marked[0]) return { changed: 0 };
+    const updated = await sql<{ id: string }>`
+      update bridge_titles set status = 'DRAFT', updated_at = now()
+      where status <> 'DRAFT'
+      returning id
+    `;
+    await sql`insert into bridge_ops_flags (id) values ('catalog-draft-2026-10-26') on conflict (id) do nothing`;
+    await writeAudit({
+      actorUserId: actor.userId,
+      action: "catalog.draft",
+      entityType: "bridge_titles",
+      entityId: "catalog",
+      metadata: { changed: updated.length },
+    });
+    return { changed: updated.length };
+  });
+
+let seoReady = false;
+
+async function readTitleSeo(sql: Sql, titleId: string) {
+  try {
+    if (!seoReady) {
+      await sql.query(`
+        create table if not exists bridge_title_seo (
+          title_id text primary key,
+          seo_title text,
+          seo_description text
+        )
+      `);
+      await sql.query(`alter table bridge_title_seo add column if not exists genre text`);
+      await sql.query(`alter table bridge_title_seo add column if not exists rating text`);
+      await sql.query(`alter table bridge_title_seo add column if not exists play_url text`);
+      seoReady = true;
+    }
+    const rows = await sql<{ seo_title: string | null; seo_description: string | null; genre: string | null; rating: string | null; play_url: string | null }>`
+      select seo_title, seo_description, genre, rating, play_url from bridge_title_seo where title_id = ${titleId} limit 1
+    `;
+    return {
+      title: rows[0]?.seo_title || "",
+      description: rows[0]?.seo_description || "",
+      genre: rows[0]?.genre || "",
+      rating: rows[0]?.rating || "",
+      playUrl: rows[0]?.play_url || "",
+    };
+  } catch {
+    return { title: "", description: "", genre: "", rating: "", playUrl: "" };
+  }
+}
+
+async function ensureOwnerOrganizationColumn(sql: Sql) {
+  await sql`alter table bridge_titles add column if not exists owner_organization_id uuid`;
+}
+
+export { ensureOwnerOrganizationColumn };
 
 async function hasTitleMergeColumn(sql: Sql): Promise<boolean> {
   const rows = await sql<{ exists: boolean }>`
@@ -212,6 +280,7 @@ export const createTitle = createServerFn({ method: "POST" })
     const id = randomBytes(16).toString("hex");
     const slug = slugify(data.name, id);
     const sql = await getSql();
+    await ensureOwnerOrganizationColumn(sql);
     await sql`
       insert into bridge_titles (
         id, slug, name, name_ml, owner_user_id, owner_account_type, status,
@@ -244,9 +313,86 @@ export const createTitle = createServerFn({ method: "POST" })
       entityId: id,
       metadata: { publicSubmission: isPublicSubmission },
     });
+    if (data.territories?.length && data.rightsLanguages?.length && data.media?.length && data.windowStart && data.windowEnd) {
+      await sql`
+        insert into bridge_rights_grants (
+          title_id, grant_type, territories, languages, media, window_start, window_end,
+          exclusivity, evidence, status, created_by
+        ) values (
+          ${id}, 'DISTRIBUTION', ${JSON.stringify(data.territories)}::jsonb,
+          ${JSON.stringify(data.rightsLanguages)}::jsonb, ${JSON.stringify(data.media)}::jsonb,
+          ${data.windowStart}, ${data.windowEnd}, ${data.exclusivity ?? "NON_EXCLUSIVE"},
+          ${JSON.stringify([{
+            rightsBasis: data.rightsBasis ?? "OWNER",
+            authorizationAttested: Boolean(data.authorizationAttested),
+            sublicensingAllowed: Boolean(data.sublicensingAllowed),
+            promotionalRights: data.promotionalRights !== false,
+            screenerAccess: data.screenerAccess ?? "SCREENER_PENDING",
+            destinations: data.intendedDestinations ?? [],
+            additionalLanguages: data.additionalLanguages ?? [],
+          }])}::jsonb,
+          'DRAFT', ${actor.userId}
+        )
+      `;
+    }
     const title = await loadTitle(id);
     if (!title) throw new Error("Title create failed");
     return { title, submission: isPublicSubmission };
+  });
+
+const LEGACY_DRAFT_SKIP = new Set(["jajlskj", "test", "sdsd", "test film", "aasss"]);
+
+export const importNamedLegacyDrafts = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    if (actor.internalRole !== "super_admin") throw new Error("Super admin only");
+    const sql = await getSql();
+    await ensureOwnerOrganizationColumn(sql);
+    const existing = await sql<{ name: string }>`select name from bridge_titles`;
+    const have = new Set(existing.map((row) => row.name.trim().toLowerCase()));
+    const added: string[] = [];
+    const already: string[] = [];
+    const skipped: string[] = [];
+    for (const row of legacyCatalog.titles.filter((item) => item.source === "draft")) {
+      const name = row.title.trim();
+      if (LEGACY_DRAFT_SKIP.has(name.toLowerCase())) {
+        skipped.push(name);
+        continue;
+      }
+      if (have.has(name.toLowerCase())) {
+        already.push(name);
+        continue;
+      }
+      const id = randomBytes(16).toString("hex");
+      const synopsis = `Old draft kept for ${row.owner || "the owner"}. ${row.email || "No email"}.`;
+      await sql`
+        insert into bridge_titles (
+          id, slug, name, owner_user_id, owner_account_type, status,
+          synopsis, language, content_type, credits
+        ) values (
+          ${id}, ${slugify(name, id)}, ${name}, ${actor.userId}, ${actor.accountType},
+          ${"DRAFT"}, ${synopsis}, ${row.language || "Malayalam"},
+          ${loopStageType(row.type)}, ${JSON.stringify([
+            { role: "Owner", name: row.owner || "Not named" },
+            { role: "Email", name: row.email || "" },
+            { role: "Phone", name: row.phone || "" },
+          ])}::jsonb
+        )
+      `;
+      await recordTransition({ titleId: id, from: null, to: "DRAFT", actorUserId: actor.userId, note: "old named draft" });
+      await writeAudit({
+        actorUserId: actor.userId,
+        action: "title.create",
+        entityType: "bridge_title",
+        entityId: id,
+        metadata: { legacyDraft: true, email: row.email },
+      });
+      have.add(name.toLowerCase());
+      added.push(name);
+    }
+    return { added, already, skipped };
   });
 
 export const listTitles = createServerFn({ method: "GET" })
@@ -255,6 +401,7 @@ export const listTitles = createServerFn({ method: "GET" })
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
     const sql = await getSql();
+    await ensureOwnerOrganizationColumn(sql);
     let rows: TitleRow[] = [];
     if (actor.internalRole && hasPermission(actor, "title.read_catalog")) {
       rows = await listCatalog(sql);
@@ -319,6 +466,7 @@ export const getTitle = createServerFn({ method: "GET" })
     `;
     return {
       title,
+      seo: await readTitleSeo(sql, title.id),
       events: events.map((e) => ({
         from: e.from_status,
         to: e.to_status,
@@ -342,6 +490,15 @@ export const updateTitle = createServerFn({ method: "POST" })
       runtimeMinutes: z.number().int().min(1).max(600).nullable().optional(),
       licensingFeePaise: z.number().int().min(0).max(2_000_000_000).optional(),
       contentType: z.string().min(1).max(80).optional(),
+      countryOfOrigin: z.string().max(80).nullable().optional(),
+      releaseDate: z.string().max(40).nullable().optional(),
+      director: z.string().max(120).optional(),
+      producer: z.string().max(120).optional(),
+      seoTitle: z.string().max(70).optional(),
+      seoDescription: z.string().max(160).optional(),
+      genre: z.string().max(40).optional(),
+      rating: z.string().max(20).optional(),
+      playUrl: z.string().max(300).optional(),
     }),
   )
   .handler(async ({ context, data }) => {
@@ -361,6 +518,17 @@ export const updateTitle = createServerFn({ method: "POST" })
       throw new Error("Title is locked after prepare");
     }
     const sql = await getSql();
+    const creditsNow = title.credits ?? [];
+    const named = (role: string, value: string | undefined) => {
+      if (value === undefined) return creditsNow.filter((credit) => credit.role === role);
+      const clean = value.trim();
+      return clean ? [{ role, name: clean }] : [];
+    };
+    const credits = [
+      ...named("Director", data.director),
+      ...named("Producer", data.producer),
+      ...creditsNow.filter((credit) => credit.role === "Cast"),
+    ];
     await sql`
       update bridge_titles set
         name = ${data.name ?? title.name},
@@ -371,6 +539,9 @@ export const updateTitle = createServerFn({ method: "POST" })
         runtime_minutes = ${data.runtimeMinutes === undefined ? title.runtimeMinutes : data.runtimeMinutes},
         licensing_fee_paise = ${data.licensingFeePaise ?? title.licensingFeePaise},
         content_type = ${data.contentType ? loopStageType(data.contentType) : title.contentType},
+        country_of_origin = ${data.countryOfOrigin === undefined ? title.countryOfOrigin : data.countryOfOrigin},
+        release_date = ${data.releaseDate === undefined ? title.releaseDate : data.releaseDate || null},
+        credits = ${JSON.stringify(credits)}::jsonb,
         updated_at = now()
       where id = ${title.id}
     `;
@@ -380,6 +551,28 @@ export const updateTitle = createServerFn({ method: "POST" })
       entityType: "bridge_title",
       entityId: title.id,
     });
+    if (data.seoTitle !== undefined || data.seoDescription !== undefined || data.genre !== undefined || data.rating !== undefined || data.playUrl !== undefined) {
+      await sql.query(`
+        create table if not exists bridge_title_seo (
+          title_id text primary key,
+          seo_title text,
+          seo_description text
+        )
+      `);
+      await sql.query(`alter table bridge_title_seo add column if not exists genre text`);
+      await sql.query(`alter table bridge_title_seo add column if not exists rating text`);
+      await sql.query(`alter table bridge_title_seo add column if not exists play_url text`);
+      await sql`
+        insert into bridge_title_seo (title_id, seo_title, seo_description, genre, rating, play_url)
+        values (${title.id}, ${data.seoTitle || null}, ${data.seoDescription || null}, ${data.genre || null}, ${data.rating || null}, ${data.playUrl || null})
+        on conflict (title_id) do update set
+          seo_title = coalesce(excluded.seo_title, bridge_title_seo.seo_title),
+          seo_description = coalesce(excluded.seo_description, bridge_title_seo.seo_description),
+          genre = coalesce(excluded.genre, bridge_title_seo.genre),
+          rating = coalesce(excluded.rating, bridge_title_seo.rating),
+          play_url = coalesce(excluded.play_url, bridge_title_seo.play_url)
+      `;
+    }
     const next = await loadTitle(title.id);
     return { title: next };
   });
@@ -476,8 +669,11 @@ async function assertLicensingReady(titleId: string) {
     ["required artwork", row.poster_ok],
     ["destination package", row.package_ok],
   ].filter(([, ok]) => !ok).map(([name]) => name);
-  if (missing.length) {
-    throw new Error(`LICENSING_READY blocked: ${missing.join(", ")}`);
+  const blocked = FILE_STORAGE_ENABLED
+    ? missing
+    : missing.filter((name) => !["private screener", "verified master", "required artwork"].includes(String(name)));
+  if (blocked.length) {
+    throw new Error(`LICENSING_READY blocked: ${blocked.join(", ")}`);
   }
   await sql`
     update bridge_titles
@@ -505,7 +701,7 @@ export const advanceTitle = createServerFn({ method: "POST" })
     }
     if (["RIGHTS_REVIEW", "LICENSING_READY"].includes(data.to))
       throw new Error("Use the recorded QC or legal review action");
-    if (data.to === "QC_REVIEW") {
+    if (data.to === "QC_REVIEW" && FILE_STORAGE_ENABLED) {
       const verified = await (await getSql())<{
         kind: string;
         s3_key: string;
@@ -556,8 +752,75 @@ export const advanceTitle = createServerFn({ method: "POST" })
         tx,
       );
       return { title: { ...title, status: data.to } };
+    }).then(async (result) => {
+      await Promise.race([
+        notifySubmission({
+          titleId: title.id,
+          titleName: title.name,
+          ownerUserId: title.ownerUserId,
+          actorUserId: actor.userId,
+          actorEmail: actor.email,
+          actorName: actor.displayName || actor.email,
+        }),
+        new Promise((resolve) => setTimeout(resolve, 8000)),
+      ]);
+      return result;
     });
   });
+
+async function notifySubmission(input: {
+  titleId: string;
+  titleName: string;
+  ownerUserId: string;
+  actorUserId: string;
+  actorEmail: string;
+  actorName: string;
+}) {
+  try {
+    const sql = await getSql();
+    const admins = await sql<{ email: string }>`
+      select email from bridge_profiles
+      where internal_role in ('admin', 'super_admin', 'qc_reviewer')
+    `;
+    const owner = await sql<{ email: string }>`
+      select email from bridge_profiles where user_id = ${input.ownerUserId} limit 1
+    `;
+    const people = [...new Set([
+      ...admins.map((row) => row.email),
+      owner[0]?.email ?? "",
+      input.actorEmail,
+    ].map((value) => value.trim()).filter(Boolean))];
+    let mailed = false;
+    try {
+      const { sendTransactionalEmail } = await import("./mail.server");
+      await Promise.all(people.map((address) => sendTransactionalEmail({
+        to: address,
+        subject: `Submitted · ${input.titleName}`,
+        text: `${input.actorName} submitted “${input.titleName}”. Open https://www.crayonspictures.in/title/${input.titleId}`,
+      })));
+      mailed = people.length > 0;
+    } catch (error) {
+      console.error("[bridge] submit mail skipped", error instanceof Error ? error.message : error);
+    }
+    await sql.query(`
+      create table if not exists bridge_desk_notes (
+        id text primary key,
+        title_id text not null,
+        actor_user_id text not null,
+        action text not null,
+        body text not null,
+        mailed boolean not null default false,
+        created_at timestamptz not null default now()
+      )
+    `);
+    await sql`
+      insert into bridge_desk_notes (id, title_id, actor_user_id, action, body, mailed)
+      values (${randomBytes(16).toString("hex")}, ${input.titleId}, ${input.actorUserId}, 'submit', ${"Submitted."}, ${mailed})
+    `;
+  } catch (error) {
+    console.error("[bridge] submit notice skipped", error instanceof Error ? error.message : error);
+  }
+}
 
 export const listAuditLogs = createServerFn({ method: "GET" })
   .middleware([authMiddleware])

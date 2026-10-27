@@ -95,9 +95,11 @@ function Reset() {
               </p>
             ) : null}
 
-            <label className="block text-sm font-medium text-fg">
+            <label className="block text-sm font-medium text-fg" htmlFor="bridge-new-password">
               New password
               <input
+                id="bridge-new-password"
+                name="password"
                 required
                 autoComplete="new-password"
                 type={showPassword ? "text" : "password"}
@@ -109,9 +111,11 @@ function Reset() {
               />
             </label>
 
-            <label className="block text-sm font-medium text-fg">
+            <label className="block text-sm font-medium text-fg" htmlFor="bridge-confirm-password">
               Confirm password
               <input
+                id="bridge-confirm-password"
+                name="confirm"
                 required
                 autoComplete="new-password"
                 type={showPassword ? "text" : "password"}

@@ -7,6 +7,7 @@ import { BridgeShell } from "@/components/bridge/shell";
 import { StatusChip } from "@/components/bridge/status-rail";
 import { Button } from "@/components/ui/button";
 import { listTitles } from "@/lib/bridge/titles";
+import { requestScreener } from "@/lib/bridge/partners";
 import {
   createLicenseOrder,
   listOwnEntitlements,
@@ -50,10 +51,7 @@ function Buyer() {
   return (
     <RequireBridge allow="buyer">
       {(actor) => (
-        <BridgeShell actor={actor} title="Buyer dashboard">
-          <p className="mb-6 max-w-2xl text-sm leading-relaxed text-muted">
-            Discover licensing-ready titles, open a listing, then license only after captured payment.
-          </p>
+        <BridgeShell actor={actor} title="Buyer">
           <BuyerBody />
         </BridgeShell>
       )}
@@ -63,7 +61,6 @@ function Buyer() {
 
 function BuyerBody() {
   const qc = useQueryClient();
-  const [tab, setTab] = useState<"discover" | "listing" | "licenses">("discover");
   const [query, setQuery] = useState("");
   const titlesQ = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles() });
   const entQ = useQuery({
@@ -102,7 +99,6 @@ function BuyerBody() {
       toast("Payment captured — entitlement recorded");
       void qc.invalidateQueries({ queryKey: ["bridge-titles"] });
       void qc.invalidateQueries({ queryKey: ["bridge-entitlements"] });
-      setTab("licenses");
     },
     onError: (err) => toast(err instanceof Error ? err.message : "Payment did not complete"),
   });
@@ -110,8 +106,9 @@ function BuyerBody() {
   const titles = titlesQ.data?.titles ?? [];
   const needle = query.trim().toLowerCase();
   const visible = titles.filter((t) => !needle || `${t.name} ${t.language}`.toLowerCase().includes(needle));
+  const ready = visible.filter((t) => ["LICENSING_READY", "LIVE_FOR_BUYERS", "IN_NEGOTIATION", "LICENSED", "DELIVERED"].includes(t.status));
   const licensed = visible.filter((t) => entitled.has(t.id));
-  if (titlesQ.isPending || entQ.isPending) return <p>Loading buyer dashboard…</p>;
+  if (titlesQ.isPending || entQ.isPending) return <p className="text-sm text-muted">Loading…</p>;
   if (titlesQ.isError)
     return (
       <p role="alert">
@@ -121,40 +118,30 @@ function BuyerBody() {
     );
 
   return (
-    <div className="space-y-5">
-      <div className="grid gap-3 sm:grid-cols-3">
-        <Stat label="Discover" value={String(titles.length)} note="Live for buyers" />
-        <Stat label="Listing" value={String(visible.length)} note="Matching this search" />
-        <Stat label="Licenses" value={String(licensed.length)} note="Captured entitlements" />
-      </div>
-      <div className="flex flex-wrap gap-2">
-        {(["discover", "listing", "licenses"] as const).map((id) => (
-          <button key={id} type="button" onClick={() => setTab(id)} className={`rounded-sm border px-3 py-1.5 text-sm capitalize ${tab === id ? "border-accent text-accent" : "border-line text-muted"}`}>
-            {id}
-          </button>
-        ))}
-      </div>
-      {tab !== "licenses" && (
-        <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search title or language" className="w-full max-w-md rounded-sm border border-line bg-transparent px-3 py-2 text-sm" />
-      )}
-      {!titles.length ? (
-        <p className="text-sm text-muted">No live titles yet. Nothing is for sale until licensing-ready clears.</p>
-      ) : tab === "licenses" ? (
-        <TitleList titles={licensed} entitled={entitled} order={order} empty="No licenses yet. Discover a title and complete payment." />
-      ) : (
-        <TitleList titles={visible} entitled={entitled} order={order} empty="No titles match this search." />
-      )}
+    <div className="space-y-6">
+      <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search a cleared title" className="h-12 w-full rounded-xl border border-line-strong bg-white px-3" />
+      <section>
+        <h2 className="mb-3 text-lg font-semibold">Ready to license</h2>
+        <TitleList titles={ready} entitled={entitled} order={order} empty="Nothing is cleared for buyers yet." />
+      </section>
+      <section>
+        <h2 className="mb-3 text-lg font-semibold">Your licenses</h2>
+        <TitleList titles={licensed} entitled={entitled} order={order} empty="No license yet." />
+      </section>
     </div>
   );
 }
 
-function Stat({ label, value, note }: { label: string; value: string; note: string }) {
+function ScreenerAsk({ titleId }: { titleId: string }) {
+  const ask = useMutation({
+    mutationFn: () => requestScreener({ data: { titleId, days: 3 } }),
+    onSuccess: () => toast.success("Screener requested for 3 days."),
+    onError: (error) => toast.error(error instanceof Error ? error.message : "Could not request a screener"),
+  });
   return (
-    <div className="rounded-sm border border-line px-4 py-3">
-      <div className="text-xs uppercase tracking-widest text-muted">{label}</div>
-      <div className="mt-1 text-2xl font-semibold">{value}</div>
-      <div className="text-xs text-muted">{note}</div>
-    </div>
+    <button type="button" disabled={ask.isPending} onClick={() => ask.mutate()} className="text-sm font-semibold">
+      {ask.isPending ? "Asking…" : "Ask screener"}
+    </button>
   );
 }
 
@@ -170,7 +157,12 @@ function TitleList({ titles, entitled, order, empty }: { titles: Array<{ id: str
           </div>
           <div className="flex items-center gap-3">
             <StatusChip status={t.status as never} />
-            {entitled.has(t.id) ? <span className="text-sm text-accent">Licensed</span> : <Button disabled={order.isPending || t.licensingFeePaise <= 0} onClick={() => order.mutate(t.id)}>License</Button>}
+            {entitled.has(t.id) ? <span className="text-sm text-accent">Licensed</span> : (
+              <>
+                <ScreenerAsk titleId={t.id} />
+                <Button disabled={order.isPending || t.licensingFeePaise <= 0} onClick={() => order.mutate(t.id)}>License</Button>
+              </>
+            )}
           </div>
         </li>
       ))}

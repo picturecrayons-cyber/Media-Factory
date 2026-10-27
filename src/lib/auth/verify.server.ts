@@ -1,3 +1,4 @@
+import { assertCanonicalSupabaseUrl } from "../bridge/canonical.ts";
 import { resolveCanonicalSupabaseUrl } from "../supabase-url.ts";
 
 function trimKey(value: string | undefined): string | undefined {
@@ -7,10 +8,10 @@ function trimKey(value: string | undefined): string | undefined {
 
 // Use the same URL aliases as the browser client. If both are configured,
 // resolveCanonicalSupabaseUrl fails closed when they identify different projects.
-const supabaseUrl = resolveCanonicalSupabaseUrl(
+const supabaseUrl = assertCanonicalSupabaseUrl(resolveCanonicalSupabaseUrl(
   process.env.VITE_SUPABASE_URL,
   process.env.NEXT_PUBLIC_SUPABASE_URL,
-);
+));
 
 const supabasePublishableKey =
   trimKey(process.env.SUPABASE_PUBLISHABLE_KEY) ??

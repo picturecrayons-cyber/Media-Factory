@@ -153,16 +153,15 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
           {stage === "Prepare" ? (
             <div className="space-y-3">
               <p>
-                Lifecycle: {title.status}. QC: {workflow.data?.qc?.status ?? "Not reviewed"}. Upload
-                verified master and artwork below before submitting.
+                Lifecycle: {title.status}. QC: {workflow.data?.qc?.status ?? "Not reviewed"}. This release keeps the title record only. File masters are not required. Submit the record for QC when it is complete.
               </p>
               {canOperateOnTitle(actor, title, "title.advance_upload", "title.ingest_internal") &&
               ["DRAFT", "UPLOADING", "PREPARING"].includes(title.status)
                 ? button(
                     title.status === "DRAFT"
-                      ? "Start ingest"
+                      ? "Mark record ready"
                       : title.status === "UPLOADING"
-                        ? "Prepare package"
+                        ? "Send to prepare"
                         : "Submit for QC",
                     () =>
                       advanceTitle({

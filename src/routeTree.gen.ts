@@ -14,7 +14,13 @@ import { Route as AccountRouteImport } from './routes/account'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as AdminCmsRouteImport } from './routes/admin-cms'
 import { Route as AppRouteImport } from './routes/app'
+import { Route as BusinessRouteImport } from './routes/business'
 import { Route as BuyerRouteImport } from './routes/buyer'
+import { Route as DisclaimerRouteImport } from './routes/disclaimer'
+import { Route as DmcaRouteImport } from './routes/dmca'
+import { Route as GalleryRouteImport } from './routes/gallery'
+import { Route as GrievanceRouteImport } from './routes/grievance'
+import { Route as RefundRouteImport } from './routes/refund'
 import { Route as CmsRouteImport } from './routes/cms'
 import { Route as ContactRouteImport } from './routes/contact'
 import { Route as CreatorRouteImport } from './routes/creator'
@@ -68,6 +74,11 @@ const AppRoute = AppRouteImport.update({
   path: '/app',
   getParentRoute: () => rootRouteImport,
 } as any)
+const BusinessRoute = BusinessRouteImport.update({
+  id: '/business',
+  path: '/business',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const BuyerRoute = BuyerRouteImport.update({
   id: '/buyer',
   path: '/buyer',
@@ -98,9 +109,29 @@ const DeliveriesRoute = DeliveriesRouteImport.update({
   path: '/deliveries',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DisclaimerRoute = DisclaimerRouteImport.update({
+  id: '/disclaimer',
+  path: '/disclaimer',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DmcaRoute = DmcaRouteImport.update({
+  id: '/dmca',
+  path: '/dmca',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ForgotPasswordRoute = ForgotPasswordRouteImport.update({
   id: '/forgot-password',
   path: '/forgot-password',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const GalleryRoute = GalleryRouteImport.update({
+  id: '/gallery',
+  path: '/gallery',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const GrievanceRoute = GrievanceRouteImport.update({
+  id: '/grievance',
+  path: '/grievance',
   getParentRoute: () => rootRouteImport,
 } as any)
 const InternalRoute = InternalRouteImport.update({
@@ -136,6 +167,11 @@ const PrivacyRoute = PrivacyRouteImport.update({
 const ResetPasswordRoute = ResetPasswordRouteImport.update({
   id: '/reset-password',
   path: '/reset-password',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RefundRoute = RefundRouteImport.update({
+  id: '/refund',
+  path: '/refund',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SignupRoute = SignupRouteImport.update({
@@ -215,13 +251,18 @@ export interface FileRoutesByFullPath {
   '/admin': typeof AdminRouteWithChildren
   '/admin-cms': typeof AdminCmsRoute
   '/app': typeof AppRoute
+  '/business': typeof BusinessRoute
   '/buyer': typeof BuyerRoute
   '/cms': typeof CmsRoute
   '/contact': typeof ContactRoute
   '/creator': typeof CreatorRoute
   '/dashboard': typeof DashboardRoute
   '/deliveries': typeof DeliveriesRoute
+  '/disclaimer': typeof DisclaimerRoute
+  '/dmca': typeof DmcaRoute
   '/forgot-password': typeof ForgotPasswordRoute
+  '/gallery': typeof GalleryRoute
+  '/grievance': typeof GrievanceRoute
   '/internal': typeof InternalRoute
   '/investor': typeof InvestorRoute
   '/login': typeof LoginRoute
@@ -229,6 +270,7 @@ export interface FileRoutesByFullPath {
   '/onboarding': typeof OnboardingRoute
   '/privacy': typeof PrivacyRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/refund': typeof RefundRoute
   '/signup': typeof SignupRoute
   '/studio': typeof StudioRoute
   '/submit-film': typeof SubmitFilmRoute
@@ -250,13 +292,18 @@ export interface FileRoutesByTo {
   '/admin': typeof AdminRouteWithChildren
   '/admin-cms': typeof AdminCmsRoute
   '/app': typeof AppRoute
+  '/business': typeof BusinessRoute
   '/buyer': typeof BuyerRoute
   '/cms': typeof CmsRoute
   '/contact': typeof ContactRoute
   '/creator': typeof CreatorRoute
   '/dashboard': typeof DashboardRoute
   '/deliveries': typeof DeliveriesRoute
+  '/disclaimer': typeof DisclaimerRoute
+  '/dmca': typeof DmcaRoute
   '/forgot-password': typeof ForgotPasswordRoute
+  '/gallery': typeof GalleryRoute
+  '/grievance': typeof GrievanceRoute
   '/internal': typeof InternalRoute
   '/investor': typeof InvestorRoute
   '/login': typeof LoginRoute
@@ -264,6 +311,7 @@ export interface FileRoutesByTo {
   '/onboarding': typeof OnboardingRoute
   '/privacy': typeof PrivacyRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/refund': typeof RefundRoute
   '/signup': typeof SignupRoute
   '/studio': typeof StudioRoute
   '/submit-film': typeof SubmitFilmRoute
@@ -286,13 +334,18 @@ export interface FileRoutesById {
   '/admin': typeof AdminRouteWithChildren
   '/admin-cms': typeof AdminCmsRoute
   '/app': typeof AppRoute
+  '/business': typeof BusinessRoute
   '/buyer': typeof BuyerRoute
   '/cms': typeof CmsRoute
   '/contact': typeof ContactRoute
   '/creator': typeof CreatorRoute
   '/dashboard': typeof DashboardRoute
   '/deliveries': typeof DeliveriesRoute
+  '/disclaimer': typeof DisclaimerRoute
+  '/dmca': typeof DmcaRoute
   '/forgot-password': typeof ForgotPasswordRoute
+  '/gallery': typeof GalleryRoute
+  '/grievance': typeof GrievanceRoute
   '/internal': typeof InternalRoute
   '/investor': typeof InvestorRoute
   '/login': typeof LoginRoute
@@ -300,6 +353,7 @@ export interface FileRoutesById {
   '/onboarding': typeof OnboardingRoute
   '/privacy': typeof PrivacyRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/refund': typeof RefundRoute
   '/signup': typeof SignupRoute
   '/studio': typeof StudioRoute
   '/submit-film': typeof SubmitFilmRoute
@@ -323,13 +377,18 @@ export interface FileRouteTypes {
     | '/admin'
     | '/admin-cms'
     | '/app'
+    | '/business'
     | '/buyer'
     | '/cms'
     | '/contact'
     | '/creator'
     | '/dashboard'
     | '/deliveries'
+    | '/disclaimer'
+    | '/dmca'
     | '/forgot-password'
+    | '/gallery'
+    | '/grievance'
     | '/internal'
     | '/investor'
     | '/login'
@@ -337,6 +396,7 @@ export interface FileRouteTypes {
     | '/onboarding'
     | '/privacy'
     | '/reset-password'
+    | '/refund'
     | '/signup'
     | '/studio'
     | '/submit-film'
@@ -358,13 +418,18 @@ export interface FileRouteTypes {
     | '/admin'
     | '/admin-cms'
     | '/app'
+    | '/business'
     | '/buyer'
     | '/cms'
     | '/contact'
     | '/creator'
     | '/dashboard'
     | '/deliveries'
+    | '/disclaimer'
+    | '/dmca'
     | '/forgot-password'
+    | '/gallery'
+    | '/grievance'
     | '/internal'
     | '/investor'
     | '/login'
@@ -372,6 +437,7 @@ export interface FileRouteTypes {
     | '/onboarding'
     | '/privacy'
     | '/reset-password'
+    | '/refund'
     | '/signup'
     | '/studio'
     | '/submit-film'
@@ -393,13 +459,18 @@ export interface FileRouteTypes {
     | '/admin'
     | '/admin-cms'
     | '/app'
+    | '/business'
     | '/buyer'
     | '/cms'
     | '/contact'
     | '/creator'
     | '/dashboard'
     | '/deliveries'
+    | '/disclaimer'
+    | '/dmca'
     | '/forgot-password'
+    | '/gallery'
+    | '/grievance'
     | '/internal'
     | '/investor'
     | '/login'
@@ -407,6 +478,7 @@ export interface FileRouteTypes {
     | '/onboarding'
     | '/privacy'
     | '/reset-password'
+    | '/refund'
     | '/signup'
     | '/studio'
     | '/submit-film'
@@ -429,13 +501,18 @@ export interface RootRouteChildren {
   AdminRoute: typeof AdminRouteWithChildren
   AdminCmsRoute: typeof AdminCmsRoute
   AppRoute: typeof AppRoute
+  BusinessRoute: typeof BusinessRoute
   BuyerRoute: typeof BuyerRoute
   CmsRoute: typeof CmsRoute
   ContactRoute: typeof ContactRoute
   CreatorRoute: typeof CreatorRoute
   DashboardRoute: typeof DashboardRoute
   DeliveriesRoute: typeof DeliveriesRoute
+  DisclaimerRoute: typeof DisclaimerRoute
+  DmcaRoute: typeof DmcaRoute
   ForgotPasswordRoute: typeof ForgotPasswordRoute
+  GalleryRoute: typeof GalleryRoute
+  GrievanceRoute: typeof GrievanceRoute
   InternalRoute: typeof InternalRoute
   InvestorRoute: typeof InvestorRoute
   LoginRoute: typeof LoginRoute
@@ -443,6 +520,7 @@ export interface RootRouteChildren {
   OnboardingRoute: typeof OnboardingRoute
   PrivacyRoute: typeof PrivacyRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
+  RefundRoute: typeof RefundRoute
   SignupRoute: typeof SignupRoute
   StudioRoute: typeof StudioRoute
   SubmitFilmRoute: typeof SubmitFilmRoute
@@ -495,6 +573,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/business': {
+      id: '/business'
+      path: '/business'
+      fullPath: '/business'
+      preLoaderRoute: typeof BusinessRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/buyer': {
       id: '/buyer'
       path: '/buyer'
@@ -537,11 +622,39 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DeliveriesRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/disclaimer': {
+      id: '/disclaimer'
+      path: '/disclaimer'
+      fullPath: '/disclaimer'
+      preLoaderRoute: typeof DisclaimerRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/dmca': {
+      id: '/dmca'
+      path: '/dmca'
+      fullPath: '/dmca'
+      preLoaderRoute: typeof DmcaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/forgot-password': {
       id: '/forgot-password'
       path: '/forgot-password'
       fullPath: '/forgot-password'
       preLoaderRoute: typeof ForgotPasswordRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/gallery': {
+      id: '/gallery'
+      path: '/gallery'
+      fullPath: '/gallery'
+      preLoaderRoute: typeof GalleryRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/grievance': {
+      id: '/grievance'
+      path: '/grievance'
+      fullPath: '/grievance'
+      preLoaderRoute: typeof GrievanceRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/internal': {
@@ -591,6 +704,13 @@ declare module '@tanstack/react-router' {
       path: '/reset-password'
       fullPath: '/reset-password'
       preLoaderRoute: typeof ResetPasswordRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/refund': {
+      id: '/refund'
+      path: '/refund'
+      fullPath: '/refund'
+      preLoaderRoute: typeof RefundRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/signup': {
@@ -710,13 +830,18 @@ const rootRouteChildren: RootRouteChildren = {
   AdminRoute: AdminRouteWithChildren,
   AdminCmsRoute: AdminCmsRoute,
   AppRoute: AppRoute,
+  BusinessRoute: BusinessRoute,
   BuyerRoute: BuyerRoute,
   CmsRoute: CmsRoute,
   ContactRoute: ContactRoute,
   CreatorRoute: CreatorRoute,
   DashboardRoute: DashboardRoute,
   DeliveriesRoute: DeliveriesRoute,
+  DisclaimerRoute: DisclaimerRoute,
+  DmcaRoute: DmcaRoute,
   ForgotPasswordRoute: ForgotPasswordRoute,
+  GalleryRoute: GalleryRoute,
+  GrievanceRoute: GrievanceRoute,
   InternalRoute: InternalRoute,
   InvestorRoute: InvestorRoute,
   LoginRoute: LoginRoute,
@@ -724,6 +849,7 @@ const rootRouteChildren: RootRouteChildren = {
   OnboardingRoute: OnboardingRoute,
   PrivacyRoute: PrivacyRoute,
   ResetPasswordRoute: ResetPasswordRoute,
+  RefundRoute: RefundRoute,
   SignupRoute: SignupRoute,
   StudioRoute: StudioRoute,
   SubmitFilmRoute: SubmitFilmRoute,

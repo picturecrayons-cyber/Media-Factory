@@ -10,7 +10,11 @@ import {
 describe("canonical supabase pin", () => {
   it("pins the owner-approved project and rejects the zip snapshot ref", () => {
     assert.equal(CANONICAL_SUPABASE_REF, "mlmgugivsyoxzdgwkbpu");
-    assert.ok(FORBIDDEN_SUPABASE_REFS.includes("tqzimuwozhipqgyerdff"));
+    assert.ok(FORBIDDEN_SUPABASE_REFS.includes("bbtrosuwisnxacuxvegt"));
+    assert.throws(
+      () => assertCanonicalSupabaseUrl("https://bbtrosuwisnxacuxvegt.supabase.co"),
+      /Forbidden/,
+    );
     assert.throws(
       () => assertCanonicalSupabaseUrl("https://tqzimuwozhipqgyerdff.supabase.co"),
       /Forbidden/,

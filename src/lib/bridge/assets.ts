@@ -12,6 +12,8 @@ import { assertNotDevUser } from "./guards";
 import { persistVerifiedAsset } from "./asset-confirmation";
 import { downloadDecision } from "./delivery-policy";
 import { validateOttIngestFile, type OttIngestKind } from "./ott-ingest-spec";
+import { verifyObject } from "./oci-object-storage.server";
+import { FILE_STORAGE_ENABLED } from "./mvp-lock";
 
 const UPLOADABLE: ReadonlySet<string> = new Set(["DRAFT", "UPLOADING", "PREPARING"]);
 
@@ -35,6 +37,7 @@ export const requestAssetUpload = createServerFn({ method: "POST" })
     }),
   )
   .handler(async ({ context, data }) => {
+    if (!FILE_STORAGE_ENABLED) throw new Error("File storage is not part of this release.");
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
     assertPermission(actor, actor.internalRole ? "title.ingest_internal" : "asset.sign_upload");
@@ -83,6 +86,7 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
     }),
   )
   .handler(async ({ context, data }) => {
+    if (!FILE_STORAGE_ENABLED) throw new Error("File storage is not part of this release.");
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
     assertPermission(actor, actor.internalRole ? "title.ingest_internal" : "asset.sign_upload");
@@ -185,6 +189,7 @@ export const requestAssetDownload = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(z.object({ assetId: z.string().min(8) }))
   .handler(async ({ context, data }) => {
+    if (!FILE_STORAGE_ENABLED) throw new Error("File storage is not part of this release.");
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
     assertPermission(actor, "asset.sign_download");
@@ -239,21 +244,85 @@ export const listTitleAssets = createServerFn({ method: "GET" })
     const title = await loadTitle(data.titleId);
     if (!title || !canReadTitle(actor, title)) throw new Error("Not found");
     const sql = await getSql();
+    await sql.query(`alter table bridge_assets add column if not exists public_face boolean not null default false`);
     const buyer = actor.accountType === "buyer" && !actor.internalRole;
-    const rows = await sql<{
+    const ready = await sql<{
       id: string;
       kind: string;
       s3_key: string;
       content_type: string | null;
       byte_size: number | null;
+      public_face: boolean | null;
       created_at: string | Date;
     }>`
-      select id, kind, s3_key, content_type, byte_size, created_at
-      from bridge_assets where title_id = ${title.id} and byte_size > 0 order by created_at desc
+      select distinct on (kind) id, kind, s3_key, content_type, byte_size, public_face, created_at
+      from bridge_assets
+      where title_id = ${title.id} and byte_size > 0
+      order by kind, created_at desc
     `;
+    const unfinished = await sql<{
+      id: string;
+      kind: string;
+      s3_key: string;
+      content_type: string | null;
+      byte_size: number | null;
+      public_face: boolean | null;
+      created_at: string | Date;
+    }>`
+      select id, kind, s3_key, content_type, byte_size, false as public_face, created_at
+      from bridge_assets
+      where title_id = ${title.id} and coalesce(byte_size, 0) = 0
+      order by created_at desc
+      limit 12
+    `;
+    const picture = ready.some((row) => ["poster", "poster_vertical", "poster_horizontal", "thumbnail"].includes(row.kind));
+    const film = ready.some((row) => row.kind === "master" || row.kind === "screener");
+    if (!buyer && (!picture || !film)) {
+      for (const row of unfinished.slice(0, 6)) {
+        if (!row.s3_key.startsWith("bridge/")) continue;
+        try {
+          const object = await verifyObject(row.s3_key);
+          await sql`
+            update bridge_assets
+            set byte_size = ${object.byteSize}, content_type = coalesce(content_type, ${object.contentType})
+            where id = ${row.id}
+          `;
+          row.byte_size = object.byteSize;
+          if (object.contentType) row.content_type = object.contentType;
+        } catch {
+          // Still not in storage.
+        }
+      }
+    }
+    await sql`
+      update bridge_titles t set
+        poster_key = coalesce((
+          select a.s3_key from bridge_assets a
+          where a.title_id = t.id
+            and a.kind in ('poster_vertical', 'poster', 'poster_horizontal', 'thumbnail')
+            and coalesce(a.byte_size, 0) > 0
+          order by case a.kind when 'poster_vertical' then 0 when 'poster' then 1 when 'poster_horizontal' then 2 else 3 end,
+            a.created_at desc
+          limit 1
+        ), t.poster_key),
+        master_key = coalesce((
+          select a.s3_key from bridge_assets a
+          where a.title_id = t.id
+            and a.kind in ('master', 'screener')
+            and coalesce(a.byte_size, 0) > 0
+          order by case a.kind when 'master' then 0 else 1 end, a.created_at desc
+          limit 1
+        ), t.master_key)
+      where t.id = ${title.id}
+    `;
+    const rows = [...ready, ...unfinished];
     return {
       assets: rows
-        .filter((r) => !buyer || !["master", "technical", "censor_certificate"].includes(r.kind))
+        .filter((r) => {
+          if (!buyer) return true;
+          if (["master", "technical", "censor_certificate"].includes(r.kind)) return false;
+          return Number(r.byte_size) > 0;
+        })
         .map((r) => ({
           id: r.id,
           kind: r.kind,
@@ -261,6 +330,8 @@ export const listTitleAssets = createServerFn({ method: "GET" })
           contentType: r.content_type,
           byteSize: r.byte_size,
           verified: Number(r.byte_size) > 0,
+          publicFace: Boolean(r.public_face),
+          pending: !(Number(r.byte_size) > 0),
           createdAt:
             r.created_at instanceof Date ? r.created_at.toISOString() : String(r.created_at),
         })),

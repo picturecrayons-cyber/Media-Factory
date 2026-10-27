@@ -6,28 +6,29 @@ import appCss from "../styles.css?url";
 
 const APP_NAME = "Crayons Bridge";
 const queryClient = new QueryClient({
-  defaultOptions: { queries: { staleTime: 15_000, retry: 1 } },
+  defaultOptions: { queries: { staleTime: 60_000, retry: 1, refetchOnWindowFocus: false } },
 });
 
 export const Route = createRootRoute({
   head: () => ({
     meta: [
       { charSet: "utf-8" },
-      { name: "viewport", content: "width=device-width, initial-scale=1" },
+      { name: "viewport", content: "width=device-width, initial-scale=1, viewport-fit=cover" },
       { title: APP_NAME },
-      { name: "theme-color", content: "#0b0a09" },
+      { name: "theme-color", content: "#ffffff" },
+      { name: "apple-mobile-web-app-capable", content: "yes" },
+      { name: "mobile-web-app-capable", content: "yes" },
+      { name: "apple-mobile-web-app-title", content: APP_NAME },
       {
         name: "description",
-        content:
-          "Crayons Bridge — title record, rights, and licensing OS. StreamVista OPC Pvt Ltd.",
+        content: "Crayons Bridge. Titles, files, and approvals.",
       },
       { property: "og:type", content: "website" },
-      { property: "og:site_name", content: "Crayons Bridge" },
-      { property: "og:title", content: "Crayons Bridge" },
+      { property: "og:site_name", content: APP_NAME },
+      { property: "og:title", content: APP_NAME },
       {
         property: "og:description",
-        content:
-          "Upload, prepare, license, deliver, and earn with Crayons Bridge — the media supply chain, rights, and licensing OS from StreamVista OPC Pvt Ltd.",
+        content: "Crayons Bridge. Titles, files, and approvals.",
       },
       { property: "og:url", content: "https://crayonspictures.in/" },
       { property: "og:image", content: "https://crayonspictures.in/og.jpg" },
@@ -36,18 +37,13 @@ export const Route = createRootRoute({
       {
         name: "twitter:description",
         content:
-          "Upload, prepare, license, deliver, and earn with Crayons Bridge.",
+          "Crayons Bridge. Titles, files, and approvals.",
       },
       { name: "twitter:image", content: "https://crayonspictures.in/og.jpg" },
     ],
     links: [
       { rel: "icon", type: "image/svg+xml", href: "/favicon.svg" },
       { rel: "stylesheet", href: appCss },
-      { rel: "preconnect", href: "https://fonts.googleapis.com" },
-      {
-        rel: "stylesheet",
-        href: "https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap",
-      },
     ],
   }),
   component: () => (
@@ -59,7 +55,21 @@ export const Route = createRootRoute({
         <QueryClientProvider client={queryClient}>
           <AuthProvider>
             <Outlet />
-            <Toaster theme="dark" position="bottom-center" />
+            <Toaster
+              theme="light"
+              position="top-center"
+              closeButton
+              toastOptions={{
+                style: {
+                  background: "#ffffff",
+                  color: "#0b1220",
+                  border: "2px solid #0b1220",
+                  borderRadius: "16px",
+                  fontSize: "15px",
+                  fontWeight: 600,
+                },
+              }}
+            />
           </AuthProvider>
         </QueryClientProvider>
         <Scripts />

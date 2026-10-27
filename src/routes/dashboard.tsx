@@ -2,9 +2,11 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
-import { listTitles } from "@/lib/bridge/titles";
+import { listTitles, resetCatalogToDraft } from "@/lib/bridge/titles";
 import { BRIDGE_LOOP_LANES, loopStageType } from "@/lib/bridge/loop-lanes";
-import { getDashboardSession } from "@/lib/bridge/session";
+import { PublishingDesk } from "@/components/bridge/publishing-desk";
+import { ClearanceDesk } from "@/components/bridge/clearance-desk";
+import { legacyCatalog } from "@/lib/bridge/legacy-catalog";
 
 export const Route = createFileRoute("/dashboard")({ component: Dashboard });
 
@@ -12,7 +14,7 @@ function Dashboard() {
   return (
     <RequireBridge allow="super_admin">
       {(actor) => (
-        <BridgeShell actor={actor} title="Revenue desk">
+        <BridgeShell actor={actor} title="Ops">
           <DashboardBody />
         </BridgeShell>
       )}
@@ -21,42 +23,11 @@ function Dashboard() {
 }
 
 const ADMIN_MODULES = [
-  {
-    title: "Titles & media",
-    description: "Canonical title records, metadata, artwork, uploads, QC and rights workflow.",
-    to: "/workspace",
-    action: "Open title workspace",
-  },
-  {
-    title: "Operations & approvals",
-    description: "Review title readiness and use the role-gated operational workstations.",
-    to: "/admin/workstations",
-    action: "Open operations",
-  },
-  {
-    title: "Buyer desk & licensing",
-    description: "Review buyer activity and licensing/payment workflow states.",
-    to: "/buyer",
-    action: "Open buyer desk",
-  },
-  {
-    title: "Deliveries & services",
-    description: "Track delivery work and operational service requests.",
-    to: "/deliveries",
-    action: "Open deliveries",
-  },
-  {
-    title: "People & access",
-    description: "Manage the existing internal-user invitation and profile workflow.",
-    to: "/internal",
-    action: "Open user access",
-  },
-  {
-    title: "CMS & site content",
-    description: "Edit the existing Bridge-managed site content workspace.",
-    to: "/cms",
-    action: "Open CMS",
-  },
+  { title: "Library", to: "/gallery" },
+  { title: "Operations", to: "/admin/workstations" },
+  { title: "Buyers", to: "/buyer" },
+  { title: "Deliveries", to: "/deliveries" },
+  { title: "People", to: "/internal" },
 ] as const;
 
 function DashboardBody() {
@@ -71,6 +42,17 @@ function DashboardBody() {
     enabled: dashboardQ.isSuccess,
     retry: 1,
   });
+  useQuery({
+    queryKey: ["catalog-draft-once"],
+    queryFn: async () => {
+      const result = await resetCatalogToDraft();
+      if (result.changed > 0) await titlesQ.refetch();
+      return result;
+    },
+    enabled: dashboardQ.isSuccess,
+    staleTime: Infinity,
+    retry: false,
+  });
 
   if (dashboardQ.isPending) return <p className="text-sm text-muted">Checking access…</p>;
   if (dashboardQ.isError) return <p role="alert" className="text-sm text-accent">Super admin access required.</p>;
@@ -80,97 +62,71 @@ function DashboardBody() {
   const pipeline = titles.filter((t) => t.status === "LICENSING_READY").length;
   const deals = titles.filter((t) => t.status === "LICENSED" || t.status === "IN_NEGOTIATION").length;
   const revenue = live.reduce((sum, t) => sum + (t.status === "LICENSED" || t.status === "DELIVERED" ? t.licensingFeePaise : 0), 0);
-  const needsAction = titles.filter((t) => ["QC_REVIEW", "RIGHTS_REVIEW", "LICENSING_READY"].includes(t.status)).length;
   const reportingUnavailable = titlesQ.isError;
   const metricValue = (value: number) => titlesQ.isPending || reportingUnavailable ? "—" : String(value);
   const moneyValue = titlesQ.isPending || reportingUnavailable ? "—" : `₹${(revenue / 100).toLocaleString("en-IN")}`;
 
   return (
     <div className="space-y-6">
-      <section className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">Crayons Bridge · Super Admin</p>
-          <h2 className="font-display text-3xl font-semibold">Revenue & operations</h2>
-          <p className="mt-1 text-sm text-muted">
-            {titlesQ.isPending
-              ? "Loading verified title reporting…"
-              : reportingUnavailable
-                ? "Reporting is unavailable. Metrics are withheld rather than shown as zero."
-                : `${moneyValue} licensed value · ${needsAction} titles need a decision.`}
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Link to="/workspace" className="rounded-sm bg-accent px-4 py-2 text-sm font-semibold text-[#041018]">Titles</Link>
-          <Link to="/buyer" className="rounded-sm border border-line px-4 py-2 text-sm font-semibold">Buyer desk</Link>
-          <Link to="/deliveries" className="rounded-sm border border-line px-4 py-2 text-sm font-semibold">Deliveries</Link>
-        </div>
-      </section>
-
-      <section aria-label="Title lanes" className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {BRIDGE_LOOP_LANES.map((lane) => (
-          <article key={lane.id} className="rounded-sm border border-line px-4 py-3">
-            <p className="text-xs uppercase tracking-widest text-muted">{lane.label}</p>
+          <article key={lane.id} className="rounded-2xl border border-line px-4 py-3">
+            <p className="text-xs text-muted">{lane.label}</p>
             <p className="mt-1 text-2xl font-semibold">
-              {titlesQ.isPending || reportingUnavailable
-                ? "—"
-                : titles.filter((title) => loopStageType(title.contentType) === lane.loopType).length}
+              {titlesQ.isPending || reportingUnavailable ? "—" : titles.filter((title) => loopStageType(title.contentType) === lane.loopType).length}
             </p>
-            <p className="text-xs text-muted">Titles in this content lane. Buyer visibility still depends on server-side publication gates.</p>
           </article>
         ))}
       </section>
 
-      <section aria-label="Revenue metrics" className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <Stat label="Licensed value" value={moneyValue} />
-        <Stat label="Live / commercial titles" value={metricValue(live.length)} />
-        <Stat label="Ready to list" value={metricValue(pipeline)} />
-        <Stat label="Active deals" value={metricValue(deals)} />
+      <section aria-label="Revenue metrics" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <Stat label="Licensed" value={moneyValue} />
+        <Stat label="Live" value={metricValue(live.length)} />
+        <Stat label="Ready" value={metricValue(pipeline)} />
+        <Stat label="Deals" value={metricValue(deals)} />
       </section>
 
-      <section aria-labelledby="admin-modules-title" className="space-y-3">
-        <div>
-          <h3 id="admin-modules-title" className="font-display text-2xl font-semibold">Admin modules</h3>
-          <p className="mt-1 text-sm text-muted">Open the existing role-gated workspaces from one place. A link does not imply a workflow has passed its release or authorization gates.</p>
+      <section className="rounded-2xl border border-line p-4">
+        <p className="text-sm font-semibold">Catalog</p>
+        <p className="mt-1 text-sm text-muted">{titlesQ.isPending ? "Loading…" : `Bridge library · ${titles.filter((title) => title.status === "DRAFT").length} draft · ${titles.length} titles`}</p>
+        <div className="mt-3 h-2 overflow-hidden rounded-full bg-[#e7edf2]">
+          <div className="h-full bg-[#102433]" style={{ width: `${titles.length ? Math.round((live.length / titles.length) * 100) : 0}%` }} />
         </div>
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          {ADMIN_MODULES.map((module) => (
-            <article key={module.title} className="flex flex-col items-start rounded-sm border border-line p-4">
-              <h4 className="font-semibold">{module.title}</h4>
-              <p className="mt-2 flex-1 text-sm leading-relaxed text-muted">{module.description}</p>
-              <Link to={module.to} className="mt-4 text-sm font-semibold text-accent hover:underline">
-                {module.action} →
-              </Link>
-            </article>
-          ))}
-        </div>
+        <p className="mt-2 text-xs text-muted">The bar is the share that is live. Every Bridge record stays a draft. Money above is recorded license value only.</p>
+        <p className="mt-2 text-xs text-muted">Old catalog on file · {legacyCatalog.titles.filter((row) => row.source === "film").length} films · {legacyCatalog.titles.filter((row) => row.source === "draft").length} named drafts · {legacyCatalog.empty.reduce((sum, row) => sum + row.count, 0)} empty contacts. Held as drafts. Not written into this library.</p>
       </section>
 
-      <section aria-labelledby="title-queue-title" className="rounded-sm border border-line">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-4 py-3">
-          <div>
-            <h3 id="title-queue-title" className="font-semibold">Recent title records</h3>
-            <p className="text-xs text-muted">Canonical records only; no synthetic or fallback counts.</p>
-          </div>
-          <Link to="/workspace" className="text-sm font-semibold text-accent hover:underline">View all titles →</Link>
-        </div>
-        {titlesQ.isPending ? (
-          <p className="px-4 py-6 text-sm text-muted">Loading title records…</p>
-        ) : reportingUnavailable ? (
-          <div className="px-4 py-6">
-            <p role="alert" className="text-sm text-accent">The title queue could not be loaded. Refresh to retry; metrics above are withheld.</p>
-          </div>
+      <section className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        {ADMIN_MODULES.map((module) => (
+          <Link key={module.title} to={module.to} className="rounded-2xl border border-line bg-surface px-4 py-5 text-sm font-semibold">
+            {module.title}
+          </Link>
+        ))}
+        <a href="https://crayonsloop.in/" target="_blank" rel="noreferrer" className="rounded-2xl border border-line bg-surface px-4 py-5">
+          <span className="block text-sm font-semibold">Loop</span>
+          <span className="mt-1 block text-xs font-medium text-muted">Launching soon</span>
+        </a>
+      </section>
+
+      <ClearanceDesk />
+
+      <PublishingDesk />
+
+      <section className="space-y-3">
+        <h2 className="text-lg font-semibold">Titles</h2>
+        {titlesQ.isPending ? <p className="text-sm text-muted">Loading…</p> : reportingUnavailable ? (
+          <p role="alert" className="text-sm text-red-500">Could not load titles.</p>
         ) : (
-          <ul className="divide-y divide-line">
-            {titles.slice(0, 8).map((title) => (
-              <li key={title.id} className="flex items-center justify-between gap-3 px-4 py-3 text-sm">
-                <div className="min-w-0">
-                  <span className="font-medium">{title.name}</span>
-                  <p className="break-all font-mono text-[10px] text-muted">ID: {title.id}</p>
-                </div>
-                <span className="shrink-0 text-muted">{title.status.replaceAll("_", " ").toLowerCase()}</span>
+          <ul className="divide-y divide-line overflow-hidden rounded-2xl border border-line bg-surface">
+            {titles.slice(0, 12).map((title) => (
+              <li key={title.id}>
+                <Link to="/title/$id" params={{ id: title.id }} className="flex items-center justify-between gap-3 px-4 py-3">
+                  <span className="min-w-0 truncate font-medium">{title.name}</span>
+                  <span className="shrink-0 text-xs text-muted">{title.status.replaceAll("_", " ").toLowerCase()}</span>
+                </Link>
               </li>
             ))}
-            {!titles.length && <li className="px-4 py-6 text-sm text-muted">No title records were returned by the canonical query.</li>}
+            {!titles.length ? <li className="px-4 py-6 text-sm text-muted">No titles.</li> : null}
           </ul>
         )}
       </section>

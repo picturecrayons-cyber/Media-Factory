@@ -38,6 +38,7 @@ export function RequireBridge({
     queryFn: () => getBridgeSession(),
     enabled: !isPending && Boolean(user),
     retry: false,
+    staleTime: 5 * 60_000,
   });
   const verifyMail = useMutation({
     mutationFn: () => requestEmailVerification(),
@@ -47,11 +48,7 @@ export function RequireBridge({
   });
 
   if (isPending || (user && sessionQ.isPending)) {
-    return (
-      <Frame>
-        <p className="text-sm text-muted">Opening your desk…</p>
-      </Frame>
-    );
+    return <p className="px-6 pt-8 text-sm font-semibold text-fg">Opening…</p>;
   }
   if (!user) return <RedirectToSignIn />;
   if (sessionQ.error) {
@@ -98,7 +95,28 @@ export function RequireBridge({
   }
 
   const profile = sessionQ.data?.profile ?? null;
-  if (!profile) return <Navigate to="/onboarding" />;
+  if (!profile) {
+    if (allow === "internal" || allow === "super_admin") {
+      return (
+        <Frame>
+          <h1 className="font-display text-2xl">This sign-in is not an admin</h1>
+          <p className="text-sm leading-relaxed text-muted">
+            {user.primaryEmail ? `${user.primaryEmail} has no Bridge profile. ` : "This account has no Bridge profile. "}
+            The title form will not open. Sign out, then use abijithasokan@crayonspictures.com.
+          </p>
+          <Button
+            type="button"
+            onClick={() => {
+              void supabase.auth.signOut({ scope: "local" }).finally(() => window.location.assign("/login"));
+            }}
+          >
+            Sign out
+          </Button>
+        </Frame>
+      );
+    }
+    return <Navigate to="/onboarding" />;
+  }
 
   // The generic title workspace is not a public catalog. Only Creator/Studio
   // accounts and internal roles with explicit catalog-read permission may enter.
@@ -112,10 +130,13 @@ export function RequireBridge({
   // by the explicit "internal"/"super_admin" allow checks above.
   if (allow === "super_admin" && profile.internalRole !== "super_admin") return <Navigate to={sessionQ.data?.home ?? "/"} />;
   if (allow === "internal" && !profile.internalRole) return <Navigate to={sessionQ.data?.home ?? "/"} />;
-  if (allow && allow !== "internal" && allow !== "super_admin" && (profile.internalRole || profile.accountType !== (
-    allow === "creator" ? "independent_creator" : allow
-  ))) {
-    return <Navigate to={sessionQ.data?.home ?? "/"} />;
+  if (allow && allow !== "internal" && allow !== "super_admin" && allow !== "workspace") {
+    const expected = allow === "creator" ? "independent_creator" : allow;
+    const reviewing = (profile.internalRole === "admin" || profile.internalRole === "super_admin")
+      && (allow === "creator" || allow === "studio" || allow === "buyer");
+    if (!reviewing && (profile.internalRole || profile.accountType !== expected)) {
+      return <Navigate to={sessionQ.data?.home ?? "/"} />;
+    }
   }
 
   if (!profile.emailVerified) {

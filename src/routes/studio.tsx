@@ -1,37 +1,31 @@
+import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
-import { CreateTitleForm, TitleList } from "@/components/bridge/title-desk";
-import { StreamVistaOrders } from "@/components/bridge/streamvista-orders";
-import { Desk } from "./creator";
+import { StudioStorage } from "@/components/bridge/studio-storage";
+import { CreateTitleForm, OwnerReport, TitleList } from "@/components/bridge/title-desk";
 
 export const Route = createFileRoute("/studio")({ component: Studio });
+
+function StudioDesk() {
+  const [query, setQuery] = useState("");
+  return (
+    <div className="space-y-6">
+      <CreateTitleForm defaults={{ language: "Malayalam", country: "India", contentType: "Film" }} />
+      <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search titles" className="h-12 w-full rounded-xl border border-line-strong bg-white px-3" />
+      <TitleList empty="No titles yet." query={query} />
+      <OwnerReport />
+      <StudioStorage />
+    </div>
+  );
+}
 
 function Studio() {
   return (
     <RequireBridge allow="studio">
       {(actor) => (
-        <BridgeShell actor={actor} title="Studio desk">
-          <div className="space-y-8">
-            <Desk
-              role="Studio"
-              scope="Studio-owned titles only. Same rights gate as creators. No buyer catalog access."
-              opportunity="Submit a slate. Production services stay optional and separate from licensing."
-              steps={["Add title", "Prepare assets", "Rights clearance", "License", "Deliver"]}
-            />
-            <section id="add-title">
-              <h2 className="text-lg font-semibold">Add title</h2>
-              <div className="mt-3"><CreateTitleForm concise /></div>
-            </section>
-            <section>
-              <h2 className="text-lg font-semibold">Studio slate</h2>
-              <div className="mt-3"><TitleList empty="No titles yet. Add the first title." /></div>
-            </section>
-            <section>
-              <h2 className="text-lg font-semibold">Production services</h2>
-              <div className="mt-3"><StreamVistaOrders /></div>
-            </section>
-          </div>
+        <BridgeShell actor={actor} title="Studio">
+          <StudioDesk />
         </BridgeShell>
       )}
     </RequireBridge>
