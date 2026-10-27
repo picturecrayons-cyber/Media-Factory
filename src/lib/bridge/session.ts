@@ -118,6 +118,50 @@ export async function loadActor(authUserId: string): Promise<BridgeActor | null>
   return loadActorByBridgeUserId(bridgeUserId);
 }
 
+async function resolveWorkspaceHome(actor: BridgeActor): Promise<string> {
+  const fallback = workspaceHome(actor);
+  if (actor.internalRole || !["independent_creator", "studio"].includes(actor.accountType)) {
+    return fallback;
+  }
+
+  const sql = await getSql();
+  if (actor.accountType === "studio" && actor.organizationId) {
+    const rows = await sql<{ has_intake: boolean }>`
+      select exists (
+        select 1
+        from bridge_titles t
+        where t.owner_user_id = ${actor.userId}
+           or (
+             t.owner_account_type = 'studio'
+             and t.owner_organization_id = ${actor.organizationId}
+             and exists (
+               select 1
+               from bridge_organization_memberships m
+               join bridge_organizations o on o.id = m.organization_id
+               where m.organization_id = ${actor.organizationId}
+                 and m.user_id = ${actor.userId}
+                 and m.status = 'active'
+                 and o.status = 'active'
+             )
+           )
+      ) as has_intake
+    `;
+    return rows[0]?.has_intake ? fallback : "/onboarding";
+  }
+
+  // Individual creators do not require an organization membership.
+  // Studio profiles without a resolved active membership are deliberately
+  // limited to user-owned intake state; organization-owned titles are not inferred
+  // from organization_name or exposed without the canonical organization ID.
+  const rows = await sql<{ has_intake: boolean }>`
+    select exists (
+      select 1 from bridge_titles t where t.owner_user_id = ${actor.userId}
+    ) as has_intake
+  `;
+  if (actor.accountType === "studio" && !actor.organizationId) return "/onboarding";
+  return rows[0]?.has_intake ? fallback : "/onboarding";
+}
+
 export async function requireActor(userId: string): Promise<BridgeActor> {
   const actor = await loadActor(userId);
   if (!actor) throw new Error("Profile required");
@@ -155,7 +199,7 @@ export const getBridgeSession = createServerFn({ method: "GET" })
       if (!actor) {
         return { userId: context.userId, profile: null, home: "/onboarding" };
       }
-      return { userId: context.userId, profile: actor, home: workspaceHome(actor) };
+      return { userId: context.userId, profile: actor, home: await resolveWorkspaceHome(actor) };
     } catch (error) {
       const code = workspaceFailureCode(error);
       console.error("[bridge-session] workspace session resolution failed", { code, error });
