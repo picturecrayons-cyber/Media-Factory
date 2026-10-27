@@ -5,6 +5,7 @@ import { BridgeShell } from "@/components/bridge/shell";
 import { Button } from "@/components/ui/button";
 import { listTitles, listAuditLogs } from "@/lib/bridge/titles";
 import { listEnquiries } from "@/lib/bridge/leads";
+import { CreateTitleForm } from "@/components/bridge/title-desk";
 import { listLoopPublicationReadiness } from "@/lib/bridge/loop-publication";
 import { listAdminProfiles } from "@/lib/bridge/profiles";
 
@@ -82,6 +83,12 @@ function AdminBody({ actor }: { actor: any }) {
             <CompactMetric label="Bridge profiles" value={profilesQ.isPending ? "—" : String(profiles.length)} />
             <CompactMetric label="Organizations" value={profilesQ.isPending ? "—" : String(organizations.size)} />
           </div>
+        </section>
+
+        <section className="rounded-2xl border border-line bg-surface p-4 sm:p-5">
+          <h3 className="font-display text-xl font-semibold">New title</h3>
+          <p className="mt-1 mb-4 text-sm text-muted">Same record a creator or studio opens. Title, rights, and authorization stay together.</p>
+          <CreateTitleForm />
         </section>
 
         <section className="rounded-2xl border border-line bg-surface p-4 sm:p-5">

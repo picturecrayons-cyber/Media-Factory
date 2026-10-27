@@ -312,6 +312,28 @@ export const createTitle = createServerFn({ method: "POST" })
       entityId: id,
       metadata: { publicSubmission: isPublicSubmission },
     });
+    if (data.territories?.length && data.rightsLanguages?.length && data.media?.length && data.windowStart && data.windowEnd) {
+      await sql`
+        insert into bridge_rights_grants (
+          title_id, grant_type, territories, languages, media, window_start, window_end,
+          exclusivity, evidence, status, created_by
+        ) values (
+          ${id}, 'DISTRIBUTION', ${JSON.stringify(data.territories)}::jsonb,
+          ${JSON.stringify(data.rightsLanguages)}::jsonb, ${JSON.stringify(data.media)}::jsonb,
+          ${data.windowStart}, ${data.windowEnd}, ${data.exclusivity ?? "NON_EXCLUSIVE"},
+          ${JSON.stringify([{
+            rightsBasis: data.rightsBasis ?? "OWNER",
+            authorizationAttested: Boolean(data.authorizationAttested),
+            sublicensingAllowed: Boolean(data.sublicensingAllowed),
+            promotionalRights: data.promotionalRights !== false,
+            screenerAccess: data.screenerAccess ?? "SCREENER_PENDING",
+            destinations: data.intendedDestinations ?? [],
+            additionalLanguages: data.additionalLanguages ?? [],
+          }])}::jsonb,
+          'DRAFT', ${actor.userId}
+        )
+      `;
+    }
     const title = await loadTitle(id);
     if (!title) throw new Error("Title create failed");
     return { title, submission: isPublicSubmission };
