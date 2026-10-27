@@ -293,6 +293,9 @@ export const createBuyerInterest = createServerFn({ method: "POST" })
       `;
       let row: InterestRow;
       if (existing[0]) {
+        if (existing[0].interest_level === "LICENSED") {
+          throw new Error("Licensed interest is immutable; use the authorized licensing workflow");
+        }
         [row] = await tx<InterestRow>`
           update public.bridge_buyer_interest
           set interest_level = 'INTERESTED', updated_at = now(), updated_by = ${actor.userId}
@@ -367,6 +370,9 @@ export const updateBuyerInterest = createServerFn({ method: "POST" })
       if (!current) throw new Error("Buyer interest not found");
       if (!internal && (actor.accountType !== "buyer" || current.buyer_user_id !== actor.userId)) {
         throw new Error("Forbidden");
+      }
+      if (!internal && current.interest_level === "LICENSED") {
+        throw new Error("Licensed interest is immutable; use the authorized licensing workflow");
       }
       if (!internal && data.interestLevel && !(buyerEditableLevels as readonly string[]).includes(data.interestLevel)) {
         throw new Error("Buyer cannot set LICENSED; licensing requires a separate authorized workflow");
