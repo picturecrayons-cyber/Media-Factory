@@ -55,7 +55,16 @@ async function loadTitleAccess(tx: Sql, titleId: string): Promise<TitleAccessRow
   return rows[0];
 }
 
-function isSecureReceiptUrl(value: string): boolean {\n  try {\n    const url = new URL(value);\n    return url.protocol === "https:" && Boolean(url.hostname) && !url.username && !url.password;\n  } catch {\n    return false;\n  }\n}\n\nfunction canReadJobsForTitle(actor: Actor, title: TitleAccessRow): boolean {
+function isSecureReceiptUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" && Boolean(url.hostname) && !url.username && !url.password;
+  } catch {
+    return false;
+  }
+}
+
+function canReadJobsForTitle(actor: Actor, title: TitleAccessRow): boolean {
   return canOperateOnTitle(actor, {
     ownerUserId: title.owner_user_id,
     ownerAccountType: title.owner_account_type as Actor["accountType"],
