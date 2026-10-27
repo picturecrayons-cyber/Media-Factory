@@ -150,7 +150,14 @@ function Onboarding() {
   }, [home, navigate]);
 
   if (isPending || (user && sessionQ.isPending) || home) {
-    return <main className="grid min-h-screen place-items-center bg-bg p-6"><p className="text-sm text-muted">{home ? "Opening workspace…" : "Loading Bridge…"}</p></main>;
+    return (
+      <main className="grid min-h-screen place-items-center bg-bg p-6">
+        <div>
+          <h1 className="font-display text-3xl font-semibold tracking-tight">Submit a title to Crayons Bridge</h1>
+          <p className="mt-3 text-sm text-muted">{home ? "Opening workspace…" : "Loading Bridge…"}</p>
+        </div>
+      </main>
+    );
   }
   if (!user) return <RedirectToSignIn />;
 
