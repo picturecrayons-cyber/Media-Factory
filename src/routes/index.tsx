@@ -177,24 +177,24 @@ function Home() {
   return (
     <div className="min-h-screen bg-white text-fg antialiased selection:bg-accent/20 selection:text-fg">
       <header className="sticky top-0 z-50 border-b border-line bg-white/95 backdrop-blur-md">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-5 px-5 py-3.5 sm:px-6 lg:px-8">
-          <div className="flex min-w-0 items-center gap-6 lg:gap-8">
-            <BrandMark />
+        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-5 py-3 sm:px-6 lg:px-8">
+          <BrandMark />
+          <div className="flex items-center gap-2">
+            <Link to="/login" className="inline-flex h-10 items-center rounded-full px-4 text-sm font-semibold">Sign in</Link>
+            <Link to="/signup" className="inline-flex h-10 items-center rounded-full bg-[#0b1220] px-4 text-sm font-semibold text-white">Create account</Link>
           </div>
         </div>
       </header>
 
-      <section className="border-b border-line bg-[#071018] text-white">
-        <div className="mx-auto grid max-w-7xl gap-3 px-5 py-6 sm:grid-cols-2 sm:px-6 lg:grid-cols-5 lg:px-8">
+      <nav className="border-b border-line bg-white" aria-label="Desks">
+        <div className="mx-auto flex max-w-7xl gap-2 overflow-x-auto px-5 py-3 sm:px-6 lg:px-8">
           {desks.map(([label, path]) => (
-            <a key={path} href={path} className="rounded-2xl border border-white/15 bg-white/5 px-4 py-4">
-              <span className="block text-sm font-semibold">{label}</span>
-              <span className="mt-1 block text-xs text-white/70">www.crayonspictures.in{path}</span>
-              <span className="mt-3 inline-flex h-10 items-center rounded-full bg-white px-4 text-sm font-semibold text-[#071018]">Open</span>
+            <a key={path} href={path} className="inline-flex h-10 shrink-0 items-center rounded-full border border-line px-4 text-sm font-semibold">
+              {label}
             </a>
           ))}
         </div>
-      </section>
+      </nav>
 
       <main>
         <PosterHero posters={postersQ.data?.posters ?? []} />
@@ -210,6 +210,9 @@ function Home() {
               </p>
 
               <div className="bridge-hero-actions mt-7 flex flex-wrap items-center justify-center gap-3 sm:mt-8">
+                <Link to="/login">
+                  <Button variant="outline" className="h-11 rounded-full px-6 text-sm font-semibold">Sign in</Button>
+                </Link>
                 <Link to="/signup">
                   <Button className="h-11 rounded-full px-6 text-sm font-semibold shadow-xs">
                     Create account
@@ -273,141 +276,8 @@ function Home() {
           </div>
         </section>
 
-        <section id="creators" className="border-b border-line bg-surface py-14 sm:py-20">
-          <div className="mx-auto max-w-7xl px-4 sm:px-6">
-            <div className="max-w-2xl">
-              <h2 className="font-display text-3xl font-semibold tracking-tight text-fg sm:text-4xl">
-                Built for the media business.
-              </h2>
-            </div>
-
-            <div className="mt-10 grid gap-6 lg:grid-cols-2 xl:grid-cols-4">
-              <div className="flex flex-col justify-between rounded-3xl border border-line bg-elevated p-7 sm:p-8">
-                <div>
-                  <h3 className="font-display text-2xl font-semibold text-fg">
-                    Creators
-                  </h3>
-                  <p className="mt-3 text-sm leading-relaxed text-muted">
-                    Manage your titles from the record to delivery.
-                  </p>
-                </div>
-                <div className="mt-8 pt-5 border-t border-line">
-                  <Link
-                    to="/signup"
-                    search={{ role: "creator" }}
-                    className="inline-flex items-center text-xs font-semibold text-accent hover:underline"
-                  >
-                    Start as Creator →
-                  </Link>
-                </div>
-              </div>
-
-              <div
-                id="studios"
-                className="flex flex-col justify-between rounded-3xl border border-line bg-elevated p-7 sm:p-8"
-              >
-                <div>
-                  <h3 className="font-display text-2xl font-semibold text-fg">
-                    Studios
-                  </h3>
-                  <p className="mt-3 text-sm leading-relaxed text-muted">
-                    Manage catalogs, teams and rights.
-                  </p>
-                </div>
-                <div className="mt-8 pt-5 border-t border-line">
-                  <Link
-                    to="/signup"
-                    search={{ role: "studio" }}
-                    className="inline-flex items-center text-xs font-semibold text-accent hover:underline"
-                  >
-                    Create Studio Workspace →
-                  </Link>
-                </div>
-              </div>
-
-              <div
-                id="investors"
-                className="flex flex-col justify-between rounded-3xl border border-line bg-elevated p-7 sm:p-8"
-              >
-                <div>
-                  <h3 className="font-display text-2xl font-semibold text-fg">Investors</h3>
-                  <p className="mt-3 text-sm leading-relaxed text-muted">
-                    Track approved title participation and investment records.
-                  </p>
-                </div>
-                <div className="mt-8 pt-5 border-t border-line">
-                  <Link
-                    to="/contact"
-                    className="inline-flex items-center text-xs font-semibold text-accent hover:underline"
-                  >
-                    Request Investor Access →
-                  </Link>
-                </div>
-              </div>
-
-              <div
-                id="buyers"
-                className="flex flex-col justify-between rounded-3xl border border-line bg-elevated p-7 sm:p-8"
-              >
-                <div>
-                  <h3 className="font-display text-2xl font-semibold text-fg">
-                    Buyers
-                  </h3>
-                  <p className="mt-3 text-sm leading-relaxed text-muted">
-                    Discover titles and manage licensing.
-                  </p>
-                </div>
-                <div className="mt-8 pt-5 border-t border-line">
-                  <Link
-                    to="/signup"
-                    search={{ role: "buyer" }}
-                    className="inline-flex items-center text-xs font-semibold text-accent hover:underline"
-                  >
-                    Explore Buyer Access →
-                  </Link>
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section className="border-b border-line bg-surface/50 py-12 sm:py-16">
-          <div className="mx-auto max-w-7xl px-4 sm:px-6">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 rounded-2xl border border-line bg-surface p-6 sm:p-8">
-              <div>
-                <h3 className="font-display text-xl font-semibold text-fg">
-                  From rights to audience.
-                </h3>
-                <p className="mt-2 text-sm leading-relaxed text-muted max-w-2xl">
-                  Crayons Bridge manages rights, licensing and distribution authorization. Crayons
-                  Loop is the consumer streaming experience.
-                </p>
-              </div>
-
-
-            </div>
-          </div>
-        </section>
-
         <section className="border-b border-line bg-white py-12 sm:py-16">
           <Enquiry />
-        </section>
-
-        <section className="border-b border-line bg-surface py-14 sm:py-20">
-          <div className="mx-auto max-w-7xl px-4 sm:px-6">
-            <div className="mx-auto max-w-2xl text-center">
-              <h2 className="font-display text-3xl font-semibold tracking-tight text-fg sm:text-4xl">
-                Ready to move your content forward?
-              </h2>
-              <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
-                <Link to="/signup">
-                  <Button className="h-11 rounded-full px-6 text-sm font-semibold shadow-xs">
-                    Create account
-                  </Button>
-                </Link>
-              </div>
-            </div>
-          </div>
         </section>
       </main>
 
