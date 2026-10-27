@@ -3,8 +3,6 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { BrandMark } from "@/components/bridge/shell";
 import { Button } from "@/components/ui/button";
-import { SignedOut } from "@/lib/auth/gates";
-import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { createEnquiry } from "@/lib/bridge/leads";
 import { listPublicPosters } from "@/lib/bridge/simple-desk";
 import { listPublicPartners } from "@/lib/bridge/partners";
@@ -166,10 +164,8 @@ function Enquiry() {
 }
 
 function Home() {
-  const { user } = useCurrentUserState();
   const partnersQ = useQuery({ queryKey: ["public-partners"], queryFn: () => listPublicPartners(), staleTime: 120_000 });
   const postersQ = useQuery({ queryKey: ["public-posters"], queryFn: () => listPublicPosters(), staleTime: 120_000 });
-  const signedIn = Boolean(user);
   const desks = [
     ["Creator", "/creator"],
     ["Studio", "/studio"],
@@ -185,22 +181,16 @@ function Home() {
           <div className="flex min-w-0 items-center gap-6 lg:gap-8">
             <BrandMark />
           </div>
-
-          <div className="flex items-center gap-3 text-sm">
-            <SignedOut>
-              <Link to="/login" className="text-sm font-semibold">Sign in</Link>
-            </SignedOut>
-          </div>
         </div>
       </header>
 
       <section className="border-b border-line bg-[#071018] text-white">
         <div className="mx-auto grid max-w-7xl gap-3 px-5 py-6 sm:grid-cols-2 sm:px-6 lg:grid-cols-5 lg:px-8">
           {desks.map(([label, path]) => (
-            <a key={path} href={signedIn ? path : `/login?next=${path}`} className="rounded-2xl border border-white/15 bg-white/5 px-4 py-4">
+            <a key={path} href={path} className="rounded-2xl border border-white/15 bg-white/5 px-4 py-4">
               <span className="block text-sm font-semibold">{label}</span>
               <span className="mt-1 block text-xs text-white/70">www.crayonspictures.in{path}</span>
-              <span className="mt-3 inline-flex h-10 items-center rounded-full bg-white px-4 text-sm font-semibold text-[#071018]">{signedIn ? "Open" : "Sign in"}</span>
+              <span className="mt-3 inline-flex h-10 items-center rounded-full bg-white px-4 text-sm font-semibold text-[#071018]">Open</span>
             </a>
           ))}
         </div>
