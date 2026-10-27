@@ -1,5 +1,5 @@
 import { useNavigate } from "@tanstack/react-router";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -31,6 +31,7 @@ const PLATFORMS = [
 
 export function StoryConceptForm() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [titleName, setTitleName] = useState("");
   const [logline, setLogline] = useState("");
   const [synopsis, setSynopsis] = useState("");
@@ -56,9 +57,11 @@ export function StoryConceptForm() {
           screenplayUrl: screenplayUrl || undefined,
         },
       }),
-    onSuccess: (res) => {
+    onSuccess: () => {
       toast("Story / Concept submitted for review");
-      void navigate({ to: "/title/$id", params: { id: res.titleId } });
+      void queryClient.invalidateQueries({ queryKey: ["my-story-concepts"] });
+      void queryClient.invalidateQueries({ queryKey: ["bridge-titles"] });
+      void navigate({ to: "/studio", replace: true });
     },
     onError: (err) =>
       toast(err instanceof Error ? err.message : "Could not submit concept"),
