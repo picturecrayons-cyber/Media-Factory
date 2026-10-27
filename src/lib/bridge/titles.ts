@@ -314,7 +314,7 @@ export const createTitle = createServerFn({ method: "POST" })
         from: null,
         to: "DRAFT",
         actorUserId: actor.userId,
-        note: isPublicSubmission ? "public rights-ready submission received; evidence review pending" : "created",
+        note: isPublicSubmission ? "public title intake received; rights and evidence review pending" : "created",
       }, tx);
       await writeAudit({
         actorUserId: actor.userId,
