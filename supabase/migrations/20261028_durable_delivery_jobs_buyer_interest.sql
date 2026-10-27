@@ -135,3 +135,24 @@ COMMENT ON COLUMN public.bridge_buyer_interest.license_fee_minor IS
   'Currency minor units (for INR, paise); never infer a fee or revenue from interest level alone.';
 COMMENT ON COLUMN public.bridge_buyer_interest.revenue_share_percent IS
   'Negotiated share percentage, 0–100; requires contract evidence before terms_status=contracted.';
+
+
+-- Verified contract evidence is a server-managed record, not a caller-supplied URL/string.
+CREATE TABLE IF NOT EXISTS public.bridge_contract_evidence (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  bridge_title_id text NOT NULL REFERENCES public.bridge_titles(id) ON DELETE RESTRICT,
+  document_url text NOT NULL CHECK (document_url ~ '^https://[^[:space:]]+$'),
+  status text NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'verified', 'rejected')),
+  verified_by text,
+  verified_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT bridge_contract_evidence_verification_chk
+    CHECK ((status = 'verified') = (verified_by IS NOT NULL AND verified_at IS NOT NULL))
+);
+CREATE INDEX IF NOT EXISTS bridge_contract_evidence_title_status_idx
+  ON public.bridge_contract_evidence (bridge_title_id, status, verified_at DESC);
+ALTER TABLE public.bridge_contract_evidence ENABLE ROW LEVEL SECURITY;
+REVOKE ALL PRIVILEGES ON TABLE public.bridge_contract_evidence FROM PUBLIC, anon, authenticated;
+COMMENT ON TABLE public.bridge_contract_evidence IS
+  'Server-managed evidence registry. LICENSED buyer interest must reference a verified contract record bound to the same title.';
