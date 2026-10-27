@@ -252,7 +252,15 @@ function Onboarding() {
               <li key={label} className={marks[index] ? "text-white" : "text-white/40"}>{marks[index] ? "Done" : "Open"} · {label}</li>
             ))}
           </ol>
-          <Link to="/admin" className="mt-8 inline-flex text-sm text-white/70">Open admin</Link>
+          <button
+            type="button"
+            className="mt-8 text-sm text-white/70"
+            onClick={() => {
+              void supabase.auth.signOut({ scope: "local" }).finally(() => window.location.assign("/login"));
+            }}
+          >
+            Sign out
+          </button>
         </aside>
         <div className="flex min-h-screen flex-col">
           <div className="flex-1 space-y-5 p-5 sm:p-8">

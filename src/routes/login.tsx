@@ -2,6 +2,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState, type FormEvent } from "react";
 import { signInWithEmail } from "@/lib/auth/client";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
+import { supabase } from "@/lib/supabase";
 import { BrandMark } from "@/components/bridge/shell";
 import { Button } from "@/components/ui/button";
 import { getBridgeSession } from "@/lib/bridge/session";
@@ -19,12 +20,17 @@ function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [unsigned, setUnsigned] = useState<string | null>(null);
 
-  // If already authenticated with Supabase session, resolve profile and route to dashboard
+  // An existing sign-in with no Bridge profile stays here. It must not open the title form.
   useEffect(() => {
     if (isPending || !user) return;
     void getBridgeSession()
       .then((s) => {
+        if (!s.profile) {
+          setUnsigned(user.primaryEmail || "this account");
+          return;
+        }
         const nextParam =
           typeof window !== "undefined"
             ? new URLSearchParams(window.location.search).get("next")
@@ -36,7 +42,7 @@ function Login() {
         }
       })
       .catch(() => {
-        void navigate({ to: "/onboarding" });
+        setUnsigned(user.primaryEmail || "this account");
       });
   }, [isPending, user, navigate]);
 
@@ -56,7 +62,7 @@ function Login() {
 
       if (isSafeRedirect(nextParam)) {
         window.location.assign(nextParam!);
-      } else if (s?.home) {
+      } else if (s?.profile && s.home) {
         window.location.assign(s.home);
       } else {
         window.location.assign("/dashboard");
@@ -92,6 +98,22 @@ function Login() {
             Securely access your Crayons Bridge workspace.
           </p>
         </div>
+
+        {unsigned ? (
+          <div className="space-y-3 rounded-xl border border-line bg-bg p-3 text-sm">
+            <p>Signed in as {unsigned}. This account has no desk, so the title form stays closed.</p>
+            <p className="text-muted">Sign out, then use abijithasokan@crayonspictures.com for the admin desk.</p>
+            <Button
+              type="button"
+              className="w-full"
+              onClick={() => {
+                void supabase.auth.signOut({ scope: "local" }).finally(() => window.location.assign("/login"));
+              }}
+            >
+              Sign out
+            </Button>
+          </div>
+        ) : null}
 
         <form className="space-y-4" onSubmit={(e) => void onSubmit(e)}>
           <label className="block text-sm font-medium text-fg" htmlFor="bridge-email">

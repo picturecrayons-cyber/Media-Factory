@@ -100,8 +100,18 @@ export function RequireBridge({
       return (
         <Frame>
           <h1 className="font-display text-2xl">This sign-in is not an admin</h1>
-          <p className="text-sm leading-relaxed text-muted">The page you opened is the admin desk. This account has no Bridge profile, so it cannot enter. Sign in with the operator account.</p>
-          <Link to="/login" className="block text-sm font-semibold text-accent">Sign in</Link>
+          <p className="text-sm leading-relaxed text-muted">
+            {user.primaryEmail ? `${user.primaryEmail} has no Bridge profile. ` : "This account has no Bridge profile. "}
+            The title form will not open. Sign out, then use abijithasokan@crayonspictures.com.
+          </p>
+          <Button
+            type="button"
+            onClick={() => {
+              void supabase.auth.signOut({ scope: "local" }).finally(() => window.location.assign("/login"));
+            }}
+          >
+            Sign out
+          </Button>
         </Frame>
       );
     }
