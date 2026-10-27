@@ -34,7 +34,11 @@ test("submission is blocked until the user explicitly re-affirms authorization",
   );
   assert.notEqual(attestationGuard, -1, "submit handler must fail closed when attestation is false");
 
-  const profileWrite = submitPath.indexOf("await completeOnboarding(");
+  const creatorProfileMarker = submitPath.indexOf(
+    "// Create the server-backed profile only after intake validation passes.",
+  );
+  assert.notEqual(creatorProfileMarker, -1, "creator profile mutation must remain behind intake validation");
+  const profileWrite = submitPath.indexOf("await completeOnboarding(", creatorProfileMarker);
   const titleWrite = submitPath.indexOf("await createTitle(");
   assert.ok(profileWrite === -1 || attestationGuard < profileWrite,
     "attestation guard must run before profile/onboarding mutation");
