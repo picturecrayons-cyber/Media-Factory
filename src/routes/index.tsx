@@ -231,6 +231,15 @@ function Home() {
             <h2 className="text-lg font-semibold">Partners</h2>
             <p className="mt-1 max-w-2xl text-sm text-muted">Distribution and delivery readiness for leading OTT and satellite networks.</p>
             <div className="mt-4 flex gap-3 overflow-x-auto pb-2">
+              {(partnersQ.data?.partners ?? []).some((partner) => partner.publicUrl.includes("crayonsloop.in")) ? null : (
+                <a href="https://crayonsloop.in/" className="flex min-w-64 items-center gap-3 rounded-2xl border border-line p-4" target="_blank" rel="noreferrer">
+                  <span className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-[#102433] text-xs font-semibold text-white">LOOP</span>
+                  <span>
+                    <span className="block text-sm font-semibold">Crayons Loop</span>
+                    <span className="block text-xs text-muted">Consumer streaming · crayonsloop.in</span>
+                  </span>
+                </a>
+              )}
               {(partnersQ.data?.partners ?? []).map((partner) => (
                 <a key={partner.publicUrl} href={partner.publicUrl} className="flex min-w-64 items-center gap-3 rounded-2xl border border-line p-4" target="_blank" rel="noreferrer">
                   <span className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-[#102433] text-xs font-semibold text-white">LOOP</span>
@@ -240,6 +249,13 @@ function Home() {
                   </span>
                 </a>
               ))}
+              <a href="https://www.streamvista.in/" className="flex min-w-64 items-center gap-3 rounded-2xl border border-line p-4" target="_blank" rel="noreferrer">
+                <span className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-[#102433] text-xs font-semibold text-white">SV</span>
+                <span>
+                  <span className="block text-sm font-semibold">StreamVista</span>
+                  <span className="block text-xs text-muted">Media services · streamvista.in</span>
+                </span>
+              </a>
             </div>
           </div>
         </section>
