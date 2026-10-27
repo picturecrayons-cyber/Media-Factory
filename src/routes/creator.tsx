@@ -1,7 +1,9 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
-import { CreateTitleForm, TitleList } from "@/components/bridge/title-desk";
+import { TitleList } from "@/components/bridge/title-desk";
+import { MyStoryConcepts } from "@/components/bridge/my-story-concepts";
+import { NewSubmissionPanel } from "@/components/bridge/new-submission-panel";
 
 export const Route = createFileRoute("/creator")({ component: Creator });
 
@@ -10,30 +12,46 @@ function Creator() {
     <RequireBridge allow="creator">
       {(actor) => (
         <BridgeShell actor={actor} title="Creator desk">
-          <Desk
-            role="Creator"
-            scope="Own titles only. Upload, update drafts, and read your deliveries."
-            opportunity="Submit a title. Bridge clears QC and rights before any buyer can see it."
-            steps={["Create title", "Upload assets", "QC and rights", "License", "Delivery"]}
-          />
-          <section className="mt-8">
-            <h2 className="text-lg font-semibold">New title</h2>
-            <div className="mt-3"><CreateTitleForm /></div>
-          </section>
-          <section className="mt-8">
-            <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-lg font-semibold">Your titles</h2>
-              <Link to="/account" className="text-sm text-muted">Account</Link>
-            </div>
-            <TitleList empty="No titles yet. Create a draft to start." />
-          </section>
+          <div className="mx-auto max-w-3xl space-y-10 px-1 pb-16">
+            <header className="space-y-4">
+              <div>
+                <h1 className="font-display text-2xl tracking-tight sm:text-3xl">Creator</h1>
+                <p className="mt-1 text-sm text-muted">
+                  Own titles only. Upload, update drafts, and track delivery.
+                </p>
+              </div>
+              <NewSubmissionPanel />
+            </header>
+
+            <MyStoryConcepts />
+
+            <section>
+              <div className="mb-3 flex items-center justify-between">
+                <h2 className="text-lg font-semibold">Your titles</h2>
+                <Link to="/account" className="text-sm text-muted">
+                  Account
+                </Link>
+              </div>
+              <TitleList empty="No titles yet. Start with a new submission." />
+            </section>
+          </div>
         </BridgeShell>
       )}
     </RequireBridge>
   );
 }
 
-export function Desk({ role, scope, opportunity, steps }: { role: string; scope: string; opportunity: string; steps: string[] }) {
+export function Desk({
+  role,
+  scope,
+  opportunity,
+  steps,
+}: {
+  role: string;
+  scope: string;
+  opportunity: string;
+  steps: string[];
+}) {
   return (
     <div className="space-y-4">
       <div className="grid gap-3 sm:grid-cols-2">
@@ -48,7 +66,9 @@ export function Desk({ role, scope, opportunity, steps }: { role: string; scope:
       </div>
       <ol className="flex flex-wrap gap-2 text-sm">
         {steps.map((step, i) => (
-          <li key={step} className="rounded-sm border border-line px-3 py-1.5">{i + 1}. {step}</li>
+          <li key={step} className="rounded-sm border border-line px-3 py-1.5">
+            {i + 1}. {step}
+          </li>
         ))}
       </ol>
     </div>
