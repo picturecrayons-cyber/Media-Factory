@@ -4,6 +4,7 @@ import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { CreateTitleForm, TitleList } from "@/components/bridge/title-desk";
 import { StoryConceptForm } from "@/components/bridge/story-concept-form";
+import { MyStoryConcepts } from "@/components/bridge/my-story-concepts";
 import { StreamVistaOrders } from "@/components/bridge/streamvista-orders";
 import { Button } from "@/components/ui/button";
 import { STORY_CONCEPT_ENABLED } from "@/lib/bridge/story-concept";
@@ -122,6 +123,8 @@ function Studio() {
                 </div>
               )}
             </header>
+
+            <MyStoryConcepts />
 
             <section>
               <h2 className="mb-3 text-lg font-semibold">Your titles</h2>
