@@ -4,11 +4,10 @@ import { useQuery } from "@tanstack/react-query";
 import { RedirectToSignIn } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { completeOnboarding } from "@/lib/bridge/profiles";
-import { createTitle } from "@/lib/bridge/titles";
+import { createTitle, updateTitle } from "@/lib/bridge/titles";
 import { getBridgeSession } from "@/lib/bridge/session";
 import { retryWorkspaceSession } from "@/lib/auth/workspace-session-retry";
 import { supabase } from "@/lib/supabase";
-import { ACCOUNT_TYPES } from "@/lib/bridge/types";
 import { publicAccountTypeFrom } from "@/lib/auth/public-account-type";
 import { BRIDGE_LOOP_LANES } from "@/lib/bridge/loop-lanes";
 import { publicOnboardingError } from "@/lib/bridge/onboarding-errors";
@@ -26,9 +25,9 @@ const ACCOUNT_LABELS: Record<PublicAccountType, string> = {
 };
 
 const LANGUAGES = ["Malayalam", "Tamil", "Telugu", "Kannada", "Hindi", "English", "Bengali", "Marathi", "Other"];
-const TERRITORIES = ["India", "Worldwide", "South Asia", "GCC", "North America", "United Kingdom", "Europe", "Australia / New Zealand", "Other"];
-const MEDIA = ["SVOD", "TVOD", "AVOD", "FAST", "Broadcast", "Theatrical", "Airline", "Educational", "Festival", "Crayons Loop"];
-const DESTINATIONS = ["Crayons Loop", "External OTT", "Broadcast / TV", "TVOD / EST", "FAST", "Festival / Educational", "Buyer delivery"];
+const GENRES = ["Drama", "Comedy", "Thriller", "Horror", "Romance", "Action", "Family", "Documentary"];
+const RATINGS = ["U", "UA", "A"];
+const LATER = ["Film", "Trailer", "Posters", "English subtitles", "Audio", "Certificate"];
 
 const SESSION_TIMEOUT_MS = 12_000;
 
@@ -50,41 +49,6 @@ function goHome(home: string | null | undefined, navigate: ReturnType<typeof use
   void navigate({ to: (home || "/dashboard") as any, replace: true });
 }
 
-function CheckGroup({
-  label,
-  values,
-  selected,
-  onChange,
-  required = false,
-}: {
-  label: string;
-  values: string[];
-  selected: string[];
-  onChange: (value: string, checked: boolean) => void;
-  required?: boolean;
-}) {
-  return (
-    <fieldset className="space-y-2">
-      <legend className="text-sm font-medium text-fg">
-        {label}{required ? " *" : ""}
-      </legend>
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-        {values.map((value) => (
-          <label key={value} className="flex min-h-10 items-center gap-2 rounded-xl border border-line bg-elevated px-3 text-xs text-fg">
-            <input
-              type="checkbox"
-              checked={selected.includes(value)}
-              onChange={(e) => onChange(value, e.target.checked)}
-              className="accent-current"
-            />
-            <span>{value}</span>
-          </label>
-        ))}
-      </div>
-    </fieldset>
-  );
-}
-
 function Onboarding() {
   const { user, isPending } = useCurrentUserState();
   const navigate = useNavigate();
@@ -101,30 +65,14 @@ function Onboarding() {
   const [organizationName, setOrganizationName] = useState("");
 
   const [titleName, setTitleName] = useState("");
-  const [originalTitle, setOriginalTitle] = useState("");
   const [contentType, setContentType] = useState("Film");
   const [language, setLanguage] = useState("Malayalam");
-  const [additionalLanguages, setAdditionalLanguages] = useState<string[]>([]);
   const [year, setYear] = useState("");
   const [runtimeMinutes, setRuntimeMinutes] = useState("");
+  const [genre, setGenre] = useState("");
+  const [rating, setRating] = useState("");
   const [synopsis, setSynopsis] = useState("");
-  const [countryOfOrigin, setCountryOfOrigin] = useState("India");
-  const [releaseDate, setReleaseDate] = useState("");
-  const [director, setDirector] = useState("");
-  const [producer, setProducer] = useState("");
-
-  const [territories, setTerritories] = useState<string[]>(["India"]);
-  const [rightsLanguages, setRightsLanguages] = useState<string[]>(["Malayalam"]);
-  const [media, setMedia] = useState<string[]>(["SVOD"]);
-  const [windowStart, setWindowStart] = useState("");
-  const [windowEnd, setWindowEnd] = useState("");
-  const [exclusivity, setExclusivity] = useState<"EXCLUSIVE" | "NON_EXCLUSIVE">("NON_EXCLUSIVE");
-  const [sublicensingAllowed, setSublicensingAllowed] = useState(false);
-  const [promotionalRights, setPromotionalRights] = useState(true);
-  const [rightsBasis, setRightsBasis] = useState<"OWNER" | "EXCLUSIVE_LICENSEE" | "AUTHORIZED_DISTRIBUTOR" | "PRODUCER_AUTHORITY">("OWNER");
   const [authorizationAttested, setAuthorizationAttested] = useState(false);
-  const [screenerAccess, setScreenerAccess] = useState<"BRIDGE_PRIVATE_SCREENER" | "SCREENER_PENDING">("SCREENER_PENDING");
-  const [destinations, setDestinations] = useState<string[]>(["Buyer delivery"]);
 
   const [submittedTitleId, setSubmittedTitleId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -166,20 +114,8 @@ function Onboarding() {
       <main className="grid min-h-screen place-items-center bg-bg p-6">
         <div className="w-full max-w-lg space-y-5 rounded-2xl border border-line bg-surface p-7">
           <BrandMark />
-          <h1 className="font-display text-2xl font-semibold">Submission received</h1>
-          <p className="text-sm leading-relaxed text-muted">
-            Your title is now in Bridge review. Licensing Ready is not granted by the public form.
-            Bridge must verify the master, screener, authorization evidence, legal clearance, QC and rights package before buyers can see it.
-          </p>
-          <div className="rounded-xl border border-line bg-elevated p-4 text-sm">
-            <p className="font-semibold text-fg">Next required evidence</p>
-            <ul className="mt-2 space-y-1.5 text-muted">
-              <li>• Upload authorization / chain-of-title evidence</li>
-              <li>• Upload a private Bridge screener</li>
-              <li>• Upload the approved master and artwork</li>
-              <li>• Complete QC and Legal review</li>
-            </ul>
-          </div>
+          <h1 className="font-display text-2xl font-semibold">Record saved</h1>
+          <p className="text-sm leading-relaxed text-muted">Film, trailer, posters, subtitles, audio, and the certificate are added on the title. Not here.</p>
           <Button className="w-full" onClick={() => void navigate({ to: "/title/$id", params: { id: submittedTitleId } })}>
             Open title workspace
           </Button>
@@ -218,10 +154,6 @@ function Onboarding() {
     );
   }
 
-  function toggle(setter: (next: string[]) => void, current: string[], value: string, checked: boolean) {
-    setter(checked ? [...current, value] : current.filter((item) => item !== value));
-  }
-
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     if (unsupportedSignupRole) {
@@ -252,42 +184,40 @@ function Onboarding() {
       }
 
       if (!titleName.trim()) throw new Error("Title name is required");
-      if (synopsis.trim().length < 20) throw new Error("Add a synopsis of at least 20 characters");
-      if (!territories.length || !rightsLanguages.length || !media.length || !destinations.length) {
-        throw new Error("Select at least one value in each rights package group");
-      }
-      if (!windowStart || !windowEnd) throw new Error("Rights window start and end are required");
-      if (!authorizationAttested) throw new Error("Confirm that you have authority to license the submitted rights");
-      if (new Date(windowEnd) <= new Date(windowStart)) throw new Error("Rights window end must be after start");
+      if (!genre) throw new Error("Choose a genre");
+      if (!rating) throw new Error("Choose a rating");
+      if (synopsis.trim().length < 20) throw new Error("Add a short synopsis");
+      if (!authorizationAttested) throw new Error("Confirm you can submit this title");
 
+      const start = new Date();
+      const end = new Date(start);
+      end.setFullYear(end.getFullYear() + 3);
       const result = await createTitle({
         data: {
           name: titleName.trim(),
-          originalTitle: originalTitle.trim() || undefined,
           contentType,
           language,
-          additionalLanguages,
           year: year ? Number(year) : undefined,
           runtimeMinutes: runtimeMinutes ? Number(runtimeMinutes) : undefined,
           synopsis: synopsis.trim(),
-          countryOfOrigin: countryOfOrigin.trim() || undefined,
-          releaseDate: releaseDate || undefined,
-          director: director.trim() || undefined,
-          producer: producer.trim() || undefined,
-          territories,
-          rightsLanguages,
-          media,
-          windowStart: new Date(windowStart).toISOString(),
-          windowEnd: new Date(windowEnd).toISOString(),
-          exclusivity,
-          sublicensingAllowed,
-          promotionalRights,
-          rightsBasis,
-          authorizationAttested,
-          screenerAccess,
-          intendedDestinations: destinations,
+          countryOfOrigin: "India",
+          territories: ["India"],
+          rightsLanguages: [language],
+          media: ["SVOD"],
+          windowStart: start.toISOString(),
+          windowEnd: end.toISOString(),
+          exclusivity: "NON_EXCLUSIVE",
+          sublicensingAllowed: false,
+          promotionalRights: true,
+          rightsBasis: "OWNER",
+          authorizationAttested: true,
+          screenerAccess: "SCREENER_PENDING",
+          intendedDestinations: ["Buyer delivery"],
         },
       });
+      if (genre || rating) {
+        await updateTitle({ data: { id: result.title.id, genre, rating } }).catch(() => undefined);
+      }
 
       setSubmittedTitleId(result.title.id);
       try { sessionStorage.removeItem("bridge-invite"); } catch { /* ignore */ }
@@ -299,156 +229,75 @@ function Onboarding() {
     }
   }
 
+  const marks = [
+    Boolean((displayName || user.displayName || "").trim()),
+    Boolean(titleName.trim()),
+    Boolean(genre && rating),
+    synopsis.trim().length >= 20,
+    authorizationAttested,
+  ];
+  const progress = accountType === "buyer" ? (marks[0] ? 100 : 0) : Math.round((marks.filter(Boolean).length / marks.length) * 100);
+  const field = "mt-1 h-11 w-full rounded-xl border border-[#d5dbe3] bg-white px-3 text-sm";
+
   return (
-    <main className="min-h-screen bg-bg p-5 sm:p-8">
-      <form onSubmit={(e) => void onSubmit(e)} className="mx-auto max-w-4xl space-y-6 rounded-2xl border border-line bg-surface p-6 sm:p-8">
-        <div className="flex items-start justify-between gap-5">
-          <div>
-            <BrandMark />
-            <h1 className="mt-5 font-display text-3xl font-semibold tracking-tight">Submit a title to Crayons Bridge</h1>
-            <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted">This is the first title form for a new account. It is not the admin desk.</p>
-            <Link to="/admin" className="mt-3 inline-flex text-sm font-semibold">Open admin</Link>
+    <main className="min-h-screen bg-[#eef1f4] text-[#102033]">
+      <form onSubmit={(e) => void onSubmit(e)} className="mx-auto grid min-h-screen max-w-6xl lg:grid-cols-[240px_1fr]">
+        <aside className="border-b border-white/10 bg-[#102033] p-5 text-white lg:min-h-screen lg:border-b-0">
+          <BrandMark />
+          <p className="mt-8 text-xs text-white/50">Setup</p>
+          <p className="mt-1 font-display text-4xl font-semibold">{progress}%</p>
+          <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/15"><div className="h-full bg-white" style={{ width: `${progress}%` }} /></div>
+          <ol className="mt-6 space-y-2 text-sm">
+            {["Account", "Title", "Genre", "Synopsis", "Confirm"].map((label, index) => (
+              <li key={label} className={marks[index] ? "text-white" : "text-white/40"}>{marks[index] ? "Done" : "Open"} · {label}</li>
+            ))}
+          </ol>
+          <Link to="/admin" className="mt-8 inline-flex text-sm text-white/70">Open admin</Link>
+        </aside>
+        <div className="flex min-h-screen flex-col">
+          <div className="flex-1 space-y-5 p-5 sm:p-8">
+            <h1 className="font-display text-3xl font-semibold">New title</h1>
+            {unsupportedSignupRole ? <p role="alert" className="text-sm">This role needs a review. <Link to="/contact" className="font-semibold">Contact Bridge</Link>.</p> : null}
+            <p className="text-sm text-[#5c6b7a]">{displayName || user.displayName || "Account"}{user.primaryEmail ? ` · ${user.primaryEmail}` : ""}{signupAccountType ? ` · ${ACCOUNT_LABELS[signupAccountType]}` : ""}</p>
+            {!user.displayName ? <label className="block text-sm">Name<input required id="onboard-name" name="name" autoComplete="name" value={displayName} onChange={(e) => setDisplayName(e.target.value)} className={field} /></label> : null}
+            {!signupAccountType ? (
+              <label className="block text-sm">Account
+                <select id="onboard-account" name="account" value={accountType} onChange={(e) => setAccountType(e.target.value as PublicAccountType)} className={field}>
+                  {(Object.keys(ACCOUNT_LABELS) as PublicAccountType[]).map((type) => <option key={type} value={type}>{ACCOUNT_LABELS[type]}</option>)}
+                </select>
+              </label>
+            ) : null}
+            {accountType === "studio" ? <label className="block text-sm">Studio<input required id="onboard-studio" name="organization" autoComplete="organization" value={organizationName} onChange={(e) => setOrganizationName(e.target.value)} className={field} /></label> : null}
+            {accountType === "buyer" ? <p className="text-sm text-[#5c6b7a]">Buyer accounts open the desk. A title is not created here.</p> : (
+              <>
+                <label className="block text-sm">Title<input required id="onboard-title" name="title" autoComplete="off" value={titleName} onChange={(e) => setTitleName(e.target.value)} className={field} /></label>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="text-sm">Type<select id="onboard-type" name="type" value={contentType} onChange={(e) => setContentType(e.target.value)} className={field}>{BRIDGE_LOOP_LANES.map((lane) => <option key={lane.id} value={lane.loopType}>{lane.label}</option>)}</select></label>
+                  <label className="text-sm">Language<select id="onboard-language" name="language" value={language} onChange={(e) => setLanguage(e.target.value)} className={field}>{LANGUAGES.map((item) => <option key={item}>{item}</option>)}</select></label>
+                  <label className="text-sm">Year<input id="onboard-year" name="year" inputMode="numeric" value={year} onChange={(e) => setYear(e.target.value)} className={field} /></label>
+                  <label className="text-sm">Minutes<input id="onboard-runtime" name="runtime" inputMode="numeric" value={runtimeMinutes} onChange={(e) => setRuntimeMinutes(e.target.value)} className={field} /></label>
+                </div>
+                <div>
+                  <p className="text-sm">Genre</p>
+                  <div className="mt-2 flex flex-wrap gap-2">{GENRES.map((item) => <button key={item} type="button" onClick={() => setGenre(item)} className={`h-10 rounded-full px-3 text-sm ${genre === item ? "bg-[#102033] text-white" : "bg-white"}`}>{item}</button>)}</div>
+                </div>
+                <div>
+                  <p className="text-sm">Rating</p>
+                  <div className="mt-2 flex gap-2">{RATINGS.map((item) => <button key={item} type="button" onClick={() => setRating(item)} className={`h-10 rounded-full px-4 text-sm ${rating === item ? "bg-[#102033] text-white" : "bg-white"}`}>{item}</button>)}</div>
+                </div>
+                <label className="block text-sm">Synopsis<textarea required id="onboard-synopsis" name="synopsis" autoComplete="off" minLength={20} rows={3} value={synopsis} onChange={(e) => setSynopsis(e.target.value)} className="mt-1 w-full rounded-xl border border-[#d5dbe3] bg-white px-3 py-2 text-sm" /></label>
+                <label className="flex items-center gap-3 text-sm"><input type="checkbox" checked={authorizationAttested} onChange={(e) => setAuthorizationAttested(e.target.checked)} />I can submit this title.</label>
+                <div>
+                  <p className="text-sm">Added on the title</p>
+                  <div className="mt-2 flex flex-wrap gap-2">{LATER.map((item) => <span key={item} className="rounded-full bg-white px-3 py-2 text-xs text-[#5c6b7a]">{item}</span>)}</div>
+                </div>
+              </>
+            )}
           </div>
-          <span className="hidden rounded-full border border-line bg-elevated px-3 py-1 text-xs text-muted sm:inline-flex">StreamVista OPC Pvt Ltd.</span>
-        </div>
-
-        <section className="space-y-4 rounded-2xl border border-line p-5">
-          <h2 className="font-display text-xl font-semibold">Account</h2>
-          {unsupportedSignupRole ? (
-            <div role="alert" className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-fg">
-              This signup link contains a role that is not available through public onboarding. No role has been granted. <Link to="/contact" className="font-semibold underline">Contact Bridge</Link> to request the correct workspace.
-            </div>
-          ) : null}
-          <p className="text-sm">
-            {displayName || user?.displayName || "Your account"}
-            {user?.primaryEmail ? ` · ${user.primaryEmail}` : ""}
-            {signupAccountType ? ` · ${ACCOUNT_LABELS[signupAccountType]}` : ""}
-          </p>
-          {!user?.displayName ? (
-            <label className="block text-sm font-medium">Your name *
-              <input required value={displayName} onChange={(e) => setDisplayName(e.target.value)} autoComplete="name" className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5" />
-            </label>
-          ) : null}
-          {!signupAccountType ? (
-            <label className="block text-sm font-medium">Account type *
-              <select value={accountType} onChange={(e) => setAccountType(e.target.value as PublicAccountType)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5">
-                {(Object.keys(ACCOUNT_LABELS) as PublicAccountType[]).map((type) => <option key={type} value={type}>{ACCOUNT_LABELS[type]}</option>)}
-              </select>
-            </label>
-          ) : null}
-          {accountType === "studio" ? (
-            <label className="block text-sm font-medium">Studio / company name *
-              <input required value={organizationName} onChange={(e) => setOrganizationName(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5" />
-            </label>
-          ) : null}
-        </section>
-
-        {accountType === "buyer" ? (
-          <section className="rounded-2xl border border-line bg-elevated p-5">
-            <h2 className="font-display text-xl font-semibold">Buyer access</h2>
-            <p className="mt-2 text-sm text-muted">Buyer accounts discover and license titles. Rights-holder submissions are limited to Independent Creator and Studio / Company accounts.</p>
-          </section>
-        ) : (
-          <>
-            <section className="space-y-4 rounded-2xl border border-line p-5">
-              <div><h2 className="font-display text-xl font-semibold">2. Title</h2><p className="mt-1 text-xs text-muted">Use structured fields; only the title synopsis remains free text.</p></div>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <label className="text-sm font-medium">Title name *
-                  <input required value={titleName} onChange={(e) => setTitleName(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5" />
-                </label>
-                <label className="text-sm font-medium">Original / local title
-                  <input value={originalTitle} onChange={(e) => setOriginalTitle(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5" />
-                </label>
-                <label className="text-sm font-medium">Content type *
-                  <select value={contentType} onChange={(e) => setContentType(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5">
-                    {BRIDGE_LOOP_LANES.map((lane) => <option key={lane.id} value={lane.loopType}>{lane.label}</option>)}
-                  </select>
-                </label>
-                <label className="text-sm font-medium">Original language *
-                  <select value={language} onChange={(e) => setLanguage(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5">{LANGUAGES.map((item) => <option key={item}>{item}</option>)}</select>
-                </label>
-                <label className="text-sm font-medium">Release year
-                  <input type="number" min="1895" max="2100" value={year} onChange={(e) => setYear(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5" />
-                </label>
-                <label className="text-sm font-medium">Runtime (minutes)
-                  <input type="number" min="1" max="600" value={runtimeMinutes} onChange={(e) => setRuntimeMinutes(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5" />
-                </label>
-              </div>
-              <CheckGroup label="Additional languages" values={LANGUAGES} selected={additionalLanguages} onChange={(v, c) => toggle(setAdditionalLanguages, additionalLanguages, v, c)} />
-              <label className="block text-sm font-medium">Synopsis *
-                <textarea required minLength={20} maxLength={4000} rows={5} value={synopsis} onChange={(e) => setSynopsis(e.target.value)} className="mt-1.5 w-full rounded-xl border border-line-strong bg-elevated px-3.5 py-3" />
-              </label>
-              <div className="grid gap-4 sm:grid-cols-3">
-                <label className="text-sm font-medium">Country of origin
-                  <input value={countryOfOrigin} onChange={(e) => setCountryOfOrigin(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5" />
-                </label>
-                <label className="text-sm font-medium">Release date
-                  <input type="date" value={releaseDate} onChange={(e) => setReleaseDate(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5" />
-                </label>
-                <label className="text-sm font-medium">Director
-                  <input value={director} onChange={(e) => setDirector(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5" />
-                </label>
-              </div>
-              <label className="block text-sm font-medium">Producer
-                <input value={producer} onChange={(e) => setProducer(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5" />
-              </label>
-            </section>
-
-            <section className="space-y-4 rounded-2xl border border-line p-5">
-              <div><h2 className="font-display text-xl font-semibold">3. Rights package</h2><p className="mt-1 text-xs text-muted">These controls define what a buyer may license. No open-ended rights description is accepted.</p></div>
-              <CheckGroup label="Territories" values={TERRITORIES} selected={territories} onChange={(v, c) => toggle(setTerritories, territories, v, c)} required />
-              <CheckGroup label="Rights languages" values={LANGUAGES} selected={rightsLanguages} onChange={(v, c) => toggle(setRightsLanguages, rightsLanguages, v, c)} required />
-              <CheckGroup label="Exploitation / media" values={MEDIA} selected={media} onChange={(v, c) => toggle(setMedia, media, v, c)} required />
-              <div className="grid gap-4 sm:grid-cols-2">
-                <label className="text-sm font-medium">Rights window starts *
-                  <input required type="datetime-local" value={windowStart} onChange={(e) => setWindowStart(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5" />
-                </label>
-                <label className="text-sm font-medium">Rights window ends *
-                  <input required type="datetime-local" value={windowEnd} onChange={(e) => setWindowEnd(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5" />
-                </label>
-              </div>
-              <div className="grid gap-4 sm:grid-cols-3">
-                <label className="text-sm font-medium">Exclusivity *
-                  <select value={exclusivity} onChange={(e) => setExclusivity(e.target.value as "EXCLUSIVE" | "NON_EXCLUSIVE")} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5"><option value="NON_EXCLUSIVE">Non-exclusive</option><option value="EXCLUSIVE">Exclusive</option></select>
-                </label>
-                <label className="text-sm font-medium">Sublicensing *
-                  <select value={String(sublicensingAllowed)} onChange={(e) => setSublicensingAllowed(e.target.value === "true")} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5"><option value="false">Not allowed</option><option value="true">Allowed</option></select>
-                </label>
-                <label className="text-sm font-medium">Promotional rights *
-                  <select value={String(promotionalRights)} onChange={(e) => setPromotionalRights(e.target.value === "true")} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5"><option value="true">Included</option><option value="false">Not included</option></select>
-                </label>
-              </div>
-            </section>
-
-            <section className="space-y-4 rounded-2xl border border-line p-5">
-              <div><h2 className="font-display text-xl font-semibold">4. Authorization & access</h2><p className="mt-1 text-xs text-muted">Attestation starts the legal review. It does not replace documentary evidence.</p></div>
-              <label className="text-sm font-medium">Rights basis *
-                <select value={rightsBasis} onChange={(e) => setRightsBasis(e.target.value as typeof rightsBasis)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5">
-                  <option value="OWNER">I am the rights owner</option>
-                  <option value="EXCLUSIVE_LICENSEE">Exclusive licensee</option>
-                  <option value="AUTHORIZED_DISTRIBUTOR">Authorized distributor</option>
-                  <option value="PRODUCER_AUTHORITY">Producer authority</option>
-                </select>
-              </label>
-              <label className="flex items-start gap-3 rounded-xl border border-line bg-elevated p-4 text-sm">
-                <input required type="checkbox" checked={authorizationAttested} onChange={(e) => setAuthorizationAttested(e.target.checked)} className="mt-0.5 accent-current" />
-                <span>I confirm that I am authorized to submit and license the selected rights. I understand Bridge will require supporting authorization / chain-of-title evidence before Licensing Ready.</span>
-              </label>
-              <label className="text-sm font-medium">Screener status *
-                <select value={screenerAccess} onChange={(e) => setScreenerAccess(e.target.value as typeof screenerAccess)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5">
-                  <option value="SCREENER_PENDING">I will upload a screener in Bridge after submission</option>
-                  <option value="BRIDGE_PRIVATE_SCREENER">Private Bridge screener is ready to upload</option>
-                </select>
-              </label>
-              <CheckGroup label="Intended delivery destinations" values={DESTINATIONS} selected={destinations} onChange={(v, c) => toggle(setDestinations, destinations, v, c)} required />
-            </section>
-          </>
-        )}
-
-        {error ? <div role="alert" className="rounded-xl border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-600 dark:text-red-400">{error}</div> : null}
-        <div className="flex flex-col gap-3 border-t border-line pt-5 sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-xs leading-relaxed text-muted">© 2026 StreamVista OPC Pvt Ltd. Crayons Bridge is the media supply chain, rights and licensing control plane.</p>
-          <Button type="submit" disabled={busy} className="h-11 rounded-full px-6 font-semibold">{busy ? "Submitting…" : accountType === "buyer" ? "Enter Bridge" : "Submit title for review"}</Button>
+          <div className="sticky bottom-0 flex items-center justify-between gap-3 border-t border-[#d5dbe3] bg-white px-5 py-3">
+            {error ? <p role="alert" className="text-sm text-red-600">{error}</p> : <p className="text-sm text-[#5c6b7a]">{progress}% ready</p>}
+            <Button type="submit" disabled={busy} className="h-11 rounded-full px-6">{busy ? "Saving…" : accountType === "buyer" ? "Open desk" : "Save record"}</Button>
+          </div>
         </div>
       </form>
     </main>
