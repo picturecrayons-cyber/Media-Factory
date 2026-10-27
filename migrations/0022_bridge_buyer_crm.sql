@@ -14,9 +14,10 @@ create table if not exists bridge_buyer_crm (
     check (pipeline_status in ('target', 'contacted', 'qualified', 'invited', 'active', 'negotiating', 'won', 'lost', 'paused')),
   notes text,
   created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now(),
-  unique (organization_id, lower(company_name), lower(coalesce(contact_email, '')))
+  updated_at timestamptz not null default now()
 );
+create unique index if not exists bridge_buyer_crm_org_company_email_uidx
+  on bridge_buyer_crm (organization_id, lower(company_name), lower(coalesce(contact_email, '')));
 create index if not exists bridge_buyer_crm_org_status_idx
   on bridge_buyer_crm (organization_id, pipeline_status, updated_at desc);
 create index if not exists bridge_buyer_crm_org_company_idx
