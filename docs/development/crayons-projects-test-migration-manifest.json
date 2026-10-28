@@ -2,17 +2,20 @@
   "project_name": "Crayons Projects - Testing DB",
   "project_ref": "jbymleftneggcgutlcqu",
   "production_project_ref": "mlmgugivsyoxzdgwkbpu",
-  "status": "BLOCKED_PENDING_BASELINE",
+  "status": "BLOCKED_SOURCE_RECONSTRUCTION",
   "migration_policy": {
     "apply_enabled": false,
-    "reason": "The Supabase project is fresh and contains no public Bridge tables. Several checked-in migrations depend on public.bridge_titles and public.bridge_payments; the earliest RLS migration hard-codes a different project ref in its comments, and supabase/migrations includes duplicate version 20261006230000.",
+    "reason": "Read-only comparison found 52 recorded production migration versions, while current repository sources do not contain exact SQL for every version. Several entries have only candidate equivalents; five current timestamped files diverge from their recorded production versions, and duplicate local version 20261006230000 remains. The complete historical sequence cannot be replayed faithfully yet.",
     "next_required_steps": [
-      "Identify the canonical Bridge schema bootstrap and review all required SQL dependencies.",
-      "Resolve duplicate version 20261006230000 by assigning unique migration versions in a reviewed branch (do not auto-rename silently).",
-      "Decide whether this testing project is intended to host the entire Bridge application schema or only the Crayons Projects module.",
-      "Build a clean, deterministic manifest with unique versions and dependency ordering.",
-      "After review, enable writes only for a test-only protected environment and apply to jbymleftneggcgutlcqu after an explicit target assertion."
-    ]
+      "Recover exact SQL for every missing production-history version from authoritative Git commits, PRs, or Supabase migration artifacts.",
+      "Diff candidate local sources against exact applied SQL; do not treat filename similarity as equivalence.",
+      "Resolve duplicate local version 20261006230000 and the competing legacy/new commercial-engine schemas in a reviewed branch.",
+      "Replay the complete ordered sequence in disposable PostgreSQL 17/Supabase and verify schema, data effects, grants, RLS, policies, functions, indexes, constraints, and extension placement.",
+      "Only then configure a protected test-only GitHub environment with test-only credentials and run a separate write-enabled migration workflow.",
+      "Do not modify production project mlmgugivsyoxzdgwkbpu or Vercel Production settings."
+    ],
+    "remote_history_count": 52,
+    "source_map_path": "docs/development/crayons-projects-production-migration-source-map-20261028.json"
   },
   "known_files": [
     {
