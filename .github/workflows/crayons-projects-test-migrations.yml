@@ -40,9 +40,18 @@ jobs:
           echo "Validated isolated Supabase target ref: ${EXPECTED_SUPABASE_PROJECT_REF}"
           echo "This workflow intentionally does not use Production credentials or write to a database."
 
-      - name: Confirm the reviewed migration manifest exists
+      - name: Validate source reconstruction manifest
         shell: bash
         run: |
           set -euo pipefail
-          test -f docs/development/crayons-projects-test-migration-manifest.json
-          node -e "const m=require('./docs/development/crayons-projects-test-migration-manifest.json'); if(m.project_ref!=='jbymleftneggcgutlcqu'||m.status!=='BLOCKED_PENDING_BASELINE') process.exit(1); console.log('Migration manifest found; status remains BLOCKED_PENDING_BASELINE.')"
+          node <<'NODE'
+          const m = require('./docs/development/crayons-projects-test-migration-manifest.json');
+          const s = require('./docs/development/crayons-projects-production-migration-source-map-20261028.json');
+          if (m.project_ref !== 'jbymleftneggcgutlcqu') throw new Error('Unexpected test project ref');
+          if (m.production_project_ref !== 'mlmgugivsyoxzdgwkbpu') throw new Error('Unexpected production boundary');
+          if (m.status !== 'BLOCKED_SOURCE_RECONSTRUCTION') throw new Error('Unexpected migration status');
+          if (s.test_project_ref !== m.project_ref || s.production_project_ref !== m.production_project_ref) throw new Error('Source map project refs mismatch');
+          if (s.history.length !== 52 || s.production_ledger_count !== 52) throw new Error('Expected all 52 production migration versions');
+          if (s.history.some(x => !x.version || !x.name || !x.status)) throw new Error('Malformed source map row');
+          console.log('Validated 52-version source map. Database apply remains disabled because source reconstruction is incomplete.');
+          NODE
