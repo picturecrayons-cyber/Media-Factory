@@ -9,7 +9,7 @@
 
 ## Migration execution status: BLOCKED_SOURCE_RECONSTRUCTION
 
-**No SQL migration has been applied to the test project.** A direct timestamp-order run is unsafe. The production migration ledger has 52 recorded versions, but the current repository does not contain exact SQL sources for every version. See `docs/development/crayons-projects-production-migration-source-map-20261028.json` for the version-by-version source map.
+**A partial smoke run has been applied to the test project, but the complete production history has not.** The core baseline plus nine current timestamped SQL files executed successfully; the detailed result is in `docs/development/crayons-projects-test-migration-smoke-run-20261028.md`. A direct timestamp-order replay of the complete production history remains unsafe. The production migration ledger has 52 recorded versions, but the current repository does not contain exact SQL sources for every version. See `docs/development/crayons-projects-production-migration-source-map-20261028.json` for the version-by-version source map.
 
 Reasons:
 1. The fresh test project has no `public.bridge_titles`, `public.bridge_assets`, `public.bridge_payments`, or `public.bridge_service_catalog` baseline tables required by current files.
@@ -20,9 +20,17 @@ Reasons:
 6. The legacy `0018_bridge_service_revenue_engine.sql` and the newer commercial-engine migration define overlapping objects with different schema expectations; they must not be combined without an explicit canonical decision.
 7. The 52-version production history includes missing-source, candidate-only, and version-divergence entries. Candidate files are not proof of exact historical SQL.
 
+## Partial test result
+
+- Test project is now populated with 27 public tables, 70 indexes, and 24 RLS-enabled tables on PostgreSQL 17.11.
+- The current source subset executed successfully, including commercial, duplicate-review, and Story/Concept objects.
+- Security Advisor still flags a `SECURITY DEFINER` duplicate-title RPC executable by `anon`/`authenticated`, plus RLS-enabled tables without policies; a direct privilege query confirms broad SELECT grants on `bridge_titles` and `bridge_payments` for browser roles.
+- Performance Advisor identifies four unindexed foreign keys. These findings must be reviewed and fixed before certification.
+- This partial test state is not production parity. A full replay will need a fresh/reset disposable test project after all 52 historical SQL sources are recovered.
+
 ## Safe workflow
 
-The accompanying `.github/workflows/crayons-projects-test-migrations.yml` is deliberately a non-writing guard. It runs only by manual dispatch under GitHub Environment `crayons-projects-test`, fails closed unless `vars.SUPABASE_PROJECT_REF` exactly matches `jbymleftneggcgutlcqu`, and verifies that the manifest remains `BLOCKED_SOURCE_RECONSTRUCTION` and that all 52 production history entries are represented. It remains non-writing. It does not need Supabase credentials and cannot run SQL migrations.
+The accompanying `.github/workflows/crayons-projects-test-migrations.yml` is deliberately a non-writing guard. It runs only by manual dispatch under GitHub Environment `crayons-projects-test`, fails closed unless `vars.SUPABASE_PROJECT_REF` exactly matches `jbymleftneggcgutlcqu`, and verifies that the manifest remains `BLOCKED_SOURCE_RECONSTRUCTION` and that all 52 production history entries are represented. The workflow itself remains non-writing; the recorded partial smoke run was performed separately against the test project. It does not need Supabase credentials and cannot run SQL migrations.
 
 Before enabling database writes:
 1. Decide whether this target should receive the full Crayons Bridge schema or only the Crayons Projects module.
