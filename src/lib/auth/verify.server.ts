@@ -6,8 +6,9 @@ function trimKey(value: string | undefined): string | undefined {
   return trimmed || undefined;
 }
 
-// Test Auth uses a separate, exact-ref URL/key pair. Ordinary deployments
-// continue resolving only the canonical project from the existing aliases.
+// Test Auth values are separate from shared canonical configuration.
+// The test flag and exact project URL must match, and the test key is used
+// exclusively for verification against that same Auth project.
 const testAuthEnabled =
   process.env.VITE_TEST_AUTH_ENABLED === "true" ||
   process.env.TEST_AUTH_ENABLED === "true";
