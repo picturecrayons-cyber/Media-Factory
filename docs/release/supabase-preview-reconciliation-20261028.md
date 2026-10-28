@@ -4,10 +4,25 @@
 
 - Canonical repository: `picturecrayons-cyber/Media-Factory`, inspected at `main` commit `b1600394bc90dfff404fb2e2c5b0c68237e6e0ec`.
 - GitHub Actions run #1764 on commit `40e4fb882c948481bd498ef082bd5cadd30c6162` completed successfully. Both the app `gate` and temporary `workflow-postgres` jobs passed. This does not certify the Supabase Preview migration run.
-- Supabase project `mlmgugivsyoxzdgwkbpu` (Crayons Bridge) is the only connected project. The branch listing shows only `main`, with `project_ref=mlmgugivsyoxzdgwkbpu`, `parent_project_ref=mlmgugivsyoxzdgwkbpu`, `is_default=true`, `status=MIGRATIONS_FAILED`. No isolated non-production branch is identified.
+- Existing Production Supabase project: `mlmgugivsyoxzdgwkbpu` (Crayons Bridge), ACTIVE_HEALTHY, Postgres 17. The earlier branch listing showed only `main` with `project_ref=mlmgugivsyoxzdgwkbpu`, `parent_project_ref=mlmgugivsyoxzdgwkbpu`, `is_default=true`, `status=MIGRATIONS_FAILED`. No isolated branch was identified there.
+- **Dedicated testing project created 2026-10-28:** `jbymleftneggcgutlcqu` (`Crayons Projects - Testing DB`), in the same Crayons Bridge Supabase organization, region `ap-south-1` (Mumbai), ACTIVE_HEALTHY, Postgres 17. Its project reference differs from Production. The project reports no public tables and zero migration rows at creation. Its API URL is `https://jbymleftneggcgutlcqu.supabase.co`.
+- The Supabase project-creation quote returned US$0/month for the new project. This is the project creation quote, not a guarantee that all future usage is free.
 - Vercel project `bridge` has a READY production deployment for main commit `b1600394bc90dfff404fb2e2c5b0c68237e6e0ec`. A successful web deployment does not prove database migration reconciliation.
-- A Supabase branch cost quote returned **US$0.01344/hour** (default Micro Compute baseline). Branching may also incur other resource usage; branch usage is not covered by Spend Cap. No branch was created because explicit cost approval is required.
-- Current project integration settings (GitHub repo, working directory, production branch, automatic branching, and deploy-to-production setting) cannot be verified through the current Supabase connector. These must be checked in Supabase Dashboard > Project Settings > Integrations before attributing the CI result to Supabase Preview.
+- A Supabase branch cost quote returned **US$0.01344/hour** (default Micro Compute baseline). Branching may also incur other resource usage; branch usage is not covered by Spend Cap. No branch was created; a separate test project now exists instead.
+- Current project integration settings (GitHub repo, working directory, production branch, automatic branching, and deploy-to-production setting) cannot be verified through the current Supabase connector. These must be checked in Supabase Dashboard > Project Settings > Integrations before attributing CI results to Supabase Preview.
+
+## MCP configuration for the testing project
+
+A recommended project-scoped, read-only Supabase MCP URL for the testing database is:
+
+```
+https://mcp.supabase.com/mcp?project_ref=jbymleftneggcgutlcqu&read_only=true
+```
+
+- Configure this URL through the MCP client's “Add to ChatGPT” / custom MCP URL flow, then complete OAuth in the browser.
+- The `project_ref` parameter scopes the MCP server to the test project, disabling account-level tools. `read_only=true` configures read-only SQL access.
+- Read-only MCP access is for inspection. Applying migrations must use an explicitly scoped test-only workflow or authorized project write tools.
+- Do not point this MCP configuration at Production. Keep tool-call approval enabled.
 
 ## Repository migration inventory
 
@@ -39,7 +54,7 @@ Exact comparison:
    - remote `20261006195531`, `bridge_commercial_control_plane_20261007013000` ↔ local `20261007013000_bridge_commercial_control_plane.sql`
    - remote `20261006195536`, `bridge_financial_reversal_hardening_20261007020000` ↔ local `20261007020000_bridge_financial_reversal_hardening.sql`
    - remote `20261006195607`, `bridge_commercial_performance_indexes_20261007023000` ↔ local `20261007023000_bridge_commercial_performance_indexes.sql`
-   
+
    The SQL names/contents are recognizably related, but this remains a name/version divergence rather than an exact migration match.
 3. The two local files with version prefix `20261006230000` have distinct SQL purposes: one creates the commercial engine; the other creates duplicate-title review/audit tables. This may conflict with timestamp-based migration ordering and needs a deliberate version assignment based on historical order and dependencies. Do not rename or reorder either automatically.
 4. Remote versions without an exact local timestamped counterpart include the initial legacy-import, auth and operational schema baselines; webhook/foreign-key index additions; Loop runtime, identity, payment and semantic-search migrations; poster/studio schema; buyer access, publication gates and catalog/deal-room reconciliation; RLS and server-only hardening; delivery/finance; rights-ready submission and submission-intake hardening; storage economics; and final asset-kind constraint. Some legacy files have similar names/SQL, but similarity alone does not prove equivalent side effects, ordering, grants or RLS configuration.
@@ -53,21 +68,23 @@ The prior Bridge OCI Storage E2E run #44 failed closed because `BRIDGE_E2E_ASSET
 
 ## Safe next actions
 
-1. Verify Supabase Dashboard > Project Settings > Integrations: selected Git repository, working directory (`.` if `supabase/` is at root), production branch, Automatic branching and Deploy to production settings. Supabase docs confirm that automatic branching creates isolated branches for Git branches, Supabase migrations in the `supabase/migrations/` directory run in order, and preview branches do not copy production data.
-2. Before creating a branch, approve the quoted starting cost of **US$0.01344/hour**, and account for possible additional compute, disk, egress and storage use. Then create an isolated branch and verify its returned `project_ref` is different from production before running any writes.
-3. In the isolated target, build a version-by-version mapping of all remote history rows to actual source SQL and schema evidence, including migration files from older PRs/commits if recoverable. Do not map by name similarity alone.
-4. Reconstruct missing historical migrations from authoritative Git history when possible. Treat legacy migrations and schema snapshots as evidence, not automatic replacements.
-5. Determine the original intended order of duplicate-version and short-prefix files. Test the complete reconstructed migration sequence on a disposable isolated target; verify resulting tables, columns, data effects, grants, RLS and policies against the intended design.
-6. Only after schema equivalence is demonstrated, consider documented migration-history repair against the isolated target, if necessary. Repair edits history records; it does not execute SQL. Never repair or reset Production to make the check green.
-7. Configure OCI E2E to use an explicitly named preview GitHub Environment and preview-only resources, with fail-closed target and asset checks. Re-run only after all resource boundaries are verified and record results against an exact commit SHA.
-8. Keep Production HOLD / NOT CERTIFIED until these gates pass.
+1. Configure and verify Supabase MCP using the test-only project-scoped URL above, preferably read-only while investigating.
+2. Verify Supabase Dashboard > Project Settings > Integrations: selected Git repository, working directory (`.` if `supabase/` is at root), production branch, Automatic branching and Deploy to production settings. Supabase docs confirm that automatic branching creates isolated branches for Git branches, Supabase migrations in `supabase/migrations/` run in order, and preview branches do not copy production data.
+3. In a test-only workflow, set the Supabase project URL/ref to `jbymleftneggcgutlcqu` and use independently generated test-only credentials. Never reuse Production database URLs, secret keys, service-role keys, mail/payment credentials, or OCI production credentials. Verify the target project reference in the workflow before every database write.
+4. Build a version-by-version mapping of all remote history rows to actual source SQL and schema evidence, including migration files from older PRs/commits if recoverable. Do not map by name similarity alone.
+5. Reconstruct missing historical migrations from authoritative Git history when possible. Treat legacy migrations and schema snapshots as evidence, not automatic replacements.
+6. Determine the original intended order of duplicate-version and short-prefix files. Test the complete reconstructed migration sequence on the disposable test project; verify resulting tables, columns, data effects, grants, RLS and policies against the intended design.
+7. Only after schema equivalence is demonstrated, consider documented migration-history repair against the disposable test project, if necessary. Repair edits history records; it does not execute SQL. Never repair or reset Production to make the check green.
+8. Configure OCI E2E to use an explicitly named preview GitHub Environment and preview-only resources, with fail-closed target and asset checks. Re-run only after all resource boundaries are verified and record results against an exact commit SHA.
+9. Keep Production HOLD / NOT CERTIFIED until these gates pass.
 
 ## Not done
 
-No Production database, migration-history row, RLS policy, authentication configuration, credential, OCI object, payment record, email setting, Vercel environment or deployment was changed. No Supabase branch was created, no migration history repaired, no reset run and no OCI E2E rerun performed.
+No Production database, migration-history row, RLS policy, authentication configuration, credential, OCI object, payment record, email setting, Vercel environment or deployment was changed. The separate testing Supabase project was created; at the time of verification it had no public tables and zero migration records. No migration has yet been applied to it, no migration history repaired, no reset run and no OCI E2E rerun performed. The existing Vercel `bridge` project still has multiple older branch-scoped variables; no changes were made to them. GitHub/Supabase Integration settings have not been independently verified.
 
 ## References
 
+- Supabase MCP server and project-scoped read-only configuration: https://supabase.com/docs/guides/ai-tools/mcp
 - Supabase local development and migration workflow: https://supabase.com/docs/guides/local-development/cli-workflows
 - Supabase GitHub integration: https://supabase.com/docs/guides/deployment/branching/github-integration
 - Supabase branching: https://supabase.com/docs/guides/deployment/branching
