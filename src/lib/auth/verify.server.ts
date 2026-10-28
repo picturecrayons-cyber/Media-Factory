@@ -14,8 +14,8 @@ const testAuthEnabled =
   process.env.TEST_AUTH_ENABLED === "true";
 const testAuthUrl = process.env.VITE_TEST_AUTH_SUPABASE_URL || process.env.TEST_AUTH_SUPABASE_URL;
 const testAuthPublishableKey =
-  process.env.VITE_TEST_AUTH_SUPABASE_PUBLISHABLE_KEY ||
-  process.env.TEST_AUTH_SUPABASE_PUBLISHABLE_KEY;
+  process.env.TEST_AUTH_SERVER_PUBLISHABLE_KEY ||
+  process.env.VITE_TEST_AUTH_SUPABASE_PUBLISHABLE_KEY;
 
 const supabaseUrl = testAuthEnabled
   ? resolveTestAuthSupabaseUrl(true, testAuthUrl, testAuthPublishableKey)
