@@ -1,0 +1,69 @@
+{
+  "project_name": "Crayons Projects - Testing DB",
+  "project_ref": "jbymleftneggcgutlcqu",
+  "production_project_ref": "mlmgugivsyoxzdgwkbpu",
+  "status": "BLOCKED_PENDING_BASELINE",
+  "migration_policy": {
+    "apply_enabled": false,
+    "reason": "The Supabase project is fresh and contains no public Bridge tables. Several checked-in migrations depend on public.bridge_titles and public.bridge_payments; the earliest RLS migration hard-codes a different project ref in its comments, and supabase/migrations includes duplicate version 20261006230000.",
+    "next_required_steps": [
+      "Identify the canonical Bridge schema bootstrap and review all required SQL dependencies.",
+      "Resolve duplicate version 20261006230000 by assigning unique migration versions in a reviewed branch (do not auto-rename silently).",
+      "Decide whether this testing project is intended to host the entire Bridge application schema or only the Crayons Projects module.",
+      "Build a clean, deterministic manifest with unique versions and dependency ordering.",
+      "After review, enable writes only for a test-only protected environment and apply to jbymleftneggcgutlcqu after an explicit target assertion."
+    ]
+  },
+  "known_files": [
+    {
+      "path": "supabase/migrations/20260921_crayons_bridge_rls.sql",
+      "version": "20260921",
+      "risk": "Comment names project uakpqqardziifcwzvgfx and says do not apply to production yet; uses ALTER TABLE IF EXISTS for specific Bridge tables, so does not create baseline schema."
+    },
+    {
+      "path": "supabase/migrations/20261004_bridge_assets_add_censor_certificate.sql",
+      "version": "20261004",
+      "risk": "Requires public.bridge_assets to exist."
+    },
+    {
+      "path": "supabase/migrations/20261006170000_reconcile_duplicate_bridge_titles.sql",
+      "version": "20261006170000",
+      "risk": "No-op compatibility migration."
+    },
+    {
+      "path": "supabase/migrations/20261006230000_bridge_commercial_engine.sql",
+      "version": "20261006230000",
+      "risk": "Requires public.bridge_titles and public.bridge_payments to exist; conflicts with another file's migration version."
+    },
+    {
+      "path": "supabase/migrations/20261006230000_duplicate_title_reconciliation.sql",
+      "version": "20261006230000",
+      "risk": "Requires public.bridge_titles to exist; conflicts with another file's migration version."
+    },
+    {
+      "path": "supabase/migrations/20261007000000_harden_bridge_commercial_server_only.sql",
+      "version": "20261007000000",
+      "risk": "Requires commercial-engine tables and function to exist."
+    },
+    {
+      "path": "supabase/migrations/20261007013000_bridge_commercial_control_plane.sql",
+      "version": "20261007013000",
+      "risk": "Requires commercial-engine tables and public.bridge_payments to exist."
+    },
+    {
+      "path": "supabase/migrations/20261007020000_bridge_financial_reversal_hardening.sql",
+      "version": "20261007020000",
+      "risk": "Requires commercial-engine and control-plane tables."
+    },
+    {
+      "path": "supabase/migrations/20261007023000_bridge_commercial_performance_indexes.sql",
+      "version": "20261007023000",
+      "risk": "Requires commercial-engine and control-plane tables."
+    },
+    {
+      "path": "supabase/migrations/20261027_story_concept_submission.sql",
+      "version": "20261027",
+      "risk": "Requires public.bridge_titles and public.bridge_service_catalog to exist."
+    }
+  ]
+}
