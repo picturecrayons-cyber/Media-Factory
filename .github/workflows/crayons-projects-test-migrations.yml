@@ -1,0 +1,48 @@
+name: Crayons Projects test database migration verification
+
+on:
+  workflow_dispatch:
+    inputs:
+      acknowledge_test_only:
+        description: "Type TEST_ONLY to confirm this run targets the dedicated test Supabase project"
+        required: true
+        type: choice
+        options:
+          - TEST_ONLY
+
+permissions:
+  contents: read
+
+concurrency:
+  group: crayons-projects-test-db-migrations
+  cancel-in-progress: false
+
+jobs:
+  verify-target:
+    runs-on: ubuntu-latest
+    environment: crayons-projects-test
+    timeout-minutes: 10
+    steps:
+      - name: Checkout canonical repository
+        uses: actions/checkout@v4
+
+      - name: Validate isolated project reference
+        shell: bash
+        env:
+          SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+          EXPECTED_SUPABASE_PROJECT_REF: jbymleftneggcgutlcqu
+        run: |
+          set -euo pipefail
+          if [[ "${SUPABASE_PROJECT_REF:-}" != "${EXPECTED_SUPABASE_PROJECT_REF}" ]]; then
+            echo "::error::Refusing database work: crayons-projects-test SUPABASE_PROJECT_REF must exactly equal the dedicated test project ref."
+            exit 1
+          fi
+          echo "Validated isolated Supabase target ref: ${EXPECTED_SUPABASE_PROJECT_REF}"
+          echo "This workflow intentionally does not use Production credentials or write to a database."
+
+      - name: Confirm the reviewed migration manifest exists
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f docs/development/crayons-projects-test-migration-manifest.json
+          node -e "const m=require('./docs/development/crayons-projects-test-migration-manifest.json'); if(m.project_ref!=='jbymleftneggcgutlcqu'||m.status!=='BLOCKED_PENDING_BASELINE') process.exit(1); console.log('Migration manifest found; status remains BLOCKED_PENDING_BASELINE.')"
