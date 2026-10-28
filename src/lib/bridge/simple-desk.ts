@@ -112,8 +112,6 @@ export const deleteUnfinishedAssets = createServerFn({ method: "POST" })
     }
     return { deleted: rows.length };
   });
-  return Boolean(role && STAFF.has(role));
-}
 
 async function ensureNotes() {
   const sql = await getSql();
