@@ -66,7 +66,10 @@ export async function signUpWithEmail(input: {
 }
 
 export async function resendConfirmationEmail(email: string) {
-  const callbackUrl = bridgeCallbackUrl(undefined);
+  const callbackUrl = resolveAuthCallbackUrl({
+    testAuthEnabled: import.meta.env.VITE_TEST_AUTH_ENABLED === "true",
+    runtimeOrigin: typeof window !== "undefined" ? window.location.origin : undefined,
+  });
 
   const { data, error } = await supabase.auth.resend({
     type: "signup",
