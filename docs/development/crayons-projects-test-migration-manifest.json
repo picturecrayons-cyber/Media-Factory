@@ -5,7 +5,7 @@
   "status": "BLOCKED_SOURCE_RECONSTRUCTION",
   "migration_policy": {
     "apply_enabled": false,
-    "reason": "Read-only comparison found 52 recorded production migration versions, while current repository sources do not contain exact SQL for every version. Several entries have only candidate equivalents; five current timestamped files diverge from their recorded production versions, and duplicate local version 20261006230000 remains. The complete historical sequence cannot be replayed faithfully yet.",
+    "reason": "The available current SQL subset passed a test-only PostgreSQL 17 smoke run, but the complete 52-version production migration source chain is not reconstructable from current checked-in files. Security Advisor also found a SECURITY DEFINER RPC executable by anon/authenticated and broad table SELECT grants on core tables; performance review found four unindexed foreign keys. Full replay and certification remain blocked.",
     "next_required_steps": [
       "Recover exact SQL for every missing production-history version from authoritative Git commits, PRs, or Supabase migration artifacts.",
       "Diff candidate local sources against exact applied SQL; do not treat filename similarity as equivalence.",
@@ -68,5 +68,18 @@
       "version": "20261027",
       "risk": "Requires public.bridge_titles and public.bridge_service_catalog to exist."
     }
-  ]
+  ],
+  "test_smoke_run": {
+    "status": "PARTIAL_SMOKE_PASS_SECURITY_REVIEW_REQUIRED",
+    "report_path": "docs/development/crayons-projects-test-migration-smoke-run-20261028.md",
+    "postgres_version": "17.11",
+    "applied_test_migrations": 10,
+    "public_tables": 27,
+    "public_indexes": 70,
+    "rls_enabled_tables": 24,
+    "production_history_untouched": true,
+    "full_52_version_replay": false,
+    "security_advisor_warnings": 2,
+    "performance_advisor_unindexed_foreign_keys": 4
+  }
 }
