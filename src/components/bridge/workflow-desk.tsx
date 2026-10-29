@@ -124,13 +124,16 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
     field: "status" | "evidenceReference" | "finding",
     value: string,
   ) => {
-    setQcReport((current) => ({
-      ...current,
-      checks: {
-        ...current.checks,
-        [key]: { ...current.checks[key], [field]: value },
-      },
-    }));
+    setQcReport((current) => {
+      const nextCheck = { ...current.checks[key] };
+      if (field === "status") nextCheck.status = value as typeof nextCheck.status;
+      else if (field === "evidenceReference") nextCheck.evidenceReference = value;
+      else nextCheck.finding = value;
+      return {
+        ...current,
+        checks: { ...current.checks, [key]: nextCheck },
+      };
+    });
   };
   const input = (label: string, value: string, set: (v: string) => void, type = "text") => (
     <label className="grid gap-1 text-sm">
