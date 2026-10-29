@@ -65,7 +65,7 @@ Current inspected code at the base commit uses `@aws-sdk/client-s3` in `src/lib/
 
 ## Gate 4 — Preview runtime and page audit
 
-Configure Preview variables to point only to non-production resources. The inspected canonical URL resolver currently pins Supabase to Production ref `mlmgugivsyoxzdgwkbpu`; staging ref `bbtrosuwisnxacuxvegt` must not be used until a deliberate, environment-aware allowlist is implemented and tested. Do not bypass canonical checks by simply weakening validation.
+Configure Preview variables to point only to non-production resources. The inspected canonical URL resolver currently pins Supabase to Production ref `mlmgugivsyoxzdgwkbpu`. The intended Testing project ref is `jbymleftneggcgutlcqu` (`ap-south-1`, `ACTIVE_HEALTHY`), but its project identity and the unexpected `Production` badge have not been independently resolved. Do not point Preview at this project, and do not weaken canonical checks, until project identity/environment classification is independently verified and an environment-aware allowlist is implemented and tested. The retired ref `bbtrosuwisnxacuxvegt` must not be used.
 
 For each page/flow, record exact commit SHA, Preview URL, test identity/role, steps, expected result, observed result, logs/evidence, and one status:
 - WORKING — observed end-to-end with evidence;
