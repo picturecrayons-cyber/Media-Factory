@@ -8,6 +8,10 @@ export type AssetVersionCandidate = {
  * Return one current gallery entry per asset kind while preserving all source
  * rows for audit/history. Callers must pass only verified assets.
  */
+function timestamp(value: string | Date): number {
+  return value instanceof Date ? value.getTime() : Date.parse(value);
+}
+
 export function selectCurrentAssets<T extends AssetVersionCandidate>(
   rows: T[],
 ): Array<T & { versionNumber: number; versionCount: number }> {
@@ -21,8 +25,7 @@ export function selectCurrentAssets<T extends AssetVersionCandidate>(
   const current: Array<T & { versionNumber: number; versionCount: number }> = [];
   for (const versions of grouped.values()) {
     versions.sort((a, b) => {
-      const timeDifference =
-        new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      const timeDifference = timestamp(b.created_at) - timestamp(a.created_at);
       if (timeDifference !== 0) return timeDifference;
       return b.id.localeCompare(a.id);
     });
@@ -36,8 +39,7 @@ export function selectCurrentAssets<T extends AssetVersionCandidate>(
     }
   }
   return current.sort((a, b) => {
-    const timeDifference =
-      new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    const timeDifference = timestamp(b.created_at) - timestamp(a.created_at);
     return timeDifference !== 0 ? timeDifference : b.id.localeCompare(a.id);
   });
 }
