@@ -93,7 +93,7 @@ async function fixture() {
     );
     await db.exec(`insert into bridge_titles(id,owner_user_id,status,master_key,poster_key,updated_at)
       values('title-123','owner','QC_REVIEW','sealed/master','sealed/poster',now());
-    insert into bridge_assets values('master','title-123','master','sealed/master',100),('poster','title-123','poster','sealed/poster',100);`);
+    insert into bridge_assets values('master','title-123','master','sealed/master',100),('poster','title-123','poster','sealed/poster',100),('subtitle','title-123','subtitle','sealed/subtitle',100),('certificate','title-123','censor_certificate','sealed/certificate',100);`);
     function adapter(query: (text: string, params?: unknown[]) => Promise<{ rows: unknown[] }>) {
       const sql = (async (strings: TemplateStringsArray, ...params: unknown[]) => {
         let text = strings[0];
@@ -168,11 +168,11 @@ const license = {
 const syntheticQcReport = {
   version: 1 as const,
   checks: {
-    video: { status: "PASS" as const, evidenceReference: "test-evidence:video", finding: "Fixture only" },
-    audio: { status: "PASS" as const, evidenceReference: "test-evidence:audio", finding: "Fixture only" },
-    artwork: { status: "PASS" as const, evidenceReference: "test-evidence:artwork", finding: "Fixture only" },
-    subtitles: { status: "PASS" as const, evidenceReference: "test-evidence:subtitles", finding: "Fixture only" },
-    certificate: { status: "PASS" as const, evidenceReference: "test-evidence:certificate", finding: "Fixture only" },
+    video: { status: "PASS" as const, evidenceReference: "sealed/master", finding: "Fixture only" },
+    audio: { status: "PASS" as const, evidenceReference: "sealed/master", finding: "Fixture only" },
+    artwork: { status: "PASS" as const, evidenceReference: "sealed/poster", finding: "Fixture only" },
+    subtitles: { status: "PASS" as const, evidenceReference: "sealed/subtitle", finding: "Fixture only" },
+    certificate: { status: "PASS" as const, evidenceReference: "sealed/certificate", finding: "Fixture only" },
   },
 };
 
@@ -341,6 +341,26 @@ test("QC PASS requires all five checks to pass with evidence references", () => 
     },
   };
   assert.throws(() => qcReportPolicy.assertQcReportReadyForPass(missingEvidence), /certificate/);
+  const evidenceAssets = [
+    { id: "master", kind: "master", s3_key: "sealed/master", byte_size: 100 },
+    { id: "poster", kind: "poster", s3_key: "sealed/poster", byte_size: 100 },
+    { id: "subtitle", kind: "subtitle", s3_key: "sealed/subtitle", byte_size: 100 },
+    { id: "certificate", kind: "censor_certificate", s3_key: "sealed/certificate", byte_size: 100 },
+  ];
+  assert.doesNotThrow(() =>
+    qcReportPolicy.assertQcReportEvidenceReferences(syntheticQcReport, evidenceAssets),
+  );
+  const invalidReference = {
+    ...syntheticQcReport,
+    checks: {
+      ...syntheticQcReport.checks,
+      certificate: { status: "PASS" as const, evidenceReference: "not-an-asset", finding: "Fixture only" },
+    },
+  };
+  assert.throws(
+    () => qcReportPolicy.assertQcReportEvidenceReferences(invalidReference, evidenceAssets),
+    /existing title asset/,
+  );
 });
 
 
