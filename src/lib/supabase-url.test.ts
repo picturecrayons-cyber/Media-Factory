@@ -72,3 +72,20 @@ test("environment-scoped resolver rejects non-HTTPS and lookalike hosts", () => 
     /does not match this deployment environment/,
   );
 });
+
+test("environment-scoped resolver rejects paths, query strings, fragments, credentials, and custom ports", () => {
+  const invalidUrls = [
+    "https://jbymleftneggcgutlcqu.supabase.co/rest/v1",
+    "https://jbymleftneggcgutlcqu.supabase.co/?redirect=elsewhere",
+    "https://jbymleftneggcgutlcqu.supabase.co/#fragment",
+    "https://user:pass@jbymleftneggcgutlcqu.supabase.co",
+    "https://jbymleftneggcgutlcqu.supabase.co:8443",
+  ];
+  for (const url of invalidUrls) {
+    assert.throws(
+      () => resolveEnvironmentScopedSupabaseUrl("preview", url),
+      /URL structure or project/,
+      url,
+    );
+  }
+});
