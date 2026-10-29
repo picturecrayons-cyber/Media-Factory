@@ -1,13 +1,13 @@
-import { resolveCanonicalSupabaseUrl } from "../supabase-url.ts";
+import { resolveEnvironmentScopedSupabaseUrl } from "../supabase-url.ts";
 
 function trimKey(value: string | undefined): string | undefined {
   const trimmed = value?.trim();
   return trimmed || undefined;
 }
 
-// Use the same URL aliases as the browser client. If both are configured,
-// resolveCanonicalSupabaseUrl fails closed when they identify different projects.
-const supabaseUrl = resolveCanonicalSupabaseUrl(
+// Server-side verification must target the project assigned to this deployment.
+const supabaseUrl = resolveEnvironmentScopedSupabaseUrl(
+  process.env.VERCEL_ENV ?? process.env.BRIDGE_DEPLOYMENT_ENV,
   process.env.VITE_SUPABASE_URL,
   process.env.NEXT_PUBLIC_SUPABASE_URL,
 );
