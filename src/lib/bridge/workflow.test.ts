@@ -342,3 +342,28 @@ test("QC PASS requires all five checks to pass with evidence references", () => 
   };
   assert.throws(() => qcReportPolicy.assertQcReportReadyForPass(missingEvidence), /certificate/);
 });
+
+
+test("QC approval remains blocked until an evidence-backed report is supplied", async () => {
+  const f = await fixture();
+  try {
+    await assert.rejects(
+      f.sql.transaction((tx) =>
+        f.review(tx, qc, {
+          titleId: "title-123",
+          stage: "QC",
+          decision: "APPROVE",
+          note: "Reviewer summary without a report",
+        }),
+      ),
+      /Evidence-backed QC report is required/,
+    );
+    assert.equal(
+      (await f.sql.query<{ status: string }>("select status from bridge_titles"))[0].status,
+      "QC_REVIEW",
+    );
+    assert.equal((await f.sql.query("select * from bridge_qc_cases")).length, 0);
+  } finally {
+    await f.db.close();
+  }
+});
