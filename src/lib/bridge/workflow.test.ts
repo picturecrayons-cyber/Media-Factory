@@ -8,7 +8,7 @@ import { Pool } from "pg";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import * as policy from "./workflow-policy.ts";
-import * as readiness from "./title-workflow-readiness";
+import * as readiness from "./title-workflow-readiness.ts";
 import * as rbac from "./rbac.ts";
 import type { Sql } from "../db";
 
