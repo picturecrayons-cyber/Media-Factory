@@ -1,7 +1,7 @@
 import { supabase } from "@/lib/supabase";
 import type { Session, User } from "@supabase/supabase-js";
 import { restoreSupabaseSession } from "./session-restoration";
-import { bridgeCallbackUrl } from "../bridge/origin";
+import { resolveAuthCallbackUrl } from "./auth-callback-url";
 
 export const authEnabled = import.meta.env.VITE_AUTH_ENABLED !== "false";
 
@@ -43,7 +43,10 @@ export async function signUpWithEmail(input: {
   name: string;
   accountType?: "independent_creator" | "studio" | "buyer" | "investor";
 }) {
-  const callbackUrl = bridgeCallbackUrl(undefined);
+  const callbackUrl = resolveAuthCallbackUrl({
+    testAuthEnabled: import.meta.env.VITE_TEST_AUTH_ENABLED === "true",
+    runtimeOrigin: typeof window !== "undefined" ? window.location.origin : undefined,
+  });
 
   const { data, error } = await supabase.auth.signUp({
     email: input.email,
@@ -63,7 +66,10 @@ export async function signUpWithEmail(input: {
 }
 
 export async function resendConfirmationEmail(email: string) {
-  const callbackUrl = bridgeCallbackUrl(undefined);
+  const callbackUrl = resolveAuthCallbackUrl({
+    testAuthEnabled: import.meta.env.VITE_TEST_AUTH_ENABLED === "true",
+    runtimeOrigin: typeof window !== "undefined" ? window.location.origin : undefined,
+  });
 
   const { data, error } = await supabase.auth.resend({
     type: "signup",

@@ -1,24 +1,37 @@
 import { resolveCanonicalSupabaseUrl } from "../supabase-url.ts";
+import { resolveTestAuthSupabaseUrl } from "../bridge/canonical.ts";
 
 function trimKey(value: string | undefined): string | undefined {
   const trimmed = value?.trim();
   return trimmed || undefined;
 }
 
-// Use the same URL aliases as the browser client. If both are configured,
-// resolveCanonicalSupabaseUrl fails closed when they identify different projects.
-const supabaseUrl = resolveCanonicalSupabaseUrl(
-  process.env.VITE_SUPABASE_URL,
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-);
+// Test Auth values are separate from shared canonical configuration.
+// The test flag and exact project URL must match, and the test key is used
+// exclusively for verification against that same Auth project.
+const testAuthEnabled =
+  process.env.VITE_TEST_AUTH_ENABLED === "true" ||
+  process.env.TEST_AUTH_ENABLED === "true";
+const testAuthUrl = process.env.VITE_TEST_AUTH_SUPABASE_URL || process.env.TEST_AUTH_SUPABASE_URL;
+const testAuthPublishableKey =
+  process.env.TEST_AUTH_SERVER_PUBLISHABLE_KEY ||
+  process.env.VITE_TEST_AUTH_SUPABASE_PUBLISHABLE_KEY;
 
-const supabasePublishableKey =
-  trimKey(process.env.SUPABASE_PUBLISHABLE_KEY) ??
-  trimKey(process.env.VITE_SUPABASE_PUBLISHABLE_KEY) ??
-  trimKey(process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY) ??
-  trimKey(process.env.SUPABASE_ANON_KEY) ??
-  trimKey(process.env.VITE_SUPABASE_ANON_KEY) ??
-  trimKey(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+const supabaseUrl = testAuthEnabled
+  ? resolveTestAuthSupabaseUrl(true, testAuthUrl, testAuthPublishableKey)
+  : resolveCanonicalSupabaseUrl(
+      process.env.VITE_SUPABASE_URL,
+      process.env.NEXT_PUBLIC_SUPABASE_URL,
+    );
+
+const supabasePublishableKey = testAuthEnabled
+  ? trimKey(testAuthPublishableKey)
+  : trimKey(process.env.SUPABASE_PUBLISHABLE_KEY) ??
+    trimKey(process.env.VITE_SUPABASE_PUBLISHABLE_KEY) ??
+    trimKey(process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY) ??
+    trimKey(process.env.SUPABASE_ANON_KEY) ??
+    trimKey(process.env.VITE_SUPABASE_ANON_KEY) ??
+    trimKey(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
 
 export class UnauthorizedError extends Error {
   readonly status = 401;
