@@ -3,7 +3,7 @@
 Status: **NOT RUN** — staging project access and test identities are not verified.
 
 ## Preconditions
-- [ ] Confirm this is staging project ref `bbtrosuwisnxacuxvegt`, not Production `mlmgugivsyoxzdgwkbpu`.
+- [ ] Independently confirm project ref `jbymleftneggcgutlcqu` is an isolated Testing project, not Production; investigate why the dashboard displays a `Production` badge before any tests run.
 - [ ] Confirm schema/migration version and exact Preview commit SHA.
 - [ ] Confirm the runtime identity model. Existing migration documents Better Auth + Bridge RBAC and says `auth.uid()` is not the Bridge identity source.
 - [ ] Use dedicated test identities and non-sensitive test records. Never use Production data.
