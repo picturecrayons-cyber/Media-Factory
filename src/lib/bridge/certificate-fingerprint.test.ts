@@ -14,6 +14,14 @@ test("validates SHA-256 digest format", () => {
 
 test("distinguishes exact content duplicates from same-name warnings", () => {
   const digest = "b".repeat(64);
-  assert.deepEqual(certificateDuplicateWarning({ filename: "Certificate.pdf", sha256: digest, existing: [{ filename: "certificate.PDF", sha256: null }] }), { exact: false, sameName: true });
-  assert.deepEqual(certificateDuplicateWarning({ filename: "new-name.pdf", sha256: digest.toUpperCase(), existing: [{ filename: "old-name.pdf", sha256: digest }] }), { exact: true, sameName: false });
+  assert.deepEqual(certificateDuplicateWarning({
+    filename: "Certificate.pdf",
+    sha256: digest,
+    existing: [{ filename: "certificate.PDF", sha256: null }],
+  }), { exact: false, sameName: true });
+  assert.deepEqual(certificateDuplicateWarning({
+    filename: "new-name.pdf",
+    sha256: digest.toUpperCase(),
+    existing: [{ filename: "old-name.pdf", sha256: digest }],
+  }), { exact: true, sameName: false });
 });
