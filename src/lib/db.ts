@@ -1,5 +1,5 @@
 import { pendingMigrations } from "../../scripts/migration-plan.mjs";
-import { firstNonBlank } from "./bridge/config-safety.ts";
+import { assertDatabaseMatchesSupabase, firstNonBlank } from "./bridge/config-safety.ts";
 
 /** Which database backend is active. */
 export type DbSource = "postgres" | "pglite";
@@ -43,6 +43,12 @@ function normalizePostgresUrl(value: string | undefined): string | undefined {
 const databaseUrl = normalizePostgresUrl(
   rawDatabaseUrl && rawDatabaseUrl.trim() ? rawDatabaseUrl : undefined,
 );
+if (typeof process !== "undefined") {
+  assertDatabaseMatchesSupabase(
+    firstNonBlank(process.env.VITE_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_URL),
+    databaseUrl,
+  );
+}
 
 /**
  * Vercel serverless has no PGLite wasm data file (`/var/task/_libs/pglite.data`).
