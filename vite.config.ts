@@ -56,6 +56,12 @@ function pgliteBootstrapPlugin(): Plugin {
 export default defineConfig(({ command, isPreview }) => ({
   // NEXT_PUBLIC_ is an explicit public alias for Supabase browser configuration.
   envPrefix: ["VITE_", "NEXT_PUBLIC_"],
+  // Compile the deployment identity into the browser bundle; unknown values fail closed.
+  define: {
+    "import.meta.env.VITE_BRIDGE_DEPLOYMENT_ENV": JSON.stringify(
+      process.env.VERCEL_ENV ?? process.env.BRIDGE_DEPLOYMENT_ENV ?? "",
+    ),
+  },
   server: {
     host: "0.0.0.0",
     port: 3000,
