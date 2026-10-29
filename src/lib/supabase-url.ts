@@ -50,8 +50,17 @@ export function resolveEnvironmentScopedSupabaseUrl(
   }
 
   const expectedRef = SUPABASE_REF_BY_ENVIRONMENT[environment as BridgeDeploymentEnvironment];
-  if (parsed.protocol !== "https:" || parsed.hostname !== `${expectedRef}.supabase.co`) {
-    throw new Error("CONFIG_MISSING: Supabase project does not match this deployment environment.");
+  if (
+    parsed.protocol !== "https:" ||
+    parsed.hostname !== `${expectedRef}.supabase.co` ||
+    parsed.port !== "" ||
+    parsed.username !== "" ||
+    parsed.password !== "" ||
+    (parsed.pathname !== "" && parsed.pathname !== "/") ||
+    parsed.search !== "" ||
+    parsed.hash !== ""
+  ) {
+    throw new Error("CONFIG_MISSING: Supabase URL structure or project does not match this deployment environment.");
   }
 
   return url;
