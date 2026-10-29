@@ -4,9 +4,12 @@ import { Client } from "pg";
 import { persistVerifiedAsset } from "../src/lib/bridge/asset-confirmation.ts";
 import { seedStagingRbacFixtures } from "./staging-rbac-fixtures.mjs";
 
-const REQUIRED_PROJECT_REF = "bbtrosuwisnxacuxvegt";
+const REQUIRED_PROJECT_REF = "jbymleftneggcgutlcqu";
 
 function requireStagingOnlyEnvironment() {
+  if (process.env.BRIDGE_STAGING_ALLOW_TRANSACTIONAL_FIXTURES !== "true") {
+    throw new Error("Refusing to run transactional fixture test: first independently verify the Testing project identity/environment, then explicitly set BRIDGE_STAGING_ALLOW_TRANSACTIONAL_FIXTURES=true.");
+  }
   const projectRef = process.env.BRIDGE_STAGING_PROJECT_REF;
   const supabaseUrl = process.env.BRIDGE_STAGING_SUPABASE_URL;
   const databaseUrlText = process.env.BRIDGE_STAGING_DATABASE_URL;
