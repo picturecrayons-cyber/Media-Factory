@@ -1,7 +1,8 @@
 import { createClient } from "@supabase/supabase-js";
-import { resolveCanonicalSupabaseUrl } from "./supabase-url.ts";
+import { resolveEnvironmentScopedSupabaseUrl } from "./supabase-url.ts";
 
-const supabaseUrl = resolveCanonicalSupabaseUrl(
+const supabaseUrl = resolveEnvironmentScopedSupabaseUrl(
+  import.meta.env.VITE_BRIDGE_DEPLOYMENT_ENV as string | undefined,
   import.meta.env.VITE_SUPABASE_URL as string | undefined,
   import.meta.env.NEXT_PUBLIC_SUPABASE_URL as string | undefined,
 );
