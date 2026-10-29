@@ -8,6 +8,7 @@ import { Pool } from "pg";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import * as policy from "./workflow-policy.ts";
+import * as qcReportPolicy from "./qc-report.ts";
 import * as rbac from "./rbac.ts";
 import type { Sql } from "../db";
 
@@ -121,6 +122,7 @@ async function fixture() {
       "./titles": {},
     "./env": {bridgeEnv:{}},
       "./workflow-policy": policy,
+      "./qc-report": qcReportPolicy,
     };
     const exports: Record<string, (...args: unknown[]) => Promise<unknown>> = {};
     const source = readFileSync(new URL("./workflow.ts", import.meta.url), "utf8");
@@ -318,4 +320,25 @@ test("license author cannot approve their own agreement", async () => {
   } finally {
     await f.db.close();
   }
+});
+
+
+test("QC PASS requires all five checks to pass with evidence references", () => {
+  assert.doesNotThrow(() => qcReportPolicy.assertQcReportReadyForPass(syntheticQcReport));
+  const incomplete = {
+    ...syntheticQcReport,
+    checks: {
+      ...syntheticQcReport.checks,
+      audio: { status: "NOT_RUN" as const, evidenceReference: "", finding: "" },
+    },
+  };
+  assert.throws(() => qcReportPolicy.assertQcReportReadyForPass(incomplete), /audio/);
+  const missingEvidence = {
+    ...syntheticQcReport,
+    checks: {
+      ...syntheticQcReport.checks,
+      certificate: { status: "PASS" as const, evidenceReference: "", finding: "" },
+    },
+  };
+  assert.throws(() => qcReportPolicy.assertQcReportReadyForPass(missingEvidence), /certificate/);
 });
