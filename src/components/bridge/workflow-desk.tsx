@@ -268,10 +268,41 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                   )}
                 </div>
               ) : null}
-              {workflow.data?.qc?.reviewer_findings.map((f, i) => (
-                <p key={i} className="text-sm">
-                  {f.note}
-                </p>
+              {workflow.data?.qcHistory?.length ? (
+                <section className="space-y-3" aria-label="QC report and re-review history">
+                  <h3 className="font-semibold">QC report history</h3>
+                  {workflow.data.qcHistory.map((entry, index) => (
+                    <article key={`${entry.reviewed_at}-${index}`} className="space-y-2 rounded-lg border border-line p-3">
+                      <p className="text-sm font-medium">
+                        {entry.status} · Reviewer ID: {entry.reviewed_by} · {new Date(entry.reviewed_at).toLocaleString()}
+                      </p>
+                      {entry.reviewer_findings.map((finding, findingIndex) => (
+                        <div key={findingIndex} className="space-y-1 text-sm">
+                          <p>{finding.note}</p>
+                          {finding.qcReport ? (
+                            <ul className="list-disc space-y-1 pl-5">
+                              {QC_CHECK_KEYS.map((key) => (
+                                <li key={key}>
+                                  {QC_CHECK_LABELS[key]}: {finding.qcReport?.checks[key].status}
+                                  {finding.qcReport?.checks[key].evidenceReference
+                                    ? ` · Evidence: ${finding.qcReport.checks[key].evidenceReference}`
+                                    : " · Evidence reference missing"}
+                                  {finding.qcReport?.checks[key].finding
+                                    ? ` · ${finding.qcReport.checks[key].finding}`
+                                    : ""}
+                                </li>
+                              ))}
+                            </ul>
+                          ) : (
+                            <p className="text-muted">Legacy QC entry: structured evidence-backed report not recorded.</p>
+                          )}
+                        </div>
+                      ))}
+                    </article>
+                  ))}
+                </section>
+              ) : workflow.data?.qc?.reviewer_findings.map((finding, i) => (
+                <p key={i} className="text-sm">{finding.note}</p>
               ))}
             </div>
           ) : null}
