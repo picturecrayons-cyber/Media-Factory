@@ -162,6 +162,18 @@ const license = {
   distributorSharePct: 20,
 };
 
+// Synthetic evidence references are test fixtures only; never used for real title certification.
+const syntheticQcReport = {
+  version: 1 as const,
+  checks: {
+    video: { status: "PASS" as const, evidenceReference: "test-evidence:video", finding: "Fixture only" },
+    audio: { status: "PASS" as const, evidenceReference: "test-evidence:audio", finding: "Fixture only" },
+    artwork: { status: "PASS" as const, evidenceReference: "test-evidence:artwork", finding: "Fixture only" },
+    subtitles: { status: "PASS" as const, evidenceReference: "test-evidence:subtitles", finding: "Fixture only" },
+    certificate: { status: "PASS" as const, evidenceReference: "test-evidence:certificate", finding: "Fixture only" },
+  },
+};
+
 test("real SQL services persist QC, independently approved license, lifecycle and audit", async () => {
   const f = await fixture();
   try {
@@ -174,6 +186,7 @@ test("real SQL services persist QC, independently approved license, lifecycle an
         stage: "QC",
         decision: "APPROVE",
         note: "Playback and codec checked",
+        qcReport: syntheticQcReport,
       }),
     );
     await f.sql.transaction((tx) =>
@@ -206,6 +219,7 @@ test("unauthorized review and unverified current assets cannot clear QC", async 
       stage: "QC",
       decision: "APPROVE",
       note: "Review findings",
+      qcReport: syntheticQcReport,
     };
     await assert.rejects(
       f.sql.transaction((tx) => f.review(tx, owner, data)),
@@ -232,6 +246,7 @@ test("an audit failure rolls back review records and lifecycle", async () => {
           stage: "QC",
           decision: "APPROVE",
           note: "Real review findings",
+          qcReport: syntheticQcReport,
         }),
       ),
     );
@@ -264,6 +279,7 @@ test("concurrent reviewer calls cannot approve the same lifecycle twice", async 
       stage: "QC",
       decision: "APPROVE",
       note: "Verified playback review",
+      qcReport: syntheticQcReport,
     };
     const results = await Promise.allSettled([
       f.sql.transaction((tx) => f.review(tx, qc, data)),
