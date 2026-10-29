@@ -263,7 +263,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                   )}
                   {button("Return for correction", () =>
                     reviewTitleWorkflow({
-                      data: { titleId: title.id, stage: "QC", decision: "REJECT", note },
+                      data: { titleId: title.id, stage: "QC", decision: "REJECT", note, qcReport },
                     }),
                   )}
                 </div>
