@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { resolveCanonicalSupabaseUrl } from "./supabase-url.ts";
+import {
+  resolveCanonicalSupabaseUrl,
+  resolveEnvironmentScopedSupabaseUrl,
+} from "./supabase-url.ts";
+
+const testingUrl = "https://jbymleftneggcgutlcqu.supabase.co";
+const productionUrl = "https://mlmgugivsyoxzdgwkbpu.supabase.co";
 
 test("canonical Supabase URL trims whitespace and trailing slashes", () => {
   assert.equal(resolveCanonicalSupabaseUrl("  https://example.supabase.co///  "), "https://example.supabase.co");
@@ -20,11 +26,49 @@ test("canonical Supabase URL accepts matching aliases together", () => {
 
 test("canonical Supabase URL fails closed when aliases point at different projects", () => {
   assert.throws(
-    () => resolveCanonicalSupabaseUrl("https://production.supabase.co", "https://staging.supabase.co"),
+    () => resolveCanonicalSupabaseUrl(productionUrl, testingUrl),
     /CONFIG_MISSING/,
   );
 });
 
 test("canonical Supabase URL is missing when all aliases are absent or blank", () => {
   assert.equal(resolveCanonicalSupabaseUrl(undefined, "   "), undefined);
+});
+
+test("Preview accepts only the Testing project", () => {
+  assert.equal(resolveEnvironmentScopedSupabaseUrl("preview", testingUrl), testingUrl);
+  assert.throws(
+    () => resolveEnvironmentScopedSupabaseUrl("preview", productionUrl),
+    /does not match this deployment environment/,
+  );
+});
+
+test("Production accepts only the Production project", () => {
+  assert.equal(resolveEnvironmentScopedSupabaseUrl("production", productionUrl), productionUrl);
+  assert.throws(
+    () => resolveEnvironmentScopedSupabaseUrl("production", testingUrl),
+    /does not match this deployment environment/,
+  );
+});
+
+test("environment-scoped resolver rejects missing URLs and unknown environments", () => {
+  assert.throws(
+    () => resolveEnvironmentScopedSupabaseUrl("preview", undefined, " "),
+    /Supabase URL configuration is missing/,
+  );
+  assert.throws(
+    () => resolveEnvironmentScopedSupabaseUrl(undefined, testingUrl),
+    /deployment environment must be preview or production/,
+  );
+});
+
+test("environment-scoped resolver rejects non-HTTPS and lookalike hosts", () => {
+  assert.throws(
+    () => resolveEnvironmentScopedSupabaseUrl("preview", "http://jbymleftneggcgutlcqu.supabase.co"),
+    /does not match this deployment environment/,
+  );
+  assert.throws(
+    () => resolveEnvironmentScopedSupabaseUrl("preview", "https://jbymleftneggcgutlcqu.supabase.co.attacker.example"),
+    /does not match this deployment environment/,
+  );
 });
