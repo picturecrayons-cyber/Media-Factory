@@ -180,7 +180,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
           {stage === "Prepare" ? (
             <div className="space-y-3">
               <p>
-                Lifecycle: {title.status}. QC: {workflow.data?.qc?.status ?? "Not reviewed"}. Upload
+                Lifecycle: {title.status}. QC: {workflow.data?.qc?.status ?? "Pending"}. Upload
                 verified master and artwork below before submitting.
               </p>
               {canOperateOnTitle(actor, title, "title.advance_upload", "title.ingest_internal") &&
