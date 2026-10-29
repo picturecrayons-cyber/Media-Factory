@@ -6,7 +6,7 @@ import { requireVerifiedActor } from "./session";
 import { assertPermission, canReadTitle, canOperateOnTitle, type Actor } from "./rbac";
 import { loadTitle } from "./titles";
 import { loopLicenseInput, producerSharePaise } from "./workflow-policy";
-import { assertQcReportReadyForPass, qcReportSchema, type QcReport } from "./qc-report";
+import { assertQcReportEvidenceReferences, assertQcReportReadyForPass, qcReportSchema, type QcReport } from "./qc-report";
 import { bridgeEnv } from "./env";
 
 async function audit(tx: Sql, user: string, title: string, action: string, metadata: object) {
@@ -90,15 +90,19 @@ export async function reviewWorkflow(tx: Sql, actor: Actor, data: z.infer<typeof
       assertQcReportReadyForPass(data.qcReport);
     }
     const assets = await tx<{
+      id: string;
       kind: string;
       s3_key: string;
-    }>`select kind,s3_key from bridge_assets where title_id=${data.titleId} and byte_size>0`;
+      byte_size: number | string | null;
+    }>`select id,kind,s3_key,byte_size from bridge_assets where title_id=${data.titleId} and byte_size>0`;
     if (
       data.decision === "APPROVE" &&
       (!assets.some((a) => a.kind === "master" && a.s3_key === title.master_key) ||
         !assets.some((a) => a.kind === "poster" && a.s3_key === title.poster_key))
     )
       throw new Error("Verified current master and artwork are required");
+    if (data.decision === "APPROVE" && data.qcReport)
+      assertQcReportEvidenceReferences(data.qcReport, assets);
     await tx`insert into bridge_qc_cases(title_id,status,reviewer_findings,reviewed_by,reviewed_at)
       values (${data.titleId},${data.decision === "APPROVE" ? "PASSED" : "ACTION_REQUIRED"},
       ${JSON.stringify([{ note: data.note, masterKey: title.master_key, posterKey: title.poster_key, qcReport: data.qcReport ?? null }])}::jsonb,${actor.userId},now())`;
