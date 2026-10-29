@@ -6,7 +6,7 @@ import { requireVerifiedActor } from "./session";
 import { assertPermission, canReadTitle, canOperateOnTitle, type Actor } from "./rbac";
 import { loadTitle } from "./titles";
 import { loopLicenseInput, producerSharePaise } from "./workflow-policy";
-import { assertQcReportReadyForPass, qcReportSchema } from "./qc-report";
+import { assertQcReportReadyForPass, qcReportSchema, type QcReport } from "./qc-report";
 import { bridgeEnv } from "./env";
 
 async function audit(tx: Sql, user: string, title: string, action: string, metadata: object) {
@@ -175,12 +175,14 @@ export const getTitleWorkflow = createServerFn({ method: "GET" })
     const qc = await sql<{
       status: string;
       reviewed_at: string | Date;
+      reviewed_by: string;
       reviewer_findings: Array<{
         note: string;
         masterKey: string | null;
         posterKey: string | null;
+        qcReport?: QcReport | null;
       }>;
-    }>`select status,reviewed_at,reviewer_findings from bridge_qc_cases where title_id=${data.titleId} order by created_at desc limit 1`;
+    }>`select status,reviewed_at,reviewed_by,reviewer_findings from bridge_qc_cases where title_id=${data.titleId} order by created_at desc`;
     const legal = await sql<{
       status: string;
       reviewed_at: string | Date;
@@ -192,6 +194,7 @@ export const getTitleWorkflow = createServerFn({ method: "GET" })
         window_end: g.window_end ? new Date(g.window_end).toISOString() : "",
       })),
       qc: qc[0] ? { ...qc[0], reviewed_at: new Date(qc[0].reviewed_at).toISOString() } : null,
+      qcHistory: qc.map((item) => ({ ...item, reviewed_at: new Date(item.reviewed_at).toISOString() })),
       legal: legal[0]
         ? { ...legal[0], reviewed_at: new Date(legal[0].reviewed_at).toISOString() }
         : null,
