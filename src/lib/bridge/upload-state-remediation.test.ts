@@ -210,7 +210,8 @@ test("atomic state transition: migration queue and title master/poster only adva
 
 test("duplicate upload confirmations derive the same sealed key from the asset row ID", () => {
   const assets = readFileSync(join(process.cwd(), "src/lib/bridge/assets.ts"), "utf8");
-  assert.ok(assets.includes('const sealedKey = `${asset.s3_key}.verified/${asset.id}`;'));
+  assert.ok(assets.includes('sealedKey = `${asset.s3_key}.verified/${asset.id}`;'));
+  assert.match(assets, /let sealedKey = asset\\.s3_key/);
   assert.doesNotMatch(assets, /randomUUID/);
 });
 
@@ -225,14 +226,20 @@ test("verification timeout warns that server-side work may still complete and re
 test("persistence failure does not advance migration queue state", async () => {
   const assets = readFileSync(join(process.cwd(), "src/lib/bridge/assets.ts"), "utf8");
   const persistAt = assets.indexOf("const confirmed = await persistVerifiedAsset(sql, {");
-  const uploadedAt = assets.indexOf("set status = 'UPLOADED'", persistAt);
-  const verifiedAt = assets.indexOf("set status = 'VERIFIED'", persistAt);
-  const failureBranchAt = assets.indexOf("if (!confirmed)", persistAt);
+  const completionGateAt = assets.indexOf(
+    'if (confirmed || (alreadyVerified && asset.kind === "censor_certificate"))',
+    persistAt,
+  );
+  const uploadedAt = assets.indexOf("set status = 'UPLOADED'", completionGateAt);
+  const verifiedAt = assets.indexOf("set status = 'VERIFIED'", uploadedAt);
+  const failureBranchAt = assets.indexOf("if (!confirmed)", verifiedAt);
   assert.ok(persistAt >= 0, "confirmation persistence call must exist");
-  assert.ok(uploadedAt > persistAt, "UPLOADED transition must occur after persistence");
+  assert.ok(completionGateAt > persistAt, "queue completion must have a persistence/recovery guard");
+  assert.ok(uploadedAt > completionGateAt, "UPLOADED transition must follow the completion guard");
   assert.ok(verifiedAt > uploadedAt, "VERIFIED transition must follow UPLOADED");
-  assert.ok(failureBranchAt > verifiedAt, "failure handling must be after the success-only queue transitions");
-  const successBlock = assets.slice(assets.indexOf("if (confirmed)", persistAt), failureBranchAt);
+  assert.ok(failureBranchAt > verifiedAt, "failure/recovery handling must follow the guarded success path");
+  const successBlock = assets.slice(completionGateAt, failureBranchAt);
   assert.match(successBlock, /set status = 'UPLOADED'/);
   assert.match(successBlock, /set status = 'VERIFIED'/);
+  assert.match(assets.slice(failureBranchAt), /if \(current\[0\]\?\.byte_size != null\)/);
 });
