@@ -59,3 +59,40 @@ export function assertQcReportReadyForPass(report: QcReport) {
     );
   }
 }
+
+export type QcEvidenceAsset = {
+  id: string;
+  kind: string;
+  s3_key: string;
+  byte_size: number | string | null;
+};
+
+/**
+ * Evidence references must resolve to an existing, non-empty asset for this
+ * title and the relevant QC domain. This proves traceability to a stored
+ * asset, not that the technical inspection itself was performed correctly.
+ */
+export function assertQcReportEvidenceReferences(report: QcReport, assets: QcEvidenceAsset[]) {
+  const allowedKinds: Record<QcCheckKey, string[]> = {
+    video: ["master"],
+    audio: ["master"],
+    artwork: ["poster", "poster_vertical", "poster_horizontal", "thumbnail"],
+    subtitles: ["subtitle"],
+    certificate: ["censor_certificate"],
+  };
+  for (const key of QC_CHECK_KEYS) {
+    const check = report.checks[key];
+    if (check.status !== "PASS") continue;
+    const reference = check.evidenceReference.trim();
+    const exists = assets.some((asset) =>
+      allowedKinds[key].includes(asset.kind) &&
+      Number(asset.byte_size) > 0 &&
+      (asset.id === reference || asset.s3_key === reference),
+    );
+    if (!exists) {
+      throw new Error(
+        `QC evidence for ${key} must reference a non-empty existing title asset of the required type`,
+      );
+    }
+  }
+}
