@@ -16,7 +16,7 @@ export function resolveConsistentAlias(
   const configured = values.map((value) => value?.trim()).filter((value): value is string => Boolean(value));
   const unique = [...new Set(configured)];
   if (unique.length > 1) {
-    throw new Error(\`CONFIG_MISMATCH: conflicting \${label} aliases are configured.\`);
+    throw new Error("CONFIG_MISMATCH: conflicting " + label + " aliases are configured.");
   }
   return unique[0];
 }
