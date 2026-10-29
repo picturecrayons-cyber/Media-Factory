@@ -2,11 +2,12 @@ export type AssetVersionCandidate = {
   id: string;
   kind: string;
   created_at: string | Date;
+  content_type?: string | null;
 };
 
 /**
- * Return one current gallery entry per asset kind while preserving all source
- * rows for audit/history. Callers must pass only verified assets.
+ * Return one current gallery entry per asset kind and content type while preserving
+ * all source rows for audit/history. Distinct formats remain independently visible. Callers must pass only verified assets.
  */
 function timestamp(value: string | Date): number {
   return value instanceof Date ? value.getTime() : Date.parse(value);
@@ -17,9 +18,10 @@ export function selectCurrentAssets<T extends AssetVersionCandidate>(
 ): Array<T & { versionNumber: number; versionCount: number }> {
   const grouped = new Map<string, T[]>();
   for (const row of rows) {
-    const group = grouped.get(row.kind) ?? [];
+    const groupKey = row.kind + "\u0000" + (row.content_type ?? "");
+    const group = grouped.get(groupKey) ?? [];
     group.push(row);
-    grouped.set(row.kind, group);
+    grouped.set(groupKey, group);
   }
 
   const current: Array<T & { versionNumber: number; versionCount: number }> = [];

@@ -22,7 +22,15 @@ test("gallery keeps different asset kinds separate and uses a stable tie-breaker
     { id: "subtitle-a", kind: "subtitle", created_at: "2026-10-01T10:00:00Z" },
   ]);
   assert.deepEqual(current.map(({ id, versionNumber, versionCount }) => ({ id, versionNumber, versionCount })), [
-    { id: "certificate-b", versionNumber: 2, versionCount: 2 },
     { id: "subtitle-a", versionNumber: 1, versionCount: 1 },
+    { id: "certificate-b", versionNumber: 2, versionCount: 2 },
   ]);
+});
+
+test("gallery does not collapse distinct formats of the same asset kind", () => {
+  const current = selectCurrentAssets([
+    { id: "certificate-pdf", kind: "censor_certificate", content_type: "application/pdf", created_at: "2026-10-01T10:00:00Z" },
+    { id: "certificate-scan", kind: "censor_certificate", content_type: "image/png", created_at: "2026-10-01T09:00:00Z" },
+  ]);
+  assert.deepEqual(current.map(({ id }) => id), ["certificate-pdf", "certificate-scan"]);
 });
