@@ -1,9 +1,12 @@
--- Additive metadata for censor-certificate evidence.
--- Apply only after isolated Preview DB/schema identity is verified and existing constraints reviewed.
+-- Additive metadata for censor-certificate evidence. Apply only after an isolated Preview DB is verified.
+-- Keep bridge_assets_kind_chk intact: existing asset kinds must continue to be accepted.
 alter table public.bridge_assets
   add column if not exists original_filename text,
   add column if not exists sha256 text,
-  add column if not exists supersedes_asset_id text references public.bridge_assets(id);
+  add column if not exists replacement_requested_asset_id text references public.bridge_assets(id),
+  add column if not exists supersedes_asset_id text references public.bridge_assets(id),
+  add column if not exists certificate_duplicate_of_asset_id text references public.bridge_assets(id),
+  add column if not exists asset_version_id uuid references public.bridge_asset_versions(id);
 
 DO $$
 BEGIN
@@ -26,4 +29,13 @@ create index if not exists bridge_assets_certificate_versions_idx
   on public.bridge_assets (title_id, created_at desc)
   where kind = 'censor_certificate';
 
--- SHA-256 is set only by trusted server-side verification; never trust client hashes.
+-- One verified replacement can supersede a given certificate row at most once.
+create unique index if not exists bridge_assets_certificate_supersedes_uidx
+  on public.bridge_assets (supersedes_asset_id)
+  where kind = 'censor_certificate' and supersedes_asset_id is not null;
+
+create index if not exists bridge_assets_certificate_duplicate_idx
+  on public.bridge_assets (certificate_duplicate_of_asset_id)
+  where certificate_duplicate_of_asset_id is not null;
+
+-- SHA-256 and bridge_asset_versions rows are written by trusted server-side verification.
