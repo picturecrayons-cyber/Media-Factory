@@ -23,6 +23,7 @@ import {
   validateOttIngestFile,
 } from "@/lib/bridge/ott-ingest-spec";
 import { asciiUploadName } from "@/lib/bridge/latin1";
+import { normalizeCertificateFilename } from "@/lib/bridge/certificate-fingerprint";
 
 export const Route = createFileRoute("/title/$id")({ component: TitlePage });
 
@@ -303,6 +304,13 @@ function FilesPanel({
     contentType: string | null;
     byteSize: number | null;
     verified: boolean;
+    filename?: string | null;
+    sha256?: string | null;
+    supersedesAssetId?: string | null;
+    duplicateOfAssetId?: string | null;
+    version?: number | null;
+    versionState?: string | null;
+    createdAt?: string;
   }>;
   onAssetsChanged: () => Promise<unknown> | unknown;
 }) {
@@ -384,7 +392,7 @@ function FilesPanel({
     });
   }
 
-  async function uploadFile(kind: SimpleAssetKind, file: File) {
+  async function uploadFile(kind: SimpleAssetKind, file: File, replacesAssetId?: string) {
     if (uploading) return;
     const filename = asciiUploadName(file.name);
     const contentType = file.type || "application/octet-stream";
@@ -407,7 +415,16 @@ function FilesPanel({
     let transferTimer: ReturnType<typeof setTimeout> | undefined;
     try {
       const signed = await withTimeout(
-        requestAssetUpload({ data: { titleId, kind, filename, contentType } }),
+        requestAssetUpload({
+          data: {
+            titleId,
+            kind,
+            filename,
+            originalFilename: file.name,
+            contentType,
+            replacesAssetId,
+          },
+        }),
         20_000,
         "Upload URL preparation",
       );
@@ -480,7 +497,6 @@ function FilesPanel({
     ["poster_horizontal", "Horizontal Artwork", "Add"],
     ["thumbnail", "Thumbnail", "Add"],
     ["subtitle", "Subtitle", "Optional"],
-    ["censor_certificate", "Censor Certificate", "Optional"],
   ];
 
   const phaseLabel = progress
@@ -592,7 +608,7 @@ function FilesPanel({
         ) : null}
       </div>
       <div className="mt-5 space-y-2">
-        {assets.map((a) => (
+        {assets.filter((a) => a.kind !== "censor_certificate").map((a) => (
           <div key={a.id} className="flex items-center justify-between gap-3 rounded-xl border border-line p-4">
             <div>
               <p className="text-sm font-semibold">{a.kind}</p>
@@ -609,9 +625,137 @@ function FilesPanel({
           </div>
         ))}
       </div>
+
+      <CertificateSection
+        assets={assets.filter((asset) => asset.kind === "censor_certificate")}
+        canUpload={canUpload}
+        busy={uploading === "censor_certificate"}
+        onUpload={(file, replacesAssetId) => void uploadFile("censor_certificate", file, replacesAssetId)}
+      />
     </section>
   );
 }
+
+function CertificateSection({
+  assets,
+  canUpload,
+  busy,
+  onUpload,
+}: {
+  assets: Array<{
+    id: string;
+    kind: string;
+    contentType: string | null;
+    byteSize: number | null;
+    verified: boolean;
+    filename?: string | null;
+    sha256?: string | null;
+    supersedesAssetId?: string | null;
+    duplicateOfAssetId?: string | null;
+    version?: number | null;
+    versionState?: string | null;
+    createdAt?: string;
+  }>;
+  canUpload: boolean;
+  busy: boolean;
+  onUpload: (file: File, replacesAssetId?: string) => void;
+}) {
+  const [preview, setPreview] = useState<{ url: string; contentType: string; filename: string } | null>(null);
+  const current = assets.find((asset) =>
+    asset.verified &&
+    !asset.duplicateOfAssetId &&
+    !assets.some((next) => next.supersedesAssetId === asset.id && !next.duplicateOfAssetId)
+  ) ?? null;
+  const openPreview = async (asset: (typeof assets)[number]) => {
+    if (!asset.verified) return;
+    const signed = await requestAssetDownload({ data: { assetId: asset.id, purpose: "preview" } });
+    setPreview({
+      url: signed.url,
+      contentType: asset.contentType || "application/octet-stream",
+      filename: asset.filename || "Censor certificate",
+    });
+  };
+  return (
+    <section aria-labelledby="censor-certificate-heading" className="mt-6 rounded-xl border border-line p-4 sm:p-5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Legal &amp; Rights</p>
+          <h3 id="censor-certificate-heading" className="mt-1 text-base font-semibold">Censor Certificate</h3>
+          <p className="mt-1 text-xs text-muted">Restricted to the title owner and permitted internal staff. Buyers cannot preview or download certificates.</p>
+        </div>
+        <label className={`rounded-full border border-line px-3 py-2 text-xs font-semibold ${canUpload && !busy ? "cursor-pointer" : "cursor-not-allowed opacity-50"}`}>
+          {busy ? "Uploading…" : current ? "Upload replacement" : "Upload certificate"}
+          <input
+            className="sr-only"
+            type="file"
+            accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg"
+            disabled={!canUpload || busy}
+            onChange={(event) => {
+              const file = event.currentTarget.files?.[0];
+              if (file) onUpload(file, current?.id);
+              event.currentTarget.value = "";
+            }}
+          />
+        </label>
+      </div>
+      <p className="mt-3 text-xs text-muted">The server computes SHA-256 over verified stored bytes. Exact-content duplicates stay in history as warnings; replacing a certificate never deletes the previous version.</p>
+      {assets.length === 0 ? (
+        <p className="mt-4 rounded-lg border border-dashed border-line p-4 text-sm text-muted">No certificate uploaded.</p>
+      ) : (
+        <div className="mt-4 space-y-2">
+          {assets.map((asset) => {
+            const superseded = assets.some((next) => next.supersedesAssetId === asset.id && !next.duplicateOfAssetId);
+            const exactDuplicate = Boolean(asset.duplicateOfAssetId);
+            const sameNameDifferentContent = Boolean(asset.filename && asset.sha256 && assets.some((other) =>
+              other.id !== asset.id &&
+              other.filename &&
+              other.sha256 &&
+              normalizeCertificateFilename(other.filename) === normalizeCertificateFilename(asset.filename!) &&
+              other.sha256.toLowerCase() !== asset.sha256!.toLowerCase()
+            ));
+            return (
+              <div key={asset.id} className="flex flex-col gap-3 rounded-lg border border-line bg-elevated/30 p-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0">
+                  <p className="break-all text-sm font-semibold">{asset.filename || "Certificate filename unavailable"}</p>
+                  <p className="mt-1 text-xs text-muted">
+                    {asset.version ? `Version ${asset.version} · ` : ""}
+                    {asset.createdAt ? new Date(asset.createdAt).toLocaleString() : "Date unavailable"}
+                    {" · "}{!asset.verified ? "Processing" : exactDuplicate ? "Duplicate — review" : superseded ? "Superseded" : asset.id === current?.id ? "Current" : "Verified"}
+                    {asset.versionState ? ` · ${asset.versionState}` : ""}
+                  </p>
+                  {sameNameDifferentContent ? <p className="mt-1 text-xs font-medium text-amber-700">Filename matches another certificate, but the SHA-256 digest differs.</p> : null}
+                  {exactDuplicate ? <p className="mt-1 text-xs font-medium text-amber-700">Exact content match with an existing certificate. This version is retained for audit and does not replace the current certificate.</p> : null}
+                  {asset.sha256 ? <p className="mt-1 break-all font-mono text-[10px] text-muted">SHA-256: {asset.sha256}</p> : null}
+                </div>
+                {asset.verified ? (
+                  <button type="button" onClick={() => void openPreview(asset)} className="shrink-0 rounded-full border border-line px-3 py-2 text-xs font-semibold">Preview</button>
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
+      )}
+      {preview ? (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4" role="dialog" aria-modal="true" aria-label="Censor certificate preview">
+          <div className="flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-xl bg-surface text-fg">
+            <div className="flex items-center justify-between gap-3 border-b border-line p-3">
+              <p className="min-w-0 truncate text-sm font-semibold">{preview.filename}</p>
+              <button type="button" onClick={() => setPreview(null)} className="rounded-full border border-line px-3 py-1.5 text-xs font-semibold">Close</button>
+            </div>
+            <div className="min-h-[50vh] overflow-auto p-3">
+              {preview.contentType === "application/pdf" ? (
+                <iframe title="Censor certificate PDF" src={preview.url} className="h-[75vh] w-full rounded border border-line" />
+              ) : preview.contentType.startsWith("image/") ? (
+                <img src={preview.url} alt={preview.filename} className="mx-auto max-h-[75vh] max-w-full object-contain" />
+              ) : <p role="alert" className="p-4 text-sm">Unsupported certificate preview format.</p>}
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
 function FileTypeCard({
   kind,
   label,
