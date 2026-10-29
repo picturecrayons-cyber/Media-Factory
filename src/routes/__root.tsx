@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createRootRoute, HeadContent, Outlet, Scripts } from "@tanstack/react-router";
 import { AuthProvider } from "@/lib/auth/provider";
 import { Toaster } from "sonner";
+import { Analytics } from "@vercel/analytics/react";
 import appCss from "../styles.css?url";
 
 const APP_NAME = "Crayons Bridge";
@@ -62,6 +63,7 @@ export const Route = createRootRoute({
             <Toaster theme="dark" position="bottom-center" />
           </AuthProvider>
         </QueryClientProvider>
+        <Analytics />
         <Scripts />
       </body>
     </html>
