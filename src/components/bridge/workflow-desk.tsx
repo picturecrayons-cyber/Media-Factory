@@ -210,8 +210,8 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                   <div>
                     <h3 className="font-semibold">Evidence-backed QC report</h3>
                     <p className="mt-1 text-sm text-muted">
-                      Record only checks actually performed. Each PASS requires an evidence reference.
-                      Asset readiness alone is not QC evidence.
+                      Record only checks actually performed. Each PASS requires a reference that resolves to an existing title asset of the required type.
+                      This proves asset traceability, not automatic technical analysis; reviewer findings must reflect checks actually performed.
                     </p>
                   </div>
                   <div className="space-y-4">
@@ -232,11 +232,11 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                           </select>
                         </label>
                         <label className="grid gap-1 text-sm">
-                          Evidence reference (required for Pass)
+                          Evidence reference (existing title asset ID or storage key)
                           <input
                             value={qcReport.checks[key].evidenceReference}
                             onChange={(event) => updateQcCheck(key, "evidenceReference", event.target.value)}
-                            placeholder="Existing asset ID, QC evidence reference, or checksum record"
+                            placeholder="Exact ID or storage key of a stored asset of the required type"
                             className="rounded-lg border border-line bg-elevated p-2"
                           />
                         </label>
