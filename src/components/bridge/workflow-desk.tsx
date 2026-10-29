@@ -168,16 +168,37 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
       {label}
     </button>
   );
-  const input = (label: string, value: string, set: (v: string) => void, type = "text") => (
+  const input = (
+    label: string,
+    value: string,
+    set: (v: string) => void,
+    type = "text",
+    options: {
+      min?: number;
+      max?: number;
+      step?: number;
+      minLength?: number;
+      maxLength?: number;
+      placeholder?: string;
+      help?: string;
+    } = {},
+  ) => (
     <label className="grid gap-1 text-sm">
       {label}
       <input
         type={type}
         value={value}
+        min={options.min}
+        max={options.max}
+        step={options.step}
+        minLength={options.minLength}
+        maxLength={options.maxLength}
+        placeholder={options.placeholder}
         onChange={(e) => set(e.target.value)}
         className="rounded-lg border border-line bg-elevated p-2"
         required
       />
+      {options.help ? <span className="text-xs text-muted">{options.help}</span> : null}
     </label>
   );
   if (actor.accountType === "buyer" && !actor.internalRole) return null;
