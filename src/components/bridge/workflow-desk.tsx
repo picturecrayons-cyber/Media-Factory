@@ -18,6 +18,7 @@ import { hasPermission, canOperateOnTitle } from "@/lib/bridge/rbac";
 import { publicationIsActive } from "@/lib/bridge/workflow-policy";
 import type { BridgeActor } from "@/lib/bridge/session";
 import type { BridgeTitle } from "@/lib/bridge/types";
+import { QC_CHECK_KEYS, QC_CHECK_LABELS, type QcCheckKey, type QcReport } from "@/lib/bridge/qc-report";
 
 const stages = ["Prepare", "Business", "Distribution", "Revenue"] as const;
 export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: BridgeActor }) {
@@ -27,6 +28,16 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
   const [statementRef, setStatementRef] = useState("");
   const [settlementAmount, setSettlementAmount] = useState("");
   const [note, setNote] = useState("");
+  const [qcReport, setQcReport] = useState<QcReport>({
+    version: 1,
+    checks: {
+      video: { status: "NOT_RUN", evidenceReference: "", finding: "" },
+      audio: { status: "NOT_RUN", evidenceReference: "", finding: "" },
+      artwork: { status: "NOT_RUN", evidenceReference: "", finding: "" },
+      subtitles: { status: "NOT_RUN", evidenceReference: "", finding: "" },
+      certificate: { status: "NOT_RUN", evidenceReference: "", finding: "" },
+    },
+  });
   const [error, setError] = useState("");
   const qc = useQueryClient();
   const workflow = useQuery({
@@ -108,6 +119,19 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
       {label}
     </button>
   );
+  const updateQcCheck = (
+    key: QcCheckKey,
+    field: "status" | "evidenceReference" | "finding",
+    value: string,
+  ) => {
+    setQcReport((current) => ({
+      ...current,
+      checks: {
+        ...current.checks,
+        [key]: { ...current.checks[key], [field]: value },
+      },
+    }));
+  };
   const input = (label: string, value: string, set: (v: string) => void, type = "text") => (
     <label className="grid gap-1 text-sm">
       {label}
@@ -179,15 +203,62 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                   )
                 : null}
               {title.status === "QC_REVIEW" && hasPermission(actor, "title.qc_review") ? (
-                <>
-                  {input(
-                    "Technical review findings (include playback/codec checks)",
-                    note,
-                    setNote,
-                  )}
+                <div className="space-y-4 rounded-xl border border-line p-4">
+                  <div>
+                    <h3 className="font-semibold">Evidence-backed QC report</h3>
+                    <p className="mt-1 text-sm text-muted">
+                      Record only checks actually performed. Each PASS requires an evidence reference.
+                      Asset readiness alone is not QC evidence.
+                    </p>
+                  </div>
+                  <div className="space-y-4">
+                    {QC_CHECK_KEYS.map((key) => (
+                      <fieldset key={key} className="grid gap-2 rounded-lg border border-line p-3">
+                        <legend className="px-1 text-sm font-semibold">{QC_CHECK_LABELS[key]}</legend>
+                        <label className="grid gap-1 text-sm">
+                          Result
+                          <select
+                            value={qcReport.checks[key].status}
+                            onChange={(event) => updateQcCheck(key, "status", event.target.value)}
+                            className="rounded-lg border border-line bg-elevated p-2"
+                          >
+                            <option value="NOT_RUN">Not run</option>
+                            <option value="PASS">Pass</option>
+                            <option value="FAIL">Fail</option>
+                            <option value="NEEDS_REVIEW">Needs review</option>
+                          </select>
+                        </label>
+                        <label className="grid gap-1 text-sm">
+                          Evidence reference (required for Pass)
+                          <input
+                            value={qcReport.checks[key].evidenceReference}
+                            onChange={(event) => updateQcCheck(key, "evidenceReference", event.target.value)}
+                            placeholder="Existing asset ID, QC evidence reference, or checksum record"
+                            className="rounded-lg border border-line bg-elevated p-2"
+                          />
+                        </label>
+                        <label className="grid gap-1 text-sm">
+                          Finding / notes
+                          <textarea
+                            value={qcReport.checks[key].finding}
+                            onChange={(event) => updateQcCheck(key, "finding", event.target.value)}
+                            rows={2}
+                            className="rounded-lg border border-line bg-elevated p-2"
+                          />
+                        </label>
+                      </fieldset>
+                    ))}
+                  </div>
+                  {input("Reviewer summary / findings", note, setNote)}
                   {button("Approve QC", () =>
                     reviewTitleWorkflow({
-                      data: { titleId: title.id, stage: "QC", decision: "APPROVE", note },
+                      data: {
+                        titleId: title.id,
+                        stage: "QC",
+                        decision: "APPROVE",
+                        note,
+                        qcReport,
+                      },
                     }),
                   )}
                   {button("Return for correction", () =>
@@ -195,7 +266,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                       data: { titleId: title.id, stage: "QC", decision: "REJECT", note },
                     }),
                   )}
-                </>
+                </div>
               ) : null}
               {workflow.data?.qc?.reviewer_findings.map((f, i) => (
                 <p key={i} className="text-sm">
