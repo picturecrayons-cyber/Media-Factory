@@ -6,6 +6,7 @@ import { requireVerifiedActor } from "./session";
 import { assertPermission, canReadTitle, canOperateOnTitle, type Actor } from "./rbac";
 import { loadTitle } from "./titles";
 import { loopLicenseInput, producerSharePaise } from "./workflow-policy";
+import { assertQcReportReadyForPass, qcReportSchema } from "./qc-report";
 import { bridgeEnv } from "./env";
 
 async function audit(tx: Sql, user: string, title: string, action: string, metadata: object) {
@@ -69,6 +70,7 @@ const reviewInput = z.object({
   decision: z.enum(["APPROVE", "REJECT"]),
   note: z.string().trim().min(8).max(2000),
   grantId: z.string().uuid().optional(),
+  qcReport: qcReportSchema.optional(),
 });
 
 export async function reviewWorkflow(tx: Sql, actor: Actor, data: z.infer<typeof reviewInput>) {
@@ -83,6 +85,10 @@ export async function reviewWorkflow(tx: Sql, actor: Actor, data: z.infer<typeof
   const expected = data.stage === "QC" ? "QC_REVIEW" : "RIGHTS_REVIEW";
   if (title.status !== expected) throw new Error(`Title must be in ${expected}`);
   if (data.stage === "QC") {
+    if (data.decision === "APPROVE") {
+      if (!data.qcReport) throw new Error("Evidence-backed QC report is required before QC PASS");
+      assertQcReportReadyForPass(data.qcReport);
+    }
     const assets = await tx<{
       kind: string;
       s3_key: string;
@@ -95,7 +101,7 @@ export async function reviewWorkflow(tx: Sql, actor: Actor, data: z.infer<typeof
       throw new Error("Verified current master and artwork are required");
     await tx`insert into bridge_qc_cases(title_id,status,reviewer_findings,reviewed_by,reviewed_at)
       values (${data.titleId},${data.decision === "APPROVE" ? "PASSED" : "ACTION_REQUIRED"},
-      ${JSON.stringify([{ note: data.note, masterKey: title.master_key, posterKey: title.poster_key }])}::jsonb,${actor.userId},now())`;
+      ${JSON.stringify([{ note: data.note, masterKey: title.master_key, posterKey: title.poster_key, qcReport: data.qcReport ?? null }])}::jsonb,${actor.userId},now())`;
   } else {
     if (!data.grantId) throw new Error("Select a license draft");
     const [grant] = await tx<{
