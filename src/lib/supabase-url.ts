@@ -7,7 +7,7 @@ export function resolveCanonicalSupabaseUrl(
   ...values: Array<string | undefined>
 ): string | undefined {
   const normalized = values
-    .map((value) => value?.trim().replace(/\\/+$/, ""))
+    .map((value) => value?.trim().replace(/\/+$/, ""))
     .filter((value): value is string => Boolean(value));
 
   const unique = [...new Set(normalized)];
