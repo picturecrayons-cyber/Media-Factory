@@ -94,6 +94,19 @@ async function hasSubmissionTypeColumn(sql: Sql): Promise<boolean> {
   return Boolean(rows[0]?.exists);
 }
 
+async function hasSubmissionTypeColumn(sql: Sql): Promise<boolean> {
+  const rows = await sql<{ exists: boolean }>`
+    select exists (
+      select 1
+      from information_schema.columns
+      where table_schema = 'public'
+        and table_name = 'bridge_titles'
+        and column_name = 'submission_type'
+    ) as exists
+  `;
+  return Boolean(rows[0]?.exists);
+}
+
 async function listCatalog(sql: Sql): Promise<TitleRow[]> {
   if (!(await hasTitleMergeColumn(sql))) {
     return sql<TitleRow>`select * from bridge_titles order by updated_at desc limit 200`;
@@ -108,83 +121,50 @@ async function listOwned(sql: Sql, userId: string, organizationId: string | null
     hasSubmissionTypeColumn(sql),
   ]);
 
-  // Story / Concept submissions have their own Studio desk. Keep the
-  // Finished Film title list scoped to finished_film records when the
-  // additive discriminator migration is installed. Internal catalog
-  // readers use listCatalog() and therefore retain canonical visibility.
-  const ownFilter = submissionTypeAvailable
-    ? sql`submission_type = 'finished_film'`
-    : sql`true`;
-
+  // Story / Concept submissions have their own Studio desk. Filter the
+  // Finished Film list when the additive discriminator migration is present.
+  // Internal catalog readers use listCatalog() and retain canonical visibility.
   if (!orgId) {
     if (mergeColumnAvailable && submissionTypeAvailable) {
-      return sql<TitleRow>`select * from bridge_titles
-        where owner_user_id = ${userId}
-          and merged_into_title_id is null
-          and submission_type = 'finished_film'
+      return sql<TitleRow>`select * from bridge_titles where owner_user_id = ${userId}
+        and merged_into_title_id is null and submission_type = 'finished_film'
         order by updated_at desc limit 200`;
     }
     if (mergeColumnAvailable) {
-      return sql<TitleRow>`select * from bridge_titles
-        where owner_user_id = ${userId}
-          and merged_into_title_id is null
-        order by updated_at desc limit 200`;
+      return sql<TitleRow>`select * from bridge_titles where owner_user_id = ${userId}
+        and merged_into_title_id is null order by updated_at desc limit 200`;
     }
     if (submissionTypeAvailable) {
-      return sql<TitleRow>`select * from bridge_titles
-        where owner_user_id = ${userId}
-          and submission_type = 'finished_film'
-        order by updated_at desc limit 200`;
+      return sql<TitleRow>`select * from bridge_titles where owner_user_id = ${userId}
+        and submission_type = 'finished_film' order by updated_at desc limit 200`;
     }
-    return sql<TitleRow>`select * from bridge_titles
-      where owner_user_id = ${userId}
+    return sql<TitleRow>`select * from bridge_titles where owner_user_id = ${userId}
       order by updated_at desc limit 200`;
   }
 
-  const ownership = sql`(
-    t.owner_user_id = ${userId}
-    or (
-      t.owner_account_type = 'studio'
-      and t.owner_organization_id = ${orgId}
-      and exists (
-        select 1 from bridge_organization_memberships m
-        where m.organization_id = ${orgId}
-          and m.user_id = ${userId}
-          and m.status = 'active'
-      )
-    )
+  const membership = sql`exists (
+    select 1 from bridge_organization_memberships m
+    where m.organization_id = ${orgId} and m.user_id = ${userId} and m.status = 'active'
   )`;
+  const ownership = sql`(t.owner_user_id = ${userId} or (
+    t.owner_account_type = 'studio' and t.owner_organization_id = ${orgId} and ${membership}
+  ))`;
 
   if (mergeColumnAvailable && submissionTypeAvailable) {
-    return sql<TitleRow>`
-      select t.* from bridge_titles t
-      where t.merged_into_title_id is null
-        and t.submission_type = 'finished_film'
-        and ${ownership}
-      order by t.updated_at desc limit 200
-    `;
+    return sql<TitleRow>`select t.* from bridge_titles t where t.merged_into_title_id is null
+      and t.submission_type = 'finished_film' and ${ownership}
+      order by t.updated_at desc limit 200`;
   }
   if (mergeColumnAvailable) {
-    return sql<TitleRow>`
-      select t.* from bridge_titles t
-      where t.merged_into_title_id is null
-        and ${ownership}
-      order by t.updated_at desc limit 200
-    `;
+    return sql<TitleRow>`select t.* from bridge_titles t where t.merged_into_title_id is null
+      and ${ownership} order by t.updated_at desc limit 200`;
   }
   if (submissionTypeAvailable) {
-    return sql<TitleRow>`
-      select t.* from bridge_titles t
-      where t.submission_type = 'finished_film'
-        and ${ownership}
-      order by t.updated_at desc limit 200
-    `;
+    return sql<TitleRow>`select t.* from bridge_titles t where t.submission_type = 'finished_film'
+      and ${ownership} order by t.updated_at desc limit 200`;
   }
-  return sql<TitleRow>`
-    select t.* from bridge_titles t
-    where ${ownership}
-    order by t.updated_at desc limit 200
-  `;
+  return sql<TitleRow>`select t.* from bridge_titles t where ${ownership}
+    order by t.updated_at desc limit 200`;
 }
 
 function slugify(name: string, id: string): string {
