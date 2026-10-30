@@ -94,3 +94,63 @@ export function assertPublicationCanExtend(status: string, revokedAt: string | D
     throw new Error("Only an active publication can be extended; suspended, revoked or expired publications require fresh authorization.");
   }
 }
+
+
+function rightsTokens(value: unknown): Set<string> {
+  if (!Array.isArray(value)) return new Set();
+  return new Set(value
+    .filter((entry): entry is string => typeof entry === "string")
+    .map((entry) => entry.trim().toUpperCase())
+    .filter(Boolean));
+}
+
+function dimensionsOverlap(left: unknown, right: unknown, wildcards: string[]): boolean {
+  const a = rightsTokens(left);
+  const b = rightsTokens(right);
+  if (a.size === 0 || b.size === 0) return true;
+  if (wildcards.some((token) => a.has(token) || b.has(token))) return true;
+  return [...a].some((token) => b.has(token));
+}
+
+function mediaScopesOverlap(left: unknown, right: unknown): boolean {
+  const a = rightsTokens(left);
+  const b = rightsTokens(right);
+  if (a.size === 0 || b.size === 0) return true;
+  if (["ALL", "*"].some((token) => a.has(token) || b.has(token))) return true;
+  const online = new Set(["OTT", "STREAMING", "DIGITAL", "CRAYONS_LOOP", "SVOD", "TVOD", "AVOD", "FREE", "PROMOTIONAL"]);
+  const leftOnline = [...a].some((token) => online.has(token));
+  const rightOnline = [...b].some((token) => online.has(token));
+  if (leftOnline && rightOnline && (
+    ["OTT", "STREAMING", "DIGITAL"].some((token) => a.has(token) || b.has(token))
+  )) return true;
+  return [...a].some((token) => b.has(token));
+}
+
+function bound(value: string | Date | null): number {
+  if (value === null) return Number.NaN;
+  return new Date(value).getTime();
+}
+
+function windowsOverlap(a: BridgeRightsGrant, b: BridgeRightsGrant): boolean {
+  const aStart = bound(a.window_start);
+  const aEnd = bound(a.window_end);
+  const bStart = bound(b.window_start);
+  const bEnd = bound(b.window_end);
+  // Missing or malformed bounds on a supposedly valid grant must fail closed.
+  if ([aStart, aEnd, bStart, bEnd].some((value) => !Number.isFinite(value))) return true;
+  return aStart < bEnd && bStart < aEnd;
+}
+
+/**
+ * Returns true only when the two grants overlap in scope and time and at least
+ * one grant is exclusive. This is an approval guard, not a legal determination.
+ */
+export function hasExclusiveRightsConflict(candidate: BridgeRightsGrant, existing: BridgeRightsGrant): boolean {
+  if (candidate.id === existing.id) return false;
+  if (candidate.exclusivity.toUpperCase() !== "EXCLUSIVE" &&
+      existing.exclusivity.toUpperCase() !== "EXCLUSIVE") return false;
+  return dimensionsOverlap(candidate.territories, existing.territories, ["WORLDWIDE", "GLOBAL", "ALL", "*"]) &&
+    dimensionsOverlap(candidate.languages, existing.languages, ["ALL", "*"]) &&
+    mediaScopesOverlap(candidate.media, existing.media) &&
+    windowsOverlap(candidate, existing);
+}
