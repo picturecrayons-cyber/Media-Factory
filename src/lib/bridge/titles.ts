@@ -362,7 +362,11 @@ export const listTitles = createServerFn({ method: "GET" })
     }
     return { titles: rows.flatMap((row) => {
       try {
-        return [mapTitle(row)];
+        const title = mapTitle(row);
+        // Buyer catalog cards must never expose private object-storage keys.
+        return [actor.accountType === "buyer"
+          ? { ...title, posterKey: null, masterKey: null }
+          : title];
       } catch (error) {
         console.error("[bridge] skipped unreadable title", row?.id, error);
         return [];
@@ -383,11 +387,15 @@ export const getTitle = createServerFn({ method: "GET" })
       const assigned = await sql<{ id: string }>
         `select id from bridge_title_investors where title_id = ${title.id} and investor_user_id = ${actor.userId} limit 1`;
       if (!assigned[0]) throw new Error("Not found");
-    } else if (!canReadTitle(actor, title)) {
-      if (actor.accountType !== "buyer") throw new Error("Not found");
+    } else if (actor.accountType === "buyer") {
+      // Buyer-visible lifecycle labels are not an authorization grant.
+      // Always enforce the complete publication/rights gate for direct-ID reads.
+      assertPermission(actor, "title.read_catalog");
       await assertBuyerPublishable(title.id);
+    } else if (!canReadTitle(actor, title)) {
+      throw new Error("Not found");
     }
-    const events = await sql<{
+    const events = actor.accountType === "buyer" ? [] : await sql<{
       from_status: string | null;
       to_status: string;
       actor_user_id: string;
@@ -397,8 +405,9 @@ export const getTitle = createServerFn({ method: "GET" })
       select from_status, to_status, actor_user_id, note, created_at
       from bridge_title_events where title_id = ${title.id} order by created_at asc
     `;
+    const buyerTitle = actor.accountType === "buyer" ? { ...title, posterKey: null, masterKey: null } : title;
     return {
-      title,
+      title: buyerTitle,
       events: events.map((e) => ({
         from: e.from_status,
         to: e.to_status,

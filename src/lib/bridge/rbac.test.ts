@@ -21,6 +21,35 @@ const legal = actor("legal1", "independent_creator", "legal_reviewer");
 const finance = actor("finance1", "independent_creator", "finance");
 
 describe("PRD authorization matrix", () => {
+  it("enforces the complete account-type and internal-role permission matrix", () => {
+    const expected: Array<[Actor, readonly string[]]> = [
+      [creator(), ["title.create", "title.read_own", "title.update_own", "title.advance_upload", "service.quote_create", "service.order_create", "asset.sign_upload", "asset.sign_download", "entitlement.read_own", "delivery.read", "delivery.read_finance"]],
+      [studio(), ["title.create", "title.read_own", "title.update_own", "title.advance_upload", "service.quote_create", "service.order_create", "asset.sign_upload", "asset.sign_download", "entitlement.read_own", "delivery.read", "delivery.read_finance"]],
+      [buyer(), ["title.read_catalog", "payment.create_order", "entitlement.read_own", "asset.sign_download"]],
+      [investor(), ["entitlement.read_own"]],
+      [viewer(), ["title.read_catalog", "audit.read"]],
+      [qc, ["title.read_catalog", "title.qc_review", "asset.sign_download", "audit.read"]],
+      [legal, ["title.read_catalog", "title.rights_review", "asset.sign_download", "audit.read"]],
+      [finance, ["title.read_catalog", "finance.read", "finance.record_settlement", "entitlement.read_own", "audit.read"]],
+      [admin(), ["title.read_catalog", "service.quote_create", "service.order_create", "service.fulfill", "title.qc_review", "title.rights_review", "title.license", "title.merge_duplicate", "title.negotiate", "title.deliver", "delivery.read", "delivery.read_finance", "asset.sign_download", "finance.read", "finance.record_settlement", "users.invite_internal", "audit.read", "loop.publish", "loop.revoke", "loop.certify_playback"]],
+      [superAdmin(), ["title.ingest_internal", "title.create", "title.read_catalog", "title.advance_upload", "title.qc_review", "title.rights_review", "title.license", "title.negotiate", "title.deliver", "delivery.read", "delivery.read_finance", "asset.sign_download", "entitlement.read_own", "finance.read", "finance.record_settlement", "users.invite_internal", "audit.read", "loop.publish", "loop.revoke", "loop.certify_playback", "asset.sign_upload"]],
+    ];
+    const all = [
+      "title.ingest_internal", "title.create", "title.read_own", "title.read_catalog", "title.update_own",
+      "title.merge_duplicate", "title.advance_upload", "title.qc_review", "title.rights_review",
+      "title.license", "title.negotiate", "title.deliver", "asset.sign_upload", "asset.sign_download",
+      "payment.create_order", "service.quote_create", "service.order_create", "service.fulfill",
+      "entitlement.read_own", "finance.read", "finance.configure", "finance.record_settlement",
+      "delivery.read", "delivery.read_finance", "users.invite_internal", "audit.read",
+      "loop.publish", "loop.revoke", "loop.certify_playback",
+    ] as const;
+    for (const [who, allowed] of expected) {
+      for (const permission of all) {
+        assert.equal(hasPermission(who, permission), allowed.includes(permission), `${who.internalRole ?? who.accountType} permission mismatch: ${permission}`);
+      }
+    }
+  });
+
   it("fails closed until email is verified", () => {
     assert.equal(hasPermission(creator(false), "title.create"), false);
     assert.throws(() => assertPermission(creator(false), "title.create"), /Email verification/);

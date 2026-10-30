@@ -11,6 +11,7 @@ import { writeAudit } from "./audit";
 import { assertNotDevUser } from "./guards";
 import { persistVerifiedAsset } from "./asset-confirmation";
 import { downloadDecision } from "./delivery-policy";
+import { assertBuyerPublishable } from "./buyer-visibility";
 import { validateOttIngestFile, type OttIngestKind } from "./ott-ingest-spec";
 
 const UPLOADABLE: ReadonlySet<string> = new Set(["DRAFT", "UPLOADING", "PREPARING"]);
@@ -202,6 +203,7 @@ export const requestAssetDownload = createServerFn({ method: "POST" })
     if (!asset) throw new Error("Not found");
     const title = await loadTitle(asset.title_id);
     if (!title || !canReadTitle(actor, title)) throw new Error("Not found");
+    if (actor.accountType === "buyer" && !actor.internalRole) await assertBuyerPublishable(title.id);
     const entitled = await hasLicenseEntitlement(actor.userId, title.id);
     const decision = downloadDecision({
       kind: asset.kind,
@@ -238,8 +240,9 @@ export const listTitleAssets = createServerFn({ method: "GET" })
     const actor = await requireVerifiedActor(context.userId);
     const title = await loadTitle(data.titleId);
     if (!title || !canReadTitle(actor, title)) throw new Error("Not found");
-    const sql = await getSql();
     const buyer = actor.accountType === "buyer" && !actor.internalRole;
+    if (buyer) await assertBuyerPublishable(title.id);
+    const sql = await getSql();
     const rows = await sql<{
       id: string;
       kind: string;
