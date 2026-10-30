@@ -126,45 +126,105 @@ async function listOwned(sql: Sql, userId: string, organizationId: string | null
   // Internal catalog readers use listCatalog() and retain canonical visibility.
   if (!orgId) {
     if (mergeColumnAvailable && submissionTypeAvailable) {
-      return sql<TitleRow>`select * from bridge_titles where owner_user_id = ${userId}
-        and merged_into_title_id is null and submission_type = 'finished_film'
+      return sql<TitleRow>`select * from bridge_titles
+        where owner_user_id = ${userId}
+          and merged_into_title_id is null
+          and submission_type = 'finished_film'
         order by updated_at desc limit 200`;
     }
     if (mergeColumnAvailable) {
-      return sql<TitleRow>`select * from bridge_titles where owner_user_id = ${userId}
-        and merged_into_title_id is null order by updated_at desc limit 200`;
+      return sql<TitleRow>`select * from bridge_titles
+        where owner_user_id = ${userId}
+          and merged_into_title_id is null
+        order by updated_at desc limit 200`;
     }
     if (submissionTypeAvailable) {
-      return sql<TitleRow>`select * from bridge_titles where owner_user_id = ${userId}
-        and submission_type = 'finished_film' order by updated_at desc limit 200`;
+      return sql<TitleRow>`select * from bridge_titles
+        where owner_user_id = ${userId}
+          and submission_type = 'finished_film'
+        order by updated_at desc limit 200`;
     }
-    return sql<TitleRow>`select * from bridge_titles where owner_user_id = ${userId}
+    return sql<TitleRow>`select * from bridge_titles
+      where owner_user_id = ${userId}
       order by updated_at desc limit 200`;
   }
 
-  const membership = sql`exists (
-    select 1 from bridge_organization_memberships m
-    where m.organization_id = ${orgId} and m.user_id = ${userId} and m.status = 'active'
-  )`;
-  const ownership = sql`(t.owner_user_id = ${userId} or (
-    t.owner_account_type = 'studio' and t.owner_organization_id = ${orgId} and ${membership}
-  ))`;
-
   if (mergeColumnAvailable && submissionTypeAvailable) {
-    return sql<TitleRow>`select t.* from bridge_titles t where t.merged_into_title_id is null
-      and t.submission_type = 'finished_film' and ${ownership}
-      order by t.updated_at desc limit 200`;
+    return sql<TitleRow>`
+      select t.* from bridge_titles t
+      where t.merged_into_title_id is null
+        and t.submission_type = 'finished_film'
+        and (
+          t.owner_user_id = ${userId}
+          or (
+            t.owner_account_type = 'studio'
+            and t.owner_organization_id = ${orgId}
+            and exists (
+              select 1 from bridge_organization_memberships m
+              where m.organization_id = ${orgId}
+                and m.user_id = ${userId}
+                and m.status = 'active'
+            )
+          )
+        )
+      order by t.updated_at desc limit 200
+    `;
   }
   if (mergeColumnAvailable) {
-    return sql<TitleRow>`select t.* from bridge_titles t where t.merged_into_title_id is null
-      and ${ownership} order by t.updated_at desc limit 200`;
+    return sql<TitleRow>`
+      select t.* from bridge_titles t
+      where t.merged_into_title_id is null
+        and (
+          t.owner_user_id = ${userId}
+          or (
+            t.owner_account_type = 'studio'
+            and t.owner_organization_id = ${orgId}
+            and exists (
+              select 1 from bridge_organization_memberships m
+              where m.organization_id = ${orgId}
+                and m.user_id = ${userId}
+                and m.status = 'active'
+            )
+          )
+        )
+      order by t.updated_at desc limit 200
+    `;
   }
   if (submissionTypeAvailable) {
-    return sql<TitleRow>`select t.* from bridge_titles t where t.submission_type = 'finished_film'
-      and ${ownership} order by t.updated_at desc limit 200`;
+    return sql<TitleRow>`
+      select t.* from bridge_titles t
+      where t.submission_type = 'finished_film'
+        and (
+          t.owner_user_id = ${userId}
+          or (
+            t.owner_account_type = 'studio'
+            and t.owner_organization_id = ${orgId}
+            and exists (
+              select 1 from bridge_organization_memberships m
+              where m.organization_id = ${orgId}
+                and m.user_id = ${userId}
+                and m.status = 'active'
+            )
+          )
+        )
+      order by t.updated_at desc limit 200
+    `;
   }
-  return sql<TitleRow>`select t.* from bridge_titles t where ${ownership}
-    order by t.updated_at desc limit 200`;
+  return sql<TitleRow>`
+    select t.* from bridge_titles t
+    where t.owner_user_id = ${userId}
+      or (
+        t.owner_account_type = 'studio'
+        and t.owner_organization_id = ${orgId}
+        and exists (
+          select 1 from bridge_organization_memberships m
+          where m.organization_id = ${orgId}
+            and m.user_id = ${userId}
+            and m.status = 'active'
+        )
+      )
+    order by t.updated_at desc limit 200
+  `;
 }
 
 function slugify(name: string, id: string): string {
