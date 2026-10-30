@@ -90,17 +90,17 @@ export async function resolveBridgeUserId(authUserId: string): Promise<string> {
   const direct = await sql<{ user_id: string }>`
     select user_id from bridge_profiles where user_id = ${authUserId} limit 1
   `;
+  // Same-ID Supabase onboarding profiles are authoritative and remain
+  // resolvable even before the legacy identity-link table is installed.
+  if (direct[0]?.user_id) return direct[0].user_id;
+
   const linked = await sql<{ bridge_user_id: string }>`
     select bridge_user_id
     from bridge_loop_identity_links
     where auth_user_id = ${authUserId}::uuid
     limit 1
   `;
-  return selectBridgeUserId(
-    authUserId,
-    direct[0]?.user_id ?? null,
-    linked[0]?.bridge_user_id ?? null,
-  );
+  return selectBridgeUserId(authUserId, linked[0]?.bridge_user_id ?? null);
 }
 
 export async function loadActor(authUserId: string): Promise<BridgeActor | null> {

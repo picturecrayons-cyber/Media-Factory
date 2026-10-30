@@ -1,21 +1,11 @@
 /**
- * Resolve a verified Supabase Auth identity to its Bridge profile ID.
- *
- * A direct same-ID profile or an explicit identity link is required.
+ * Resolve a Supabase Auth identity through an explicit legacy Bridge link.
+ * Direct same-ID profiles are handled first by resolveBridgeUserId.
  * Email similarity is deliberately not an identity-binding mechanism.
  */
 export function selectBridgeUserId(
   authUserId: string,
-  directProfileUserId: string | null,
   linkedBridgeUserId: string | null,
 ): string {
-  if (
-    directProfileUserId &&
-    linkedBridgeUserId &&
-    directProfileUserId !== linkedBridgeUserId
-  ) {
-    throw new Error("Conflicting Bridge identity bindings");
-  }
-
-  return directProfileUserId ?? linkedBridgeUserId ?? authUserId;
+  return linkedBridgeUserId ?? authUserId;
 }
