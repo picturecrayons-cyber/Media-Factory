@@ -22,9 +22,9 @@ This change set corrects the Bridge-to-Supabase identity binding source path and
 
 1. Change the identity-link FK to `public.bridge_profiles(user_id)`; retain the Supabase Auth FK to `auth.users(id)`.
 2. Remove email-equality fallback from `resolveBridgeUserId`.
-3. Fail closed if a direct same-ID profile and explicit identity link disagree.
+3. Preserve the direct same-ID profile path before querying the identity-link table, so existing same-ID profiles do not depend on that table being present.
 4. Include existing onboarding atomicity/conflict regression tests in `npm test`.
-5. Add focused identity-resolution unit tests.
+5. Add focused identity-resolution unit tests for explicit-link fallback and removal of email-based adoption.
 
 ## Verification limits
 
