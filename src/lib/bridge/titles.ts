@@ -401,8 +401,9 @@ export const getTitle = createServerFn({ method: "GET" })
       select from_status, to_status, actor_user_id, note, created_at
       from bridge_title_events where title_id = ${title.id} order by created_at asc
     `;
+    const buyerTitle = actor.accountType === "buyer" ? { ...title, posterKey: null, masterKey: null } : title;
     return {
-      title,
+      title: buyerTitle,
       events: events.map((e) => ({
         from: e.from_status,
         to: e.to_status,
