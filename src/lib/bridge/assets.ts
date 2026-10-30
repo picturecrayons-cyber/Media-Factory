@@ -257,7 +257,8 @@ export const listTitleAssets = createServerFn({ method: "GET" })
         .map((r) => ({
           id: r.id,
           kind: r.kind,
-          key: buyer ? null : r.s3_key,
+          // Storage keys and original filenames are server-side metadata.
+          // The UI only needs the asset kind, verification state and size/type.
           contentType: r.content_type,
           byteSize: r.byte_size,
           verified: Number(r.byte_size) > 0,
