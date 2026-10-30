@@ -362,7 +362,11 @@ export const listTitles = createServerFn({ method: "GET" })
     }
     return { titles: rows.flatMap((row) => {
       try {
-        return [mapTitle(row)];
+        const title = mapTitle(row);
+        // Buyer catalog cards must never expose private object-storage keys.
+        return [actor.accountType === "buyer"
+          ? { ...title, posterKey: null, masterKey: null }
+          : title];
       } catch (error) {
         console.error("[bridge] skipped unreadable title", row?.id, error);
         return [];
