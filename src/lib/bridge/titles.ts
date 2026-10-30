@@ -383,11 +383,15 @@ export const getTitle = createServerFn({ method: "GET" })
       const assigned = await sql<{ id: string }>
         `select id from bridge_title_investors where title_id = ${title.id} and investor_user_id = ${actor.userId} limit 1`;
       if (!assigned[0]) throw new Error("Not found");
-    } else if (!canReadTitle(actor, title)) {
-      if (actor.accountType !== "buyer") throw new Error("Not found");
+    } else if (actor.accountType === "buyer") {
+      // Buyer-visible lifecycle labels are not an authorization grant.
+      // Always enforce the complete publication/rights gate for direct-ID reads.
+      assertPermission(actor, "title.read_catalog");
       await assertBuyerPublishable(title.id);
+    } else if (!canReadTitle(actor, title)) {
+      throw new Error("Not found");
     }
-    const events = await sql<{
+    const events = actor.accountType === "buyer" ? [] : await sql<{
       from_status: string | null;
       to_status: string;
       actor_user_id: string;
