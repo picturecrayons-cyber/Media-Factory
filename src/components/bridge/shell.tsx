@@ -24,10 +24,16 @@ export function BrandMark({ className }: { className?: string }) {
       className={cn("inline-flex items-center shrink-0", className)}
       aria-label="Crayons Bridge home"
     >
-      <svg viewBox="0 0 168 48" role="img" aria-label="Crayons Bridge" className="bridge-logo block h-[42px] w-auto sm:h-[46px] lg:h-[48px]">
-        <text x="0" y="16" fill="#6f6f6f" fontFamily="ui-sans-serif, system-ui, sans-serif" fontSize="13" fontWeight="600" letterSpacing="0.5">crayons</text>
-        <text x="0" y="40" fill="#08b8e8" fontFamily="ui-sans-serif, system-ui, sans-serif" fontSize="26" fontWeight="700" letterSpacing="-0.5">bridge</text>
-      </svg>
+      <img
+        src="/logo/crayons-bridge-logo-3d.png"
+        alt="Crayons Bridge"
+        width={1840}
+        height={1136}
+        loading="eager"
+        decoding="async"
+        draggable={false}
+        className="bridge-logo block h-[44px] w-auto max-w-[112px] object-contain sm:h-[48px] sm:max-w-[124px] lg:h-[52px] lg:max-w-[134px]"
+      />
     </Link>
   );
 }
