@@ -174,7 +174,11 @@ export const completeOnboarding = createServerFn({ method: "POST" })
             with consumed_invite as (
               update bridge_invites
               set accepted_at = now()
-              where id = ${inviteId} and accepted_at is null
+              where id = ${inviteId}
+                and accepted_at is null
+                and expires_at > now()
+                and lower(email) = lower(${email})
+                and internal_role = ${internalRole}
               returning id
             )
             insert into bridge_profiles (
