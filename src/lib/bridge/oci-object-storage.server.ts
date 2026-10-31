@@ -267,7 +267,10 @@ async function pollWorkRequest(
     } else {
       const body = (await res.json()) as { status?: string };
       lastStatus = body.status || "unknown";
-      if (lastStatus === "SUCCEEDED") return;
+      // OCI responses can report a terminal successful copy as COMPLETED.
+      // Treat either success label as completion of the work request, then still
+      // verify the destination object with HEAD below before Bridge marks it Ready.
+      if (lastStatus === "SUCCEEDED" || lastStatus === "COMPLETED") return;
       if (lastStatus === "FAILED" || lastStatus === "CANCELED") {
         throw new Error(`OCI object copy ${lastStatus.toLowerCase()}`);
       }
