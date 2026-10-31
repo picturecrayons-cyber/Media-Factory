@@ -249,3 +249,14 @@ For PR #439 head `d65b3e2c999705e859e430db5d7c06316f496ae9`:
 **NOT READY FOR EXECUTION.** The SQL snippets remain review material only. Before an implementation PR can be prepared, complete a separate read-only dependency inventory for all Loop relations, Better Auth relations, table/sequence owners, direct and column ACLs, PUBLIC grants, role inheritance, and default ACL provenance.
 
 No SQL was executed; no database, role, policy, identity, data, deployment, or Production state was changed.
+
+
+## Canonical Staging dependency inventory update — 31 Oct 2026
+
+See [full read-only Loop + Auth dependency inventory](./staging-loop-better-auth-dependency-inventory-2026-10-31.md).
+
+Fresh catalog snapshot: 32 public tables and zero public `loop_*` relations. All seven tables declared in migration 0006 are missing. The codebase also references `loop_payment_events` and `loop_user_tvod_entitlements` in `src/lib/bridge/workflow.ts`; no creating migration was found in the searched source. These are additional unresolved dependencies and are not covered by the current SQL snippets.
+
+Auth reconciliation: current runtime middleware validates Supabase bearer tokens using Supabase Auth REST; `auth.users(id uuid)` exists. `public.bridge_profiles(user_id text)` exists. Better Auth tables `public."user"`, `session`, `account`, and `verification` are absent. The `0007a` identity-link DDL references `public."user"(id)`, which does not match the inspected current runtime profile model without an explicit source-contract decision.
+
+**Execution block remains:** do not create any Loop/Auth relation, do not replay 0006, and do not apply ACL/default-ACL SQL until the two additional Loop relations are sourced, the identity FK model is decided, and the complete dependency/ACL preflight is approved. No SQL was run.
