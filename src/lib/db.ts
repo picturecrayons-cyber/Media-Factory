@@ -6,14 +6,18 @@ export type DbSource = "postgres" | "pglite";
 // Prefer an explicit DATABASE_URL when present. On Vercel, the native Supabase
 // integration injects POSTGRES_URL, so accept that as the canonical fallback.
 // Empty/whitespace values are treated as unset to avoid a silent PGLite fallback.
+// Vercel environment entries can exist with an empty value. Select the first
+// non-empty URL so an empty DATABASE_URL placeholder cannot mask the next
+// configured candidate. This does not validate the credentials; connection
+// failures must still fail closed at the Postgres client.
 const rawDatabaseUrl =
   typeof process !== "undefined"
-    ? (
-        process.env.DATABASE_URL ??
-        process.env.POSTGRES_URL ??
-        process.env.SUPABASE_DB_URL ??
-        process.env.SUPABASE_DATABASE_URL
-      )
+    ? [
+        process.env.DATABASE_URL,
+        process.env.POSTGRES_URL,
+        process.env.SUPABASE_DB_URL,
+        process.env.SUPABASE_DATABASE_URL,
+      ].find((value) => typeof value === "string" && value.trim().length > 0)
     : undefined;
 function normalizePostgresUrl(value: string | undefined): string | undefined {
   if (!value) return undefined;
