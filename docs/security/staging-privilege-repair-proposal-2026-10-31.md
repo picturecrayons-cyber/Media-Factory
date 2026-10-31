@@ -83,7 +83,8 @@ Source: `migrations/0012_bridge_rls_identity_binding.sql`
 - Depends on identity/profile mapping and buyer-title access relations.
 - Defines authenticated SELECT policies on selected tables.
 - Current Staging advisor previously reported 32 RLS-enabled tables and zero public policies; the four helper functions and required identity/publication objects were reported missing in the prior audit.
-- **Do not apply** until schema dependencies, role identity mapping, policy semantics, and the conflict with the server-only 0008 boundary are reviewed together.
+- The source grants `authenticated` EXECUTE on the helpers because the policies call them. The later 0013 revokes that same EXECUTE permission. This means the authenticated policy path and 0013's direct-RPC hardening cannot be assumed to work together.
+- **Do not apply** until the project chooses either a server-only Data API boundary (consistent with 0008, with no browser RLS read surface required) or a narrowly scoped browser-read design with a tested helper permission strategy.
 
 ### 0013 — Helper hardening
 
@@ -91,7 +92,7 @@ Source: `migrations/0013_harden_bridge_rls_helpers.sql`
 
 - Revokes direct EXECUTE from PUBLIC, anon, and authenticated on the four helper functions.
 - Requires the helper functions to exist first.
-- Must be reviewed with 0012: policy execution semantics and direct RPC denial are separate concerns.
+- The migration comment says RLS policies may invoke these helpers while API clients must not call them directly. However, PostgreSQL still requires the querying role to have EXECUTE privilege when a policy expression invokes a function. Revoking authenticated EXECUTE therefore conflicts with 0012's authenticated policies unless the policy execution model is redesigned and tested.
 - **Do not apply independently or reorder speculatively.**
 
 ## Application access model — proposed, pending complete code review
@@ -144,3 +145,86 @@ This is a proposed access model, not a statement that the current database alrea
 **Production: HOLD / NOT CERTIFIED / NO-GO.**
 
 **Staging: security review in progress; repair not authorized and not applied.**
+
+
+## Read-only verification addendum — 31 Oct 2026
+
+This addendum records follow-up catalog checks against canonical Staging `jbymleftneggcgutlcqu`. These were SELECT/catalog-only checks. No database state was changed.
+
+### Sequences
+
+Exactly five public sequences were returned. All are owned by `postgres`, and all three sequence privileges (USAGE, SELECT, UPDATE) are effectively true for both `anon` and `authenticated`:
+
+| Sequence | Owner | anon | authenticated | service_role |
+|---|---|---|---|---|
+| `bridge_audit_logs_id_seq` | postgres | USAGE/SELECT/UPDATE | USAGE/SELECT/UPDATE | USAGE/SELECT/UPDATE |
+| `bridge_entitlements_id_seq` | postgres | USAGE/SELECT/UPDATE | USAGE/SELECT/UPDATE | USAGE/SELECT/UPDATE |
+| `bridge_service_order_events_id_seq` | postgres | USAGE/SELECT/UPDATE | USAGE/SELECT/UPDATE | USAGE/SELECT/UPDATE |
+| `bridge_title_events_id_seq` | postgres | USAGE/SELECT/UPDATE | USAGE/SELECT/UPDATE | USAGE/SELECT/UPDATE |
+| `bridge_title_reconciliation_events_id_seq` | postgres | USAGE/SELECT/UPDATE | USAGE/SELECT/UPDATE | USAGE/SELECT/UPDATE |
+
+The sequence ACL strings explicitly include `anon=rwU` and `authenticated=rwU`. This is a confirmed additional browser-role privilege exposure surface, separate from table ACLs.
+
+### Functions
+
+The current Staging `public` schema returned two functions:
+
+| Function | Owner | anon EXECUTE | authenticated EXECUTE | service_role EXECUTE |
+|---|---|---:|---:|---:|
+| `bridge_duplicate_title_loop_release_allowed(text)` | postgres | No | No | Yes |
+| `bridge_service_margin_paise(uuid)` | postgres | No | No | Yes |
+
+The four helper functions defined by migration 0012 are absent from the live Staging function inventory. The two existing functions have restricted ACLs and do not exhibit the broad EXECUTE pattern.
+
+### Views and other relation types
+
+The catalog query returned **zero** public views, materialized views, and foreign tables. This is a current catalog result, not a statement about other schemas.
+
+### Default ACL — owner/schema/object breakdown
+
+The live `pg_default_acl` inventory includes:
+
+- `postgres` in `public`: broad defaults for tables, sequences, and functions, including anon/authenticated table DML, sequence USAGE/SELECT/UPDATE, and function EXECUTE.
+- `postgres` in `storage`: similar broad defaults are present.
+- `supabase_admin` in `public`, `graphql`, and `graphql_public`: broad defaults also appear.
+- `supabase_admin` in `extensions`: a different default ACL pattern is present.
+- `supabase_admin` in `realtime` and `supabase_auth_admin` in `auth`: platform-specific defaults are present.
+
+**Important ownership boundary:** Catalog output alone does not establish whether a default ACL was installed by Supabase platform provisioning or by a project operator. Do not modify `supabase_admin`, `supabase_auth_admin`, `storage`, `graphql`, `graphql_public`, `realtime`, `auth`, or `extensions` defaults as part of a Bridge repair. Even the `postgres/public` default ACL must not be altered until its provenance and intended migration owner are confirmed with Supabase support or authoritative audit evidence.
+
+### Role membership / inheritance
+
+The membership catalog shows `authenticator` is a member of `anon`, `authenticated`, and `service_role`; `postgres` has admin-option memberships across those roles. `supabase_realtime_admin` is also a member of those API roles. This is a role-membership fact, not proof that every application request inherits all privileges. Continue using effective-privilege checks for each object and request role; do not change platform role memberships.
+
+### Revised 0012 / 0013 design conclusion
+
+The SQL source confirms the conflict precisely:
+
+1. 0012 creates the four SECURITY DEFINER helper functions.
+2. 0012 grants EXECUTE to `authenticated` on all four.
+3. 0012 creates authenticated SELECT policies that invoke those helpers.
+4. 0013 revokes EXECUTE from `PUBLIC`, `anon`, and `authenticated` on those same four functions.
+
+A caller evaluating a policy expression that invokes a function must have permission to execute that function. The SECURITY DEFINER property controls the privileges used inside the function body; it does not eliminate the caller's EXECUTE privilege requirement.
+
+**Decision required before any migration design:**
+- **Option A — server-only Bridge Data API (recommended based on 0008 and current app code):** Keep operational tables inaccessible to browser roles. Do not create a browser RLS read surface; 0012's policies are not needed for this model and should not be applied as a partial migration. Server-side authorization remains in the application/database connection path.
+- **Option B — explicitly approved browser-read surface:** Define exactly which tables and roles may read, then redesign and test the helper execution strategy. Do not simply apply 0012 then 0013; the current sequence is contradictory for policy execution.
+
+No choice has been implemented. Option A is a design recommendation only, pending application-owner approval.
+
+### Updated completion status
+
+| Review item | Result |
+|---|---|
+| Five public sequence ACLs | Verified; broad anon/authenticated privileges |
+| Public functions | Two present; service_role-only EXECUTE |
+| 0012 helper functions | Four absent |
+| Public views/materialized views/foreign tables | Zero found |
+| Default ACL owner/schema breakdown | Verified; provenance unknown |
+| Platform-owned default ACL boundary | Must remain untouched |
+| Role memberships | Catalog verified; effective privileges still assessed per object |
+| 0012/0013 conflict | Confirmed from exact source SQL |
+| Repair SQL | Not written or applied |
+
+**No GRANT, REVOKE, ALTER DEFAULT PRIVILEGES, DDL, RLS/policy change, migration, deployment, or Production operation was performed.**
