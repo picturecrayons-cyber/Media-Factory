@@ -2,19 +2,23 @@ name: Bridge OCI Storage E2E
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
-    paths:
-      - ".github/workflows/bridge-oci-storage-e2e.yml"
-      - "scripts/oci-storage-e2e.mjs"
-      - "src/lib/bridge/**"
-      - "src/routes/title.$id.tsx"
-      - "package.json"
-      - "package-lock.json"
+    inputs:
+      confirm_nonproduction:
+        description: "Run only against the dedicated non-production OCI environment"
+        required: true
+        type: choice
+        options:
+          - NO
+          - I_CONFIRM_NON_PRODUCTION
+        default: NO
+
+permissions:
+  contents: read
 
 jobs:
   storage-e2e:
+    if: ${{ inputs.confirm_nonproduction == 'I_CONFIRM_NON_PRODUCTION' }}
+    environment: bridge-oci-e2e-nonproduction
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -24,15 +28,13 @@ jobs:
           node-version: "24"
           cache: npm
       - run: npm ci
-      - name: Run production OCI → Bridge persistence round-trip
+      - name: Run isolated OCI object round-trip (no database writes)
         env:
-          OCI_TENANCY_OCID: ${{ secrets.OCI_TENANCY_OCID }}
-          OCI_USER_OCID: ${{ secrets.OCI_USER_OCID }}
-          OCI_FINGERPRINT: ${{ secrets.OCI_FINGERPRINT }}
-          OCI_PRIVATE_KEY: ${{ secrets.OCI_PRIVATE_KEY }}
-          OCI_REGION: ${{ secrets.OCI_REGION }}
-          OCI_NAMESPACE: ${{ secrets.OCI_NAMESPACE }}
-          OCI_BUCKET_NAME: ${{ secrets.OCI_BUCKET_NAME }}
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          BRIDGE_E2E_ASSET_ID: ${{ secrets.BRIDGE_E2E_ASSET_ID }}
+          OCI_TENANCY_OCID: ${{ secrets.BRIDGE_E2E_OCI_TENANCY_OCID }}
+          OCI_USER_OCID: ${{ secrets.BRIDGE_E2E_OCI_USER_OCID }}
+          OCI_FINGERPRINT: ${{ secrets.BRIDGE_E2E_OCI_FINGERPRINT }}
+          OCI_PRIVATE_KEY: ${{ secrets.BRIDGE_E2E_OCI_PRIVATE_KEY }}
+          OCI_REGION: ${{ secrets.BRIDGE_E2E_OCI_REGION }}
+          OCI_NAMESPACE: ${{ secrets.BRIDGE_E2E_OCI_NAMESPACE }}
+          OCI_BUCKET_NAME: ${{ secrets.BRIDGE_E2E_OCI_BUCKET_NAME }}
         run: node scripts/oci-storage-e2e.mjs
