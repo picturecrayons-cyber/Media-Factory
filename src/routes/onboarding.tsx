@@ -52,12 +52,16 @@ function goHome(home: string | null | undefined, navigate: ReturnType<typeof use
 
 function CheckGroup({
   label,
+  name,
+  idPrefix,
   values,
   selected,
   onChange,
   required = false,
 }: {
   label: string;
+  name: string;
+  idPrefix: string;
   values: string[];
   selected: string[];
   onChange: (value: string, checked: boolean) => void;
@@ -69,17 +73,23 @@ function CheckGroup({
         {label}{required ? " *" : ""}
       </legend>
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-        {values.map((value) => (
-          <label key={value} className="flex min-h-10 items-center gap-2 rounded-xl border border-line bg-elevated px-3 text-xs text-fg">
-            <input
-              type="checkbox"
-              checked={selected.includes(value)}
-              onChange={(e) => onChange(value, e.target.checked)}
-              className="accent-current"
-            />
-            <span>{value}</span>
-          </label>
-        ))}
+        {values.map((value, index) => {
+          const optionId = `${idPrefix}-${index}`;
+          return (
+            <label key={value} htmlFor={optionId} className="flex min-h-10 items-center gap-2 rounded-xl border border-line bg-elevated px-3 text-xs text-fg">
+              <input
+                id={optionId}
+                name={name}
+                type="checkbox"
+                value={value}
+                checked={selected.includes(value)}
+                onChange={(e) => onChange(value, e.target.checked)}
+                className="accent-current"
+              />
+              <span>{value}</span>
+            </label>
+          );
+        })}
       </div>
     </fieldset>
   );
@@ -230,20 +240,22 @@ function Onboarding() {
       let inviteToken: string | undefined;
       try { inviteToken = sessionStorage.getItem("bridge-invite") ?? undefined; } catch { /* ignore */ }
 
-      await completeOnboarding({
-        data: {
-          displayName: displayName.trim(),
-          accountType,
-          organizationName: accountType === "studio" ? organizationName.trim() : undefined,
-          inviteToken,
-        },
-      });
-
       if (accountType === "buyer") {
+        await completeOnboarding({
+          data: {
+            displayName: displayName.trim(),
+            accountType,
+            inviteToken,
+          },
+        });
         void navigate({ to: "/buyer", replace: true });
         return;
       }
 
+      // Validate the complete creator/studio intake before creating or updating
+      // the onboarding profile. In particular, required checkbox groups are
+      // validated here because a fieldset legend's asterisk is not native
+      // browser validation.
       if (!titleName.trim()) throw new Error("Title name is required");
       if (synopsis.trim().length < 20) throw new Error("Add a synopsis of at least 20 characters");
       if (!territories.length || !rightsLanguages.length || !media.length || !destinations.length) {
@@ -253,6 +265,15 @@ function Onboarding() {
       if (!authorizationAttested) throw new Error("Confirm that you have authority to license the submitted rights");
       if (!authorizationEvidenceType) throw new Error("Select the authorization evidence you will provide");
       if (new Date(windowEnd) <= new Date(windowStart)) throw new Error("Rights window end must be after start");
+
+      await completeOnboarding({
+        data: {
+          displayName: displayName.trim(),
+          accountType,
+          organizationName: accountType === "studio" ? organizationName.trim() : undefined,
+          inviteToken,
+        },
+      });
 
       const result = await createTitle({
         data: {
@@ -321,17 +342,17 @@ function Onboarding() {
           ) : null}
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="text-sm font-medium">Your name *
-              <input required value={displayName} onChange={(e) => setDisplayName(e.target.value)} autoComplete="name" className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5" />
+              <input id="display-name" name="display_name" required value={displayName} onChange={(e) => setDisplayName(e.target.value)} autoComplete="name" className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5" />
             </label>
             <label className="text-sm font-medium">Account type *
-              <select value={accountType} onChange={(e) => setAccountType(e.target.value as PublicAccountType)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5">
+              <select id="account-type" name="account_type" value={accountType} onChange={(e) => setAccountType(e.target.value as PublicAccountType)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5">
                 {(Object.keys(ACCOUNT_LABELS) as PublicAccountType[]).map((type) => <option key={type} value={type}>{ACCOUNT_LABELS[type]}</option>)}
               </select>
             </label>
           </div>
           {accountType === "studio" ? (
             <label className="block text-sm font-medium">Studio / company name *
-              <input required value={organizationName} onChange={(e) => setOrganizationName(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5" />
+              <input id="organization-name" name="organization_name" required value={organizationName} onChange={(e) => setOrganizationName(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5" />
             </label>
           ) : null}
         </section>
@@ -347,68 +368,68 @@ function Onboarding() {
               <div><h2 className="font-display text-xl font-semibold">2. Title</h2><p className="mt-1 text-xs text-muted">Use structured fields; only the title synopsis remains free text.</p></div>
               <div className="grid gap-4 sm:grid-cols-2">
                 <label className="text-sm font-medium">Title name *
-                  <input required value={titleName} onChange={(e) => setTitleName(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5" />
+                  <input id="title-name" name="title_name" required value={titleName} onChange={(e) => setTitleName(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5" />
                 </label>
                 <label className="text-sm font-medium">Original / local title
-                  <input value={originalTitle} onChange={(e) => setOriginalTitle(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5" />
+                  <input id="original-title" name="original_title" value={originalTitle} onChange={(e) => setOriginalTitle(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5" />
                 </label>
                 <label className="text-sm font-medium">Content type *
-                  <select value={contentType} onChange={(e) => setContentType(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5">
+                  <select id="content-type" name="content_type" value={contentType} onChange={(e) => setContentType(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5">
                     {BRIDGE_LOOP_LANES.map((lane) => <option key={lane.id} value={lane.loopType}>{lane.label}</option>)}
                   </select>
                 </label>
                 <label className="text-sm font-medium">Original language *
-                  <select value={language} onChange={(e) => setLanguage(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5">{LANGUAGES.map((item) => <option key={item}>{item}</option>)}</select>
+                  <select id="original-language" name="language" value={language} onChange={(e) => setLanguage(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5">{LANGUAGES.map((item) => <option key={item}>{item}</option>)}</select>
                 </label>
                 <label className="text-sm font-medium">Release year
-                  <input type="number" min="1895" max="2100" value={year} onChange={(e) => setYear(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5" />
+                  <input id="release-year" name="year" type="number" min="1895" max="2100" value={year} onChange={(e) => setYear(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5" />
                 </label>
                 <label className="text-sm font-medium">Runtime (minutes)
-                  <input type="number" min="1" max="600" value={runtimeMinutes} onChange={(e) => setRuntimeMinutes(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5" />
+                  <input id="runtime-minutes" name="runtime_minutes" type="number" min="1" max="600" value={runtimeMinutes} onChange={(e) => setRuntimeMinutes(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5" />
                 </label>
               </div>
-              <CheckGroup label="Additional languages" values={LANGUAGES} selected={additionalLanguages} onChange={(v, c) => toggle(setAdditionalLanguages, additionalLanguages, v, c)} />
+              <CheckGroup name="additional_languages" idPrefix="additional-language" label="Additional languages" values={LANGUAGES} selected={additionalLanguages} onChange={(v, c) => toggle(setAdditionalLanguages, additionalLanguages, v, c)} />
               <label className="block text-sm font-medium">Synopsis *
-                <textarea required minLength={20} maxLength={4000} rows={5} value={synopsis} onChange={(e) => setSynopsis(e.target.value)} className="mt-1.5 w-full rounded-xl border border-line-strong bg-elevated px-3.5 py-3" />
+                <textarea id="synopsis" name="synopsis" required minLength={20} maxLength={4000} rows={5} value={synopsis} onChange={(e) => setSynopsis(e.target.value)} className="mt-1.5 w-full rounded-xl border border-line-strong bg-elevated px-3.5 py-3" />
               </label>
               <div className="grid gap-4 sm:grid-cols-3">
                 <label className="text-sm font-medium">Country of origin
-                  <input value={countryOfOrigin} onChange={(e) => setCountryOfOrigin(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5" />
+                  <input id="country-of-origin" name="country_of_origin" value={countryOfOrigin} onChange={(e) => setCountryOfOrigin(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5" />
                 </label>
                 <label className="text-sm font-medium">Release date
-                  <input type="date" value={releaseDate} onChange={(e) => setReleaseDate(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5" />
+                  <input id="release-date" name="release_date" type="date" value={releaseDate} onChange={(e) => setReleaseDate(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5" />
                 </label>
                 <label className="text-sm font-medium">Director
-                  <input value={director} onChange={(e) => setDirector(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5" />
+                  <input id="director" name="director" value={director} onChange={(e) => setDirector(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5" />
                 </label>
               </div>
               <label className="block text-sm font-medium">Producer
-                <input value={producer} onChange={(e) => setProducer(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5" />
+                <input id="producer" name="producer" value={producer} onChange={(e) => setProducer(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5" />
               </label>
             </section>
 
             <section className="space-y-4 rounded-2xl border border-line p-5">
               <div><h2 className="font-display text-xl font-semibold">3. Rights package</h2><p className="mt-1 text-xs text-muted">These controls define what a buyer may license. No open-ended rights description is accepted.</p></div>
-              <CheckGroup label="Territories" values={TERRITORIES} selected={territories} onChange={(v, c) => toggle(setTerritories, territories, v, c)} required />
-              <CheckGroup label="Rights languages" values={LANGUAGES} selected={rightsLanguages} onChange={(v, c) => toggle(setRightsLanguages, rightsLanguages, v, c)} required />
-              <CheckGroup label="Exploitation / media" values={MEDIA} selected={media} onChange={(v, c) => toggle(setMedia, media, v, c)} required />
+              <CheckGroup name="territories" idPrefix="territory" label="Territories" values={TERRITORIES} selected={territories} onChange={(v, c) => toggle(setTerritories, territories, v, c)} required />
+              <CheckGroup name="rights_languages" idPrefix="rights-language" label="Rights languages" values={LANGUAGES} selected={rightsLanguages} onChange={(v, c) => toggle(setRightsLanguages, rightsLanguages, v, c)} required />
+              <CheckGroup name="media" idPrefix="media" label="Exploitation / media" values={MEDIA} selected={media} onChange={(v, c) => toggle(setMedia, media, v, c)} required />
               <div className="grid gap-4 sm:grid-cols-2">
                 <label className="text-sm font-medium">Rights window starts *
-                  <input required type="datetime-local" value={windowStart} onChange={(e) => setWindowStart(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5" />
+                  <input id="rights-window-start" name="window_start" required type="datetime-local" value={windowStart} onChange={(e) => setWindowStart(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5" />
                 </label>
                 <label className="text-sm font-medium">Rights window ends *
-                  <input required type="datetime-local" value={windowEnd} onChange={(e) => setWindowEnd(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5" />
+                  <input id="rights-window-end" name="window_end" required type="datetime-local" value={windowEnd} onChange={(e) => setWindowEnd(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5" />
                 </label>
               </div>
               <div className="grid gap-4 sm:grid-cols-3">
                 <label className="text-sm font-medium">Exclusivity *
-                  <select value={exclusivity} onChange={(e) => setExclusivity(e.target.value as "EXCLUSIVE" | "NON_EXCLUSIVE")} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5"><option value="NON_EXCLUSIVE">Non-exclusive</option><option value="EXCLUSIVE">Exclusive</option></select>
+                  <select id="exclusivity" name="exclusivity" value={exclusivity} onChange={(e) => setExclusivity(e.target.value as "EXCLUSIVE" | "NON_EXCLUSIVE")} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5"><option value="NON_EXCLUSIVE">Non-exclusive</option><option value="EXCLUSIVE">Exclusive</option></select>
                 </label>
                 <label className="text-sm font-medium">Sublicensing *
-                  <select value={String(sublicensingAllowed)} onChange={(e) => setSublicensingAllowed(e.target.value === "true")} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5"><option value="false">Not allowed</option><option value="true">Allowed</option></select>
+                  <select id="sublicensing" name="sublicensing_allowed" value={String(sublicensingAllowed)} onChange={(e) => setSublicensingAllowed(e.target.value === "true")} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5"><option value="false">Not allowed</option><option value="true">Allowed</option></select>
                 </label>
                 <label className="text-sm font-medium">Promotional rights *
-                  <select value={String(promotionalRights)} onChange={(e) => setPromotionalRights(e.target.value === "true")} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5"><option value="true">Included</option><option value="false">Not included</option></select>
+                  <select id="promotional-rights" name="promotional_rights" value={String(promotionalRights)} onChange={(e) => setPromotionalRights(e.target.value === "true")} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5"><option value="true">Included</option><option value="false">Not included</option></select>
                 </label>
               </div>
             </section>
@@ -416,7 +437,7 @@ function Onboarding() {
             <section className="space-y-4 rounded-2xl border border-line p-5">
               <div><h2 className="font-display text-xl font-semibold">4. Authorization & access</h2><p className="mt-1 text-xs text-muted">Attestation starts the legal review. It does not replace documentary evidence.</p></div>
               <label className="text-sm font-medium">Rights basis *
-                <select value={rightsBasis} onChange={(e) => setRightsBasis(e.target.value as typeof rightsBasis)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5">
+                <select id="rights-basis" name="rights_basis" value={rightsBasis} onChange={(e) => setRightsBasis(e.target.value as typeof rightsBasis)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5">
                   <option value="OWNER">I am the rights owner</option>
                   <option value="EXCLUSIVE_LICENSEE">Exclusive licensee</option>
                   <option value="AUTHORIZED_DISTRIBUTOR">Authorized distributor</option>
@@ -424,7 +445,7 @@ function Onboarding() {
                 </select>
               </label>
               <label className="block text-sm font-medium">Authorization evidence to provide *
-                <select required value={authorizationEvidenceType} onChange={(e) => setAuthorizationEvidenceType(e.target.value as typeof authorizationEvidenceType)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5">
+                <select id="authorization-evidence-type" name="authorization_evidence_type" required value={authorizationEvidenceType} onChange={(e) => setAuthorizationEvidenceType(e.target.value as typeof authorizationEvidenceType)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5">
                   <option value="">Choose evidence type</option>
                   <option value="RIGHTS_AGREEMENT">Rights agreement</option>
                   <option value="CHAIN_OF_TITLE">Chain-of-title documents</option>
@@ -435,16 +456,16 @@ function Onboarding() {
                 <span className="mt-1 block text-xs text-muted">This records the evidence type you intend to provide; it does not mark the document as uploaded or verified.</span>
               </label>
               <label className="flex items-start gap-3 rounded-xl border border-line bg-elevated p-4 text-sm">
-                <input required type="checkbox" checked={authorizationAttested} onChange={(e) => setAuthorizationAttested(e.target.checked)} className="mt-0.5 accent-current" />
+                <input id="authorization-attested" name="authorization_attested" required type="checkbox" checked={authorizationAttested} onChange={(e) => setAuthorizationAttested(e.target.checked)} className="mt-0.5 accent-current" />
                 <span>I confirm that I am authorized to submit and license the selected rights. I understand Bridge will require supporting authorization / chain-of-title evidence before Licensing Ready.</span>
               </label>
               <label className="text-sm font-medium">Screener upload
-                <select value="SCREENER_PENDING" disabled className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5">
+                <select id="screener-status" name="screener_status" value="SCREENER_PENDING" disabled className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5">
                   <option value="SCREENER_PENDING">Upload after submission in the private title workspace</option>
                 </select>
                 <span className="mt-1 block text-xs text-muted">No screener file is uploaded by this form. The submission remains pending until a private asset is uploaded and verified.</span>
               </label>
-              <CheckGroup label="Intended delivery destinations" values={DESTINATIONS} selected={destinations} onChange={(v, c) => toggle(setDestinations, destinations, v, c)} required />
+              <CheckGroup name="destinations" idPrefix="destination" label="Intended delivery destinations" values={DESTINATIONS} selected={destinations} onChange={(v, c) => toggle(setDestinations, destinations, v, c)} required />
             </section>
           </>
         )}
