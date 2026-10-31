@@ -223,3 +223,29 @@ No rollback SQL is supplied because no change is authorized and the exact pre-ch
 - Publication table: schema-only extraction possible; do not replay data-mutating migration 0006.
 - `postgres/public` default ACL: proposal drafted; provenance still requires authoritative confirmation.
 - Production: **HOLD / NOT CERTIFIED / NO-GO**.
+
+
+## Review addendum — CI and dependency completeness gate (31 Oct 2026)
+
+### Repository checks
+
+For PR #439 head `d65b3e2c999705e859e430db5d7c06316f496ae9`:
+
+- GitHub CI workflow run `41174272581`: both `gate` and `workflow-postgres` jobs completed successfully.
+- Vercel status `Vercel – media-factory`: success.
+- These checks validate the repository build/test workflow and Vercel check only. They do **not** validate this SQL against canonical Staging, prove ACL safety, or certify the release.
+
+### SQL draft review — blockers before implementation
+
+1. **The publication-table DDL is not a complete Loop schema repair.** Migration `0006_loop_canonical.sql` also defines `loop_titles`, `loop_profiles`, `loop_watch_progress`, `loop_watchlist`, `loop_subscriptions`, `loop_entitlements`, and indexes. The current draft isolates only `bridge_loop_publications`. The other Loop relations were reported missing in the prior Staging inventory. Do not treat this isolated table as resolving the full Loop schema or runtime dependency set.
+2. **Do not replay migration 0006.** It inserts Jananam Bridge/publication/Loop rows and explicitly updates the Loop title to `published=true`, `listed=true`, and `status='approved'`. A separate schema-only inventory and dependency map is required before any Loop DDL is proposed.
+3. **Identity-link dependency remains blocked.** `bridge_loop_identity_links` references `public."user"` and `auth.users`. The first was reported missing in Staging. Do not create the identity-link table until the intended Better Auth schema, exact key types, existing companion relations, and migration ledger are reconciled. No identity records or links are in scope.
+4. **Table and sequence revokes are not a universal access-denial proof.** The statements only revoke direct ACL entries for `anon` and `authenticated`; they do not by themselves remove column-level grants, grants to `PUBLIC`, or privileges inherited through role memberships. The implementation preflight and postflight must explicitly test these paths and stop if effective access remains.
+5. **Default ACL statements remain blocked.** Current catalog output identifies defaults by owner/schema/object type but does not identify the actor or timestamp that installed them. Do not apply `ALTER DEFAULT PRIVILEGES` until authoritative provenance confirms the `postgres/public` defaults are project-managed and `postgres` is the intended migration role. Schema-specific revokes also cannot cancel global default grants to `PUBLIC`.
+6. **Current RLS posture is defense-in-depth, not a substitute for ACL verification.** Keep RLS enabled; do not add browser-facing policies under Option A. Verify browser Data API requests fail closed and server-side application routes continue to work before any future repair is considered.
+
+### Review disposition
+
+**NOT READY FOR EXECUTION.** The SQL snippets remain review material only. Before an implementation PR can be prepared, complete a separate read-only dependency inventory for all Loop relations, Better Auth relations, table/sequence owners, direct and column ACLs, PUBLIC grants, role inheritance, and default ACL provenance.
+
+No SQL was executed; no database, role, policy, identity, data, deployment, or Production state was changed.
