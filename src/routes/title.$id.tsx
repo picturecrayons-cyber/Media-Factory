@@ -125,6 +125,24 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
   return (
     <div className="space-y-5">
       <WorkflowDesk title={title} actor={actor} />
+      {title.status === "LIVE_FOR_BUYERS" ? (
+        <section
+          role="status"
+          className="rounded-xl border border-line bg-surface px-4 py-3"
+          aria-label="Buyer status and consumer publication"
+        >
+          <p className="text-sm font-semibold">Buyer workflow status is separate from consumer publication.</p>
+          <p className="mt-1 text-sm text-muted">
+            LIVE_FOR_BUYERS means the title is in the buyer licensing workflow. Crayons Loop visibility requires a separately active authorization and published listing.
+          </p>
+          {!distributionReady ? (
+            <p className="mt-2 text-sm font-medium text-amber-700">
+              Consumer publication is not active
+              {pub?.authorizationStatus ? ` — authorization is ${pub.authorizationStatus.toLowerCase().replaceAll("_", " ")}` : " — no active authorization record was found"}.
+            </p>
+          ) : null}
+        </section>
+      ) : null}
       {assetsQ.isError ? <p role="alert">Assets unavailable: {assetsQ.error.message}</p> : null}
       <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
         <div className="grid gap-5 md:grid-cols-[180px_1fr]">

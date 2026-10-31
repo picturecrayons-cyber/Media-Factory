@@ -204,21 +204,6 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
     assertPermission(actor, "title.read_catalog");
     const sql = await getSql();
 
-    // Auto-reevaluate any expired distribution windows
-    await sql`
-      update bridge_loop_publications
-      set authorization_status = 'expired', updated_at = now()
-      where window_end is not null and window_end < now() and authorization_status in ('authorized', 'live')
-    `.catch(() => {});
-
-    await sql`
-      update loop_titles
-      set status = 'expired', published = false, listed = false, updated_at = now()
-      where bridge_title_id in (
-        select bridge_title_id from bridge_loop_publications where authorization_status = 'expired'
-      ) and published = true
-    `.catch(() => {});
-
     const rows = await sql<{
       id: string;
       slug: string;
@@ -261,6 +246,13 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
 
     return {
       titles: rows.map((r) => {
+        // GET endpoints report effective expiry without mutating persisted authorization history.
+        const windowExpired = Boolean(r.window_end && new Date(r.window_end).getTime() < Date.now());
+        const storedAuthorizationStatus = r.authorization_status?.toUpperCase() || "PENDING";
+        const effectiveAuthorizationStatus =
+          windowExpired && ["AUTHORIZED", "LIVE"].includes(storedAuthorizationStatus)
+            ? "EXPIRED"
+            : storedAuthorizationStatus;
         const coveringGrant = r.loop_title_id
           ? findCoveringRightsGrant(
               grants.filter((grant) => grant.title_id === r.id),
@@ -317,16 +309,15 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
             ? {
                 destination: "CRAYONS_LOOP" as const,
                 loopTitleId: r.loop_title_id,
-                authorizationStatus: (r.authorization_status?.toUpperCase() ||
-                  "PENDING") as DistributionAuthorizationStatus,
+                authorizationStatus: effectiveAuthorizationStatus as DistributionAuthorizationStatus,
                 territories: r.territories || ["IN"],
                 languages: r.languages || [r.language],
                 exploitationModels: r.exploitation_models || ["SVOD"],
                 windowStart: iso(r.window_start),
                 windowEnd: iso(r.window_end),
                 loopStatus: r.loop_status,
-                listed: Boolean(r.listed),
-                published: Boolean(r.published),
+                listed: !windowExpired && Boolean(r.listed),
+                published: !windowExpired && Boolean(r.published),
                 playbackPath: r.playback_path,
               }
             : null,
