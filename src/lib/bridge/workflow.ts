@@ -6,6 +6,7 @@ import { requireVerifiedActor } from "./session";
 import { assertPermission, canReadTitle, canOperateOnTitle, type Actor } from "./rbac";
 import { loadTitle } from "./titles";
 import { loopLicenseInput, producerSharePaise } from "./workflow-policy";
+import { assertQcReportEvidenceReferences, assertQcReportReadyForPass, qcReportSchema, type QcReport } from "./qc-report";
 import { bridgeEnv } from "./env";
 
 async function audit(tx: Sql, user: string, title: string, action: string, metadata: object) {
@@ -69,6 +70,7 @@ const reviewInput = z.object({
   decision: z.enum(["APPROVE", "REJECT"]),
   note: z.string().trim().min(8).max(2000),
   grantId: z.string().uuid().optional(),
+  qcReport: qcReportSchema.optional(),
 });
 
 export async function reviewWorkflow(tx: Sql, actor: Actor, data: z.infer<typeof reviewInput>) {
@@ -83,19 +85,27 @@ export async function reviewWorkflow(tx: Sql, actor: Actor, data: z.infer<typeof
   const expected = data.stage === "QC" ? "QC_REVIEW" : "RIGHTS_REVIEW";
   if (title.status !== expected) throw new Error(`Title must be in ${expected}`);
   if (data.stage === "QC") {
+    if (data.decision === "APPROVE") {
+      if (!data.qcReport) throw new Error("Evidence-backed QC report is required before QC PASS");
+      assertQcReportReadyForPass(data.qcReport);
+    }
     const assets = await tx<{
+      id: string;
       kind: string;
       s3_key: string;
-    }>`select kind,s3_key from bridge_assets where title_id=${data.titleId} and byte_size>0`;
+      byte_size: number | string | null;
+    }>`select id,kind,s3_key,byte_size from bridge_assets where title_id=${data.titleId} and byte_size>0`;
     if (
       data.decision === "APPROVE" &&
       (!assets.some((a) => a.kind === "master" && a.s3_key === title.master_key) ||
         !assets.some((a) => a.kind === "poster" && a.s3_key === title.poster_key))
     )
       throw new Error("Verified current master and artwork are required");
+    if (data.decision === "APPROVE" && data.qcReport)
+      assertQcReportEvidenceReferences(data.qcReport, assets);
     await tx`insert into bridge_qc_cases(title_id,status,reviewer_findings,reviewed_by,reviewed_at)
       values (${data.titleId},${data.decision === "APPROVE" ? "PASSED" : "ACTION_REQUIRED"},
-      ${JSON.stringify([{ note: data.note, masterKey: title.master_key, posterKey: title.poster_key }])}::jsonb,${actor.userId},now())`;
+      ${JSON.stringify([{ note: data.note, masterKey: title.master_key, posterKey: title.poster_key, qcReport: data.qcReport ?? null }])}::jsonb,${actor.userId},now())`;
   } else {
     if (!data.grantId) throw new Error("Select a license draft");
     const [grant] = await tx<{
@@ -169,12 +179,14 @@ export const getTitleWorkflow = createServerFn({ method: "GET" })
     const qc = await sql<{
       status: string;
       reviewed_at: string | Date;
+      reviewed_by: string;
       reviewer_findings: Array<{
         note: string;
         masterKey: string | null;
         posterKey: string | null;
+        qcReport?: QcReport | null;
       }>;
-    }>`select status,reviewed_at,reviewer_findings from bridge_qc_cases where title_id=${data.titleId} order by created_at desc limit 1`;
+    }>`select status,reviewed_at,reviewed_by,reviewer_findings from bridge_qc_cases where title_id=${data.titleId} order by created_at desc`;
     const legal = await sql<{
       status: string;
       reviewed_at: string | Date;
@@ -186,6 +198,7 @@ export const getTitleWorkflow = createServerFn({ method: "GET" })
         window_end: g.window_end ? new Date(g.window_end).toISOString() : "",
       })),
       qc: qc[0] ? { ...qc[0], reviewed_at: new Date(qc[0].reviewed_at).toISOString() } : null,
+      qcHistory: qc.map((item) => ({ ...item, reviewed_at: new Date(item.reviewed_at).toISOString() })),
       legal: legal[0]
         ? { ...legal[0], reviewed_at: new Date(legal[0].reviewed_at).toISOString() }
         : null,
