@@ -120,7 +120,7 @@ function DashboardBody() {
       </section>
       <details className="text-xs text-muted">
         <summary className="w-fit cursor-pointer">About title lanes</summary>
-        <p className="mt-1">Buyer visibility requires approved TVOD delivery.</p>
+        <p className="mt-1">Buyer visibility requires an approved, published title, authorized publication, and an active distribution window.</p>
       </details>
 
       <section aria-label="Revenue metrics" className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
