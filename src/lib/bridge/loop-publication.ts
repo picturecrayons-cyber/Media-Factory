@@ -41,6 +41,8 @@ export type PublicationRow = {
 };
 const publishInput = z.object({
   bridgeTitleId: z.string().min(1),
+  // Optional at parsing only so legacy callers receive the actionable server gate error.
+  deliveryId: z.string().uuid().optional(),
   destination: z.literal("CRAYONS_LOOP").default("CRAYONS_LOOP"),
   territories: z.array(z.string().min(2).max(32)).min(1).max(50),
   languages: z.array(z.string().min(2).max(40)).min(1).max(20),
@@ -148,7 +150,6 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
       return {
         id: r.id, slug: r.slug, name: r.name, bridgeStatus: r.status, language: r.language,
         hasMaster: Boolean(r.master_key), hasPoster: Boolean(r.poster_key),
-        // This desk cannot assert manual approval; use the title's Distribution workflow.
         ready: false, blockers,
         publication: r.loop_title_id ? {
           destination: "CRAYONS_LOOP" as const, loopTitleId: r.loop_title_id,
@@ -179,7 +180,6 @@ export const authorizeLoopPublication = createServerFn({ method: "POST" })
       });
       if (!preflight.eligible || !preflight.title)
         throw new Error(`Distribution Authorization Blocked: ${preflight.reasons.join(" · ")}`);
-      // No UI or legacy caller can skip this gate. Consumption rolls back with catalog/audit failure.
       const acceptance = await consumeApprovedLoopDelivery(sql, data, preflight.rightsGrantId);
       const title = preflight.title;
       const existing = await sql<{ id: string }>`select id from loop_titles where bridge_title_id=${title.id} limit 1`;
@@ -253,8 +253,6 @@ export const revokeLoopPublication = createServerFn({ method: "POST" })
       return { ok: true, status: "REVOKED" as const };
     });
   });
-
-// Retain the old entrypoint, but a window change now requires fresh manual acceptance.
 export const extendDistributionWindow = createServerFn({ method: "POST" })
   .middleware([authMiddleware]).validator(z.object({ bridgeTitleId: z.string().min(1), newWindowEnd: z.string().datetime() }))
   .handler(async ({ context }) => {
@@ -263,7 +261,6 @@ export const extendDistributionWindow = createServerFn({ method: "POST" })
     assertPermission(actor, "loop.publish");
     throw new Error("Window changes require a new approved license and manual delivery package in the title Distribution workflow");
   });
-
 export const getLoopPublication = createServerFn({ method: "GET" })
   .middleware([authMiddleware]).validator(z.object({ bridgeTitleId: z.string().min(1) }))
   .handler(async ({ context, data }) => {
