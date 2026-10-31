@@ -321,7 +321,7 @@ function Onboarding() {
           ) : null}
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="text-sm font-medium">Your name *
-              <input required value={displayName} onChange={(e) => setDisplayName(e.target.value)} autoComplete="name" className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5" />
+              <input id="onboarding-display-name" name="displayName" required value={displayName} onChange={(e) => setDisplayName(e.target.value)} autoComplete="name" className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5" />
             </label>
             <label className="text-sm font-medium">Account type *
               <select value={accountType} onChange={(e) => setAccountType(e.target.value as PublicAccountType)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5">
