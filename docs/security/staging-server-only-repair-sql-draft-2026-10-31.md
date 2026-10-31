@@ -260,3 +260,19 @@ Fresh catalog snapshot: 32 public tables and zero public `loop_*` relations. All
 Auth reconciliation: current runtime middleware validates Supabase bearer tokens using Supabase Auth REST; `auth.users(id uuid)` exists. `public.bridge_profiles(user_id text)` exists. Better Auth tables `public."user"`, `session`, `account`, and `verification` are absent. The `0007a` identity-link DDL references `public."user"(id)`, which does not match the inspected current runtime profile model without an explicit source-contract decision.
 
 **Execution block remains:** do not create any Loop/Auth relation, do not replay 0006, and do not apply ACL/default-ACL SQL until the two additional Loop relations are sourced, the identity FK model is decided, and the complete dependency/ACL preflight is approved. No SQL was run.
+
+
+## Follow-up dependency design gate — 31 Oct 2026
+
+The seven Loop relation/index definitions are now isolated in [the schema-only dependency draft](./staging-loop-schema-only-dependency-draft-2026-10-31.md). It excludes all Jananam title/publication INSERTs and the UPDATE that would set the title to published/listed/approved. It is a source extraction for review only; it is not an executable migration.
+
+Two additional relations referenced by `src/lib/bridge/workflow.ts` remain unresolved: `loop_payment_events` and `loop_user_tvod_entitlements`. Repository-wide code search found only their query usage and no authoritative DDL/schema contract. Do not invent or create them. This blocks the payment/revenue workflow dependency and keeps this repair proposal **NOT READY FOR EXECUTION**.
+
+Identity source review recommends correcting the intended FK model before any identity-link DDL is considered:
+
+- `bridge_user_id` → `public.bridge_profiles(user_id)` (text → text).
+- `auth_user_id` → `auth.users(id)` (uuid → uuid).
+
+This matches the inspected Supabase Auth runtime and Bridge profile resolution. The current `0007a_identity_links.sql` reference to Better Auth `public."user"(id)` appears stale/inconsistent. Do not create Better Auth tables merely to satisfy that FK; repository/schema owner approval and source migration reconciliation are still required. No identity relation or rows were created.
+
+**ACL disposition:** do not review/apply ACL repair as implementation-ready yet. First resolve the two payment schema sources and obtain owner approval for the identity FK correction; then refresh complete catalog/ACL/default-ACL preflight. No GRANT/REVOKE, DDL/DML, default ACL, RLS/policy, or migration changes have been made.
