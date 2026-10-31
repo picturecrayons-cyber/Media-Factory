@@ -240,20 +240,23 @@ function Onboarding() {
       let inviteToken: string | undefined;
       try { inviteToken = sessionStorage.getItem("bridge-invite") ?? undefined; } catch { /* ignore */ }
 
-      await completeOnboarding({
-        data: {
-          displayName: displayName.trim(),
-          accountType,
-          organizationName: accountType === "studio" ? organizationName.trim() : undefined,
-          inviteToken,
-        },
-      });
-
       if (accountType === "buyer") {
+        await completeOnboarding({
+          data: {
+            displayName: displayName.trim(),
+            accountType,
+            organizationName: accountType === "studio" ? organizationName.trim() : undefined,
+            inviteToken,
+          },
+        });
         void navigate({ to: "/buyer", replace: true });
         return;
       }
 
+      // Validate the complete creator/studio intake before creating or updating
+      // the onboarding profile. In particular, required checkbox groups are
+      // validated here because a fieldset legend's asterisk is not native
+      // browser validation.
       if (!titleName.trim()) throw new Error("Title name is required");
       if (synopsis.trim().length < 20) throw new Error("Add a synopsis of at least 20 characters");
       if (!territories.length || !rightsLanguages.length || !media.length || !destinations.length) {
@@ -263,6 +266,15 @@ function Onboarding() {
       if (!authorizationAttested) throw new Error("Confirm that you have authority to license the submitted rights");
       if (!authorizationEvidenceType) throw new Error("Select the authorization evidence you will provide");
       if (new Date(windowEnd) <= new Date(windowStart)) throw new Error("Rights window end must be after start");
+
+      await completeOnboarding({
+        data: {
+          displayName: displayName.trim(),
+          accountType,
+          organizationName: accountType === "studio" ? organizationName.trim() : undefined,
+          inviteToken,
+        },
+      });
 
       const result = await createTitle({
         data: {
