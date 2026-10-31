@@ -151,3 +151,29 @@ Created [schema-only dependency draft](./staging-loop-schema-only-dependency-dra
 - Identity FK: recommended `bridge_profiles(user_id)` + `auth.users(id)`; owner approval pending.
 - ACL/default-ACL repair: remains blocked pending dependency decisions and independent ACL preflight.
 - Production: HOLD / NOT CERTIFIED / NO-GO.
+
+
+## Additional cross-repository and identity source review — 31 Oct 2026
+
+### Payment/TVOD: source trace expanded
+
+The separate Loop repository `picturecrayons-cyber/crayons-loop-streaming-platform` PR #15 changes checkout preflight to query `loop_payment_events` and `loop_user_tvod_entitlements`. Media-Factory Issue #199 describes the historical Loop production webhook as persisting `loop_payment_events` and calling `loop_fulfill_captured_rental`. These are evidence of the owning product flow and historical use, **not authoritative table DDL**.
+
+Repository code search in both current default branches did not locate a CREATE TABLE/migration for either table; PR #15 itself does not add a schema migration. No source-of-truth schema artifact or named schema owner approval was found. The payment schema remains BLOCKED. The authoritative next source must be the exact applied Supabase migration/schema history for the Loop database or an owner-provided versioned SQL export; do not reconstruct it from call sites.
+
+### Identity FK: prior recommendation downgraded to unresolved
+
+Further historical source evidence contradicts treating the earlier `bridge_profiles(user_id)` FK proposal as approved:
+
+- `migrations/0007a_identity_links.sql` explicitly references `public."user"(id)` for `bridge_user_id`.
+- The Scope A PostgreSQL harness in the same source history seeds `public."user"` and `auth.users` before inserting an identity link; its comment calls both required identity fixtures.
+- PR #23 and current `docs/authentication-architecture.md` establish Supabase Auth as the canonical login/session authority and use identity links to map Auth UUIDs to Bridge profile IDs. PR #23's execution comment reports a founder mapping persisted in Production. That confirms the mapping workflow, **not** approval to change the FK target.
+- The current architecture doc says Better Auth schema artifacts are legacy/transitional, but does not explicitly approve replacing the FK with `bridge_profiles(user_id)`.
+
+**Disposition:** FK target remains **OWNER DECISION REQUIRED**. Do not apply the previous recommendation or create `public.user` just to satisfy an old migration. Owner must decide whether `public.user` remains a deliberate legacy identity registry or whether the migration and tests should be revised to reference `bridge_profiles(user_id)`. Then update the canonical migration, test harness, and compatibility plan consistently. No owner approval for either option was located.
+
+### Status correction
+
+- Payment/TVOD DDL source: **NOT FOUND**; Loop PR #15 / Issue #199 provide usage/history only.
+- Identity FK: **UNRESOLVED**; no approved FK-target decision found.
+- ACL repair: remains blocked.
