@@ -211,7 +211,7 @@ A caller evaluating a policy expression that invokes a function must have permis
 - **Option A — server-only Bridge Data API (recommended based on 0008 and current app code):** Keep operational tables inaccessible to browser roles. Do not create a browser RLS read surface; 0012's policies are not needed for this model and should not be applied as a partial migration. Server-side authorization remains in the application/database connection path.
 - **Option B — explicitly approved browser-read surface:** Define exactly which tables and roles may read, then redesign and test the helper execution strategy. Do not simply apply 0012 then 0013; the current sequence is contradictory for policy execution.
 
-No choice has been implemented. Option A is a design recommendation only, pending application-owner approval.
+**Decision:** Option A — Server-only Bridge Data API — has been accepted by the application owner as the design direction for the review draft. This is not approval to apply database changes. The companion SQL proposal is [Staging server-only repair SQL draft](./staging-server-only-repair-sql-draft-2026-10-31.md).
 
 ### Updated completion status
 
@@ -228,3 +228,19 @@ No choice has been implemented. Option A is a design recommendation only, pendin
 | Repair SQL | Not written or applied |
 
 **No GRANT, REVOKE, ALTER DEFAULT PRIVILEGES, DDL, RLS/policy change, migration, deployment, or Production operation was performed.**
+
+
+## Option A decision and companion SQL draft — 31 Oct 2026
+
+The application owner selected **Option A — Server-only Bridge Data API**. This means Bridge operational data remains accessed through server-side `getSql()` and server-side authorization; no browser-facing RLS read surface is intended.
+
+A separate documentation-only SQL review draft has been added:
+
+- `docs/security/staging-server-only-repair-sql-draft-2026-10-31.md`
+- Covers the 17 tables and five sequences, plus schema-scoped `postgres/public` default ACL proposals.
+- Separates the missing `bridge_loop_publications` schema-only DDL from the data-mutating `0006_loop_canonical.sql`; explicitly prohibits replaying 0006 because it inserts and publishes Jananam records.
+- Blocks `bridge_loop_identity_links` creation until the missing `public."user"` prerequisite from the Better Auth schema is reconciled and `auth.users` key compatibility is verified.
+- Leaves default-ACL changes blocked until the provenance of `postgres/public` defaults and intended migration owner are confirmed.
+- Does not include or authorize any SQL execution.
+
+**No database changes have been performed.** No GRANT/REVOKE, ALTER DEFAULT PRIVILEGES, DDL, RLS/policy change, migration, deployment, identity link, or data mutation has occurred. Production remains **HOLD / NOT CERTIFIED / NO-GO**.
