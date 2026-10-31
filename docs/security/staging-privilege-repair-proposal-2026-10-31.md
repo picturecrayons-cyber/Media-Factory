@@ -225,7 +225,7 @@ A caller evaluating a policy expression that invokes a function must have permis
 | Platform-owned default ACL boundary | Must remain untouched |
 | Role memberships | Catalog verified; effective privileges still assessed per object |
 | 0012/0013 conflict | Confirmed from exact source SQL |
-| Repair SQL | Not written or applied |
+| Repair SQL | Review-only SQL snippets drafted; NOT READY FOR EXECUTION / NOT APPLIED |
 
 **No GRANT, REVOKE, ALTER DEFAULT PRIVILEGES, DDL, RLS/policy change, migration, deployment, or Production operation was performed.**
 
@@ -244,3 +244,17 @@ A separate documentation-only SQL review draft has been added:
 - Does not include or authorize any SQL execution.
 
 **No database changes have been performed.** No GRANT/REVOKE, ALTER DEFAULT PRIVILEGES, DDL, RLS/policy change, migration, deployment, identity link, or data mutation has occurred. Production remains **HOLD / NOT CERTIFIED / NO-GO**.
+
+
+## Review disposition — 31 Oct 2026
+
+The companion SQL document now includes an explicit review addendum. Repository CI and Vercel checks for PR #439 completed successfully, but these do not certify database behavior.
+
+The SQL draft is **NOT READY FOR EXECUTION** because:
+- the isolated `bridge_loop_publications` DDL does not restore the complete missing Loop schema (including `loop_titles` and related relations reported missing in Staging);
+- migration 0006 must not be replayed because it inserts and publishes Jananam records;
+- `bridge_loop_identity_links` remains blocked by missing `public."user"` and unresolved Better Auth dependency checks;
+- direct ACL revokes alone do not prove denial where column grants, PUBLIC grants, or role inheritance may exist;
+- `postgres/public` default ACL provenance remains unknown.
+
+No database changes have been performed. No migrations, grants, revokes, DDL, RLS/policy changes, identity linking, data mutation, or deployments have occurred.
