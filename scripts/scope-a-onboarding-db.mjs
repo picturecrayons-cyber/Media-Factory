@@ -154,22 +154,39 @@ try {
   await client.query("release savepoint duplicate_email_test");
   assert(duplicateEmailBlocked, "Case-insensitive duplicate profile email was not blocked");
 
-  // Verify both identity foreign keys reject orphan references.
-  await client.query("savepoint orphan_fk_test");
-  let orphanFkBlocked = false;
-  try {
-    await client.query(
-      `insert into public.bridge_loop_identity_links
-        (bridge_user_id, auth_user_id, verification_method, verified_at, verified_by)
-       values ($1, $2::uuid, 'verified_email_reauthentication', now(), $1)`,
-      [`missing-user-${crypto.randomUUID()}`, crypto.randomUUID()],
-    );
-  } catch (error) {
-    orphanFkBlocked = error?.code === "23503";
-    await client.query("rollback to savepoint orphan_fk_test");
+  // Test each FK independently: first a missing Better Auth user with a
+  // valid Supabase Auth user, then a valid Better Auth user with a missing
+  // Supabase Auth user.
+  async function assertOrphanFkRejected(savepoint, bridgeUserId, authUserIdValue, message) {
+    await client.query(`savepoint ${savepoint}`);
+    let blocked = false;
+    try {
+      await client.query(
+        `insert into public.bridge_loop_identity_links
+          (bridge_user_id, auth_user_id, verification_method, verified_at, verified_by)
+         values ($1, $2::uuid, 'verified_email_reauthentication', now(), $1)`,
+        [bridgeUserId, authUserIdValue],
+      );
+    } catch (error) {
+      blocked = error?.code === "23503";
+      await client.query(`rollback to savepoint ${savepoint}`);
+    }
+    await client.query(`release savepoint ${savepoint}`);
+    assert(blocked, message);
   }
-  await client.query("release savepoint orphan_fk_test");
-  assert(orphanFkBlocked, "Identity foreign keys did not reject an orphan link");
+
+  await assertOrphanFkRejected(
+    "missing_better_auth_user_test",
+    `missing-user-${crypto.randomUUID()}`,
+    authUserId,
+    "Better Auth user foreign key did not reject an orphan reference",
+  );
+  await assertOrphanFkRejected(
+    "missing_supabase_auth_user_test",
+    userId,
+    crypto.randomUUID(),
+    "Supabase Auth user foreign key did not reject an orphan reference",
+  );
 
   await client.query("rollback");
   transactionOpen = false;
