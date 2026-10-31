@@ -69,3 +69,31 @@ Before any apply: verify the existing constraint name, profile PK/unique constra
 ## Release posture
 
 Draft / source reconciliation only. No SQL execution, database mutation, credential change, PR merge, deployment, or Production action. Production remains **HOLD / NOT CERTIFIED / NO-GO**.
+
+
+## Canonical Staging read-only inspection — 2026-10-31
+
+Target verified by Supabase project metadata: **Staging** project ref `jbymleftneggcgutlcqu`, name `Crayons Projects - Testing DB`, region `ap-south-1`, status `ACTIVE_HEALTHY`, PostgreSQL 17.11.0.003. This is not Production.
+
+Read-only table catalog result:
+
+| Object | Staging result |
+|---|---|
+| `public.bridge_profiles` | Present; RLS enabled; `user_id text` primary key |
+| `public.bridge_loop_identity_links` | **Absent** |
+| `public.loop_payment_events` | **Absent** |
+| `public.loop_user_tvod_entitlements` | **Absent** |
+| `public.loop_titles` | **Absent** |
+| `public.bridge_payments` | Present; RLS enabled; provider-order/payment IDs and amount/status fields present |
+| `public.bridge_webhook_events` | Present; RLS enabled; event ID/name/hash/status and timestamps |
+| `public.bridge_entitlements` | Present; RLS enabled; Bridge-side entitlement shape |
+
+Staging migration history returned only test-labelled Bridge baseline/security migrations through `20261030133503 testing_security_hardening_20261030`; no Loop canonical runtime baseline or TVOD migration was present in the returned migration history.
+
+Consequences:
+- The repository TVOD contract cannot be called the live Staging schema: all three Loop target tables checked above are absent.
+- The identity FK forward draft cannot be applied to Staging as-is because `bridge_loop_identity_links` is absent. The `bridge_profiles.user_id` type/PK prerequisite is present.
+- The Scope A harness cannot run against this Staging project; it requires a disposable PostgreSQL database with the intended baseline schema. Do not point it at Staging.
+- Existing Bridge payment/webhook/entitlement tables are not interchangeable with the Loop TVOD tables. Do not infer a cross-ledger mapping or create parallel records from this catalog result.
+
+No rows were read, no SQL was executed, and no schema/data changes were made. This inspection does not certify Production.
