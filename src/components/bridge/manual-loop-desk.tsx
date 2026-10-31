@@ -21,13 +21,13 @@ export function ManualLoopDesk({ title, actor, view }: { title: BridgeTitle; act
   const [handoffRef, setHandoffRef] = useState("");
   const [approvalRef, setApprovalRef] = useState("");
   const [note, setNote] = useState("");
-  const [confirmPublish, setConfirmPublish] = useState(false);
+  const [confirmedPackageId, setConfirmedPackageId] = useState<string | null>(null);
   const data = useQuery({ queryKey: ["manual-loop-delivery", title.id], queryFn: () => getManualLoopDelivery({ data: { titleId: title.id } }) });
   const publication = useQuery({ queryKey: ["loop-pub", title.id], queryFn: () => getLoopPublication({ data: { bridgeTitleId: title.id } }), enabled: Boolean(actor.internalRole) });
   const action = useMutation({
     mutationFn: (run: () => Promise<unknown>) => run(),
     onSuccess: async () => {
-      setConfirmPublish(false);
+      setConfirmedPackageId(null);
       await Promise.all(["manual-loop-delivery", "title-workflow", "bridge-title", "loop-pub", "bridge-titles", "loop-publication-readiness", "bridge-audit"].map((key) => cache.invalidateQueries({ queryKey: [key] })));
     },
   });
@@ -49,7 +49,6 @@ export function ManualLoopDesk({ title, actor, view }: { title: BridgeTitle; act
 
   function downloadManifest() {
     if (!latest) return;
-    // Download only on an explicit click; never sends media or private contracts to Loop.
     const url = URL.createObjectURL(new Blob([JSON.stringify({ packageId: latest.id, version: latest.version, ...latest.manifest }, null, 2)], { type: "application/json" }));
     const link = document.createElement("a");
     link.href = url;
@@ -127,8 +126,8 @@ export function ManualLoopDesk({ title, actor, view }: { title: BridgeTitle; act
         </> : <p>Another authorized operator must record acceptance or rejection; preparers and senders cannot approve their own handoff.</p> : null}
         {latest.approval_reference ? <p>Loop decision evidence: {latest.approval_reference}. {latest.review_note}</p> : null}
         {latest.status === "APPROVED" && latest.model === "TVOD" && canReview ? <>
-          <label className="block text-sm"><input type="checkbox" checked={confirmPublish} onChange={(e) => setConfirmPublish(e.target.checked)} /> Explicitly publish this accepted TVOD package to the consumer Loop catalog</label>
-          {button("Publish accepted TVOD package", () => authorizeLoopPublication({ data: { ...latest.manifest.request, bridgeTitleId: title.id, accessTier: "TVOD" } }), !confirmPublish)}
+          <label className="block text-sm"><input type="checkbox" checked={confirmedPackageId === latest.id} onChange={(e) => setConfirmedPackageId(e.target.checked ? latest.id : null)} /> Explicitly publish this accepted TVOD package to the consumer Loop catalog</label>
+          {button("Publish accepted TVOD package", () => authorizeLoopPublication({ data: { ...latest.manifest.request, bridgeTitleId: title.id, deliveryId: latest.id, accessTier: "TVOD" } }), confirmedPackageId !== latest.id)}
         </> : null}
         {latest.status === "REJECTED" ? <p>Correct the package and prepare a new version. Rejected versions cannot be published.</p> : null}
       </article> : data.isSuccess ? <p>No manual delivery recorded. The title remains unpublished by this workflow.</p> : null}

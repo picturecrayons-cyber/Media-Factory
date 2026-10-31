@@ -19,10 +19,8 @@ const terms = { titleId, territories: ["WORLDWIDE"], languages: ["Malayalam"],
   rightsOwnerSharePct: 80, distributorSharePct: 20 };
 const publicationData = { bridgeTitleId: titleId, destination: "CRAYONS_LOOP", territories: terms.territories,
   languages: terms.languages, exploitationModels: ["TVOD"], accessTier: "TVOD", windowStart: terms.windowStart, windowEnd: terms.windowEnd };
-
 type Handler = (args: { context: { userId: string }; data?: unknown }) => Promise<any>;
 async function fixture(model: "TVOD" | "AVOD" = "TVOD") {
-  // Always ephemeral in-memory PostgreSQL. No environment/database credentials are read.
   const db = new PGlite();
   await db.exec(`create table bridge_titles(id text primary key,owner_user_id text,owner_account_type text,owner_organization_id uuid,
     status text,slug text,name text,synopsis text,language text,year int,runtime_minutes int,content_type text,master_key text,poster_key text,updated_at timestamptz);
@@ -56,9 +54,14 @@ async function fixture(model: "TVOD" | "AVOD" = "TVOD") {
     return sql;
   }
   const sql = adapter((text, params) => db.query(text, params));
-  const actors: Record<string, rbac.Actor> = Object.fromEntries([
-    ["owner", null], ["sender", "admin"], ["reviewer", "admin"], ["other", "admin"], ["viewer", "viewer"], ["legal", "legal_reviewer"],
-  ].map(([userId, internalRole]) => [userId, { userId, emailVerified: true, accountType: "independent_creator", internalRole }])) as Record<string, rbac.Actor>;
+  const actors: Record<string, rbac.Actor> = {
+    owner: { userId: "owner", emailVerified: true, accountType: "independent_creator", internalRole: null },
+    sender: { userId: "sender", emailVerified: true, accountType: "independent_creator", internalRole: "admin" },
+    reviewer: { userId: "reviewer", emailVerified: true, accountType: "independent_creator", internalRole: "admin" },
+    other: { userId: "other", emailVerified: true, accountType: "independent_creator", internalRole: "admin" },
+    viewer: { userId: "viewer", emailVerified: true, accountType: "independent_creator", internalRole: "viewer" },
+    legal: { userId: "legal", emailVerified: true, accountType: "independent_creator", internalRole: "legal_reviewer" },
+  };
   const modules: Record<string, unknown> = {
     "node:crypto": await import("node:crypto"),
     "@tanstack/react-start": { createServerFn: () => {
@@ -89,6 +92,10 @@ async function fixture(model: "TVOD" | "AVOD" = "TVOD") {
   async function call(name: string, userId: string, data?: unknown) {
     return (manual[name] ?? publishing[name] ?? workflow[name])({ context: { userId }, data });
   }
+  async function publish(overrides: Record<string, unknown> = {}) {
+    const latest = await sql<{ id: string }>`select id from bridge_loop_deliveries order by version desc limit 1`;
+    return call("authorizeLoopPublication", "reviewer", { ...publicationData, deliveryId: latest[0]?.id, ...overrides });
+  }
   async function prepare() { return call("prepareManualLoopDelivery", "sender", { titleId, grantId, model }); }
   async function deliver() {
     const saved = await prepare();
@@ -100,7 +107,7 @@ async function fixture(model: "TVOD" | "AVOD" = "TVOD") {
     await call("reviewManualLoopDelivery", "reviewer", { titleId, deliveryId: saved.id, decision: "APPROVE", note: "Loop explicitly accepted this version", reference: "loop-acceptance-123" });
     return saved;
   }
-  return { db, sql, call, prepare, deliver, approve };
+  return { db, sql, call, publish, prepare, deliver, approve };
 }
 
 test("stable JSON hashing ignores jsonb object order, but not changed content", () => {
@@ -108,50 +115,46 @@ test("stable JSON hashing ignores jsonb object order, but not changed content", 
   assert.notEqual(policy.deliveryHash({ a: 1 }), policy.deliveryHash({ a: 2 }));
   assert.throws(() => policy.assertManualModelCanPublish("AVOD"), /AVOD/);
 });
-
 test("TVOD handoff and independent acceptance never publish until a separate explicit action", async () => {
   const f = await fixture();
   try {
-    await assert.rejects(f.call("authorizeLoopPublication", "reviewer", publicationData), /Manual Loop delivery/);
+    await assert.rejects(f.publish(), /Manual Loop delivery/);
     const saved = await f.deliver();
-    await assert.rejects(f.call("authorizeLoopPublication", "reviewer", publicationData), /Manual Loop delivery/);
+    await assert.rejects(f.publish(), /Manual Loop delivery/);
     await assert.rejects(f.call("reviewManualLoopDelivery", "sender", { titleId, deliveryId: saved.id, decision: "APPROVE", note: "My own handoff", reference: "loop-reply-123" }), /Another authorized operator/);
     await f.call("reviewManualLoopDelivery", "reviewer", { titleId, deliveryId: saved.id, decision: "APPROVE", note: "Loop explicitly accepted this version", reference: "loop-reply-123" });
     assert.equal((await f.sql`select * from loop_titles`).length, 0);
-    const result = await f.call("authorizeLoopPublication", "reviewer", publicationData);
-    assert.equal(result.status, "AUTHORIZED");
+    await assert.rejects(f.publish({ deliveryId: undefined }), /explicitly selected/);
+    await assert.rejects(f.publish({ deliveryId: "20000000-0000-4000-8000-000000000002" }), /explicitly selected/);
+    assert.equal((await f.publish()).status, "AUTHORIZED");
     assert.equal((await f.sql<{ status: string }>`select status from bridge_loop_deliveries`)[0].status, "PUBLISHED");
     assert.equal((await f.sql<{ published: boolean }>`select published from loop_titles`)[0].published, true);
-    await assert.rejects(f.call("authorizeLoopPublication", "reviewer", publicationData), /Manual Loop delivery/);
+    await assert.rejects(f.publish(), /Manual Loop delivery/);
   } finally { await f.db.close(); }
 });
-
 test("AVOD supports prepared, delivered and independently approved states but never FREE publication", async () => {
   const f = await fixture("AVOD");
   try {
     await f.approve();
     assert.equal((await f.sql<{ status: string }>`select status from bridge_loop_deliveries`)[0].status, "APPROVED");
-    await assert.rejects(f.call("authorizeLoopPublication", "reviewer", { ...publicationData, exploitationModels: ["AVOD"], accessTier: "FREE" }), /AVOD/);
+    await assert.rejects(f.publish({ exploitationModels: ["AVOD"], accessTier: "FREE" }), /AVOD/);
     assert.equal((await f.sql`select * from loop_titles`).length, 0);
     const result = await f.call("getManualLoopDelivery", "owner", { titleId });
     assert.equal(result.deliveries[0].manifest.model, "AVOD");
     assert.ok(!JSON.stringify(result.deliveries[0].manifest).includes("ownership-verified"));
   } finally { await f.db.close(); }
 });
-
 test("owner can draft AVOD terms but cannot approve or perform privileged delivery", async () => {
   const f = await fixture();
   try {
     const saved = await f.call("submitManualLoopLicense", "owner", { terms, model: "AVOD" });
     const [g] = await f.sql<{ media: string[]; status: string }>`select media,status from bridge_rights_grants where id=${saved.grantId}`;
-    assert.deepEqual(g.media, ["CRAYONS_LOOP", "AVOD"]);
-    assert.equal(g.status, "DRAFT");
+    assert.deepEqual(g.media, ["CRAYONS_LOOP", "AVOD"]); assert.equal(g.status, "DRAFT");
     await assert.rejects(f.call("prepareManualLoopDelivery", "owner", { titleId, grantId, model: "TVOD" }), /Forbidden/);
     await assert.rejects(f.call("prepareManualLoopDelivery", "viewer", { titleId, grantId, model: "TVOD" }), /Forbidden/);
     assert.equal((await f.sql`select * from loop_titles`).length, 0);
   } finally { await f.db.close(); }
 });
-
 test("missing QC/legal, expired rights and draft lifecycle remain blocked", async () => {
   for (const mutation of ["delete from bridge_qc_cases", "delete from bridge_legal_cases", "update bridge_rights_grants set window_end='2000-01-01'", "update bridge_titles set status='DRAFT'"]) {
     const f = await fixture();
@@ -159,43 +162,36 @@ test("missing QC/legal, expired rights and draft lifecycle remain blocked", asyn
     finally { await f.db.close(); }
   }
 });
-
 test("metadata, assets, license changes and mismatched publish dimensions invalidate acceptance", async () => {
   for (const mutation of ["update bridge_titles set synopsis='Changed'", "update bridge_titles set master_key='changed/master'", "update bridge_rights_grants set exclusivity='EXCLUSIVE'", "update bridge_rights_grants set status='REVOKED'"]) {
     const f = await fixture();
-    try {
-      await f.approve(); await f.sql.query(mutation);
-      await assert.rejects(f.call("authorizeLoopPublication", "reviewer", publicationData));
-      assert.equal((await f.sql`select * from loop_titles`).length, 0);
-    } finally { await f.db.close(); }
+    try { await f.approve(); await f.sql.query(mutation); await assert.rejects(f.publish()); assert.equal((await f.sql`select * from loop_titles`).length, 0); }
+    finally { await f.db.close(); }
   }
   const f = await fixture();
   try {
     await f.approve();
-    await assert.rejects(f.call("authorizeLoopPublication", "reviewer", { ...publicationData, windowStart: "2027-01-01T00:00:00.000Z" }), /exactly match/);
+    await assert.rejects(f.publish({ windowStart: "2027-01-01T00:00:00.000Z" }), /exactly match/);
     await assert.rejects(f.call("extendDistributionWindow", "reviewer", { bridgeTitleId: titleId, newWindowEnd: terms.windowEnd }), /new approved license/);
   } finally { await f.db.close(); }
 });
-
 test("rejected or superseded packages cannot be published", async () => {
   const f = await fixture();
   try {
     const rejected = await f.deliver();
     await f.call("reviewManualLoopDelivery", "reviewer", { titleId, deliveryId: rejected.id, decision: "REJECT", reference: "buyer-return-123", note: "Buyer requested corrected package" });
-    await assert.rejects(f.call("authorizeLoopPublication", "reviewer", publicationData), /Manual Loop delivery/);
+    await assert.rejects(f.publish(), /Manual Loop delivery/);
     const approved = await f.approve();
-    const newest = await f.prepare();
-    assert.ok(newest.version > approved.version);
-    await assert.rejects(f.call("authorizeLoopPublication", "reviewer", publicationData), /Manual Loop delivery/);
+    const newest = await f.prepare(); assert.ok(newest.version > approved.version);
+    await assert.rejects(f.publish(), /Manual Loop delivery/);
     await assert.rejects(f.call("reviewManualLoopDelivery", "other", { titleId, deliveryId: approved.id, decision: "APPROVE", reference: "buyer-reply-456", note: "Trying an older version" }), /latest/);
   } finally { await f.db.close(); }
 });
-
 test("audit failure rolls back publication and acceptance consumption atomically", async () => {
   const f = await fixture();
   try {
     await f.approve(); await f.sql`drop table bridge_audit_logs`;
-    await assert.rejects(f.call("authorizeLoopPublication", "reviewer", publicationData));
+    await assert.rejects(f.publish());
     assert.equal((await f.sql`select * from loop_titles`).length, 0);
     assert.equal((await f.sql`select * from bridge_loop_publications`).length, 0);
     assert.equal((await f.sql<{ status: string }>`select status from bridge_loop_deliveries`)[0].status, "APPROVED");
