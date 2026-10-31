@@ -245,7 +245,6 @@ function Onboarding() {
           data: {
             displayName: displayName.trim(),
             accountType,
-            organizationName: accountType === "studio" ? organizationName.trim() : undefined,
             inviteToken,
           },
         });
