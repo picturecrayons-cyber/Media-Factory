@@ -20,11 +20,10 @@ create table if not exists public.bridge_loop_deliveries (
   published_at timestamptz,
   unique (title_id, version),
   check (status not in ('DELIVERED','APPROVED','REJECTED','PUBLISHED') or
-    (delivered_by is not null and delivered_at is not null and length(handoff_reference) >= 8)),
+    (delivered_by is not null and delivered_at is not null and handoff_reference is not null and length(handoff_reference) >= 8)),
   check (status not in ('APPROVED','REJECTED','PUBLISHED') or
-    (reviewed_by is not null and reviewed_at is not null and length(review_note) >= 8
-      and length(approval_reference) >= 8 and reviewed_by <> delivered_by
-      and reviewed_by <> prepared_by))
+    (reviewed_by is not null and reviewed_at is not null and review_note is not null and approval_reference is not null
+      and length(review_note) >= 8 and length(approval_reference) >= 8 and reviewed_by <> delivered_by and reviewed_by <> prepared_by))
 );
 alter table public.bridge_loop_deliveries enable row level security;
 -- No browser policies: verified, permission-checked server functions are the only entrypoint.
