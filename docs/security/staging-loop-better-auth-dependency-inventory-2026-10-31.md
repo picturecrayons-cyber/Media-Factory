@@ -118,3 +118,36 @@ The ledger is not proof that no equivalent schema was created manually, but the 
 - No SQL DDL/DML, GRANT/REVOKE, ALTER DEFAULT PRIVILEGES, RLS/policy changes, migration, identity link, data mutation, deployment, or merge performed.
 - SQL repair draft remains **NOT READY FOR EXECUTION**.
 - Production remains **HOLD / NOT CERTIFIED / NO-GO**.
+
+
+## Follow-up source investigation — 31 Oct 2026
+
+### Additional payment/TVOD schema search
+
+A repository-wide GitHub code search on the current default branch for `loop_payment_events`, `loop_user_tvod_entitlements`, `payment_transaction_id`, and candidate CREATE TABLE definitions returned only the SQL usage in `src/lib/bridge/workflow.ts`; no migration, typed schema, or owning service contract was located. The inspected query expects these fields:
+
+- `loop_payment_events`: `razorpay_payment_id`, `payload`, `status`, `processed_at`, `received_at`.
+- `loop_user_tvod_entitlements`: `payment_transaction_id`, `title_id`.
+
+These are query-observed fields, **not** a complete authoritative schema. No table DDL is to be invented. The payment/revenue query remains an unresolved runtime dependency until the system owner supplies a versioned migration/schema or reviewed data contract.
+
+### Identity FK source decision
+
+Further source inspection of `src/lib/bridge/session.ts`, `src/lib/bridge/profiles.ts`, and `migrations/0004_bridge.sql` supports the following proposed source correction:
+
+- `bridge_loop_identity_links.bridge_user_id` should reference `public.bridge_profiles(user_id)` (text → text, ON DELETE RESTRICT).
+- `bridge_loop_identity_links.auth_user_id` should reference `auth.users(id)` (uuid → uuid, ON DELETE CASCADE).
+
+Reason: the current runtime authenticates through Supabase Auth; Bridge actors are loaded from `bridge_profiles`; identity resolution supports mapping a Supabase Auth UUID to a Bridge profile ID; and onboarding persists that mapping. The legacy `0007a_identity_links.sql` FK to Better Auth `public."user"(id)` does not match the inspected current runtime model. Do not create `public."user"` solely to satisfy that old FK. Owner approval and source migration reconciliation remain required; no identity table or row was created.
+
+### Seven-table schema-only draft
+
+Created [schema-only dependency draft](./staging-loop-schema-only-dependency-draft-2026-10-31.md), extracting all seven relation/index definitions from `0006_loop_canonical.sql` while excluding every Jananam INSERT and UPDATE/publication statement. This is a design artifact only, not an executable migration. The draft preserves source-declared constraints and explicitly flags missing user/title FK decisions for owner review.
+
+### Updated disposition
+
+- Seven-table schema extraction: drafted, not applied.
+- Payment/TVOD schema: still blocked; authoritative source not found.
+- Identity FK: recommended `bridge_profiles(user_id)` + `auth.users(id)`; owner approval pending.
+- ACL/default-ACL repair: remains blocked pending dependency decisions and independent ACL preflight.
+- Production: HOLD / NOT CERTIFIED / NO-GO.
