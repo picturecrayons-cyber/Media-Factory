@@ -218,3 +218,11 @@ This reflects the runtime mapping: a Supabase Auth principal may map to an exist
 - ACL repair: **REVIEW BLOCKED pending dependency resolution**.
 - No DDL, DML, GRANT/REVOKE, default ACL, RLS/policy, identity-link, migration, deployment, or merge performed.
 - Production: **HOLD / NOT CERTIFIED / NO-GO**.
+
+
+## Identity FK owner decision — unresolved
+
+A later cross-source review found that the earlier `bridge_profiles(user_id)` FK recommendation is **not approved** and should not be treated as selected. The existing `0007a_identity_links.sql` explicitly references `public."user"(id)`, and the Scope A PostgreSQL harness seeds both `public."user"` and `auth.users` before inserting the identity link. PR #23/current architecture docs establish Supabase Auth as the login/session authority and use a mapping to Bridge profile IDs, but they do not explicitly approve changing the FK target.
+
+The owner must decide whether `public.user` remains a deliberate legacy identity registry or whether the identity migration and tests should be revised to reference `public.bridge_profiles(user_id)`. Until then, no FK target is approved and no identity DDL/rows may be created.
+
