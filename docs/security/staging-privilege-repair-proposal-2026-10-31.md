@@ -258,3 +258,24 @@ The SQL draft is **NOT READY FOR EXECUTION** because:
 - `postgres/public` default ACL provenance remains unknown.
 
 No database changes have been performed. No migrations, grants, revokes, DDL, RLS/policy changes, identity linking, data mutation, or deployments have occurred.
+
+
+## Canonical Staging Loop + Auth dependency inventory — 31 Oct 2026
+
+A separate read-only inventory has been added: [Staging Loop + Better Auth dependency inventory](./staging-loop-better-auth-dependency-inventory-2026-10-31.md).
+
+Current catalog snapshot:
+- 32 public tables; zero public `loop_*` tables.
+- Missing all seven relations declared by `0006_loop_canonical.sql`: `bridge_loop_publications`, `loop_titles`, `loop_profiles`, `loop_watch_progress`, `loop_watchlist`, `loop_subscriptions`, `loop_entitlements`.
+- Also missing `bridge_loop_identity_links`, `public."user"`, `public."session"`, `public."account"`, and `public."verification"`.
+- `auth.users` exists; its `id` is UUID. `bridge_profiles.user_id` is TEXT.
+- Code search found additional references to `loop_payment_events` and `loop_user_tvod_entitlements` in `src/lib/bridge/workflow.ts`, with no creating migration found in the searched repository source.
+
+Auth source-contract blocker:
+- Current `authMiddleware` validates Supabase bearer tokens via `/auth/v1/user`; current onboarding writes `bridge_profiles` and calls the identity-link table.
+- Migration `0007a_identity_links.sql` instead FK-references `public."user"(id)`, a Better Auth table defined by `0001_auth.sql`. Those Better Auth tables are absent from Staging and are not used by the inspected current runtime auth path.
+- The source owner must decide whether the identity-link FK should target `bridge_profiles(user_id)` (current runtime model) or whether Better Auth is intentionally retained. Do not create `public."user"` just to satisfy the old FK.
+
+The 13-row Staging migration ledger contains only `test_...` entries and no `0001`, `0006`, `0007a`, `0008`, `0012`, or `0013` entry. The catalog independently confirms the listed relations are absent.
+
+**Disposition:** SQL remains NOT READY FOR EXECUTION. Do not replay `0006`; do not create Better Auth tables or identity links pending source-contract decision. No database changes.
