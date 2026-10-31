@@ -20,7 +20,7 @@ test("captured Bridge payment is resolved from provider_order_id, not only notes
 });
 
 test("unmatched Bridge capture remains retriable", () => {
-  assert.match(source, /if \(!localPayment\) return await failEvent\(supabase, id, "Bridge order not persisted yet"\)/);
+  assert.match(source, /if \(!localPayment\) return await failEvent\(supabase, id, "Bridge order not persisted yet", claimToken\)/);
   assert.match(source, /new Response\(message, \{ status: 503 \}\)/);
 });
 
@@ -31,4 +31,17 @@ test("entitlement and title transition happen before webhook is marked processed
   assert.ok(entitlement >= 0 && transition >= 0 && processed >= 0);
   assert.ok(entitlement < processed);
   assert.ok(transition < processed);
+});
+
+test("edge webhook atomically claims events and rejects concurrent in-flight delivery", () => {
+  assert.match(source, /status: "processing"/);
+  assert.match(source, /processing_token: claimToken/);
+  assert.match(source, /status\.in\.\(received,failed\),and\(status\.eq\.processing,processing_started_at\.lt/);
+  assert.match(source, /if \(!claimed\) return new Response\("Webhook event is already processing", \{ status: 503 \}\)/);
+});
+
+test("edge webhook completion and failure updates are guarded by the active lease token", () => {
+  assert.match(source, /\.eq\("processing_token", claimToken\)/);
+  assert.match(source, /update\(\{ status: "failed", processing_started_at: null, processing_token: null \}\)/);
+  assert.match(source, /attempts: \(existing\.attempts \?\? 0\) \+ 1/);
 });
