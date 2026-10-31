@@ -276,3 +276,12 @@ Identity source review recommends correcting the intended FK model before any id
 This matches the inspected Supabase Auth runtime and Bridge profile resolution. The current `0007a_identity_links.sql` reference to Better Auth `public."user"(id)` appears stale/inconsistent. Do not create Better Auth tables merely to satisfy that FK; repository/schema owner approval and source migration reconciliation are still required. No identity relation or rows were created.
 
 **ACL disposition:** do not review/apply ACL repair as implementation-ready yet. First resolve the two payment schema sources and obtain owner approval for the identity FK correction; then refresh complete catalog/ACL/default-ACL preflight. No GRANT/REVOKE, DDL/DML, default ACL, RLS/policy, or migration changes have been made.
+
+
+## Additional source-review correction — 31 Oct 2026
+
+Cross-repository review found Loop PR #15 and Media-Factory Issue #199 describing usage of `loop_payment_events`, `loop_user_tvod_entitlements`, and `loop_fulfill_captured_rental`. These establish historical product-flow usage only; neither the PR diff nor the searched current default branches supplied authoritative table DDL. Require the exact applied Supabase migration/schema history or owner-provided versioned SQL export before designing either table.
+
+**Identity FK decision remains unresolved.** The earlier proposed `bridge_profiles(user_id)` target is not owner-approved and must not be treated as the selected design. Historical `0007a_identity_links.sql` and its Scope A harness explicitly reference/seed Better Auth `public."user"`; PR #23 and current architecture docs establish Supabase Auth as login authority and mapping to Bridge profile IDs, but do not explicitly approve changing that FK. Owner must choose whether `public.user` remains a legacy identity registry or whether the migration and tests should be revised to target `bridge_profiles(user_id)`. No identity DDL or row changes.
+
+ACL repair remains **NOT READY FOR EXECUTION** pending authoritative payment schema and explicit identity FK owner decision, followed by fresh catalog/ACL/default-ACL preflight.
