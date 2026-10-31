@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { RedirectToSignIn } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { completeOnboarding } from "@/lib/bridge/profiles";
@@ -13,6 +13,8 @@ import { publicAccountTypeFrom } from "@/lib/auth/public-account-type";
 import { BRIDGE_LOOP_LANES } from "@/lib/bridge/loop-lanes";
 import { publicOnboardingError } from "@/lib/bridge/onboarding-errors";
 import { BrandMark } from "@/components/bridge/shell";
+import { UserButton } from "@/lib/auth/gates";
+import { useCurrentUser } from "@/lib/auth/use-current-user";
 import { Button } from "@/components/ui/button";
 
 export const Route = createFileRoute("/onboarding")({ component: Onboarding });
@@ -31,6 +33,34 @@ const MEDIA = ["SVOD", "TVOD", "AVOD", "FAST", "Broadcast", "Theatrical", "Airli
 const DESTINATIONS = ["Crayons Loop", "External OTT", "Broadcast / TV", "TVOD / EST", "FAST", "Festival / Educational", "Buyer delivery"];
 
 const SESSION_TIMEOUT_MS = 12_000;
+const DRAFT_KEY_PREFIX = "crayons-bridge:onboarding-draft:v1:";
+
+type OnboardingDraft = {
+  displayName: string; accountType: PublicAccountType; organizationName: string;
+  titleName: string; originalTitle: string; contentType: string; language: string;
+  additionalLanguages: string[]; year: string; runtimeMinutes: string; synopsis: string;
+  countryOfOrigin: string; releaseDate: string; director: string; producer: string;
+  territories: string[]; rightsLanguages: string[]; media: string[]; windowStart: string; windowEnd: string;
+  exclusivity: "EXCLUSIVE" | "NON_EXCLUSIVE"; sublicensingAllowed: boolean; promotionalRights: boolean;
+  rightsBasis: "OWNER" | "EXCLUSIVE_LICENSEE" | "AUTHORIZED_DISTRIBUTOR" | "PRODUCER_AUTHORITY";
+  authorizationAttested: boolean; screenerAccess: "BRIDGE_PRIVATE_SCREENER" | "SCREENER_PENDING"; destinations: string[];
+};
+
+function OnboardingHeader() {
+  const user = useCurrentUser();
+  return (
+    <header className="sticky top-0 z-50 border-b border-line bg-surface/95 backdrop-blur-xl">
+      <div className="mx-auto flex max-w-[1440px] items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-8">
+        <BrandMark />
+        <div className="ml-auto flex min-w-0 items-center justify-end gap-3">
+          <span className="hidden text-xs text-muted sm:inline">Creator onboarding</span>
+          <span className="max-w-[42vw] truncate text-xs text-muted sm:max-w-none">{user?.primaryEmail ?? user?.displayName ?? "Account"}</span>
+          <UserButton />
+        </div>
+      </div>
+    </header>
+  );
+}
 
 async function getBridgeSessionWithTimeout() {
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -88,6 +118,7 @@ function CheckGroup({
 function Onboarding() {
   const { user, isPending } = useCurrentUserState();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const sessionQ = useQuery({
     queryKey: ["bridge-session", user?.id],
     queryFn: getBridgeSessionWithTimeout,
@@ -124,14 +155,78 @@ function Onboarding() {
   const [rightsBasis, setRightsBasis] = useState<"OWNER" | "EXCLUSIVE_LICENSEE" | "AUTHORIZED_DISTRIBUTOR" | "PRODUCER_AUTHORITY">("OWNER");
   const [authorizationAttested, setAuthorizationAttested] = useState(false);
   const [authorizationEvidenceType, setAuthorizationEvidenceType] = useState<"" | "RIGHTS_AGREEMENT" | "CHAIN_OF_TITLE" | "AUTHORIZATION_LETTER" | "DISTRIBUTION_AGREEMENT" | "OTHER">("");
-
+  const [screenerAccess, setScreenerAccess] = useState<"BRIDGE_PRIVATE_SCREENER" | "SCREENER_PENDING">("SCREENER_PENDING");
   const [destinations, setDestinations] = useState<string[]>(["Buyer delivery"]);
 
-  const [submittedTitleId, setSubmittedTitleId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const submitInFlight = useRef(false);
   const [retrying, setRetrying] = useState(false);
+  const [draftLoadedFor, setDraftLoadedFor] = useState<string | null>(null);
+  const [draftStatus, setDraftStatus] = useState("Draft is saved only in this browser.");
+  const draftKey = user?.id ? `${DRAFT_KEY_PREFIX}${user.id}` : null;
+
+  const currentDraft: OnboardingDraft = {
+    displayName, accountType, organizationName, titleName, originalTitle, contentType, language,
+    additionalLanguages, year, runtimeMinutes, synopsis, countryOfOrigin, releaseDate, director, producer,
+    territories, rightsLanguages, media, windowStart, windowEnd, exclusivity, sublicensingAllowed,
+    promotionalRights, rightsBasis, authorizationAttested, screenerAccess, destinations,
+  };
+
+  useEffect(() => {
+    if (!draftKey || isPending) return;
+    try {
+      const raw = window.localStorage.getItem(draftKey);
+      if (raw) {
+        const d = JSON.parse(raw) as Partial<OnboardingDraft>;
+        if (typeof d.displayName === "string") setDisplayName(d.displayName);
+        if (d.accountType === "independent_creator" || d.accountType === "studio" || d.accountType === "buyer") setAccountType(d.accountType);
+        if (typeof d.organizationName === "string") setOrganizationName(d.organizationName);
+        if (typeof d.titleName === "string") setTitleName(d.titleName);
+        if (typeof d.originalTitle === "string") setOriginalTitle(d.originalTitle);
+        if (typeof d.contentType === "string") setContentType(d.contentType);
+        if (typeof d.language === "string") setLanguage(d.language);
+        if (Array.isArray(d.additionalLanguages)) setAdditionalLanguages(d.additionalLanguages.filter((x): x is string => typeof x === "string"));
+        if (typeof d.year === "string") setYear(d.year);
+        if (typeof d.runtimeMinutes === "string") setRuntimeMinutes(d.runtimeMinutes);
+        if (typeof d.synopsis === "string") setSynopsis(d.synopsis);
+        if (typeof d.countryOfOrigin === "string") setCountryOfOrigin(d.countryOfOrigin);
+        if (typeof d.releaseDate === "string") setReleaseDate(d.releaseDate);
+        if (typeof d.director === "string") setDirector(d.director);
+        if (typeof d.producer === "string") setProducer(d.producer);
+        if (Array.isArray(d.territories)) setTerritories(d.territories.filter((x): x is string => typeof x === "string"));
+        if (Array.isArray(d.rightsLanguages)) setRightsLanguages(d.rightsLanguages.filter((x): x is string => typeof x === "string"));
+        if (Array.isArray(d.media)) setMedia(d.media.filter((x): x is string => typeof x === "string"));
+        if (typeof d.windowStart === "string") setWindowStart(d.windowStart);
+        if (typeof d.windowEnd === "string") setWindowEnd(d.windowEnd);
+        if (d.exclusivity === "EXCLUSIVE" || d.exclusivity === "NON_EXCLUSIVE") setExclusivity(d.exclusivity);
+        if (typeof d.sublicensingAllowed === "boolean") setSublicensingAllowed(d.sublicensingAllowed);
+        if (typeof d.promotionalRights === "boolean") setPromotionalRights(d.promotionalRights);
+        if (d.rightsBasis === "OWNER" || d.rightsBasis === "EXCLUSIVE_LICENSEE" || d.rightsBasis === "AUTHORIZED_DISTRIBUTOR" || d.rightsBasis === "PRODUCER_AUTHORITY") setRightsBasis(d.rightsBasis);
+        // Legal rights attestation is never restored from local storage. Require a fresh, explicit affirmation for every submission.
+        setAuthorizationAttested(false);
+        if (d.screenerAccess === "BRIDGE_PRIVATE_SCREENER" || d.screenerAccess === "SCREENER_PENDING") setScreenerAccess(d.screenerAccess);
+        if (Array.isArray(d.destinations)) setDestinations(d.destinations.filter((x): x is string => typeof x === "string"));
+        setDraftStatus("Saved draft restored from this browser.");
+      }
+    } catch {
+      setDraftStatus("Could not restore the local draft. You can continue or save a new draft.");
+    } finally {
+      setDraftLoadedFor(draftKey);
+    }
+  }, [draftKey, isPending]);
+
+  useEffect(() => {
+    if (!draftKey || draftLoadedFor !== draftKey) return;
+    try {
+      window.localStorage.setItem(draftKey, JSON.stringify(currentDraft));
+      setDraftStatus("Draft saved in this browser.");
+    } catch {
+      setDraftStatus("Draft could not be saved in this browser. Check available storage.");
+    }
+  // currentDraft is an intentional snapshot of every intake field.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draftKey, draftLoadedFor, displayName, accountType, organizationName, titleName, originalTitle, contentType, language, additionalLanguages, year, runtimeMinutes, synopsis, countryOfOrigin, releaseDate, director, producer, territories, rightsLanguages, media, windowStart, windowEnd, exclusivity, sublicensingAllowed, promotionalRights, rightsBasis, authorizationAttested, screenerAccess, destinations]);
 
   // Preserve the role chosen during signup instead of silently defaulting
   // every new account to Creator when onboarding opens.
@@ -143,43 +238,16 @@ function Onboarding() {
     if (signupAccountType) setAccountType(signupAccountType);
   }, [signupAccountType]);
 
-  const home = sessionQ.data?.profile ? sessionQ.data.home : null;
+  const home = sessionQ.data?.home && sessionQ.data.home !== "/onboarding" ? sessionQ.data.home : null;
 
   useEffect(() => {
     if (home) goHome(home, navigate);
   }, [home, navigate]);
 
   if (isPending || (user && sessionQ.isPending) || home) {
-    return <main className="grid min-h-screen place-items-center bg-bg p-6"><p className="text-sm text-muted">{home ? "Opening workspace…" : "Loading Bridge…"}</p></main>;
+    return <div className="min-h-screen bg-bg"><OnboardingHeader /><main className="grid min-h-[60vh] place-items-center p-6"><p className="text-sm text-muted">{home ? "Opening workspace…" : "Loading Bridge…"}</p></main></div>;
   }
   if (!user) return <RedirectToSignIn />;
-
-  if (submittedTitleId) {
-    return (
-      <main className="grid min-h-screen place-items-center bg-bg p-6">
-        <div className="w-full max-w-lg space-y-5 rounded-2xl border border-line bg-surface p-7">
-          <BrandMark />
-          <h1 className="font-display text-2xl font-semibold">Submission received</h1>
-          <p className="text-sm leading-relaxed text-muted">
-            Your title submission has been recorded as DRAFT. It is not approved, licensed, or visible to buyers. Licensing Ready is not granted by this form.
-            Bridge must verify the master, screener, authorization evidence, legal clearance, QC and rights package before buyers can see it.
-          </p>
-          <div className="rounded-xl border border-line bg-elevated p-4 text-sm">
-            <p className="font-semibold text-fg">Next required evidence</p>
-            <ul className="mt-2 space-y-1.5 text-muted">
-              <li>• Upload authorization / chain-of-title evidence</li>
-              <li>• Upload a private Bridge screener</li>
-              <li>• Upload the approved master and artwork</li>
-              <li>• Complete QC and Legal review</li>
-            </ul>
-          </div>
-          <Button className="w-full" onClick={() => void navigate({ to: "/title/$id", params: { id: submittedTitleId } })}>
-            Open title workspace
-          </Button>
-        </div>
-      </main>
-    );
-  }
 
   if (sessionQ.isError) {
     async function retrySession() {
@@ -199,7 +267,7 @@ function Onboarding() {
       }
     }
     return (
-      <main className="grid min-h-screen place-items-center bg-bg p-6">
+      <div className="min-h-screen bg-bg"><OnboardingHeader /><main className="grid min-h-[60vh] place-items-center p-6">
         <div className="w-full max-w-sm space-y-4 rounded-2xl border border-line bg-surface p-6">
           <BrandMark />
           <h1 className="font-display text-2xl">Could not load Bridge</h1>
@@ -207,7 +275,7 @@ function Onboarding() {
           {error ? <p role="alert" className="text-sm text-accent">{error}</p> : null}
           <Button type="button" disabled={retrying} className="w-full" onClick={() => void retrySession()}>{retrying ? "Checking…" : "Retry"}</Button>
         </div>
-      </main>
+      </main></div>
     );
   }
 
@@ -230,16 +298,16 @@ function Onboarding() {
       let inviteToken: string | undefined;
       try { inviteToken = sessionStorage.getItem("bridge-invite") ?? undefined; } catch { /* ignore */ }
 
-      await completeOnboarding({
-        data: {
-          displayName: displayName.trim(),
-          accountType,
-          organizationName: accountType === "studio" ? organizationName.trim() : undefined,
-          inviteToken,
-        },
-      });
-
       if (accountType === "buyer") {
+        await completeOnboarding({
+          data: {
+            displayName: displayName.trim(),
+            accountType,
+            organizationName: undefined,
+            inviteToken,
+          },
+        });
+        try { sessionStorage.removeItem("bridge-invite"); } catch { /* ignore */ }
         void navigate({ to: "/buyer", replace: true });
         return;
       }
@@ -254,7 +322,19 @@ function Onboarding() {
       if (!authorizationEvidenceType) throw new Error("Select the authorization evidence you will provide");
       if (new Date(windowEnd) <= new Date(windowStart)) throw new Error("Rights window end must be after start");
 
-      const result = await createTitle({
+      // Create the server-backed profile only after intake validation passes.
+      // If title creation fails, the server-side intake-state check keeps the
+      // creator on /onboarding so they can retry without being stranded.
+      await completeOnboarding({
+        data: {
+          displayName: displayName.trim(),
+          accountType,
+          organizationName: accountType === "studio" ? organizationName.trim() : undefined,
+          inviteToken,
+        },
+      });
+
+      await createTitle({
         data: {
           name: titleName.trim(),
           originalTitle: originalTitle.trim() || undefined,
@@ -280,13 +360,16 @@ function Onboarding() {
           authorizationAttested,
           authorizationEvidenceType,
           publicSubmission: true,
-          screenerAccess: "SCREENER_PENDING",
+          screenerAccess,
           intendedDestinations: destinations,
         },
       });
 
-      setSubmittedTitleId(result.title.id);
       try { sessionStorage.removeItem("bridge-invite"); } catch { /* ignore */ }
+      if (draftKey) { try { window.localStorage.removeItem(draftKey); } catch { /* ignore */ } }
+      void queryClient.invalidateQueries({ queryKey: ["bridge-session"] });
+      void queryClient.invalidateQueries({ queryKey: ["bridge-titles"] });
+      void navigate({ to: "/studio", replace: true });
     } catch (err) {
       setError(publicOnboardingError(err));
     } finally {
@@ -296,7 +379,9 @@ function Onboarding() {
   }
 
   return (
-    <main className="min-h-screen bg-bg p-5 sm:p-8">
+    <div className="min-h-screen bg-bg">
+      <OnboardingHeader />
+      <main className="p-5 sm:p-8">
       <form onSubmit={(e) => void onSubmit(e)} className="mx-auto max-w-4xl space-y-6 rounded-2xl border border-line bg-surface p-6 sm:p-8">
         <div className="flex items-start justify-between gap-5">
           <div>
@@ -451,10 +536,21 @@ function Onboarding() {
 
         {error ? <div role="alert" className="rounded-xl border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-600 dark:text-red-400">{error}</div> : null}
         <div className="flex flex-col gap-3 border-t border-line pt-5 sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-xs leading-relaxed text-muted">© 2026 StreamVista OPC Pvt Ltd. Crayons Bridge is the media supply chain, rights and licensing control plane.</p>
-          <Button type="submit" disabled={busy} className="h-11 rounded-full px-6 font-semibold">{busy ? "Submitting…" : accountType === "buyer" ? "Enter Bridge" : "Submit title for review"}</Button>
+          <div className="space-y-2">
+            <p className="text-xs leading-relaxed text-muted">© 2026 StreamVista OPC Pvt Ltd. Crayons Bridge is the media supply chain, rights and licensing control plane.</p>
+            <p role="status" aria-live="polite" className="text-xs text-muted">{draftStatus} This draft stays on this device and is not submitted to Bridge.</p>
+            <div className="flex flex-wrap items-center gap-3 text-sm">
+              <button type="button" onClick={() => { if (!draftKey) return; try { window.localStorage.setItem(draftKey, JSON.stringify(currentDraft)); setDraftStatus("Draft saved in this browser."); } catch { setDraftStatus("Draft could not be saved in this browser. Check available storage."); } }} className="font-semibold underline underline-offset-4">Save draft</button>
+              <Link to="/" className="font-semibold underline underline-offset-4">Exit onboarding</Link>
+              <button type="button" onClick={() => { if (!draftKey) return; try { window.localStorage.removeItem(draftKey); setDraftStatus("Saved draft removed from this browser."); } catch { setDraftStatus("Could not remove the local draft."); } }} className="text-muted underline underline-offset-4">Delete local draft</button>
+            </div>
+          </div>
+          <div className="flex flex-col gap-3 sm:items-end">
+            <Button type="submit" disabled={busy} className="h-11 rounded-full px-6 font-semibold">{busy ? "Submitting…" : accountType === "buyer" ? "Enter Bridge" : "Submit title for review"}</Button>
+          </div>
         </div>
       </form>
-    </main>
+      </main>
+    </div>
   );
 }

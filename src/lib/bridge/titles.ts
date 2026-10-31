@@ -210,6 +210,9 @@ export const createTitle = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
+    if (!actor.internalRole && actor.accountType === "studio" && !actor.organizationId) {
+      throw new Error("An active Studio organization membership is required");
+    }
     assertPermission(actor, actor.internalRole ? "title.ingest_internal" : "title.create");
     const id = randomBytes(16).toString("hex");
     const slug = slugify(data.name, id);
@@ -334,6 +337,9 @@ export const listTitles = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
+    if (!actor.internalRole && actor.accountType === "studio" && !actor.organizationId) {
+      throw new Error("An active Studio organization membership is required");
+    }
     const sql = await getSql();
     let rows: TitleRow[] = [];
     if (actor.internalRole && hasPermission(actor, "title.read_catalog")) {

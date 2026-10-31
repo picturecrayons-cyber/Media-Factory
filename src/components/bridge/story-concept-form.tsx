@@ -1,5 +1,5 @@
 import { useNavigate } from "@tanstack/react-router";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -20,6 +20,8 @@ const GENRES = [
   "Other",
 ];
 
+type EstimatedBudgetRange = "Under 25 Lakhs" | "25–50 Lakhs" | "50 Lakhs – 1 Cr" | "1–3 Cr" | "3–10 Cr" | "10+ Cr";
+
 const PLATFORMS = [
   "OTT",
   "Theatrical",
@@ -31,13 +33,14 @@ const PLATFORMS = [
 
 export function StoryConceptForm() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [titleName, setTitleName] = useState("");
   const [logline, setLogline] = useState("");
   const [synopsis, setSynopsis] = useState("");
   const [language, setLanguage] = useState("Malayalam");
   const [genre, setGenre] = useState<string[]>([]);
   const [targetPlatforms, setTargetPlatforms] = useState<string[]>([]);
-  const [estimatedBudgetRange, setEstimatedBudgetRange] = useState("");
+  const [estimatedBudgetRange, setEstimatedBudgetRange] = useState<EstimatedBudgetRange | "">("");
   const [treatmentUrl, setTreatmentUrl] = useState("");
   const [screenplayUrl, setScreenplayUrl] = useState("");
 
@@ -56,9 +59,11 @@ export function StoryConceptForm() {
           screenplayUrl: screenplayUrl || undefined,
         },
       }),
-    onSuccess: (res) => {
+    onSuccess: () => {
       toast("Story / Concept submitted for review");
-      void navigate({ to: "/title/$id", params: { id: res.titleId } });
+      void queryClient.invalidateQueries({ queryKey: ["my-story-concepts"] });
+      void queryClient.invalidateQueries({ queryKey: ["bridge-titles"] });
+      void navigate({ to: "/studio", replace: true });
     },
     onError: (err) =>
       toast(err instanceof Error ? err.message : "Could not submit concept"),
@@ -135,12 +140,19 @@ export function StoryConceptForm() {
 
       <label className="text-sm">
         Estimated budget range
-        <input
+        <select
           value={estimatedBudgetRange}
-          onChange={(e) => setEstimatedBudgetRange(e.target.value)}
+          onChange={(e) => setEstimatedBudgetRange(e.target.value as EstimatedBudgetRange | "")}
           className="mt-1 h-11 w-full rounded-lg border border-line-strong bg-elevated px-3"
-          placeholder="e.g. under 1 Cr / 1–3 Cr / 3–10 Cr"
-        />
+        >
+          <option value="">Select a budget range</option>
+          <option value="Under 25 Lakhs">Under 25 Lakhs</option>
+          <option value="25–50 Lakhs">25–50 Lakhs</option>
+          <option value="50 Lakhs – 1 Cr">50 Lakhs – 1 Cr</option>
+          <option value="1–3 Cr">1–3 Cr</option>
+          <option value="3–10 Cr">3–10 Cr</option>
+          <option value="10+ Cr">10+ Cr</option>
+        </select>
       </label>
 
       <div className="sm:col-span-2">
