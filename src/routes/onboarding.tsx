@@ -15,7 +15,10 @@ import { publicOnboardingError } from "@/lib/bridge/onboarding-errors";
 import { BrandMark } from "@/components/bridge/shell";
 import { Button } from "@/components/ui/button";
 
-export const Route = createFileRoute("/onboarding")({ component: Onboarding });
+export const Route = createFileRoute("/onboarding")({
+  head: () => ({ meta: [{ name: "robots", content: "noindex, nofollow" }] }),
+  component: Onboarding,
+});
 
 type PublicAccountType = "independent_creator" | "studio" | "buyer";
 

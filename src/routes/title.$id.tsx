@@ -25,7 +25,10 @@ import {
 import { asciiUploadName } from "@/lib/bridge/latin1";
 import { AssetPosterSlot, AssetPreviewGallery } from "@/components/bridge/asset-preview-gallery";
 
-export const Route = createFileRoute("/title/$id")({ component: TitlePage });
+export const Route = createFileRoute("/title/$id")({
+  head: () => ({ meta: [{ name: "robots", content: "noindex, nofollow" }] }),
+  component: TitlePage,
+});
 
 const WORKSPACE_TABS = ["Overview", "Files"] as const;
 type WorkspaceTab = (typeof WORKSPACE_TABS)[number];
