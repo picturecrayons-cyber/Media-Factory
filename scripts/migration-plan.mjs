@@ -49,6 +49,7 @@ export function pendingMigrations(paths, applied) {
  * Historical duplicate prefixes are grandfathered by their exact filenames.
  * Do not add new files to these groups; use the next unused numeric prefix.
  */
+/** @type {Record<string, readonly string[]>} */
 export const LEGACY_DUPLICATE_MIGRATION_GROUPS = Object.freeze({
   "0018": Object.freeze([
     "0018_bridge_rights_ready_submission.sql",
