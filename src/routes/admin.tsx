@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { listTitles, listAuditLogs, importNamedLegacyDrafts } from "@/lib/bridge/titles";
 import { listEnquiries } from "@/lib/bridge/leads";
 import { CreateTitleForm } from "@/components/bridge/title-desk";
+import { ServiceQueue } from "@/components/bridge/service-requests";
 import { listLoopPublicationReadiness } from "@/lib/bridge/loop-publication";
 import { listAdminProfiles } from "@/lib/bridge/profiles";
 import { legacyCatalog } from "@/lib/bridge/legacy-catalog";
@@ -129,6 +130,8 @@ function AdminBody({ actor }: { actor: any }) {
             ) : null}
           </div>
         </section>
+
+        <ServiceQueue />
 
         <section className="rounded-2xl border border-line bg-surface p-4 sm:p-5">
           <div className="flex flex-wrap items-end justify-between gap-3">
