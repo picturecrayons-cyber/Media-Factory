@@ -252,8 +252,6 @@ function Home() {
                   Loop is the consumer streaming experience.
                 </p>
               </div>
-
-
             </div>
           </div>
         </section>
@@ -304,6 +302,9 @@ function Home() {
             </Link>
             <Link to="/contact" className="hover:text-fg transition-colors">
               Contact
+            </Link>
+            <Link to="/media-services" className="hover:text-fg transition-colors">
+              Media Services
             </Link>
           </nav>
         </div>
