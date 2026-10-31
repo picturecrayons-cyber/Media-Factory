@@ -72,7 +72,7 @@ function Buyer() {
 
 function BuyerBody() {
   const qc = useQueryClient();
-  const [tab, setTab] = useState<"discover" | "watchlist" | "licenses">("discover");
+  const [tab, setTab] = useState<"discover" | "licenses">("discover");
   const [query, setQuery] = useState("");
   const [language, setLanguage] = useState("All languages");
   const titlesQ = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles() });
@@ -189,22 +189,16 @@ function BuyerBody() {
               {languages.map((item) => <option key={item} value={item}>{item}</option>)}
             </select>
             <div className="flex rounded-full bg-subtle p-1">
-              {(["discover", "watchlist", "licenses"] as const).map((id) => (
+              {(["discover", "licenses"] as const).map((id) => (
                 <button key={id} type="button" onClick={() => setTab(id)} aria-pressed={tab === id} className={`rounded-full px-3 py-2 text-xs font-medium capitalize transition ${tab === id ? "bg-background text-foreground shadow-sm" : "text-muted hover:text-foreground"}`}>
-                  {id === "watchlist" ? "Shortlist" : id}
+                  {id}
                 </button>
               ))}
             </div>
           </div>
         </div>
 
-        {tab === "watchlist" ? (
-          <div className="rounded-2xl border border-dashed border-line px-6 py-12 text-center">
-            <p className="text-base font-semibold">Build your shortlist</p>
-            <p className="mx-auto mt-2 max-w-md text-sm text-muted">Shortlisting is not enabled in this release. Your catalogue and captured licenses remain available above.</p>
-            <button type="button" onClick={() => setTab("discover")} className="mt-4 text-sm font-semibold underline">Back to discovery</button>
-          </div>
-        ) : shown.length ? (
+        {shown.length ? (
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             {shown.map((title, index) => (
               <BuyerTitleCard key={title.id} title={title} entitled={entitled.has(title.id)} pending={order.isPending} onLicense={() => order.mutate(title.id)} index={index} />
