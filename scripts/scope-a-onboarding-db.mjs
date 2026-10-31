@@ -31,14 +31,8 @@ try {
   const userId = randomUUID();
   const email = "scope-a@example.test";
 
-  // Seed the disposable Better Auth and Bridge user identities required by the
-  // identity-link foreign keys before exercising the transactional onboarding writes.
-  await client.query(
-    `insert into "user" ("id", "name", "email", "emailVerified")
-     values ($1, 'Scope A', $2, true)
-     on conflict ("id") do nothing`,
-    [userId, email],
-  );
+  // Seed only the canonical Supabase Auth identity. The Bridge-side identity
+  // link must resolve through bridge_profiles(user_id), not legacy public."user".
   await client.query(
     `insert into auth.users (id) values ($1::uuid) on conflict (id) do nothing`,
     [userId],
@@ -54,7 +48,7 @@ try {
   await client.query(
     `insert into bridge_loop_identity_links
       (bridge_user_id, auth_user_id, verification_method, verified_at, verified_by)
-     values ($1, $2::uuid, 'supabase_auth_onboarding', now(), $1)`,
+     values ($1, $2::uuid, 'verified_email_reauthentication', now(), $1)`,
     [userId, userId],
   );
   await client.query("commit");
