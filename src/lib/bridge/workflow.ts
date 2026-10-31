@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { isCurrentArtworkAsset } from "./title-workflow-readiness";
 import { z } from "zod";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql, type Sql } from "@/lib/db";
@@ -90,7 +91,9 @@ export async function reviewWorkflow(tx: Sql, actor: Actor, data: z.infer<typeof
     if (
       data.decision === "APPROVE" &&
       (!assets.some((a) => a.kind === "master" && a.s3_key === title.master_key) ||
-        !assets.some((a) => a.kind === "poster" && a.s3_key === title.poster_key))
+        !assets.some(
+          (a) => isCurrentArtworkAsset(a.kind, a.s3_key, title.poster_key),
+        ))
     )
       throw new Error("Verified current master and artwork are required");
     await tx`insert into bridge_qc_cases(title_id,status,reviewer_findings,reviewed_by,reviewed_at)
@@ -157,6 +160,8 @@ export const getTitleWorkflow = createServerFn({ method: "GET" })
       status: string;
       territories: string[];
       languages: string[];
+      media: string[];
+      created_by: string;
       window_start: string | Date;
       window_end: string | Date;
       exclusivity: string;
@@ -165,7 +170,7 @@ export const getTitleWorkflow = createServerFn({ method: "GET" })
         ownershipReference?: string;
         commercialTerms?: { rightsOwnerSharePct: number; distributorSharePct: number };
       }>;
-    }>`select id,status,territories,languages,window_start,window_end,exclusivity,evidence from bridge_rights_grants where title_id=${data.titleId} order by created_at desc`;
+    }>`select id,status,territories,languages,media,window_start,window_end,exclusivity,evidence,created_by from bridge_rights_grants where title_id=${data.titleId} order by created_at desc`;
     const qc = await sql<{
       status: string;
       reviewed_at: string | Date;
@@ -178,7 +183,53 @@ export const getTitleWorkflow = createServerFn({ method: "GET" })
     const legal = await sql<{
       status: string;
       reviewed_at: string | Date;
-    }>`select status,reviewed_at from bridge_legal_cases where title_id=${data.titleId} order by created_at desc limit 1`;
+      evidence: Array<{ grantId?: string; note?: string }>;
+    }>`select status,reviewed_at,evidence from bridge_legal_cases where title_id=${data.titleId} order by created_at desc limit 1`;
+    const assetRows = await sql<{ kind: string; s3_key: string; byte_size: number | null }>`
+      select kind, s3_key, byte_size
+      from bridge_assets
+      where title_id = ${title.id} and coalesce(byte_size, 0) > 0
+    `;
+    const verifiedMaster = assetRows.some(
+      (asset) => asset.kind === "master" && asset.s3_key === title.masterKey,
+    );
+    const verifiedArtwork = assetRows.some((asset) =>
+      isCurrentArtworkAsset(asset.kind, asset.s3_key, title.posterKey),
+    );
+    const currentQcPassed = Boolean(
+      qc[0]?.status === "PASSED" &&
+      qc[0].reviewer_findings.some(
+        (finding) => finding.masterKey === title.masterKey && finding.posterKey === title.posterKey,
+      ),
+    );
+    const packageRows = await sql<{ ready: boolean }>`
+      select exists (
+        select 1 from bridge_destination_packages p
+        where p.title_id = ${title.id} and p.readiness_state in ('HOLD', 'READY')
+      ) as ready
+    `;
+    const activeGrant = grants.find(
+      (grant) =>
+        grant.status === "VALID" &&
+        grant.territories.length > 0 &&
+        grant.languages.length > 0 &&
+        grant.media.length > 0 &&
+        new Date(grant.window_start).getTime() <= Date.now() &&
+        new Date(grant.window_end).getTime() > Date.now(),
+    );
+    const rightsEvidenceReady = Boolean(
+      activeGrant?.evidence?.some(
+        (entry) =>
+          Boolean(entry.agreementReference?.trim()) &&
+          Boolean(entry.ownershipReference?.trim()),
+      ),
+    );
+    const legalEvidenceReady = Boolean(
+      legal[0]?.status === "APPROVED" &&
+      legal[0]?.evidence?.some(
+        (entry) => Boolean(entry.grantId) && (entry.note?.trim().length ?? 0) >= 8,
+      ),
+    );
     return {
       grants: grants.map((g) => ({
         ...g,
@@ -186,6 +237,20 @@ export const getTitleWorkflow = createServerFn({ method: "GET" })
         window_end: g.window_end ? new Date(g.window_end).toISOString() : "",
       })),
       qc: qc[0] ? { ...qc[0], reviewed_at: new Date(qc[0].reviewed_at).toISOString() } : null,
+      readiness: {
+        metadataComplete: Boolean(
+          title.name.trim() && title.synopsis.trim() && title.language.trim() && title.contentType.trim(),
+        ),
+        verifiedMaster,
+        verifiedArtwork,
+        privateScreener: assetRows.some((asset) => asset.kind === "screener"),
+        qcPassed: currentQcPassed,
+        rightsGrantValid: Boolean(activeGrant),
+        rightsEvidenceReady,
+        legalApproved: legal[0]?.status === "APPROVED",
+        legalEvidenceReady,
+        destinationPackageReady: Boolean(packageRows[0]?.ready),
+      },
       legal: legal[0]
         ? { ...legal[0], reviewed_at: new Date(legal[0].reviewed_at).toISOString() }
         : null,

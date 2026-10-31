@@ -8,6 +8,7 @@ import { Pool } from "pg";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import * as policy from "./workflow-policy.ts";
+import * as readiness from "./title-workflow-readiness.ts";
 import * as rbac from "./rbac.ts";
 import type { Sql } from "../db";
 
@@ -121,6 +122,7 @@ async function fixture() {
       "./titles": {},
     "./env": {bridgeEnv:{}},
       "./workflow-policy": policy,
+      "./title-workflow-readiness": readiness,
     };
     const exports: Record<string, (...args: unknown[]) => Promise<unknown>> = {};
     const source = readFileSync(new URL("./workflow.ts", import.meta.url), "utf8");

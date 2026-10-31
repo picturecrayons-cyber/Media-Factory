@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { isCurrentArtworkAsset } from "./title-workflow-readiness";
 import { z } from "zod";
 import { randomBytes } from "node:crypto";
 import { authMiddleware } from "@/lib/auth/middleware";
@@ -532,7 +533,10 @@ async function assertLicensingReady(titleId: string) {
       ) as master_ok,
       exists (
         select 1 from bridge_assets a
-        where a.title_id = t.id and a.kind = 'poster' and coalesce(a.byte_size, 0) > 0
+        where a.title_id = t.id
+          and a.kind in ('poster', 'poster_vertical', 'poster_horizontal')
+          and a.s3_key = t.poster_key
+          and coalesce(a.byte_size, 0) > 0
       ) as poster_ok,
       exists (
         select 1 from bridge_destination_packages p
@@ -592,7 +596,7 @@ export const advanceTitle = createServerFn({ method: "POST" })
       }>`select kind,s3_key from bridge_assets where title_id=${title.id} and byte_size>0`;
       if (
         !verified.some((a) => a.kind === "master" && a.s3_key === title.masterKey) ||
-        !verified.some((a) => a.kind === "poster" && a.s3_key === title.posterKey)
+        !verified.some((a) => isCurrentArtworkAsset(a.kind, a.s3_key, title.posterKey))
       )
         throw new Error("Verified master and artwork required before QC");
     }
