@@ -115,10 +115,13 @@ function DashboardBody() {
                 ? "—"
                 : titles.filter((title) => loopStageType(title.contentType) === lane.loopType).length}
             </p>
-            <p className="text-xs text-muted">Titles in this content lane. Buyer visibility still depends on server-side publication gates.</p>
           </article>
         ))}
       </section>
+      <details className="text-xs text-muted">
+        <summary className="w-fit cursor-pointer">About title lanes</summary>
+        <p className="mt-1">Buyer visibility requires approval, publication authorization, and an active delivery window.</p>
+      </details>
 
       <section aria-label="Revenue metrics" className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Stat label="Licensed value" value={moneyValue} />
@@ -130,7 +133,10 @@ function DashboardBody() {
       <section aria-labelledby="admin-modules-title" className="space-y-3">
         <div>
           <h3 id="admin-modules-title" className="font-display text-2xl font-semibold">Admin modules</h3>
-          <p className="mt-1 text-sm text-muted">Open the existing role-gated workspaces from one place. A link does not imply a workflow has passed its release or authorization gates.</p>
+          <details className="text-sm text-muted">
+            <summary className="w-fit cursor-pointer">About admin modules</summary>
+            <p className="mt-1">Each workspace has its own access and approval requirements.</p>
+          </details>
         </div>
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {ADMIN_MODULES.map((module) => (
@@ -149,7 +155,6 @@ function DashboardBody() {
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-4 py-3">
           <div>
             <h3 id="title-queue-title" className="font-semibold">Recent title records</h3>
-            <p className="text-xs text-muted">Canonical records only; no synthetic or fallback counts.</p>
           </div>
           <Link to="/workspace" className="text-sm font-semibold text-accent hover:underline">View all titles →</Link>
         </div>
