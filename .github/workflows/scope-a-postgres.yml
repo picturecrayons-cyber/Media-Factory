@@ -8,14 +8,16 @@ on:
       - "migrations/**"
       - "src/lib/bridge/**"
       - "src/lib/db.ts"
+      - "scripts/scope-a-onboarding-db.mjs"
       - "package.json"
       - "package-lock.json"
   workflow_dispatch:
 
 jobs:
   scope-a:
+    name: Scope A — disposable PostgreSQL 17
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
 
     services:
       postgres:
@@ -32,12 +34,15 @@ jobs:
           --health-timeout 5s
           --health-retries 20
 
+    # Fixed loopback endpoint to a job-local service container. No Supabase,
+    # Staging, Production, Vercel, or repository database secret is consumed.
     env:
       POSTGRES_URL: postgresql://postgres:postgres@127.0.0.1:5432/bridge_scope_a
       POSTGRES_URL_NON_POOLING: postgresql://postgres:postgres@127.0.0.1:5432/bridge_scope_a
       DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/bridge_scope_a
       PGSSLMODE: disable
       NODE_ENV: test
+      SCOPE_A_DISPOSABLE_DATABASE: "1"
 
     steps:
       - uses: actions/checkout@v4
@@ -49,7 +54,21 @@ jobs:
 
       - run: npm ci
 
-      - name: Bootstrap Supabase-compatible roles
+      - name: Assert disposable database target
+        run: |
+          node --input-type=module <<'NODE'
+          const url = new URL(process.env.DATABASE_URL);
+          if (
+            !["127.0.0.1", "localhost", "::1"].includes(url.hostname) ||
+            url.pathname !== "/bridge_scope_a" ||
+            process.env.SCOPE_A_DISPOSABLE_DATABASE !== "1"
+          ) {
+            throw new Error("Refusing to run Scope A outside the job-local disposable database");
+          }
+          console.log("Target confirmed: job-local PostgreSQL / bridge_scope_a");
+          NODE
+
+      - name: Bootstrap Supabase-compatible Auth roles for isolated tests
         run: |
           PGPASSWORD=postgres psql -h 127.0.0.1 -U postgres -d bridge_scope_a -v ON_ERROR_STOP=1 <<'SQL'
           DO $$
@@ -70,11 +89,11 @@ jobs:
           AS $fn$ SELECT NULL::uuid $fn$;
           SQL
 
-      - name: Replay repository migrations into disposable PostgreSQL
+      - name: Replay repository migrations into disposable PostgreSQL only
         run: npm run db:migrate
 
       - name: Run onboarding static regression tests
         run: node --experimental-strip-types --test src/lib/bridge/onboarding-atomicity.test.ts
 
-      - name: Run real onboarding DB assertions
+      - name: Run Scope A database assertions and rollback
         run: node scripts/scope-a-onboarding-db.mjs

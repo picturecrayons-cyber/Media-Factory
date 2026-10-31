@@ -1,5 +1,4 @@
 import pg from "pg";
-import { randomUUID } from "node:crypto";
 
 const { Client } = pg;
 const connectionString =
@@ -7,125 +6,220 @@ const connectionString =
   process.env.POSTGRES_URL ||
   process.env.DATABASE_URL;
 
-if (!connectionString) {
-  throw new Error("Disposable PostgreSQL connection string is required");
+function requireDisposableLocalDatabase(value) {
+  if (process.env.SCOPE_A_DISPOSABLE_DATABASE !== "1") {
+    throw new Error("Refusing to run: SCOPE_A_DISPOSABLE_DATABASE=1 is required");
+  }
+  if (!value) throw new Error("Disposable PostgreSQL connection string is required");
+  const url = new URL(value);
+  const localHosts = new Set(["127.0.0.1", "localhost", "::1"]);
+  const database = decodeURIComponent(url.pathname.replace(/^\//, ""));
+  if (!localHosts.has(url.hostname) || database !== "bridge_scope_a") {
+    throw new Error(
+      "Refusing to run: Scope A accepts only the local bridge_scope_a disposable database",
+    );
+  }
 }
+
+requireDisposableLocalDatabase(connectionString);
 
 const client = new Client({ connectionString });
 await client.connect();
 
 async function scalar(sql, params = []) {
-  const res = await client.query(sql, params);
-  return Number(res.rows[0]?.value ?? 0);
+  const result = await client.query(sql, params);
+  return Number(result.rows[0]?.value ?? 0);
 }
 
-async function assert(condition, message) {
+function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
+const requiredMigrations = [
+  "0001_auth.sql",
+  "0004_bridge.sql",
+  "0007a_identity_links.sql",
+];
+
+const trackedTables = [
+  "auth.users",
+  'public."user"',
+  "public.bridge_profiles",
+  "public.bridge_loop_identity_links",
+  "public.bridge_invites",
+];
+
+const counts = async () => ({
+  authUsers: await scalar("select count(*)::int as value from auth.users"),
+  legacyUsers: await scalar('select count(*)::int as value from public."user"'),
+  profiles: await scalar("select count(*)::int as value from public.bridge_profiles"),
+  identityLinks: await scalar(
+    "select count(*)::int as value from public.bridge_loop_identity_links",
+  ),
+  invites: await scalar("select count(*)::int as value from public.bridge_invites"),
+});
+
+let transactionOpen = false;
+let baseline;
+let inTransaction;
+let finalCounts;
+let errorOutput;
+
 try {
-  const beforeProfiles = await scalar("select count(*)::int as value from bridge_profiles");
-  const beforeLinks = await scalar("select count(*)::int as value from bridge_loop_identity_links");
-  const beforeInvites = await scalar("select count(*)::int as value from bridge_invites");
-
-  const userId = randomUUID();
-  const email = "scope-a@example.test";
-
-  // Seed only the canonical Supabase Auth identity. The Bridge-side identity
-  // link must resolve through bridge_profiles(user_id), not legacy public."user".
-  await client.query(
-    `insert into auth.users (id) values ($1::uuid) on conflict (id) do nothing`,
-    [userId],
+  // Prove that the workflow replayed the actual migration files. A log label
+  // alone is not accepted as evidence of migration replay.
+  const migrationRows = await client.query(
+    "select name from public._migrations where name = any($1::text[])",
+    [requiredMigrations],
   );
+  const applied = new Set(migrationRows.rows.map((row) => row.name));
+  const missing = requiredMigrations.filter((name) => !applied.has(name));
+  assert(missing.length === 0, `Required migrations were not applied: ${missing.join(", ")}`);
+
+  for (const table of trackedTables) {
+    const [schema, name] = table.includes(".")
+      ? table.split(".", 2)
+      : ["public", table];
+    const exists = await client.query(
+      "select to_regclass($1) is not null as present",
+      [`${schema}.${name}`],
+    );
+    assert(exists.rows[0]?.present === true, `Required relation missing: ${table}`);
+  }
+
+  // Verify the checked-in migration's actual FK targets. This deliberately
+  // does not silently rewrite the unresolved Better Auth FK design.
+  const foreignKeys = await client.query(`
+    select
+      conname,
+      confrelid::regclass::text as referenced_table,
+      pg_get_constraintdef(oid) as definition
+    from pg_constraint
+    where conrelid = 'public.bridge_loop_identity_links'::regclass
+      and contype = 'f'
+  `);
+  const fkTargets = new Set(foreignKeys.rows.map((row) => row.referenced_table));
+  assert(fkTargets.has('"user"') || fkTargets.has("user"), "Identity FK to public.user is missing");
+  assert(fkTargets.has("auth.users"), "Identity FK to auth.users is missing");
+
+  baseline = await counts();
 
   await client.query("begin");
+  transactionOpen = true;
+
+  const userId = `scope-a-${crypto.randomUUID()}`;
+  const authUserId = crypto.randomUUID();
+  const email = `scope-a-${crypto.randomUUID()}@example.test`;
+
   await client.query(
-    `insert into bridge_profiles
+    'insert into public."user" ("id", "name", "email", "emailVerified") values ($1, $2, $3, true)',
+    [userId, "Scope A disposable test", email],
+  );
+  await client.query("insert into auth.users (id) values ($1::uuid)", [authUserId]);
+  await client.query(
+    `insert into public.bridge_profiles
       (user_id, email, display_name, account_type, organization_name, internal_role, email_verified)
-     values ($1, $2, 'Scope A', 'independent_creator', null, null, true)`,
+     values ($1, $2, 'Scope A disposable test', 'independent_creator', null, null, true)`,
     [userId, email],
   );
   await client.query(
-    `insert into bridge_loop_identity_links
+    `insert into public.bridge_loop_identity_links
       (bridge_user_id, auth_user_id, verification_method, verified_at, verified_by)
      values ($1, $2::uuid, 'verified_email_reauthentication', now(), $1)`,
-    [userId, userId],
+    [userId, authUserId],
   );
-  await client.query("commit");
 
-  const afterProfiles = await scalar("select count(*)::int as value from bridge_profiles");
-  const afterLinks = await scalar("select count(*)::int as value from bridge_loop_identity_links");
-  console.log(JSON.stringify({ stage: "identity_setup", beforeProfiles, beforeLinks, afterProfiles, afterLinks }));
+  inTransaction = await counts();
+  assert(inTransaction.authUsers === baseline.authUsers + 1, "Auth user insert assertion failed");
+  assert(inTransaction.legacyUsers === baseline.legacyUsers + 1, "Better Auth user insert assertion failed");
+  assert(inTransaction.profiles === baseline.profiles + 1, "Bridge profile insert assertion failed");
+  assert(inTransaction.identityLinks === baseline.identityLinks + 1, "Identity link insert assertion failed");
+  assert(inTransaction.invites === baseline.invites, "Invite count changed unexpectedly");
 
-  await assert(afterProfiles === beforeProfiles + 1, "profile insert assertion failed");
-  await assert(afterLinks === beforeLinks + 1, "identity link insert assertion failed");
-
-  let sameEmailBlocked = false;
+  // Expected unique-email violation must be isolated with a savepoint so the
+  // test transaction remains usable and can be rolled back cleanly.
+  await client.query("savepoint duplicate_email_test");
+  let duplicateEmailBlocked = false;
   try {
     await client.query(
-      `insert into bridge_profiles
+      `insert into public.bridge_profiles
         (user_id, email, display_name, account_type, organization_name, internal_role, email_verified)
        values ($1, $2, 'Conflict', 'independent_creator', null, null, true)`,
-      [randomUUID(), email],
+      [`scope-a-conflict-${crypto.randomUUID()}`, email],
     );
   } catch (error) {
-    sameEmailBlocked = error?.code === "23505";
+    duplicateEmailBlocked = error?.code === "23505";
+    await client.query("rollback to savepoint duplicate_email_test");
   }
-  await assert(sameEmailBlocked, "same-email foreign profile was not blocked by unique index");
+  await client.query("release savepoint duplicate_email_test");
+  assert(duplicateEmailBlocked, "Case-insensitive duplicate profile email was not blocked");
 
-  const rollbackId = randomUUID();
-  await client.query("begin");
-  await client.query(
-    `insert into bridge_profiles
-      (user_id, email, display_name, account_type, organization_name, internal_role, email_verified)
-     values ($1, $2, 'Rollback', 'independent_creator', null, null, true)`,
-    [rollbackId, "scope-a-rollback@example.test"],
-  );
+  // Verify both identity foreign keys reject orphan references.
+  await client.query("savepoint orphan_fk_test");
+  let orphanFkBlocked = false;
+  try {
+    await client.query(
+      `insert into public.bridge_loop_identity_links
+        (bridge_user_id, auth_user_id, verification_method, verified_at, verified_by)
+       values ($1, $2::uuid, 'verified_email_reauthentication', now(), $1)`,
+      [`missing-user-${crypto.randomUUID()}`, crypto.randomUUID()],
+    );
+  } catch (error) {
+    orphanFkBlocked = error?.code === "23503";
+    await client.query("rollback to savepoint orphan_fk_test");
+  }
+  await client.query("release savepoint orphan_fk_test");
+  assert(orphanFkBlocked, "Identity foreign keys did not reject an orphan link");
+
   await client.query("rollback");
+  transactionOpen = false;
+  finalCounts = await counts();
 
-  const rollbackRows = await scalar(
-    "select count(*)::int as value from bridge_profiles where user_id = $1",
-    [rollbackId],
+  assert(
+    JSON.stringify(finalCounts) === JSON.stringify(baseline),
+    "Disposable test rows remained after rollback",
   );
-  console.log(JSON.stringify({ stage: "rollback", rollbackRows }));
-  await assert(rollbackRows === 0, "transaction rollback assertion failed");
-
-  const finalInvites = await scalar("select count(*)::int as value from bridge_invites");
-  await assert(finalInvites === beforeInvites, "invite row count changed unexpectedly");
 
   console.log(
     JSON.stringify({
-      before: {
-        bridge_profiles: beforeProfiles,
-        bridge_loop_identity_links: beforeLinks,
-        bridge_invites: beforeInvites,
-      },
-      after: {
-        bridge_profiles: afterProfiles,
-        bridge_loop_identity_links: afterLinks,
-        bridge_invites: finalInvites,
-      },
+      result: "PASS",
+      database_guard: "local bridge_scope_a only",
+      applied_migrations: requiredMigrations,
+      verified_identity_fk_targets: [...fkTargets],
       assertions: {
-        migration_replay: "passed",
-        profile_insert: "passed",
+        migration_prerequisites: "passed",
+        auth_user_insert: "passed",
+        better_auth_user_insert: "passed",
+        bridge_profile_insert: "passed",
         identity_link_insert: "passed",
-        same_email_unique_conflict: "passed",
-        rollback: "passed",
-        invite_count_stable: "passed",
+        duplicate_email_unique_constraint: "passed",
+        orphan_identity_fk_rejection: "passed",
+        invite_count_unchanged: "passed",
+        complete_transaction_rollback: "passed",
       },
+      baseline_counts: baseline,
+      in_transaction_counts: inTransaction,
+      after_rollback_counts: finalCounts,
     }),
   );
 } catch (error) {
-  console.error(JSON.stringify({
-    stage: "db_assertion_failure",
+  errorOutput = {
+    result: "FAIL",
     name: error?.name,
     message: error?.message,
     code: error?.code,
     constraint: error?.constraint,
     detail: error?.detail,
-    hint: error?.hint,
-  }));
-  throw error;
+  };
+  console.error(JSON.stringify(errorOutput));
+  process.exitCode = 1;
 } finally {
+  if (transactionOpen) {
+    try {
+      await client.query("rollback");
+    } catch {
+      // Preserve the original test failure.
+    }
+  }
   await client.end();
 }
