@@ -313,6 +313,7 @@ function FilesPanel({
     typeof window === "undefined" || !("Notification" in window) ? "unsupported" : Notification.permission,
   );
   const [progress, setProgress] = useState<UploadProgress | null>(null);
+  const [refreshingStatus, setRefreshingStatus] = useState(false);
   const uploadXhrRef = useRef<XMLHttpRequest | null>(null);
   const cancelRequestedRef = useRef(false);
   // Invalidates any in-flight preparation/confirmation continuation after cancel or a newer attempt.
@@ -492,12 +493,26 @@ function FilesPanel({
 
   return (
     <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Media</p>
-          <h2 className="mt-1 font-display text-xl font-semibold">OTT package</h2>
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Your files</p>
+          <h2 className="mt-1 font-display text-xl font-semibold">Film package</h2>
+          <p className="mt-1 text-sm text-muted">Add or replace files whenever you’re ready. Your title stays editable until you submit it.</p>
         </div>
-        <span className="text-xs text-muted">Ready / Missing</span>
+        <button
+          type="button"
+          onClick={() => {
+            setRefreshingStatus(true);
+            void Promise.resolve(onAssetsChanged()).then(
+              () => announce("File status refreshed.", "success"),
+              () => announce("Could not refresh file status. Please try again.", "error"),
+            ).finally(() => setRefreshingStatus(false));
+          }}
+          disabled={refreshingStatus}
+          className="rounded-full border border-line px-4 py-2 text-sm font-semibold disabled:opacity-50"
+        >
+          {refreshingStatus ? "Refreshing…" : "Refresh status"}
+        </button>
       </div>
 
       {progress ? (
@@ -544,7 +559,7 @@ function FilesPanel({
               style={progress.percent === null ? undefined : { width: `${progress.percent}%` }}
             />
           </div>
-          <p className="mt-2 text-xs text-muted">The file is not Ready until server-side storage verification succeeds.</p>
+          <p className="mt-2 text-xs text-muted">We’ll check the file in the background and update its status when verification finishes.</p>
         </div>
       ) : null}
 
@@ -628,15 +643,34 @@ function FileTypeCard({
   onFile: (file: File) => void;
 }) {
   const spec = OTT_INGEST_SPEC[kind];
+  const [dragging, setDragging] = useState(false);
   return (
-    <div className="rounded-xl border border-line p-4">
+    <div
+      className={`rounded-xl border p-4 transition-colors ${dragging ? "border-accent bg-accent/5" : "border-line"}`}
+      onDragOver={(event) => {
+        if (!canUpload || busy) return;
+        event.preventDefault();
+        setDragging(true);
+      }}
+      onDragLeave={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragging(false);
+      }}
+      onDrop={(event) => {
+        event.preventDefault();
+        setDragging(false);
+        if (!canUpload || busy) return;
+        const file = event.dataTransfer.files?.[0];
+        if (file) onFile(file);
+      }}
+    >
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-sm font-semibold">{label}</p>
           <p className="mt-1 text-xs text-muted">{status}</p>
           <p className="mt-2 text-[11px] leading-5 text-muted">
-            Allowed: {spec.extensions.map((ext) => ext.replace(".", "").toUpperCase()).join(", ")}
+            {spec.extensions.map((ext) => ext.replace(".", "").toUpperCase()).join(", ")} files
           </p>
+          <p className="mt-1 text-xs text-muted">{dragging ? "Drop file to upload" : "Drag a file here or choose one"}</p>
         </div>
         <label className="cursor-pointer rounded-full border border-line px-3 py-1.5 text-xs font-semibold">
           {busy ? "Uploading…" : status === "Ready" ? "Replace" : "Upload"}
