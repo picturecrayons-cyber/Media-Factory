@@ -6,7 +6,7 @@ import { retryWorkspaceSession } from "@/lib/auth/workspace-session-retry";
 import { supabase } from "@/lib/supabase";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { getBridgeSession, type BridgeActor } from "@/lib/bridge/session";
-import { canAccessTitleWorkspace } from "@/lib/bridge/rbac";
+import { canAccessTitleWorkspace, hasPermission } from "@/lib/bridge/rbac";
 import { requestEmailVerification } from "@/lib/bridge/profiles";
 import { Button } from "@/components/ui/button";
 import { BrandMark } from "./shell";
@@ -27,7 +27,7 @@ export function RequireBridge({
   allow,
 }: {
   children: (actor: BridgeActor) => ReactNode;
-  allow?: "creator" | "studio" | "buyer" | "investor" | "internal" | "super_admin" | "workspace";
+  allow?: "creator" | "studio" | "buyer" | "investor" | "internal" | "super_admin" | "workspace" | "deliveries";
 }) {
   const qc = useQueryClient();
   const [retrying, setRetrying] = useState(false);
@@ -100,19 +100,24 @@ export function RequireBridge({
   const profile = sessionQ.data?.profile ?? null;
   if (!profile) return <Navigate to="/onboarding" />;
 
-  // The generic title workspace is not a public catalog. Only Creator/Studio
-  // accounts and internal roles with explicit catalog-read permission may enter.
+  // Role checks are enforced here as well as in the navigation; hiding a link is not authorization.
   if (allow === "workspace" && !canAccessTitleWorkspace(profile)) {
+    return <Navigate to={sessionQ.data?.home ?? "/"} />;
+  }
+  if (allow === "deliveries" && !(
+    hasPermission(profile, "title.create") ||
+    hasPermission(profile, "title.deliver") ||
+    hasPermission(profile, "delivery.read")
+  )) {
     return <Navigate to={sessionQ.data?.home ?? "/"} />;
   }
 
   // Role gates are authoritative for role-specific workspaces:
-  // creator/studio/buyer/investor accounts are valid Bridge users and must not be
-  // blocked by the internal-operator gate. Internal surfaces remain protected
-  // by the explicit "internal"/"super_admin" allow checks above.
+  // creator/studio/buyer accounts are valid Bridge users and must not be
+  // blocked by the internal-operator gate.
   if (allow === "super_admin" && profile.internalRole !== "super_admin") return <Navigate to={sessionQ.data?.home ?? "/"} />;
   if (allow === "internal" && !profile.internalRole) return <Navigate to={sessionQ.data?.home ?? "/"} />;
-  if (allow && allow !== "internal" && allow !== "super_admin" && (profile.internalRole || profile.accountType !== (
+  if (allow && allow !== "internal" && allow !== "super_admin" && allow !== "workspace" && allow !== "deliveries" && (profile.internalRole || profile.accountType !== (
     allow === "creator" ? "independent_creator" : allow
   ))) {
     return <Navigate to={sessionQ.data?.home ?? "/"} />;
@@ -136,13 +141,11 @@ export function RequireBridge({
           <p className="text-sm text-muted">Verification email sent. Open the newest Crayons Bridge message and use the link within 24 hours.</p>
         ) : null}
         {verifyMail.isError ? (
-          <p className="text-sm text-accent">
+          <p role="alert" className="text-sm text-accent">
             {verifyMail.error instanceof Error ? verifyMail.error.message : "Could not send verification email."}
           </p>
         ) : null}
-        <Link to="/account" className="block text-sm text-accent underline-offset-4 hover:underline">
-          Account
-        </Link>
+        <Link to="/account" className="block text-sm text-accent underline-offset-4 hover:underline">Account</Link>
       </Frame>
     );
   }

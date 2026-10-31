@@ -26,7 +26,7 @@ const LABELS: Record<VendorJobType, string> = {
 
 function Deliveries() {
   return (
-    <RequireBridge>
+    <RequireBridge allow="deliveries">
       {(actor) => (
         <BridgeShell actor={actor} title="Deliveries">
           <VendorJobs actor={actor} />
