@@ -175,10 +175,16 @@ try {
     assert(blocked, message);
   }
 
+  // Use a fresh, valid Auth user that is not already linked. Reusing
+  // authUserId would hit the identity-link UNIQUE constraint (23505) before
+  // PostgreSQL can evaluate the Better Auth user FK (expected 23503).
+  const orphanCheckAuthUserId = crypto.randomUUID();
+  await client.query("insert into auth.users (id) values ($1::uuid)", [orphanCheckAuthUserId]);
+
   await assertOrphanFkRejected(
     "missing_better_auth_user_test",
     `missing-user-${crypto.randomUUID()}`,
-    authUserId,
+    orphanCheckAuthUserId,
     "Better Auth user foreign key did not reject an orphan reference",
   );
   await assertOrphanFkRejected(
