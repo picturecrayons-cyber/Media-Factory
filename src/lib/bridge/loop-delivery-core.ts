@@ -5,7 +5,7 @@ export type DeliveryRequest = {
   destination: "CRAYONS_LOOP";
   territories: string[];
   languages: string[];
-  exploitationModels: string[];
+  exploitationModels: ManualLoopModel[];
   windowStart: string;
   windowEnd: string;
 };
