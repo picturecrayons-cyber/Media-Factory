@@ -187,9 +187,19 @@ try {
     orphanCheckAuthUserId,
     "Better Auth user foreign key did not reject an orphan reference",
   );
+  // Use a separate, valid Better Auth user for the Supabase Auth FK test.
+  // Reusing userId would hit the identity-link primary key (23505) before
+  // PostgreSQL can evaluate the auth.users FK (expected 23503).
+  const orphanCheckBridgeUserId = `scope-a-orphan-${crypto.randomUUID()}`;
+  const orphanCheckBridgeEmail = `scope-a-orphan-${crypto.randomUUID()}@example.test`;
+  await client.query(
+    'insert into public."user" ("id", "name", "email", "emailVerified") values ($1, $2, $3, true)',
+    [orphanCheckBridgeUserId, "Scope A orphan FK test", orphanCheckBridgeEmail],
+  );
+
   await assertOrphanFkRejected(
     "missing_supabase_auth_user_test",
-    userId,
+    orphanCheckBridgeUserId,
     crypto.randomUUID(),
     "Supabase Auth user foreign key did not reject an orphan reference",
   );
