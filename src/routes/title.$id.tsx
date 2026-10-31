@@ -303,6 +303,8 @@ function FilesPanel({
     contentType: string | null;
     byteSize: number | null;
     verified: boolean;
+    versionNumber: number;
+    versionCount: number;
   }>;
   onAssetsChanged: () => Promise<unknown> | unknown;
 }) {
@@ -596,7 +598,12 @@ function FilesPanel({
           <div key={a.id} className="flex items-center justify-between gap-3 rounded-xl border border-line p-4">
             <div>
               <p className="text-sm font-semibold">{a.kind}</p>
-              <p className="text-xs text-muted">{a.verified ? "Ready" : "Processing"}</p>
+              <p className="text-xs text-muted">{a.verified ? "Ready · Current v" + a.versionNumber : "Processing"}</p>
+              {a.versionCount > 1 ? (
+                <p className="mt-1 text-[11px] text-muted">
+                  {a.versionCount - 1} previous verified {a.versionCount - 1 === 1 ? "version" : "versions"} retained in history
+                </p>
+              ) : null}
             </div>
             {a.verified ? (
               <button

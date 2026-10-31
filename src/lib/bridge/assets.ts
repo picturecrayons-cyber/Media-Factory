@@ -11,6 +11,7 @@ import { writeAudit } from "./audit";
 import { assertNotDevUser } from "./guards";
 import { persistVerifiedAsset } from "./asset-confirmation";
 import { downloadDecision } from "./delivery-policy";
+import { selectCurrentAssets } from "./asset-current";
 import { validateOttIngestFile, type OttIngestKind } from "./ott-ingest-spec";
 
 const UPLOADABLE: ReadonlySet<string> = new Set(["DRAFT", "UPLOADING", "PREPARING"]);
@@ -249,10 +250,13 @@ export const listTitleAssets = createServerFn({ method: "GET" })
       created_at: string | Date;
     }>`
       select id, kind, s3_key, content_type, byte_size, created_at
-      from bridge_assets where title_id = ${title.id} and byte_size > 0 order by created_at desc
+      from bridge_assets where title_id = ${title.id} and byte_size > 0 order by created_at desc, id desc
     `;
+    // Keep every immutable row in storage/database history, but expose only the
+    // latest verified asset per kind as the current gallery entry.
+    const currentAssets = selectCurrentAssets(rows);
     return {
-      assets: rows
+      assets: currentAssets
         .filter((r) => !buyer || !["master", "technical", "censor_certificate"].includes(r.kind))
         .map((r) => ({
           id: r.id,
@@ -261,6 +265,8 @@ export const listTitleAssets = createServerFn({ method: "GET" })
           contentType: r.content_type,
           byteSize: r.byte_size,
           verified: Number(r.byte_size) > 0,
+          versionNumber: r.versionNumber,
+          versionCount: r.versionCount,
           createdAt:
             r.created_at instanceof Date ? r.created_at.toISOString() : String(r.created_at),
         })),
