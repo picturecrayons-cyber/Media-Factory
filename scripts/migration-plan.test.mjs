@@ -10,7 +10,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { isMigrationFile, migrationName, pendingMigrations } from "./migration-plan.mjs";
+import { findDuplicateMigrationPrefixes, isMigrationFile, migrationName, pendingMigrations, validateMigrationPrefixes } from "./migration-plan.mjs";
 import { projectRoot } from "./with-app-env.mjs";
 
 const AUTH_MIGRATION = "0001_auth.sql";
@@ -90,4 +90,52 @@ test("the copy check reads both files and catches an edit", () => {
   writeFileSync(join(root, "migrations", AUTH_MIGRATION), "create table t (x int);\n");
   const drifted = authSchemaCopy(root);
   assert.notEqual(drifted.copy, drifted.source);
+});
+
+
+test("root migration prefixes contain only the exact historical duplicate groups", () => {
+  const migrationsDir = join(projectRoot(), "migrations");
+  assert.deepEqual(validateMigrationPrefixes(readdirSync(migrationsDir)), {
+    "0018": [
+      "0018_bridge_rights_ready_submission.sql",
+      "0018_bridge_service_revenue_engine.sql",
+      "0018_multilingual_rights_mvp.sql",
+      "0018_rights_ready_public_submission.sql",
+    ],
+    "0020": [
+      "0020_bridge_digital_theatrical_delivery.sql",
+      "0020_duplicate_title_merge_gate.sql",
+    ],
+  });
+});
+
+test("new migrations cannot reuse an existing numeric prefix", () => {
+  const paths = [
+    "0018_bridge_rights_ready_submission.sql",
+    "0018_bridge_service_revenue_engine.sql",
+    "0018_multilingual_rights_mvp.sql",
+    "0018_rights_ready_public_submission.sql",
+    "0020_bridge_digital_theatrical_delivery.sql",
+    "0020_duplicate_title_merge_gate.sql",
+    "0022_bridge_new_feature.sql",
+    "0022_bridge_another_feature.sql",
+  ];
+  assert.deepEqual(
+    findDuplicateMigrationPrefixes(paths)["0022"],
+    ["0022_bridge_another_feature.sql", "0022_bridge_new_feature.sql"],
+  );
+  assert.throws(() => validateMigrationPrefixes(paths), /Duplicate migration prefix 0022/);
+});
+
+test("a unique future prefix is accepted without renaming historical migrations", () => {
+  const paths = [
+    "0018_bridge_rights_ready_submission.sql",
+    "0018_bridge_service_revenue_engine.sql",
+    "0018_multilingual_rights_mvp.sql",
+    "0018_rights_ready_public_submission.sql",
+    "0020_bridge_digital_theatrical_delivery.sql",
+    "0020_duplicate_title_merge_gate.sql",
+    "0022_bridge_new_feature.sql",
+  ];
+  assert.doesNotThrow(() => validateMigrationPrefixes(paths));
 });
