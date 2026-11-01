@@ -11,6 +11,7 @@ import { writeAudit } from "./audit";
 import { assertNotDevUser } from "./guards";
 import { persistVerifiedAsset } from "./asset-confirmation";
 import { downloadDecision } from "./delivery-policy";
+import { uploadUrlLifetimeSeconds } from "./upload-url-lifetime";
 import { validateOttIngestFile, type OttIngestKind } from "./ott-ingest-spec";
 
 const UPLOADABLE: ReadonlySet<string> = new Set(["DRAFT", "UPLOADING", "PREPARING"]);
@@ -32,6 +33,7 @@ export const requestAssetUpload = createServerFn({ method: "POST" })
       kind: z.enum(ASSET_KINDS),
       filename: z.string().min(1).max(120),
       contentType: z.string().min(3).max(120),
+      byteSize: z.number().int().positive().max(200 * 1024 * 1024 * 1024).optional(),
     }),
   )
   .handler(async ({ context, data }) => {
@@ -57,7 +59,11 @@ export const requestAssetUpload = createServerFn({ method: "POST" })
       kind: data.kind,
       filename: data.filename,
     });
-    const signed = await signUpload({ key, contentType: data.contentType });
+    const signed = await signUpload({
+      key,
+      contentType: data.contentType,
+      expiresIn: uploadUrlLifetimeSeconds(data.byteSize),
+    });
     const id = randomBytes(16).toString("hex");
     const sql = await getSql();
     await sql`
