@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { listTitles, listAuditLogs } from "@/lib/bridge/titles";
 import { listLoopPublicationReadiness } from "@/lib/bridge/loop-publication";
 import { listAdminProfiles } from "@/lib/bridge/profiles";
+import { StreamVistaOrders } from "@/components/bridge/streamvista-orders";
 
 export const Route = createFileRoute("/admin")({
   head: () => ({ meta: [{ name: "robots", content: "noindex, nofollow" }] }),
@@ -152,6 +153,13 @@ function AdminBody({ actor }: { actor: any }) {
             </ul>
           </details>
         </section>
+
+        <details className="rounded-2xl border border-line bg-surface p-4 sm:p-5">
+          <summary className="cursor-pointer list-none font-semibold">Production services</summary>
+          <div className="mt-4">
+            <StreamVistaOrders />
+          </div>
+        </details>
       </div>
     </BridgeShell>
   );

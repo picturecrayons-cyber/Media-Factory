@@ -4,7 +4,6 @@ import { BridgeShell } from "@/components/bridge/shell";
 import { TitleList } from "@/components/bridge/title-desk";
 import { MyStoryConcepts } from "@/components/bridge/my-story-concepts";
 import { NewSubmissionPanel } from "@/components/bridge/new-submission-panel";
-import { StreamVistaOrders } from "@/components/bridge/streamvista-orders";
 
 export const Route = createFileRoute("/studio")({ component: Studio });
 
@@ -16,7 +15,7 @@ function Studio() {
           <div className="mx-auto max-w-3xl space-y-10 px-1 pb-16">
             <header className="space-y-4">
               <p className="max-w-xl text-sm text-muted">
-                Finished films, story concepts, and production services stay in separate lists. The film master is uploaded from the title, not from this page.
+                Finished films and story concepts stay separate. Production services are on the admin desk. The film master is uploaded from the title.
               </p>
               <NewSubmissionPanel />
             </header>
@@ -27,10 +26,6 @@ function Studio() {
             </section>
 
             <MyStoryConcepts />
-
-            <section className="border-t border-line pt-8">
-              <StreamVistaOrders />
-            </section>
           </div>
         </BridgeShell>
       )}
