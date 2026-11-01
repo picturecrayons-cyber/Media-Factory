@@ -644,7 +644,7 @@ function FilesPanel({
 
   async function download(id: string) {
     const signed = await requestAssetDownload({ data: { assetId: id } });
-    window.location.assign(signed.url);
+    window.open(signed.url, "_blank", "noopener,noreferrer");
   }
 
   const groups: { title: string; hint: string; items: [SimpleAssetKind, string][] }[] = [
@@ -770,7 +770,8 @@ function FilesPanel({
                     kind={kind}
                     label={kindLabel(kind)}
                     status={verified ? "Ready" : empty}
-                    busy={uploading !== null}
+                    busy={uploading === kind}
+                    locked={uploading !== null && uploading !== kind}
                     canUpload={canUpload}
                     onFile={(file) => void uploadFile(kind, file)}
                     onDownload={verified ? () => void download(verified.id) : undefined}
@@ -874,6 +875,7 @@ function FileTypeCard({
   label,
   status,
   busy,
+  locked,
   onFile,
   onDownload,
   canUpload,
@@ -883,6 +885,7 @@ function FileTypeCard({
   label: string;
   status: string;
   busy: boolean;
+  locked: boolean;
   onFile: (file: File) => void;
   onDownload?: () => void;
 }) {
@@ -899,13 +902,13 @@ function FileTypeCard({
           </p>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-2">
-          <label className={`cursor-pointer rounded-full px-3 py-1.5 text-xs font-semibold ${ready ? "border border-line bg-surface" : "bg-fg text-bg"} ${busy || !canUpload ? "pointer-events-none opacity-50" : ""}`}>
+          <label className={`cursor-pointer rounded-full px-3 py-1.5 text-xs font-semibold ${ready ? "border border-line bg-surface" : "bg-fg text-bg"} ${busy || locked || !canUpload ? "pointer-events-none opacity-50" : ""}`}>
             {busy ? "Uploading…" : ready ? "Replace" : "Upload"}
             <input
               className="sr-only"
               type="file"
               accept={getOttIngestAccept(kind)}
-              disabled={busy || !canUpload}
+              disabled={busy || locked || !canUpload}
               onChange={(e) => {
                 const file = e.currentTarget.files?.[0];
                 if (file) onFile(file);
