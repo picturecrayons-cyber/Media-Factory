@@ -346,7 +346,7 @@ function FilesPanel({
       const startedAt = Date.now();
       xhr.open(method, url, true);
       xhr.setRequestHeader("content-type", contentType);
-      xhr.timeout = 120_000;
+      xhr.timeout = 0;
       xhr.upload.onprogress = (event) => {
         const total = event.lengthComputable ? event.total : file.size;
         const loaded = Math.min(event.loaded, total);
@@ -373,7 +373,7 @@ function FilesPanel({
       };
       xhr.ontimeout = () => {
         uploadXhrRef.current = null;
-        reject(new Error("File transfer timed out after 2 minutes. No Ready status was set; select the file again to retry."));
+        reject(new Error("File transfer timed out. No Ready status was set; select the file again to retry."));
       };
       xhr.onabort = () => {
         uploadXhrRef.current = null;
@@ -405,10 +405,9 @@ function FilesPanel({
     setUploading(kind);
     setProgress({ kind, phase: "preparing", percent: null, etaSeconds: null, loaded: 0, total: file.size });
     announce(`Preparing ${kindLabel(kind)}.`);
-    let transferTimer: ReturnType<typeof setTimeout> | undefined;
     try {
       const signed = await withTimeout(
-        requestAssetUpload({ data: { titleId, kind, filename, contentType } }),
+        requestAssetUpload({ data: { titleId, kind, filename, contentType, byteSize: file.size } }),
         20_000,
         "Upload URL preparation",
       );
@@ -418,11 +417,8 @@ function FilesPanel({
       // Use the OCI pre-authenticated URL verbatim; rewriting its encoded path can invalidate it.
       setProgress({ kind, phase: "transferring", percent: 0, etaSeconds: null, loaded: 0, total: file.size });
       announce(`Uploading ${kindLabel(kind)}…`);
-      transferTimer = setTimeout(() => uploadXhrRef.current?.abort(), 120_000);
       await transferWithProgress(kind, signed.url, signed.method, file, contentType);
       assertAttemptActive();
-      if (transferTimer !== undefined) clearTimeout(transferTimer);
-      transferTimer = undefined;
 
       setProgress({ kind, phase: "verifying", percent: null, etaSeconds: null, loaded: file.size, total: file.size });
       announce(`File received. Verifying ${kindLabel(kind)} before it can show Ready…`);
@@ -460,7 +456,6 @@ function FilesPanel({
       }
       announce(detail, "error", true);
     } finally {
-      if (transferTimer !== undefined) clearTimeout(transferTimer);
       if (uploadAttemptRef.current === attemptId) {
         uploadXhrRef.current = null;
         cancelRequestedRef.current = false;
