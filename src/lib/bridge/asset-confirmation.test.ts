@@ -125,3 +125,35 @@ test("same-organization verified Studio member can confirm upload, other organiz
     await db.close();
   }
 });
+
+test("title owner can confirm an upload when organization tables are absent", async () => {
+  const db = new PGlite();
+  try {
+    await db.waitReady;
+    await db.exec("create role anon; create role authenticated;");
+    await db.exec(readFileSync(join(process.cwd(), "migrations/0004_bridge.sql"), "utf8"));
+    await db.exec(`insert into bridge_titles (id,slug,name,owner_user_id,owner_account_type,status)
+      values ('title1234','title','Title','creator','independent_creator','PREPARING');
+      insert into bridge_assets (id,title_id,kind,s3_key,content_type,created_by)
+      values ('asset1234','title1234','screener','bridge/creator/title1234/screener/video.mp4','video/mp4','creator');`);
+    const sql = { query: async <T>(query: string, params: unknown[]) => (await db.query<T>(query, params)).rows };
+    assert.equal(await persistVerifiedAsset(sql, {
+      assetId: "asset1234",
+      actorUserId: "creator",
+      internalActor: false,
+      titleId: "title1234",
+      kind: "screener",
+      byteSize: 170,
+      contentType: "video/mp4",
+      checksum: "etag-no-org",
+      sourceKey: "bridge/creator/title1234/screener/video.mp4",
+      sealedKey: "bridge/creator/title1234/screener/video.mp4.verified/asset1234",
+    }), true);
+    const row = (await db.query<{ byte_size: number | null }>(
+      "select byte_size from bridge_assets where id='asset1234'",
+    )).rows[0];
+    assert.equal(row?.byte_size, 170);
+  } finally {
+    await db.close();
+  }
+});
