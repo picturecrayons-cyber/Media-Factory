@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { requestAssetDownload } from "@/lib/bridge/assets";
+import { previewUrlFor } from "@/lib/bridge/preview-url";
 
 type PreviewAsset = {
   id: string;
@@ -40,7 +41,7 @@ export function AssetPosterSlot({ assets }: { assets: PreviewAsset[] }) {
     if (!poster) return () => { active = false; };
     void requestAssetDownload({ data: { assetId: poster.id } })
       .then((signed) => {
-        if (active && signed?.url) setUrl(signed.url);
+        if (active && signed?.url) setUrl(previewUrlFor(signed.url, poster.kind, poster.contentType));
         else if (active) setFailed(true);
       })
       .catch(() => { if (active) setFailed(true); });
@@ -81,7 +82,7 @@ export function AssetPreviewGallery({ assets }: { assets: PreviewAsset[] }) {
       // Resolve an expiring, server-authorized URL only after the user requests a preview.
       const signed = await requestAssetDownload({ data: { assetId: asset.id } });
       if (!signed?.url) throw new Error("Preview URL unavailable");
-      setPreviewUrl(signed.url);
+      setPreviewUrl(previewUrlFor(signed.url, asset.kind, asset.contentType));
     } catch {
       setFailedId(asset.id);
     } finally {
@@ -168,7 +169,7 @@ export function AssetPreviewGallery({ assets }: { assets: PreviewAsset[] }) {
               ) : failedId === selected.id ? (
                 <div className="text-center text-white">
                   <p className="text-sm font-semibold">Preview unavailable</p>
-                  <p className="mt-1 text-xs text-white/70">The secure preview could not be opened. The asset was not uploaded again.</p>
+                  <p className="mt-1 text-xs text-white/70">In-page playback failed. The stored file was not uploaded again.</p>
                   <button type="button" onClick={() => void openPreview(selected)} className="mt-4 rounded-full bg-white px-4 py-2 text-sm font-semibold text-black">
                     Retry preview
                   </button>
