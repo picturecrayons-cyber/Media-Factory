@@ -1,4 +1,5 @@
 import type { Sql } from "../db.ts";
+import { isMissingOrganizationSchemaError } from "./workspace-schema.ts";
 
 /** Persist a verified HeadObject result, title reference and audit event atomically. */
 export async function persistVerifiedAsset(sql: Pick<Sql, "query">, opts: {
@@ -14,19 +15,36 @@ export async function persistVerifiedAsset(sql: Pick<Sql, "query">, opts: {
   sealedKey: string;
 }): Promise<boolean> {
   if (!Number.isSafeInteger(opts.byteSize) || opts.byteSize <= 0) throw new Error("Uploaded object is empty");
-  const rows = await sql.query<{ entity_id: string }>(`
-    with verified as (
-      update bridge_assets a set byte_size = $1, content_type = coalesce($2, a.content_type), s3_key = $6
-      where a.id = $3 and a.created_by = $4 and a.byte_size is null and a.s3_key = $7
-        and a.title_id = $8
-        and exists (
-          select 1
-          from bridge_titles t
-          where t.id = a.title_id
-            and t.status in ('DRAFT','UPLOADING','PREPARING')
-            and (
-              $5
-              or t.owner_user_id = $4
+  // Owner and internal confirmation must not reference the optional Studio
+  // organization tables. Production can persist a verified asset before
+  // migration 0021 is applied. PostgreSQL plans the whole statement, so an
+  // unused OR branch still fails when that relation is absent.
+  if (await persistVerifiedAssetScoped(sql, opts, false)) return true;
+  try {
+    return await persistVerifiedAssetScoped(sql, opts, true);
+  } catch (error) {
+    if (isMissingOrganizationSchemaError(error)) return false;
+    throw error;
+  }
+}
+
+async function persistVerifiedAssetScoped(
+  sql: Pick<Sql, "query">,
+  opts: {
+    assetId: string;
+    actorUserId: string;
+    internalActor: boolean;
+    titleId: string;
+    kind: string;
+    byteSize: number;
+    contentType: string | null;
+    checksum: string | null;
+    sourceKey: string;
+    sealedKey: string;
+  },
+  studioScope: boolean,
+): Promise<boolean> {
+  const studioPredicate = studioScope ? `
               or (
                 t.owner_account_type = 'studio'
                 and exists (
@@ -43,7 +61,21 @@ export async function persistVerifiedAsset(sql: Pick<Sql, "query">, opts: {
                     and p.email_verified = true
                     and t.owner_organization_id = m.organization_id
                 )
-              )
+              )` : "";
+  const rows = await sql.query<{ entity_id: string }>(`
+    with verified as (
+      update bridge_assets a set byte_size = $1, content_type = coalesce($2, a.content_type), s3_key = $6
+      where a.id = $3 and a.created_by = $4 and a.byte_size is null and a.s3_key = $7
+        and a.title_id = $8
+        and exists (
+          select 1
+          from bridge_titles t
+          where t.id = a.title_id
+            and t.status in ('DRAFT','UPLOADING','PREPARING')
+            and (
+              $5
+              or t.owner_user_id = $4
+              ${studioPredicate}
             )
         )
       returning a.id, a.title_id, a.kind, a.s3_key
