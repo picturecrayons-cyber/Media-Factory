@@ -45,6 +45,9 @@ export function BridgeShell({ actor, title, children }: { actor: BridgeActor; ti
             <UserButton />
           </div>
         </div>
+        <nav aria-label="Workspace navigation" className="mx-auto flex max-w-[1440px] gap-1 overflow-x-auto border-t border-line px-3 py-2 md:hidden">
+          {NAV.map((item) => <NavLink key={item.label} item={item} />)}
+        </nav>
       </header>
       <main className="mx-auto max-w-[1440px] px-4 py-6 sm:px-6 lg:px-8">
         <div className="mb-5 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
