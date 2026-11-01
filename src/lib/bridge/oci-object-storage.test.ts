@@ -68,7 +68,7 @@ test("OCI copy polling uses Object Storage and only verifies successful copies",
   const originalFetch = globalThis.fetch;
   Object.assign(process.env, values);
   try {
-    for (const outcome of ["SUCCEEDED", "FAILED", "CANCELED", "HTTP_ERROR"]) {
+    for (const outcome of ["SUCCEEDED", "COMPLETED", "FAILED", "CANCELED", "HTTP_ERROR"]) {
       await t.test(outcome, async () => {
         const calls: Array<{ url: URL; method: string }> = [];
         globalThis.fetch = async (input, init) => {
@@ -96,7 +96,7 @@ test("OCI copy polling uses Object Storage and only verifies successful copies",
           assert.equal(url.pathname, "/n/test-namespace/b/test-bucket/o/sealed-key");
           return new Response(null, { headers: { "content-length": "12", etag: '"sealed-etag"' } });
         };
-        if (outcome === "SUCCEEDED") {
+        if (outcome === "SUCCEEDED" || outcome === "COMPLETED") {
           assert.equal((await sealVerifiedObject("source-key", "sealed-key", "source-etag")).byteSize, 12);
           assert.deepEqual(calls.map((call) => call.method), ["POST", "GET", "HEAD"]);
         } else {
