@@ -73,10 +73,18 @@ function Home() {
           </div>
 
           <div className="flex items-center gap-3 text-sm">
+            <nav aria-label="Main navigation" className="hidden items-center gap-5 lg:flex">
+              <a href="#how-it-works" className="font-medium text-muted transition-colors hover:text-fg">How it works</a>
+              <a href="#audiences" className="font-medium text-muted transition-colors hover:text-fg">Who it’s for</a>
+              <a href="#bridge-and-loop" className="font-medium text-muted transition-colors hover:text-fg">Bridge & Loop</a>
+              <Link to="/contact" className="font-medium text-muted transition-colors hover:text-fg">Contact</Link>
+            </nav>
+            <a href="https://crayonsloop.in/" target="_blank" rel="noreferrer" className="hidden rounded-full border border-line px-4 py-2 text-xs font-semibold text-fg transition-colors hover:border-accent sm:inline-flex">Open Loop ↗</a>
             <SignedOut>
+              <Link to="/login" className="px-2 text-sm font-semibold text-muted transition-colors hover:text-fg">Sign in</Link>
               <Link to="/signup">
                 <Button size="sm" className="rounded-full px-4 py-1.5 text-xs font-semibold shadow-xs">
-                  Create account
+                  Get started
                 </Button>
               </Link>
             </SignedOut>
@@ -142,7 +150,7 @@ function Home() {
           </div>
         </section>
 
-        <section id="creators" className="border-b border-line bg-surface py-14 sm:py-20">
+        <section id="audiences" className="border-b border-line bg-surface py-14 sm:py-20">
           <div className="mx-auto max-w-7xl px-4 sm:px-6">
             <div className="max-w-2xl">
               <h2 className="font-display text-3xl font-semibold tracking-tight text-fg sm:text-4xl">
@@ -240,20 +248,36 @@ function Home() {
           </div>
         </section>
 
-        <section className="border-b border-line bg-surface/50 py-12 sm:py-16">
+        <section id="bridge-and-loop" className="border-b border-line bg-surface/50 py-14 sm:py-20">
           <div className="mx-auto max-w-7xl px-4 sm:px-6">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 rounded-2xl border border-line bg-surface p-6 sm:p-8">
-              <div>
-                <h3 className="font-display text-xl font-semibold text-fg">
-                  From rights to audience.
-                </h3>
-                <p className="mt-2 text-sm leading-relaxed text-muted max-w-2xl">
-                  Crayons Bridge manages rights, licensing and distribution authorization. Crayons
-                  Loop is the consumer streaming experience.
-                </p>
-              </div>
-
-
+            <div className="max-w-2xl">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">One connected ecosystem</p>
+              <h2 className="mt-2 font-display text-3xl font-semibold tracking-tight text-fg sm:text-4xl">Bridge authorizes. Loop delivers.</h2>
+              <p className="mt-3 text-sm leading-7 text-muted">Separate experiences for professional content operations and public viewing, connected by controlled publication.</p>
+            </div>
+            <div className="mt-8 grid gap-4 lg:grid-cols-2">
+              <article className="rounded-2xl border border-line bg-white p-6 sm:p-8">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Business workspace</p>
+                <h3 className="mt-3 font-display text-2xl font-semibold">Crayons Bridge</h3>
+                <p className="mt-3 text-sm leading-7 text-muted">A private workspace for title records, master assets, metadata, QC, rights, licensing and delivery operations.</p>
+                <ul className="mt-5 space-y-2 text-sm text-fg">
+                  <li>• Sign-in required for workspace access</li>
+                  <li>• Role-based access to operational tools</li>
+                  <li>• Publication only after authorization</li>
+                </ul>
+                <Link to="/login" className="mt-6 inline-flex text-sm font-semibold text-accent hover:underline">Sign in to Bridge →</Link>
+              </article>
+              <article className="rounded-2xl border border-line bg-white p-6 sm:p-8">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Consumer experience</p>
+                <h3 className="mt-3 font-display text-2xl font-semibold">Crayons Loop</h3>
+                <p className="mt-3 text-sm leading-7 text-muted">A public destination for audiences to discover and watch titles that have been authorized for publication.</p>
+                <ul className="mt-5 space-y-2 text-sm text-fg">
+                  <li>• Public catalogue and viewing experience</li>
+                  <li>• Only authorized, active publications</li>
+                  <li>• Separate from private Bridge operations</li>
+                </ul>
+                <a href="https://crayonsloop.in/" target="_blank" rel="noreferrer" className="mt-6 inline-flex text-sm font-semibold text-accent hover:underline">Visit Crayons Loop ↗</a>
+              </article>
             </div>
           </div>
         </section>
