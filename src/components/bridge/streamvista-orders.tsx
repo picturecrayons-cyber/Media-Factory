@@ -36,9 +36,9 @@ export function StreamVistaOrders() {
   }
 
   return (
-    <section className="mt-8 rounded-3xl border border-line bg-surface p-6 md:p-8">
-      <h2 className="font-display text-2xl">StreamVista production services</h2>
-      <p className="mt-2 text-sm text-muted">Request a production service and securely upload its source. QC approval and Bridge distribution remain separate steps.</p>
+    <section>
+      <h2 className="font-display text-xl">Production services</h2>
+      <p className="mt-2 text-sm text-muted">Optional work such as localization. This is not the film master, and it does not pass QC or rights.</p>
       <form className="mt-5 flex flex-wrap items-end gap-3" onSubmit={(event: FormEvent) => { event.preventDefault(); create.mutate(); }}>
         <label className="text-sm">Service
           <select className="mt-1 block h-11 rounded-sm border border-line bg-elevated px-3" value={service} onChange={(event) => setService(event.target.value as typeof service)}>
@@ -58,16 +58,19 @@ export function StreamVistaOrders() {
       <ul className="mt-4 space-y-3">
         {ordersQ.data?.orders.map((order) => (
           <li key={order.id} className="rounded-sm border border-line p-4">
-            <p className="font-medium">{order.service.replaceAll("_", " ")} · {order.status.replaceAll("_", " ")}</p>
-            <p className="mt-1 text-xs text-muted">Request {order.id}</p>
+            <p className="font-medium capitalize">{order.service.replaceAll("_", " ")}</p>
+            <p className="mt-1 text-sm text-muted capitalize">{order.status.replaceAll("_", " ")}</p>
             {order.source_s3_key ? (
               <p className="mt-2 text-sm">Source verified in private storage · QC: {order.qc_status === "needs_review" ? "Awaiting human review" : order.qc_status ?? "Pending"}</p>
             ) : order.status === "requested" ? (
-              <label className="mt-3 block text-sm">Upload source
-                <input type="file" disabled={uploading === order.id} className="mt-1 block w-full text-sm" onChange={(event) => { void upload(order.id, event.target.files?.[0]); event.target.value = ""; }} />
-              </label>
+              <>
+                <label className="mt-3 inline-flex cursor-pointer items-center rounded-full border border-line px-4 py-2 text-sm font-semibold">
+                  {uploading === order.id ? "Uploading source…" : "Choose source"}
+                  <input type="file" disabled={uploading === order.id} className="sr-only" onChange={(event) => { void upload(order.id, event.target.files?.[0]); event.target.value = ""; }} />
+                </label>
+                <p className="mt-2 text-xs text-muted">Private storage. Open the film title to upload the picture.</p>
+              </>
             ) : null}
-            {order.bridge_title_id && <p className="mt-2 text-sm">Bridge title: {order.bridge_title_id}</p>}
           </li>
         ))}
       </ul>

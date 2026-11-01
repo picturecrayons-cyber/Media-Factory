@@ -15,28 +15,21 @@ function Studio() {
         <BridgeShell actor={actor} title="Studio">
           <div className="mx-auto max-w-3xl space-y-10 px-1 pb-16">
             <header className="space-y-4">
-              <div>
-                <h1 className="font-display text-2xl tracking-tight sm:text-3xl">Studio</h1>
-                <p className="mt-1 text-sm text-muted">
-                  Your titles, rights, and delivery in one place.
-                </p>
-              </div>
+              <p className="max-w-xl text-sm text-muted">
+                Finished films, story concepts, and production services stay in separate lists. The film master is uploaded from the title, not from this page.
+              </p>
               <NewSubmissionPanel />
             </header>
 
-            <MyStoryConcepts />
-
             <section>
-              <h2 className="mb-3 text-lg font-semibold">Your titles</h2>
-              <TitleList empty="No titles yet. Start with a new submission." />
+              <h2 className="mb-3 text-lg font-semibold">Finished films</h2>
+              <TitleList empty="No finished films yet. Start with a new submission." />
             </section>
 
+            <MyStoryConcepts />
+
             <section className="border-t border-line pt-8">
-              <h2 className="text-sm font-semibold text-muted">Production services</h2>
-              <p className="mt-1 text-xs text-muted">Optional. Separate from licensing.</p>
-              <div className="mt-4">
-                <StreamVistaOrders />
-              </div>
+              <StreamVistaOrders />
             </section>
           </div>
         </BridgeShell>
