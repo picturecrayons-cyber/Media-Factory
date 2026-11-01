@@ -79,7 +79,7 @@ function TitlePage() {
 }
 
 function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
-  const [activeTab, setActiveTab] = useState<WorkspaceTab>("Overview");
+  const [chosenTab, setChosenTab] = useState<WorkspaceTab | null>(null);
 
   const titleQ = useQuery({
     queryKey: ["bridge-title", id],
@@ -102,6 +102,9 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
   const title = titleQ.data?.title;
   const assets = assetsQ.data?.assets ?? [];
   const pub = pubQ.data?.publication;
+  const activeTab: WorkspaceTab =
+    chosenTab ??
+    (title && ["DRAFT", "UPLOADING", "PREPARING"].includes(title.status) ? "Files" : "Overview");
 
   if (titleQ.isPending) return <p className="text-sm text-muted">Loading title workspace…</p>;
   if (titleQ.isError)
@@ -178,7 +181,7 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
             <div className="mt-5">
               <button
                 type="button"
-                onClick={() => setActiveTab("Files")}
+                onClick={() => setChosenTab("Files")}
                 className="rounded-full bg-fg px-5 py-2.5 text-sm font-semibold text-bg"
               >
                 Upload Files
@@ -196,7 +199,7 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
           <button
             key={tab}
             type="button"
-            onClick={() => setActiveTab(tab)}
+            onClick={() => setChosenTab(tab)}
             className={`whitespace-nowrap rounded-full px-4 py-2 text-xs ${activeTab === tab ? "bg-fg text-bg font-semibold" : "text-muted hover:bg-surface hover:text-fg"}`}
           >
             {tab}
@@ -401,7 +404,7 @@ function FilesPanel({
     };
     setUploading(kind);
     setProgress({ kind, phase: "preparing", percent: null, etaSeconds: null, loaded: 0, total: file.size });
-    announce(`Preparing ${kind} upload. You can follow progress here.`);
+    announce(`Preparing ${kindLabel(kind)}.`);
     let transferTimer: ReturnType<typeof setTimeout> | undefined;
     try {
       const signed = await withTimeout(
@@ -414,7 +417,7 @@ function FilesPanel({
       assertAttemptActive();
       // Use the OCI pre-authenticated URL verbatim; rewriting its encoded path can invalidate it.
       setProgress({ kind, phase: "transferring", percent: 0, etaSeconds: null, loaded: 0, total: file.size });
-      announce(`Uploading ${kind}…`);
+      announce(`Uploading ${kindLabel(kind)}…`);
       transferTimer = setTimeout(() => uploadXhrRef.current?.abort(), 120_000);
       await transferWithProgress(kind, signed.url, signed.method, file, contentType);
       assertAttemptActive();
@@ -422,7 +425,7 @@ function FilesPanel({
       transferTimer = undefined;
 
       setProgress({ kind, phase: "verifying", percent: null, etaSeconds: null, loaded: file.size, total: file.size });
-      announce(`Upload transferred. Verifying stored ${kind} before marking it Ready…`);
+      announce(`File received. Verifying ${kindLabel(kind)} before it can show Ready…`);
       assertAttemptActive();
       await withTimeout(
         confirmAssetUpload({ data: { assetId: signed.assetId, expectedByteSize: file.size } }),
@@ -436,7 +439,7 @@ function FilesPanel({
       await withTimeout(Promise.resolve(onAssetsChanged()), 15_000, "Asset refresh");
       assertAttemptActive();
       setProgress(null);
-      announce(`${kind[0].toUpperCase() + kind.slice(1)} is ready after storage verification.`, "success", true);
+      announce(`${kindLabel(kind)} is ready.`, "success", true);
     } catch (error) {
       // A cancelled/superseded attempt must not overwrite the status of a newer upload.
       if (uploadAttemptRef.current !== attemptId) return;
@@ -471,66 +474,95 @@ function FilesPanel({
     window.location.assign(signed.url);
   }
 
-  const cards: [SimpleAssetKind, string, string][] = [
-    ["master", "Main Film", "Required"],
-    ["screener", "Trailer", "Add"],
-    ["poster_vertical", "Vertical Poster", "Add"],
-    ["poster_horizontal", "Horizontal Artwork", "Add"],
-    ["thumbnail", "Thumbnail", "Add"],
-    ["subtitle", "Subtitle", "Optional"],
-    ["censor_certificate", "Censor Certificate", "Optional"],
+  const groups: { title: string; hint: string; items: [SimpleAssetKind, string][] }[] = [
+    {
+      title: "1 · Picture",
+      hint: "Main film is required. Trailer is optional.",
+      items: [
+        ["master", "Required"],
+        ["screener", "Optional"],
+      ],
+    },
+    {
+      title: "2 · Artwork",
+      hint: "Vertical poster, horizontal artwork, and thumbnail.",
+      items: [
+        ["poster_vertical", "Recommended"],
+        ["poster_horizontal", "Recommended"],
+        ["thumbnail", "Recommended"],
+      ],
+    },
+    {
+      title: "3 · Documents",
+      hint: "Add these only if you have them.",
+      items: [
+        ["subtitle", "Optional"],
+        ["censor_certificate", "Optional"],
+      ],
+    },
   ];
-
-  const phaseLabel = progress
-    ? progress.phase === "preparing" ? "Preparing secure upload"
-      : progress.phase === "transferring" ? "Transferring to storage"
-      : progress.phase === "verifying" ? "Verifying stored object"
-      : "Refreshing verified assets"
-    : "";
+  const phaseSteps = [
+    ["preparing", "Prepare"],
+    ["transferring", "Transfer"],
+    ["verifying", "Verify"],
+    ["refreshing", "Refresh"],
+  ] as const;
+  const readyCount = groups
+    .flatMap((group) => group.items)
+    .filter(([kind]) => verifiedFor(assets, kind)).length;
 
   return (
     <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Media</p>
-          <h2 className="mt-1 font-display text-xl font-semibold">OTT package</h2>
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Upload</p>
+          <h2 className="mt-1 font-display text-xl font-semibold">Package in three steps</h2>
+          <p className="mt-1 text-sm text-muted">{readyCount} of 7 files ready. A file is Ready only after storage verification.</p>
         </div>
-        <span className="text-xs text-muted">Ready / Missing</span>
       </div>
 
       {progress ? (
-        <div className="mt-5 rounded-xl border border-line bg-elevated/40 p-4" aria-label="Upload progress">
+        <div className="mt-5 rounded-2xl border border-accent/30 bg-accent-soft p-4" aria-label="Upload progress">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <p className="text-sm font-semibold">{progress.kind.replaceAll("_", " ")} · {phaseLabel}</p>
-              <p className="mt-1 text-xs text-muted">
+              <p className="text-base font-semibold">{kindLabel(progress.kind)}</p>
+              <p className="mt-1 text-sm text-muted">
                 {progress.phase === "transferring" && progress.percent !== null
                   ? `${progress.percent}% · ${(progress.loaded / (1024 * 1024)).toFixed(1)} of ${(progress.total / (1024 * 1024)).toFixed(1)} MB · ${formatEta(progress.etaSeconds)}`
-                  : progress.phase === "preparing" ? "Getting a secure upload URL…"
-                  : progress.phase === "verifying" ? "Checking the stored object's size, type and verification evidence…"
-                  : "Refreshing the verified asset list…"}
+                  : progress.phase === "preparing" ? "Getting a secure upload link…"
+                  : progress.phase === "verifying" ? "Checking the stored file. Do not upload it again yet."
+                  : "Updating the file list…"}
               </p>
             </div>
             <button
               type="button"
               onClick={() => {
                 cancelRequestedRef.current = true;
-                // Invalidate this attempt so a late URL-preparation result cannot start a PUT.
                 uploadAttemptRef.current += 1;
                 uploadXhrRef.current?.abort();
                 setProgress(null);
-                announce("Upload cancelled. Any pending preparation result will be ignored; no new transfer will start from this attempt.", "error", true);
+                announce("Upload cancelled. Select the file again if you want to retry.", "error", true);
                 if (!uploadXhrRef.current) {
                   setUploading(null);
                 }
               }}
-              className="rounded-full border border-line px-3 py-1.5 text-xs font-semibold"
+              className="rounded-full border border-line bg-surface px-3 py-1.5 text-xs font-semibold"
             >
-              Cancel upload
+              Cancel
             </button>
           </div>
+          <ol className="mt-3 flex flex-wrap gap-2">
+            {phaseSteps.map(([phase, label]) => (
+              <li
+                key={phase}
+                className={`rounded-full px-3 py-1 text-xs font-semibold ${progress.phase === phase ? "bg-fg text-bg" : "bg-surface text-muted"}`}
+              >
+                {label}
+              </li>
+            ))}
+          </ol>
           <div
-            className="mt-3 h-2.5 overflow-hidden rounded-full bg-line"
+            className="mt-3 h-3 overflow-hidden rounded-full bg-white"
             role="progressbar"
             aria-label="Upload transfer progress"
             aria-valuemin={0}
@@ -542,34 +574,46 @@ function FilesPanel({
               style={progress.percent === null ? undefined : { width: `${progress.percent}%` }}
             />
           </div>
-          <p className="mt-2 text-xs text-muted">The file is not Ready until server-side storage verification succeeds.</p>
         </div>
       ) : null}
 
-      <div className="mt-5 grid gap-3 sm:grid-cols-2">
-        {cards.map(([kind, label, empty]) => (
-          <FileTypeCard
-            key={kind}
-            kind={kind}
-            label={label}
-            status={assets.some((a) => (a.kind === kind || (kind === "poster_vertical" && a.kind === "poster")) && a.verified) ? "Ready" : empty}
-            busy={uploading === kind}
-            canUpload={canUpload}
-            onFile={(file) => void uploadFile(kind, file)}
-          />
+      <div className="mt-6 space-y-6">
+        {groups.map((group) => (
+          <div key={group.title}>
+            <div className="mb-3">
+              <h3 className="text-sm font-semibold">{group.title}</h3>
+              <p className="text-xs text-muted">{group.hint}</p>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {group.items.map(([kind, empty]) => {
+                const verified = verifiedFor(assets, kind);
+                return (
+                  <FileTypeCard
+                    key={kind}
+                    kind={kind}
+                    label={kindLabel(kind)}
+                    status={verified ? "Ready" : empty}
+                    busy={uploading === kind}
+                    canUpload={canUpload}
+                    onFile={(file) => void uploadFile(kind, file)}
+                    onDownload={verified ? () => void download(verified.id) : undefined}
+                  />
+                );
+              })}
+            </div>
+          </div>
         ))}
       </div>
       {message ? (
         <p
-          className={`mt-3 rounded-lg border px-3 py-2 text-sm ${messageKind === "error" ? "border-red-300 text-red-700" : messageKind === "success" ? "border-green-300 text-green-700" : "border-line text-muted"}`}
+          className={`mt-4 rounded-lg border px-3 py-2 text-sm ${messageKind === "error" ? "border-red-300 bg-red-50 text-red-700" : messageKind === "success" ? "border-green-300 bg-green-50 text-green-800" : "border-line bg-elevated text-fg"}`}
           role={messageKind === "error" ? "alert" : "status"}
           aria-live={messageKind === "error" ? "assertive" : "polite"}
         >
           {message}
         </p>
       ) : null}
-      <div className="mt-2 flex flex-wrap items-center gap-3">
-        <p className="text-xs text-muted">Upload status and errors appear here.</p>
+      <div className="mt-3">
         {notificationPermission === "default" ? (
           <button
             type="button"
@@ -577,46 +621,60 @@ function FilesPanel({
               if ("Notification" in window) {
                 void Notification.requestPermission().then((permission) => {
                   setNotificationPermission(permission);
-                  if (permission === "granted") announce("Desktop upload notifications enabled.");
+                  if (permission === "granted") announce("Desktop notifications are on.");
                 });
               }
             }}
             className="rounded-full border border-line px-3 py-1.5 text-xs font-semibold"
           >
-            Enable desktop notifications
+            Notify me when a file is ready
           </button>
         ) : notificationPermission === "granted" ? (
-          <span className="text-xs text-muted">Desktop notifications enabled</span>
+          <span className="text-xs text-muted">You will be notified when a file is ready.</span>
         ) : null}
       </div>
-      <div className="mt-5 space-y-2">
-        {assets.map((a) => (
-          <div key={a.id} className="flex items-center justify-between gap-3 rounded-xl border border-line p-4">
-            <div>
-              <p className="text-sm font-semibold">{a.kind}</p>
-              <p className="text-xs text-muted">{a.verified ? "Ready" : "Processing"}</p>
-            </div>
-            {a.verified ? (
-              <button
-                onClick={() => void download(a.id)}
-                className="rounded-full border border-line px-4 py-2 text-xs font-semibold"
-              >
-                Download
-              </button>
-            ) : null}
-          </div>
-        ))}
-      </div>
+      {assets.some((asset) => !asset.verified) ? (
+        <p className="mt-4 text-sm text-muted">
+          Still processing: {assets.filter((asset) => !asset.verified).map((asset) => displayKind(asset.kind)).join(", ")}. Refresh before uploading the same file again.
+        </p>
+      ) : null}
       <AssetPreviewGallery assets={assets} />
     </section>
   );
 }
+
+function displayKind(kind: string) {
+  if (kind === "poster") return "Vertical poster";
+  if (kind === "master" || kind === "screener" || kind === "poster_vertical" || kind === "poster_horizontal" || kind === "thumbnail" || kind === "subtitle" || kind === "censor_certificate") {
+    return kindLabel(kind);
+  }
+  return kind.replaceAll("_", " ");
+}
+
+function kindLabel(kind: SimpleAssetKind) {
+  if (kind === "master") return "Main film";
+  if (kind === "screener") return "Trailer";
+  if (kind === "poster_vertical") return "Vertical poster";
+  if (kind === "poster_horizontal") return "Horizontal artwork";
+  if (kind === "thumbnail") return "Thumbnail";
+  if (kind === "subtitle") return "Subtitles";
+  return "Censor certificate";
+}
+
+function verifiedFor(
+  assets: Array<{ id: string; kind: string; verified: boolean }>,
+  kind: SimpleAssetKind,
+) {
+  return assets.find((asset) => asset.verified && (asset.kind === kind || (kind === "poster_vertical" && asset.kind === "poster")));
+}
+
 function FileTypeCard({
   kind,
   label,
   status,
   busy,
   onFile,
+  onDownload,
   canUpload,
 }: {
   canUpload: boolean;
@@ -625,32 +683,41 @@ function FileTypeCard({
   status: string;
   busy: boolean;
   onFile: (file: File) => void;
+  onDownload?: () => void;
 }) {
   const spec = OTT_INGEST_SPEC[kind];
+  const ready = status === "Ready";
   return (
-    <div className="rounded-xl border border-line p-4">
+    <div className={`rounded-xl border p-4 ${ready ? "border-green-200 bg-green-50/60" : status === "Required" ? "border-line-strong bg-elevated/50" : "border-line"}`}>
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-sm font-semibold">{label}</p>
-          <p className="mt-1 text-xs text-muted">{status}</p>
+          <p className={`mt-1 text-xs font-semibold ${ready ? "text-green-700" : "text-muted"}`}>{ready ? "Ready" : status}</p>
           <p className="mt-2 text-[11px] leading-5 text-muted">
-            Allowed: {spec.extensions.map((ext) => ext.replace(".", "").toUpperCase()).join(", ")}
+            {spec.extensions.map((ext) => ext.replace(".", "").toUpperCase()).join(", ")}
           </p>
         </div>
-        <label className="cursor-pointer rounded-full border border-line px-3 py-1.5 text-xs font-semibold">
-          {busy ? "Uploading…" : status === "Ready" ? "Replace" : "Upload"}
-          <input
-            className="sr-only"
-            type="file"
-            accept={getOttIngestAccept(kind)}
-            disabled={busy || !canUpload}
-            onChange={(e) => {
-              const file = e.currentTarget.files?.[0];
-              if (file) onFile(file);
-              e.currentTarget.value = "";
-            }}
-          />
-        </label>
+        <div className="flex shrink-0 flex-col items-end gap-2">
+          <label className={`cursor-pointer rounded-full px-3 py-1.5 text-xs font-semibold ${ready ? "border border-line bg-surface" : "bg-fg text-bg"} ${busy || !canUpload ? "opacity-50" : ""}`}>
+            {busy ? "Uploading…" : ready ? "Replace" : "Upload"}
+            <input
+              className="sr-only"
+              type="file"
+              accept={getOttIngestAccept(kind)}
+              disabled={busy || !canUpload}
+              onChange={(e) => {
+                const file = e.currentTarget.files?.[0];
+                if (file) onFile(file);
+                e.currentTarget.value = "";
+              }}
+            />
+          </label>
+          {onDownload ? (
+            <button type="button" onClick={onDownload} className="rounded-full border border-line bg-surface px-3 py-1.5 text-xs font-semibold">
+              Download
+            </button>
+          ) : null}
+        </div>
       </div>
     </div>
   );
