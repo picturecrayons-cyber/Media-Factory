@@ -31,6 +31,7 @@ export type BridgeProfile = {
   displayName: string;
   accountType: AccountType;
   organizationName: string | null;
+  organizationId?: string | null;
   internalRole: InternalRole | null;
   emailVerified: boolean;
 };
@@ -42,6 +43,8 @@ export type BridgeTitle = {
   nameMl: string | null;
   ownerUserId: string;
   ownerAccountType: AccountType;
+  /** Canonical organization UUID used for Studio authorization. */
+  ownerOrganizationId?: string | null;
   status: TitleStatus;
   synopsis: string;
   language: string;

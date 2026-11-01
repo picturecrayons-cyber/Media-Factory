@@ -1,0 +1,10 @@
+# Robots policy for the public Crayons Pictures domain.
+# This is a crawler hint, not an access-control mechanism.
+User-agent: *
+Allow: /
+
+# Workflow pages publish a noindex meta directive and must remain crawlable
+# so compliant search engines can read it.
+# Keep private server-function and API endpoints out of crawler discovery.
+Disallow: /_serverFn/
+Disallow: /api/

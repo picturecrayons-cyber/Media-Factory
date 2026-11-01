@@ -2,6 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState, type FormEvent } from "react";
 import { resendConfirmationEmail, signUpWithEmail } from "@/lib/auth/client";
 import { classifySignupResult } from "@/lib/auth/signup-classification";
+import { publicAccountTypeFrom } from "@/lib/auth/public-account-type";
 import { BrandMark } from "@/components/bridge/shell";
 import { Button } from "@/components/ui/button";
 
@@ -17,11 +18,7 @@ type AccountChoice = "independent_creator" | "studio" | "buyer";
 function Signup() {
   const search = Route.useSearch();
   const initialChoice: AccountChoice =
-    search.role === "studio"
-      ? "studio"
-      : search.role === "buyer"
-      ? "buyer"
-      : "independent_creator";
+    publicAccountTypeFrom(search.role) ?? "independent_creator";
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -201,6 +198,25 @@ function Signup() {
     );
   }
 
+  if (search.role === "investor") {
+    return (
+      <main className="grid min-h-screen place-items-center bg-bg p-6">
+        <div className="w-full max-w-md space-y-5 rounded-2xl border border-line bg-surface p-7 text-center shadow-sm">
+          <BrandMark />
+          <h1 className="font-display text-2xl font-semibold text-fg">Investor access</h1>
+          <p className="text-sm leading-relaxed text-muted">
+            Investor workspaces are provisioned after access review. This public signup form is for
+            Creator, Studio, and Buyer accounts only.
+          </p>
+          <div className="flex flex-wrap justify-center gap-3">
+            <Link to="/contact" className="text-sm font-semibold text-accent underline-offset-4 hover:underline">Request investor access</Link>
+            <Link to="/" className="text-sm text-muted underline-offset-4 hover:underline">Back to Crayons Bridge</Link>
+          </div>
+        </div>
+      </main>
+    );
+  }
+
   return (
     <main className="grid min-h-screen place-items-center bg-bg p-6">
       <div className="w-full max-w-md space-y-6 rounded-2xl border border-line bg-surface p-7 shadow-sm">
@@ -241,29 +257,42 @@ function Signup() {
             />
           </label>
 
-          <div className="space-y-1.5">
-            <span className="block text-sm font-medium text-fg">I am a:</span>
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+          <fieldset className="space-y-1.5">
+            <legend className="block text-sm font-medium text-fg">I am a:</legend>
+            <p id="account-type-help" className="text-xs text-muted">
+              Choose the workspace that matches your role. Access is restricted by permissions after sign-in.
+            </p>
+            <div role="radiogroup" aria-describedby="account-type-help" className="grid grid-cols-1 gap-2 sm:grid-cols-3">
               {[
-                { id: "independent_creator", label: "Creator / Filmmaker" },
-                { id: "studio", label: "Studio / Production" },
-                { id: "buyer", label: "Buyer / Platform" },
+                { id: "independent_creator" as const, label: "Creator / Filmmaker", detail: "Submit and manage your own titles" },
+                { id: "studio" as const, label: "Studio / Production", detail: "Manage a company slate" },
+                { id: "buyer" as const, label: "Buyer / Platform", detail: "Review cleared titles and licensing" },
               ].map((opt) => (
-                <button
-                  type="button"
+                <label
                   key={opt.id}
-                  onClick={() => setAccountType(opt.id as AccountChoice)}
-                  className={`flex flex-col items-center justify-center rounded-xl border p-2.5 text-center text-xs font-medium transition ${
+                  className={`flex min-h-24 cursor-pointer flex-col items-start justify-center gap-1 rounded-xl border p-3 text-left transition focus-within:ring-2 focus-within:ring-accent focus-within:ring-offset-2 ${
                     accountType === opt.id
-                      ? "border-accent bg-accent-soft text-accent font-semibold shadow-xs"
+                      ? "border-accent bg-accent-soft text-accent shadow-xs"
                       : "border-line bg-elevated text-muted hover:border-line-strong hover:text-fg"
                   }`}
                 >
-                  {opt.label}
-                </button>
+                  <input
+                    className="sr-only"
+                    type="radio"
+                    name="accountType"
+                    value={opt.id}
+                    checked={accountType === opt.id}
+                    onChange={() => setAccountType(opt.id)}
+                  />
+                  <span className="text-sm font-semibold">{opt.label}</span>
+                  <span className="text-xs leading-relaxed">{opt.detail}</span>
+                  <span className="text-xs font-semibold" aria-live="polite">
+                    {accountType === opt.id ? "Selected" : "Select role"}
+                  </span>
+                </label>
               ))}
             </div>
-          </div>
+          </fieldset>
 
           <label className="block text-sm font-medium text-fg">
             Password

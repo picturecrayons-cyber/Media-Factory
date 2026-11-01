@@ -23,8 +23,12 @@ import {
   validateOttIngestFile,
 } from "@/lib/bridge/ott-ingest-spec";
 import { asciiUploadName } from "@/lib/bridge/latin1";
+import { AssetPosterSlot, AssetPreviewGallery } from "@/components/bridge/asset-preview-gallery";
 
-export const Route = createFileRoute("/title/$id")({ component: TitlePage });
+export const Route = createFileRoute("/title/$id")({
+  head: () => ({ meta: [{ name: "robots", content: "noindex, nofollow" }] }),
+  component: TitlePage,
+});
 
 const WORKSPACE_TABS = ["Overview", "Files"] as const;
 type WorkspaceTab = (typeof WORKSPACE_TABS)[number];
@@ -128,13 +132,7 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
       {assetsQ.isError ? <p role="alert">Assets unavailable: {assetsQ.error.message}</p> : null}
       <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
         <div className="grid gap-5 md:grid-cols-[180px_1fr]">
-          <div className="aspect-[2/3] overflow-hidden rounded-xl border border-line bg-elevated">
-            <div className="grid h-full place-items-center px-4 text-center text-xs text-muted">
-              {assets.some((asset) => ["poster_vertical", "poster"].includes(asset.kind))
-                ? "Vertical poster ready"
-                : "Add vertical poster"}
-            </div>
-          </div>
+          <AssetPosterSlot assets={assets} />
           <div className="min-w-0">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
@@ -609,6 +607,7 @@ function FilesPanel({
           </div>
         ))}
       </div>
+      <AssetPreviewGallery assets={assets} />
     </section>
   );
 }

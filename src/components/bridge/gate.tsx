@@ -6,6 +6,7 @@ import { retryWorkspaceSession } from "@/lib/auth/workspace-session-retry";
 import { supabase } from "@/lib/supabase";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { getBridgeSession, type BridgeActor } from "@/lib/bridge/session";
+import { canAccessTitleWorkspace } from "@/lib/bridge/rbac";
 import { requestEmailVerification } from "@/lib/bridge/profiles";
 import { Button } from "@/components/ui/button";
 import { BrandMark } from "./shell";
@@ -26,7 +27,7 @@ export function RequireBridge({
   allow,
 }: {
   children: (actor: BridgeActor) => ReactNode;
-  allow?: "creator" | "studio" | "buyer" | "investor" | "internal" | "super_admin";
+  allow?: "creator" | "studio" | "buyer" | "investor" | "internal" | "super_admin" | "workspace";
 }) {
   const qc = useQueryClient();
   const [retrying, setRetrying] = useState(false);
@@ -54,6 +55,10 @@ export function RequireBridge({
   }
   if (!user) return <RedirectToSignIn />;
   if (sessionQ.error) {
+    const workspaceErrorCode =
+      sessionQ.error instanceof Error
+        ? sessionQ.error.message.match(/\b(CONFIG_MISSING|MISSING_RELATION|WORKSPACE_QUERY_FAILED)\b/)?.[1]
+        : undefined;
     async function retrySession() {
       if (retrying) return;
       setRetrying(true);
@@ -81,7 +86,9 @@ export function RequireBridge({
       <Frame>
         <h1 className="font-display text-2xl">Could not open workspace</h1>
         <p role="alert" className="text-sm text-muted">
-          Bridge could not load your workspace. Retry to check the service without clearing your session.
+          {workspaceErrorCode
+            ? `Workspace service error: ${workspaceErrorCode}. Retry to check the service without clearing your session.`
+            : "Bridge could not load your workspace. Retry to check the service without clearing your session."}
         </p>
         {retryError ? <p role="alert" className="text-sm text-accent">{retryError}</p> : null}
         <Button type="button" disabled={retrying} onClick={() => void retrySession()}>{retrying ? "Checking…" : "Retry workspace"}</Button>
@@ -92,6 +99,12 @@ export function RequireBridge({
 
   const profile = sessionQ.data?.profile ?? null;
   if (!profile) return <Navigate to="/onboarding" />;
+
+  // The generic title workspace is not a public catalog. Only Creator/Studio
+  // accounts and internal roles with explicit catalog-read permission may enter.
+  if (allow === "workspace" && !canAccessTitleWorkspace(profile)) {
+    return <Navigate to={sessionQ.data?.home ?? "/"} />;
+  }
 
   // Role gates are authoritative for role-specific workspaces:
   // creator/studio/buyer/investor accounts are valid Bridge users and must not be

@@ -7,7 +7,10 @@ import { listTitles, listAuditLogs } from "@/lib/bridge/titles";
 import { listLoopPublicationReadiness } from "@/lib/bridge/loop-publication";
 import { listAdminProfiles } from "@/lib/bridge/profiles";
 
-export const Route = createFileRoute("/admin")({ component: AdminControlPlane });
+export const Route = createFileRoute("/admin")({
+  head: () => ({ meta: [{ name: "robots", content: "noindex, nofollow" }] }),
+  component: AdminControlPlane,
+});
 
 function AdminControlPlane() {
   return (

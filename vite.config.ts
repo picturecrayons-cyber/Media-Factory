@@ -54,6 +54,8 @@ function pgliteBootstrapPlugin(): Plugin {
 
 // `0.0.0.0:3000` is the preview contract.
 export default defineConfig(({ command, isPreview }) => ({
+  // NEXT_PUBLIC_ is an explicit public alias for Supabase browser configuration.
+  envPrefix: ["VITE_", "NEXT_PUBLIC_"],
   server: {
     host: "0.0.0.0",
     port: 3000,

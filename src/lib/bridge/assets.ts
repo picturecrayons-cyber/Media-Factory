@@ -4,7 +4,7 @@ import { randomBytes } from "node:crypto";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import { ASSET_KINDS } from "./types";
-import { assertPermission, canReadTitle, hasStaffPermission } from "./rbac";
+import { assertPermission, canOperateOnTitle, canReadTitle, hasStaffPermission } from "./rbac";
 import { requireVerifiedActor } from "./session";
 import { loadTitle } from "./titles";
 import { writeAudit } from "./audit";
@@ -40,7 +40,7 @@ export const requestAssetUpload = createServerFn({ method: "POST" })
     assertPermission(actor, actor.internalRole ? "title.ingest_internal" : "asset.sign_upload");
     const title = await loadTitle(data.titleId);
     if (!title) throw new Error("Not found");
-    if (title.ownerUserId !== actor.userId && !hasStaffPermission(actor, "asset.sign_upload")) throw new Error("Forbidden");
+    if (!canOperateOnTitle(actor, title, "asset.sign_upload", "asset.sign_upload")) throw new Error("Forbidden");
     if (!UPLOADABLE.has(title.status)) throw new Error("Uploads are closed for this status");
     if (!["master", "poster", "poster_vertical", "poster_horizontal", "thumbnail", "subtitle", "screener", "technical", "censor_certificate"].includes(data.kind))
       throw new Error("This asset kind is not supported by the OTT ingest uploader");
@@ -100,9 +100,9 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
       from bridge_assets where id = ${data.assetId} limit 1
     `;
     const asset = rows[0];
-    if (!asset || (asset.created_by !== actor.userId && !hasStaffPermission(actor, "asset.sign_upload"))) throw new Error("Asset not found");
+    if (!asset) throw new Error("Asset not found");
     const title = await loadTitle(asset.title_id);
-    if (!title || (title.ownerUserId !== actor.userId && !hasStaffPermission(actor, "asset.sign_upload")) || !UPLOADABLE.has(title.status)) {
+    if (!title || !canOperateOnTitle(actor, title, "asset.sign_upload", "asset.sign_upload") || !UPLOADABLE.has(title.status)) {
       throw new Error("Upload confirmation is closed for this title");
     }
     if (asset.byte_size != null)
@@ -122,15 +122,8 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
     if (sealed.byteSize !== object.byteSize || !sealed.etag) {
       throw new Error("Verified copy differs from the uploaded object");
     }
-    // Only mark the migration queue as UPLOADED after the immutable copy succeeds
-    // and destination object's size, content type, and ETag have been verified.
-    await sql`
-      update loop_media_migration_queue
-      set status = 'UPLOADED', target_path = ${sealedKey}, updated_at = now()
-      where title_id = ${title.id}
-        and asset_kind = case when ${asset.kind} = 'screener' then 'TRAILER' else upper(${asset.kind}) end
-        and status in ('PENDING_REUPLOAD', 'UPLOADED')
-    `;
+    // Persist asset/title/audit state first. Do not advance the migration queue
+    // if persistence fails: its prior state remains the truthful state.
     const confirmed = await persistVerifiedAsset(sql, {
       assetId: asset.id,
       actorUserId: actor.userId,
@@ -144,6 +137,14 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
       sealedKey,
     });
     if (confirmed) {
+      // UPLOADED is only recorded after persistVerifiedAsset succeeds.
+      await sql`
+        update loop_media_migration_queue
+        set status = 'UPLOADED', target_path = ${sealedKey}, updated_at = now()
+        where title_id = ${title.id}
+          and asset_kind = case when ${asset.kind} = 'screener' then 'TRAILER' else upper(${asset.kind}) end
+          and status in ('PENDING_REUPLOAD', 'UPLOADED')
+      `;
       await sql`
         update loop_media_migration_queue
         set status = 'VERIFIED', target_path = ${sealedKey}, updated_at = now()
@@ -156,8 +157,25 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
       const current = await sql<{
         byte_size: number | null;
       }>`select byte_size from bridge_assets where id = ${asset.id}`;
-      if (current[0]?.byte_size != null)
+      if (current[0]?.byte_size != null) {
+        // A concurrent confirmation persisted the asset successfully. Bring the
+        // queue into line with that durable state before returning idempotently.
+        await sql`
+          update loop_media_migration_queue
+          set status = 'UPLOADED', target_path = ${sealedKey}, updated_at = now()
+          where title_id = ${title.id}
+            and asset_kind = case when ${asset.kind} = 'screener' then 'TRAILER' else upper(${asset.kind}) end
+            and status in ('PENDING_REUPLOAD', 'UPLOADED')
+        `;
+        await sql`
+          update loop_media_migration_queue
+          set status = 'VERIFIED', target_path = ${sealedKey}, updated_at = now()
+          where title_id = ${title.id}
+            and asset_kind = case when ${asset.kind} = 'screener' then 'TRAILER' else upper(${asset.kind}) end
+            and status in ('UPLOADED', 'PENDING_REUPLOAD')
+        `;
         return { assetId: asset.id, byteSize: Number(current[0].byte_size), verified: true };
+      }
       throw new Error("Asset confirmation changed; retry after refreshing the title");
     }
     return { assetId: asset.id, byteSize: sealed.byteSize, verified: true };
