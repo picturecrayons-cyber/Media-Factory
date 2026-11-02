@@ -18,3 +18,14 @@ test("studio organization lookup is optional and fails closed when schema is mis
   assert.match(source, /workspaceFailureCode/);
   assert.doesNotMatch(source, /organization_name.*(?:fallback|organization_id)/i);
 });
+
+test("identity resolver requires an explicit verified identity link and rejects email inference", () => {
+  const source = readFileSync(new URL("./session.ts", import.meta.url), "utf8");
+  const resolver = source.match(/export async function resolveBridgeUserId[\\s\\S]*?\\n}\\n\\nexport async function loadActor/)?.[0] ?? "";
+  assert.ok(resolver, "identity resolver should exist");
+  assert.match(resolver, /bridge_loop_identity_links/);
+  assert.match(resolver, /verified_at is not null/);
+  assert.match(resolver, /verified_by/);
+  assert.match(resolver, /BRIDGE_IDENTITY_UNRESOLVED/);
+  assert.doesNotMatch(resolver, /auth\\.users|lower\\(au\\.email\\)|email_confirmed_at/);
+});
