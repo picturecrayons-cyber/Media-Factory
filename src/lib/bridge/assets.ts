@@ -17,6 +17,11 @@ import { validateOttIngestFile, type OttIngestKind } from "./ott-ingest-spec";
 const UPLOADABLE: ReadonlySet<string> = new Set(["DRAFT", "UPLOADING", "PREPARING"]);
 
 async function hasLicenseEntitlement(userId: string, titleId: string): Promise<boolean> {
+  // User/title-only entitlements cannot prove buyer-organization or mandate
+  // scope. Deny this path until the canonical authorization chain is enforced.
+  void userId;
+  void titleId;
+  return false;
   const sql = await getSql();
   const rows = await sql<{ n: number }>`
     select count(*)::int as n from bridge_entitlements
