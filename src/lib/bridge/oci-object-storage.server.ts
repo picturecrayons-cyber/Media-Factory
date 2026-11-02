@@ -134,6 +134,7 @@ async function signedFetch(opts: {
   method: "GET" | "HEAD" | "POST" | "DELETE";
   path: string;
   body?: unknown;
+  timeoutMs?: number;
 }) {
   const url = new URL(opts.path, endpoint(opts.cfg.region));
   const body = opts.body === undefined ? undefined : JSON.stringify(opts.body);
@@ -153,7 +154,7 @@ async function signedFetch(opts: {
     method: opts.method,
     headers: safeHeaders,
     body,
-    signal: AbortSignal.timeout(15_000),
+    signal: AbortSignal.timeout(opts.timeoutMs ?? 15_000),
   });
 }
 
@@ -249,6 +250,38 @@ export async function signDownload(opts: { key: string; expiresIn?: number }) {
     expiresIn: opts.expiresIn ?? 300,
   });
   return { url: signed.url, key: opts.key, bucket: signed.bucket, method: "GET" as const };
+}
+
+/** Stream an OCI object through SHA-256 without buffering the media in memory. */
+export async function hashObject(key: string) {
+  const cfg = config();
+  const namespace = await resolveNamespace(cfg);
+  const path = `/n/${encodeURIComponent(namespace)}/b/${encodeURIComponent(cfg.bucket)}/o/${encodedObjectName(key)}`;
+  // Large masters may take much longer than control-plane requests. The body is
+  // consumed incrementally; the timeout bounds a stalled transfer without buffering it.
+  const res = await signedFetch({ cfg, method: "GET", path, timeoutMs: 60 * 60 * 1000 });
+  if (!res.ok) throw new Error(`OCI object checksum read failed (${res.status})`);
+  if (!res.body) throw new Error("OCI object checksum stream is unavailable");
+  const expectedBytes = Number(res.headers.get("content-length") || 0);
+  if (!Number.isSafeInteger(expectedBytes) || expectedBytes <= 0) {
+    throw new Error("OCI object checksum read has no valid content length");
+  }
+  const digest = createHash("sha256");
+  const reader = res.body.getReader();
+  let byteSize = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      byteSize += value.byteLength;
+      if (byteSize > expectedBytes) throw new Error("OCI object stream exceeded its declared size");
+      digest.update(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  if (byteSize !== expectedBytes) throw new Error("OCI object stream size does not match its declared size");
+  return { byteSize, sha256: digest.digest("hex") };
 }
 
 export async function verifyObject(key: string, expectedContentType?: string | null) {
