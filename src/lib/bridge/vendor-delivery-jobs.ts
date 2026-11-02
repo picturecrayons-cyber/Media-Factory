@@ -5,7 +5,13 @@ import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql, type Sql } from "@/lib/db";
 import { assertNotDevUser } from "./guards";
 import { writeAudit } from "./audit";
-import { assertPermission, canOperateOnTitle, type Actor } from "./rbac";
+import type { Actor } from "./rbac";
+import {
+  canOperateVendorJob,
+  canRequestVendorJob,
+  canSignOffVendorJob,
+  nextVendorJobState,
+} from "./vendor-delivery-policy";
 import { requireVerifiedActor } from "./session";
 
 const jobType = z.enum(["dubbing", "loudness_check", "imf_request", "dcp_request", "human_qc"]);
@@ -20,21 +26,6 @@ type TitleScope = {
   status: string;
 };
 
-function assertTitleScope(actor: Actor, title: TitleScope, permission: "request" | "operate") {
-  if (!actor.emailVerified) throw new Error("Email verification required");
-  if (actor.internalRole) {
-    if (!actor.organizationId || actor.organizationId !== title.owner_organization_id) {
-      throw new Error("Forbidden");
-    }
-    assertPermission(actor, "title.deliver");
-    return;
-  }
-  if (permission === "request") {
-    if (!canOperateOnTitle(actor, title, "title.create")) throw new Error("Forbidden");
-    return;
-  }
-  throw new Error("Forbidden");
-}
 
 function unavailableStorage(error: unknown): never {
   const candidate = error as { code?: unknown; message?: unknown };
@@ -96,6 +87,7 @@ export const listVendorDeliveryJobs = createServerFn({ method: "GET" })
         or (${isStudio} and t.owner_account_type = 'studio'
             and t.owner_organization_id = ${actor.organizationId ?? null})
         or (${isInternal} and t.owner_organization_id = ${actor.organizationId ?? null})
+      and j.organization_id is not distinct from t.owner_organization_id
       order by j.created_at desc
       limit 200
     `);
@@ -119,7 +111,11 @@ export const requestVendorDeliveryJob = createServerFn({ method: "POST" })
         from public.bridge_titles where id = ${data.titleId} for update
       `;
       if (!title) throw new Error("Not found");
-      assertTitleScope(actor, title, "request");
+      if (!canRequestVendorJob(actor, {
+        ownerUserId: title.owner_user_id,
+        ownerAccountType: title.owner_account_type,
+        ownerOrganizationId: title.owner_organization_id,
+      })) throw new Error("Forbidden");
       const id = randomUUID();
       await tx`
         insert into public.bridge_vendor_jobs
@@ -150,15 +146,13 @@ export const assignVendorDeliveryJob = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
-    assertPermission(actor, "title.deliver");
-    if (!actor.internalRole || !actor.organizationId) throw new Error("Forbidden");
     const sql = await getSql();
     return withStorage(() => sql.transaction(async (tx) => {
       const [job] = await tx<{ id: string; title_id: string; organization_id: string | null; state: string }>`
         select id, title_id, organization_id, state from public.bridge_vendor_jobs
         where id = ${data.jobId} for update
       `;
-      if (!job || job.organization_id !== actor.organizationId) throw new Error("Not found");
+      if (!job || !canOperateVendorJob(actor, job.organization_id)) throw new Error("Not found");
       if (job.state !== "requested") throw new Error("Invalid vendor job state transition");
       await tx`
         update public.bridge_vendor_jobs
@@ -189,8 +183,6 @@ export const transitionVendorDeliveryJob = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
-    assertPermission(actor, "title.deliver");
-    if (!actor.internalRole || !actor.organizationId) throw new Error("Forbidden");
     const sql = await getSql();
     return withStorage(() => sql.transaction(async (tx) => {
       const [job] = await tx<{
@@ -199,15 +191,10 @@ export const transitionVendorDeliveryJob = createServerFn({ method: "POST" })
         select id, title_id, organization_id, state, requested_by
         from public.bridge_vendor_jobs where id = ${data.jobId} for update
       `;
-      if (!job || job.organization_id !== actor.organizationId) throw new Error("Not found");
-      const nextState =
-        data.action === "start_work" && job.state === "assigned" ? "in_progress" :
-        data.action === "submit_review" && job.state === "in_progress" ? "in_review" :
-        data.action === "sign_off" && job.state === "in_review" ? "signed_off" :
-        data.action === "block" && ["requested", "assigned", "in_progress", "in_review"].includes(job.state) ? "blocked" :
-        null;
+      if (!job || !canOperateVendorJob(actor, job.organization_id)) throw new Error("Not found");
+      const nextState = nextVendorJobState(job.state, data.action);
       if (!nextState) throw new Error("Invalid vendor job state transition");
-      if (data.action === "sign_off" && job.requested_by === actor.userId) {
+      if (data.action === "sign_off" && !canSignOffVendorJob(job.requested_by, actor.userId)) {
         throw new Error("A different reviewer must sign off this vendor job");
       }
       await tx`
@@ -249,7 +236,7 @@ export const prepareDestinationPackage = createServerFn({ method: "POST" })
         select id, name, owner_user_id, owner_account_type, owner_organization_id, status
         from public.bridge_titles where id = ${data.titleId} for update
       `;
-      if (!title || title.owner_organization_id !== actor.organizationId) throw new Error("Not found");
+      if (!title || !canOperateVendorJob(actor, title.owner_organization_id)) throw new Error("Not found");
       if (title.status !== "LICENSED") throw new Error("Package preparation requires a LICENSED title");
       const [evidence] = await tx<{
         qc_case_id: string | null; legal_case_id: string | null; rights_grant_id: string | null;
