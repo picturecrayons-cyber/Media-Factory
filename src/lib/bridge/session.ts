@@ -52,23 +52,21 @@ async function loadActorByBridgeUserId(userId: string): Promise<BridgeActor | nu
   if (!rows[0]) return null;
 
   const actor = mapRow(rows[0]);
-  if ((actor.accountType !== "studio" && actor.accountType !== "buyer") || !actor.emailVerified) return actor;
+  if (!["studio", "buyer"].includes(actor.accountType) || !actor.emailVerified) return actor;
 
   // Organization scope is server-resolved for Studio and Buyer accounts.
   // Missing schema means no scope; never infer an ID from organization_name.
   try {
     const memberships = await sql<{ organization_id: string }>`
-      select bp.organization_id
+      select m.organization_id
       from bridge_profiles bp
       join bridge_organization_memberships m
-        on m.organization_id = bp.organization_id
-       and m.user_id = bp.user_id
+        on m.user_id = bp.user_id
        and m.status = 'active'
       join bridge_organizations o
         on o.id = m.organization_id
        and o.status = 'active'
       where bp.user_id = ${userId}
-        and bp.organization_id is not null
       limit 1
     `;
     actor.organizationId = memberships[0]?.organization_id ?? null;
