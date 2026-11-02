@@ -51,11 +51,34 @@ async function main() {
     const schema = await client.query(`
       select
         to_regclass('public.bridge_organizations') is not null as organizations_present,
-        to_regclass('public.bridge_organization_memberships') is not null as memberships_present
+        to_regclass('public.bridge_organization_memberships') is not null as memberships_present,
+        (select count(*)::int from pg_class c join pg_namespace n on n.oid=c.relnamespace
+          where n.nspname='public' and c.relkind='r' and not c.relrowsecurity) as rls_disabled_tables
     `);
     const schemaReady = schema.rows[0];
     assert.equal(schemaReady.organizations_present, true, "approved STAGING schema must include bridge_organizations before Studio isolation fixtures");
     assert.equal(schemaReady.memberships_present, true, "approved STAGING schema must include bridge_organization_memberships before Studio isolation fixtures");
+    assert.equal(Number(schemaReady.rls_disabled_tables), 0, "all public Bridge STAGING tables must have RLS enabled");
+
+    const requiredPolicyTables = [
+      "bridge_profiles",
+      "bridge_titles",
+      "bridge_assets",
+      "bridge_asset_versions",
+      "bridge_rights_grants",
+      "bridge_title_events",
+      "bridge_organization_memberships",
+    ];
+    const ownerPolicies = await client.query(`
+      select tablename, count(*)::int as policy_count
+      from pg_policies
+      where schemaname = 'public' and tablename = any($1::text[])
+      group by tablename
+    `, [requiredPolicyTables]);
+    const policiesByTable = new Map(ownerPolicies.rows.map((row) => [row.tablename, Number(row.policy_count)]));
+    for (const table of requiredPolicyTables) {
+      assert.ok((policiesByTable.get(table) ?? 0) > 0, `reviewed ownership RLS policy required for public.${table}`);
+    }
 
     const acl = await client.query(`
       select
