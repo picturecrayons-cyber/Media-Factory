@@ -243,6 +243,50 @@ export async function abortMultipartUpload(partBaseUrl: string, objectKey: strin
   if (!res.ok && res.status !== 404) throw new Error(`OCI multipart cancel failed (${res.status})`);
 }
 
+export type OciMultipartPart = {
+  partNumber: number;
+  etag: string;
+  size: number;
+};
+
+/**
+ * Reconcile durable upload state against OCI's authoritative part listing.
+ * This uses the server's signed OCI identity; no browser-supplied PAR URL is trusted.
+ */
+export async function listMultipartUploadParts(objectKey: string, uploadId: string): Promise<OciMultipartPart[]> {
+  if (!uploadId || uploadId.length > 1024) throw new Error("Invalid OCI multipart upload ID");
+  const cfg = config();
+  const namespace = await resolveNamespace(cfg);
+  const parts: OciMultipartPart[] = [];
+  let page: string | undefined;
+  for (let pageCount = 0; pageCount < 100; pageCount += 1) {
+    const query = new URLSearchParams({ uploadId, limit: "1000" });
+    if (page) query.set("page", page);
+    const path =
+      `/n/${encodeURIComponent(namespace)}/b/${encodeURIComponent(cfg.bucket)}/u/${encodedObjectName(objectKey)}?${query.toString()}`;
+    const res = await signedFetch({ cfg, method: "GET", path });
+    if (res.status === 404) throw new Error("OCI multipart upload no longer exists");
+    if (!res.ok) throw new Error(`OCI multipart part listing failed (${res.status})`);
+    const body = (await res.json()) as {
+      items?: Array<{ partNumber?: number; etag?: string; size?: number }>;
+    };
+    if (!Array.isArray(body.items)) throw new Error("OCI multipart part listing returned an invalid response");
+    for (const item of body.items) {
+      const partNumber = Number(item.partNumber);
+      const size = Number(item.size);
+      const etag = typeof item.etag === "string" ? item.etag.replaceAll('"', "") : "";
+      if (!Number.isSafeInteger(partNumber) || partNumber < 1 || partNumber > 10_000 ||
+          !Number.isSafeInteger(size) || size <= 0 || !etag) {
+        throw new Error("OCI multipart part listing contained invalid part metadata");
+      }
+      parts.push({ partNumber, etag, size });
+    }
+    page = res.headers.get("opc-next-page") || undefined;
+    if (!page) return parts;
+  }
+  throw new Error("OCI multipart part listing exceeded the pagination safety limit");
+}
+
 export async function signDownload(opts: { key: string; expiresIn?: number }) {
   const signed = await createPar({
     key: opts.key,
