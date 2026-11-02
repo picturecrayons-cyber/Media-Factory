@@ -14,6 +14,8 @@ The current STAGING inventory does not contain `bridge_organizations` or `bridge
 
 The current STAGING DB has no Loop-specific public tables. CRA-138 remains a separate Loop schema planning gate.
 
+A source-reference parity probe also confirms these relations are referenced by current Bridge/Loop application code but are absent from this STAGING schema: `bridge_loop_identity_links`, `bridge_loop_publications`, `bridge_title_investors`, and `loop_media_migration_queue`, in addition to the two Studio organization relations above. These are schema/runtime dependencies, not a request to replay migrations blindly. Each needs an owner, consumer, migration provenance and data-contract review. Do not replay data-bearing legacy migrations or create empty placeholder tables to make Preview appear healthy.
+
 ## 2. Ownership and relation map
 
 | Object | Current scope columns / relationship | Proposed access boundary |
