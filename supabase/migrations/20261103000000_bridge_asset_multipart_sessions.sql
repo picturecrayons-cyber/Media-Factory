@@ -8,7 +8,7 @@ create table if not exists public.bridge_asset_multipart_sessions (
   created_by text not null,
   object_key text not null,
   upload_id text not null,
-  part_base_url text not null,
+  part_base_url_ciphertext text not null,
   file_name text not null,
   file_size bigint not null check (file_size > 0),
   part_size integer not null check (part_size > 0),
