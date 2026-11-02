@@ -327,6 +327,9 @@ export const listOwnEntitlements = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     const actor = await requireVerifiedActor(context.userId);
     assertPermission(actor, "entitlement.read_own");
+    // Buyer entitlements are withheld until reads are organization- and
+    // mandate-scoped. A user-only lookup is not sufficient tenant isolation.
+    if (actor.accountType === "buyer" && !actor.internalRole) return { entitlements: [] };
     const sql = await getSql();
     try {
       const rows = await sql<{
