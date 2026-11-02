@@ -12,7 +12,7 @@ describe("master download denial", () => {
       hasLicenseEntitlement: true,
     });
     assert.equal(decision.allow, false);
-    assert.match(decision.reason, /does not authorize a master/);
+    assert.match(decision.reason, /Master downloads are denied/);
   });
 
   it("never lets a buyer entitlement download a technical package", () => {
