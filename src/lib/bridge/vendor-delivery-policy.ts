@@ -1,4 +1,4 @@
-import { hasPermission, canOperateOnTitle, type Actor } from "./rbac";
+import { hasPermission, canOperateOnTitle, type Actor } from "./rbac.ts";
 
 export type VendorTitleScope = {
   ownerUserId: string;
