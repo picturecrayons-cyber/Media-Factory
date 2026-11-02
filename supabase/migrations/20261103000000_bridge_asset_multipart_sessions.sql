@@ -14,7 +14,7 @@ create table if not exists public.bridge_asset_multipart_sessions (
   part_size integer not null check (part_size between 5242880 and 67108864),
   last_modified bigint not null default 0 check (last_modified >= 0),
   status text not null default 'active'
-    check (status in ('active', 'committing', 'committed', 'expired', 'aborted', 'failed')),
+    check (status in ('active', 'committing', 'aborting', 'committed', 'expired', 'aborted', 'failed')),
   expires_at timestamptz not null,
   completed_at timestamptz,
   created_at timestamptz not null default now(),
