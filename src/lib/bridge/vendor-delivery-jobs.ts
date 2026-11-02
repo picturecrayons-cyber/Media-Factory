@@ -82,12 +82,13 @@ export const listVendorDeliveryJobs = createServerFn({ method: "GET" })
              j.signed_off_by, j.signed_off_at, j.created_at
       from public.bridge_vendor_jobs j
       join public.bridge_titles t on t.id = j.title_id
-      where
-        (not ${isInternal} and t.owner_user_id = ${actor.userId})
-        or (${isStudio} and t.owner_account_type = 'studio'
-            and t.owner_organization_id = ${actor.organizationId ?? null})
-        or (${isInternal} and t.owner_organization_id = ${actor.organizationId ?? null})
-      and j.organization_id is not distinct from t.owner_organization_id
+      where j.organization_id is not distinct from t.owner_organization_id
+        and (
+          (not ${isInternal} and t.owner_user_id = ${actor.userId})
+          or (${isStudio} and t.owner_account_type = 'studio'
+              and t.owner_organization_id = ${actor.organizationId ?? null})
+          or (${isInternal} and t.owner_organization_id = ${actor.organizationId ?? null})
+        )
       order by j.created_at desc
       limit 200
     `);
@@ -228,8 +229,6 @@ export const prepareDestinationPackage = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
-    assertPermission(actor, "title.deliver");
-    if (!actor.internalRole || !actor.organizationId) throw new Error("Forbidden");
     const sql = await getSql();
     return sql.transaction(async (tx) => {
       const [title] = await tx<TitleScope>`
