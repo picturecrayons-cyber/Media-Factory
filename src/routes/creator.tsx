@@ -32,7 +32,7 @@ function Creator() {
                   Account
                 </Link>
               </div>
-              <TitleList empty="No titles yet. Start with a new submission." />
+              <TitleList empty="No titles yet. Start with a new submission." showProgress />
             </section>
           </div>
         </BridgeShell>
