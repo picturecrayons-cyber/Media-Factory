@@ -27,8 +27,24 @@ describe("master download denial", () => {
     assert.match(decision.reason, /does not authorize technical package downloads/);
   });
 
-  it("lets internal reviewers with buyer accounts download a master", () => {
-    assert.equal(downloadDecision({ kind: "master", actorIsOwner: false, actorIsInternal: true, accountType: "buyer", hasLicenseEntitlement: false }).allow, true);
+  it("denies QC and Legal master downloads by default", () => {
+    for (const actorInternalRole of ["qc_reviewer", "legal_reviewer"]) {
+      const decision = downloadDecision({
+        kind: "master", actorIsOwner: false, actorIsInternal: true, actorInternalRole,
+        accountType: "independent_creator", hasLicenseEntitlement: false,
+      });
+      assert.equal(decision.allow, false);
+      assert.match(decision.reason, /separately approved exception/);
+    }
+  });
+
+  it("keeps master access for explicitly privileged internal admins", () => {
+    for (const actorInternalRole of ["admin", "super_admin"]) {
+      assert.equal(downloadDecision({
+        kind: "master", actorIsOwner: false, actorIsInternal: true, actorInternalRole,
+        accountType: "independent_creator", hasLicenseEntitlement: false,
+      }).allow, true);
+    }
   });
 
   it("lets the owner download a master and a buyer download only a screener", () => {
