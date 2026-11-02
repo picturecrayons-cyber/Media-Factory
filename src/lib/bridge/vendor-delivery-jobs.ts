@@ -164,10 +164,14 @@ export const assignVendorDeliveryJob = createServerFn({ method: "POST" })
     const sql = await getSql();
     return withStorage(() => sql.transaction(async (tx) => {
       const [job] = await tx<{ id: string; title_id: string; organization_id: string | null; state: string }>`
-        select id, title_id, organization_id, state from public.bridge_vendor_jobs
-        where id = ${data.jobId} for update
+        select j.id, j.title_id, j.organization_id, j.state,
+               t.owner_organization_id
+        from public.bridge_vendor_jobs j
+        join public.bridge_titles t on t.id = j.title_id
+        where j.id = ${data.jobId} for update of j
       `;
-      if (!job || !canOperateVendorJob(actor, job.organization_id)) throw new Error("Not found");
+      if (!job || job.organization_id !== job.owner_organization_id ||
+          !canOperateVendorJob(actor, job.organization_id)) throw new Error("Not found");
       if (job.state !== "requested") throw new Error("Invalid vendor job state transition");
       await tx`
         update public.bridge_vendor_jobs
@@ -203,10 +207,14 @@ export const transitionVendorDeliveryJob = createServerFn({ method: "POST" })
       const [job] = await tx<{
         id: string; title_id: string; organization_id: string | null; state: string; requested_by: string;
       }>`
-        select id, title_id, organization_id, state, requested_by
-        from public.bridge_vendor_jobs where id = ${data.jobId} for update
+        select j.id, j.title_id, j.organization_id, j.state, j.requested_by,
+               t.owner_organization_id
+        from public.bridge_vendor_jobs j
+        join public.bridge_titles t on t.id = j.title_id
+        where j.id = ${data.jobId} for update of j
       `;
-      if (!job || !canOperateVendorJob(actor, job.organization_id)) throw new Error("Not found");
+      if (!job || job.organization_id !== job.owner_organization_id ||
+          !canOperateVendorJob(actor, job.organization_id)) throw new Error("Not found");
       const nextState = nextVendorJobState(job.state, data.action);
       if (!nextState) throw new Error("Invalid vendor job state transition");
       if (data.action === "sign_off" && !canSignOffVendorJob(job.requested_by, actor.userId)) {
