@@ -5,7 +5,7 @@ import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql, type Sql } from "@/lib/db";
 import { assertNotDevUser } from "./guards";
 import { writeAudit } from "./audit";
-import type { Actor } from "./rbac";
+import { assertPermission, type Actor } from "./rbac";
 import {
   canOperateVendorJob,
   canRequestVendorJob,
