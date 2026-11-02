@@ -12,17 +12,34 @@ import { assertNotDevUser } from "./guards";
 import { persistVerifiedAsset } from "./asset-confirmation";
 import { downloadDecision } from "./delivery-policy";
 import { assertBuyerPublishable } from "./buyer-visibility";
+import { matchesBuyerEntitlementScope } from "./entitlement-policy";
 import { validateOttIngestFile, type OttIngestKind } from "./ott-ingest-spec";
 
 const UPLOADABLE: ReadonlySet<string> = new Set(["DRAFT", "UPLOADING", "PREPARING"]);
 
-async function hasLicenseEntitlement(userId: string, titleId: string): Promise<boolean> {
+async function hasLicenseEntitlement(
+  userId: string,
+  organizationId: string | null | undefined,
+  titleId: string,
+): Promise<boolean> {
+  // Missing organization scope and legacy entitlement rows fail closed.
+  // to_jsonb safely returns NULL when organization_id is absent from the schema.
+  if (!organizationId) return false;
   const sql = await getSql();
-  const rows = await sql<{ n: number }>`
-    select count(*)::int as n from bridge_entitlements
-    where user_id = ${userId} and title_id = ${titleId} and access_type = 'license'
+  const rows = await sql<{
+    user_id: string;
+    organization_id: string | null;
+    title_id: string;
+    access_type: string;
+  }>`
+    select e.user_id, to_jsonb(e)->>'organization_id' as organization_id,
+      e.title_id, e.access_type
+    from bridge_entitlements e
+    where e.user_id = ${userId}
+      and e.title_id = ${titleId}
+      and e.access_type = 'license'
   `;
-  return Number(rows[0]?.n ?? 0) > 0;
+  return rows.some((row) => matchesBuyerEntitlementScope(row, { userId, organizationId, titleId }));
 }
 
 export const requestAssetUpload = createServerFn({ method: "POST" })
@@ -204,11 +221,12 @@ export const requestAssetDownload = createServerFn({ method: "POST" })
     const title = await loadTitle(asset.title_id);
     if (!title || !canReadTitle(actor, title)) throw new Error("Not found");
     if (actor.accountType === "buyer" && !actor.internalRole) await assertBuyerPublishable(title.id);
-    const entitled = await hasLicenseEntitlement(actor.userId, title.id);
+    const entitled = await hasLicenseEntitlement(actor.userId, actor.organizationId, title.id);
     const decision = downloadDecision({
       kind: asset.kind,
       actorIsOwner: title.ownerUserId === actor.userId,
       actorIsInternal: Boolean(actor.internalRole),
+      actorInternalRole: actor.internalRole,
       accountType: actor.accountType,
       hasLicenseEntitlement: entitled,
     });
