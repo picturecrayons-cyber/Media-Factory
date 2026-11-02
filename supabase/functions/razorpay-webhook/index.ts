@@ -87,6 +87,12 @@ Deno.serve(async (req: Request) => {
     if (localPayment) surface = "bridge";
 
     if (surface === "bridge") {
+      // Bridge title-license fulfillment is blocked until the canonical
+      // organization + mandate + exact-rights authorization chain exists.
+      // Do not let this Edge Function bypass the server-side fulfillment gate.
+      if (localPayment?.purpose === "title_license") {
+        return await failEvent(supabase, id, "Bridge license fulfillment blocked pending CRA-165 authorization");
+      }
       // A capture can race the local insert after Razorpay order creation. Return 503 so Razorpay retries it.
       if (!localPayment) return await failEvent(supabase, id, "Bridge order not persisted yet");
       if (localPayment.provider_payment_id && localPayment.provider_payment_id !== payment.id) {
