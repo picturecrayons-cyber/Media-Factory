@@ -110,6 +110,8 @@ export const beginAssetMultipart = createServerFn({ method: "POST" })
   .validator(z.object({
     assetId: z.string().min(8),
     byteSize: z.number().int().positive().max(200 * 1024 * 1024 * 1024),
+    fileName: z.string().min(1).max(255),
+    lastModified: z.number().int().nonnegative(),
   }))
   .handler(async ({ context, data }) => {
     const asset = await openUploadAsset(context.userId, data.assetId);
@@ -130,15 +132,17 @@ export const beginAssetMultipart = createServerFn({ method: "POST" })
            file_name, file_size, part_size, last_modified, status, expires_at)
         values
           (${asset.id}, ${asset.title_id}, ${context.userId}, ${asset.s3_key}, ${started.uploadId},
-           ${encryptMultipartCapability(started.partBaseUrl)}, '', ${data.byteSize},
-           ${16 * 1024 * 1024}, 0, 'active', ${expiresAt.toISOString()})
+           ${encryptMultipartCapability(started.partBaseUrl)}, ${data.fileName}, ${data.byteSize},
+           ${16 * 1024 * 1024}, ${data.lastModified}, 'active', ${expiresAt.toISOString()})
         on conflict (asset_id) do update set
           title_id = excluded.title_id,
           created_by = excluded.created_by,
           object_key = excluded.object_key,
           upload_id = excluded.upload_id,
           part_base_url_ciphertext = excluded.part_base_url_ciphertext,
+          file_name = excluded.file_name,
           file_size = excluded.file_size,
+          last_modified = excluded.last_modified,
           part_size = excluded.part_size,
           status = 'active',
           expires_at = excluded.expires_at,
