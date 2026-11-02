@@ -17,6 +17,7 @@ import {
   listTitleAssets,
   requestAssetDownload,
   requestAssetUpload,
+  resumeAssetMultipart,
 } from "@/lib/bridge/assets";
 import { getLoopPublication } from "@/lib/bridge/loop-publication";
 import type { BridgeActor } from "@/lib/bridge/session";
@@ -474,7 +475,7 @@ function FilesPanel({
       );
       assertAttemptActive();
       const started = await withTimeout(
-        beginAssetMultipart({ data: { assetId: signed.assetId, byteSize: file.size } }),
+        beginAssetMultipart({ data: { assetId: signed.assetId, byteSize: file.size, fileName: file.name, lastModified: file.lastModified } }),
         20_000,
         "Multipart preparation",
       );
@@ -494,6 +495,26 @@ function FilesPanel({
         completedParts: [],
         committed: false,
         expiresAt: started.expiresAt,
+      };
+      writeUploadSession(session);
+    }
+    // Reconcile local progress with OCI's authoritative part listing on every resume.
+    // The server also validates ownership, title/object binding, expiry and expected part sizes.
+    if (!session.committed) {
+      const recovered = await withTimeout(
+        resumeAssetMultipart({ data: { assetId: session.assetId } }),
+        30_000,
+        "Multipart session recovery",
+      );
+      assertAttemptActive();
+      if (recovered.alreadyVerified) return session.assetId;
+      session = {
+        ...session,
+        uploadId: recovered.uploadId,
+        partBaseUrl: recovered.partBaseUrl,
+        completedParts: recovered.completedParts,
+        partSize: recovered.partSize,
+        expiresAt: recovered.expiresAt,
       };
       writeUploadSession(session);
     }
@@ -544,7 +565,7 @@ function FilesPanel({
       }
       assertAttemptActive();
       await withTimeout(
-        commitAssetMultipart({ data: { assetId: session.assetId, partBaseUrl: session.partBaseUrl } }),
+        commitAssetMultipart({ data: { assetId: session.assetId } }),
         30_000,
         "Multipart commit",
       );
