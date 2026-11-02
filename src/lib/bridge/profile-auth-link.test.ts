@@ -15,16 +15,16 @@ test("onboarding persists verified auth-to-Bridge identity binding", () => {
 
 test("identity resolution never falls back to email or an unlinked auth subject", () => {
   const src = readFileSync(new URL("./session.ts", import.meta.url), "utf8");
-  const resolver = src.match(/export async function resolveBridgeUserId[\\s\\S]*?\\n}\\n\\nexport async function loadActor/)?.[0] ?? "";
+  const resolver = src.match(/export async function resolveBridgeUserId[\s\S]*?\n}\n\nexport async function loadActor/)?.[0] ?? "";
   assert.ok(resolver, "identity resolver should be present");
-  assert.match(resolver, /where l\\.auth_user_id =/);
-  assert.match(resolver, /l\\.verified_at is not null/);
-  assert.match(resolver, /length\\(trim\\(l\\.verified_by\\)\\) > 0/);
+  assert.match(resolver, /where l\.auth_user_id =/);
+  assert.match(resolver, /l\.verified_at is not null/);
+  assert.match(resolver, /length\(trim\(l\.verified_by\)\) > 0/);
   assert.match(resolver, /BRIDGE_IDENTITY_UNRESOLVED/);
-  assert.doesNotMatch(resolver, /auth\\.users|lower\\(.*email|return .*authUserId/);
+  assert.doesNotMatch(resolver, /auth\.users|lower\(.*email|return .*authUserId/);
 });
 
 test("legacy single-actor internal invitations are rejected at onboarding", () => {
   const src = readFileSync(new URL("./profiles.ts", import.meta.url), "utf8");
-  assert.match(src, /if \\(data\\.inviteToken\\) \\{[\\s\\S]*?Internal role invitations are disabled pending independent dual-control approval/);
+  assert.match(src, /if \(data\.inviteToken\) \{[\s\S]*?Internal role invitations are disabled pending independent dual-control approval/);
 });
