@@ -77,8 +77,6 @@ const ACCOUNT_PERMISSIONS: Record<AccountType, readonly Permission[]> = {
     "asset.sign_upload",
     "asset.sign_download",
     "entitlement.read_own",
-    "delivery.read",
-    "delivery.read_finance",
   ],
   studio: [
     "title.create",
@@ -90,8 +88,6 @@ const ACCOUNT_PERMISSIONS: Record<AccountType, readonly Permission[]> = {
     "asset.sign_upload",
     "asset.sign_download",
     "entitlement.read_own",
-    "delivery.read",
-    "delivery.read_finance",
   ],
   buyer: [
     "title.read_catalog",
