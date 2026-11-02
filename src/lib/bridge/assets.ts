@@ -312,13 +312,27 @@ export const abortAssetMultipart = createServerFn({ method: "POST" })
     if (!session || session.object_key !== asset.s3_key) return { aborted: true };
     if (session.status === "aborted") return { aborted: true };
     if (session.status !== "active") throw new Error("Multipart session cannot be aborted in its current state");
-    const { abortMultipartUpload } = await import("./oci-object-storage.server");
-    await abortMultipartUpload(decryptMultipartCapability(session.part_base_url_ciphertext), asset.s3_key);
-    await sql`
-      update bridge_asset_multipart_sessions set status = 'aborted', updated_at = now()
+    const claimed = await sql<{ asset_id: string }>`
+      update bridge_asset_multipart_sessions set status = 'aborting', updated_at = now()
       where asset_id = ${asset.id} and created_by = ${context.userId} and status = 'active'
+      returning asset_id
     `;
-    return { aborted: true };
+    if (!claimed[0]) throw new Error("Multipart session is already changing state; refresh before retrying");
+    try {
+      const { abortMultipartUpload } = await import("./oci-object-storage.server");
+      await abortMultipartUpload(decryptMultipartCapability(session.part_base_url_ciphertext), asset.s3_key);
+      await sql`
+        update bridge_asset_multipart_sessions set status = 'aborted', updated_at = now()
+        where asset_id = ${asset.id} and created_by = ${context.userId} and status = 'aborting'
+      `;
+      return { aborted: true };
+    } catch (error) {
+      await sql`
+        update bridge_asset_multipart_sessions set status = 'active', updated_at = now()
+        where asset_id = ${asset.id} and created_by = ${context.userId} and status = 'aborting'
+      `;
+      throw error;
+    }
   });
 
 export const confirmAssetUpload = createServerFn({ method: "POST" })
