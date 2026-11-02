@@ -738,7 +738,7 @@ function FilesPanel({
                 activeMultipart.current = null;
                 if (session) {
                   clearUploadSession(session.titleId, session.kind);
-                  void abortAssetMultipart({ data: { assetId: session.assetId, partBaseUrl: session.partBaseUrl } }).catch(() => undefined);
+                  void abortAssetMultipart({ data: { assetId: session.assetId } }).catch(() => undefined);
                 }
                 setProgress(null);
                 announce("Upload cancelled. Completed parts from this attempt were discarded.", "error", true);
