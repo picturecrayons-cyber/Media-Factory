@@ -10,9 +10,9 @@ test("workspace profile query does not require organization tables or organizati
   assert.doesNotMatch(profileQuery, /bridge_organization_memberships|bridge_organizations|bp\.organization_id/);
 });
 
-test("studio organization lookup is optional and fails closed when schema is missing", () => {
+test("Studio and Buyer organization lookup is optional and fails closed when schema is missing", () => {
   const source = readFileSync(new URL("./session.ts", import.meta.url), "utf8");
-  assert.match(source, /if \(actor\.accountType !== "studio" \|\| !actor\.emailVerified\) return actor/);
+  assert.match(source, /if \(!\["studio", "buyer"\]\.includes\(actor\.accountType\) \|\| !actor\.emailVerified\) return actor/);
   assert.match(source, /catch \(error\) \{\s*if \(!isMissingOrganizationSchemaError\(error\)\) throw error/);
   assert.match(source, /actor\.organizationId = null/);
   assert.match(source, /workspaceFailureCode/);
