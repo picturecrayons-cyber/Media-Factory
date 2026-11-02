@@ -28,7 +28,7 @@ test("title detail and mutation handlers enforce server-side owner checks", () =
 });
 
 test("private asset operations re-check title ownership on every server action", () => {
-  const assets = read("../bridge/assets.ts");
+  const assets = read("./assets.ts");
   assert.match(assets, /canOperateOnTitle\(actor, title, "asset\.sign_upload", "asset\.sign_upload"\)/);
   assert.match(assets, /async function openUploadAsset/);
   assert.match(assets, /async function openUploadAsset[\s\S]*?canOperateOnTitle/);
@@ -37,7 +37,7 @@ test("private asset operations re-check title ownership on every server action",
 });
 
 test("workflow endpoints separate owner drafts from QC/legal staff review", () => {
-  const workflow = read("../bridge/workflow.ts");
+  const workflow = read("./workflow.ts");
   assert.match(workflow, /canOperateOnTitle\([\s\S]*?"title\.update_own"[\s\S]*?"title\.license"/);
   assert.match(workflow, /assertPermission\(actor, data\.stage === "QC" \? "title\.qc_review" : "title\.rights_review"\)/);
   assert.match(workflow, /!canReadTitle\(actor, title\)/);
