@@ -175,9 +175,12 @@ export const createLicenseOrder = createServerFn({ method: "POST" })
     const actor = await requireVerifiedActor(context.userId);
     assertPermission(actor, "payment.create_order");
     // Buyer organization, intermediary mandate, and exact-rights scope are not
-    // yet represented by a verified canonical authorization chain. Do not
-    // create a chargeable Razorpay order until CRA-165 implements that chain.
-    throw new Error("BRIDGE_LICENSE_ORDER_BLOCKED: buyer organization and rights-mandate authorization is not yet certified");
+    // yet represented by a verified canonical authorization chain. The current
+    // session resolver gives buyer profiles no organization scope, so deny them
+    // before creating any chargeable Razorpay order.
+    if (actor.accountType === "buyer" && !actor.organizationId) {
+      throw new Error("BRIDGE_LICENSE_ORDER_BLOCKED: buyer organization and rights-mandate authorization is not yet certified");
+    }
     const title = await loadTitle(data.titleId);
     if (!title || (!canReadTitle(actor, title) && actor.accountType !== "buyer")) throw new Error("Not found");
     await assertBuyerPublishable(title.id);
