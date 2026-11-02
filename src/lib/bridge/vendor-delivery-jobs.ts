@@ -302,13 +302,13 @@ export const prepareDestinationPackage = createServerFn({ method: "POST" })
             and rg.status = 'VALID'
             and rg.window_start <= now()
             and rg.window_end > now()
-            and (
-              rg.territories @> jsonb_build_array(${data.territory})
-              or rg.territories @> '["WORLDWIDE"]'::jsonb
+            and exists (
+              select 1 from jsonb_array_elements_text(rg.territories) territory_value
+              where upper(trim(territory_value)) in (upper(trim(${data.territory})), 'WORLDWIDE')
             )
-            and (
-              rg.languages @> jsonb_build_array(${data.language})
-              or rg.languages @> '["ALL"]'::jsonb
+            and exists (
+              select 1 from jsonb_array_elements_text(rg.languages) language_value
+              where upper(trim(language_value)) in (upper(trim(${data.language})), 'ALL')
             )
           order by rg.created_at desc
           limit 1
