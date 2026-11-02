@@ -11,8 +11,12 @@ export function downloadDecision(opts: {
   actorIsInternal: boolean;
   accountType: string;
   hasLicenseEntitlement: boolean;
+  actorInternalRole?: string | null;
 }): DownloadDecision {
   if (opts.kind === "master") {
+    if (opts.actorInternalRole === "qc_reviewer" || opts.actorInternalRole === "legal_reviewer") {
+      return { allow: false, reason: "QC and Legal master downloads are denied by default; a separately approved exception is required" };
+    }
     if (!opts.actorIsOwner && !opts.actorIsInternal) {
       return {
         allow: false,
