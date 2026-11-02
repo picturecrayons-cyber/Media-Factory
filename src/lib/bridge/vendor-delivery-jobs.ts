@@ -276,6 +276,8 @@ export const prepareDestinationPackage = createServerFn({ method: "POST" })
   .validator(z.object({
     titleId: z.string().trim().min(8).max(200),
     destination: z.string().trim().min(2).max(160),
+    territory: z.string().trim().min(2).max(80),
+    language: z.string().trim().min(2).max(80),
   }))
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
@@ -291,30 +293,72 @@ export const prepareDestinationPackage = createServerFn({ method: "POST" })
       const [evidence] = await tx<{
         qc_case_id: string | null; legal_case_id: string | null; rights_grant_id: string | null;
       }>`
-        select
-          (select q.id from public.bridge_qc_cases q where q.title_id = t.id and q.status = 'PASSED'
-            order by q.created_at desc limit 1) as qc_case_id,
-          (select l.id from public.bridge_legal_cases l where l.title_id = t.id and l.status = 'APPROVED'
-            order by l.created_at desc limit 1) as legal_case_id,
-          (select r.id from public.bridge_rights_grants r where r.title_id = t.id and r.status = 'VALID'
-            and r.window_start <= now() and r.window_end > now()
-            order by r.created_at desc limit 1) as rights_grant_id
-        from public.bridge_titles t where t.id = ${title.id}
+        select q.id as qc_case_id, l.id as legal_case_id, r.id as rights_grant_id
+        from public.bridge_titles t
+        join lateral (
+          select rg.id
+          from public.bridge_rights_grants rg
+          where rg.title_id = t.id
+            and rg.status = 'VALID'
+            and rg.window_start <= now()
+            and rg.window_end > now()
+            and (
+              rg.territories @> jsonb_build_array(${data.territory})
+              or rg.territories @> '["WORLDWIDE"]'::jsonb
+            )
+            and (
+              rg.languages @> jsonb_build_array(${data.language})
+              or rg.languages @> '["ALL"]'::jsonb
+            )
+          order by rg.created_at desc
+          limit 1
+        ) r on true
+        join lateral (
+          select qc.id
+          from public.bridge_qc_cases qc
+          where qc.title_id = t.id
+            and qc.status = 'PASSED'
+            and qc.reviewer_findings->0->>'masterKey' = t.master_key
+            and qc.reviewer_findings->0->>'posterKey' = t.poster_key
+          order by qc.created_at desc
+          limit 1
+        ) q on true
+        join lateral (
+          select lc.id
+          from public.bridge_legal_cases lc
+          where lc.title_id = t.id
+            and lc.status = 'APPROVED'
+            and lc.evidence->0->>'grantId' = r.id::text
+          order by lc.created_at desc
+          limit 1
+        ) l on true
+        where t.id = ${title.id}
       `;
-      const assets = await tx<{ master_ok: boolean; poster_ok: boolean }>`
+      const assets = await tx<{ master_ok: boolean; poster_ok: boolean; verified_video_ok: boolean }>`
         select
-          exists(select 1 from public.bridge_assets a where a.title_id = t.id and a.kind = 'master' and coalesce(a.byte_size,0) > 0) as master_ok,
-          exists(select 1 from public.bridge_assets a where a.title_id = t.id and a.kind = 'poster' and coalesce(a.byte_size,0) > 0) as poster_ok
+          exists(select 1 from public.bridge_assets a
+            where a.title_id = t.id and a.kind = 'master'
+              and a.s3_key = t.master_key and coalesce(a.byte_size,0) > 0) as master_ok,
+          exists(select 1 from public.bridge_assets a
+            where a.title_id = t.id and a.kind = 'poster'
+              and a.s3_key = t.poster_key and coalesce(a.byte_size,0) > 0) as poster_ok,
+          exists(select 1 from public.bridge_asset_versions v
+            where v.title_id = t.id and v.asset_group = 'VIDEO'
+              and v.processing_state = 'PASSED'
+              and v.checksum_sha256 is not null and coalesce(v.byte_size,0) > 0) as verified_video_ok
         from public.bridge_titles t where t.id = ${title.id}
       `;
       if (!evidence?.qc_case_id || !evidence.legal_case_id || !evidence.rights_grant_id ||
-          !assets[0]?.master_ok || !assets[0]?.poster_ok) {
-        throw new Error("Package preparation blocked: verified QC, legal approval, active rights, master and poster are required");
+          !assets[0]?.master_ok || !assets[0]?.poster_ok || !assets[0]?.verified_video_ok) {
+        throw new Error("Package preparation blocked: current-master QC PASS, matching legal approval, active territory/language rights, verified master/poster and checksum-verified video are required");
       }
       const versions = await tx<{ ids: string[] }>`
         select coalesce(array_agg(v.id::text order by v.created_at desc), array[]::text[]) as ids
         from public.bridge_asset_versions v
-        where v.title_id = ${title.id} and v.processing_state = 'PASSED'
+        where v.title_id = ${title.id}
+          and v.processing_state = 'PASSED'
+          and v.checksum_sha256 is not null
+          and coalesce(v.byte_size,0) > 0
       `;
       const [version] = await tx<{ next_version: number }>`
         select coalesce(max(package_version), 0) + 1 as next_version
@@ -334,7 +378,12 @@ export const prepareDestinationPackage = createServerFn({ method: "POST" })
       await writeAudit({
         actorUserId: actor.userId, action: "delivery.destination_package.prepared",
         entityType: "bridge_destination_package", entityId: pkg.id,
-        metadata: { titleId: title.id, destination: data.destination, readinessState: "HOLD" },
+        metadata: {
+          titleId: title.id, destination: data.destination, territory: data.territory,
+          language: data.language, rightsGrantId: evidence.rights_grant_id,
+          qcCaseId: evidence.qc_case_id, legalCaseId: evidence.legal_case_id,
+          readinessState: "HOLD",
+        },
       }, tx);
       return { id: pkg.id, readinessState: "HOLD" as const };
     });
