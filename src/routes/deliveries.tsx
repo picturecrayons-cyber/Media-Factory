@@ -205,7 +205,11 @@ function VendorJobs({ actor }: { actor: Actor }) {
             type="button"
             className="self-end rounded-lg border border-line px-3 py-2 text-sm disabled:opacity-50"
             disabled={!titleId || busy || titlesQuery.isPending}
-            onClick={() => requestMutation.mutate(requestKey || crypto.randomUUID())}
+            onClick={() => {
+              const key = requestKey || crypto.randomUUID();
+              setRequestKey(key);
+              requestMutation.mutate(key);
+            }}
           >
             Request
           </button>
