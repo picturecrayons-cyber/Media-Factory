@@ -162,6 +162,50 @@ export const beginAssetMultipart = createServerFn({ method: "POST" })
     };
   });
 
+export const findAssetMultipartSession = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({
+    titleId: z.string().min(8),
+    fileName: z.string().min(1).max(255),
+    byteSize: z.number().int().positive(),
+    lastModified: z.number().int().nonnegative(),
+  }))
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    assertPermission(actor, actor.internalRole ? "title.ingest_internal" : "asset.sign_upload");
+    const title = await loadTitle(data.titleId);
+    if (!title || !canOperateOnTitle(actor, title, "asset.sign_upload", "asset.sign_upload") ||
+        !UPLOADABLE.has(title.status)) throw new Error("Upload recovery is closed for this title");
+    const sql = await getSql();
+    const rows = await sql<{
+      asset_id: string; kind: string; file_name: string; file_size: number;
+      last_modified: number; expires_at: string | Date;
+    }>`
+      select s.asset_id, a.kind, s.file_name, s.file_size, s.last_modified, s.expires_at
+      from bridge_asset_multipart_sessions s
+      join bridge_assets a on a.id = s.asset_id and a.title_id = s.title_id
+      where s.title_id = ${title.id} and s.created_by = ${context.userId}
+        and s.file_name = ${data.fileName} and s.file_size = ${data.byteSize}
+        and s.last_modified = ${data.lastModified} and s.status = 'active'
+        and s.expires_at > now() and a.byte_size is null
+      order by s.updated_at desc
+      limit 2
+    `;
+    if (rows.length > 1) throw new Error("Multiple matching upload sessions exist; choose the intended upload from the session list");
+    const session = rows[0];
+    if (!session) return { found: false as const };
+    return {
+      found: true as const,
+      assetId: session.asset_id,
+      kind: session.kind,
+      fileName: session.file_name,
+      fileSize: Number(session.file_size),
+      lastModified: Number(session.last_modified),
+      expiresAt: new Date(session.expires_at).getTime(),
+    };
+  });
+
 export const resumeAssetMultipart = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(z.object({ assetId: z.string().min(8) }))
