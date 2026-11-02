@@ -62,6 +62,7 @@ function VendorJobs({ actor }: { actor: Actor }) {
   const [type, setType] = useState<VendorJobType>("human_qc");
   const [titleId, setTitleId] = useState("");
   const [note, setNote] = useState("");
+  const [requestKey, setRequestKey] = useState("");
   const [vendorLabel, setVendorLabel] = useState("");
   const [packageTitleId, setPackageTitleId] = useState("");
   const [destination, setDestination] = useState("");
@@ -86,12 +87,13 @@ function VendorJobs({ actor }: { actor: Actor }) {
   };
 
   const requestMutation = useMutation({
-    mutationFn: () => requestVendorDeliveryJob({ data: { titleId, type, note } }),
+    mutationFn: (idempotencyKey: string) => requestVendorDeliveryJob({ data: { titleId, type, note, idempotencyKey } }),
     onSuccess: async () => {
       setError("");
       setNotice("Vendor request saved in Bridge.");
       setNote("");
       setTitleId("");
+      setRequestKey(crypto.randomUUID());
       await refresh();
     },
     onError: (cause) => {
@@ -160,7 +162,10 @@ function VendorJobs({ actor }: { actor: Actor }) {
               aria-label="Vendor job type"
               className="rounded-lg border border-line bg-transparent px-3 py-2 text-sm text-fg"
               value={type}
-              onChange={(event) => setType(event.target.value as VendorJobType)}
+              onChange={(event) => {
+                setType(event.target.value as VendorJobType);
+                setRequestKey(crypto.randomUUID());
+              }}
             >
               {VENDOR_JOB_TYPES.map((jobType) => (
                 <option key={jobType} value={jobType}>{LABELS[jobType]}</option>
@@ -173,7 +178,10 @@ function VendorJobs({ actor }: { actor: Actor }) {
               aria-label="Title for vendor job"
               className="rounded-lg border border-line bg-transparent px-3 py-2 text-sm text-fg"
               value={titleId}
-              onChange={(event) => setTitleId(event.target.value)}
+              onChange={(event) => {
+                setTitleId(event.target.value);
+                setRequestKey(crypto.randomUUID());
+              }}
               disabled={titlesQuery.isPending || titles.length === 0}
             >
               <option value="">{titlesQuery.isPending ? "Loading titles…" : "Select a title"}</option>
@@ -186,7 +194,10 @@ function VendorJobs({ actor }: { actor: Actor }) {
               className="rounded-lg border border-line bg-transparent px-3 py-2 text-sm text-fg"
               value={note}
               maxLength={2000}
-              onChange={(event) => setNote(event.target.value)}
+              onChange={(event) => {
+                setNote(event.target.value);
+                setRequestKey(crypto.randomUUID());
+              }}
               placeholder="Scope or technical notes"
             />
           </label>
@@ -194,7 +205,7 @@ function VendorJobs({ actor }: { actor: Actor }) {
             type="button"
             className="self-end rounded-lg border border-line px-3 py-2 text-sm disabled:opacity-50"
             disabled={!titleId || busy || titlesQuery.isPending}
-            onClick={() => requestMutation.mutate()}
+            onClick={() => requestMutation.mutate(requestKey || crypto.randomUUID())}
           >
             Request
           </button>
