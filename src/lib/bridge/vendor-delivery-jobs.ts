@@ -192,7 +192,7 @@ export const assignVendorDeliveryJob = createServerFn({ method: "POST" })
     const actor = await requireVerifiedActor(context.userId);
     const sql = await getSql();
     return withStorage(() => sql.transaction(async (tx) => {
-      const [job] = await tx<{ id: string; title_id: string; organization_id: string | null; state: string }>`
+      const [job] = await tx<{ id: string; title_id: string; organization_id: string | null; owner_organization_id: string | null; state: string }>`
         select j.id, j.title_id, j.organization_id, j.state,
                t.owner_organization_id
         from public.bridge_vendor_jobs j
