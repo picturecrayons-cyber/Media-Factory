@@ -59,17 +59,21 @@ export async function grantFromCapturedPayment(opts: {
     id: string;
     user_id: string;
     title_id: string | null;
+    purpose: string;
     amount_paise: number;
     status: string;
     currency: string;
     provider_payment_id: string | null;
     package_id: string | null;
   }>`
-    select id, user_id, title_id, package_id, amount_paise, status, currency, provider_payment_id
+    select id, user_id, title_id, purpose, package_id, amount_paise, status, currency, provider_payment_id
     from bridge_payments where provider_order_id = ${opts.orderId} limit 1
   `;
   const payment = rows[0];
   if (!payment) throw new Error("Unknown order");
+  if (payment.purpose === "title_license") {
+    throw new Error("BRIDGE_LICENSE_FULFILLMENT_BLOCKED: organization and mandate authorization is not yet enforced");
+  }
   if (captured.amount !== payment.amount_paise || captured.currency !== payment.currency || payment.currency !== "INR") {
     throw new Error("Amount or currency mismatch");
   }
@@ -170,6 +174,10 @@ export const createLicenseOrder = createServerFn({ method: "POST" })
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
     assertPermission(actor, "payment.create_order");
+    // Buyer organization, intermediary mandate, and exact-rights scope are not
+    // yet represented by a verified canonical authorization chain. Do not
+    // create a chargeable Razorpay order until CRA-165 implements that chain.
+    throw new Error("BRIDGE_LICENSE_ORDER_BLOCKED: buyer organization and rights-mandate authorization is not yet certified");
     const title = await loadTitle(data.titleId);
     if (!title || (!canReadTitle(actor, title) && actor.accountType !== "buyer")) throw new Error("Not found");
     await assertBuyerPublishable(title.id);
