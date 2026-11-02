@@ -38,6 +38,10 @@ describe("PRD authorization matrix", () => {
       );
       assert.equal(hasPermission(owner, "title.qc_review"), false);
       assert.equal(hasPermission(owner, "title.license"), false);
+      assert.equal(hasPermission(owner, "delivery.read"), false);
+      assert.equal(hasPermission(owner, "delivery.read_finance"), false);
+      assert.equal(hasPermission(owner, "finance.read"), false);
+      assert.equal(hasPermission(owner, "finance.record_settlement"), false);
     }
   });
 
