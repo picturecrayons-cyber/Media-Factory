@@ -313,7 +313,13 @@ export const requestAssetDownload = createServerFn({ method: "POST" })
         action: "asset.download_denied",
         entityType: "bridge_asset",
         entityId: asset.id,
-        metadata: { reason: decision.reason, kind: asset.kind },
+        metadata: {
+          titleId: title.id,
+          kind: asset.kind,
+          internalRole: actor.internalRole,
+          decision: "deny",
+          reason: decision.reason,
+        },
       });
       throw new Error(decision.reason);
     }
@@ -324,6 +330,13 @@ export const requestAssetDownload = createServerFn({ method: "POST" })
       action: "asset.download_signed",
       entityType: "bridge_asset",
       entityId: asset.id,
+      metadata: {
+        titleId: title.id,
+        kind: asset.kind,
+        internalRole: actor.internalRole,
+        decision: "allow",
+        reason: decision.reason,
+      },
     });
     return signed;
   });
