@@ -100,6 +100,7 @@ export const requestVendorDeliveryJob = createServerFn({ method: "POST" })
   .validator(z.object({
     titleId: z.string().trim().min(8).max(200),
     type: jobType,
+    idempotencyKey: z.string().uuid(),
     note: z.string().trim().max(2000).optional(),
   }))
   .handler(async ({ context, data }) => {
@@ -118,23 +119,36 @@ export const requestVendorDeliveryJob = createServerFn({ method: "POST" })
         ownerOrganizationId: title.owner_organization_id,
       })) throw new Error("Forbidden");
       const id = randomUUID();
-      await tx`
+      const [created] = await tx<{ id: string; state: string }>`
         insert into public.bridge_vendor_jobs
-          (id, organization_id, title_id, job_type, state, note, requested_by)
+          (id, organization_id, title_id, job_type, state, note, requested_by, idempotency_key)
         values
           (${id}, ${title.owner_organization_id}, ${title.id}, ${data.type},
-           'requested', ${data.note ?? ""}, ${actor.userId})
+           'requested', ${data.note ?? ""}, ${actor.userId}, ${data.idempotencyKey})
+        on conflict (idempotency_key) do nothing
+        returning id, state
       `;
+      if (!created) {
+        const [existing] = await tx<{ id: string; state: string; title_id: string; requested_by: string; job_type: string }>`
+          select id, state, title_id, requested_by, job_type
+          from public.bridge_vendor_jobs where idempotency_key = ${data.idempotencyKey}
+        `;
+        if (!existing || existing.requested_by !== actor.userId ||
+            existing.title_id !== title.id || existing.job_type !== data.type) {
+          throw new Error("Idempotency key already used for a different vendor request");
+        }
+        return { id: existing.id, state: existing.state };
+      }
       await addJobEvent(tx, {
-        jobId: id, actorUserId: actor.userId, eventType: "requested",
+        jobId: created.id, actorUserId: actor.userId, eventType: "requested",
         toState: "requested", metadata: { titleId: title.id, jobType: data.type },
       });
       await writeAudit({
         actorUserId: actor.userId, action: "delivery.vendor_job.requested",
-        entityType: "bridge_vendor_job", entityId: id,
+        entityType: "bridge_vendor_job", entityId: created.id,
         metadata: { titleId: title.id, organizationId: title.owner_organization_id, jobType: data.type },
       }, tx);
-      return { id, state: "requested" as const };
+      return { id: created.id, state: "requested" as const };
     }));
   });
 
