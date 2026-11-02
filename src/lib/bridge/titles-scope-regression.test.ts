@@ -52,3 +52,15 @@ test("STAGING smoke is bound to the currently approved Bridge Testing DB and che
   assert.ok(smoke.indexOf("anon and authenticated must not retain") < smoke.indexOf("seedStagingRbacFixtures(client)"));
   assert.match(smoke, /ROLLBACK/);
 });
+
+
+test("Creator and Studio workspaces show only the canonical title status as safe review progress", () => {
+  const creator = read("../../routes/creator.tsx");
+  const studio = read("../../routes/studio.tsx");
+  const desk = read("../../components/bridge/title-desk.tsx");
+  assert.match(creator, /TitleList[^>]*showProgress/);
+  assert.match(studio, /TitleList[^>]*showProgress/);
+  assert.match(desk, /OWNER_PROGRESS/);
+  assert.match(desk, /publication is not implied/);
+  assert.match(desk, /does not itself confirm consumer playback/);
+});
