@@ -1,25 +1,50 @@
 export type DownloadDecision = { allow: boolean; reason: string };
 
+export function matchesBuyerEntitlementScope(input: {
+  actorUserId: string;
+  actorOrganizationId: string | null | undefined;
+  titleId: string;
+  entitlementUserId: string | null | undefined;
+  entitlementOrganizationId: string | null | undefined;
+  entitlementTitleId: string | null | undefined;
+}): boolean {
+  return Boolean(
+    input.actorUserId &&
+    input.actorOrganizationId &&
+    input.titleId &&
+    input.entitlementUserId &&
+    input.entitlementOrganizationId &&
+    input.entitlementTitleId &&
+    input.actorUserId === input.entitlementUserId &&
+    input.actorOrganizationId === input.entitlementOrganizationId &&
+    input.titleId === input.entitlementTitleId
+  );
+}
+
 /**
  * A buyer catalog or screener grant never authorizes a source master.
- * Owners and internal reviewers may download a master. Everyone else needs
- * an entitlement, and that entitlement only covers screener or subtitle files.
+ * Title owners and explicitly privileged Admin / Super Admin staff may download
+ * a master. QC / Legal reviewers are always denied by default; no exception
+ * path exists in this policy. Buyer access requires a separately scoped grant.
  */
 export function downloadDecision(opts: {
   kind: string;
   actorIsOwner: boolean;
   actorIsInternal: boolean;
+  actorInternalRole?: string | null;
   accountType: string;
   hasLicenseEntitlement: boolean;
 }): DownloadDecision {
   if (opts.kind === "master") {
-    if (!opts.actorIsOwner && !opts.actorIsInternal) {
+    const reviewerDenied = opts.actorInternalRole === "qc_reviewer" || opts.actorInternalRole === "legal_reviewer";
+    const privilegedStaff = opts.actorInternalRole === "admin" || opts.actorInternalRole === "super_admin";
+    if (reviewerDenied || (!opts.actorIsOwner && !privilegedStaff)) {
       return {
         allow: false,
-        reason: "A screener or catalog grant does not authorize a master download",
+        reason: "Master downloads are denied to QC / Legal reviewers and require title ownership or Admin approval",
       };
     }
-    return { allow: true, reason: "Master download is limited to the title owner or an internal reviewer" };
+    return { allow: true, reason: "Master download allowed for the title owner or Admin / Super Admin" };
   }
   if (opts.kind === "technical") {
     if (!opts.actorIsOwner && !opts.actorIsInternal) {
