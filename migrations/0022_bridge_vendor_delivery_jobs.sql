@@ -10,6 +10,7 @@ create table if not exists public.bridge_vendor_jobs (
     check (state in ('requested','assigned','in_progress','in_review','blocked','signed_off','cancelled')),
   note text not null default '',
   requested_by text not null,
+  idempotency_key uuid not null default gen_random_uuid() unique,
   assigned_vendor text,
   assigned_by text,
   assigned_at timestamptz,
