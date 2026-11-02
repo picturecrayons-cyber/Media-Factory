@@ -58,6 +58,35 @@ async function addJobEvent(
   `;
 }
 
+export const listDeliveryDeskTitles = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    assertPermission(actor, "delivery.read");
+    if (actor.internalRole && !actor.organizationId) return { titles: [] };
+    if (!actor.internalRole && !["studio", "independent_creator"].includes(actor.accountType)) {
+      return { titles: [] };
+    }
+    const isInternal = Boolean(actor.internalRole);
+    const isStudio = !isInternal && actor.accountType === "studio" && Boolean(actor.organizationId);
+    const sql = await getSql();
+    const titles = await sql<{
+      id: string; name: string; language: string; year: number | null; status: string;
+    }>`
+      select t.id, t.name, t.language, t.year, t.status
+      from public.bridge_titles t
+      where
+        (not ${isInternal} and t.owner_user_id = ${actor.userId})
+        or (${isStudio} and t.owner_account_type = 'studio'
+            and t.owner_organization_id = ${actor.organizationId ?? null})
+        or (${isInternal} and t.owner_organization_id = ${actor.organizationId ?? null})
+      order by t.updated_at desc
+      limit 200
+    `;
+    return { titles };
+  });
+
 export const listVendorDeliveryJobs = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
