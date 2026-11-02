@@ -10,19 +10,39 @@ import { loadTitle } from "./titles";
 import { writeAudit } from "./audit";
 import { assertNotDevUser } from "./guards";
 import { persistVerifiedAsset } from "./asset-confirmation";
-import { downloadDecision } from "./delivery-policy";
+import { downloadDecision, matchesBuyerEntitlementScope } from "./delivery-policy";
 import { uploadUrlLifetimeSeconds } from "./upload-url-lifetime";
 import { validateOttIngestFile, type OttIngestKind } from "./ott-ingest-spec";
 
 const UPLOADABLE: ReadonlySet<string> = new Set(["DRAFT", "UPLOADING", "PREPARING"]);
 
-async function hasLicenseEntitlement(userId: string, titleId: string): Promise<boolean> {
+async function hasLicenseEntitlement(
+  actor: { userId: string; organizationId?: string | null },
+  titleId: string,
+): Promise<boolean> {
   const sql = await getSql();
-  const rows = await sql<{ n: number }>`
-    select count(*)::int as n from bridge_entitlements
-    where user_id = ${userId} and title_id = ${titleId} and access_type = 'license'
+  const rows = await sql<{ user_id: string; title_id: string }>`
+    select user_id, title_id
+    from bridge_entitlements
+    where user_id = ${actor.userId}
+      and title_id = ${titleId}
+      and access_type = 'license'
   `;
-  return Number(rows[0]?.n ?? 0) > 0;
+
+  // Current bridge_entitlements schema has no organization_id column. Do not
+  // infer buyer organization from the title owner, organization_name, or payment.
+  // The missing entitlement organization binding intentionally makes this
+  // comparison fail closed until a separately approved schema change exists.
+  return rows.some((row) =>
+    matchesBuyerEntitlementScope({
+      actorUserId: actor.userId,
+      actorOrganizationId: actor.organizationId,
+      titleId,
+      entitlementUserId: row.user_id,
+      entitlementOrganizationId: null,
+      entitlementTitleId: row.title_id,
+    }),
+  );
 }
 
 export const requestAssetUpload = createServerFn({ method: "POST" })
@@ -278,11 +298,12 @@ export const requestAssetDownload = createServerFn({ method: "POST" })
     if (!asset) throw new Error("Not found");
     const title = await loadTitle(asset.title_id);
     if (!title || !canReadTitle(actor, title)) throw new Error("Not found");
-    const entitled = await hasLicenseEntitlement(actor.userId, title.id);
+    const entitled = await hasLicenseEntitlement(actor, title.id);
     const decision = downloadDecision({
       kind: asset.kind,
       actorIsOwner: title.ownerUserId === actor.userId,
       actorIsInternal: Boolean(actor.internalRole),
+      actorInternalRole: actor.internalRole,
       accountType: actor.accountType,
       hasLicenseEntitlement: entitled,
     });
