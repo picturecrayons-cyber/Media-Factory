@@ -52,11 +52,10 @@ async function loadActorByBridgeUserId(userId: string): Promise<BridgeActor | nu
   if (!rows[0]) return null;
 
   const actor = mapRow(rows[0]);
-  if (actor.accountType !== "studio" || !actor.emailVerified) return actor;
+  if ((actor.accountType !== "studio" && actor.accountType !== "buyer") || !actor.emailVerified) return actor;
 
-  // Organization scope is an optional, server-resolved capability. If its
-  // schema is absent, keep the profile available but do not grant organization
-  // scope. Never infer an ID from organization_name or use another environment's ID.
+  // Organization scope is server-resolved for Studio and Buyer accounts.
+  // Missing schema means no scope; never infer an ID from organization_name.
   try {
     const memberships = await sql<{ organization_id: string }>`
       select bp.organization_id
