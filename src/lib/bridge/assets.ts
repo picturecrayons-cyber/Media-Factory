@@ -184,7 +184,7 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
     if (asset.byte_size != null)
       return { assetId: asset.id, byteSize: Number(asset.byte_size), verified: true };
 
-    const { verifyObject, sealVerifiedObject } = await import("./oci-object-storage.server");
+    const { verifyObject, hashObject, sealVerifiedObject } = await import("./oci-object-storage.server");
     const object = await verifyObject(asset.s3_key, asset.content_type);
     if (data.expectedByteSize != null && object.byteSize !== data.expectedByteSize) {
       throw new Error("Uploaded object size does not match the file that was sent");
@@ -194,9 +194,17 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
     // leads to a duplicate confirmation while the first server call is still running,
     // both attempts target the same sealed object instead of creating orphan copies.
     const sealedKey = `${asset.s3_key}.verified/${asset.id}`;
+    const sourceDigest = await hashObject(asset.s3_key);
+    if (sourceDigest.byteSize !== object.byteSize) {
+      throw new Error("Uploaded object changed during source checksum verification");
+    }
     const sealed = await sealVerifiedObject(asset.s3_key, sealedKey, object.etag);
     if (sealed.byteSize !== object.byteSize || !sealed.etag) {
       throw new Error("Verified copy differs from the uploaded object");
+    }
+    const sealedDigest = await hashObject(sealedKey);
+    if (sealedDigest.byteSize !== sourceDigest.byteSize || sealedDigest.sha256 !== sourceDigest.sha256) {
+      throw new Error("Immutable copy SHA-256 does not match the uploaded source");
     }
     // Persist asset/title/audit state first. Do not advance the migration queue
     // if persistence fails: its prior state remains the truthful state.
@@ -208,7 +216,7 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
       kind: asset.kind,
       byteSize: sealed.byteSize,
       contentType: sealed.contentType,
-      checksum: sealed.etag,
+      checksum: `sha256:${sourceDigest.sha256}`,
       sourceKey: asset.s3_key,
       sealedKey,
     });
