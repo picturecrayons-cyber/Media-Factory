@@ -66,6 +66,8 @@ function VendorJobs({ actor }: { actor: Actor }) {
   const [vendorLabel, setVendorLabel] = useState("");
   const [packageTitleId, setPackageTitleId] = useState("");
   const [destination, setDestination] = useState("");
+  const [territory, setTerritory] = useState("");
+  const [packageLanguage, setPackageLanguage] = useState("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
@@ -128,12 +130,14 @@ function VendorJobs({ actor }: { actor: Actor }) {
     },
   });
   const packageMutation = useMutation({
-    mutationFn: () => prepareDestinationPackage({ data: { titleId: packageTitleId, destination } }),
+    mutationFn: () => prepareDestinationPackage({ data: { titleId: packageTitleId, destination, territory, language: packageLanguage } }),
     onSuccess: async () => {
       setError("");
       setNotice("Destination package record created in HOLD. No dispatch or publication occurred.");
       setPackageTitleId("");
       setDestination("");
+      setTerritory("");
+      setPackageLanguage("");
       await refresh();
     },
     onError: (cause) => {
@@ -222,7 +226,7 @@ function VendorJobs({ actor }: { actor: Actor }) {
         <div className="mt-5 border-t border-line pt-4">
           <h3 className="text-sm font-semibold">Prepare destination package</h3>
           <p className="mt-1 text-xs text-muted">Requires LICENSED title, QC PASS, legal approval, active rights and verified master/poster. New package remains HOLD.</p>
-          <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
+          <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_1fr_1fr_1fr_auto]">
             <select
               aria-label="Title for destination package"
               className="rounded-lg border border-line bg-transparent px-3 py-2 text-sm text-fg"
@@ -241,10 +245,26 @@ function VendorJobs({ actor }: { actor: Actor }) {
               onChange={(event) => setDestination(event.target.value)}
               placeholder="Destination / buyer label"
             />
+            <input
+              aria-label="Rights territory"
+              className="rounded-lg border border-line bg-transparent px-3 py-2 text-sm text-fg"
+              value={territory}
+              maxLength={80}
+              onChange={(event) => setTerritory(event.target.value)}
+              placeholder="Territory (e.g. IN)"
+            />
+            <input
+              aria-label="Rights language"
+              className="rounded-lg border border-line bg-transparent px-3 py-2 text-sm text-fg"
+              value={packageLanguage}
+              maxLength={80}
+              onChange={(event) => setPackageLanguage(event.target.value)}
+              placeholder="Language (e.g. Malayalam)"
+            />
             <button
               type="button"
               className="rounded-lg border border-line px-3 py-2 text-sm disabled:opacity-50"
-              disabled={!packageTitleId || destination.trim().length < 2 || busy}
+              disabled={!packageTitleId || destination.trim().length < 2 || territory.trim().length < 2 || packageLanguage.trim().length < 2 || busy}
               onClick={() => packageMutation.mutate()}
             >
               Prepare — HOLD
