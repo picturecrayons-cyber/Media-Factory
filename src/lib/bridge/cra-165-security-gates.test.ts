@@ -24,7 +24,7 @@ test("buyer entitlements and signed downloads are withheld without tenant-scoped
 });
 
 test("Edge webhook cannot bypass canonical Bridge license fulfillment", () => {
-  const source = read("../../../../supabase/functions/razorpay-webhook/index.ts");
+  const source = read("../../../supabase/functions/razorpay-webhook/index.ts");
   assert.match(source, /localPayment\?\.purpose === "title_license"/);
   assert.match(source, /Bridge license fulfillment blocked pending CRA-165 authorization/);
 });
