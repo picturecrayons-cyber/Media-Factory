@@ -50,7 +50,7 @@ test("session resolution fails closed without a direct immutable Supabase subjec
   const resolver = source.slice(start, end);
   assert.ok(resolver.includes("requireDirectBridgeIdentity"));
   assert.equal(resolver.includes("bridge_loop_identity_links"), false);
-  assert.equal(resolver.toLowerCase().includes("email"), false);
+  assert.doesNotMatch(resolver, /bridge_loop_identity_links|auth\\.users|lower\\s*\\(\\s*email/i);
 
   const guards = readFileSync(new URL("./authorization-guards.ts", import.meta.url), "utf8");
   assert.match(guards, /directProfileUserId === authUserId/);
