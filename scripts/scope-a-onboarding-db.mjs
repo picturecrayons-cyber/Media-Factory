@@ -15,7 +15,7 @@ if (!connectionString) {
 }
 
 const parsed = new URL(connectionString);
-const allowedHosts = new Set(["localhost", "127.0.0.1", "::1"]);
+const allowedHosts = new Set(["localhost", "127.0.0.1", "::1", "[::1]"]);
 const databaseName = decodeURIComponent(parsed.pathname.replace(/^\\//, ""));
 if (!allowedHosts.has(parsed.hostname) || databaseName !== "bridge_scope_a") {
   throw new Error(
