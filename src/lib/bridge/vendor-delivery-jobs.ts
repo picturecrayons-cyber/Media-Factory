@@ -5,9 +5,10 @@ import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql, type Sql } from "@/lib/db";
 import { assertNotDevUser } from "./guards";
 import { writeAudit } from "./audit";
-import { assertPermission, type Actor } from "./rbac";
+import type { Actor } from "./rbac";
 import {
   canOperateVendorJob,
+  canReadVendorJobDesk,
   canRequestVendorJob,
   canSignOffVendorJob,
   nextVendorJobState,
@@ -63,7 +64,7 @@ export const listDeliveryDeskTitles = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
-    assertPermission(actor, "delivery.read");
+    if (!canReadVendorJobDesk(actor)) throw new Error("Forbidden");
     if (actor.internalRole && !actor.organizationId) return { titles: [] };
     if (!actor.internalRole && !["studio", "independent_creator"].includes(actor.accountType)) {
       return { titles: [] };
@@ -92,7 +93,7 @@ export const listVendorDeliveryJobs = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
-    assertPermission(actor, "delivery.read");
+    if (!canReadVendorJobDesk(actor)) throw new Error("Forbidden");
     if (actor.internalRole && !actor.organizationId) return { jobs: [] };
     if (!actor.internalRole && !["studio", "independent_creator"].includes(actor.accountType)) {
       return { jobs: [] };
