@@ -59,6 +59,8 @@ test("storage E2E rejects a non-test OCI bucket and wrong project reference", ()
   const bucket = validEnv();
   bucket.OCI_BUCKET_NAME = "bridge-production";
   assert.match(validateStorageE2EConfig(bucket).reason, /staging\/test bucket/);
+  bucket.OCI_BUCKET_NAME = "bridge-prod-test";
+  assert.match(validateStorageE2EConfig(bucket).reason, /staging\/test bucket/);
   const project = validEnv();
   project.BRIDGE_E2E_EXPECTED_SUPABASE_REF = "mlmgugivsyoxzdgwkbpu";
   assert.match(validateStorageE2EConfig(project).reason, /unexpected Supabase/);
