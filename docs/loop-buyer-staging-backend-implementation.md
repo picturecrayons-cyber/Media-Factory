@@ -35,6 +35,16 @@ Target inspected: Supabase project `jbymleftneggcgutlcqu` (Crayons Projects - Te
 
 **Important mapping rule:** do not infer that `bridge_rights_grants.media` is equivalent to Loop exploitation models. Do not infer a buyer organization from `bridge_profiles.organization_name`, email, or browser input. Do not fabricate a mandate, identity link, rights grant, or entitlement. The new mandate-chain type is a code-level contract only; it is not yet backed by persisted canonical schema.
 
+## Bridge Buyer ↔ LOOP boundary reconciliation — 2026-11-03
+
+The separate LOOP repository was read-only reviewed at main SHA `5ec418f01cc5376b53f934b12c21e2a8090e90f9`.
+
+- LOOP viewer Auth is a consumer identity. Its identity contract explicitly says a LOOP viewer does not become a Bridge creator, studio, buyer or internal desk user (`docs/LOOP_VIEWER_IDENTITY.md`).
+- Therefore a B2B Bridge Buyer must **not** be provisioned as a LOOP consumer viewer, and a LOOP viewer session or TVOD entitlement must never confer Bridge Buyer/licensee access.
+- LOOP public catalogue and playback consume Bridge-originated `bridge_loop_publications` records. This is the title-publication authority path, not a buyer-organization mandate or a B2B licensee entitlement.
+- The read-only source review found that LOOP catalogue and playback currently have differing territory/window behavior. That separate consumer playback consistency work is tracked in CRA-162; do not silently fold it into Buyer account authorization.
+- No LOOP repository files were changed in this PR. A later LOOP-side integration must be a narrowly scoped server-side consumer of Bridge's canonical publication/mandate decision, must preserve viewer identity separation, and must not create a second rights authority.
+
 ## Not implemented / intentionally gated
 
 This is not yet connected to the live Bridge session resolver, canonical organization/membership/mandate persistence, DB queries, Loop catalog API, title details, playback authorization, signed assets, publication webhook, or revocation worker. Wiring the policy into runtime before the canonical organization/mandate schema and database isolation are available would risk breaking existing accounts/flows or accidentally falling back to Production.
