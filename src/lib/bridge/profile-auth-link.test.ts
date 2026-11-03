@@ -21,6 +21,14 @@ test("identity migration references Bridge profiles and Supabase Auth, not Bette
   assert.match(migration, /references public\\.bridge_profiles\\(user_id\\) on delete restrict/);
   assert.match(migration, /references auth\\.users\\(id\\) on delete cascade/);
   assert.doesNotMatch(migration, /references public\\."user"\\(id\\)/);
+
+  const repair = readFileSync(
+    new URL("../../../migrations/0023_bridge_identity_fk_repair.sql", import.meta.url),
+    "utf8",
+  );
+  assert.match(repair, /drop constraint if exists bridge_loop_identity_links_bridge_user_id_fkey/);
+  assert.match(repair, /references public\\.bridge_profiles\\(user_id\\)/);
+  assert.match(repair, /references auth\\.users\\(id\\)/);
 });
 
 test("Scope A database harness refuses non-disposable or remote databases", () => {
