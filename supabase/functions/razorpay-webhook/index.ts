@@ -89,7 +89,7 @@ Deno.serve(async (req: Request) => {
   if (insertError && String(insertError.code) !== "23505") return new Response("Persistence failure", { status: 503 });
 
   const { data: existing, error: readError } = await supabase.from("bridge_webhook_events")
-    .select("status,payload_hash").eq("event_id", id).maybeSingle();
+    .select("status,payload_hash,attempts").eq("event_id", id).maybeSingle();
   if (readError || !existing) return new Response("Persistence failure", { status: 503 });
   if (existing.payload_hash !== hash) return new Response("Event collision", { status: 409 });
   if (existing.status === "processed") return Response.json({ ok: true, duplicate: true });
