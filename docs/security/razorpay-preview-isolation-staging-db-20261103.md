@@ -158,3 +158,32 @@ Project ref: `jbymleftneggcgutlcqu` (**STAGING / Testing DB**, not Production DB
 5. Configure Test Mode credentials and the Testing Supabase URL/DB binding for this exact Preview branch only after the migration and test gates pass.
 
 **Current result:** Preview isolation guard + regression tests are committed; migration, webhook parity, runtime tests, Vercel Preview configuration, and end-to-end payment verification remain BLOCKED / NOT VERIFIED. Production remains HOLD / NOT CERTIFIED / NO-GO.
+
+
+## Follow-up implementation pass (2026-11-03)
+
+### Edge webhook code updated (not deployed)
+
+- The Supabase Edge Function now reads the Razorpay payment from the authenticated Razorpay API and checks payment ID, order ID, captured status, amount, and currency against the local payment record before granting Bridge entitlement.
+- Added an atomic database lease claim using status + lease expiry + unique processing token. Completion and failure updates are conditional on the active token; a concurrent delivery receives retryable 503.
+- Expanded the static regression test to assert the Razorpay API verification and lease guards.
+- These changes require the Testing DB migration below before the function can operate. The function has not been deployed or exercised against Razorpay.
+
+### Migration generation and verification blocker
+
+- Attempted to obtain the repository checkout to run the required Supabase CLI migration-generation command. The execution environment could not resolve `github.com` (DNS/network failure); the Supabase CLI is therefore not available in the active repository checkout.
+- No migration filename was invented, and no migration SQL was committed.
+- No database changes were executed. The three payment tables remain unchanged in the Testing DB.
+- Required migration content, after CLI generation and review: add `processing_started_at timestamptz`, `processing_token text`, and `attempts integer NOT NULL DEFAULT 0` to `bridge_webhook_events`; revoke all direct privileges from `anon` and `authenticated` on `bridge_payments`, `bridge_webhook_events`, and `bridge_entitlements`; preserve trusted server/service-role access needed by the actual runtime. Recheck role inheritance and grants before approval.
+
+### Test and verification status at exact head
+
+- GitHub branch comparison: 9 commits ahead of `main`, 0 behind.
+- Exact head: `74176a333557d0ef04a70eb61d9720143870803b`.
+- Vercel status: FAIL — build rate limit. No Preview deployment exists for this branch.
+- Vercel branch-scoped Preview environment variables: zero.
+- Supabase Testing DB migration history: unchanged; no new payment-hardening migration.
+- Supabase Testing DB security advisor: 32 RLS-enabled/no-policy findings remain.
+- Automated test suite, typecheck, lint, secret scan, and payment E2E: NOT RUN / NOT VERIFIED. The GitHub checkout attempt failed due DNS; the Vercel status is a build-rate-limit failure, not a successful test result.
+
+**Updated result:** Preview guard and Edge webhook code changes are committed, but the migration and execution evidence remain blockers. Do not deploy the Edge Function or enable checkout until the CLI-generated migration is reviewed/applied to Testing only, tests pass, and exact Preview configuration is verified. Production remains HOLD / NOT CERTIFIED / NO-GO.
