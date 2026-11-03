@@ -15,7 +15,7 @@ test("onboarding persists verified Supabase Auth-to-Bridge identity binding", ()
 
 test("identity migration references Bridge profiles and Supabase Auth, not Better Auth users", () => {
   const migration = readFileSync(
-    new URL("../../../../migrations/0007a_identity_links.sql", import.meta.url),
+    new URL("../../../migrations/0007a_identity_links.sql", import.meta.url),
     "utf8",
   );
   assert.match(migration, /references public\\.bridge_profiles\\(user_id\\) on delete restrict/);
@@ -25,7 +25,7 @@ test("identity migration references Bridge profiles and Supabase Auth, not Bette
 
 test("Scope A database harness refuses non-disposable or remote databases", () => {
   const src = readFileSync(
-    new URL("../../../../scripts/scope-a-onboarding-db.mjs", import.meta.url),
+    new URL("../../../scripts/scope-a-onboarding-db.mjs", import.meta.url),
     "utf8",
   );
   assert.match(src, /SCOPE_A_DISPOSABLE_DATABASE !== "1"/);
