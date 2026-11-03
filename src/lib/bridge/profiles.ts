@@ -282,13 +282,24 @@ export const completeOnboarding = createServerFn({ method: "POST" })
     if (welcomeClaim.length > 0) {
       try {
         const { sendWelcomeEmail } = await import("./mail.server");
-        await sendWelcomeEmail({ to: email, name: data.displayName });
-        await writeAudit({
-          actorUserId: bridgeUserId!,
-          action: "email.welcome_sent",
-          entityType: "bridge_profile",
-          entityId: bridgeUserId,
-        });
+        const mailResult = await sendWelcomeEmail({ to: email, name: data.displayName });
+        if (mailResult.delivered) {
+          await writeAudit({
+            actorUserId: bridgeUserId!,
+            action: "email.welcome_sent",
+            entityType: "bridge_profile",
+            entityId: bridgeUserId,
+          });
+        } else {
+          await sql`update bridge_profiles set welcome_email_sent_at = null, updated_at = now() where user_id = ${bridgeUserId}`;
+          await writeAudit({
+            actorUserId: bridgeUserId!,
+            action: "email.welcome_sink_captured",
+            entityType: "bridge_profile",
+            entityId: bridgeUserId,
+            metadata: { transport: mailResult.transport },
+          });
+        }
       } catch (error) {
         await sql`
           update bridge_profiles
@@ -318,18 +329,19 @@ export const requestEmailVerification = createServerFn({ method: "POST" })
       values (${id}, ${bridgeUserId}, ${email}, ${"verify"}, ${hash}, ${new Date(Date.now() + 24 * 3600 * 1000).toISOString()})
     `;
     const url = bridgeVerificationUrl(token, bridgeEnv.appUrl());
-    await mail({
+    const mailResult = await mail({
       to: email,
       subject: "Verify your Crayons Bridge email",
       text: `Confirm this email for Crayons Bridge (StreamVista OPC Pvt Ltd):\n\n${url}\n\nThis link expires in 24 hours.`,
     });
     await writeAudit({
       actorUserId: context.userId,
-      action: "email.verification_requested",
+      action: mailResult.delivered ? "email.verification_requested" : "email.verification_sink_captured",
       entityType: "bridge_profile",
       entityId: bridgeUserId,
+      metadata: { transport: mailResult.transport },
     });
-    return { sent: true };
+    return { sent: mailResult.delivered, captured: !mailResult.delivered };
   });
 
 export const confirmEmailVerification = createServerFn({ method: "POST" })
@@ -412,17 +424,17 @@ export const inviteInternalRole = createServerFn({ method: "POST" })
       values (${id}, ${data.email.toLowerCase()}, ${data.role}, ${context.userId}, ${hash}, ${new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString()})
     `;
     const url = bridgeInvitationUrl(token, bridgeEnv.appUrl());
-    await mail({
+    const mailResult = await mail({
       to: data.email,
       subject: "Crayons Bridge internal invite",
       text: `You were invited as ${data.role}. Accept:\n\n${url}\n`,
     });
     await writeAudit({
       actorUserId: context.userId,
-      action: "users.invite_internal",
+      action: mailResult.delivered ? "users.invite_internal" : "users.invite_internal_sink_captured",
       entityType: "bridge_invite",
       entityId: id,
-      metadata: { role: data.role },
+      metadata: { role: data.role, transport: mailResult.transport },
     });
-    return { sent: true };
+    return { sent: mailResult.delivered, captured: !mailResult.delivered };
   });
