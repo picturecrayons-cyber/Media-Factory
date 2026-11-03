@@ -39,7 +39,7 @@ const offerings = [
       "Digital Imaging Technician support for production-day media intake, camera-card handling, verified copies, media organization and post-production handoffs.",
     deliverables: ["Production and shooting-day intake", "Camera / card / clip manifest", "Master and backup verification tracking", "Conversion and handoff tracking", "Human DIT sign-off"],
     pricing: "Quote by DIT headcount, days, hours and media scope",
-    note: "Internal planning inputs: ₹210/hour or a quoted ₹2,000–₹2,500 per 12-hour shift. These are not customer sell prices; the hourly and day-rate bases must not be combined.",
+    note: "Custom quote based on approved DIT headcount, service duration and media scope. Internal labour rates and cost calculations are not displayed to customers.",
   },
 ];
 
