@@ -10,9 +10,11 @@ test("workspace profile query does not require organization tables or organizati
   assert.doesNotMatch(profileQuery, /bridge_organization_memberships|bridge_organizations|bp\.organization_id/);
 });
 
-test("studio organization lookup is optional and fails closed when schema is missing", () => {
+test("studio and internal organization lookup is optional and fails closed when schema is missing", () => {
   const source = readFileSync(new URL("./session.ts", import.meta.url), "utf8");
-  assert.match(source, /if \(actor\.accountType !== "studio" \|\| !actor\.emailVerified\) return actor/);
+  assert.match(source, /if \(\(!actor\.internalRole && actor\.accountType !== "studio"\) \|\| !actor\.emailVerified\) return actor/);
+  assert.match(source, /m\.status = 'active'/);
+  assert.match(source, /o\.status = 'active'/);
   assert.match(source, /catch \(error\) \{\s*if \(!isMissingOrganizationSchemaError\(error\)\) throw error/);
   assert.match(source, /actor\.organizationId = null/);
   assert.match(source, /workspaceFailureCode/);
