@@ -20,9 +20,17 @@ test("captured Bridge payment is resolved from provider_order_id, not only notes
   assert.match(source, /if \(localPayment\) surface = "bridge"/);
 });
 
-test("unmatched Bridge capture remains retriable", () => {
-  assert.match(source, /if \(!localPayment\) return await failEvent\(supabase, id, claimToken, "Bridge order not persisted yet"\)/);
-  assert.match(source, /new Response\(message, \{ status: 503 \}\)/);
+test("Bridge-tagged capture remains retriable while CRA-165 fulfillment is blocked", () => {
+  assert.match(source, /if \(explicit\.includes\("bridge"\) \|\| notes\.titleId\) return "bridge"/);
+  assert.match(source, /if \(localPayment\) surface = "bridge"/);
+
+  const start = source.indexOf('if (surface === "bridge")');
+  const end = source.indexOf("\\n      }", start);
+  assert.ok(start >= 0 && end > start, "Bridge surface guard must exist");
+  const block = source.slice(start, end);
+  assert.match(block, /return await failEvent/);
+  assert.match(block, /Bridge payment fulfillment blocked: CRA-165 mandate authorization is not implemented/);
+  assert.match(source, /return new Response\\(message, \\{ status: 503 \\}\\)/);
 });
 
 test("Bridge webhook capture fails closed before any payment or entitlement mutation", () => {
