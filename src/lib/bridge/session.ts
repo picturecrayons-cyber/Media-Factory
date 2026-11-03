@@ -94,21 +94,11 @@ export async function resolveBridgeUserId(authUserId: string): Promise<string> {
   `;
   if (direct[0]?.user_id) return direct[0].user_id;
 
-  // Legacy identities are accepted only through an explicit, verified,
-  // one-to-one identity link. A missing link is a denial, not a fallback.
-  const linked = await sql<{ bridge_user_id: string }>`
-    select l.bridge_user_id
-    from bridge_loop_identity_links l
-    join bridge_profiles bp on bp.user_id = l.bridge_user_id
-    where l.auth_user_id = ${authUserId}::uuid
-      and l.verified_at is not null
-      and length(trim(l.verification_method)) > 0
-      and length(trim(l.verified_by)) > 0
-    limit 1
-  `;
-  if (linked[0]?.bridge_user_id) return linked[0].bridge_user_id;
-
-  throw new Error("BRIDGE_IDENTITY_UNRESOLVED: explicit verified identity binding required");
+  // The current identity-link schema has no disabled/revoked state or
+  // revocation timestamp. A verified_at value therefore cannot prove that a
+  // legacy binding remains active. Accept only the direct immutable auth
+  // subject until a revocable identity-link contract is implemented.
+  throw new Error("BRIDGE_IDENTITY_UNRESOLVED: direct immutable auth subject required; legacy link revocation is not representable");
 }
 
 export async function loadActor(authUserId: string): Promise<BridgeActor | null> {
