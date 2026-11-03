@@ -140,7 +140,7 @@ export function MultilingualRightsPanel({ titleId, actor }: Props) {
               <h3 className="font-semibold">Build buyer package</h3>
               <input required value={packageName} onChange={(e) => setPackageName(e.target.value)} placeholder="Package name e.g. Hindi + Tamil OTT" className="h-10 w-full rounded-lg border border-line-strong bg-elevated px-3 text-sm" />
               <div className="space-y-2">
-                {rights.filter((r) => r.status === "VALID").map((r) => (
+                {rights.filter((r) => "status" in r && r.status === "VALID").map((r) => (
                   <label key={r.id} className="flex items-center gap-3 rounded-lg border border-line p-3 text-sm">
                     <input type="checkbox" checked={selected.includes(r.id)} onChange={(e) => setSelected((v) => e.target.checked ? [...v, r.id] : v.filter((id) => id !== r.id))} />
                     <span>{r.language} · {r.rightType} · {r.exclusivity}</span>
@@ -159,7 +159,7 @@ export function MultilingualRightsPanel({ titleId, actor }: Props) {
 
       {rights.length ? (
         <div className="overflow-x-auto rounded-xl border border-line">
-          <table className="w-full text-left text-sm"><thead className="border-b border-line text-xs uppercase tracking-wider text-muted"><tr><th className="px-3 py-3">Language</th><th className="px-3 py-3">Right</th><th className="px-3 py-3">Territory</th><th className="px-3 py-3">Window</th><th className="px-3 py-3">Status</th></tr></thead><tbody>{rights.map((r) => <tr key={r.id} className="border-b border-line last:border-0"><td className="px-3 py-3 font-medium">{r.language}</td><td className="px-3 py-3">{r.rightType}</td><td className="px-3 py-3">{r.territories.join(", ")}</td><td className="px-3 py-3">{r.windowStart ? new Date(r.windowStart).toLocaleDateString() : "Open"} – {r.windowEnd ? new Date(r.windowEnd).toLocaleDateString() : "Open"}</td><td className="px-3 py-3">{r.status}</td></tr>)}</tbody></table>
+          <table className="w-full text-left text-sm"><thead className="border-b border-line text-xs uppercase tracking-wider text-muted"><tr><th className="px-3 py-3">Language</th><th className="px-3 py-3">Right</th><th className="px-3 py-3">Territory</th><th className="px-3 py-3">Window</th><th className="px-3 py-3">Status</th></tr></thead><tbody>{rights.map((r) => <tr key={r.id} className="border-b border-line last:border-0"><td className="px-3 py-3 font-medium">{r.language}</td><td className="px-3 py-3">{r.rightType}</td><td className="px-3 py-3">{r.territories.join(", ")}</td><td className="px-3 py-3">{r.windowStart ? new Date(r.windowStart).toLocaleDateString() : "Open"} – {r.windowEnd ? new Date(r.windowEnd).toLocaleDateString() : "Open"}</td><td className="px-3 py-3">{"status" in r ? r.status : "Available"}</td></tr>)}</tbody></table>
         </div>
       ) : <p className="text-sm text-muted">No language rights recorded yet.</p>}
 
