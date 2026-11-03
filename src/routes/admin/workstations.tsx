@@ -22,12 +22,12 @@ const STATUS_LABELS: Record<string, string> = {
 function AdminWorkstations() {
   return (
     <RequireBridge allow="internal">
-      {(actor) => <BridgeShell actor={actor} title="Admin"><WorkstationBody /></BridgeShell>}
+      {(actor) => <BridgeShell actor={actor} title="Admin"><WorkstationBody actor={actor} /></BridgeShell>}
     </RequireBridge>
   );
 }
 
-function WorkstationBody() {
+function WorkstationBody({ actor }: { actor: any }) {
   const qc = useQueryClient();
   const query = useQuery({ queryKey: ["admin-workstations"], queryFn: () => listAdminWorkstations() });
   const review = useMutation({
@@ -41,6 +41,7 @@ function WorkstationBody() {
   const [activeTab, setActiveTab] = useState<Tab>("Titles");
 
   const data = query.data;
+  const canReviewDuplicates = actor.internalRole === "admin" || actor.internalRole === "super_admin";
   if (query.isLoading) return <div className="p-8 text-sm text-muted">Loading Admin…</div>;
   if (query.isError || !data) return <div className="rounded-2xl border border-line bg-surface p-8 text-sm">Unable to load the Bridge operational backend.</div>;
 
@@ -72,7 +73,10 @@ function WorkstationBody() {
       </nav>
 
       {activeTab === "Titles" ? (
-        <TitleQueue titles={data.titles} review={review} />
+        <div className="space-y-8">
+          <TitleQueue titles={data.titles} review={review} />
+          {canReviewDuplicates ? <DuplicateReviewSection /> : null}
+        </div>
       ) : activeTab === "Concepts" ? (
         <StoryConceptDesk />
       ) : activeTab === "QC" ? (
