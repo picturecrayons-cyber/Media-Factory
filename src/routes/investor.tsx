@@ -2,7 +2,6 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
-import { listTitles } from "@/lib/bridge/titles";
 import { getSql } from "@/lib/db";
 
 export const Route = createFileRoute("/investor")({ component: Investor });
@@ -26,7 +25,6 @@ function InvestorBody({ userId }: { userId: string }) {
   });
   const rows = investmentsQ.data?.investments ?? [];
   const totalCapital = rows.reduce((sum, row) => sum + Number(row.investedAmountPaise ?? 0), 0);
-  const totalParticipation = rows.reduce((sum, row) => sum + Number(row.participationPercent ?? 0), 0);
 
   return (
     <div className="space-y-6">
