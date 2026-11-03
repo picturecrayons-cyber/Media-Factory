@@ -234,7 +234,7 @@ export const transitionVendorDeliveryJob = createServerFn({ method: "POST" })
     const sql = await getSql();
     return withStorage(() => sql.transaction(async (tx) => {
       const [job] = await tx<{
-        id: string; title_id: string; organization_id: string | null; state: string; requested_by: string;
+        id: string; title_id: string; organization_id: string | null; owner_organization_id: string | null; state: string; requested_by: string;
       }>`
         select j.id, j.title_id, j.organization_id, j.state, j.requested_by,
                t.owner_organization_id
