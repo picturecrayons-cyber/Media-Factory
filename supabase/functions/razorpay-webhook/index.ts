@@ -51,17 +51,6 @@ async function failEvent(supabase: any, id: string, token: string, message: stri
   return new Response(message, { status: 503 });
 }
 
-async function fetchVerifiedRazorpayPayment(paymentId: string, keyId: string, keySecret: string) {
-  const auth = btoa(`${keyId}:${keySecret}`);
-  const response = await fetch(`https://api.razorpay.com/v1/payments/${encodeURIComponent(paymentId)}`, {
-    headers: { Authorization: `Basic ${auth}` },
-  });
-  if (!response.ok) throw new Error("Razorpay payment lookup failed");
-  return await response.json() as {
-    id: string; order_id: string; status: string; amount: number; currency: string;
-  };
-}
-
 Deno.serve(async (req: Request) => {
   if (req.method !== "POST") return new Response("Method Not Allowed", { status: 405 });
   const raw = await req.text();
@@ -121,48 +110,16 @@ Deno.serve(async (req: Request) => {
       if (localPayment) surface = "bridge";
 
       if (surface === "bridge") {
-        if (!localPayment) return await failEvent(supabase, id, claimToken, "Bridge order not persisted yet");
-        if (localPayment.provider_payment_id && localPayment.provider_payment_id !== payment.id) {
-          return await failEvent(supabase, id, claimToken, "Order linked to another payment");
-        }
-        if (!localPayment.title_id) return await failEvent(supabase, id, claimToken, "Bridge license order has no title");
-
-        const verified = await fetchVerifiedRazorpayPayment(payment.id, keyId, keySecret);
-        if (verified.id !== payment.id || verified.order_id !== payment.order_id || verified.status !== "captured") {
-          return await failEvent(supabase, id, claimToken, "Razorpay payment is not a matching captured payment");
-        }
-        if (verified.amount !== localPayment.amount_paise || verified.currency !== localPayment.currency || verified.currency !== "INR") {
-          return await failEvent(supabase, id, claimToken, "Razorpay payment amount or currency mismatch");
-        }
-
-        const nowIso = new Date().toISOString();
-        const { data: updated, error: updateError } = await supabase.from("bridge_payments")
-          .update({ status: "captured", provider_payment_id: payment.id, verified_at: nowIso })
-          .eq("id", localPayment.id)
-          .or(`status.neq.captured,provider_payment_id.eq.${payment.id}`)
-          .select("id").maybeSingle();
-        if (updateError || !updated) return await failEvent(supabase, id, claimToken, "Bridge payment update failed");
-
-        const { error: entitlementError } = await supabase.from("bridge_entitlements").upsert({
-          user_id: localPayment.user_id, title_id: localPayment.title_id, payment_id: localPayment.id, access_type: "license",
-        }, { onConflict: "user_id,title_id,access_type", ignoreDuplicates: true });
-        if (entitlementError) return await failEvent(supabase, id, claimToken, "Bridge entitlement grant failed");
-
-        const { data: title, error: titleError } = await supabase.from("bridge_titles").select("status").eq("id", localPayment.title_id).maybeSingle();
-        if (titleError) return await failEvent(supabase, id, claimToken, "Bridge title lookup failed");
-        if (title && (title.status === "LIVE_FOR_BUYERS" || title.status === "IN_NEGOTIATION")) {
-          const { error: transitionError } = await supabase.from("bridge_titles").update({ status: "LICENSED", updated_at: nowIso }).eq("id", localPayment.title_id);
-          if (transitionError) return await failEvent(supabase, id, claimToken, "Bridge title transition failed");
-          const { error: eventError } = await supabase.from("bridge_title_events").insert({
-            title_id: localPayment.title_id, from_status: title.status, to_status: "LICENSED", actor_user_id: localPayment.user_id, note: "razorpay captured webhook",
-          });
-          if (eventError) return await failEvent(supabase, id, claimToken, "Bridge title event failed");
-        }
-        const { error: auditError } = await supabase.from("bridge_audit_logs").insert({
-          actor_user_id: localPayment.user_id, action: "payment.captured", entity_type: "bridge_payment", entity_id: localPayment.id,
-          metadata: JSON.stringify({ titleId: localPayment.title_id, source: "razorpay-webhook" }),
-        });
-        if (auditError) return await failEvent(supabase, id, claimToken, "Bridge audit write failed");
+        // CRA-165 remains a hard fulfillment gate. Do not call Razorpay,
+        // update Bridge payment state, grant entitlements, or transition titles
+        // until organization, mandate and exact-rights authorization share one
+        // canonical server transaction.
+        return await failEvent(
+          supabase,
+          id,
+          claimToken,
+          "Bridge payment fulfillment blocked: CRA-165 mandate authorization is not implemented",
+        );
       }
     }
 
