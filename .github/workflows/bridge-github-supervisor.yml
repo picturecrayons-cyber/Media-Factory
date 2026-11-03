@@ -21,7 +21,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Detect recent failed workflow runs and open deduplicated alerts
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const cutoff = Date.now() - 30 * 60 * 1000;
