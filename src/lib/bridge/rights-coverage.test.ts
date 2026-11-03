@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { assertPublicationCanExtend, findCoveringRightsGrant, type BridgeRightsGrant } from "./rights-coverage.ts";
+import { isBuyerVisibleLanguageRight, isBuyerVisibleLicensePackage } from "./buyer-license-views.ts";
 
 const baseGrant: BridgeRightsGrant = {
   id: "grant-1",
@@ -111,4 +112,22 @@ test("extension cannot restore suspended revoked expired or pending publications
   assert.throws(() => assertPublicationCanExtend("live", "2026-09-29T00:00:00.000Z"), /fresh authorization/);
   assert.doesNotThrow(() => assertPublicationCanExtend("live", null));
   assert.doesNotThrow(() => assertPublicationCanExtend("authorized", null));
+});
+
+test("buyer language-right visibility is limited to VALID rights", () => {
+  assert.equal(isBuyerVisibleLanguageRight("VALID"), true);
+  for (const status of ["DRAFT", "EXPIRED", "REVOKED", "PENDING", ""]) {
+    assert.equal(isBuyerVisibleLanguageRight(status), false);
+  }
+});
+
+test("buyer package visibility requires an offerable state and every linked right still VALID", () => {
+  const valid = new Set(["right-a", "right-b"]);
+  assert.equal(isBuyerVisibleLicensePackage("READY", ["right-a", "right-b"], valid), true);
+  assert.equal(isBuyerVisibleLicensePackage("IN_NEGOTIATION", ["right-a"], valid), true);
+  assert.equal(isBuyerVisibleLicensePackage("DRAFT", ["right-a"], valid), false);
+  assert.equal(isBuyerVisibleLicensePackage("REVOKED", ["right-a"], valid), false);
+  assert.equal(isBuyerVisibleLicensePackage("LICENSED", ["right-a"], valid), false);
+  assert.equal(isBuyerVisibleLicensePackage("READY", [], valid), false);
+  assert.equal(isBuyerVisibleLicensePackage("READY", ["right-a", "revoked-right"], valid), false);
 });
