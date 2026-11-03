@@ -116,3 +116,16 @@ This table is not the complete 32-table route/action matrix. All remaining route
 **STAGING:** SECURITY REMEDIATION REQUIRED / NOT CERTIFIED.  
 **PRODUCTION:** HOLD / NOT CERTIFIED / NO-GO.  
 **App-inu pani kittaruthu.**
+
+## 6. Remediation addendum — 2026-11-03
+
+The P0 quote-response disclosure has a source-level remediation in Draft PR #462:
+
+- Branch: `feat/bridge-loop-commercial-catalogue-20261103`
+- Exact head SHA: `142b3e3a50d7a1f5f9078cb5dd5c616d85a80467`
+- Added an explicit customer DTO allowlist for `createServiceQuote`; customer responses no longer serialize estimated cost, estimated margin, cost basis, rate IDs/versions, internal classification or evidence.
+- Internal pricing calculations and persisted finance data remain server-side.
+- DTO and response-wiring regression tests passed on the exact head.
+- CI run #1981 and Scope A disposable PostgreSQL run #1005 both completed SUCCESS.
+
+This is a Draft source remediation, not a merged or deployed fix. Supabase Preview was SKIPPED; no STAGING DB or PRODUCTION DB runtime query, migration, customer invocation or payment was performed. The P0 remains release-blocking until the Draft change is reviewed, merged with approval, and verified through the isolated Preview/runtime authorization gates. Do not mark the finding closed based on unit/CI evidence alone.
