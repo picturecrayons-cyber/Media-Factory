@@ -11,6 +11,12 @@ const monitor = await readFile(
   "utf8",
 );
 
+test("supervisor and recovery use the Node 24-compatible GitHub Script action", () => {
+  assert.match(monitor, /actions\\/github-script@v8/);
+  assert.match(recovery, /actions\\/github-script@v8/);
+  assert.doesNotMatch(monitor + recovery, /actions\\/github-script@v7/);
+});
+
 test("manual recovery pins the trusted CI workflow IDs and names", () => {
   assert.match(recovery, /\[363476266,\s*"CI"\]/);
   assert.match(recovery, /\[374508093,\s*"Scope A PostgreSQL Onboarding Verification"\]/);
