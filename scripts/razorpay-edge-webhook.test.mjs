@@ -30,7 +30,7 @@ test("Bridge-tagged capture remains retriable while CRA-165 fulfillment is block
   const block = source.slice(start, end);
   assert.match(block, /return await failEvent/);
   assert.match(block, /Bridge payment fulfillment blocked: CRA-165 mandate authorization is not implemented/);
-  assert.match(source, /return new Response\\(message, \\{ status: 503 \\}\\)/);
+  assert.match(source, /return new Response\(message, \{ status: 503 \}\)/);
 });
 
 test("Bridge webhook capture fails closed before any payment or entitlement mutation", () => {
