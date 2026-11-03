@@ -4,6 +4,19 @@ import { readFileSync } from "node:fs";
 import { toCustomerServiceQuoteDto } from "./service-quote-dto.ts";
 
 test("customer quote DTO exposes prices but strips internal cost, margin and rate metadata", () => {
+  const internalLine = {
+    serviceName: "Malayalam subtitle QC",
+    unitLabel: "language",
+    quantity: 1,
+    unitPricePaise: 5000,
+    lineTotalPaise: 5000,
+    rateId: "internal-rate-id",
+    rateVersion: 9,
+    classification: "INTERNAL",
+    costBasisPaise: 1200,
+    estimatedMarginPaise: 3800,
+    evidence: { internalNote: "not customer-facing" },
+  };
   const dto = toCustomerServiceQuoteDto({
     quoteId: "quote-1",
     quoteNumber: "CRQ-20261103-ABCD",
@@ -12,19 +25,7 @@ test("customer quote DTO exposes prices but strips internal cost, margin and rat
     subtotalPaise: 5000,
     taxPaise: 900,
     totalPaise: 5900,
-    lines: [{
-      serviceName: "Malayalam subtitle QC",
-      unitLabel: "language",
-      quantity: 1,
-      unitPricePaise: 5000,
-      lineTotalPaise: 5000,
-      rateId: "internal-rate-id",
-      rateVersion: 9,
-      classification: "INTERNAL",
-      costBasisPaise: 1200,
-      estimatedMarginPaise: 3800,
-      evidence: { internalNote: "not customer-facing" },
-    }],
+    lines: [internalLine],
   });
 
   assert.deepEqual(dto, {
