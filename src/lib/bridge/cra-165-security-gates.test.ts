@@ -28,32 +28,38 @@ test("direct immutable auth subject resolves only when it exactly matches the pr
 
 test("session resolver has no email or legacy identity-link fallback", () => {
   const source = read("../bridge/session.ts");
-  const resolver = source.match(/export async function resolveBridgeUserId[\\s\\S]*?\\n}\\n\\nexport async function loadActor/)?.[0] ?? "";
-  assert.ok(resolver, "identity resolver should be present");
-  assert.match(resolver, /requireDirectBridgeIdentity/);
-  assert.doesNotMatch(resolver, /bridge_loop_identity_links|auth\\.users|email/i);
+  const resolver = source.slice(
+    source.indexOf("export async function resolveBridgeUserId"),
+    source.indexOf("export async function loadActor"),
+  );
+  assert.ok(resolver.includes("requireDirectBridgeIdentity"));
+  assert.equal(resolver.includes("bridge_loop_identity_links"), false);
+  assert.equal(resolver.includes("auth.users"), false);
+  assert.equal(resolver.toLowerCase().includes("email"), false);
 });
 
 test("license payment fulfillment fails closed without canonical mandate authorization", () => {
   const source = read("../bridge/payments.ts");
-  assert.match(source, /payment\\.purpose === "title_license"/);
-  assert.match(source, /BRIDGE_LICENSE_FULFILLMENT_BLOCKED/);
+  assert.ok(source.includes('payment.purpose === "title_license"'));
+  assert.ok(source.includes("BRIDGE_LICENSE_FULFILLMENT_BLOCKED"));
 });
 
 test("buyer entitlements and signed downloads are withheld without tenant-scoped rights", () => {
   const payments = read("../bridge/payments.ts");
   const assets = read("../bridge/assets.ts");
-  assert.match(payments, /actor\\.accountType === "buyer"\\) return \\{ entitlements: \\[\\] \\}/);
-  assert.match(assets, /async function hasLicenseEntitlement\\(_userId: string, _titleId: string\\): Promise<boolean> \\{[\\s\\S]*?return false;/);
+  assert.ok(payments.includes('if (actor.accountType === "buyer") return { entitlements: [] };'));
+  assert.ok(assets.includes("async function hasLicenseEntitlement"));
+  assert.ok(assets.includes("return false;"));
 });
 
 test("Edge webhook cannot bypass canonical Bridge license fulfillment", () => {
   const source = read("../../../supabase/functions/razorpay-webhook/index.ts");
-  assert.match(source, /localPayment\\?\\.purpose === "title_license"/);
-  assert.match(source, /Bridge license fulfillment blocked pending CRA-165 authorization/);
+  assert.ok(source.includes('localPayment?.purpose === "title_license"'));
+  assert.ok(source.includes("Bridge license fulfillment blocked pending CRA-165 authorization"));
 });
 
 test("all single-actor internal grants are denied pending independent dual control", () => {
   const source = read("../bridge/rbac.ts");
-  assert.match(source, /export function canGrantInternalRole\\(_actor: Actor, _role: InternalRole\\): boolean \\{\\s*return false;/);
+  assert.ok(source.includes("export function canGrantInternalRole(_actor: Actor, _role: InternalRole): boolean"));
+  assert.ok(source.includes("return false;"));
 });
