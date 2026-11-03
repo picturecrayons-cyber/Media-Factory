@@ -58,6 +58,6 @@ test("createServiceQuote serializes only through the customer DTO allowlist", ()
 });
 test("customer-facing services catalogue never exposes internal DIT cost inputs", () => {
   const source = readFileSync(new URL("../../routes/services.tsx", import.meta.url), "utf8");
-  assert.doesNotMatch(source, /₹\\s*(?:210|2,000|2,500)|Internal planning inputs|costBasisPaise|estimatedCostPaise|estimatedMarginPaise/);
+  assert.doesNotMatch(source, /₹\s*(?:210|2,000|2,500)|Internal planning inputs|costBasisPaise|estimatedCostPaise|estimatedMarginPaise/);
   assert.match(source, /Custom quote based on approved DIT headcount, service duration and media scope/);
 });
