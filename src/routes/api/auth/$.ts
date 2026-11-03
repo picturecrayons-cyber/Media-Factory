@@ -1,26 +1,20 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { authConfigResponse } from "@/lib/auth/auth-config-response";
+import { bridgeEnv } from "@/lib/bridge/env";
+
+function handler() {
+  try {
+    return authConfigResponse(bridgeEnv.supabaseUrl());
+  } catch {
+    return authConfigResponse(undefined);
+  }
+}
 
 export const Route = createFileRoute("/api/auth/$")({
   server: {
     handlers: {
-      GET: () =>
-        new Response(
-          JSON.stringify({
-            status: "active",
-            authority: "supabase",
-            authUrl: "https://mlmgugivsyoxzdgwkbpu.supabase.co",
-          }),
-          { headers: { "Content-Type": "application/json" } },
-        ),
-      POST: () =>
-        new Response(
-          JSON.stringify({
-            status: "active",
-            authority: "supabase",
-            authUrl: "https://mlmgugivsyoxzdgwkbpu.supabase.co",
-          }),
-          { headers: { "Content-Type": "application/json" } },
-        ),
+      GET: handler,
+      POST: handler,
     },
   },
 });
