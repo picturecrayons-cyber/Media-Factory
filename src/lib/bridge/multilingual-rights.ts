@@ -76,7 +76,7 @@ export const listLanguageRights = createServerFn({ method: "GET" })
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
     const title = await loadTitle(data.titleId);
-    if (!title || !canReadTitle(actor, title)) throw new Error("Not found");
+    if (!title || (!canReadTitle(actor, title) && actor.accountType !== "buyer")) throw new Error("Not found");
     const isBuyer = actor.accountType === "buyer" && !actor.internalRole;
     if (isBuyer) await assertBuyerPublishable(title.id);
     const sql = await getSql();
