@@ -1,35 +1,59 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
+import { assertBuyerLicenseOrderBlocked, requireDirectBridgeIdentity } from "./authorization-guards.ts";
 
 const read = (path: string) => readFileSync(new URL(path, import.meta.url), "utf8");
 
-test("Buyer A/B cannot create a license order without server-resolved organization scope", () => {
-  const source = read("../bridge/payments.ts");
-  assert.match(source, /actor\.accountType === "buyer" && !actor\.organizationId/);
-  assert.match(source, /BRIDGE_LICENSE_ORDER_BLOCKED/);
+test("Buyer A and Buyer B are denied even when each has an organization ID", () => {
+  const buyerA = { userId: "buyer-a", accountType: "buyer", organizationId: "org-a" };
+  const buyerB = { userId: "buyer-b", accountType: "buyer", organizationId: "org-b" };
+  assert.throws(() => assertBuyerLicenseOrderBlocked(buyerA), /BRIDGE_LICENSE_ORDER_BLOCKED/);
+  assert.throws(() => assertBuyerLicenseOrderBlocked(buyerB), /BRIDGE_LICENSE_ORDER_BLOCKED/);
+});
+
+test("non-buyer title owners are not blocked by the buyer-only guard", () => {
+  assert.doesNotThrow(() => assertBuyerLicenseOrderBlocked({
+    userId: "creator-a",
+    accountType: "independent_creator",
+    organizationId: null,
+  }));
+});
+
+test("direct immutable auth subject resolves only when it exactly matches the profile subject", () => {
+  assert.equal(requireDirectBridgeIdentity("auth-a", "auth-a"), "auth-a");
+  assert.throws(() => requireDirectBridgeIdentity("auth-a", null), /BRIDGE_IDENTITY_UNRESOLVED/);
+  assert.throws(() => requireDirectBridgeIdentity("auth-a", "legacy-bridge-user"), /BRIDGE_IDENTITY_UNRESOLVED/);
+});
+
+test("session resolver has no email or legacy identity-link fallback", () => {
+  const source = read("../bridge/session.ts");
+  const resolver = source.match(/export async function resolveBridgeUserId[\\s\\S]*?\\n}\\n\\nexport async function loadActor/)?.[0] ?? "";
+  assert.ok(resolver, "identity resolver should be present");
+  assert.match(resolver, /requireDirectBridgeIdentity/);
+  assert.doesNotMatch(resolver, /bridge_loop_identity_links|auth\\.users|email/i);
 });
 
 test("license payment fulfillment fails closed without canonical mandate authorization", () => {
   const source = read("../bridge/payments.ts");
-  assert.match(source, /payment\.purpose === "title_license"/);
+  assert.match(source, /payment\\.purpose === "title_license"/);
   assert.match(source, /BRIDGE_LICENSE_FULFILLMENT_BLOCKED/);
 });
 
 test("buyer entitlements and signed downloads are withheld without tenant-scoped rights", () => {
   const payments = read("../bridge/payments.ts");
   const assets = read("../bridge/assets.ts");
-  assert.match(payments, /actor\.accountType === "buyer" && !actor\.internalRole\) return \{ entitlements: \[\] \}/);
-  assert.match(assets, /async function hasLicenseEntitlement\(_userId: string, _titleId: string\): Promise<boolean> \{[\s\S]*?return false;/);
+  assert.match(payments, /actor\\.accountType === "buyer"\\) return \\{ entitlements: \\[\\] \\}/);
+  assert.match(assets, /async function hasLicenseEntitlement\\(_userId: string, _titleId: string\\): Promise<boolean> \\{[\\s\\S]*?return false;/);
 });
 
 test("Edge webhook cannot bypass canonical Bridge license fulfillment", () => {
   const source = read("../../../supabase/functions/razorpay-webhook/index.ts");
-  assert.match(source, /localPayment\?\.purpose === "title_license"/);
+  assert.match(source, /localPayment\\?\\.purpose === "title_license"/);
   assert.match(source, /Bridge license fulfillment blocked pending CRA-165 authorization/);
 });
 
 test("all single-actor internal grants are denied pending independent dual control", () => {
   const source = read("../bridge/rbac.ts");
-  assert.match(source, /export function canGrantInternalRole\(_actor: Actor, _role: InternalRole\): boolean \{\s*return false;/);
+  assert.match(source, /export function canGrantInternalRole\\(_actor: Actor, _role: InternalRole\\): boolean \\{\\s*return false;/);
 });
