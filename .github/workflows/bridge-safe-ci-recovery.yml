@@ -45,6 +45,10 @@ jobs:
               core.setFailed(`Refusing recovery for non-allowlisted workflow: ${run.name}`);
               return;
             }
+            if (run.head_branch === "main") {
+              core.setFailed("Refusing automatic retry of a main-branch run");
+              return;
+            }
             if (run.status !== "completed" || !["failure", "timed_out"].includes(run.conclusion)) {
               core.setFailed(`Run is not a completed retryable failure (status=${run.status}, conclusion=${run.conclusion})`);
               return;
