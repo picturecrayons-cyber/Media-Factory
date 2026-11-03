@@ -10,7 +10,7 @@ test("external Razorpay function disables Supabase gateway JWT verification", ()
 });
 
 test("fallback event ID awaits the body hash", () => {
-  assert.match(source, /`\$\{e\}:\$\{await sha256\(raw\)\}`/);
+  assert.match(source, /\x60\$\{e\}:\$\{await sha256\(raw\)\}\x60/);
   assert.doesNotMatch(source, /\$\{awaitHash\(raw\)\}/);
 });
 
@@ -20,15 +20,12 @@ test("captured Bridge payment is resolved from provider_order_id, not only notes
 });
 
 test("unmatched Bridge capture remains retriable", () => {
-  assert.match(source, /if \(!localPayment\) return await failEvent\(supabase, id, "Bridge order not persisted yet"\)/);
+  assert.match(source, /if \(!payment\?\.order_id \|\| !payment\?\.id\) return await failEvent/);
   assert.match(source, /new Response\(message, \{ status: 503 \}\)/);
 });
 
-test("entitlement and title transition happen before webhook is marked processed", () => {
-  const entitlement = source.indexOf('from("bridge_entitlements").upsert');
-  const transition = source.indexOf('from("bridge_titles").update');
-  const processed = source.indexOf('status: "processed"');
-  assert.ok(entitlement >= 0 && transition >= 0 && processed >= 0);
-  assert.ok(entitlement < processed);
-  assert.ok(transition < processed);
+test("Edge webhook fails closed for every Bridge payment purpose and never writes entitlements", () => {
+  assert.match(source, /if \(surface === "bridge"\)[\s\S]*?failEvent\(supabase, id, "Bridge payment fulfillment disabled in Edge webhook/);
+  assert.doesNotMatch(source, /from\("bridge_entitlements"\)\.upsert/);
+  assert.doesNotMatch(source, /from\("bridge_titles"\)\.update/);
 });
