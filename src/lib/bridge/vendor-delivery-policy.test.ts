@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import type { Actor } from "./rbac.ts";
 import {
   canOperateVendorJob,
+  canReadVendorJobDesk,
   canRequestVendorJob,
   canSignOffVendorJob,
   nextVendorJobState,
@@ -13,6 +14,29 @@ const orgB = "22222222-2222-4222-8222-222222222222";
 const actor = (overrides: Partial<Actor> = {}): Actor => ({
   userId: "studio-a", emailVerified: true, accountType: "studio",
   internalRole: null, organizationId: orgA, ...overrides,
+});
+
+test("Creator and Studio can read only their own-scoped delivery desk without delivery.read", () => {
+  assert.equal(canReadVendorJobDesk(actor({ accountType: "independent_creator", organizationId: null })), true);
+  assert.equal(canReadVendorJobDesk(actor({ accountType: "studio", organizationId: orgA })), true);
+});
+
+test("delivery-desk reads deny Buyer, Investor, unverified users and read-only staff", () => {
+  assert.equal(canReadVendorJobDesk(actor({ accountType: "buyer" })), false);
+  assert.equal(canReadVendorJobDesk(actor({ accountType: "investor" })), false);
+  assert.equal(canReadVendorJobDesk(actor({ emailVerified: false })), false);
+  assert.equal(canReadVendorJobDesk(actor({
+    internalRole: "viewer", accountType: "independent_creator",
+  })), false);
+});
+
+test("internal delivery-desk reads require the explicit staff delivery permission", () => {
+  assert.equal(canReadVendorJobDesk(actor({
+    internalRole: "admin", accountType: "independent_creator",
+  })), true);
+  assert.equal(canReadVendorJobDesk(actor({
+    internalRole: "qc_reviewer", accountType: "independent_creator",
+  })), false);
 });
 
 test("studio requests are limited to owned titles or active same-organization scope", () => {
