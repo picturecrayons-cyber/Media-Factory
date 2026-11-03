@@ -52,10 +52,13 @@ test("buyer entitlements and signed downloads are withheld without tenant-scoped
   assert.ok(assets.includes("return false;"));
 });
 
-test("Edge webhook cannot bypass canonical Bridge license fulfillment", () => {
+test("Edge webhook fails closed for every Bridge payment purpose without granting entitlements", () => {
   const source = read("../../../supabase/functions/razorpay-webhook/index.ts");
-  assert.ok(source.includes('localPayment?.purpose === "title_license"'));
-  assert.ok(source.includes("Bridge license fulfillment blocked pending CRA-165 authorization"));
+  assert.ok(source.includes("if (localPayment) surface = \"bridge\""));
+  assert.ok(source.includes("if (surface === \"bridge\")"));
+  assert.ok(source.includes("Bridge payment fulfillment disabled in Edge webhook; use canonical server handler"));
+  assert.doesNotMatch(source, /from\("bridge_entitlements"\)\.upsert/);
+  assert.doesNotMatch(source, /from\("bridge_titles"\)\.update/);
 });
 
 test("all single-actor internal grants are denied pending independent dual control", () => {
