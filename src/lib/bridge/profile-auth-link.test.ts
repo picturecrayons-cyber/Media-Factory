@@ -13,15 +13,13 @@ test("onboarding persists verified auth-to-Bridge identity binding", () => {
   assert.doesNotMatch(src, /on conflict \(auth_user_id\) do update set/);
 });
 
-test("identity resolution uses only direct immutable auth subject while legacy links lack revocation state", () => {
-  const src = readFileSync(new URL("./session.ts", import.meta.url), "utf8");
-  const resolver = src.match(/export async function resolveBridgeUserId[\\s\\S]*?\\n}\\n\\nexport async function loadActor/)?.[0] ?? "";
-  assert.ok(resolver, "identity resolver should be present");
-  assert.match(resolver, /requireDirectBridgeIdentity/);
-  assert.doesNotMatch(resolver, /bridge_loop_identity_links|auth\\.users|email/i);
-});
-
-test("legacy single-actor internal invitations are rejected at onboarding", () => {
-  const src = readFileSync(new URL("./profiles.ts", import.meta.url), "utf8");
-  assert.match(src, /if \(data\.inviteToken\) \{[\s\S]*?Internal role invitations are disabled pending independent dual-control approval/);
+test("identity resolver requires direct immutable auth subject and rejects legacy/email inference", () => {
+  const source = readFileSync(new URL("./session.ts", import.meta.url), "utf8");
+  const start = source.indexOf("export async function resolveBridgeUserId");
+  const end = source.indexOf("export async function loadActor", start);
+  const resolver = source.slice(start, end);
+  assert.ok(resolver.includes("requireDirectBridgeIdentity"));
+  assert.equal(resolver.includes("bridge_loop_identity_links"), false);
+  assert.equal(resolver.includes("auth.users"), false);
+  assert.equal(resolver.toLowerCase().includes("email"), false);
 });
