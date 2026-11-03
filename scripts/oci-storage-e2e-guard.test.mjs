@@ -76,10 +76,10 @@ test("storage E2E accepts only the named synthetic poster asset", () => {
 
 test("OCI E2E workflow has no automatic main push trigger and uses only STAGING secrets", () => {
   const source = readFileSync(new URL("../.github/workflows/bridge-oci-storage-e2e.yml", import.meta.url), "utf8");
-  assert.match(source, /workflow_dispatch:/);
+  assert.ok(source.includes("workflow_dispatch:"));
   assert.doesNotMatch(source, /^\s+push:/m);
-  assert.match(source, /STAGING_DATABASE_URL/);
-  assert.match(source, /STAGING_OCI_PRIVATE_KEY/);
+  assert.ok(source.includes("STAGING_DATABASE_URL"));
+  assert.ok(source.includes("STAGING_OCI_PRIVATE_KEY"));
   assert.doesNotMatch(source, /secrets\.DATABASE_URL/);
   assert.doesNotMatch(source, /secrets\.OCI_PRIVATE_KEY/);
 });
