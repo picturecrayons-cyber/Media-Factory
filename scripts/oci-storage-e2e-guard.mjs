@@ -38,7 +38,7 @@ export function validateStorageE2EConfig(env) {
   if (databaseUrl.hostname.toLowerCase() !== `db.${APPROVED_STAGING_PROJECT_REF}.supabase.co`) {
     return { ok: false, reason: "database host is not the approved STAGING / TESTING DB" };
   }
-  if (!/(?:^|[-_])(staging|test)(?:[-_]|$)/i.test(env.OCI_BUCKET_NAME)) {
+  if (!/^(?:bridge-)?(?:staging|test)(?:[-_]|$)/i.test(env.OCI_BUCKET_NAME)) {
     return { ok: false, reason: "OCI bucket name must identify a dedicated staging/test bucket" };
   }
 
