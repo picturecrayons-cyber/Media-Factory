@@ -110,6 +110,13 @@ export const completeOnboarding = createServerFn({ method: "POST" })
       return { home: workspaceHome(existing), profile: existing };
     }
 
+    // Existing invitations were issued by a single actor and carry no
+    // independent approval record. Reject them until the two-person
+    // requester/approver workflow is implemented; never accept legacy tokens.
+    if (data.inviteToken) {
+      throw new Error("Internal role invitations are disabled pending independent dual-control approval.");
+    }
+
     // Investor access is granted only after a reviewed access request. Enforce
     // this at the authenticated server endpoint, not only in the signup UI.
     if (data.accountType === "investor") {
