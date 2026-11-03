@@ -36,11 +36,29 @@ describe("Razorpay runtime isolation", () => {
     }), /unapproved Supabase project/);
   });
 
-  it("does not impose Preview-only restrictions on non-Preview runtimes", () => {
+  it("rejects non-HTTPS Preview Supabase URLs", () => {
+    assert.throws(() => assertRazorpayRuntimeIsolation({
+      vercelEnv: "preview",
+      keyId: "rzp_test_example",
+      supabaseUrl: "http://jbymleftneggcgutlcqu.supabase.co",
+    }), /unapproved Supabase project/);
+  });
+
+  it("allows the explicitly identified Production runtime", () => {
     assert.doesNotThrow(() => assertRazorpayRuntimeIsolation({
       vercelEnv: "production",
       keyId: "rzp_live_example",
       supabaseUrl: "https://mlmgugivsyoxzdgwkbpu.supabase.co",
     }));
+  });
+
+  it("fails closed for missing, development, and unknown runtime markers", () => {
+    for (const vercelEnv of [undefined, "development", "custom", "staging"]) {
+      assert.throws(() => assertRazorpayRuntimeIsolation({
+        vercelEnv,
+        keyId: "rzp_test_example",
+        supabaseUrl: testingUrl,
+      }), /unknown or non-production runtime/);
+    }
   });
 });
