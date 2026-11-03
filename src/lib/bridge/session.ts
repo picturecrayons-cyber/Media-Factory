@@ -89,7 +89,7 @@ export async function resolveBridgeUserId(authUserId: string): Promise<string> {
   const sql = await getSql();
 
   // The immutable Supabase subject is the canonical identity when it directly
-  // owns a Bridge profile. Email addresses are never identity keys.
+  // owns a Bridge profile. Only the immutable authenticated subject can resolve a Bridge profile.
   const direct = await sql<{ user_id: string }>`
     select user_id from bridge_profiles where user_id = ${authUserId} limit 1
   `;
