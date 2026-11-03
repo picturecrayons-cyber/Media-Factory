@@ -334,11 +334,12 @@ export const listTitles = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
+    const isBuyer = actor.accountType === "buyer" && !actor.internalRole;
     const sql = await getSql();
     let rows: TitleRow[] = [];
     if (actor.internalRole && hasPermission(actor, "title.read_catalog")) {
       rows = await listCatalog(sql);
-    } else if (actor.accountType === "buyer") {
+    } else if (isBuyer) {
       assertPermission(actor, "title.read_catalog");
       if (await hasTitleMergeColumn(sql)) {
         rows = await sql<TitleRow>`
@@ -364,7 +365,7 @@ export const listTitles = createServerFn({ method: "GET" })
       try {
         const title = mapTitle(row);
         // Buyer catalog cards must never expose private object-storage keys.
-        return [actor.accountType === "buyer"
+        return [isBuyer
           ? { ...title, posterKey: null, masterKey: null }
           : title];
       } catch (error) {
@@ -380,6 +381,7 @@ export const getTitle = createServerFn({ method: "GET" })
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
+    const isBuyer = actor.accountType === "buyer" && !actor.internalRole;
     const title = await loadTitle(data.id);
     if (!title) throw new Error("Not found");
     const sql = await getSql();
@@ -387,7 +389,7 @@ export const getTitle = createServerFn({ method: "GET" })
       const assigned = await sql<{ id: string }>
         `select id from bridge_title_investors where title_id = ${title.id} and investor_user_id = ${actor.userId} limit 1`;
       if (!assigned[0]) throw new Error("Not found");
-    } else if (actor.accountType === "buyer") {
+    } else if (isBuyer) {
       // Buyer-visible lifecycle labels are not an authorization grant.
       // Always enforce the complete publication/rights gate for direct-ID reads.
       assertPermission(actor, "title.read_catalog");
@@ -407,7 +409,7 @@ export const getTitle = createServerFn({ method: "GET" })
     } else if (!canReadTitle(actor, title)) {
       throw new Error("Not found");
     }
-    const events = actor.accountType === "buyer" ? [] : await sql<{
+    const events = isBuyer ? [] : await sql<{
       from_status: string | null;
       to_status: string;
       actor_user_id: string;
@@ -417,7 +419,7 @@ export const getTitle = createServerFn({ method: "GET" })
       select from_status, to_status, actor_user_id, note, created_at
       from bridge_title_events where title_id = ${title.id} order by created_at asc
     `;
-    const buyerTitle = actor.accountType === "buyer" ? { ...title, posterKey: null, masterKey: null } : title;
+    const buyerTitle = isBuyer ? { ...title, posterKey: null, masterKey: null } : title;
     return {
       title: buyerTitle,
       events: events.map((e) => ({
