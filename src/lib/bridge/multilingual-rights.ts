@@ -76,16 +76,36 @@ export const listLanguageRights = createServerFn({ method: "GET" })
     const actor = await requireVerifiedActor(context.userId);
     const title = await loadTitle(data.titleId);
     if (!title || !canReadTitle(actor, title)) throw new Error("Not found");
-    if (actor.accountType === "buyer" && !actor.internalRole) await assertBuyerPublishable(title.id);
+    const isBuyer = actor.accountType === "buyer" && !actor.internalRole;
+    if (isBuyer) await assertBuyerPublishable(title.id);
     const sql = await getSql();
-    const rows = await sql<LanguageRightRow>`
-      select id, title_id, language, right_type, territories, media, window_start, window_end,
-             exclusivity, asking_price_paise, evidence, status
-      from bridge_language_rights
-      where title_id = ${data.titleId}
-      order by language, right_type
-    `;
-    return { rights: rows.map(mapRight) };
+    const rows = isBuyer
+      ? await sql<LanguageRightRow>`
+          select id, title_id, language, right_type, territories, media, window_start, window_end,
+                 exclusivity, asking_price_paise, evidence, status
+          from bridge_language_rights
+          where title_id = ${data.titleId} and status = 'VALID'
+          order by language, right_type
+        `
+      : await sql<LanguageRightRow>`
+          select id, title_id, language, right_type, territories, media, window_start, window_end,
+                 exclusivity, asking_price_paise, evidence, status
+          from bridge_language_rights
+          where title_id = ${data.titleId}
+          order by language, right_type
+        `;
+    return {
+      rights: rows.map((r) => isBuyer ? ({
+        id: r.id,
+        language: r.language,
+        rightType: r.right_type,
+        territories: Array.isArray(r.territories) ? r.territories : [],
+        media: Array.isArray(r.media) ? r.media : [],
+        windowStart: r.window_start ? String(r.window_start) : null,
+        windowEnd: r.window_end ? String(r.window_end) : null,
+        exclusivity: r.exclusivity,
+      }) : mapRight(r)),
+    };
   });
 
 export const createLanguageRight = createServerFn({ method: "POST" })
@@ -222,11 +242,9 @@ export const listLicensePackages = createServerFn({ method: "GET" })
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
     const title = await loadTitle(data.titleId);
-    if (!title) throw new Error("Not found");
-    if (!canReadTitle(actor, title)) {
-      if (actor.accountType !== "buyer") throw new Error("Not found");
-      await assertBuyerPublishable(title.id);
-    }
+    if (!title || (!canReadTitle(actor, title) && actor.accountType !== "buyer")) throw new Error("Not found");
+    const isBuyer = actor.accountType === "buyer" && !actor.internalRole;
+    if (isBuyer) await assertBuyerPublishable(title.id);
     const sql = await getSql();
     const rows = await sql<{
       id: string; title_id: string; name: string; language_right_ids: unknown; territories: unknown;
@@ -237,23 +255,34 @@ export const listLicensePackages = createServerFn({ method: "GET" })
              exclusivity, price_paise, status, delivery_status
       from bridge_license_packages
       where title_id = ${data.titleId}
+        and (${!isBuyer} or status in ('READY', 'IN_NEGOTIATION'))
       order by created_at desc
     `;
     const rightIds = [...new Set(rows.flatMap((r) => Array.isArray(r.language_right_ids) ? r.language_right_ids.map(String) : []))];
-    const rightRows = rightIds.length ? await sql<{ id: string; language: string }>`
-      select id, language from bridge_language_rights where id = any(${rightIds}::uuid[])
+    const rightRows = rightIds.length ? await sql<{ id: string; language: string; status: string }>`
+      select id, language, status from bridge_language_rights where id = any(${rightIds}::uuid[])
     ` : [];
     const languageById = new Map(rightRows.map((r) => [r.id, r.language]));
-    return { packages: rows.map((r) => ({
-      id: r.id, titleId: r.title_id, name: r.name,
-      languageRightIds: Array.isArray(r.language_right_ids) ? r.language_right_ids : [],
+    const validRightIds = new Set(rightRows.filter((r) => r.status === "VALID").map((r) => r.id));
+    const visibleRows = isBuyer
+      ? rows.filter((r) => {
+          const ids = Array.isArray(r.language_right_ids) ? r.language_right_ids.map(String) : [];
+          return ids.length > 0 && ids.every((id) => validRightIds.has(id));
+        })
+      : rows;
+    return { packages: visibleRows.map((r) => ({
+      id: r.id,
+      ...(isBuyer ? {} : { titleId: r.title_id }),
+      name: r.name,
+      ...(isBuyer ? {} : { languageRightIds: Array.isArray(r.language_right_ids) ? r.language_right_ids : [] }),
       languages: (Array.isArray(r.language_right_ids) ? r.language_right_ids.map(String) : []).map((id) => languageById.get(id)).filter(Boolean),
       territories: Array.isArray(r.territories) ? r.territories : [],
       media: Array.isArray(r.media) ? r.media : [],
       windowStart: r.window_start ? String(r.window_start) : null,
       windowEnd: r.window_end ? String(r.window_end) : null,
       exclusivity: r.exclusivity, pricePaise: Number(r.price_paise ?? 0),
-      status: r.status, deliveryStatus: r.delivery_status,
+      status: r.status,
+      ...(isBuyer ? {} : { deliveryStatus: r.delivery_status }),
     })) };
   });
 
