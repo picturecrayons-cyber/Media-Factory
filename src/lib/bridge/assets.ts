@@ -209,6 +209,7 @@ export const requestAssetDownload = createServerFn({ method: "POST" })
       kind: asset.kind,
       actorIsOwner: title.ownerUserId === actor.userId,
       actorIsInternal: Boolean(actor.internalRole),
+      actorInternalRole: actor.internalRole,
       accountType: actor.accountType,
       hasLicenseEntitlement: entitled,
     });
