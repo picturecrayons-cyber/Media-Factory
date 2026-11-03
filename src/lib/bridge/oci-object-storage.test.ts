@@ -157,8 +157,7 @@ test("OCI copy work-request handles transient 404 propagation delay and recovers
 
   try {
     let getAttempts = 0;
-    globalThis.fetch = async (input, init) => {
-      const url = new URL(String(input));
+    globalThis.fetch = async (_input, init) => {
       const method = init?.method || "GET";
       if (method === "POST") {
         return new Response(null, { status: 202, headers: { "opc-work-request-id": "wr-transient-1" } });
