@@ -91,7 +91,8 @@ Deno.serve(async (req: Request) => {
       // fulfillment path. This Edge Function has no tenant/mandate-aware
       // transaction boundary and must never write Bridge entitlements.
       return await failEvent(supabase, id, "Bridge payment fulfillment disabled in Edge webhook; use canonical server handler");
-    }  }
+    }
+  }
 
   const { error: doneError } = await supabase.from("bridge_webhook_events").update({ status: "processed", processed_at: new Date().toISOString() }).eq("event_id", id);
   if (doneError) return new Response("Persistence failure", { status: 503 });
