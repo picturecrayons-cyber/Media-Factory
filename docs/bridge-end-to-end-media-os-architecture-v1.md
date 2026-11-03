@@ -45,7 +45,7 @@ An organization may have multiple members and multiple workspace memberships. A 
 - Supabase Auth is the authentication/session authority; Bridge server-side profiles, memberships, mandates and RBAC are the authorization authority.
 - Resolve access by immutable authenticated user ID plus active membership and verified organization/mandate records.
 - Never grant roles from email address, email domain, user metadata, organization display name, client state or a URL parameter.
-- If the account associated with `abijithasokan1992@gmail.com` is a Buyer, grant Buyer access only through a verified Buyer membership. Do not hardcode that email as a role rule.
+- Never hardcode an email address as a role rule. Buyer access must come only from a verified Buyer membership and active organization scope.
 - The same authenticated person may have a separate Crayons Loop account/workspace mapping if explicitly authorized. Loop is not automatically the Bridge Buyer dashboard; expose a clear product switch only when the user has valid memberships in both systems.
 - Studio-appointed Agent = delegated Studio membership. Independent Agency = its own tenant with a separate verified mandate from every principal.
 - Mandates scope principal, agent, title/project, rights category, territory, language, platform/destination, permitted actions, duration, exclusivity, sublicense/delegation and revocation. No active mandate = no title rights action.
@@ -147,19 +147,23 @@ Core dashboards:
 - Investor & Funding Desk: consented opportunities, diligence, agreements, milestone evidence and finance review.
 - Finance Desk: invoices, captured payments, refunds, service costs, licensing receipts, splits, taxes, payable/receivable and reconciliation.
 - Delivery / Loop Desk: destination packages, publication eligibility, delivery receipts, takedown/revocation and sync failures.
-- Communications Desk: authorized Gmail / Hostinger Mail connection status, message templates, inbound correspondence, delivery status and audit.
+- Release 1 communications: use existing Linear issue updates and GitHub PR comments for developer/owner progress. Do not build a custom Communications Desk or mailbox aggregation during Release 1.
 - Security & Audit Desk: access reviews, failed authorization, consent events, exports, data-room access and immutable audit trail.
 
 Sensitive actions require a reason, step-up verification where appropriate, dual control for high-risk finance/rights operations, and a recorded audit event. Admin UI visibility is not authorization; every server operation must enforce it.
 
-## 8. Gmail and Hostinger Mail — unified communications
+## 8. Gmail and Hostinger Mail — deferred beyond Release 1
 
-- Build one Communications Desk interface, but keep Gmail and Hostinger as separate connected providers and identities.
-- Connect only mailboxes explicitly authorized by the mailbox owner. Do not infer that one administrator may read every employee's mailbox.
-- Start with least-privilege read/search and draft workflows. Sending is disabled until a separate approval, sender identity, template, recipient and audit policy are established.
-- Map correspondence to title/project, buyer, studio, creator, investor, vendor or contract only when an authorized user links it.
-- Do not treat an email as proof of a rights grant, signed contract, payment or legal consent. Store the authoritative signed record in Bridge.
-- Do not expose OAuth tokens, SMTP credentials or mailbox secrets to browser code or another tenant.
+**Release 1 decision: HOLD.** Do not build a unified Communications Desk, connect or aggregate mailboxes, or add new inbox workflows as part of Release 1. Use the existing Linear issue updates and GitHub PR comments for developer/owner communication.
+
+When a later, separately scoped release authorizes mail integration:
+
+- Keep Gmail and Hostinger Mail as separate providers and identities; never assume one administrator may read every employee's mailbox.
+- Connect only mailboxes explicitly authorized by the mailbox owner, with least-privilege scopes.
+- Start with draft-first workflows. Sending requires separate approval of sender identity, message, recipient and audit policy.
+- Link correspondence to a title/project, buyer, studio, creator, investor, vendor or contract only when an authorized user does so.
+- An email is not proof of a rights grant, signed contract, payment or legal consent; the authoritative record remains in Bridge.
+- Never expose OAuth tokens, SMTP credentials or mailbox secrets to browser code or another tenant.
 
 ## 9. Revenue plan
 
@@ -260,11 +264,14 @@ Do not create these tables blindly. Reconcile each concept against existing migr
 - Investor opportunity/data-room/commitment/milestone workflows only after legal review.
 
 **Phase 5 — integrations and Loop**
-- Gmail/Hostinger authorized mailbox connections and audited communications.
 - Bridge-to-Loop publication package with strict authorization, territory, language, window and revocation synchronization.
+
+**Deferred beyond Release 1:** Gmail/Hostinger mailbox connections, a custom Communications Desk, and inbox aggregation. Keep provider accounts separate and draft-first if a later approved release takes up this work.
 
 ### Hard release gates
 
+- Release 1 scope and owner-facing progress follow Linear CRA-168: five gated steps, with evidence and explicit owner OK required before a step is marked Finished.
+- Use existing Linear issue updates and GitHub PR comments for developer/owner communication; a custom Communications Desk and Gmail/Hostinger aggregation are deferred beyond Release 1.
 - Existing Preview isolation gate CRA-128 must be proven before any STAGING DB query, runtime test or migration. Until then, no STAGING DB activity.
 - PRODUCTION DB: no schema, RLS, Auth, storage or data changes under this proposal.
 - No main merge, production deployment/promotion, real Razorpay payment/refund/transfer, real email send, paid plan upgrade or external funding movement without separate explicit approval.
