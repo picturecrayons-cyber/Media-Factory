@@ -37,12 +37,23 @@ jobs:
               run_id: runId
             });
 
-            const allowed = new Set([
-              "CI",
-              "Scope A PostgreSQL Onboarding Verification"
+            // Pin both the display name and immutable GitHub workflow ID.
+            // A different workflow can reuse a display name; names alone are not an allowlist.
+            const allowedWorkflows = new Map([
+              [363476266, "CI"],
+              [374508093, "Scope A PostgreSQL Onboarding Verification"]
             ]);
-            if (!allowed.has(run.name)) {
-              core.setFailed(`Refusing recovery for non-allowlisted workflow: ${run.name}`);
+            const allowedName = allowedWorkflows.get(run.workflow_id);
+            if (!allowedName || run.name !== allowedName) {
+              core.setFailed(`Refusing recovery for non-allowlisted workflow id/name: ${run.workflow_id}/${run.name}`);
+              return;
+            }
+            if (!["pull_request", "push", "workflow_dispatch"].includes(run.event)) {
+              core.setFailed(`Refusing recovery for unsupported event: ${run.event}`);
+              return;
+            }
+            if (!/^[0-9a-f]{40}$/i.test(run.head_sha ?? "")) {
+              core.setFailed("Refusing recovery because the run has no valid exact commit SHA");
               return;
             }
             if (run.head_branch === "main") {
