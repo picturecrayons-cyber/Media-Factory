@@ -16,7 +16,7 @@ if (!connectionString) {
 
 const parsed = new URL(connectionString);
 const allowedHosts = new Set(["localhost", "127.0.0.1", "::1", "[::1]"]);
-const databaseName = decodeURIComponent(parsed.pathname.replace(/^\\//, ""));
+const databaseName = decodeURIComponent(parsed.pathname.slice(1));
 if (!allowedHosts.has(parsed.hostname) || databaseName !== "bridge_scope_a") {
   throw new Error(
     `Refusing DB test outside disposable local bridge_scope_a (host=${parsed.hostname}, database=${databaseName})`,
@@ -31,7 +31,7 @@ async function scalar(sql, params = []) {
   return Number(res.rows[0]?.value ?? 0);
 }
 
-async function assert(condition, message) {
+function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
@@ -43,17 +43,20 @@ async function expectSqlState(sql, params, expectedCode, label) {
     await client.query(sql, params);
   } catch (error) {
     actualCode = error?.code ?? null;
-  } finally {
-    await client.query(`rollback to savepoint ${savepoint}`);
-    await client.query(`release savepoint ${savepoint}`);
   }
-  await assert(
+  await client.query(`rollback to savepoint ${savepoint}`);
+  await client.query(`release savepoint ${savepoint}`);
+  assert(
     actualCode === expectedCode,
     `${label}: expected SQLSTATE ${expectedCode}, received ${actualCode ?? "no error"}`,
   );
 }
 
+let transactionOpen = false;
 try {
+  await client.query("begin");
+  transactionOpen = true;
+
   const beforeProfiles = await scalar("select count(*)::int as value from bridge_profiles");
   const beforeLinks = await scalar("select count(*)::int as value from bridge_loop_identity_links");
   const beforeInvites = await scalar("select count(*)::int as value from bridge_invites");
@@ -62,13 +65,11 @@ try {
   const bridgeUserId = `scope-a-${randomUUID()}`;
   const email = `scope-a-${randomUUID()}@example.test`;
 
-  // Supabase Auth is the only authentication principal in this identity contract.
+  // All writes occur inside one outer transaction and are rolled back at the end.
   await client.query(
-    "insert into auth.users (id) values ($1::uuid) on conflict (id) do nothing",
+    "insert into auth.users (id) values ($1::uuid)",
     [authUserId],
   );
-
-  await client.query("begin");
   await client.query(
     `insert into bridge_profiles
       (user_id, email, display_name, account_type, organization_name, internal_role, email_verified)
@@ -81,14 +82,12 @@ try {
      values ($1, $2::uuid, 'supabase_auth_onboarding', now(), $1)`,
     [bridgeUserId, authUserId],
   );
-  await client.query("commit");
 
   const afterProfiles = await scalar("select count(*)::int as value from bridge_profiles");
   const afterLinks = await scalar("select count(*)::int as value from bridge_loop_identity_links");
-  await assert(afterProfiles === beforeProfiles + 1, "valid Bridge profile FK insert failed");
-  await assert(afterLinks === beforeLinks + 1, "valid Supabase Auth FK insert failed");
+  assert(afterProfiles === beforeProfiles + 1, "valid Bridge profile FK insert failed");
+  assert(afterLinks === beforeLinks + 1, "valid Supabase Auth FK insert failed");
 
-  // FK 1 negative: valid Auth user, missing Bridge profile must be rejected.
   await expectSqlState(
     `insert into bridge_loop_identity_links
       (bridge_user_id, auth_user_id, verification_method, verified_at, verified_by)
@@ -98,7 +97,6 @@ try {
     "Bridge-profile FK orphan rejection",
   );
 
-  // FK 2 negative: valid Bridge profile, missing Supabase Auth user must be rejected.
   const secondBridgeUserId = `scope-a-${randomUUID()}`;
   await client.query(
     `insert into bridge_profiles
@@ -115,7 +113,6 @@ try {
     "Supabase Auth FK orphan rejection",
   );
 
-  // The two identity dimensions are each unique.
   await expectSqlState(
     `insert into bridge_loop_identity_links
       (bridge_user_id, auth_user_id, verification_method, verified_at, verified_by)
@@ -125,7 +122,6 @@ try {
     "Duplicate auth identity rejection",
   );
 
-  // Bridge profile deletion is restricted while an identity link exists.
   await expectSqlState(
     "delete from bridge_profiles where user_id = $1",
     [bridgeUserId],
@@ -133,7 +129,6 @@ try {
     "Bridge profile delete restriction",
   );
 
-  // Supabase Auth deletion cascades only the link; it does not delete the Bridge profile.
   await client.query("delete from auth.users where id = $1::uuid", [authUserId]);
   const cascadedLinks = await scalar(
     "select count(*)::int as value from bridge_loop_identity_links where auth_user_id = $1::uuid",
@@ -143,9 +138,11 @@ try {
     "select count(*)::int as value from bridge_profiles where user_id = $1",
     [bridgeUserId],
   );
-  await assert(cascadedLinks === 0, "Auth-user delete did not cascade to identity link");
-  await assert(retainedProfile === 1, "Auth-user delete unexpectedly removed Bridge profile");
+  assert(cascadedLinks === 0, "Auth-user delete did not cascade to identity link");
+  assert(retainedProfile === 1, "Auth-user delete unexpectedly removed Bridge profile");
 
+  const sameEmailSavepoint = `sp_email_${randomUUID().replaceAll("-", "")}`;
+  await client.query(`savepoint ${sameEmailSavepoint}`);
   let sameEmailBlocked = false;
   try {
     await client.query(
@@ -157,26 +154,29 @@ try {
   } catch (error) {
     sameEmailBlocked = error?.code === "23505";
   }
-  await assert(sameEmailBlocked, "same-email foreign profile was not blocked by unique index");
+  await client.query(`rollback to savepoint ${sameEmailSavepoint}`);
+  await client.query(`release savepoint ${sameEmailSavepoint}`);
+  assert(sameEmailBlocked, "same-email foreign profile was not blocked by unique index");
 
   const rollbackId = `scope-a-${randomUUID()}`;
-  await client.query("begin");
+  const rollbackSavepoint = `sp_rollback_${randomUUID().replaceAll("-", "")}`;
+  await client.query(`savepoint ${rollbackSavepoint}`);
   await client.query(
     `insert into bridge_profiles
       (user_id, email, display_name, account_type, organization_name, internal_role, email_verified)
      values ($1, $2, 'Rollback', 'independent_creator', null, null, true)`,
     [rollbackId, `rollback-${randomUUID()}@example.test`],
   );
-  await client.query("rollback");
-
+  await client.query(`rollback to savepoint ${rollbackSavepoint}`);
+  await client.query(`release savepoint ${rollbackSavepoint}`);
   const rollbackRows = await scalar(
     "select count(*)::int as value from bridge_profiles where user_id = $1",
     [rollbackId],
   );
-  await assert(rollbackRows === 0, "transaction rollback assertion failed");
+  assert(rollbackRows === 0, "transaction rollback assertion failed");
 
   const finalInvites = await scalar("select count(*)::int as value from bridge_invites");
-  await assert(finalInvites === beforeInvites, "invite row count changed unexpectedly");
+  assert(finalInvites === beforeInvites, "invite row count changed unexpectedly");
 
   console.log(JSON.stringify({
     environment: "DISPOSABLE LOCAL POSTGRESQL ONLY",
@@ -185,10 +185,6 @@ try {
       bridge_profiles: beforeProfiles,
       bridge_loop_identity_links: beforeLinks,
       bridge_invites: beforeInvites,
-    },
-    after_setup: {
-      bridge_profiles: afterProfiles,
-      bridge_loop_identity_links: afterLinks,
     },
     assertions: {
       valid_bridge_profile_fk: "passed",
@@ -203,6 +199,7 @@ try {
       transaction_rollback: "passed",
       invite_count_stable: "passed",
     },
+    cleanup: "outer transaction rolled back; no rows persisted",
   }));
 } catch (error) {
   console.error(JSON.stringify({
@@ -216,5 +213,8 @@ try {
   }));
   throw error;
 } finally {
+  if (transactionOpen) {
+    await client.query("rollback").catch(() => {});
+  }
   await client.end();
 }
