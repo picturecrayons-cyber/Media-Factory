@@ -38,6 +38,19 @@ For each candidate Preview deployment, retain:
 
 These are reference values for comparison, not permission to connect to either project or modify configuration.
 
+## Code-level fail-closed binding guard — 2026-11-04
+
+The Draft branch now contains a static/runtime guard, not a Phase 0 certification:
+
+- Vercel Preview and Vercel Development must resolve browser/server Supabase URLs to STAGING DB / Testing ref `jbymleftneggcgutlcqu`.
+- Their Postgres connection must identify that same project through either the exact direct database host or the exact project-qualified Supabase pooler username.
+- Vercel Production must resolve both Supabase API and Postgres to Production ref `mlmgugivsyoxzdgwkbpu`.
+- Missing/unsupported `VERCEL_ENV`, missing bindings, mismatched aliases, HTTP Supabase URLs, Production DB in Preview, or Testing DB in Production fail closed.
+- `vite.config.ts` checks Vercel build bindings before bundling; `src/lib/supabase.ts` and `src/lib/bridge/env.ts` check browser/server Supabase URL selection; `src/lib/db.ts` checks the Postgres binding before pool creation.
+- Unit tests use synthetic URL strings only. No Supabase connection, STAGING DB query/write, Production DB query/write, OCI request, or customer side effect was performed.
+
+This code guard reduces accidental cross-environment binding. It does **not** prove the actual Vercel deployment's runtime environment, database credentials, OCI identity, or negative Production boundary. Phase 0 remains NOT VERIFIED until the required evidence bundle and independent review are complete.
+
 ## Execution sequence
 
 ### A. Static configuration inventory
