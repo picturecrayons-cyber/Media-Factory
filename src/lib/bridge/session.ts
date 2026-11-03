@@ -8,6 +8,7 @@ import { PRODUCT_NAME, LEGAL_OWNER, PRODUCTION_DOMAIN } from "./canonical";
 import { integrationStatus } from "./env";
 import { assertNotDevUser } from "./guards";
 import { isMissingOrganizationSchemaError, workspaceFailureCode } from "./workspace-schema";
+import { requireDirectBridgeIdentity } from "./authorization-guards";
 
 export type BridgeActor = Actor & {
   email: string;
@@ -92,7 +93,7 @@ export async function resolveBridgeUserId(authUserId: string): Promise<string> {
   const direct = await sql<{ user_id: string }>`
     select user_id from bridge_profiles where user_id = ${authUserId} limit 1
   `;
-  if (direct[0]?.user_id) return direct[0].user_id;
+  return requireDirectBridgeIdentity(authUserId, direct[0]?.user_id);
 
   // The current identity-link schema has no disabled/revoked state or
   // revocation timestamp. A verified_at value therefore cannot prove that a
