@@ -7,7 +7,7 @@ import { bridgeEnv } from "./env";
 import { paymentVerifyBody, verifyRazorpaySignature } from "./razorpay-crypto";
 import { requireVerifiedActor } from "./session";
 import { assertPermission, canReadTitle } from "./rbac";
-import { loadTitle } from "./titles";
+import { loadTitle, recordTransition } from "./titles";
 import { writeAudit } from "./audit";
 import { assertBuyerPublishable } from "./buyer-visibility";
 import { assertNotDevUser } from "./guards";
