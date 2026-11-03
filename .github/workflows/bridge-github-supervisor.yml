@@ -39,15 +39,15 @@ jobs:
             );
 
             core.info(`Recent failed runs: ${failures.length}`);
+            const { data: openIssues } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: "open",
+              per_page: 100
+            });
+
             for (const run of failures) {
               const marker = `workflow-run-${run.id}`;
-              const { data: openIssues } = await github.rest.issues.listForRepo({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                state: "open",
-                labels: "automation-alert",
-                per_page: 100
-              });
               if (openIssues.some(issue => !issue.pull_request && issue.title.includes(marker))) {
                 core.info(`Alert already open for ${marker}`);
                 continue;
@@ -70,7 +70,6 @@ jobs:
                   "",
                   "This alert is evidence only. It does not certify the application or authorize a merge/deployment.",
                   "After diagnosis, use the manual recovery workflow only when retry is safe and the underlying cause is understood."
-                ].join("\n"),
-                labels: ["automation-alert"]
+                ].join("\n")
               });
             }
