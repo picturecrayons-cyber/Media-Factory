@@ -8,6 +8,7 @@ import { loadTitle } from "./titles";
 import { writeAudit } from "./audit";
 import { assertNotDevUser } from "./guards";
 import { assertBuyerPublishable } from "./buyer-visibility";
+import { isBuyerVisibleLanguageRight, isBuyerVisibleLicensePackage } from "./buyer-license-views";
 
 const languageRightInput = z.object({
   titleId: z.string().min(8),
@@ -95,7 +96,7 @@ export const listLanguageRights = createServerFn({ method: "GET" })
           order by language, right_type
         `;
     return {
-      rights: rows.map((r) => isBuyer ? ({
+      rights: rows.filter((r) => !isBuyer || isBuyerVisibleLanguageRight(r.status)).map((r) => isBuyer ? ({
         id: r.id,
         language: r.language,
         rightType: r.right_type,
@@ -267,7 +268,7 @@ export const listLicensePackages = createServerFn({ method: "GET" })
     const visibleRows = isBuyer
       ? rows.filter((r) => {
           const ids = Array.isArray(r.language_right_ids) ? r.language_right_ids.map(String) : [];
-          return ids.length > 0 && ids.every((id) => validRightIds.has(id));
+          return isBuyerVisibleLicensePackage(r.status, ids, validRightIds);
         })
       : rows;
     return { packages: visibleRows.map((r) => ({
