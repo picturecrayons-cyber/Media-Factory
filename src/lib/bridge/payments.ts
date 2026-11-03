@@ -11,11 +11,17 @@ import { loadTitle, recordTransition } from "./titles";
 import { writeAudit } from "./audit";
 import { assertBuyerPublishable } from "./buyer-visibility";
 import { assertNotDevUser } from "./guards";
+import { assertRazorpayRuntimeIsolation } from "./razorpay-environment";
 
 function requireRazorpayKeys() {
   const keyId = bridgeEnv.razorpayKeyId();
   const keySecret = bridgeEnv.razorpayKeySecret();
   if (!keyId || !keySecret) throw new Error("Razorpay is not configured");
+  assertRazorpayRuntimeIsolation({
+    vercelEnv: typeof process === "undefined" ? undefined : process.env.VERCEL_ENV,
+    keyId,
+    supabaseUrl: bridgeEnv.supabaseUrl(),
+  });
   return { keyId, keySecret };
 }
 
