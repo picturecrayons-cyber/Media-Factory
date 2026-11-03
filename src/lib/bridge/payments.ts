@@ -11,6 +11,7 @@ import { loadTitle, recordTransition } from "./titles";
 import { writeAudit } from "./audit";
 import { assertBuyerPublishable } from "./buyer-visibility";
 import { assertNotDevUser } from "./guards";
+import { assertBuyerLicenseOrderBlocked } from "./authorization-guards";
 
 function requireRazorpayKeys() {
   const keyId = bridgeEnv.razorpayKeyId();
@@ -174,13 +175,8 @@ export const createLicenseOrder = createServerFn({ method: "POST" })
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
     assertPermission(actor, "payment.create_order");
-    // An organization ID alone is not a mandate. Until the complete
-    // principal -> mandate issuer -> intermediary -> transaction buyer chain,
-    // active membership, and exact-rights scope are verified server-side, no
-    // buyer may create a chargeable title-license order (even with an org ID).
-    if (actor.accountType === "buyer") {
-      throw new Error("BRIDGE_LICENSE_ORDER_BLOCKED: canonical organization, mandate, and exact-rights authorization is not implemented");
-    }
+    // An organization ID alone is not a mandate; fail closed for every buyer.
+    assertBuyerLicenseOrderBlocked(actor);
     const title = await loadTitle(data.titleId);
     if (!title || (!canReadTitle(actor, title) && actor.accountType !== "buyer")) throw new Error("Not found");
     await assertBuyerPublishable(title.id);
