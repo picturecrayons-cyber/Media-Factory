@@ -25,7 +25,7 @@ test("Bridge-tagged capture remains retriable while CRA-165 fulfillment is block
   assert.match(source, /if \(localPayment\) surface = "bridge"/);
 
   const start = source.indexOf('if (surface === "bridge")');
-  const end = source.indexOf("\\n      }", start);
+  const end = source.indexOf("\n      }", start);
   assert.ok(start >= 0 && end > start, "Bridge surface guard must exist");
   const block = source.slice(start, end);
   assert.match(block, /return await failEvent/);
