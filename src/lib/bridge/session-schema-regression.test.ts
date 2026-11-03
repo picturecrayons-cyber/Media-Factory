@@ -21,8 +21,11 @@ test("studio organization lookup is optional and fails closed when schema is mis
 
 test("identity resolver requires direct immutable auth subject and rejects legacy/email inference", () => {
   const source = readFileSync(new URL("./session.ts", import.meta.url), "utf8");
-  const resolver = source.match(/export async function resolveBridgeUserId[\\s\\S]*?\\n}\\n\\nexport async function loadActor/)?.[0] ?? "";
-  assert.ok(resolver, "identity resolver should exist");
-  assert.match(resolver, /requireDirectBridgeIdentity/);
-  assert.doesNotMatch(resolver, /bridge_loop_identity_links|auth\\.users|email/i);
+  const start = source.indexOf("export async function resolveBridgeUserId");
+  const end = source.indexOf("export async function loadActor", start);
+  const resolver = source.slice(start, end);
+  assert.ok(resolver.includes("requireDirectBridgeIdentity"));
+  assert.equal(resolver.includes("bridge_loop_identity_links"), false);
+  assert.equal(resolver.includes("auth.users"), false);
+  assert.equal(resolver.toLowerCase().includes("email"), false);
 });
