@@ -1,5 +1,6 @@
 import { TRANSACTIONAL_FROM, PRODUCT_NAME, LEGAL_OWNER } from "./canonical";
 import { bridgeEnv } from "./env";
+import { resolveBridgeMailTransport } from "./mail-transport";
 
 export interface TransactionalEmailOptions {
   to: string;
@@ -41,21 +42,29 @@ export function formatBrandedEmailHtml(title: string, bodyHtml: string, cta?: { 
 </html>`;
 }
 
-export async function sendTransactionalEmail(opts: TransactionalEmailOptions): Promise<{ ok: boolean; messageId?: string }> {
-  const host = bridgeEnv.smtpHost();
-  const user = bridgeEnv.smtpUser();
-  const pass = bridgeEnv.smtpPass();
+export interface TransactionalEmailResult {
+  ok: true;
+  delivered: boolean;
+  transport: "smtp" | "sink";
+  messageId?: string;
+}
 
-  if (!host || !user || !pass) throw new Error("Transactional email is not configured");
-
-  const port = Number(bridgeEnv.smtpPort() || "587");
+export async function sendTransactionalEmail(opts: TransactionalEmailOptions): Promise<TransactionalEmailResult> {
+  const transportMode = resolveBridgeMailTransport(process.env);
   const nodemailer = await import("nodemailer");
-  const transporter = nodemailer.createTransport({
-    host,
-    port,
-    secure: port === 465,
-    auth: { user, pass },
-  });
+  const transporter = transportMode === "sink"
+    ? nodemailer.createTransport({ streamTransport: true, buffer: true, newline: "unix" })
+    : (() => {
+        const host = bridgeEnv.smtpHost();
+        const user = bridgeEnv.smtpUser();
+        const pass = bridgeEnv.smtpPass();
+        if (!host || !user || !pass) throw new Error("Production transactional email is not configured");
+        const port = Number(bridgeEnv.smtpPort() || "587");
+        if (!Number.isInteger(port) || port < 1 || port > 65535) {
+          throw new Error("Production transactional email port is invalid");
+        }
+        return nodemailer.createTransport({ host, port, secure: port === 465, auth: { user, pass } });
+      })();
 
   const fromAddress = bridgeEnv.mailFrom() || `Crayons Bridge <${TRANSACTIONAL_FROM}>`;
   const info = await transporter.sendMail({
@@ -65,7 +74,7 @@ export async function sendTransactionalEmail(opts: TransactionalEmailOptions): P
     text: opts.text,
     html: opts.html || formatBrandedEmailHtml(opts.subject, `<p>${opts.text}</p>`),
   });
-  return { ok: true, messageId: info.messageId };
+  return { ok: true, delivered: transportMode === "smtp", transport: transportMode, messageId: info.messageId };
 }
 
 export async function sendBridgeMail(opts: { to: string; subject: string; text: string; html?: string }) {
