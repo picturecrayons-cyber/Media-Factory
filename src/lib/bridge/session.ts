@@ -95,11 +95,6 @@ export async function resolveBridgeUserId(authUserId: string): Promise<string> {
   `;
   return requireDirectBridgeIdentity(authUserId, direct[0]?.user_id);
 
-  // The current identity-link schema has no disabled/revoked state or
-  // revocation timestamp. A verified_at value therefore cannot prove that a
-  // legacy binding remains active. Accept only the direct immutable auth
-  // subject until a revocable identity-link contract is implemented.
-  throw new Error("BRIDGE_IDENTITY_UNRESOLVED: direct immutable auth subject required; legacy link revocation is not representable");
 }
 
 export async function loadActor(authUserId: string): Promise<BridgeActor | null> {
