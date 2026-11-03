@@ -1,6 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { createHash, randomBytes } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import { bridgeEnv } from "./env";
@@ -72,6 +72,9 @@ export async function grantFromCapturedPayment(opts: {
   `;
   const payment = rows[0];
   if (!payment) throw new Error("Unknown order");
+  if (payment.purpose !== "title_license") {
+    throw new Error("BRIDGE_PAYMENT_PURPOSE_UNSUPPORTED: use the purpose-specific canonical fulfillment handler");
+  }
   if (payment.purpose === "title_license") {
     throw new Error("BRIDGE_LICENSE_FULFILLMENT_BLOCKED: organization and mandate authorization is not yet enforced");
   }
@@ -355,70 +358,3 @@ export const listOwnEntitlements = createServerFn({ method: "GET" })
     }
   });
 
-export async function ingestRazorpayWebhook(rawBody: string, signature: string | null) {
-  const secret = bridgeEnv.razorpayWebhookSecret();
-  if (!secret) throw new Error("Razorpay webhook is not configured");
-  const ok = verifyRazorpaySignature({ secret, body: rawBody, signature });
-  if (!ok) throw new Error("Invalid webhook signature");
-  const payload = JSON.parse(rawBody) as {
-    event?: string;
-    payload?: { payment?: { entity?: RzPayment & { notes?: Record<string, string> } } };
-  };
-  const eventName = payload.event ?? "unknown";
-  const payment = payload.payload?.payment?.entity;
-  const eventId =
-    payment?.id && eventName ? `${eventName}:${payment.id}` : createHash("sha256").update(rawBody).digest("hex");
-  const payloadHash = createHash("sha256").update(rawBody).digest("hex");
-  const sql = await getSql();
-  await sql`
-    insert into bridge_webhook_events (event_id, event_name, payload_hash, status)
-    values (${eventId}, ${eventName}, ${payloadHash}, ${"received"})
-    on conflict (event_id) do nothing
-  `;
-  const existing = await sql<{ status: string; payload_hash: string }>`
-    select status, payload_hash from bridge_webhook_events where event_id = ${eventId}
-  `;
-  if (existing[0]?.payload_hash !== payloadHash) throw new Error("Webhook event ID collision");
-  if (existing[0]?.status === "processed") return { duplicate: true };
-  const claimToken = randomBytes(16).toString("hex");
-  const claim = await sql<{ event_id: string }>`
-    update bridge_webhook_events
-    set status = ${"processing"},
-        processing_started_at = now(),
-        processing_token = ${claimToken},
-        attempts = attempts + 1
-    where event_id = ${eventId}
-      and (
-        status in ('received', 'failed')
-        or (status = 'processing' and processing_started_at < now() - interval '2 minutes')
-      )
-    returning event_id
-  `;
-  if (!claim[0]) throw new Error("Webhook event is already processing");
-  try {
-    if (eventName === "payment.captured" && payment?.id && payment.order_id) {
-      await grantFromCapturedPayment({
-        orderId: payment.order_id,
-        paymentId: payment.id,
-      });
-    }
-    const completed = await sql<{ event_id: string }>`
-      update bridge_webhook_events
-      set status = ${"processed"},
-          processed_at = now(),
-          processing_started_at = null,
-          processing_token = null
-      where event_id = ${eventId} and processing_token = ${claimToken}
-      returning event_id
-    `;
-    if (!completed[0]) throw new Error("Webhook processing lease was superseded");
-    return { duplicate: false, eventName };
-  } catch (error) {
-    await sql`
-      update bridge_webhook_events
-      set status = ${"failed"}, processing_started_at = null, processing_token = null
-      where event_id = ${eventId} and processing_token = ${claimToken}
-    `;
-    throw error;
-  }
-}
