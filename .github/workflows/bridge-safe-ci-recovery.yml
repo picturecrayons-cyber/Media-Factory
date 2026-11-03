@@ -22,7 +22,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Validate run and retry failed safe checks only
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const raw = String(core.getInput("run_id")).trim();
