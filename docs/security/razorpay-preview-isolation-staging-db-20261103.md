@@ -164,10 +164,10 @@ Project ref: `jbymleftneggcgutlcqu` (**STAGING / Testing DB**, not Production DB
 
 ### Edge webhook code updated (not deployed)
 
-- The Supabase Edge Function now reads the Razorpay payment from the authenticated Razorpay API and checks payment ID, order ID, captured status, amount, and currency against the local payment record before granting Bridge entitlement.
-- Added an atomic database lease claim using status + lease expiry + unique processing token. Completion and failure updates are conditional on the active token; a concurrent delivery receives retryable 503.
-- Expanded the static regression test to assert the Razorpay API verification and lease guards.
-- These changes require the Testing DB migration below before the function can operate. The function has not been deployed or exercised against Razorpay.
+- The intermediate API-verification-and-grant implementation on that earlier head was superseded on 2026-11-04 by the CRA-165 fail-closed guard below. The active head no longer fetches a captured Bridge payment or grants Bridge entitlements from the Edge Function.
+- The atomic webhook-event lease remains: status + lease expiry + unique processing token; completion/failure updates are conditional on the active token.
+- Static regression tests now assert that Bridge capture fails closed before Razorpay lookup, payment-state update, entitlement grant, or title transition.
+- The function has not been deployed or exercised against Razorpay.
 
 ### Migration generation and verification blocker
 
@@ -187,3 +187,18 @@ Project ref: `jbymleftneggcgutlcqu` (**STAGING / Testing DB**, not Production DB
 - Automated test suite, typecheck, lint, secret scan, and payment E2E: NOT RUN / NOT VERIFIED. The GitHub checkout attempt failed due DNS; the Vercel status is a build-rate-limit failure, not a successful test result.
 
 **Updated result:** Preview guard and Edge webhook code changes are committed, but the migration and execution evidence remain blockers. Do not deploy the Edge Function or enable checkout until the CLI-generated migration is reviewed/applied to Testing only, tests pass, and exact Preview configuration is verified. Production remains HOLD / NOT CERTIFIED / NO-GO.
+
+
+## CRA-165 cross-PR integration hardening — 2026-11-04
+
+The latest Draft head now preserves the fail-closed Buyer payment policy in PR #459:
+
+- Added the same narrow `assertBuyerLicenseOrderBlocked` authorization guard used by the CRA-165 work.
+- `createLicenseOrder` blocks Buyer license orders before any Razorpay order API request.
+- `grantFromCapturedPayment` blocks Bridge license fulfillment before any Razorpay payment lookup or entitlement mutation.
+- The Supabase Edge webhook returns a retryable 503 for Bridge captures while CRA-165 organization, mandate, and exact-rights authorization is absent. It does not update `bridge_payments`, create entitlements, or transition titles.
+- Regression tests now verify the guard ordering and the absence of Bridge entitlement/title mutations in the Edge webhook.
+
+This deliberately means Razorpay Preview environment isolation can be tested statically, but Bridge Buyer checkout/fulfillment remains disabled. Do not use a real or Test Mode transaction to bypass the authorization gate.
+
+No STAGING DB or PRODUCTION DB connection was opened. No migration was applied. No Edge Function was deployed. No Razorpay transaction, webhook delivery, customer email, or Production change was performed. Exact-head CI is pending for this latest code; do not mark this update PASS until the run completes.
