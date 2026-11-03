@@ -8,7 +8,7 @@ import { loadTitle } from "./titles";
 import { writeAudit } from "./audit";
 import { assertNotDevUser } from "./guards";
 import { assertBuyerPublishable } from "./buyer-visibility";
-import { isBuyerVisibleLanguageRight, isBuyerVisibleLicensePackage } from "./buyer-license-views";
+import { isBuyerVisibleLanguageRight, isBuyerVisibleLicensePackage, toBuyerVisibleLanguageRight } from "./buyer-license-views";
 
 const languageRightInput = z.object({
   titleId: z.string().min(8),
@@ -96,16 +96,8 @@ export const listLanguageRights = createServerFn({ method: "GET" })
           order by language, right_type
         `;
     return {
-      rights: rows.filter((r) => !isBuyer || isBuyerVisibleLanguageRight(r.status)).map((r) => isBuyer ? ({
-        id: r.id,
-        language: r.language,
-        rightType: r.right_type,
-        territories: Array.isArray(r.territories) ? r.territories : [],
-        media: Array.isArray(r.media) ? r.media : [],
-        windowStart: r.window_start ? String(r.window_start) : null,
-        windowEnd: r.window_end ? String(r.window_end) : null,
-        exclusivity: r.exclusivity,
-      }) : mapRight(r)),
+      rights: rows.filter((r) => !isBuyer || isBuyerVisibleLanguageRight(r.status))
+        .map((r) => isBuyer ? toBuyerVisibleLanguageRight(r) : mapRight(r)),
     };
   });
 
