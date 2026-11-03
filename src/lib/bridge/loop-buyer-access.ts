@@ -4,7 +4,18 @@
  * This is deliberately a pure policy module. It does not resolve identity from
  * browser metadata, create accounts, query the database, or publish titles.
  * Runtime wiring is gated on the isolated Loop STAGING schema (CRA-128/138).
+ *
+ * The mandate fields are an explicit domain contract, not a claim that the
+ * current STAGING schema already persists this relationship.
  */
+export type LoopBuyerMandateLink = {
+  organizationId: string;
+  status: string;
+  canDelegate: boolean;
+  windowStart: string | Date | null;
+  windowEnd: string | Date | null;
+};
+
 export type LoopBuyerPrincipal = {
   userId: string;
   organizationId: string;
@@ -15,7 +26,15 @@ export type LoopBuyerPrincipal = {
 };
 
 export type LoopBuyerPublicationGrant = {
+  rightsGrantId: string;
+  mandateId: string;
+  mandateStatus: string;
+  rightsPrincipalOrganizationId: string;
   buyerOrganizationId: string;
+  mandateWindowStart: string | Date | null;
+  mandateWindowEnd: string | Date | null;
+  /** Ordered rights-principal → intermediaries → transaction buyer path. */
+  mandateChain: LoopBuyerMandateLink[];
   titleId: string;
   authorizationStatus: string;
   territories: string[];
@@ -43,6 +62,11 @@ export type LoopBuyerDecision = {
     | "ACTIVE_MEMBERSHIP_REQUIRED"
     | "ACTIVE_ORGANIZATION_REQUIRED"
     | "PUBLICATION_NOT_FOUND"
+    | "MANDATE_REQUIRED"
+    | "MANDATE_NOT_ACTIVE"
+    | "MANDATE_WINDOW_REQUIRED"
+    | "MANDATE_WINDOW_NOT_ACTIVE"
+    | "MANDATE_CHAIN_INVALID"
     | "ORGANIZATION_SCOPE_MISMATCH"
     | "TITLE_SCOPE_MISMATCH"
     | "PUBLICATION_NOT_ACTIVE"
@@ -60,6 +84,17 @@ function validDate(value: string | Date | null): Date | null {
   if (value === null) return null;
   const parsed = value instanceof Date ? value : new Date(value);
   return Number.isFinite(parsed.getTime()) ? parsed : null;
+}
+
+function activeWindow(
+  startValue: string | Date | null,
+  endValue: string | Date | null,
+  now: Date,
+): "MISSING" | "INACTIVE" | "ACTIVE" {
+  const start = validDate(startValue);
+  const end = validDate(endValue);
+  if (!start || !end || end <= start) return "MISSING";
+  return now >= start && now < end ? "ACTIVE" : "INACTIVE";
 }
 
 export function authorizeLoopBuyerTitle(
@@ -82,6 +117,44 @@ export function authorizeLoopBuyerTitle(
     return deny("ACTIVE_ORGANIZATION_REQUIRED");
   }
   if (!grant) return deny("PUBLICATION_NOT_FOUND");
+
+  const now = request.now ?? new Date();
+  if (!Number.isFinite(now.getTime())) return deny("MANDATE_WINDOW_NOT_ACTIVE");
+
+  if (!grant.rightsGrantId?.trim() || !grant.mandateId?.trim()) {
+    return deny("MANDATE_REQUIRED");
+  }
+  if (normalized(grant.mandateStatus) !== "ACTIVE") {
+    return deny("MANDATE_NOT_ACTIVE");
+  }
+  if (
+    !grant.rightsPrincipalOrganizationId?.trim() ||
+    grant.buyerOrganizationId !== principal.organizationId
+  ) {
+    return deny("ORGANIZATION_SCOPE_MISMATCH");
+  }
+
+  const mandateWindow = activeWindow(grant.mandateWindowStart, grant.mandateWindowEnd, now);
+  if (mandateWindow === "MISSING") return deny("MANDATE_WINDOW_REQUIRED");
+  if (mandateWindow === "INACTIVE") return deny("MANDATE_WINDOW_NOT_ACTIVE");
+
+  const chain = grant.mandateChain;
+  if (!Array.isArray(chain) || chain.length < 2) return deny("MANDATE_CHAIN_INVALID");
+  const chainIds = chain.map((link) => link.organizationId);
+  if (
+    chainIds.some((id) => !id?.trim()) ||
+    new Set(chainIds).size !== chainIds.length ||
+    chainIds[0] !== grant.rightsPrincipalOrganizationId ||
+    chainIds[chainIds.length - 1] !== grant.buyerOrganizationId ||
+    chain.some((link, index) =>
+      normalized(link.status) !== "ACTIVE" ||
+      activeWindow(link.windowStart, link.windowEnd, now) !== "ACTIVE" ||
+      (index < chain.length - 1 && !link.canDelegate)
+    )
+  ) {
+    return deny("MANDATE_CHAIN_INVALID");
+  }
+
   if (grant.buyerOrganizationId !== principal.organizationId) {
     return deny("ORGANIZATION_SCOPE_MISMATCH");
   }
@@ -105,13 +178,9 @@ export function authorizeLoopBuyerTitle(
     return deny("RIGHTS_DIMENSION_MISMATCH");
   }
 
-  const start = validDate(grant.windowStart);
-  const end = validDate(grant.windowEnd);
-  if (!start || !end || end <= start) return deny("EXPLICIT_RIGHTS_WINDOW_REQUIRED");
-  const now = request.now ?? new Date();
-  if (!Number.isFinite(now.getTime()) || now < start || now >= end) {
-    return deny("RIGHTS_WINDOW_NOT_ACTIVE");
-  }
+  const rightsWindow = activeWindow(grant.windowStart, grant.windowEnd, now);
+  if (rightsWindow === "MISSING") return deny("EXPLICIT_RIGHTS_WINDOW_REQUIRED");
+  if (rightsWindow === "INACTIVE") return deny("RIGHTS_WINDOW_NOT_ACTIVE");
 
   return { allow: true, reason: "ALLOW" };
 }
