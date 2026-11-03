@@ -8,6 +8,18 @@ export type VendorTitleScope = {
 
 export type VendorJobAction = "start_work" | "submit_review" | "sign_off" | "block";
 
+/**
+ * The delivery desk is a scoped owner read for Creator/Studio, not a broad
+ * delivery permission. Internal operators need the explicit staff permission.
+ * The query layer must still constrain returned jobs to the actor's title/org.
+ */
+export function canReadVendorJobDesk(actor: Actor): boolean {
+  if (!actor.emailVerified) return false;
+  if (actor.internalRole) return hasPermission(actor, "delivery.read");
+  if (actor.accountType !== "independent_creator" && actor.accountType !== "studio") return false;
+  return hasPermission(actor, "title.read_own");
+}
+
 export function canRequestVendorJob(actor: Actor, title: VendorTitleScope): boolean {
   if (!actor.emailVerified) return false;
   if (actor.internalRole) {
