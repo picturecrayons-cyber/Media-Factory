@@ -62,13 +62,14 @@ try {
   const beforeInvites = await scalar("select count(*)::int as value from bridge_invites");
 
   const authUserId = randomUUID();
+  const unlinkedAuthUserId = randomUUID();
   const bridgeUserId = `scope-a-${randomUUID()}`;
   const email = `scope-a-${randomUUID()}@example.test`;
 
   // All writes occur inside one outer transaction and are rolled back at the end.
   await client.query(
-    "insert into auth.users (id) values ($1::uuid)",
-    [authUserId],
+    "insert into auth.users (id) values ($1::uuid), ($2::uuid)",
+    [authUserId, unlinkedAuthUserId],
   );
   await client.query(
     `insert into bridge_profiles
@@ -92,7 +93,7 @@ try {
     `insert into bridge_loop_identity_links
       (bridge_user_id, auth_user_id, verification_method, verified_at, verified_by)
      values ($1, $2::uuid, 'supabase_auth_onboarding', now(), $1)`,
-    [`missing-${randomUUID()}`, authUserId],
+    [`missing-${randomUUID()}`, unlinkedAuthUserId],
     "23503",
     "Bridge-profile FK orphan rejection",
   );
