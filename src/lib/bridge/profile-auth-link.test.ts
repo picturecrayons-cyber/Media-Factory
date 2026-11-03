@@ -4,31 +4,31 @@ import { readFileSync } from "node:fs";
 
 test("onboarding persists verified Supabase Auth-to-Bridge identity binding", () => {
   const src = readFileSync(new URL("./profiles.ts", import.meta.url), "utf8");
-  assert.match(src, /insert into bridge_loop_identity_links/);
-  assert.match(src, /await persistSupabaseIdentityLink\\(sql, existing\\.userId, context\\.userId\\)/);
-  assert.match(src, /auth_user_id, verification_method, verified_at, verified_by/);
-  assert.match(src, /'supabase_auth_onboarding'/);
-  assert.match(src, /on conflict \\(auth_user_id\\) do nothing/);
-  assert.match(src, /where lower\\(email\\) = lower\\(\\$\\{email\\}\\)/);
-  assert.doesNotMatch(src, /on conflict \\(auth_user_id\\) do update set/);
+  assert.ok(src.includes("insert into bridge_loop_identity_links"));
+  assert.ok(src.includes("persistSupabaseIdentityLink(sql, existing.userId, context.userId)"));
+  assert.ok(src.includes("auth_user_id, verification_method, verified_at, verified_by"));
+  assert.ok(src.includes("'supabase_auth_onboarding'"));
+  assert.ok(src.includes("on conflict (auth_user_id) do nothing"));
+  assert.ok(src.includes("where lower(email) = lower(${email})"));
+  assert.ok(!src.includes("on conflict (auth_user_id) do update set"));
 });
 
-test("identity migration references Bridge profiles and Supabase Auth, not Better Auth users", () => {
+test("identity migrations reference Bridge profiles and Supabase Auth, not Better Auth users", () => {
   const migration = readFileSync(
     new URL("../../../migrations/0007a_identity_links.sql", import.meta.url),
     "utf8",
   );
-  assert.match(migration, /references public\\.bridge_profiles\\(user_id\\) on delete restrict/);
-  assert.match(migration, /references auth\\.users\\(id\\) on delete cascade/);
-  assert.doesNotMatch(migration, /references public\\."user"\\(id\\)/);
+  assert.ok(migration.includes("references public.bridge_profiles(user_id) on delete restrict"));
+  assert.ok(migration.includes("references auth.users(id) on delete cascade"));
+  assert.ok(!migration.includes('references public."user"(id)'));
 
   const repair = readFileSync(
     new URL("../../../migrations/0023_bridge_identity_fk_repair.sql", import.meta.url),
     "utf8",
   );
-  assert.match(repair, /drop constraint if exists bridge_loop_identity_links_bridge_user_id_fkey/);
-  assert.match(repair, /references public\\.bridge_profiles\\(user_id\\)/);
-  assert.match(repair, /references auth\\.users\\(id\\)/);
+  assert.ok(repair.includes("drop constraint if exists bridge_loop_identity_links_bridge_user_id_fkey"));
+  assert.ok(repair.includes("references public.bridge_profiles(user_id)"));
+  assert.ok(repair.includes("references auth.users(id)"));
 });
 
 test("Scope A database harness refuses non-disposable or remote databases", () => {
@@ -36,11 +36,12 @@ test("Scope A database harness refuses non-disposable or remote databases", () =
     new URL("../../../scripts/scope-a-onboarding-db.mjs", import.meta.url),
     "utf8",
   );
-  assert.match(src, /SCOPE_A_DISPOSABLE_DATABASE !== "1"/);
-  assert.match(src, /allowedHosts/);
-  assert.match(src, /databaseName !== "bridge_scope_a"/);
-  assert.match(src, /Bridge-profile FK orphan rejection/);
-  assert.match(src, /Supabase Auth FK orphan rejection/);
+  assert.ok(src.includes('SCOPE_A_DISPOSABLE_DATABASE !== "1"'));
+  assert.ok(src.includes("allowedHosts"));
+  assert.ok(src.includes('databaseName !== "bridge_scope_a"'));
+  assert.ok(src.includes("Bridge-profile FK orphan rejection"));
+  assert.ok(src.includes("Supabase Auth FK orphan rejection"));
+  assert.ok(src.includes("await client.query(\"rollback\")"));
 });
 
 test("session resolution fails closed without a direct immutable Supabase subject", () => {
@@ -49,10 +50,10 @@ test("session resolution fails closed without a direct immutable Supabase subjec
   const end = source.indexOf("export async function loadActor", start);
   const resolver = source.slice(start, end);
   assert.ok(resolver.includes("requireDirectBridgeIdentity"));
-  assert.equal(resolver.includes("bridge_loop_identity_links"), false);
-  assert.doesNotMatch(resolver, /bridge_loop_identity_links|auth\\.users|lower\\s*\\(\\s*email/i);
+  assert.ok(!resolver.includes("bridge_loop_identity_links"));
+  assert.ok(!/auth\.users|lower\s*\(\s*email/i.test(resolver));
 
   const guards = readFileSync(new URL("./authorization-guards.ts", import.meta.url), "utf8");
-  assert.match(guards, /directProfileUserId === authUserId/);
-  assert.match(guards, /BRIDGE_IDENTITY_UNRESOLVED/);
+  assert.ok(guards.includes("directProfileUserId === authUserId"));
+  assert.ok(guards.includes("BRIDGE_IDENTITY_UNRESOLVED"));
 });
