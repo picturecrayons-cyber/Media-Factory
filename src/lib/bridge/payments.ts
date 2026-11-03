@@ -174,12 +174,12 @@ export const createLicenseOrder = createServerFn({ method: "POST" })
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
     assertPermission(actor, "payment.create_order");
-    // Buyer organization, intermediary mandate, and exact-rights scope are not
-    // yet represented by a verified canonical authorization chain. The current
-    // session resolver gives buyer profiles no organization scope, so deny them
-    // before creating any chargeable Razorpay order.
-    if (actor.accountType === "buyer" && !actor.organizationId) {
-      throw new Error("BRIDGE_LICENSE_ORDER_BLOCKED: buyer organization and rights-mandate authorization is not yet certified");
+    // An organization ID alone is not a mandate. Until the complete
+    // principal -> mandate issuer -> intermediary -> transaction buyer chain,
+    // active membership, and exact-rights scope are verified server-side, no
+    // buyer may create a chargeable title-license order (even with an org ID).
+    if (actor.accountType === "buyer") {
+      throw new Error("BRIDGE_LICENSE_ORDER_BLOCKED: canonical organization, mandate, and exact-rights authorization is not implemented");
     }
     const title = await loadTitle(data.titleId);
     if (!title || (!canReadTitle(actor, title) && actor.accountType !== "buyer")) throw new Error("Not found");
@@ -332,7 +332,7 @@ export const listOwnEntitlements = createServerFn({ method: "GET" })
     assertPermission(actor, "entitlement.read_own");
     // Buyer entitlements are withheld until reads are organization- and
     // mandate-scoped. A user-only lookup is not sufficient tenant isolation.
-    if (actor.accountType === "buyer" && !actor.internalRole) return { entitlements: [] };
+    if (actor.accountType === "buyer") return { entitlements: [] };
     const sql = await getSql();
     try {
       const rows = await sql<{
