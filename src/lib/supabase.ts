@@ -1,9 +1,13 @@
 import { createClient } from "@supabase/supabase-js";
-import { resolveCanonicalSupabaseUrl } from "./supabase-url.ts";
+import { assertSupabaseUrlForRuntime, resolveCanonicalSupabaseUrl } from "./supabase-url.ts";
 
-const supabaseUrl = resolveCanonicalSupabaseUrl(
-  import.meta.env.VITE_SUPABASE_URL as string | undefined,
-  import.meta.env.NEXT_PUBLIC_SUPABASE_URL as string | undefined,
+const runtimeEnv = (import.meta.env as ImportMetaEnv & { VERCEL_ENV?: string }).VERCEL_ENV;
+const supabaseUrl = assertSupabaseUrlForRuntime(
+  resolveCanonicalSupabaseUrl(
+    import.meta.env.VITE_SUPABASE_URL as string | undefined,
+    import.meta.env.NEXT_PUBLIC_SUPABASE_URL as string | undefined,
+  ),
+  runtimeEnv,
 );
 const supabasePublishableKey =
   (import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined)?.trim() ||
