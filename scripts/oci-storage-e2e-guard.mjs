@@ -48,11 +48,11 @@ export function validateStorageE2EConfig(env) {
 export function validateStorageE2EAsset(asset, expectedTitleId) {
   if (!asset) return { ok: false, reason: "E2E asset not found" };
   if (asset.title_id !== expectedTitleId) return { ok: false, reason: "asset is outside the approved synthetic title" };
-  if (!/^INTERNAL TEST ONLY\\b/i.test(String(asset.title_name ?? "").trim())) {
+  if (!String(asset.title_name ?? "").trim().toUpperCase().startsWith("INTERNAL TEST ONLY")) {
     return { ok: false, reason: "title is not marked INTERNAL TEST ONLY" };
   }
   if (asset.kind !== "poster") return { ok: false, reason: "only a synthetic poster asset may be used" };
-  if (!/^(e2e|test|staging)\\//i.test(String(asset.s3_key ?? ""))) {
+  if (!["e2e/", "test/", "staging/"].some((prefix) => String(asset.s3_key ?? "").toLowerCase().startsWith(prefix))) {
     return { ok: false, reason: "asset key is outside the dedicated E2E object prefix" };
   }
   if (asset.byte_size !== null) return { ok: false, reason: "asset is already verified; provide a fresh pending asset" };
