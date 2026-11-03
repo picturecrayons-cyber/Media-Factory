@@ -13,15 +13,12 @@ test("onboarding persists verified auth-to-Bridge identity binding", () => {
   assert.doesNotMatch(src, /on conflict \(auth_user_id\) do update set/);
 });
 
-test("identity resolution never falls back to email or an unlinked auth subject", () => {
+test("identity resolution uses only direct immutable auth subject while legacy links lack revocation state", () => {
   const src = readFileSync(new URL("./session.ts", import.meta.url), "utf8");
-  const resolver = src.match(/export async function resolveBridgeUserId[\s\S]*?\n}\n\nexport async function loadActor/)?.[0] ?? "";
+  const resolver = src.match(/export async function resolveBridgeUserId[\\s\\S]*?\\n}\\n\\nexport async function loadActor/)?.[0] ?? "";
   assert.ok(resolver, "identity resolver should be present");
-  assert.match(resolver, /where l\.auth_user_id =/);
-  assert.match(resolver, /l\.verified_at is not null/);
-  assert.match(resolver, /length\(trim\(l\.verified_by\)\) > 0/);
-  assert.match(resolver, /BRIDGE_IDENTITY_UNRESOLVED/);
-  assert.doesNotMatch(resolver, /auth\.users|lower\(.*email|return .*authUserId/);
+  assert.match(resolver, /requireDirectBridgeIdentity/);
+  assert.doesNotMatch(resolver, /bridge_loop_identity_links|auth\\.users|email/i);
 });
 
 test("legacy single-actor internal invitations are rejected at onboarding", () => {
