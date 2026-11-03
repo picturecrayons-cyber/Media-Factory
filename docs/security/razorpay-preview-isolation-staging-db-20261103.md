@@ -119,3 +119,42 @@ Required gates before enabling Preview checkout:
 ## Release decision
 
 This PR is a draft for code review only. Creating it does not authorize merging, deployment, applying migrations, adding credentials, or enabling payment checkout. Production remains **HOLD / NOT CERTIFIED / NO-GO** until separately reviewed and explicitly approved.
+
+
+## Implementation update (2026-11-03, follow-up verification)
+
+### Code committed to this Draft PR
+
+- Added `src/lib/bridge/razorpay-environment.ts`: Preview runtime now fails closed unless the Razorpay key ID begins with `rzp_test_` and the Supabase URL hostname is exactly `jbymleftneggcgutlcqu.supabase.co`.
+- Wired this guard into the server-side Razorpay key resolver in `src/lib/bridge/payments.ts`. This affects server operations that resolve Razorpay credentials; it does not expose secrets to the browser.
+- Added `src/lib/bridge/razorpay-environment.test.ts` with positive and negative cases (Test Mode acceptance, Live key rejection, missing key rejection, wrong Supabase project rejection, and non-Preview behavior).
+- Added the new test file to the repository `test` script in `package.json`.
+
+These tests have been authored but have **not yet been executed** in this environment. Do not mark them PASS until CI or a local test run reports success.
+
+### Additional STAGING DB findings (read-only)
+
+Project ref: `jbymleftneggcgutlcqu` (**STAGING / Testing DB**, not Production DB).
+
+- The three payment tables are owned by `postgres`; RLS is enabled and FORCE RLS is disabled.
+- The security advisor currently reports 32 `rls_enabled_no_policy` findings across the Testing DB, including all three payment tables, plus leaked-password protection disabled.
+- The three payment tables each have 7 direct privilege rows for `anon`, 7 for `authenticated`, and 7 for `service_role`. The anon/authenticated rows include direct SELECT, INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, and TRIGGER grants.
+- `bridge_webhook_events` currently exposes only `event_id`, `event_name`, `payload_hash`, `status`, `created_at`, and `processed_at` in the inspected Testing DB schema.
+- The current application webhook processor also references `processing_started_at`, `processing_token`, and `attempts`. Those columns were not present in the Testing DB inspection. This schema/application mismatch is a hard blocker for webhook E2E.
+
+### Vercel Preview verification
+
+- Dedicated branch: `security/razorpay-preview-isolation-staging-db-20261103`.
+- Vercel Preview environment-variable listing for this exact branch returned **zero variables**.
+- Vercel deployment listing for this exact branch returned **zero deployments**.
+- No credentials were decrypted. No environment variables were changed. No deployment was created.
+
+### Remaining hard blockers
+
+1. Generate the Testing-only migration through the Supabase CLI workflow, after reviewing grants, ownership, table definitions, and dependent server/Edge Function behavior. The migration must add the missing webhook claim/lease columns required by the application and revoke direct `anon`/`authenticated` access from the three operational payment tables. Do not apply it to any database in this task.
+2. The CLI-generated migration file is not yet present in this PR. This connector session cannot run the required local `supabase migration new` command, so no timestamped migration filename has been fabricated.
+3. Align the Supabase Edge Function with the server route: it currently lacks the same Razorpay API-side captured-payment/amount/currency verification and does not implement the server route's atomic claim lease. Do not enable or point the Razorpay webhook to this Edge Function until fixed and tested.
+4. Run the authored tests, existing payment/webhook tests, typecheck, lint, and secret scan; capture exact-SHA CI evidence.
+5. Configure Test Mode credentials and the Testing Supabase URL/DB binding for this exact Preview branch only after the migration and test gates pass.
+
+**Current result:** Preview isolation guard + regression tests are committed; migration, webhook parity, runtime tests, Vercel Preview configuration, and end-to-end payment verification remain BLOCKED / NOT VERIFIED. Production remains HOLD / NOT CERTIFIED / NO-GO.
