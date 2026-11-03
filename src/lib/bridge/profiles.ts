@@ -26,7 +26,12 @@ async function mail(opts: { to: string; subject: string; text: string }) {
 
 
 
-async function claimLegacyCreatorIntake(sql: Sql, email: string, authUserId: string) {
+/**
+ * Intentionally not invoked during onboarding: this legacy path transfers title ownership
+ * using an email match alone. Wire it only after a separately verified legacy-identity
+ * proof and owner-consent contract exists.
+ */
+async function _claimLegacyCreatorIntake(sql: Sql, email: string, authUserId: string) {
   const rows = await sql<{ legacy_user_id: number }>`
     select legacy_user_id
     from legacy_creator_intake
