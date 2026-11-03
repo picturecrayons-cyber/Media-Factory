@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
+import { listTitles } from "@/lib/bridge/titles";
 import { hasPermission } from "@/lib/bridge/rbac";
 import type { Actor } from "@/lib/bridge/rbac";
 import {
