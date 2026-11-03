@@ -162,18 +162,12 @@ function sharesStudioOrganization(
   );
 }
 
-const ROLE_GRANTS: Record<InternalRole, readonly InternalRole[]> = {
-  viewer: [],
-  qc_reviewer: [],
-  legal_reviewer: [],
-  finance: [],
-  admin: ["viewer", "qc_reviewer", "legal_reviewer", "finance", "admin"],
-  super_admin: ["viewer", "qc_reviewer", "legal_reviewer", "finance", "admin", "super_admin"],
-};
-
-export function canGrantInternalRole(actor: Actor, role: InternalRole): boolean {
-  if (!actor.emailVerified || !actor.internalRole) return false;
-  return ROLE_GRANTS[actor.internalRole].includes(role);
+/**
+ * Single-actor internal role grants are disabled until an independent
+ * requester/approver workflow records immutable dual-control evidence.
+ */
+export function canGrantInternalRole(_actor: Actor, _role: InternalRole): boolean {
+  return false;
 }
 
 export function hasAccountPermission(actor: Actor, permission: Permission): boolean {
