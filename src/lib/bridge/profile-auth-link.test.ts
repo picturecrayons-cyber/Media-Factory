@@ -42,3 +42,17 @@ test("Scope A database harness refuses non-disposable or remote databases", () =
   assert.match(src, /Bridge-profile FK orphan rejection/);
   assert.match(src, /Supabase Auth FK orphan rejection/);
 });
+
+test("session resolution fails closed without a direct immutable Supabase subject", () => {
+  const source = readFileSync(new URL("./session.ts", import.meta.url), "utf8");
+  const start = source.indexOf("export async function resolveBridgeUserId");
+  const end = source.indexOf("export async function loadActor", start);
+  const resolver = source.slice(start, end);
+  assert.ok(resolver.includes("requireDirectBridgeIdentity"));
+  assert.equal(resolver.includes("bridge_loop_identity_links"), false);
+  assert.equal(resolver.toLowerCase().includes("email"), false);
+
+  const guards = readFileSync(new URL("./authorization-guards.ts", import.meta.url), "utf8");
+  assert.match(guards, /directProfileUserId === authUserId/);
+  assert.match(guards, /BRIDGE_IDENTITY_UNRESOLVED/);
+});
