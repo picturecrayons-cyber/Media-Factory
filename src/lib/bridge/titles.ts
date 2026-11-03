@@ -6,7 +6,7 @@ import { getSql, type Sql } from "@/lib/db";
 import type { AccountType, TitleStatus } from "./types";
 import { TITLE_STATUSES, type BridgeTitle } from "./types";
 import { assertTransition, nextStatus } from "./lifecycle";
-import { assertPermission, canMutateTitle, canReadTitle, hasPermission, hasStaffPermission, permissionForTransition } from "./rbac";
+import { assertPermission, canMutateTitle, canReadTitle, hasPermission, permissionForTransition } from "./rbac";
 import { requireVerifiedActor } from "./session";
 import { writeAudit } from "./audit";
 import { assertNotDevUser } from "./guards";
@@ -391,6 +391,18 @@ export const getTitle = createServerFn({ method: "GET" })
       // Buyer-visible lifecycle labels are not an authorization grant.
       // Always enforce the complete publication/rights gate for direct-ID reads.
       assertPermission(actor, "title.read_catalog");
+      const buyerGate = await getBuyerGateStatus(title.id);
+      if (
+        !buyerGate.publishable ||
+        !buyerGate.qc ||
+        !buyerGate.legal ||
+        !buyerGate.ott ||
+        !buyerGate.packaging ||
+        !buyerGate.curation ||
+        !buyerGate.delivery
+      ) {
+        throw new Error("Not found");
+      }
       await assertBuyerPublishable(title.id);
     } else if (!canReadTitle(actor, title)) {
       throw new Error("Not found");
@@ -473,8 +485,8 @@ export const updateTitle = createServerFn({ method: "POST" })
     return { title: next };
   });
 
-async function assertLicensingReady(titleId: string) {
-  const sql = await getSql();
+async function assertLicensingReady(titleId: string, transaction?: Sql) {
+  const sql = transaction ?? (await getSql());
   const rows = await sql<{
     metadata_ok: boolean;
     rights_ok: boolean;
@@ -624,6 +636,9 @@ export const advanceTitle = createServerFn({ method: "POST" })
       }>`select status from bridge_titles where id=${title.id} for update`;
       if (!locked || locked.status !== title.status)
         throw new Error("Title changed; refresh before retrying");
+      if (data.to === "LIVE_FOR_BUYERS") {
+        await assertLicensingReady(title.id, tx);
+      }
       await recordTransition(
         {
           titleId: title.id,
