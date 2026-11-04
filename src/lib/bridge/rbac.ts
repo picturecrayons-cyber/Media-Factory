@@ -127,8 +127,10 @@ export function permissionsFor(actor: Actor): Set<Permission> {
   // Internal staff identities are governed by their explicit staff role.
   // Account-type powers must never silently widen a staff role (for example,
   // a viewer profile whose account_type happens to be independent_creator).
-  const staff = actor.internalRole ? INTERNAL_PERMISSIONS[actor.internalRole] : undefined;
-  if (staff) return new Set<Permission>(staff);
+  if (actor.internalRole) {
+    // Unknown or malformed staff roles must never fall back to account-type powers.
+    return new Set<Permission>(INTERNAL_PERMISSIONS[actor.internalRole] ?? []);
+  }
   return new Set<Permission>(ACCOUNT_PERMISSIONS[actor.accountType] ?? []);
 }
 
