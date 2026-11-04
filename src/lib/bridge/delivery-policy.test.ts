@@ -115,3 +115,16 @@ it("staff download bypass is derived from the explicit asset.sign_download permi
     hasLicenseEntitlement: false,
   }).allow, false);
 });
+
+
+it("denies master downloads for unknown internal roles without explicit staff permission", () => {
+  const decision = downloadDecision({
+    kind: "master",
+    actorIsOwner: false,
+    actorIsInternal: false,
+    actorInternalRole: "unexpected_staff_role",
+    accountType: "independent_creator",
+    hasLicenseEntitlement: false,
+  });
+  assert.equal(decision.allow, false);
+});
