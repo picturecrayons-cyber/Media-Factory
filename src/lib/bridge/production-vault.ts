@@ -35,7 +35,7 @@ export function createProductionWorkspace(workspace: ProductionWorkspace): Produ
   if (!workspace.shootingDays.length) throw new Error("At least one shooting day is required");
   const dayIds = new Set<string>();
   for (const day of workspace.shootingDays) {
-    if (!day.shootingDayId.trim() || !/^\\d{4}-\\d{2}-\\d{2}$/.test(day.date)) {
+    if (!day.shootingDayId.trim() || !/^\d{4}-\d{2}-\d{2}$/.test(day.date)) {
       throw new Error("Shooting day identity and ISO date are required");
     }
     if (dayIds.has(day.shootingDayId)) throw new Error("Duplicate shooting day identity");
@@ -251,13 +251,24 @@ export interface ConversionProfile {
 export function resolveConversionProfile(
   resolution: "720p" | "1080p",
   outputType: "Proxy" | "ProRes",
+  approvedProfiles: readonly ConversionProfile[],
 ): ConversionProfile {
-  if (outputType === "Proxy") {
-    return { resolution, outputType, codec: "H.264 High", container: "MP4", width: resolution === "720p" ? 1280 : 1920, height: resolution === "720p" ? 720 : 1080 };
+  const matches = approvedProfiles.filter((profile) =>
+    profile.resolution === resolution && profile.outputType === outputType);
+  if (matches.length !== 1) throw new Error("Exactly one approved codec/profile/container is required for this conversion");
+  const profile = matches[0];
+  const expected = resolution === "720p" ? [1280, 720] : [1920, 1080];
+  if (!profile.codec.trim() || !profile.container.trim() || profile.width !== expected[0] || profile.height !== expected[1]) {
+    throw new Error("Approved conversion profile does not match the selected resolution");
   }
-  return resolution === "720p"
-    ? { resolution, outputType, codec: "Apple ProRes 422 LT", container: "MOV", width: 1280, height: 720 }
-    : { resolution, outputType, codec: "Apple ProRes 422 HQ", container: "MOV", width: 1920, height: 1080 };
+  return { ...profile };
+}
+
+export interface ConversionCopyVerification extends CopyVerification {
+  sourceSha256: string;
+  probePassed: boolean;
+  metadataMatchesProfile: boolean;
+  qcResult: CheckResult;
 }
 
 export interface ConversionJob {
@@ -268,8 +279,8 @@ export interface ConversionJob {
   state: "QUEUED" | "PROCESSING" | "RETRY_REQUIRED" | "COMPLETE" | "FAILED";
   attempt: number;
   history: Array<{ state: ConversionJob["state"]; at: string; detail: string }>;
-  masterOutput: CopyVerification | null;
-  backup1Output: CopyVerification | null;
+  masterOutput: ConversionCopyVerification | null;
+  backup1Output: ConversionCopyVerification | null;
 }
 
 export function queueConversion(input: {
@@ -278,6 +289,7 @@ export function queueConversion(input: {
   sourceVerified: boolean;
   resolution: "720p" | "1080p";
   outputType: "Proxy" | "ProRes";
+  approvedProfiles: readonly ConversionProfile[];
   at: string;
 }): ConversionJob {
   if (!input.sourceVerified || !SHA256.test(input.clip.checksumSha256) || input.clip.byteSize <= 0) {
@@ -286,7 +298,7 @@ export function queueConversion(input: {
   if (input.clip.automatedResult === "FAIL" || input.clip.automatedResult === "NOT_CHECKED") {
     throw new Error("Conversion requires a checked, non-failing clip");
   }
-  const profile = resolveConversionProfile(input.resolution, input.outputType);
+  const profile = resolveConversionProfile(input.resolution, input.outputType, input.approvedProfiles);
   return {
     jobId: input.jobId,
     clipNumber: input.clip.clipNumber,
@@ -317,14 +329,18 @@ export function recordConversionAttempt(
 
 export function completeConversion(
   job: ConversionJob,
-  masterOutput: CopyVerification,
-  backup1Output: CopyVerification,
+  masterOutput: ConversionCopyVerification,
+  backup1Output: ConversionCopyVerification,
   at: string,
 ): ConversionJob {
   if (job.state !== "PROCESSING" && job.state !== "RETRY_REQUIRED") throw new Error("Conversion must be processing or retryable");
   const master = verifyStorageCopy(masterOutput);
   const backup = verifyStorageCopy(backup1Output);
   if (master.result !== "PASS" || backup.result !== "PASS") throw new Error("MASTER and BACKUP_1 outputs must independently verify");
+  for (const output of [masterOutput, backup1Output]) {
+    if (output.sourceSha256.toLowerCase() !== job.sourceSha256.toLowerCase()) throw new Error("Derived output source lineage does not match the verified RAW clip");
+    if (!output.probePassed || !output.metadataMatchesProfile || output.qcResult !== "PASS") throw new Error("Derived output probe, profile metadata and QC must pass");
+  }
   if (masterOutput.kind !== "CONVERTED" || backup1Output.kind !== "CONVERTED" ||
       masterOutput.tier !== "MASTER" || backup1Output.tier !== "BACKUP_1" ||
       masterOutput.clipNumber !== job.clipNumber || backup1Output.clipNumber !== job.clipNumber) {

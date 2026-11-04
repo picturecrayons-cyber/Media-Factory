@@ -16,9 +16,17 @@ import {
   verifyStorageCopy,
   type ClipRecord,
   type CopyVerification,
+  type ConversionProfile,
+  type ConversionCopyVerification,
 } from "./production-vault.ts";
 
 const hash = "a".repeat(64);
+const syntheticProfiles: ConversionProfile[] = [
+  { resolution: "720p", outputType: "Proxy", codec: "Synthetic H.264", container: "MP4", width: 1280, height: 720 },
+  { resolution: "1080p", outputType: "Proxy", codec: "Synthetic H.264", container: "MP4", width: 1920, height: 1080 },
+  { resolution: "720p", outputType: "ProRes", codec: "Synthetic ProRes Profile A", container: "MOV", width: 1280, height: 720 },
+  { resolution: "1080p", outputType: "ProRes", codec: "Synthetic ProRes Profile B", container: "MOV", width: 1920, height: 1080 },
+];
 const clip: ClipRecord = {
   clipNumber: "001",
   originalFilename: "A001_C001.mov",
@@ -111,26 +119,35 @@ test("storage copy verification requires exact byte count, checksum and independ
 
 test("conversion is blocked until source is verified and automated check is complete", () => {
   const [entry] = buildClipLedger("A", "CARD-07", [clip]);
-  assert.throws(() => queueConversion({ jobId: "j1", clip: entry, sourceVerified: false, resolution: "1080p", outputType: "Proxy", at: "now" }), /verified RAW/);
-  assert.throws(() => queueConversion({ jobId: "j1", clip: entry, sourceVerified: true, resolution: "1080p", outputType: "Proxy", at: "now" }), /checked/);
+  assert.throws(() => queueConversion({ jobId: "j1", clip: entry, sourceVerified: false, resolution: "1080p", outputType: "Proxy", approvedProfiles: syntheticProfiles, at: "now" }), /verified RAW/);
+  assert.throws(() => queueConversion({ jobId: "j1", clip: entry, sourceVerified: true, resolution: "1080p", outputType: "Proxy", approvedProfiles: syntheticProfiles, at: "now" }), /checked/);
+});
+
+test("conversion profiles must come from an approved exact codec/profile/container allowlist", () => {
+  const [entry] = buildClipLedger("A", "CARD-07", [clip]);
+  const checked = runClapAssistant({ clip: entry, manifestResult: "PASS", sourceCopyResult: "PASS", audioRequired: true });
+  assert.throws(() => queueConversion({ jobId: "j1", clip: checked, sourceVerified: true, resolution: "1080p", outputType: "ProRes", approvedProfiles: [], at: "now" }), /approved codec/);
+  assert.throws(() => queueConversion({ jobId: "j1", clip: checked, sourceVerified: true, resolution: "1080p", outputType: "ProRes", approvedProfiles: [{ ...syntheticProfiles[3], width: 1280 }], at: "now" }), /does not match/);
 });
 
 test("conversion completion needs independently verified MASTER and BACKUP_1 outputs", () => {
   const [entry] = buildClipLedger("A", "CARD-07", [clip]);
   const checked = runClapAssistant({ clip: entry, manifestResult: "PASS", sourceCopyResult: "PASS", audioRequired: true });
-  const job = queueConversion({ jobId: "j1", clip: checked, sourceVerified: true, resolution: "1080p", outputType: "ProRes", at: "now" });
+  const job = queueConversion({ jobId: "j1", clip: checked, sourceVerified: true, resolution: "1080p", outputType: "ProRes", approvedProfiles: syntheticProfiles, at: "now" });
   assert.equal(job.profile.codec, "Apple ProRes 422 HQ");
   const processing = { ...job, state: "PROCESSING" as const, attempt: 1 };
-  const master = copy({ copyId: "master-converted", kind: "CONVERTED", tier: "MASTER" });
-  const backup = copy({ copyId: "backup-converted", kind: "CONVERTED", tier: "BACKUP_1" });
+  const master: ConversionCopyVerification = { ...copy({ copyId: "master-converted", kind: "CONVERTED", tier: "MASTER" }), sourceSha256: hash, probePassed: true, metadataMatchesProfile: true, qcResult: "PASS" };
+  const backup: ConversionCopyVerification = { ...copy({ copyId: "backup-converted", kind: "CONVERTED", tier: "BACKUP_1" }), sourceSha256: hash, probePassed: true, metadataMatchesProfile: true, qcResult: "PASS" };
   assert.equal(completeConversion(processing, master, backup, "later").state, "COMPLETE");
-  assert.throws(() => completeConversion(processing, master, copy({ kind: "CONVERTED", tier: "BACKUP_2" }), "later"), /MASTER and BACKUP_1/);
+  assert.throws(() => completeConversion(processing, master, { ...backup, sourceSha256: "b".repeat(64) }, "later"), /lineage/);
+  assert.throws(() => completeConversion(processing, master, { ...backup, qcResult: "FAIL" }, "later"), /QC must pass/);
+  assert.throws(() => completeConversion(processing, master, { ...backup, tier: "BACKUP_2" }, "later"), /MASTER and BACKUP_1/);
 });
 
 test("retry history is append-only and terminal jobs cannot be retried", () => {
   const [entry] = buildClipLedger("A", "CARD-07", [clip]);
   const checked = runClapAssistant({ clip: entry, manifestResult: "PASS", sourceCopyResult: "PASS", audioRequired: true });
-  const job = queueConversion({ jobId: "j1", clip: checked, sourceVerified: true, resolution: "720p", outputType: "Proxy", at: "queued" });
+  const job = queueConversion({ jobId: "j1", clip: checked, sourceVerified: true, resolution: "720p", outputType: "Proxy", approvedProfiles: syntheticProfiles, at: "queued" });
   const retry = recordConversionAttempt(job, "PROCESSING", "start", "worker started");
   assert.equal(retry.attempt, 1);
   assert.equal(retry.history.length, 2);
