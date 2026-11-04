@@ -226,12 +226,15 @@ export interface CopyVerification {
   independentlyVerified: boolean;
   verifiedAt: string | null;
   storageLocationId: string;
+  /** Trusted topology identifier (provider/account/region or offline failure domain), never a bucket-only label. */
+  failureDomainId: string;
 }
 
 export function verifyStorageCopy(copy: CopyVerification): { result: CheckResult; reasons: string[] } {
   const reasons: string[] = [];
   if (!copy.copyId.trim()) reasons.push("copy identity missing");
   if (!copy.storageLocationId.trim()) reasons.push("storage location identity missing");
+  if (!copy.failureDomainId.trim()) reasons.push("independent failure-domain identity missing");
   if (!Number.isSafeInteger(copy.expectedByteSize) || copy.expectedByteSize <= 0) reasons.push("expected byte size invalid");
   if (!SHA256.test(copy.expectedSha256)) reasons.push("expected checksum invalid");
   if (copy.observedByteSize === null || copy.observedSha256 === null || !copy.verifiedAt) reasons.push("destination evidence missing");
@@ -339,6 +342,9 @@ export function completeConversion(
   const master = verifyStorageCopy(masterOutput);
   const backup = verifyStorageCopy(backup1Output);
   if (master.result !== "PASS" || backup.result !== "PASS") throw new Error("MASTER and BACKUP_1 outputs must independently verify");
+  if (masterOutput.failureDomainId === backup1Output.failureDomainId) {
+    throw new Error("MASTER and BACKUP_1 outputs must use independent failure domains");
+  }
   for (const output of [masterOutput, backup1Output]) {
     if (output.sourceSha256.toLowerCase() !== job.sourceSha256.toLowerCase()) throw new Error("Derived output source lineage does not match the verified RAW clip");
     if (!output.probePassed || !output.metadataMatchesProfile || output.qcResult !== "PASS") throw new Error("Derived output probe, profile metadata and QC must pass");
@@ -424,10 +430,10 @@ export function evaluateDitSignoff(input: DitSignoff): {
     const copy = input.requiredCopies.find((item) =>
       item.clipNumber === target.clipNumber && item.kind === target.kind && item.tier === target.tier);
     if (!copy) continue;
-    const locations = byAsset.get(key) ?? new Set<string>();
-    if (locations.has(copy.storageLocationId)) blockers.push(`${target.clipNumber}: backup destinations are not independent`);
-    locations.add(copy.storageLocationId);
-    byAsset.set(key, locations);
+    const failureDomains = byAsset.get(key) ?? new Set<string>();
+    if (failureDomains.has(copy.failureDomainId)) blockers.push(`${target.clipNumber}: backup destinations share a failure domain`);
+    failureDomains.add(copy.failureDomainId);
+    byAsset.set(key, failureDomains);
   }
   const eligible = blockers.length === 0;
   return { eligible, cardSafeToReuse: eligible, blockers };
