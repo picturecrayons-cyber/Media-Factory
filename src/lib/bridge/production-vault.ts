@@ -27,6 +27,41 @@ export interface ProductionWorkspace {
   }>;
 }
 
+
+export function createProductionWorkspace(workspace: ProductionWorkspace): ProductionWorkspace {
+  if (!workspace.productionId.trim() || !workspace.filmName.trim() || !workspace.productionNo.trim()) {
+    throw new Error("Production identity, film name and production number are required");
+  }
+  if (!workspace.shootingDays.length) throw new Error("At least one shooting day is required");
+  const dayIds = new Set<string>();
+  for (const day of workspace.shootingDays) {
+    if (!day.shootingDayId.trim() || !/^\\d{4}-\\d{2}-\\d{2}$/.test(day.date)) {
+      throw new Error("Shooting day identity and ISO date are required");
+    }
+    if (dayIds.has(day.shootingDayId)) throw new Error("Duplicate shooting day identity");
+    dayIds.add(day.shootingDayId);
+    const cards = new Set<string>();
+    for (const roll of day.cameraRolls) {
+      if (!CAMERA_IDS.includes(roll.camera) || !roll.cardNo.trim()) throw new Error("Camera and physical Card No. are required");
+      const cardKey = `${roll.camera}:${roll.cardNo}`;
+      if (cards.has(cardKey)) throw new Error("Duplicate physical card in shooting day");
+      cards.add(cardKey);
+      const clips = new Set<string>();
+      for (const clip of roll.clips) {
+        if (!clip.clipNumber.trim() || clips.has(clip.clipNumber)) throw new Error("Missing or duplicate Clip Number in camera roll");
+        clips.add(clip.clipNumber);
+      }
+    }
+  }
+  return {
+    ...workspace,
+    shootingDays: workspace.shootingDays.map((day) => ({
+      ...day,
+      cameraRolls: day.cameraRolls.map((roll) => ({ ...roll, clips: roll.clips.map((clip) => ({ ...clip })) })),
+    })),
+  };
+}
+
 export interface ClipRecord {
   clipNumber: string;
   originalFilename: string;

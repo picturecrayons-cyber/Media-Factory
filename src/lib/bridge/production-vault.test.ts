@@ -4,6 +4,7 @@ import {
   appendAudit,
   buildClipLedger,
   buildVaultObjectKey,
+  createProductionWorkspace,
   completeConversion,
   createIngestManifest,
   evaluateDitSignoff,
@@ -54,6 +55,17 @@ const copy = (overrides: Partial<CopyVerification> = {}): CopyVerification => ({
   verifiedAt: "2026-11-04T10:01:00.000Z",
   storageLocationId: "volume-master",
   ...overrides,
+});
+
+test("Production Workspace validates shooting days, camera rolls and physical card identity", () => {
+  const workspace = createProductionWorkspace({
+    productionId: "prod-synthetic-1",
+    filmName: "Synthetic Feature",
+    productionNo: "SF-001",
+    shootingDays: [{ shootingDayId: "day-1", date: "2026-11-04", cameraRolls: [{ camera: "A", cardNo: "CARD-07", clips: [clip] }] }],
+  });
+  assert.equal(workspace.shootingDays[0].cameraRolls[0].cardNo, "CARD-07");
+  assert.throws(() => createProductionWorkspace({ ...workspace, shootingDays: [{ ...workspace.shootingDays[0], cameraRolls: [{ camera: "A", cardNo: "CARD-07", clips: [clip] }, { camera: "A", cardNo: "CARD-07", clips: [clip] }] }] }), /Duplicate physical card/);
 });
 
 test("vault key preserves original nested RAW paths and approved tier structure", () => {
