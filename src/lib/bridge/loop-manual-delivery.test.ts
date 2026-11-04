@@ -201,8 +201,8 @@ test("audit failure rolls back publication and acceptance consumption atomically
 
 test("manual delivery workflow is read-only and uses supported GitHub Actions runtimes", () => {
   const workflow = readFileSync(new URL("../../../.github/workflows/loop-manual-delivery.yml", import.meta.url), "utf8");
-  assert.match(workflow, /permissions:\\s*contents:\\s*read/);
-  assert.match(workflow, /actions\\/checkout@v5/);
-  assert.match(workflow, /actions\\/setup-node@v5/);
-  assert.doesNotMatch(workflow, /actions\\/(?:checkout|setup-node)@v4/);
+  assert.match(workflow, /permissions:\s*contents:\s*read/);
+  assert.match(workflow, /actions\/checkout@v5/);
+  assert.match(workflow, /actions\/setup-node@v5/);
+  assert.doesNotMatch(workflow, /actions\/(?:checkout|setup-node)@v4/);
 });
