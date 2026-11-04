@@ -55,7 +55,7 @@ test("scheduled monitor deduplicates alerts by exact workflow-run ID", () => {
 
 
 test("repository CI uses Node 24-compatible checkout and setup-node actions", () => {
-  assert.equal((ci.match(/actions\\/checkout@v5/g) ?? []).length, 2);
-  assert.equal((ci.match(/actions\\/setup-node@v5/g) ?? []).length, 2);
-  assert.doesNotMatch(ci, /actions\\/(?:checkout|setup-node)@v4/);
+  assert.equal((ci.match(/actions\/checkout@v5/g) ?? []).length, 2);
+  assert.equal((ci.match(/actions\/setup-node@v5/g) ?? []).length, 2);
+  assert.doesNotMatch(ci, /actions\/(?:checkout|setup-node)@v4/);
 });
