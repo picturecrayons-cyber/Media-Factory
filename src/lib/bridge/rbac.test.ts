@@ -226,7 +226,7 @@ it("CMS ingest belongs only to verified super admins", () => {
 });
 
 
-test("unknown runtime staff roles fail closed and never inherit account-type permissions", () => {
+it("unknown runtime staff roles fail closed and never inherit account-type permissions", () => {
   const malformed = {
     ...actor("malformed-staff", "independent_creator"),
     internalRole: "unexpected_staff_role",
