@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { readFileSync } from "node:fs";
 import {
   PREVIEW_STAGING_SUPABASE_REF,
   resolvePreviewDiagnosticTarget,
@@ -55,4 +56,10 @@ test("fails closed for unknown database host patterns and incomplete configurati
 test("does not produce a diagnostic target outside Vercel Preview", () => {
   assert.equal(resolvePreviewDiagnosticTarget({ vercelEnv: "production" }), null);
   assert.equal(resolvePreviewDiagnosticTarget({ vercelEnv: "development" }), null);
+});
+
+test("auth status endpoint uses deployment Supabase configuration instead of a Production constant", () => {
+  const route = readFileSync(new URL("../../routes/api/auth/$.ts", import.meta.url), "utf8");
+  assert.match(route, /bridgeEnv\.supabaseUrl\(\)/);
+  assert.doesNotMatch(route, /mlmgugivsyoxzdgwkbpu/);
 });
