@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { assertPermission, canAccessDashboard, canAccessTitleWorkspace, canGrantInternalRole, canMutateTitle, canOperateOnTitle, canReadTitle, hasPermission, hasStaffPermission, permissionForTransition, workspaceHome } from "./rbac.ts";
+import { assertPermission, canAccessDashboard, canAccessTitleWorkspace, canGrantInternalRole, canMutateTitle, canOperateOnTitle, canReadTitle, hasPermission, hasStaffPermission, permissionForTransition, permissionsFor, workspaceHome } from "./rbac.ts";
 import type { Actor } from "./rbac.ts";
 
 const actor = (
@@ -223,4 +223,15 @@ it("CMS ingest belongs only to verified super admins", () => {
   assert.equal(hasPermission(superAdmin(), "title.ingest_internal"), true);
   for (const a of [creator(), studio(), buyer(), admin(), viewer(), qc, legal, finance])
     assert.equal(hasPermission(a, "title.ingest_internal"), false);
+});
+
+
+test("unknown runtime staff roles fail closed and never inherit account-type permissions", () => {
+  const malformed = {
+    ...actor("malformed-staff", "independent_creator"),
+    internalRole: "unexpected_staff_role",
+  } as unknown as Actor;
+  assert.deepEqual([...permissionsFor(malformed)], []);
+  assert.equal(hasPermission(malformed, "title.create"), false);
+  assert.equal(hasPermission(malformed, "asset.sign_upload"), false);
 });
