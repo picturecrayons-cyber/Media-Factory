@@ -10,6 +10,10 @@ const monitor = await readFile(
   new URL("../.github/workflows/bridge-github-supervisor.yml", import.meta.url),
   "utf8",
 );
+const ci = await readFile(
+  new URL("../.github/workflows/ci.yml", import.meta.url),
+  "utf8",
+);
 
 test("supervisor and recovery use the Node 24-compatible GitHub Script action", () => {
   assert.match(monitor, /actions\/github-script@v8/);
@@ -47,4 +51,11 @@ test("scheduled monitor deduplicates alerts by exact workflow-run ID", () => {
   assert.match(monitor, /workflow-run-\$\{run\.id\}/);
   assert.match(monitor, /openIssues\.some\(issue => !issue\.pull_request && issue\.title\.includes\(marker\)\)/);
   assert.match(monitor, /github\.rest\.issues\.create/);
+});
+
+
+test("repository CI uses Node 24-compatible checkout and setup-node actions", () => {
+  assert.equal((ci.match(/actions\\/checkout@v5/g) ?? []).length, 2);
+  assert.equal((ci.match(/actions\\/setup-node@v5/g) ?? []).length, 2);
+  assert.doesNotMatch(ci, /actions\\/(?:checkout|setup-node)@v4/);
 });
