@@ -66,6 +66,8 @@ export function resolvePreviewDiagnosticTarget(
     supabaseRef === PREVIEW_STAGING_SUPABASE_REF &&
     databaseRef === PREVIEW_STAGING_SUPABASE_REF;
   const productionTargetIsExcluded =
+    supabaseRef !== null &&
+    databaseRef !== null &&
     supabaseRef !== PREVIEW_PRODUCTION_SUPABASE_REF &&
     databaseRef !== PREVIEW_PRODUCTION_SUPABASE_REF;
 
