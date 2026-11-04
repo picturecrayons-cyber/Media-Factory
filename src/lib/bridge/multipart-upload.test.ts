@@ -8,6 +8,7 @@ import {
   partCount,
   partSlice,
   sameUploadFile,
+  validateCompletedMultipartParts,
 } from "./multipart-upload.ts";
 
 test("a film master splits into 16 MiB parts and keeps a short last part", () => {
@@ -32,4 +33,18 @@ test("multipart commit target must be the asset object in the configured region"
   assert.equal(multipartTargetAllowed(good, "us-phoenix-1", key), false);
   assert.equal(multipartTargetAllowed("https://example.com/p/token/u/film/id/upload/", "ap-mumbai-1", key), false);
   assert.equal(multipartTargetAllowed(`${good}?x=1`, "ap-mumbai-1", key), false);
+});
+
+
+test("commit validation requires every expected part in sequence with exact sizes", () => {
+  const size = MULTIPART_PART_SIZE * 2 + 7;
+  const valid = [
+    { partNumber: 1, size: MULTIPART_PART_SIZE },
+    { partNumber: 2, size: MULTIPART_PART_SIZE },
+    { partNumber: 3, size: 7 },
+  ];
+  assert.deepEqual(validateCompletedMultipartParts(valid, size, MULTIPART_PART_SIZE), [1, 2, 3]);
+  assert.throws(() => validateCompletedMultipartParts(valid.slice(0, 2), size, MULTIPART_PART_SIZE), /incomplete/);
+  assert.throws(() => validateCompletedMultipartParts([valid[0], valid[2], valid[1]], size, MULTIPART_PART_SIZE), /complete manifest/);
+  assert.throws(() => validateCompletedMultipartParts([{ ...valid[0], size: 9 }, ...valid.slice(1)], size, MULTIPART_PART_SIZE), /complete manifest/);
 });
