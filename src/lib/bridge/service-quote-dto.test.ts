@@ -15,7 +15,16 @@ test("customer quote DTO exposes prices but strips internal cost, margin and rat
     classification: "INTERNAL",
     costBasisPaise: 1200,
     estimatedMarginPaise: 3800,
-    evidence: { internalNote: "not customer-facing" },
+    evidence: {
+      internalNote: "not customer-facing",
+      nested: { costBasisPaise: 1200, estimatedMarginPaise: 3800 },
+    },
+    supplierRate: { hourlyRatePaise: 9000 },
+    pricingSnapshot: {
+      costBasisPaise: 1200,
+      rateId: "nested-internal-rate",
+      classification: "INTERNAL",
+    },
   };
   const dto = toCustomerServiceQuoteDto({
     quoteId: "quote-1",
@@ -26,6 +35,14 @@ test("customer quote DTO exposes prices but strips internal cost, margin and rat
     taxPaise: 900,
     totalPaise: 5900,
     lines: [internalLine],
+    // Structural typing permits extra runtime properties; the mapper must
+    // still serialize only its explicit customer-facing allowlist.
+    estimatedCostPaise: 1200,
+    estimatedMarginPaise: 3800,
+    internalCostBreakdown: {
+      dailyManpowerCostPaise: 50000,
+      overtimeRatePaise: 7000,
+    },
   });
 
   assert.deepEqual(dto, {
@@ -44,7 +61,10 @@ test("customer quote DTO exposes prices but strips internal cost, margin and rat
       lineTotalPaise: 5000,
     }],
   });
-  assert.doesNotMatch(JSON.stringify(dto), /costBasis|estimatedMargin|rateId|classification|evidence|internalNote/i);
+  assert.doesNotMatch(
+    JSON.stringify(dto),
+    /costBasis|estimatedCost|estimatedMargin|dailyManpower|overtimeRate|supplierRate|rateId|classification|evidence|internalNote|pricingSnapshot|internalCostBreakdown/i,
+  );
 });
 
 test("createServiceQuote serializes only through the customer DTO allowlist", () => {
