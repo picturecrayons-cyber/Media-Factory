@@ -12,7 +12,9 @@ The root `migrations/` directory contains historical duplicate numeric-prefix gr
 
 ## New migrations
 
-- Use the next unused numeric prefix, with at least four digits.
+- Allocate the next unused numeric prefix, with at least four digits, across the repository's active branches—not only the current `main` tree.
+- Reserve one prefix per active migration PR before implementation; two open Draft branches must never claim the same prefix.
+- Gaps are acceptable when independently reviewed PRs merge out of order. Do not renumber an applied migration; an unmerged Draft migration may be renumbered before merge to resolve a collision.
 - Use one descriptive, lowercase snake-case suffix:
   `0022_bridge_<purpose>.sql` is the naming example for the next new migration.
 - Every new root migration must have a unique numeric prefix.
