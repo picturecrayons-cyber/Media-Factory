@@ -1,5 +1,7 @@
 name: Manual Loop delivery safety
 on:
+  push:
+    branches: ["feat/uni-38-manual-loop-delivery-approval"]
   pull_request:
     branches: [main]
   workflow_dispatch:
