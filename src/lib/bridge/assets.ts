@@ -14,6 +14,7 @@ import { downloadDecision } from "./delivery-policy";
 import { uploadUrlLifetimeSeconds } from "./upload-url-lifetime";
 import { validateOttIngestFile, type OttIngestKind } from "./ott-ingest-spec";
 import { encryptMultipartCapability, decryptMultipartCapability } from "./multipart-session-crypto.server";
+import { validateCompletedMultipartParts } from "./multipart-upload";
 
 const UPLOADABLE: ReadonlySet<string> = new Set(["DRAFT", "UPLOADING", "PREPARING"]);
 
@@ -260,8 +261,8 @@ export const commitAssetMultipart = createServerFn({ method: "POST" })
     const asset = await openUploadAsset(context.userId, data.assetId);
     if (asset.byte_size != null) return { committed: true };
     const sql = await getSql();
-    const rows = await sql<{ part_base_url_ciphertext: string; object_key: string; status: string; expires_at: string | Date }>`
-      select part_base_url_ciphertext, object_key, status, expires_at
+    const rows = await sql<{ part_base_url_ciphertext: string; object_key: string; upload_id: string; file_size: number; part_size: number; status: string; expires_at: string | Date }>`
+      select part_base_url_ciphertext, object_key, upload_id, file_size, part_size, status, expires_at
       from bridge_asset_multipart_sessions
       where asset_id = ${asset.id} and title_id = ${asset.title_id} and created_by = ${context.userId}
       limit 1
@@ -279,7 +280,9 @@ export const commitAssetMultipart = createServerFn({ method: "POST" })
     `;
     if (!claimed[0]) throw new Error("Multipart session is already being committed; refresh before retrying");
     try {
-      const { commitMultipartUpload } = await import("./oci-object-storage.server");
+      const { listMultipartUploadParts, commitMultipartUpload } = await import("./oci-object-storage.server");
+      const remoteParts = await listMultipartUploadParts(session.object_key, session.upload_id);
+      validateCompletedMultipartParts(remoteParts, Number(session.file_size), Number(session.part_size));
       await commitMultipartUpload(decryptMultipartCapability(session.part_base_url_ciphertext), asset.s3_key);
       await sql`
         update bridge_asset_multipart_sessions
