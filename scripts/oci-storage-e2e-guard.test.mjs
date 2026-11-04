@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import {
   APPROVED_STAGING_PROJECT_REF,
   validateStorageE2EAsset,
@@ -76,12 +76,7 @@ test("storage E2E accepts only the named synthetic poster asset", () => {
   assert.equal(validateStorageE2EAsset({ ...validAsset(), created_by: "other-user" }, "title-1").ok, false);
 });
 
-test("OCI E2E workflow has no automatic main push trigger and uses only STAGING secrets", () => {
-  const source = readFileSync(new URL("../.github/workflows/bridge-oci-storage-e2e.yml", import.meta.url), "utf8");
-  assert.ok(source.includes("workflow_dispatch:"));
-  assert.doesNotMatch(source, /^\s+push:/m);
-  assert.ok(source.includes("STAGING_DATABASE_URL"));
-  assert.ok(source.includes("STAGING_OCI_PRIVATE_KEY"));
-  assert.doesNotMatch(source, /secrets\.DATABASE_URL/);
-  assert.doesNotMatch(source, /secrets\.OCI_PRIVATE_KEY/);
+test("STAGING-mutating OCI workflow remains absent until CRA-128 Phase 0 is independently accepted", () => {
+  const workflow = new URL("../.github/workflows/bridge-oci-storage-e2e.yml", import.meta.url);
+  assert.equal(existsSync(workflow), false);
 });
