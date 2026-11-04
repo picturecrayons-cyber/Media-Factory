@@ -35,7 +35,9 @@ export function createProductionWorkspace(workspace: ProductionWorkspace): Produ
   if (!workspace.shootingDays.length) throw new Error("At least one shooting day is required");
   const dayIds = new Set<string>();
   for (const day of workspace.shootingDays) {
-    if (!day.shootingDayId.trim() || !/^\d{4}-\d{2}-\d{2}$/.test(day.date)) {
+    if (!day.shootingDayId.trim() || !/^\d{4}-\d{2}-\d{2}$/.test(day.date) ||
+        Number.isNaN(Date.parse(`${day.date}T00:00:00.000Z`)) ||
+        new Date(`${day.date}T00:00:00.000Z`).toISOString().slice(0, 10) !== day.date) {
       throw new Error("Shooting day identity and ISO date are required");
     }
     if (dayIds.has(day.shootingDayId)) throw new Error("Duplicate shooting day identity");
