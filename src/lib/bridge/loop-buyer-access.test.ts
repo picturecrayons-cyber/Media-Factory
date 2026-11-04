@@ -106,3 +106,45 @@ test("fails closed for missing principal or grant", () => {
   assert.equal(authorizeLoopBuyerTitle(null, grant, request).reason, "INVALID_PRINCIPAL");
   assert.equal(authorizeLoopBuyerTitle(principal, null, request).reason, "PUBLICATION_NOT_FOUND");
 });
+
+
+test("denies missing request dimensions and malformed scope arrays", () => {
+  assert.equal(authorizeLoopBuyerTitle(principal, grant, { ...request, territory: "" }).reason, "INVALID_REQUEST");
+  assert.equal(authorizeLoopBuyerTitle(principal, { ...grant, territories: [] }, request).reason, "RIGHTS_DIMENSION_MISMATCH");
+  assert.equal(authorizeLoopBuyerTitle(principal, { ...grant, languages: ["" ] }, request).reason, "RIGHTS_DIMENSION_MISMATCH");
+  assert.equal(authorizeLoopBuyerTitle(principal, { ...grant, exploitationModels: undefined as unknown as string[] }, request).reason, "RIGHTS_DIMENSION_MISMATCH");
+});
+
+test("requires every mandate link and the buyer rights window to stay inside the mandate term", () => {
+  assert.equal(
+    authorizeLoopBuyerTitle(principal, {
+      ...grant,
+      mandateChain: [
+        { ...grant.mandateChain[0], windowStart: "2025-12-31T00:00:00Z" },
+        grant.mandateChain[1],
+      ],
+    }, request).reason,
+    "MANDATE_CHAIN_INVALID",
+  );
+  assert.equal(
+    authorizeLoopBuyerTitle(principal, {
+      ...grant,
+      windowEnd: "2027-02-01T00:00:00Z",
+    }, request).reason,
+    "RIGHTS_WINDOW_NOT_ACTIVE",
+  );
+});
+
+test("denies malformed mandate links and invalid request clock", () => {
+  assert.equal(
+    authorizeLoopBuyerTitle(principal, {
+      ...grant,
+      mandateChain: [grant.mandateChain[0], null as unknown as (typeof grant.mandateChain)[number]],
+    }, request).reason,
+    "MANDATE_CHAIN_INVALID",
+  );
+  assert.equal(
+    authorizeLoopBuyerTitle(principal, grant, { ...request, now: new Date("invalid") }).reason,
+    "INVALID_REQUEST",
+  );
+});
