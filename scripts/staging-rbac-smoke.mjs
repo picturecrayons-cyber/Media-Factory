@@ -3,10 +3,13 @@ import assert from "node:assert/strict";
 import { Client } from "pg";
 import { persistVerifiedAsset } from "../src/lib/bridge/asset-confirmation.ts";
 import { seedStagingRbacFixtures } from "./staging-rbac-fixtures.mjs";
+import { assertCra128Phase0Accepted } from "./staging-rbac-smoke-guard.mjs";
 
 const REQUIRED_PROJECT_REF = "jbymleftneggcgutlcqu";
 
 function requireStagingOnlyEnvironment() {
+  // This hard gate runs before parsing credentials or opening a network connection.
+  assertCra128Phase0Accepted();
   const projectRef = process.env.BRIDGE_STAGING_PROJECT_REF;
   const supabaseUrl = process.env.BRIDGE_STAGING_SUPABASE_URL;
   const databaseUrlText = process.env.BRIDGE_STAGING_DATABASE_URL;
