@@ -91,7 +91,7 @@ describe("Bridge asset download policy", () => {
 });
 
 
-test("staff download bypass is derived from the explicit asset.sign_download permission", () => {
+it("staff download bypass is derived from the explicit asset.sign_download permission", () => {
   const qc: Actor = {
     userId: "qc-user",
     emailVerified: true,
