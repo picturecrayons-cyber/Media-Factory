@@ -49,6 +49,12 @@ export function TitleList({ empty, query = "", showProgress = false }: { empty: 
                 {t.language}
                 {t.year ? ` · ${t.year}` : ""}
               </p>
+              {showProgress && OWNER_PROGRESS[t.status] ? (
+                <div className="mt-2 max-w-xl" aria-label="Title review progress">
+                  <p className="text-xs font-medium">{OWNER_PROGRESS[t.status].label}</p>
+                  <p className="text-xs text-muted">{OWNER_PROGRESS[t.status].guidance}</p>
+                </div>
+              ) : null}
             </div>
             <StatusChip status={t.status} />
           </Link>
