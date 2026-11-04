@@ -22,7 +22,7 @@ begin
     join pg_namespace n on n.oid = c.relnamespace
     where n.nspname = 'public'
       and c.relkind in ('r','p','S')
-      and c.relname not like 'bridge\_%' escape '\\'
+      and left(c.relname, 7) <> 'bridge_'
   ) then
     raise exception 'Refusing Bridge Data API lockdown: non-Bridge public relation found';
   end if;
