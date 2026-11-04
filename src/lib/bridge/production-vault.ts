@@ -188,11 +188,13 @@ export interface CopyVerification {
   observedSha256: string | null;
   independentlyVerified: boolean;
   verifiedAt: string | null;
+  storageLocationId: string;
 }
 
 export function verifyStorageCopy(copy: CopyVerification): { result: CheckResult; reasons: string[] } {
   const reasons: string[] = [];
   if (!copy.copyId.trim()) reasons.push("copy identity missing");
+  if (!copy.storageLocationId.trim()) reasons.push("storage location identity missing");
   if (!Number.isSafeInteger(copy.expectedByteSize) || copy.expectedByteSize <= 0) reasons.push("expected byte size invalid");
   if (!SHA256.test(copy.expectedSha256)) reasons.push("expected checksum invalid");
   if (copy.observedByteSize === null || copy.observedSha256 === null || !copy.verifiedAt) reasons.push("destination evidence missing");
@@ -307,8 +309,10 @@ export function runClapAssistant(input: {
   manifestResult: CheckResult;
   sourceCopyResult: CheckResult;
   audioRequired: boolean;
+  analysisWarnings?: string[];
 }): ClipLedgerEntry {
   const reasons: string[] = [];
+  const warnings = [...(input.analysisWarnings ?? [])];
   const clip = input.clip;
   if (!clip.originalFilename.trim() || !validateRelativeSourcePath(clip.originalRelativePath)) reasons.push("Original filename/path missing or unsafe");
   if (!Number.isSafeInteger(clip.byteSize) || clip.byteSize <= 0) reasons.push("Source byte count is invalid");
@@ -322,8 +326,8 @@ export function runClapAssistant(input: {
   const fatal = reasons.some((reason) => /missing|invalid|did not pass|incomplete/i.test(reason));
   return {
     ...clip,
-    automatedResult: fatal ? "FAIL" : "PASS",
-    automatedReasons: reasons,
+    automatedResult: fatal ? "FAIL" : warnings.length ? "WARNING" : "PASS",
+    automatedReasons: [...reasons, ...warnings],
   };
 }
 
@@ -333,7 +337,8 @@ export interface DitSignoff {
   clipLedger: ClipLedgerEntry[];
   manifestResult: CheckResult;
   requiredCopies: CopyVerification[];
-  requiredCopyTargets: Array<{ clipNumber: string; kind: MediaKind; tier: StorageTier }>;
+  audioCount: number;
+  stillsCount: number;
 }
 
 export function evaluateDitSignoff(input: DitSignoff): {
@@ -347,15 +352,29 @@ export function evaluateDitSignoff(input: DitSignoff): {
   if (!input.clipLedger.length) blockers.push("No clips are present in the clip ledger");
   for (const clip of input.clipLedger) {
     if (clip.automatedResult === "NOT_CHECKED" || clip.automatedResult === "FAIL") blockers.push(`${clip.clipNumber}: automated check is ${clip.automatedResult}`);
-    if (clip.automatedResult === "WARNING" && clip.humanDisposition !== "ACCEPTED") blockers.push(`${clip.clipNumber}: warning needs an explicit human disposition`);
+    if (clip.humanDisposition !== "ACCEPTED" || !clip.humanReviewerId || !clip.humanReviewedAt) {
+      blockers.push(`${clip.clipNumber}: per-clip human DIT review is incomplete`);
+    }
     if (clip.humanDisposition === "REJECTED") blockers.push(`${clip.clipNumber}: human reviewer rejected the clip`);
   }
-  for (const target of input.requiredCopyTargets) {
+  const requiredCopyTargets = requiredCopyMatrix(input.clipLedger, input.audioCount, input.stillsCount);
+  for (const target of requiredCopyTargets) {
     const matches = input.requiredCopies.filter((copy) =>
       copy.clipNumber === target.clipNumber && copy.kind === target.kind && copy.tier === target.tier);
     if (matches.length !== 1 || verifyStorageCopy(matches[0]).result !== "PASS") {
       blockers.push(`${target.clipNumber}: ${target.tier} ${target.kind} copy is not independently verified`);
     }
+  }
+  const byAsset = new Map<string, Set<string>>();
+  for (const target of requiredCopyTargets) {
+    const key = `${target.clipNumber}:${target.kind}`;
+    const copy = input.requiredCopies.find((item) =>
+      item.clipNumber === target.clipNumber && item.kind === target.kind && item.tier === target.tier);
+    if (!copy) continue;
+    const locations = byAsset.get(key) ?? new Set<string>();
+    if (locations.has(copy.storageLocationId)) blockers.push(`${target.clipNumber}: backup destinations are not independent`);
+    locations.add(copy.storageLocationId);
+    byAsset.set(key, locations);
   }
   const eligible = blockers.length === 0;
   return { eligible, cardSafeToReuse: eligible, blockers };
