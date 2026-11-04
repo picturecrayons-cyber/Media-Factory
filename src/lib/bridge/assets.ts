@@ -208,7 +208,8 @@ export const requestAssetDownload = createServerFn({ method: "POST" })
     const decision = downloadDecision({
       kind: asset.kind,
       actorIsOwner: title.ownerUserId === actor.userId,
-      actorIsInternal: Boolean(actor.internalRole),
+      actorIsInternal: hasStaffPermission(actor, "asset.sign_download"),
+      actorInternalRole: actor.internalRole,
       accountType: actor.accountType,
       hasLicenseEntitlement: entitled,
     });

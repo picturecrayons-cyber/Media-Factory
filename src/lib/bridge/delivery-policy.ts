@@ -2,8 +2,8 @@ export type DownloadDecision = { allow: boolean; reason: string };
 
 /**
  * A buyer catalog or screener grant never authorizes a source master.
- * Owners and internal reviewers may download a master. Everyone else needs
- * an entitlement, and that entitlement only covers screener or subtitle files.
+ * Owners may download their own master. Internal master access is role-scoped:
+ * QC and Legal reviewers are denied by default; Admin roles remain permitted.
  */
 export function downloadDecision(opts: {
   kind: string;
@@ -11,15 +11,22 @@ export function downloadDecision(opts: {
   actorIsInternal: boolean;
   accountType: string;
   hasLicenseEntitlement: boolean;
+  actorInternalRole?: string | null;
 }): DownloadDecision {
   if (opts.kind === "master") {
+    if (opts.actorInternalRole === "qc_reviewer" || opts.actorInternalRole === "legal_reviewer") {
+      return {
+        allow: false,
+        reason: "QC and Legal master downloads are denied by default; a separately approved exception is required",
+      };
+    }
     if (!opts.actorIsOwner && !opts.actorIsInternal) {
       return {
         allow: false,
         reason: "A screener or catalog grant does not authorize a master download",
       };
     }
-    return { allow: true, reason: "Master download is limited to the title owner or an internal reviewer" };
+    return { allow: true, reason: "Master download is limited to the title owner or an authorized internal admin" };
   }
   if (opts.kind === "technical") {
     if (!opts.actorIsOwner && !opts.actorIsInternal) {
