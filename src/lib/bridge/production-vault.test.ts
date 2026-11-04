@@ -62,6 +62,7 @@ const copy = (overrides: Partial<CopyVerification> = {}): CopyVerification => ({
   independentlyVerified: true,
   verifiedAt: "2026-11-04T10:01:00.000Z",
   storageLocationId: "volume-master",
+  failureDomainId: `failure-domain-${overrides.tier ?? "MASTER"}`,
   ...overrides,
 });
 
@@ -114,6 +115,7 @@ test("storage copy verification requires exact byte count, checksum and independ
   assert.equal(verifyStorageCopy(copy({ observedByteSize: 1000 })).result, "FAIL");
   assert.equal(verifyStorageCopy(copy({ independentlyVerified: false })).result, "FAIL");
   assert.equal(verifyStorageCopy(copy({ observedSha256: "b".repeat(64) })).result, "FAIL");
+  assert.equal(verifyStorageCopy(copy({ failureDomainId: "" })).result, "FAIL");
   assert.equal(verifyStorageCopy(copy({ observedSha256: null, verifiedAt: null })).result, "FAIL");
 });
 
@@ -142,6 +144,7 @@ test("conversion completion needs independently verified MASTER and BACKUP_1 out
   assert.throws(() => completeConversion(processing, master, { ...backup, sourceSha256: "b".repeat(64) }, "later"), /lineage/);
   assert.throws(() => completeConversion(processing, master, { ...backup, qcResult: "FAIL" }, "later"), /QC must pass/);
   assert.throws(() => completeConversion(processing, master, { ...backup, tier: "BACKUP_2" }, "later"), /MASTER and BACKUP_1/);
+  assert.throws(() => completeConversion(processing, master, { ...backup, failureDomainId: master.failureDomainId }, "later"), /independent failure domains/);
 });
 
 test("retry history is append-only and terminal jobs cannot be retried", () => {
@@ -160,7 +163,7 @@ test("card reuse is blocked until every clip, required copy and human sign-off p
   const [entry] = buildClipLedger("A", "CARD-07", [clip]);
   const checked = runClapAssistant({ clip: entry, manifestResult: "PASS", sourceCopyResult: "PASS", audioRequired: true });
   const targets = requiredCopyMatrix([clip], 0, 0);
-  const copies = targets.map((target, index) => copy({ copyId: `copy-${index}`, clipNumber: target.clipNumber, kind: target.kind, tier: target.tier, storageLocationId: `volume-${target.tier}` }));
+  const copies = targets.map((target, index) => copy({ copyId: `copy-${index}`, clipNumber: target.clipNumber, kind: target.kind, tier: target.tier, storageLocationId: `volume-${target.tier}`, failureDomainId: `failure-domain-${target.tier}` }));
   const pending = evaluateDitSignoff({ reviewerId: "", reviewedAt: "", clipLedger: [checked], manifestResult: "PASS", requiredCopies: copies, audioCount: 0, stillsCount: 0 });
   assert.equal(pending.cardSafeToReuse, false);
   const humanChecked = { ...checked, humanDisposition: "ACCEPTED" as const, humanReviewerId: "dit-reviewer-1", humanReviewedAt: "2026-11-04T11:00:00.000Z" };
@@ -168,7 +171,7 @@ test("card reuse is blocked until every clip, required copy and human sign-off p
   assert.equal(signed.cardSafeToReuse, true);
   const incomplete = evaluateDitSignoff({ reviewerId: "dit-reviewer-1", reviewedAt: "now", clipLedger: [humanChecked], manifestResult: "PASS", requiredCopies: copies.slice(0, 1), audioCount: 0, stillsCount: 0 });
   assert.equal(incomplete.cardSafeToReuse, false);
-  const nonIndependent = copies.map((item) => ({ ...item, storageLocationId: "same-volume" }));
+  const nonIndependent = copies.map((item) => ({ ...item, storageLocationId: "different-bucket-name", failureDomainId: "same-provider-account-region" }));
   assert.equal(evaluateDitSignoff({ reviewerId: "dit-reviewer-1", reviewedAt: "now", clipLedger: [humanChecked], manifestResult: "PASS", requiredCopies: nonIndependent, audioCount: 0, stillsCount: 0 }).cardSafeToReuse, false);
 });
 
@@ -176,8 +179,8 @@ test("warnings require an explicit human disposition before sign-off", () => {
   const [entry] = buildClipLedger("A", "CARD-07", [clip]);
   const warning = { ...entry, automatedResult: "WARNING" as const, automatedReasons: ["Audio peak warning"] };
   const targets = requiredCopyMatrix([clip], 0, 0);
-  const copies = targets.map((target, index) => copy({ copyId: `warning-copy-${index}`, clipNumber: target.clipNumber, kind: target.kind, tier: target.tier, storageLocationId: `volume-${target.tier}` }));
-  const completeCopies = requiredCopyMatrix([clip], 0, 0).map((target, index) => copy({ copyId: `warning-copy-${index}`, clipNumber: target.clipNumber, kind: target.kind, tier: target.tier, storageLocationId: `volume-${target.tier}` }));
+  const copies = targets.map((target, index) => copy({ copyId: `warning-copy-${index}`, clipNumber: target.clipNumber, kind: target.kind, tier: target.tier, storageLocationId: `volume-${target.tier}`, failureDomainId: `failure-domain-${target.tier}` }));
+  const completeCopies = requiredCopyMatrix([clip], 0, 0).map((target, index) => copy({ copyId: `warning-copy-${index}`, clipNumber: target.clipNumber, kind: target.kind, tier: target.tier, storageLocationId: `volume-${target.tier}`, failureDomainId: `failure-domain-${target.tier}` }));
   assert.equal(evaluateDitSignoff({ reviewerId: "dit", reviewedAt: "now", clipLedger: [warning], manifestResult: "PASS", requiredCopies: completeCopies, audioCount: 0, stillsCount: 0 }).eligible, false);
   const accepted = { ...warning, humanDisposition: "ACCEPTED" as const, humanReviewerId: "dit", humanReviewedAt: "now" };
   assert.equal(evaluateDitSignoff({ reviewerId: "dit", reviewedAt: "now", clipLedger: [accepted], manifestResult: "PASS", requiredCopies: completeCopies, audioCount: 0, stillsCount: 0 }).eligible, true);
