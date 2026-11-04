@@ -24,11 +24,13 @@ export const Route = createFileRoute("/api/internal/preview-diagnostic")({
           vercelEnv: process.env.VERCEL_ENV,
           commitSha: process.env.VERCEL_GIT_COMMIT_SHA,
           supabaseUrl: bridgeEnv.supabaseUrl(),
+          // Match src/lib/db.ts nullish precedence exactly; a blank primary
+          // binding must not silently fall through to a different target.
           databaseUrl:
-            process.env.DATABASE_URL?.trim() ||
-            process.env.POSTGRES_URL?.trim() ||
-            process.env.SUPABASE_DB_URL?.trim() ||
-            process.env.SUPABASE_DATABASE_URL?.trim(),
+            process.env.DATABASE_URL ??
+            process.env.POSTGRES_URL ??
+            process.env.SUPABASE_DB_URL ??
+            process.env.SUPABASE_DATABASE_URL,
         });
 
         if (!target) return new Response(null, { status: 404 });
