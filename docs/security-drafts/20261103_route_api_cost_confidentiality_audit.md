@@ -122,10 +122,10 @@ This table is not the complete 32-table route/action matrix. All remaining route
 The P0 quote-response disclosure has a source-level remediation in Draft PR #462:
 
 - Branch: `feat/bridge-loop-commercial-catalogue-20261103`
-- Exact head SHA: `142b3e3a50d7a1f5f9078cb5dd5c616d85a80467`
+- Exact head SHA: `cfca67dafce6bb40a26c696d59138a0751f94e9b`
 - Added an explicit customer DTO allowlist for `createServiceQuote`; customer responses no longer serialize estimated cost, estimated margin, cost basis, rate IDs/versions, internal classification or evidence.
 - Internal pricing calculations and persisted finance data remain server-side.
 - DTO and response-wiring regression tests passed on the exact head.
-- CI run #1981 and Scope A disposable PostgreSQL run #1005 both completed SUCCESS.
+- CI run #2028 and Scope A disposable PostgreSQL run #1036 both completed SUCCESS. The exact-SHA CI log records the DTO allowlist tests (`customer quote DTO exposes prices but strips internal cost, margin and rate metadata`; `createServiceQuote serializes only through the customer DTO allowlist`) as passing; the full test suite reported 162 passed, 0 failed.
 
 This is a Draft source remediation, not a merged or deployed fix. Supabase Preview was SKIPPED; no STAGING DB or PRODUCTION DB runtime query, migration, customer invocation or payment was performed. The P0 remains release-blocking until the Draft change is reviewed, merged with approval, and verified through the isolated Preview/runtime authorization gates. Do not mark the finding closed based on unit/CI evidence alone.
