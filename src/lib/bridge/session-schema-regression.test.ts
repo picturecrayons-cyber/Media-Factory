@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { resolveBridgeUserIdFromMappings } from "./identity-resolution";
 import { readFileSync } from "node:fs";
 
 test("workspace profile query does not require organization tables or organization_id", () => {
@@ -28,4 +29,31 @@ test("Buyer organization authority is derived from membership, not organization 
   assert.match(lookup, /m\.status = 'active'/);
   assert.match(lookup, /o\.status = 'active'/);
   assert.doesNotMatch(lookup, /organization_name/);
+});
+
+test("identity resolver accepts only an exact direct profile mapping", () => {
+  assert.equal(resolveBridgeUserIdFromMappings("auth-1", ["auth-1"], []), "auth-1");
+});
+
+test("identity resolver accepts one explicit identity-link mapping", () => {
+  assert.equal(resolveBridgeUserIdFromMappings("auth-1", [], ["bridge-1"]), "bridge-1");
+});
+
+test("identity resolver denies unresolved identity instead of returning the auth subject", () => {
+  assert.throws(
+    () => resolveBridgeUserIdFromMappings("auth-1", [], []),
+    /BRIDGE_IDENTITY_UNRESOLVED/,
+  );
+});
+
+test("identity resolver denies duplicate, conflicting, and mismatched mappings", () => {
+  assert.throws(() => resolveBridgeUserIdFromMappings("auth-1", ["auth-1", "auth-1"], []), /BRIDGE_IDENTITY_AMBIGUOUS/);
+  assert.throws(() => resolveBridgeUserIdFromMappings("auth-1", ["auth-1"], ["bridge-other"]), /BRIDGE_IDENTITY_CONFLICT/);
+  assert.throws(() => resolveBridgeUserIdFromMappings("auth-1", ["other"], []), /BRIDGE_IDENTITY_MISMATCH/);
+});
+test("direct auth profile resolution does not depend on the optional legacy link table", () => {
+  const source = readFileSync(new URL("./session.ts", import.meta.url), "utf8");
+  const direct = source.indexOf("if (direct[0]?.user_id)");
+  const linked = source.indexOf("from bridge_loop_identity_links");
+  assert.ok(direct >= 0 && linked > direct, "direct identity must return before querying legacy links");
 });

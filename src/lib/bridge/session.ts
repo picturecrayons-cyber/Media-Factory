@@ -8,6 +8,7 @@ import { PRODUCT_NAME, LEGAL_OWNER, PRODUCTION_DOMAIN } from "./canonical";
 import { integrationStatus } from "./env";
 import { assertNotDevUser } from "./guards";
 import { isMissingOrganizationSchemaError, workspaceFailureCode } from "./workspace-schema";
+import { resolveBridgeUserIdFromMappings } from "./identity-resolution";
 
 export type BridgeActor = Actor & {
   email: string;
@@ -71,8 +72,11 @@ async function loadActorByBridgeUserId(userId: string): Promise<BridgeActor | nu
        and o.status = 'active'
       where bp.user_id = ${userId}
         and bp.organization_id is not null
-      limit 1
+      limit 2
     `;
+    if (memberships.length > 1) {
+      throw new Error("BRIDGE_ORGANIZATION_MEMBERSHIP_AMBIGUOUS: multiple active organizations found");
+    }
     actor.organizationId = memberships[0]?.organization_id ?? null;
   } catch (error) {
     if (!isMissingOrganizationSchemaError(error)) throw error;
@@ -88,30 +92,27 @@ export async function resolveBridgeUserId(authUserId: string): Promise<string> {
   assertNotDevUser(authUserId);
   const sql = await getSql();
   const direct = await sql<{ user_id: string }>`
-    select user_id from bridge_profiles where user_id = ${authUserId} limit 1
+    select user_id from bridge_profiles where user_id = ${authUserId} limit 2
   `;
-  if (direct[0]?.user_id) return direct[0].user_id;
-
+  if (direct.length > 1) {
+    throw new Error("BRIDGE_IDENTITY_AMBIGUOUS: multiple direct profiles found");
+  }
+  // Preserve the direct-auth path when the optional legacy identity-link
+  // relation is absent. Only users without a direct profile need that relation.
+  if (direct[0]?.user_id) {
+    return resolveBridgeUserIdFromMappings(authUserId, [direct[0].user_id], []);
+  }
   const linked = await sql<{ bridge_user_id: string }>`
     select bridge_user_id
     from bridge_loop_identity_links
     where auth_user_id = ${authUserId}::uuid
-    limit 1
+    limit 2
   `;
-  if (linked[0]?.bridge_user_id) return linked[0].bridge_user_id;
-
-  // Legacy Bridge profiles may predate the Supabase identity-link table.
-  // Recover the mapping only when the authenticated Supabase user's verified
-  // email exactly matches the existing Bridge profile email.
-  const byEmail = await sql<{ bridge_user_id: string }>`
-    select bp.user_id as bridge_user_id
-    from bridge_profiles bp
-    join auth.users au on lower(au.email) = lower(bp.email)
-    where au.id = ${authUserId}::uuid
-      and au.email_confirmed_at is not null
-    limit 1
-  `;
-  return byEmail[0]?.bridge_user_id ?? authUserId;
+  return resolveBridgeUserIdFromMappings(
+    authUserId,
+    [],
+    linked.map((row) => row.bridge_user_id),
+  );
 }
 
 export async function loadActor(authUserId: string): Promise<BridgeActor | null> {
