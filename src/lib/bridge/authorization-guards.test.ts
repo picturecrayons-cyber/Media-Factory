@@ -17,3 +17,11 @@ test("internal role invitation blocks before database writes and mail", async ()
   assert.ok(guard < handler.indexOf("const sql = await getSql()"));
   assert.ok(guard < handler.indexOf("await mail("));
 });
+
+test("Buyer entitlement list and asset delivery do not trust user-only legacy grants", async () => {
+  const payments = await readFile(new URL("./payments.ts", import.meta.url), "utf8");
+  const assets = await readFile(new URL("./assets.ts", import.meta.url), "utf8");
+  assert.match(payments, /actor\.accountType === "buyer" && !actor\.internalRole\) return \{ entitlements: \[\] \}/);
+  assert.match(assets, /if \(unscopedBuyer\) return false/);
+  assert.match(assets, /actor\.accountType === "buyer" && !actor\.internalRole/);
+});
