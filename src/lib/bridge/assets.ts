@@ -133,6 +133,13 @@ export const beginAssetMultipart = createServerFn({ method: "POST" })
       partBaseUrl: started.partBaseUrl,
       expiresAt,
     });
+    await writeAudit({
+      actorUserId: context.userId,
+      action: "asset.multipart_started",
+      entityType: "bridge_asset",
+      entityId: asset.id,
+      metadata: { titleId: asset.title_id, byteSize: data.byteSize, expiresAt },
+    });
     return {
       assetId: asset.id,
       alreadyVerified: false as const,
@@ -157,6 +164,13 @@ export const commitAssetMultipart = createServerFn({ method: "POST" })
     });
     const { commitMultipartUpload } = await import("./oci-object-storage.server");
     await commitMultipartUpload(session.partBaseUrl, asset.s3_key);
+    await writeAudit({
+      actorUserId: context.userId,
+      action: "asset.multipart_committed",
+      entityType: "bridge_asset",
+      entityId: asset.id,
+      metadata: { expiresAt: session.expiresAt },
+    });
     return { committed: true };
   });
 
@@ -174,6 +188,12 @@ export const abortAssetMultipart = createServerFn({ method: "POST" })
     });
     const { abortMultipartUpload } = await import("./oci-object-storage.server");
     await abortMultipartUpload(session.partBaseUrl, asset.s3_key);
+    await writeAudit({
+      actorUserId: context.userId,
+      action: "asset.multipart_aborted",
+      entityType: "bridge_asset",
+      entityId: asset.id,
+    });
     return { aborted: true };
   });
 
