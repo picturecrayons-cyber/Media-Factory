@@ -12,7 +12,7 @@ export function NewSubmissionPanel() {
 
   if (path === "none") {
     return (
-      <div className="flex justify-end">
+      <div className="flex justify-start">
         <Button type="button" onClick={() => setPath("finished_film")} className="rounded-full px-6">
           + New submission
         </Button>
@@ -21,7 +21,7 @@ export function NewSubmissionPanel() {
   }
 
   return (
-    <div className="rounded-2xl border border-line bg-surface p-4 sm:p-5">
+    <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm font-medium">Choose submission type</p>
         <button
@@ -33,11 +33,11 @@ export function NewSubmissionPanel() {
         </button>
       </div>
 
-      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+      <div className="grid gap-3 sm:grid-cols-2">
         <button
           type="button"
           onClick={() => setPath("finished_film")}
-          className={`rounded-xl border p-4 text-left transition ${
+          className={`rounded-xl border p-5 text-left transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fg ${
             path === "finished_film" ? "border-fg bg-fg/5" : "border-line hover:border-line-strong"
           }`}
         >
@@ -51,7 +51,7 @@ export function NewSubmissionPanel() {
           <button
             type="button"
             onClick={() => setPath("story_concept")}
-            className={`rounded-xl border p-4 text-left transition ${
+            className={`rounded-xl border p-5 text-left transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fg ${
               path === "story_concept" ? "border-fg bg-fg/5" : "border-line hover:border-line-strong"
             }`}
           >
@@ -61,7 +61,7 @@ export function NewSubmissionPanel() {
             </p>
           </button>
         ) : (
-          <div className="rounded-xl border border-dashed border-line p-4 text-left opacity-60">
+          <div className="rounded-xl border border-dashed border-line p-5 text-left opacity-60">
             <p className="font-medium">Story / Concept</p>
             <p className="mt-1 text-xs leading-relaxed text-muted">
               Coming soon. Enable after migration + STORY_CONCEPT_ENABLED.
