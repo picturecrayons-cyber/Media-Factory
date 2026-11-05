@@ -14,6 +14,7 @@ test("GET publication readiness is read-only and exposes only master presence", 
   const handler = publication.slice(start, end);
   assert.doesNotMatch(handler, /\b(?:insert|update|delete)\s+(?:into\s+)?(?:bridge_loop_publications|loop_titles)\b/i);
   assert.match(handler, /has_master/);
+  assert.match(handler, /Publication window has expired/);
   assert.doesNotMatch(handler, /master_key\s*,|playback_path|playbackPath/);
 });
 

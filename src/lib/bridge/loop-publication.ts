@@ -257,6 +257,10 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
               },
             )
           : null;
+        const windowEndTime = r.window_end ? new Date(r.window_end).getTime() : null;
+        const invalidWindowEnd = r.window_end !== null && windowEndTime !== null && !Number.isFinite(windowEndTime);
+        const publicationExpired = windowEndTime !== null && Number.isFinite(windowEndTime) && windowEndTime < Date.now() && ["authorized", "live"].includes((r.authorization_status || "").toLowerCase());
+        const publicationUnavailable = invalidWindowEnd || publicationExpired;
         const isReady =
           Boolean(coveringGrant) &&
           [
@@ -267,7 +271,8 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
             "DELIVERED",
           ].includes(r.status) &&
           Boolean(r.has_master) &&
-          Boolean(r.poster_key);
+          Boolean(r.poster_key) &&
+          !publicationUnavailable;
 
         const blockers: string[] = [];
         if (!coveringGrant)
@@ -283,8 +288,9 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
         ) {
           blockers.push(`Rights status (${r.status}) is not cleared for distribution`);
         }
-        if (!r.master_key) blockers.push("QC master video is missing");
+        if (!r.has_master) blockers.push("QC master video is missing");
         if (!r.poster_key) blockers.push("Artwork/poster is missing");
+        if (publicationUnavailable) blockers.push(publicationExpired ? "Publication window has expired" : "Publication window is invalid");
 
         return {
           id: r.id,
@@ -292,7 +298,7 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
           name: r.name,
           bridgeStatus: r.status,
           language: r.language,
-          hasMaster: Boolean(r.master_key),
+          hasMaster: Boolean(r.has_master),
           hasPoster: Boolean(r.poster_key),
           ready: isReady,
           blockers,
@@ -300,16 +306,16 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
             ? {
                 destination: "CRAYONS_LOOP" as const,
                 loopTitleId: r.loop_title_id,
-                authorizationStatus: (r.authorization_status?.toUpperCase() ||
+                authorizationStatus: (publicationExpired ? "EXPIRED" : invalidWindowEnd ? "FAILED" : r.authorization_status?.toUpperCase() ||
                   "PENDING") as DistributionAuthorizationStatus,
                 territories: r.territories || ["IN"],
                 languages: r.languages || [r.language],
                 exploitationModels: r.exploitation_models || ["SVOD"],
                 windowStart: iso(r.window_start),
                 windowEnd: iso(r.window_end),
-                loopStatus: r.loop_status,
-                listed: Boolean(r.listed),
-                published: Boolean(r.published),
+                loopStatus: publicationUnavailable ? (publicationExpired ? "expired" : "unavailable") : r.loop_status,
+                listed: publicationUnavailable ? false : Boolean(r.listed),
+                published: publicationUnavailable ? false : Boolean(r.published),
               }
             : null,
         };
