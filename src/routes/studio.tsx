@@ -38,9 +38,9 @@ function Studio() {
             </section>
             <section aria-labelledby="finished-films-heading" className="space-y-4">
               <div className="flex flex-wrap items-end justify-between gap-3"><div><p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-accent">Your catalogue</p><h2 id="finished-films-heading" className="mt-1 text-2xl font-semibold tracking-tight">Finished films</h2><p className="mt-1 text-sm text-muted">Every film submission, from draft through delivery.</p></div><span className="inline-flex items-center gap-1 text-xs font-medium text-muted">Open a title to manage it <ArrowUpRight className="h-3.5 w-3.5" /></span></div>
-              <TitleList empty="No finished films yet. Start with a new submission." />
+              <div className="studio-title-list"><TitleList empty="No finished films yet. Start with a new submission." /></div>
             </section>
-            <MyStoryConcepts />
+            <div className="studio-story-list"><MyStoryConcepts /></div>
           </div>
         </BridgeShell>
       )}
