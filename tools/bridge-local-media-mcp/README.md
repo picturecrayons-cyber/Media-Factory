@@ -34,3 +34,20 @@ session and the owner approves the transfer.
 This initial connector is read-only. Bridge upload-session integration is a
 separate server-side feature: the local process must never receive OCI private
 keys or long-lived Bridge credentials.
+
+
+## Bridge upload-session security boundary
+
+The local MCP remains read-only and never receives OCI credentials. For browser-based
+Bridge multipart transfers, the Bridge server now issues a short-lived HMAC-signed
+session capability bound to the authenticated actor, asset row, object key, OCI
+multipart upload ID, and exact OCI part URL. Commit/abort requests must present
+that server-issued capability; callers cannot substitute an arbitrary multipart
+URL. Configure `BRIDGE_UPLOAD_SESSION_SECRET` as a server-only secret with at
+least 32 random bytes in an isolated non-production environment before exercising
+this path. Do not add it to VITE_ variables, the local MCP process, source control,
+or public client configuration.
+
+This code change does not create a database table or write schema. Durable job
+history, revocation across devices, and session recovery after browser storage loss
+still require a separately reviewed persistent-session design and DB approval.
