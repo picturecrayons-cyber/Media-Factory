@@ -232,6 +232,9 @@ export const listOwnEntitlements = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     const actor = await requireVerifiedActor(context.userId);
     assertPermission(actor, "entitlement.read_own");
+    // Legacy user-only entitlements are not legal-organization entitlements.
+    // Hide them from Buyer accounts until mandate + Buyer-org binding is persisted.
+    if (actor.accountType === "buyer" && !actor.internalRole) return { entitlements: [] };
     const sql = await getSql();
     try {
       const rows = await sql<{
