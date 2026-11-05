@@ -51,3 +51,9 @@ test("identity resolver denies duplicate, conflicting, and mismatched mappings",
   assert.throws(() => resolveBridgeUserIdFromMappings("auth-1", ["auth-1"], ["bridge-other"]), /BRIDGE_IDENTITY_CONFLICT/);
   assert.throws(() => resolveBridgeUserIdFromMappings("auth-1", ["other"], []), /BRIDGE_IDENTITY_MISMATCH/);
 });
+test("direct auth profile resolution does not depend on the optional legacy link table", () => {
+  const source = readFileSync(new URL("./session.ts", import.meta.url), "utf8");
+  const direct = source.indexOf("if (direct[0]?.user_id)");
+  const linked = source.indexOf("from bridge_loop_identity_links");
+  assert.ok(direct >= 0 && linked > direct, "direct identity must return before querying legacy links");
+});
