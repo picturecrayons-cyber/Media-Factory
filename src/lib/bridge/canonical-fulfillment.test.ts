@@ -81,6 +81,7 @@ function makeHarness(overrides: {
     markCalls: 0,
     insertCalls: 0,
     auditCalls: 0,
+    webhookCompleteCalls: 0,
     payment: overrides.payment ?? makePayment(),
     entitlement: overrides.prior ?? null as CanonicalEntitlement | null,
   };
@@ -104,6 +105,7 @@ function makeHarness(overrides: {
       state.entitlement = entitlement;
     },
     async writeFulfillmentAudit() { state.auditCalls++; },
+    async completeWebhookEvent() { state.webhookCompleteCalls++; },
   };
   return { state, capture, repository };
 }
@@ -160,6 +162,7 @@ test("fulfills once after server-verified capture and writes payment, entitlemen
   assert.equal(h.state.markCalls, 1);
   assert.equal(h.state.insertCalls, 1);
   assert.equal(h.state.auditCalls, 1);
+  assert.equal(h.state.webhookCompleteCalls, 0);
   if (result.status === "fulfilled") {
     assert.equal(result.entitlement.buyerOrganizationId, "buyer-org-a");
     assert.equal(result.entitlement.rightsGrantId, "rights-grant-a");
@@ -229,4 +232,18 @@ test("existing entitlement is idempotent only when it binds the same payment, bu
   assert.equal(h.state.markCalls, 0);
   assert.equal(h.state.insertCalls, 0);
   assert.equal(h.state.auditCalls, 0);
+});
+
+
+test("completes the webhook event inside the same transaction as fulfillment", async () => {
+  const h = makeHarness();
+  const result = await fulfillCapturedBridgePayment({
+    input: { orderId: "order-a", paymentId: "pay-a", webhookEventId: "event-a", scope },
+    verifier: { async fetchCapture() { return h.capture; } },
+    repository: h.repository,
+    createEntitlementId: () => "entitlement-a",
+  });
+  assert.equal(result.status, "fulfilled");
+  assert.equal(h.state.transactionCalls, 1);
+  assert.equal(h.state.webhookCompleteCalls, 1);
 });
