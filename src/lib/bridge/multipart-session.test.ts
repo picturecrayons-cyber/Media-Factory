@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { createHmac } from "node:crypto";
 import {
   assertMultipartSessionSigningReady,
   signMultipartSession,
@@ -48,10 +49,23 @@ test("multipart session token rejects tampering, expiry and wrong OCI region", (
     });
     const [payload, sig] = token.split(".");
     assert.throws(() => verifyMultipartSession(`${payload}.${sig.slice(0, -2)}aa`, expected), /signature/);
-    const expired = signMultipartSession({
-      ...expected, uploadId: "upload-123", partBaseUrl, expiresAt: Date.now() - 1,
-    });
-    assert.throws(() => verifyMultipartSession(expired, expected), /expired/);
+    // Construct a correctly signed but expired token: the production signer must
+    // refuse to issue expired capabilities, so the verifier test signs this fixture directly.
+    const expiredClaims = {
+      version: 1,
+      ...expected,
+      uploadId: "upload-123",
+      partBaseUrl,
+      expiresAt: Date.now() - 1,
+    };
+    const expiredPayload = Buffer.from(JSON.stringify(expiredClaims)).toString("base64url");
+    const expiredSignature = createHmac("sha256", validSecret)
+      .update(expiredPayload)
+      .digest("base64url");
+    assert.throws(
+      () => verifyMultipartSession(`${expiredPayload}.${expiredSignature}`, expected),
+      /expired/,
+    );
     process.env[regionKey] = "us-phoenix-1";
     assert.throws(() => verifyMultipartSession(token, expected), /expired or does not match/);
   });
