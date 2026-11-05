@@ -6,11 +6,13 @@ import { Button } from "@/components/ui/button";
 import { StatusChip } from "@/components/bridge/status-rail";
 import { createTitle, listTitles } from "@/lib/bridge/titles";
 import { BRIDGE_LOOP_LANES } from "@/lib/bridge/loop-lanes";
+import { listMyStoryConcepts } from "@/lib/bridge/story-concept-api";
+import { STORY_CONCEPT_ENABLED } from "@/lib/bridge/story-concept";
 
 export function TitleList({ empty, query = "" }: { empty: string; query?: string }) {
   const titlesQ = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles() });
   const titles = (titlesQ.data?.titles ?? []).filter((t) => !query || `${t.name} ${t.language} ${t.year ?? ""}`.toLowerCase().includes(query.toLowerCase()));
-  if (titlesQ.isPending) return <p className="text-sm text-muted">Loading titles…</p>;
+  if (titlesQ.isPending || (excludeStoryConcepts && STORY_CONCEPT_ENABLED && conceptsQ.isPending)) return <p className="text-sm text-muted">Loading titles…</p>;
   if (titlesQ.isError) {
     return (
       <div role="alert" className="flex flex-wrap items-center gap-3 text-sm text-accent">
