@@ -94,6 +94,14 @@ export async function resolveBridgeUserId(authUserId: string): Promise<string> {
   const direct = await sql<{ user_id: string }>`
     select user_id from bridge_profiles where user_id = ${authUserId} limit 2
   `;
+  if (direct.length > 1) {
+    throw new Error("BRIDGE_IDENTITY_AMBIGUOUS: multiple direct profiles found");
+  }
+  // Preserve the direct-auth path when the optional legacy identity-link
+  // relation is absent. Only users without a direct profile need that relation.
+  if (direct[0]?.user_id) {
+    return resolveBridgeUserIdFromMappings(authUserId, [direct[0].user_id], []);
+  }
   const linked = await sql<{ bridge_user_id: string }>`
     select bridge_user_id
     from bridge_loop_identity_links
@@ -102,7 +110,7 @@ export async function resolveBridgeUserId(authUserId: string): Promise<string> {
   `;
   return resolveBridgeUserIdFromMappings(
     authUserId,
-    direct.map((row) => row.user_id),
+    [],
     linked.map((row) => row.bridge_user_id),
   );
 }
