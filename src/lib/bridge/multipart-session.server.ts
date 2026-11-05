@@ -43,7 +43,7 @@ export function signMultipartSession(
   claims: Omit<MultipartSessionClaims, "version">,
 ): string {
   const region = bridgeEnv.ociRegion();
-  if (!region || !multipartTargetAllowed(claims.partBaseUrl, region, claims.objectKey)) {
+  if (!region || !multipartTargetAllowed(claims.partBaseUrl, region, claims.objectKey, claims.uploadId)) {
     throw new Error("OCI multipart session target is invalid");
   }
   if (
@@ -93,7 +93,7 @@ export function verifyMultipartSession(
     !Number.isSafeInteger(claims.expiresAt) ||
     claims.expiresAt <= Date.now() ||
     !region ||
-    !multipartTargetAllowed(claims.partBaseUrl, region, expected.objectKey)
+    !multipartTargetAllowed(claims.partBaseUrl, region, expected.objectKey, claims.uploadId)
   ) {
     throw new Error("Multipart session is expired or does not match this asset");
   }
