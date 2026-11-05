@@ -11,6 +11,7 @@ import { writeAudit } from "./audit";
 import { assertNotDevUser } from "./guards";
 import { persistVerifiedAsset } from "./asset-confirmation";
 import { downloadDecision } from "./delivery-policy";
+import { assertBuyerDeliveryBlocked } from "./authorization-guards";
 import { uploadUrlLifetimeSeconds } from "./upload-url-lifetime";
 import { validateOttIngestFile, type OttIngestKind } from "./ott-ingest-spec";
 
@@ -263,6 +264,7 @@ export const requestAssetDownload = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
+    assertBuyerDeliveryBlocked(actor);
     assertPermission(actor, "asset.sign_download");
     const sql = await getSql();
     const rows = await sql<{
