@@ -84,7 +84,7 @@ async function loadActorByBridgeUserId(userId: string): Promise<BridgeActor | nu
   return actor;
 }
 
-export async function resolveBridgeUserId(authUserId: string): Promise<string> {
+export async function resolveBridgeUserId(authUserId: string): Promise<string | null> {
   assertNotDevUser(authUserId);
   const sql = await getSql();
   const direct = await sql<{ user_id: string }>`
@@ -98,24 +98,15 @@ export async function resolveBridgeUserId(authUserId: string): Promise<string> {
     where auth_user_id = ${authUserId}::uuid
     limit 1
   `;
-  if (linked[0]?.bridge_user_id) return linked[0].bridge_user_id;
-
-  // Legacy Bridge profiles may predate the Supabase identity-link table.
-  // Recover the mapping only when the authenticated Supabase user's verified
-  // email exactly matches the existing Bridge profile email.
-  const byEmail = await sql<{ bridge_user_id: string }>`
-    select bp.user_id as bridge_user_id
-    from bridge_profiles bp
-    join auth.users au on lower(au.email) = lower(bp.email)
-    where au.id = ${authUserId}::uuid
-      and au.email_confirmed_at is not null
-    limit 1
-  `;
-  return byEmail[0]?.bridge_user_id ?? authUserId;
+  // Identity is accepted only through a direct immutable subject match or an
+  // explicit identity-link record. Email equality is not an identity proof.
+  // Missing/ambiguous identity denies; never return the raw Auth subject.
+  return linked[0]?.bridge_user_id ?? null;
 }
 
 export async function loadActor(authUserId: string): Promise<BridgeActor | null> {
   const bridgeUserId = await resolveBridgeUserId(authUserId);
+  if (!bridgeUserId) return null;
   return loadActorByBridgeUserId(bridgeUserId);
 }
 
