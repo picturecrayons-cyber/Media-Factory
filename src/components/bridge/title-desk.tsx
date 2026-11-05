@@ -13,6 +13,7 @@ export function TitleList({ empty, query = "" }: { empty: string; query?: string
   const titlesQ = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles() });
   const titles = (titlesQ.data?.titles ?? []).filter((t) => !query || `${t.name} ${t.language} ${t.year ?? ""}`.toLowerCase().includes(query.toLowerCase()));
   if (titlesQ.isPending || (excludeStoryConcepts && STORY_CONCEPT_ENABLED && conceptsQ.isPending)) return <p className="text-sm text-muted">Loading titles…</p>;
+  if (excludeStoryConcepts && STORY_CONCEPT_ENABLED && conceptsQ.isError) return <div role="alert" className="flex flex-wrap items-center gap-3 text-sm text-accent"><p>Could not separate story concepts from finished films.</p><Button type="button" onClick={() => void conceptsQ.refetch()}>Retry</Button></div>;
   if (titlesQ.isError) {
     return (
       <div role="alert" className="flex flex-wrap items-center gap-3 text-sm text-accent">
