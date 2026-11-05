@@ -14,7 +14,7 @@ from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
-ROOT = Path(os.environ.get("BRIDGE_MEDIA_ROOT", r"F:\\new 17 - june")).resolve(strict=False)
+ROOT = Path(os.environ.get("BRIDGE_MEDIA_ROOT", r"F:\new 17 - june")).resolve(strict=False)
 ALLOWED_SUFFIXES = {".mov", ".mp4", ".mxf", ".m4v", ".mkv"}
 MAX_LIST_ITEMS = 200
 mcp = FastMCP("crayons-bridge-local-media")
