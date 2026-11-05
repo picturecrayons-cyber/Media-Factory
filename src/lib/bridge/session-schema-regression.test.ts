@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { resolveBridgeUserIdFromMappings } from "./session";
+import { resolveBridgeUserIdFromMappings } from "./identity-resolution";
 import { readFileSync } from "node:fs";
 
 test("workspace profile query does not require organization tables or organization_id", () => {
