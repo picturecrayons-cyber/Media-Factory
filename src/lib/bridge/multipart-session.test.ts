@@ -32,6 +32,9 @@ test("multipart session token binds actor, asset, object key and exact OCI targe
     const claims = verifyMultipartSession(token, expected);
     assert.equal(claims.uploadId, "upload-123");
     assert.equal(claims.partBaseUrl, partBaseUrl);
+    assert.throws(() => signMultipartSession({
+      ...expected, uploadId: "different-upload", partBaseUrl, expiresAt: Date.now() + 60_000,
+    }), /target is invalid/);
     assert.throws(() => verifyMultipartSession(token, { ...expected, actorUserId: "other" }), /does not match/);
     assert.throws(() => verifyMultipartSession(token, { ...expected, assetId: "other-asset" }), /does not match/);
     assert.throws(() => verifyMultipartSession(token, { ...expected, objectKey: "other/key" }), /does not match/);
