@@ -49,6 +49,11 @@ function projectRefFromDatabaseUrl(value: string | undefined): string | null {
 export const getPreviewDatabaseIdentity = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
+    // This probe must never execute against Production or a local environment.
+    if (process.env.VERCEL_ENV !== "preview") {
+      throw new Error("Preview database identity checks are disabled outside Vercel Preview.");
+    }
+
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
     if (!canAccessDashboard(actor)) throw new Error("Forbidden");
