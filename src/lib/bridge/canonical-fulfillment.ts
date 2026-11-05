@@ -142,6 +142,8 @@ export function authorizeBridgeLicenseScope(
   if (
     !nonBlank(grant.rightsGrantId) ||
     !nonBlank(grant.mandateId) ||
+    !nonBlank(grant.rightsPrincipalOrganizationId) ||
+    !nonBlank(grant.mandateStatus) ||
     normalized(grant.mandateStatus) !== "ACTIVE"
   ) return deny("MANDATE_INVALID");
 
@@ -160,6 +162,7 @@ export function authorizeBridgeLicenseScope(
     chainIds[chainIds.length - 1] !== request.buyerOrganizationId ||
     chain.some((link, index) =>
       !link ||
+      !nonBlank(link.status) ||
       normalized(link.status) !== "ACTIVE" ||
       typeof link.canDelegate !== "boolean" ||
       (index < chain.length - 1 && link.canDelegate !== true) ||
@@ -172,6 +175,7 @@ export function authorizeBridgeLicenseScope(
   }
   if (
     grant.revokedAt !== null ||
+    !nonBlank(grant.authorizationStatus) ||
     !["AUTHORIZED", "ACTIVE"].includes(normalized(grant.authorizationStatus))
   ) return deny("RIGHTS_NOT_ACTIVE");
 
@@ -301,9 +305,11 @@ export async function fulfillCapturedBridgePayment<Tx>(opts: {
   if (
     capture.orderId !== input.orderId ||
     capture.paymentId !== input.paymentId ||
+    !nonBlank(capture.status) ||
     normalized(capture.status) !== "CAPTURED" ||
     !Number.isSafeInteger(capture.amountPaise) ||
     capture.amountPaise <= 0 ||
+    !nonBlank(capture.currency) ||
     normalized(capture.currency) !== "INR"
   ) throw new Error("BRIDGE_PROVIDER_CAPTURE_MISMATCH");
 
@@ -312,7 +318,9 @@ export async function fulfillCapturedBridgePayment<Tx>(opts: {
     if (!payment) throw new Error("BRIDGE_PAYMENT_ORDER_NOT_FOUND");
     if (
       payment.providerOrderId !== capture.orderId ||
+      !Number.isSafeInteger(payment.amountPaise) ||
       payment.amountPaise !== capture.amountPaise ||
+      !nonBlank(payment.currency) ||
       normalized(payment.currency) !== normalized(capture.currency) ||
       payment.userId !== (input.actorUserId ?? payment.userId)
     ) throw new Error("BRIDGE_PAYMENT_ORDER_MISMATCH");
@@ -324,8 +332,12 @@ export async function fulfillCapturedBridgePayment<Tx>(opts: {
     if (prior) {
       if (
         prior.paymentRecordId !== payment.id ||
+        prior.buyerUserId !== payment.userId ||
         prior.buyerOrganizationId !== payment.buyerOrganizationId ||
-        prior.titleId !== payment.titleId
+        prior.titleId !== payment.titleId ||
+        (prior.packageId ?? null) !== (payment.packageId ?? null) ||
+        prior.rightsGrantId !== payment.rightsGrantId ||
+        prior.mandateId !== payment.mandateId
       ) throw new Error("BRIDGE_ENTITLEMENT_IDEMPOTENCY_CONFLICT");
       return { status: "duplicate", entitlement: prior };
     }
