@@ -113,6 +113,10 @@ export const beginAssetMultipart = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     const asset = await openUploadAsset(context.userId, data.assetId);
     if (asset.byte_size != null) return { assetId: asset.id, alreadyVerified: true as const };
+    const { assertMultipartSessionSigningReady, signMultipartSession } = await import("./multipart-session.server");
+    // Check the signing key before creating an OCI multipart upload; otherwise a missing
+    // app secret could leave an unmanageable remote multipart upload behind.
+    assertMultipartSessionSigningReady();
     const { beginMultipartUpload } = await import("./oci-object-storage.server");
     const expiresIn = uploadUrlLifetimeSeconds(data.byteSize);
     const started = await beginMultipartUpload({
@@ -120,33 +124,56 @@ export const beginAssetMultipart = createServerFn({ method: "POST" })
       contentType: asset.content_type || "application/octet-stream",
       expiresIn,
     });
+    const expiresAt = Date.now() + expiresIn * 1000;
+    const sessionToken = signMultipartSession({
+      actorUserId: context.userId,
+      assetId: asset.id,
+      objectKey: asset.s3_key,
+      uploadId: started.uploadId,
+      partBaseUrl: started.partBaseUrl,
+      expiresAt,
+    });
     return {
       assetId: asset.id,
       alreadyVerified: false as const,
       uploadId: started.uploadId,
       partBaseUrl: started.partBaseUrl,
-      expiresAt: Date.now() + expiresIn * 1000,
+      sessionToken,
+      expiresAt,
     };
   });
 
 export const commitAssetMultipart = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .validator(z.object({ assetId: z.string().min(8), partBaseUrl: z.string().url().max(2000) }))
+  .validator(z.object({ assetId: z.string().min(8), sessionToken: z.string().min(32).max(12000) }))
   .handler(async ({ context, data }) => {
     const asset = await openUploadAsset(context.userId, data.assetId);
     if (asset.byte_size != null) return { committed: true };
+    const { verifyMultipartSession } = await import("./multipart-session.server");
+    const session = verifyMultipartSession(data.sessionToken, {
+      actorUserId: context.userId,
+      assetId: asset.id,
+      objectKey: asset.s3_key,
+    });
     const { commitMultipartUpload } = await import("./oci-object-storage.server");
-    await commitMultipartUpload(data.partBaseUrl, asset.s3_key);
+    await commitMultipartUpload(session.partBaseUrl, asset.s3_key);
     return { committed: true };
   });
 
 export const abortAssetMultipart = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .validator(z.object({ assetId: z.string().min(8), partBaseUrl: z.string().url().max(2000) }))
+  .validator(z.object({ assetId: z.string().min(8), sessionToken: z.string().min(32).max(12000) }))
   .handler(async ({ context, data }) => {
     const asset = await openUploadAsset(context.userId, data.assetId);
+    if (asset.byte_size != null) throw new Error("A verified asset cannot be aborted");
+    const { verifyMultipartSession } = await import("./multipart-session.server");
+    const session = verifyMultipartSession(data.sessionToken, {
+      actorUserId: context.userId,
+      assetId: asset.id,
+      objectKey: asset.s3_key,
+    });
     const { abortMultipartUpload } = await import("./oci-object-storage.server");
-    await abortMultipartUpload(data.partBaseUrl, asset.s3_key);
+    await abortMultipartUpload(session.partBaseUrl, asset.s3_key);
     return { aborted: true };
   });
 
