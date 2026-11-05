@@ -16,7 +16,9 @@ import { validateOttIngestFile, type OttIngestKind } from "./ott-ingest-spec";
 
 const UPLOADABLE: ReadonlySet<string> = new Set(["DRAFT", "UPLOADING", "PREPARING"]);
 
-async function hasLicenseEntitlement(userId: string, titleId: string): Promise<boolean> {
+async function hasLicenseEntitlement(userId: string, titleId: string, unscopedBuyer: boolean): Promise<boolean> {
+  // A user-level legacy grant cannot prove legal Buyer organization or mandate scope.
+  if (unscopedBuyer) return false;
   const sql = await getSql();
   const rows = await sql<{ n: number }>`
     select count(*)::int as n from bridge_entitlements
@@ -278,7 +280,7 @@ export const requestAssetDownload = createServerFn({ method: "POST" })
     if (!asset) throw new Error("Not found");
     const title = await loadTitle(asset.title_id);
     if (!title || !canReadTitle(actor, title)) throw new Error("Not found");
-    const entitled = await hasLicenseEntitlement(actor.userId, title.id);
+    const entitled = await hasLicenseEntitlement(actor.userId, title.id, actor.accountType === "buyer" && !actor.internalRole);
     const decision = downloadDecision({
       kind: asset.kind,
       actorIsOwner: title.ownerUserId === actor.userId,
