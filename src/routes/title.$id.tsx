@@ -481,12 +481,13 @@ function FilesPanel({
       assertAttemptActive();
       if (started.alreadyVerified) return signed.assetId;
       session = {
-        version: 1,
+        version: 2,
         titleId,
         kind,
         assetId: signed.assetId,
         uploadId: started.uploadId,
         partBaseUrl: started.partBaseUrl,
+        sessionToken: started.sessionToken,
         fileName: file.name,
         fileSize: file.size,
         lastModified: file.lastModified,
@@ -544,7 +545,7 @@ function FilesPanel({
       }
       assertAttemptActive();
       await withTimeout(
-        commitAssetMultipart({ data: { assetId: session.assetId, partBaseUrl: session.partBaseUrl } }),
+        commitAssetMultipart({ data: { assetId: session.assetId, sessionToken: session.sessionToken } }),
         30_000,
         "Multipart commit",
       );
@@ -717,7 +718,7 @@ function FilesPanel({
                 activeMultipart.current = null;
                 if (session) {
                   clearUploadSession(session.titleId, session.kind);
-                  void abortAssetMultipart({ data: { assetId: session.assetId, partBaseUrl: session.partBaseUrl } }).catch(() => undefined);
+                  void abortAssetMultipart({ data: { assetId: session.assetId, sessionToken: session.sessionToken } }).catch(() => undefined);
                 }
                 setProgress(null);
                 announce("Upload cancelled. Completed parts from this attempt were discarded.", "error", true);
@@ -826,7 +827,7 @@ function readUploadSession(titleId: string, kind: string): UploadSession | null 
     const raw = localStorage.getItem(sessionStorageKey(titleId, kind));
     if (!raw) return null;
     const session = JSON.parse(raw) as UploadSession;
-    if (session.version !== 1 || session.titleId !== titleId || session.kind !== kind || !Array.isArray(session.completedParts)) return null;
+    if (session.version !== 2 || session.titleId !== titleId || session.kind !== kind || typeof session.sessionToken !== "string" || !Array.isArray(session.completedParts)) return null;
     if (session.expiresAt <= Date.now()) {
       localStorage.removeItem(sessionStorageKey(titleId, kind));
       return null;
