@@ -18,7 +18,7 @@ import {
 } from "@/lib/bridge/loop-publication";
 import { INTERNAL_ROLES } from "@/lib/bridge/types";
 import { hasPermission } from "@/lib/bridge/rbac";
-import { getPreviewDatabaseIdentity } from "@/lib/bridge/preview-db-identity.server";
+import { getPreviewDatabaseIdentity } from "@/lib/bridge/preview-db-identity";
 
 export const Route = createFileRoute("/internal")({ component: Internal });
 
