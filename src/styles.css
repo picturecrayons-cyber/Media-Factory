@@ -46,9 +46,9 @@
   .studio-title-list > ul > li > a > div:first-child { min-width: 0; padding-right: .5rem; }
   .studio-title-list > ul > li > a > div:first-child p:first-child { font-weight: 650; line-height: 1.35; }
   .studio-title-list > ul > li > a > div:first-child p:last-child { margin-top: .35rem; font-size: .75rem; }
-  .studio-story-list > ul { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: .85rem; border: 0; }
-  .studio-story-list > ul > li { overflow: hidden; border: 1px solid var(--color-line); border-radius: 1rem; background: white; box-shadow: 0 2px 8px rgba(15, 35, 55, .04); }
-  .studio-story-list > ul > li > a { min-height: 112px; padding: 1.1rem; }
+  .studio-story-list section > ul { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: .85rem; border: 0; }
+  .studio-story-list section > ul > li { overflow: hidden; border: 1px solid var(--color-line); border-radius: 1rem; background: white; box-shadow: 0 2px 8px rgba(15, 35, 55, .04); }
+  .studio-story-list section > ul > li > a { min-height: 112px; padding: 1.1rem; }
 }
 
 .font-display { font-family: var(--font-display); }
