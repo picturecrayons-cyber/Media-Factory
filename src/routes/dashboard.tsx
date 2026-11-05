@@ -42,11 +42,7 @@ const ACTION_GUIDANCE: Record<string, string> = {
 };
 const PAGE_SIZE = 8;
 
-const ACTION_GUIDANCE: Record<string, string> = {
-  QC_REVIEW: "QC review is pending",
-  RIGHTS_REVIEW: "Rights review is pending",
-  LICENSING_READY: "Licensing decision is pending",
-};
+
 
 function DashboardBody() {
   const [search, setSearch] = useState("");
