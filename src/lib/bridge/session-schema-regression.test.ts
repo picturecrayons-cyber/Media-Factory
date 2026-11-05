@@ -29,3 +29,13 @@ test("Buyer organization authority is derived from membership, not organization 
   assert.match(lookup, /o\.status = 'active'/);
   assert.doesNotMatch(lookup, /organization_name/);
 });
+
+test("Bridge identity resolution denies email-only matches and raw Auth-subject fallback", () => {
+  const source = readFileSync(new URL("./session.ts", import.meta.url), "utf8");
+  const resolver = source.slice(source.indexOf("export async function resolveBridgeUserId"), source.indexOf("export async function loadActor"));
+  assert.match(resolver, /Promise<string \| null>/);
+  assert.match(resolver, /bridge_loop_identity_links/);
+  assert.doesNotMatch(resolver, /auth\.users|email_confirmed_at|lower\(au\.email\)/);
+  assert.match(resolver, /linked\[0\]\?\.bridge_user_id \?\? null/);
+  assert.match(source, /if \(!bridgeUserId\) return null/);
+});
