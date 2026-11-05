@@ -17,3 +17,13 @@ export function assertBuyerLicenseOrderBlocked(actor: BuyerOrderActor): void {
     );
   }
 }
+
+/**
+ * Internal-role invitations require a durable two-person approval record.
+ * Until that workflow and its schema exist, no single-actor invite may be sent.
+ */
+export function assertInternalRoleGrantBlocked(): never {
+  throw new Error(
+    "BRIDGE_INTERNAL_ROLE_GRANT_BLOCKED: dual-control approval workflow is not implemented",
+  );
+}
