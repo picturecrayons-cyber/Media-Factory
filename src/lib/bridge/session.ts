@@ -39,6 +39,30 @@ function mapRow(r: BridgeProfileRow): BridgeActor {
   };
 }
 
+/**
+ * Resolve only explicit identity mappings. Email similarity and a raw auth
+ * subject are not Bridge identity fallbacks.
+ */
+export function resolveBridgeUserIdFromMappings(
+  authUserId: string,
+  directUserIds: readonly string[],
+  linkedBridgeUserIds: readonly string[],
+): string {
+  if (directUserIds.length > 1 || linkedBridgeUserIds.length > 1) {
+    throw new Error("BRIDGE_IDENTITY_AMBIGUOUS: multiple identity mappings found");
+  }
+  const direct = directUserIds[0];
+  const linked = linkedBridgeUserIds[0];
+  if (direct && direct !== authUserId) {
+    throw new Error("BRIDGE_IDENTITY_MISMATCH: direct profile does not match auth subject");
+  }
+  if (direct && linked && direct !== linked) {
+    throw new Error("BRIDGE_IDENTITY_CONFLICT: direct and linked identities disagree");
+  }
+  const resolved = direct ?? linked;
+  if (!resolved) throw new Error("BRIDGE_IDENTITY_UNRESOLVED: explicit Bridge identity link required");
+  return resolved;
+}
 async function loadActorByBridgeUserId(userId: string): Promise<BridgeActor | null> {
   const sql = await getSql();
 
@@ -71,8 +95,11 @@ async function loadActorByBridgeUserId(userId: string): Promise<BridgeActor | nu
        and o.status = 'active'
       where bp.user_id = ${userId}
         and bp.organization_id is not null
-      limit 1
+      limit 2
     `;
+    if (memberships.length > 1) {
+      throw new Error("BRIDGE_ORGANIZATION_MEMBERSHIP_AMBIGUOUS: multiple active organizations found");
+    }
     actor.organizationId = memberships[0]?.organization_id ?? null;
   } catch (error) {
     if (!isMissingOrganizationSchemaError(error)) throw error;
@@ -88,30 +115,19 @@ export async function resolveBridgeUserId(authUserId: string): Promise<string> {
   assertNotDevUser(authUserId);
   const sql = await getSql();
   const direct = await sql<{ user_id: string }>`
-    select user_id from bridge_profiles where user_id = ${authUserId} limit 1
+    select user_id from bridge_profiles where user_id = ${authUserId} limit 2
   `;
-  if (direct[0]?.user_id) return direct[0].user_id;
-
   const linked = await sql<{ bridge_user_id: string }>`
     select bridge_user_id
     from bridge_loop_identity_links
     where auth_user_id = ${authUserId}::uuid
-    limit 1
+    limit 2
   `;
-  if (linked[0]?.bridge_user_id) return linked[0].bridge_user_id;
-
-  // Legacy Bridge profiles may predate the Supabase identity-link table.
-  // Recover the mapping only when the authenticated Supabase user's verified
-  // email exactly matches the existing Bridge profile email.
-  const byEmail = await sql<{ bridge_user_id: string }>`
-    select bp.user_id as bridge_user_id
-    from bridge_profiles bp
-    join auth.users au on lower(au.email) = lower(bp.email)
-    where au.id = ${authUserId}::uuid
-      and au.email_confirmed_at is not null
-    limit 1
-  `;
-  return byEmail[0]?.bridge_user_id ?? authUserId;
+  return resolveBridgeUserIdFromMappings(
+    authUserId,
+    direct.map((row) => row.user_id),
+    linked.map((row) => row.bridge_user_id),
+  );
 }
 
 export async function loadActor(authUserId: string): Promise<BridgeActor | null> {
