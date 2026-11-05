@@ -258,8 +258,14 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
             )
           : null;
         const windowEndTime = r.window_end ? new Date(r.window_end).getTime() : null;
-        const invalidWindowEnd = r.window_end !== null && windowEndTime !== null && !Number.isFinite(windowEndTime);
-        const publicationExpired = windowEndTime !== null && Number.isFinite(windowEndTime) && windowEndTime < Date.now() && ["authorized", "live"].includes((r.authorization_status || "").toLowerCase());
+        const invalidWindowEnd =
+          r.window_end !== null && windowEndTime !== null && !Number.isFinite(windowEndTime);
+        const publicationExpired =
+          r.authorization_status?.toLowerCase() === "expired" ||
+          (windowEndTime !== null &&
+            Number.isFinite(windowEndTime) &&
+            windowEndTime < Date.now() &&
+            ["authorized", "live"].includes((r.authorization_status || "").toLowerCase()));
         const publicationUnavailable = invalidWindowEnd || publicationExpired;
         const isReady =
           Boolean(coveringGrant) &&
@@ -290,7 +296,11 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
         }
         if (!r.has_master) blockers.push("QC master video is missing");
         if (!r.poster_key) blockers.push("Artwork/poster is missing");
-        if (publicationUnavailable) blockers.push(publicationExpired ? "Publication window has expired" : "Publication window is invalid");
+        if (publicationUnavailable) {
+          blockers.push(
+            publicationExpired ? "Publication window has expired" : "Publication window is invalid",
+          );
+        }
 
         return {
           id: r.id,
@@ -306,8 +316,11 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
             ? {
                 destination: "CRAYONS_LOOP" as const,
                 loopTitleId: r.loop_title_id,
-                authorizationStatus: (publicationExpired ? "EXPIRED" : invalidWindowEnd ? "FAILED" : r.authorization_status?.toUpperCase() ||
-                  "PENDING") as DistributionAuthorizationStatus,
+                authorizationStatus: (publicationExpired
+                  ? "EXPIRED"
+                  : invalidWindowEnd
+                    ? "FAILED"
+                    : r.authorization_status?.toUpperCase() || "PENDING") as DistributionAuthorizationStatus,
                 territories: r.territories || ["IN"],
                 languages: r.languages || [r.language],
                 exploitationModels: r.exploitation_models || ["SVOD"],
