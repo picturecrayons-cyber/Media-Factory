@@ -1,8 +1,7 @@
 """Read-only local media MCP for the Bridge Media Factory.
 
 Run with: python server.py
-Transport: stdio. The server is intentionally local-only and cannot upload,
-delete, rename, modify, or execute arbitrary commands against source media.
+Transport: stdio. No upload, write, delete, rename, or arbitrary shell tools.
 """
 from __future__ import annotations
 
@@ -22,21 +21,29 @@ mcp = FastMCP("crayons-bridge-local-media")
 
 
 def safe_path(relative_path: str = ".") -> Path:
-    candidate = (ROOT / relative_path).resolve(strict=True)
+    # Reject traversal and symlinks BEFORE resolving. Resolving first would hide
+    # the symlink itself and make a later is_symlink() check ineffective.
+    relative = Path(relative_path)
+    if relative.is_absolute() or any(part == ".." for part in relative.parts):
+        raise ValueError("Only relative paths inside the configured media root are permitted")
+    current = ROOT
+    for part in relative.parts:
+        if part in ("", "."):
+            continue
+        current = current / part
+        if current.is_symlink():
+            raise ValueError("Symlinks are not permitted in the media root")
+    candidate = current.resolve(strict=True)
     try:
         candidate.relative_to(ROOT)
     except ValueError as exc:
         raise ValueError("Path is outside the configured Bridge media root") from exc
-    if candidate.is_symlink():
-        raise ValueError("Symlinks are not permitted in the media root")
     return candidate
 
 
 def run_probe(path: Path) -> dict[str, Any]:
-    command = [
-        "ffprobe", "-v", "error", "-print_format", "json",
-        "-show_format", "-show_streams", str(path),
-    ]
+    command = ["ffprobe", "-v", "error", "-print_format", "json",
+               "-show_format", "-show_streams", str(path)]
     completed = subprocess.run(command, capture_output=True, text=True, check=False)
     if completed.returncode:
         raise RuntimeError(completed.stderr[-2000:] or "ffprobe failed")
