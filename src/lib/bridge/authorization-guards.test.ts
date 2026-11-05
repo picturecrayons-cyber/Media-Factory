@@ -25,3 +25,13 @@ test("Buyer entitlement list and asset delivery do not trust user-only legacy gr
   assert.match(assets, /if \(unscopedBuyer\) return false/);
   assert.match(assets, /actor\.accountType === "buyer" && !actor\.internalRole/);
 });
+
+test("Buyer checkout configuration is blocked before Razorpay credentials are read", async () => {
+  const payments = await readFile(new URL("./payments.ts", import.meta.url), "utf8");
+  const start = payments.indexOf("export const getCheckoutConfig");
+  const end = payments.indexOf("export const createLicenseOrder", start);
+  const handler = payments.slice(start, end);
+  const guard = handler.indexOf("assertBuyerLicenseOrderBlocked(actor)");
+  assert.ok(guard >= 0);
+  assert.ok(guard < handler.indexOf("requireRazorpayKeys()"));
+});
