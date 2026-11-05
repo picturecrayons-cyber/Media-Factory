@@ -25,87 +25,39 @@
 }
 
 @layer base {
-  html, body, #app {
-    min-height: 100%;
-    background: #fff;
-    color: var(--color-fg);
-  }
-
-  html {
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
-  }
-
-  body {
-    font-family: var(--font-sans);
-  }
-
-  button:not(:disabled), [role="button"]:not(:disabled) {
-    cursor: pointer;
-  }
-
-  ::selection {
-    background: #bcefff;
-    color: #123;
-  }
+  html, body, #app { min-height: 100%; background: #fff; color: var(--color-fg); }
+  html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+  body { font-family: var(--font-sans); }
+  button:not(:disabled), [role="button"]:not(:disabled) { cursor: pointer; }
+  ::selection { background: #bcefff; color: #123; }
 }
 
 @layer components {
-  .bridge-nav-item {
-    display: inline-flex;
-    align-items: center;
-    padding: .35rem .65rem;
-    color: var(--color-muted);
-    font-size: .9rem;
-    font-weight: 600;
-    transition: color .15s ease;
-  }
-
-  .bridge-nav-item:hover {
-    color: var(--color-fg);
-  }
-
-  .bridge-nav-active {
-    color: var(--color-accent-strong);
-  }
-
-  .bridge-nav-active::after {
-    content: "";
-    width: 4px;
-    height: 4px;
-    margin-left: .45rem;
-    border-radius: 999px;
-    background: var(--color-accent);
-  }
+  .bridge-nav-item { display: inline-flex; align-items: center; padding: .35rem .65rem; color: var(--color-muted); font-size: .9rem; font-weight: 600; transition: color .15s ease; }
+  .bridge-nav-item:hover { color: var(--color-fg); background: #e7f7fd; }
+  .bridge-nav-active { color: var(--color-accent-strong); }
+  .bridge-nav-active::after { content: ""; width: 4px; height: 4px; margin-left: .45rem; border-radius: 999px; background: var(--color-accent); }
+  .bridge-panel, .bridge-stat { background: #fff; border: 1px solid #d7e7f2; box-shadow: 0 12px 32px rgba(8, 80, 120, .08); }
+  .studio-title-list > ul { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: 1rem; border: 0; border-radius: 0; }
+  .studio-title-list > ul > li { overflow: hidden; border: 1px solid var(--color-line); border-radius: 1rem; background: white; box-shadow: 0 2px 8px rgba(15, 35, 55, .04); transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease; }
+  .studio-title-list > ul > li:hover { transform: translateY(-2px); border-color: #9ccbd8; box-shadow: 0 12px 28px rgba(15, 35, 55, .09); }
+  .studio-title-list > ul > li > a { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; min-height: 170px; padding: 1rem; }
+  .studio-title-list > ul > li > a::before { content: ""; grid-column: 1 / -1; height: 76px; margin-bottom: .25rem; border-radius: .75rem; background: radial-gradient(circle at 82% 20%, rgba(215,184,120,.38), transparent 26%), linear-gradient(125deg, #142536, #263d50 62%, #102030); }
+  .studio-title-list > ul > li > a > div:first-child { min-width: 0; padding-right: .5rem; }
+  .studio-title-list > ul > li > a > div:first-child p:first-child { font-weight: 650; line-height: 1.35; }
+  .studio-title-list > ul > li > a > div:first-child p:last-child { margin-top: .35rem; font-size: .75rem; }
+  .studio-story-list > ul { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: .85rem; border: 0; }
+  .studio-story-list > ul > li { overflow: hidden; border: 1px solid var(--color-line); border-radius: 1rem; background: white; box-shadow: 0 2px 8px rgba(15, 35, 55, .04); }
+  .studio-story-list > ul > li > a { min-height: 112px; padding: 1.1rem; }
 }
 
-.font-display {
-  font-family: var(--font-display);
-}
+.font-display { font-family: var(--font-display); }
 
 @media (max-width: 767px) {
-  .bridge-nav-item {
-    padding: .5rem .7rem;
-    font-size: .82rem;
-  }
+  .bridge-nav-item { padding: .5rem .7rem; font-size: .82rem; }
+  .studio-title-list > ul { grid-template-columns: 1fr; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
-    animation-duration: .01ms !important;
-    transition-duration: .01ms !important;
-  }
-}
-
-/* Light blue and white panels. Dark brand colors are not applied. */
-@layer components {
-  .bridge-nav-item:hover {
-    background: #e7f7fd;
-  }
-  .bridge-panel,
-  .bridge-stat {
-    background: #ffffff;
-    border: 1px solid #d7e7f2;
-    box-shadow: 0 12px 32px rgba(8, 80, 120, .08);
-  }
+  *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }
