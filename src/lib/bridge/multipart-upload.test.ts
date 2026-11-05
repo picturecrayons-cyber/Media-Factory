@@ -29,6 +29,8 @@ test("multipart commit target must be the asset object in the configured region"
   const key = "bridge/owner/title/master/film.mp4";
   const good = `https://objectstorage.ap-mumbai-1.oraclecloud.com/p/token/n/ns/b/bucket/u/${key}/id/upload/`;
   assert.equal(multipartTargetAllowed(good, "ap-mumbai-1", key), true);
+  assert.equal(multipartTargetAllowed(good, "ap-mumbai-1", key, "upload"), true);
+  assert.equal(multipartTargetAllowed(good, "ap-mumbai-1", key, "different-upload"), false);
   assert.equal(multipartTargetAllowed(good, "us-phoenix-1", key), false);
   assert.equal(multipartTargetAllowed("https://example.com/p/token/u/film/id/upload/", "ap-mumbai-1", key), false);
   assert.equal(multipartTargetAllowed(`${good}?x=1`, "ap-mumbai-1", key), false);
