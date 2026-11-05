@@ -263,6 +263,7 @@ export type FulfillmentInput = {
   orderId: string;
   paymentId: string;
   actorUserId?: string | null;
+  webhookEventId?: string | null;
   scope: Omit<LicenseScopeRequest, "buyerUserId" | "buyerOrganizationId" | "titleId" | "packageId">;
 };
 
@@ -274,6 +275,7 @@ export type FulfillmentRepository<Tx> = {
   markPaymentCaptured(tx: Tx, payment: CanonicalPaymentOrder, capture: ProviderCapture): Promise<void>;
   insertEntitlement(tx: Tx, entitlement: CanonicalEntitlement): Promise<void>;
   writeFulfillmentAudit(tx: Tx, payment: CanonicalPaymentOrder, entitlement: CanonicalEntitlement): Promise<void>;
+  completeWebhookEvent(tx: Tx, eventId: string, paymentId: string): Promise<void>;
 };
 
 export type CaptureVerifier = {
@@ -297,7 +299,7 @@ export async function fulfillCapturedBridgePayment<Tx>(opts: {
   createEntitlementId: () => string;
 }): Promise<FulfillmentResult> {
   const { input, verifier, repository } = opts;
-  if (!nonBlank(input.orderId) || !nonBlank(input.paymentId)) {
+  if (!nonBlank(input.orderId) || !nonBlank(input.paymentId) || (input.webhookEventId != null && !nonBlank(input.webhookEventId))) {
     throw new Error("BRIDGE_FULFILLMENT_INVALID_PAYMENT_REFERENCE");
   }
 
@@ -339,6 +341,9 @@ export async function fulfillCapturedBridgePayment<Tx>(opts: {
         prior.rightsGrantId !== payment.rightsGrantId ||
         prior.mandateId !== payment.mandateId
       ) throw new Error("BRIDGE_ENTITLEMENT_IDEMPOTENCY_CONFLICT");
+      if (input.webhookEventId) {
+        await repository.completeWebhookEvent(tx, input.webhookEventId, capture.paymentId);
+      }
       return { status: "duplicate", entitlement: prior };
     }
     if (!["created", "authorized", "captured"].includes(payment.status)) {
@@ -383,6 +388,9 @@ export async function fulfillCapturedBridgePayment<Tx>(opts: {
     await repository.markPaymentCaptured(tx, payment, capture);
     await repository.insertEntitlement(tx, entitlement);
     await repository.writeFulfillmentAudit(tx, payment, entitlement);
+    if (input.webhookEventId) {
+      await repository.completeWebhookEvent(tx, input.webhookEventId, capture.paymentId);
+    }
     return { status: "fulfilled", entitlement };
   });
 }
