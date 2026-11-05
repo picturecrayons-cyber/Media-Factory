@@ -280,7 +280,7 @@ export const requestAssetDownload = createServerFn({ method: "POST" })
     if (!asset) throw new Error("Not found");
     const title = await loadTitle(asset.title_id);
     if (!title || !canReadTitle(actor, title)) throw new Error("Not found");
-    const entitled = await hasLicenseEntitlement(actor.userId, title.id, actor.accountType === "buyer" && !actor.internalRole);
+    const entitled = await hasLicenseEntitlement(actor.userId, title.id, actor.accountType === "buyer");
     const decision = downloadDecision({
       kind: asset.kind,
       actorIsOwner: title.ownerUserId === actor.userId,
