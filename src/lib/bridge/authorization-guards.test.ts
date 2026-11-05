@@ -26,6 +26,17 @@ test("Buyer entitlement list and asset delivery do not trust user-only legacy gr
   assert.match(assets, /actor\.accountType === "buyer"/);
 });
 
+test("Buyer asset listing hides restricted kinds and object keys regardless of internalRole", async () => {
+  const assets = await readFile(new URL("./assets.ts", import.meta.url), "utf8");
+  const start = assets.indexOf("export const listTitleAssets");
+  assert.ok(start >= 0);
+  const listing = assets.slice(start);
+  assert.match(listing, /const buyer = actor\\.accountType === "buyer";/);
+  assert.match(listing, /\\.filter\\(\\(r\\) => !buyer \\|\\| !\\["master", "technical", "censor_certificate"\\]\\.includes\\(r\\.kind\\)\\)/);
+  assert.match(listing, /key: buyer \\? null : r\\.s3_key/);
+  assert.doesNotMatch(listing, /actor\\.accountType === "buyer" && !actor\\.internalRole/);
+});
+
 test("Buyer checkout configuration is blocked before Razorpay credentials are read", async () => {
   const payments = await readFile(new URL("./payments.ts", import.meta.url), "utf8");
   const start = payments.indexOf("export const getCheckoutConfig");
