@@ -33,6 +33,16 @@ test("Bridge-tagged capture remains retriable while CRA-165 fulfillment is block
   assert.match(source, /return new Response\(message, \{ status: 503 \}\)/);
 });
 
+test("unclassified captured payments remain retryable instead of being acknowledged as processed", () => {
+  const start = source.indexOf('if (eventName === "payment.captured")');
+  const end = source.indexOf("\n    const { data: completed", start);
+  assert.ok(start >= 0 && end > start, "captured-payment classification must precede event completion");
+  const block = source.slice(start, end);
+  assert.match(block, /if \(surface === "unknown"\)/);
+  assert.match(block, /return await failEvent/);
+  assert.match(block, /Captured payment surface is unresolved/);
+});
+
 test("Bridge webhook capture fails closed before any payment or entitlement mutation", () => {
   const start = source.indexOf('if (surface === "bridge")');
   const end = source.indexOf("\n      }", start);
