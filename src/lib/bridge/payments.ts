@@ -64,7 +64,8 @@ export const getCheckoutConfig = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
     assertNotDevUser(context.userId);
-    await requireVerifiedActor(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    assertBuyerLicenseOrderBlocked(actor);
     const { keyId } = requireRazorpayKeys();
     return { keyId };
   });
