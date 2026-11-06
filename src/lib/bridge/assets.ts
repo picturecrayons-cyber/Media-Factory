@@ -648,7 +648,7 @@ export const createAssetStreamCapability = createServerFn({ method: "POST" })
     const entitledRows = await sql<{ ok:boolean }>`
       select exists(select 1 from bridge_entitlements
         where user_id=${actor.userId} and title_id=${title.id}
-          and access_type='license' and (expires_at is null or expires_at > now())) as ok
+          and access_type='license') as ok
     `;
     const decision = downloadDecision({
       kind: asset.kind,
