@@ -339,6 +339,11 @@ export function completeConversion(
   at: string,
 ): ConversionJob {
   if (job.state !== "PROCESSING" && job.state !== "RETRY_REQUIRED") throw new Error("Conversion must be processing or retryable");
+  if (masterOutput.kind !== "CONVERTED" || backup1Output.kind !== "CONVERTED" ||
+      masterOutput.tier !== "MASTER" || backup1Output.tier !== "BACKUP_1" ||
+      masterOutput.clipNumber !== job.clipNumber || backup1Output.clipNumber !== job.clipNumber) {
+    throw new Error("MASTER and BACKUP_1 destinations must match the job lineage");
+  }
   const master = verifyStorageCopy(masterOutput);
   const backup = verifyStorageCopy(backup1Output);
   if (master.result !== "PASS" || backup.result !== "PASS") throw new Error("MASTER and BACKUP_1 outputs must independently verify");
@@ -348,11 +353,6 @@ export function completeConversion(
   for (const output of [masterOutput, backup1Output]) {
     if (output.sourceSha256.toLowerCase() !== job.sourceSha256.toLowerCase()) throw new Error("Derived output source lineage does not match the verified RAW clip");
     if (!output.probePassed || !output.metadataMatchesProfile || output.qcResult !== "PASS") throw new Error("Derived output probe, profile metadata and QC must pass");
-  }
-  if (masterOutput.kind !== "CONVERTED" || backup1Output.kind !== "CONVERTED" ||
-      masterOutput.tier !== "MASTER" || backup1Output.tier !== "BACKUP_1" ||
-      masterOutput.clipNumber !== job.clipNumber || backup1Output.clipNumber !== job.clipNumber) {
-    throw new Error("Conversion destinations do not match the job lineage");
   }
   return {
     ...job,

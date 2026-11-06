@@ -4,6 +4,7 @@ import { BridgeShell } from "@/components/bridge/shell";
 import { TitleList } from "@/components/bridge/title-desk";
 import { MyStoryConcepts } from "@/components/bridge/my-story-concepts";
 import { NewSubmissionPanel } from "@/components/bridge/new-submission-panel";
+import { DitWorkspace } from "@/components/bridge/dit-workspace";
 
 export const Route = createFileRoute("/studio")({ component: Studio });
 
@@ -12,7 +13,9 @@ function Studio() {
     <RequireBridge allow="studio">
       {(actor) => (
         <BridgeShell actor={actor} title="Studio">
-          <div className="mx-auto max-w-3xl space-y-10 px-1 pb-16">
+          <div className="space-y-10 pb-16">
+            <DitWorkspace />
+            <div className="mx-auto max-w-3xl space-y-10 px-1">
             <header className="space-y-4">
               <p className="max-w-xl text-sm text-muted">
                 Finished films and story concepts stay separate. Production services are on the admin desk. The film master is uploaded from the title.
@@ -26,6 +29,7 @@ function Studio() {
             </section>
 
             <MyStoryConcepts />
+            </div>
           </div>
         </BridgeShell>
       )}

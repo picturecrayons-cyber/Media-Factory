@@ -22,10 +22,10 @@ import {
 
 const hash = "a".repeat(64);
 const syntheticProfiles: ConversionProfile[] = [
-  { resolution: "720p", outputType: "Proxy", codec: "Synthetic H.264", container: "MP4", width: 1280, height: 720 },
-  { resolution: "1080p", outputType: "Proxy", codec: "Synthetic H.264", container: "MP4", width: 1920, height: 1080 },
-  { resolution: "720p", outputType: "ProRes", codec: "Synthetic ProRes Profile A", container: "MOV", width: 1280, height: 720 },
-  { resolution: "1080p", outputType: "ProRes", codec: "Synthetic ProRes Profile B", container: "MOV", width: 1920, height: 1080 },
+  { resolution: "720p", outputType: "Proxy", codec: "H.264 High", container: "MP4", width: 1280, height: 720 },
+  { resolution: "1080p", outputType: "Proxy", codec: "H.264 High", container: "MP4", width: 1920, height: 1080 },
+  { resolution: "720p", outputType: "ProRes", codec: "Apple ProRes 422 LT", container: "MOV", width: 1280, height: 720 },
+  { resolution: "1080p", outputType: "ProRes", codec: "Apple ProRes 422 HQ", container: "MOV", width: 1920, height: 1080 },
 ];
 const clip: ClipRecord = {
   clipNumber: "001",

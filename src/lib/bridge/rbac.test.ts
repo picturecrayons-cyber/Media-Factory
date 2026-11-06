@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { assertPermission, canAccessDashboard, canAccessTitleWorkspace, canGrantInternalRole, canMutateTitle, canOperateOnTitle, canReadTitle, hasPermission, hasStaffPermission, permissionForTransition, workspaceHome } from "./rbac.ts";
+import { assertPermission, canAccessDashboard, canAccessDitWorkspace, canAccessTitleWorkspace, canGrantInternalRole, canMutateTitle, canOperateOnTitle, canReadTitle, hasPermission, hasStaffPermission, permissionForTransition, workspaceHome } from "./rbac.ts";
 import type { Actor } from "./rbac.ts";
 
 const actor = (
@@ -170,6 +170,25 @@ describe("PRD authorization matrix", () => {
     assert.equal(canAccessTitleWorkspace(investor()), false);
     assert.equal(canAccessTitleWorkspace(viewer()), true);
     assert.equal(canAccessTitleWorkspace(actor("unverified", "studio", null, false)), false);
+  });
+
+  it("grants the DIT workspace only to verified Studio account profiles", () => {
+    assert.equal(canAccessDitWorkspace(studio()), true);
+    assert.equal(hasPermission(studio(), "dit.workspace"), true);
+    assert.equal(canAccessDitWorkspace(creator()), false);
+    assert.equal(canAccessDitWorkspace(buyer()), false);
+    assert.equal(canAccessDitWorkspace(investor()), false);
+    assert.equal(canAccessDitWorkspace(admin()), false);
+    assert.equal(canAccessDitWorkspace(superAdmin()), false);
+    assert.equal(canAccessDitWorkspace(viewer()), false);
+    assert.equal(canAccessDitWorkspace(actor("unverified-studio", "studio", null, false)), false);
+  });
+
+  it("explicitly denies DIT workspace access to QC, legal, and finance reviewers", () => {
+    for (const reviewer of [qc, legal, finance]) {
+      assert.equal(canAccessDitWorkspace(reviewer), false);
+      assert.equal(hasPermission(reviewer, "dit.workspace"), false);
+    }
   });
 
   it("shares title access only with verified Studio accounts in the same Studio organization", () => {

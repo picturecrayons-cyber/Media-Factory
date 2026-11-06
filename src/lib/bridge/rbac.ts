@@ -81,6 +81,7 @@ const ACCOUNT_PERMISSIONS: Record<AccountType, readonly Permission[]> = {
     "delivery.read_finance",
   ],
   studio: [
+    "dit.workspace",
     "title.create",
     "title.read_own",
     "title.update_own",
@@ -148,6 +149,12 @@ export function canAccessTitleWorkspace(actor: Actor): boolean {
     (actor.accountType === "independent_creator" || actor.accountType === "studio") &&
     hasPermission(actor, "title.read_own")
   );
+}
+
+/** DIT workspace is a Studio-only capability; internal staff roles do not inherit it. */
+export function canAccessDitWorkspace(actor: Actor): boolean {
+  return actor.emailVerified && actor.accountType === "studio" && actor.internalRole === null &&
+    hasPermission(actor, "dit.workspace");
 }
 
 function sharesStudioOrganization(

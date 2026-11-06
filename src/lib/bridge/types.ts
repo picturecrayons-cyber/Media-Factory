@@ -75,6 +75,7 @@ export const ASSET_KINDS = [
 export type AssetKind = (typeof ASSET_KINDS)[number];
 
 export const PERMISSIONS = [
+  "dit.workspace",
   "title.ingest_internal",
   "title.create",
   "title.read_own",
