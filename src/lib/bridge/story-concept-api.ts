@@ -91,6 +91,7 @@ function requireCurationStaff(actor: { internalRole?: string | null }) {
 
 const createPayloadSchema = z.object({
   idempotencyKey: z.string().uuid(),
+  paymentId: z.string().uuid().optional(),
   titleName: z.string().min(1).max(160),
   logline: z.string().min(10).max(500),
   synopsis: z.string().min(40).max(8000),
@@ -154,17 +155,31 @@ export const createStoryConceptSubmission = createServerFn({ method: "POST" })
           return { titleId: prior[0].title_id, concept: existing[0] };
         }
 
-        // The catalog item is deliberately inactive until pricing/payment certification.
         const service = await tx<{ active: boolean }>`
           select active from bridge_service_catalog
           where code = 'STORY_CONCEPT_NETWORK_SUBMISSION'
           limit 1
         `;
         if (!service[0]?.active) {
-          throw new Error("Story / Concept network submission is locked pending service and payment certification.");
+          throw new Error("Story / Concept network submission is locked pending service certification.");
         }
-        // Activation alone is not proof of payment. Do not accept an unpaid submission.
-        throw new Error("Verified payment capture is not implemented for Story / Concept submissions. Submission remains locked.");
+        if (!data.paymentId) {
+          throw new Error("A verified Story / Concept submission payment is required.");
+        }
+        const payment = await tx<{ id: string; amount_paise: number }>`
+          select id, amount_paise
+          from bridge_payments
+          where id = ${data.paymentId}::uuid
+            and user_id = ${actor.userId}
+            and purpose = 'story_concept_submission'
+            and status = 'captured'
+            and verified_at is not null
+            and title_id is null
+          for update
+        `;
+        if (!payment[0] || Number(payment[0].amount_paise) <= 0) {
+          throw new Error("No matching captured Story / Concept submission payment was found.");
+        }
 
         const titleId = randomBytes(16).toString("hex");
         const slug = slugify(data.titleName, titleId);
