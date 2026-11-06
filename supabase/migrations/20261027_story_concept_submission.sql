@@ -39,6 +39,14 @@ CREATE TABLE IF NOT EXISTS public.bridge_story_concept_submissions (
 CREATE INDEX IF NOT EXISTS bridge_story_concept_curation_idx
   ON public.bridge_story_concept_submissions (curation_status, created_at DESC);
 
+-- One captured payment can authorize at most one concept submission.
+ALTER TABLE public.bridge_story_concept_submissions
+  ADD COLUMN IF NOT EXISTS payment_id text REFERENCES public.bridge_payments(id) ON DELETE RESTRICT;
+
+CREATE UNIQUE INDEX IF NOT EXISTS bridge_story_concept_payment_unique_idx
+  ON public.bridge_story_concept_submissions (payment_id)
+  WHERE payment_id IS NOT NULL;
+
 -- 3. Admin-mediated buyer interest
 CREATE TABLE IF NOT EXISTS public.bridge_buyer_interest (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
