@@ -120,6 +120,13 @@ async function persistVerifiedAssetScoped(
     opts.sourceKey,
     opts.titleId,
     opts.checksum,
+    opts.checksumSha256,
+    opts.storage.provider,
+    opts.storage.bucket,
+    opts.storage.namespace,
+    opts.storage.region,
+    opts.storage.endpoint,
+    opts.objectVersionId,
   ]);
   return Boolean(rows[0]);
 }
