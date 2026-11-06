@@ -118,6 +118,48 @@ export const beginAssetMultipart = createServerFn({ method: "POST" })
     const sessionActor = await requireVerifiedActor(context.userId);
     const { assertMultipartSessionSigningReady, signMultipartSession } = await import("./multipart-session.server");
     assertMultipartSessionSigningReady();
+
+    // Retry deletion for manifests whose provider upload was already aborted or expired.
+    const staleSessions = await sql<{ id: string }>`
+      select s.id
+      from bridge_private.upload_sessions s
+      join bridge_assets a on a.id = s.asset_id
+      where a.title_id = ${asset.title_id}
+        and s.actor_user_id = ${context.userId}
+        and s.state in ('aborted','expired')
+        and exists (select 1 from bridge_private.upload_parts p where p.session_id = s.id)
+    `;
+    for (const stale of staleSessions) {
+      await sql`delete from bridge_private.upload_parts where session_id = ${stale.id}`;
+    }
+
+    // Expired, uncommitted attempts are reaped before creating a replacement session.
+    // Keep resumable sessions alive until their expiry; never abort a live upload.
+    const expiredSessions = await sql<{
+      id: string; source_object_key: string; part_base_url: string;
+    }>`
+      select s.id, s.source_object_key, s.part_base_url
+      from bridge_private.upload_sessions s
+      join bridge_assets a on a.id = s.asset_id
+      where a.title_id = ${asset.title_id}
+        and s.actor_user_id = ${context.userId}
+        and s.state in ('initiated','uploading')
+        and s.expires_at <= now()
+      order by s.created_at asc
+    `;
+    if (expiredSessions.length) {
+      const { abortMultipartUpload } = await import("./oci-object-storage.server");
+      for (const expired of expiredSessions) {
+        await abortMultipartUpload(expired.part_base_url, expired.source_object_key);
+        await sql`delete from bridge_private.upload_parts where session_id = ${expired.id}`;
+        await sql`
+          update bridge_private.upload_sessions
+          set state = 'expired', updated_at = now()
+          where id = ${expired.id} and state in ('initiated','uploading')
+        `;
+      }
+    }
+
     // Reuse the currently active server session for this asset/size. Browser storage is
     // only a convenience; the durable session and part manifest live in bridge_private.
     const active = await sql<{
@@ -343,6 +385,8 @@ export const abortAssetMultipart = createServerFn({ method: "POST" })
     const { abortMultipartUpload } = await import("./oci-object-storage.server");
     await abortMultipartUpload(session.partBaseUrl, asset.s3_key);
     await sql`update bridge_private.upload_sessions set state='aborted', updated_at=now() where id=${data.sessionId}`;
+    // A later begin call retries this deletion if the manifest cleanup itself failed.
+    await sql`delete from bridge_private.upload_parts where session_id=${data.sessionId}`;
     await writeAudit({
       actorUserId: context.userId,
       action: "asset.multipart_aborted",

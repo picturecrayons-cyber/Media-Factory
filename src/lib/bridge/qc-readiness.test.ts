@@ -23,8 +23,12 @@ async function fixture() {
        storage_provider,storage_bucket,storage_namespace,storage_region,storage_endpoint,storage_verified_at)
     values
       ('qc-master-1','qc-title-123','master','sealed/master','owner',100,'sealed/master',repeat('a',64),'oci','bucket','namespace','ap-mumbai-1','https://objectstorage.ap-mumbai-1.oraclecloud.com',now()),
-      ('qc-poster-1','qc-title-123','poster','sealed/poster','owner',100,'sealed/poster',repeat('b',64),'oci','bucket','namespace','ap-mumbai-1','https://objectstorage.ap-mumbai-1.oraclecloud.com',now()),
-      ('qc-cert-1','qc-title-123','censor_certificate','sealed/cert','owner',100,'sealed/cert',repeat('c',64),'oci','bucket','namespace','ap-mumbai-1','https://objectstorage.ap-mumbai-1.oraclecloud.com',now());
+      ('qc-screener-1','qc-title-123','screener','sealed/screener','owner',100,'sealed/screener',repeat('b',64),'oci','bucket','namespace','ap-mumbai-1','https://objectstorage.ap-mumbai-1.oraclecloud.com',now()),
+      ('qc-poster-1','qc-title-123','poster_vertical','sealed/poster','owner',100,'sealed/poster',repeat('c',64),'oci','bucket','namespace','ap-mumbai-1','https://objectstorage.ap-mumbai-1.oraclecloud.com',now()),
+      ('qc-horizontal-1','qc-title-123','poster_horizontal','sealed/horizontal','owner',100,'sealed/horizontal',repeat('d',64),'oci','bucket','namespace','ap-mumbai-1','https://objectstorage.ap-mumbai-1.oraclecloud.com',now()),
+      ('qc-thumbnail-1','qc-title-123','thumbnail','sealed/thumbnail','owner',100,'sealed/thumbnail',repeat('e',64),'oci','bucket','namespace','ap-mumbai-1','https://objectstorage.ap-mumbai-1.oraclecloud.com',now()),
+      ('qc-subtitle-1','qc-title-123','subtitle','sealed/subtitle','owner',100,'sealed/subtitle',repeat('f',64),'oci','bucket','namespace','ap-mumbai-1','https://objectstorage.ap-mumbai-1.oraclecloud.com',now()),
+      ('qc-cert-1','qc-title-123','censor_certificate','sealed/cert','owner',100,'sealed/cert',repeat('a',64),'oci','bucket','namespace','ap-mumbai-1','https://objectstorage.ap-mumbai-1.oraclecloud.com',now());
     insert into bridge_rights_grants (title_id,evidence,status,created_by)
     values ('qc-title-123','[{"type":"AUTHORIZATION_ATTESTATION","rightsBasis":"OWNER","authorizationConfirmed":true}]'::jsonb,'DRAFT','owner');
     insert into bridge_title_submission_intake
@@ -48,7 +52,7 @@ test("QC readiness requires verified master, poster, censor certificate and righ
   try {
     await assert.doesNotReject(() => assertVerifiedTitleIngestReady(sql as never, "qc-title-123"));
     await db.exec("delete from bridge_assets where id='qc-cert-1'");
-    await assert.rejects(() => assertVerifiedTitleIngestReady(sql as never, "qc-title-123"), /censor\/legal certificate/);
+    await assert.rejects(() => assertVerifiedTitleIngestReady(sql as never, "qc-title-123"), /all 7 mandatory files/);
   } finally {
     await db.close();
   }
@@ -59,6 +63,19 @@ test("QC readiness rejects missing rights-holder classification", async () => {
   try {
     await db.exec("delete from bridge_title_submission_intake where title_id='qc-title-123'");
     await assert.rejects(() => assertVerifiedTitleIngestReady(sql as never, "qc-title-123"), /rights-holder classification/);
+  } finally {
+    await db.close();
+  }
+});
+
+test("QC readiness rejects any missing member of the seven-file package", async () => {
+  const { db, sql } = await fixture();
+  try {
+    await db.exec("delete from bridge_assets where id='qc-subtitle-1'");
+    await assert.rejects(
+      () => assertVerifiedTitleIngestReady(sql as never, "qc-title-123"),
+      /subtitles/
+    );
   } finally {
     await db.close();
   }

@@ -1,5 +1,15 @@
 import type { Sql } from "../db.ts";
 
+const REQUIRED_QC_FILES = [
+  { label: "main film", kinds: ["master"] },
+  { label: "trailer", kinds: ["screener"] },
+  { label: "vertical poster", kinds: ["poster_vertical", "poster"] },
+  { label: "horizontal artwork", kinds: ["poster_horizontal"] },
+  { label: "thumbnail", kinds: ["thumbnail"] },
+  { label: "subtitles", kinds: ["subtitle"] },
+  { label: "censor/legal certificate", kinds: ["censor_certificate"] },
+] as const;
+
 export async function assertVerifiedTitleIngestReady(tx: Sql, titleId: string) {
   const assets = await tx<{
     kind: string; checksum_sha256: string | null; verified_object_key: string | null;
@@ -10,20 +20,20 @@ export async function assertVerifiedTitleIngestReady(tx: Sql, titleId: string) {
       storage_namespace, storage_region, storage_endpoint, storage_verified_at
     from bridge_assets where title_id=${titleId} and coalesce(byte_size,0)>0
   `;
-  const valid = (kind: string) => assets.some((asset) =>
-    asset.kind === kind &&
+  const isStorageVerified = (asset: (typeof assets)[number]) =>
     Boolean(asset.verified_object_key) &&
     Boolean(asset.storage_provider && asset.storage_bucket && asset.storage_namespace &&
       asset.storage_region && asset.storage_endpoint && asset.storage_verified_at) &&
-    Boolean(asset.checksum_sha256 && /^[a-f0-9]{64}$/.test(asset.checksum_sha256))
+    Boolean(asset.checksum_sha256 && /^[a-f0-9]{64}$/.test(asset.checksum_sha256));
+  const missing = REQUIRED_QC_FILES.filter((required) =>
+    !assets.some((asset) => required.kinds.some((kind) => kind === asset.kind) && isStorageVerified(asset))
   );
-  if (!valid("master")) throw new Error("QC blocked: main film requires immutable storage verification and SHA-256");
-  if (!["poster","poster_vertical","poster_horizontal"].some(valid)) {
-    throw new Error("QC blocked: at least one verified poster is required");
+  if (missing.length) {
+    throw new Error(
+      `QC blocked: all 7 mandatory files must be Storage verified (missing or unverified: ${missing.map((item) => item.label).join(", ")})`
+    );
   }
-  if (!valid("censor_certificate")) {
-    throw new Error("QC blocked: verified censor/legal certificate is required");
-  }
+
   const rights = await tx<{
     authority_type: string | null;
     authorization_evidence_type: string | null;
@@ -55,4 +65,3 @@ export async function assertVerifiedTitleIngestReady(tx: Sql, titleId: string) {
     throw new Error("QC blocked: rights-holder classification and authorization evidence are incomplete");
   }
 }
-

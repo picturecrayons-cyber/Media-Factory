@@ -669,27 +669,27 @@ function FilesPanel({
   const groups: { title: string; hint: string; items: [SimpleAssetKind, string][] }[] = [
     {
       title: "1 · Picture",
-      hint: "Main film is required. Trailer is optional.",
+      hint: "Main film and trailer are both required for QC submission.",
       items: [
         ["master", "Required"],
-        ["screener", "Optional"],
+        ["screener", "Required"],
       ],
     },
     {
       title: "2 · Artwork",
-      hint: "Vertical poster, horizontal artwork, and thumbnail.",
+      hint: "All three artwork files are mandatory and must be Storage verified.",
       items: [
-        ["poster_vertical", "Recommended"],
-        ["poster_horizontal", "Recommended"],
-        ["thumbnail", "Recommended"],
+        ["poster_vertical", "Required"],
+        ["poster_horizontal", "Required"],
+        ["thumbnail", "Required"],
       ],
     },
     {
       title: "3 · Documents",
-      hint: "Add these only if you have them.",
+      hint: "Subtitles and the censor/legal certificate are mandatory for QC submission.",
       items: [
-        ["subtitle", "Optional"],
-        ["censor_certificate", "Optional"],
+        ["subtitle", "Required"],
+        ["censor_certificate", "Required"],
       ],
     },
   ];
@@ -728,19 +728,41 @@ function FilesPanel({
             </div>
             <button
               type="button"
-              onClick={() => {
+              onClick={async () => {
                 cancelRequestedRef.current = true;
                 uploadAttemptRef.current += 1;
-                uploadXhrRef.current?.abort();
                 const session = activeMultipart.current;
                 activeMultipart.current = null;
+                uploadXhrRef.current?.abort();
                 if (session) {
-                  clearUploadSession(session.titleId, session.kind);
-                  void abortAssetMultipart({ data: { assetId: session.assetId, sessionId: session.sessionId, sessionToken: session.sessionToken } }).catch(() => undefined);
+                  try {
+                    // Do not forget the browser session until the provider abort and
+                    // server-side manifest cleanup have both been acknowledged.
+                    await abortAssetMultipart({
+                      data: {
+                        assetId: session.assetId,
+                        sessionId: session.sessionId,
+                        sessionToken: session.sessionToken,
+                      },
+                    });
+                    clearUploadSession(session.titleId, session.kind);
+                  } catch {
+                    activeMultipart.current = session;
+                    writeUploadSession(session);
+                    cancelRequestedRef.current = false;
+                    setUploading(session.kind);
+                    announce(
+                      "Multipart cleanup could not be confirmed. Do not start a replacement upload; retry Cancel or resume this same file.",
+                      "error",
+                      true,
+                    );
+                    return;
+                  }
                 }
+                cancelRequestedRef.current = false;
                 setProgress(null);
-                announce("Upload cancelled. Completed parts from this attempt were discarded.", "error", true);
-                if (!uploadXhrRef.current) setUploading(null);
+                announce("Upload cancelled. Provider parts and the durable part manifest were discarded.", "error", true);
+                setUploading(null);
               }}
               className="rounded-full border border-line bg-surface px-3 py-1.5 text-xs font-semibold"
             >

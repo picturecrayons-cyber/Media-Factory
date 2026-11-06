@@ -8,6 +8,7 @@ import {
   reviewTitleWorkflow,
 } from "@/lib/bridge/workflow";
 import { advanceTitle } from "@/lib/bridge/titles";
+import { listTitleAssets } from "@/lib/bridge/assets";
 import {
   authorizeLoopPublication,
   getLoopPublication,
@@ -39,6 +40,32 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
     queryFn: () => getLoopPublication({ data: { bridgeTitleId: title.id } }),
     enabled: Boolean(actor.internalRole) || actor.accountType !== "buyer",
   });
+  const assetsQuery = useQuery({
+    queryKey: ["bridge-assets", title.id],
+    queryFn: () => listTitleAssets({ data: { titleId: title.id } }),
+    enabled: Boolean(actor.internalRole) || actor.accountType !== "buyer",
+  });
+  const requiredQcKinds = [
+    "master", "screener", "poster_vertical", "poster_horizontal",
+    "thumbnail", "subtitle", "censor_certificate",
+  ] as const;
+  const qcFileCount = requiredQcKinds.filter((kind) =>
+    assetsQuery.data?.assets.some((asset) =>
+      asset.verified &&
+      (asset.kind === kind || (kind === "poster_vertical" && asset.kind === "poster")) &&
+      Boolean(
+        asset.storageLocation?.provider &&
+        asset.storageLocation.objectKey &&
+        asset.storageLocation.bucket &&
+        asset.storageLocation.namespace &&
+        asset.storageLocation.region &&
+        asset.storageLocation.endpoint &&
+        asset.storageLocation.checksumSha256 &&
+        asset.storageLocation.verifiedAt
+      )
+    )
+  ).length;
+  const qcFilesReady = !assetsQuery.isPending && !assetsQuery.isFetching && !assetsQuery.isError && qcFileCount === 7;
   const canFinance = canOperateOnTitle(actor, title, "title.read_own", "finance.read");
   const revenue = useQuery({
     queryKey: ["title-revenue", title.id],
@@ -98,11 +125,11 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
   const grants = workflow.data?.grants ?? [];
   const valid = grants.find((g) => g.status === "VALID" && new Date(g.window_end) > new Date());
   const pub = publication.data?.publication;
-  const button = (label: string, run: () => Promise<unknown>) => (
+  const button = (label: string, run: () => Promise<unknown>, disabled = false) => (
     <button
       type="button"
       className="rounded-lg border border-line px-4 py-2 text-sm disabled:opacity-50"
-      disabled={action.isPending}
+      disabled={action.isPending || disabled}
       onClick={() => action.mutate(run)}
     >
       {label}
@@ -154,9 +181,18 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
             <div className="space-y-3">
               <p>
                 {title.status === "PREPARING" || title.status === "UPLOADING" || title.status === "DRAFT"
-                  ? "Step 1: upload the main film. Step 2: keep the posters. Step 3: submit for QC. QC is not reviewed yet."
+                  ? "Upload and verify all seven required files: main film, trailer, vertical poster, horizontal artwork, thumbnail, subtitles, and censor/legal certificate. Submit for QC unlocks only at 7/7 Storage verified."
                   : `Lifecycle: ${title.status}. QC: ${workflow.data?.qc?.status ?? "Not reviewed"}.`}
               </p>
+              {title.status === "PREPARING" ? (
+                <p className="text-sm" role="status" aria-live="polite">
+                  {assetsQuery.isPending || assetsQuery.isFetching
+                    ? "Storage verification: checking the seven mandatory files…"
+                    : assetsQuery.isError
+                      ? "Storage verification unavailable. Submit for QC is disabled."
+                      : `Storage verified: ${qcFileCount}/7 mandatory files.`}
+                </p>
+              ) : null}
               {canOperateOnTitle(actor, title, "title.advance_upload", "title.ingest_internal") &&
               ["DRAFT", "UPLOADING", "PREPARING"].includes(title.status)
                 ? button(
@@ -177,6 +213,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                                 : "QC_REVIEW",
                         },
                       }),
+                    title.status === "PREPARING" && !qcFilesReady,
                   )
                 : null}
               {title.status === "QC_REVIEW" && hasPermission(actor, "title.qc_review") ? (
