@@ -603,12 +603,12 @@ declare module '@tanstack/react-router' {
       parentRoute: typeof rootRouteImport
     }
     '/revenue': {
-      id: '/revenue'
-      path: '/revenue'
-      fullPath: '/revenue'
-      preLoaderRoute: typeof RevenueRouteImport
-      parentRoute: typeof rootRouteImport
-    }
+      id: '/revenue',
+      path: '/revenue',
+      fullPath: '/revenue',
+      preLoaderRoute: typeof RevenueRouteImport,
+      parentRoute: typeof rootRouteImport,
+    },
     '/signup': {
       id: '/signup'
       path: '/signup'
