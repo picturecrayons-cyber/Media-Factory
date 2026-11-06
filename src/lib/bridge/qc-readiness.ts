@@ -12,15 +12,16 @@ const REQUIRED_QC_FILES = [
 
 export async function assertSevenFilesStorageVerified(tx: Sql, titleId: string) {
   const assets = await tx<{
-    id: string; kind: string; created_at: string | Date; checksum_sha256: string | null; verified_object_key: string | null;
+    id: string; kind: string; created_at: string | Date; byte_size: number | null; checksum_sha256: string | null; verified_object_key: string | null;
     storage_provider: string | null; storage_bucket: string | null; storage_namespace: string | null;
     storage_region: string | null; storage_endpoint: string | null; storage_verified_at: string | Date | null;
   }>`
-    select id, kind, created_at, checksum_sha256, verified_object_key, storage_provider, storage_bucket,
+    select id, kind, created_at, byte_size, checksum_sha256, verified_object_key, storage_provider, storage_bucket,
       storage_namespace, storage_region, storage_endpoint, storage_verified_at
     from bridge_assets where title_id=${titleId} order by created_at desc, id desc
   `;
   const isStorageVerified = (asset: (typeof assets)[number]) =>
+    Number(asset.byte_size) > 0 &&
     Boolean(asset.verified_object_key) &&
     Boolean(asset.storage_provider && asset.storage_bucket && asset.storage_namespace &&
       asset.storage_region && asset.storage_endpoint && asset.storage_verified_at) &&
