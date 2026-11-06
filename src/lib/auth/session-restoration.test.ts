@@ -162,3 +162,27 @@ test("PKCE exchange persists a session and forced refresh returns the rotated be
   assert.match(requests[0], /grant_type=pkce/);
   assert.match(requests[1], /grant_type=refresh_token/);
 });
+
+
+test("session storage/auth read failures are not silently classified as signed-out", async () => {
+  await assert.rejects(
+    () => restoreSupabaseSession({
+      getSession: async () => result(null, new Error("Auth service offline")),
+      refreshSession: async () => result(null),
+    }),
+    /Auth service offline/,
+  );
+});
+
+test("Bridge protected consumers remain gated until strict session initialization completes", () => {
+  const hook = readFileSync(new URL("./use-current-user.ts", import.meta.url), "utf8");
+  assert.match(hook, /getSupabaseSessionStrict/);
+  assert.match(hook, /event === "INITIAL_SESSION"/);
+  assert.match(hook, /isPending: true/);
+  assert.match(hook, /authError:/);
+  assert.match(hook, /retry/);
+
+  const login = readFileSync(new URL("../../routes/login.tsx", import.meta.url), "utf8");
+  assert.match(login, /if \(isPending \|\| busy \|\| error \|\| authError \|\| !user\) return/);
+  assert.match(login, /Retry workspace/);
+});
