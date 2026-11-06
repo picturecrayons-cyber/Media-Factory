@@ -13,3 +13,10 @@ alter table bridge_assets
 
 -- No browser grants or RLS policy changes: provenance is exposed only through
 -- the existing authorized server function, which redacts it for Buyer accounts.
+
+create index if not exists bridge_assets_storage_provider_idx
+  on bridge_assets(storage_provider)
+  where storage_provider is not null;
+create index if not exists bridge_assets_storage_bucket_idx
+  on bridge_assets(storage_bucket)
+  where storage_bucket is not null;
