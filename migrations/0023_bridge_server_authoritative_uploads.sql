@@ -39,6 +39,34 @@ create index if not exists bridge_assets_checksum_idx
   on public.bridge_assets (checksum_sha256)
   where checksum_sha256 is not null;
 
+create or replace function bridge_private.prevent_verified_asset_pointer_mutation()
+returns trigger
+language plpgsql
+set search_path = pg_catalog
+as $
+begin
+  if old.verified_object_key is not null and (
+    new.verified_object_key is distinct from old.verified_object_key
+    or new.checksum_sha256 is distinct from old.checksum_sha256
+    or new.storage_provider is distinct from old.storage_provider
+    or new.storage_bucket is distinct from old.storage_bucket
+    or new.storage_namespace is distinct from old.storage_namespace
+    or new.storage_region is distinct from old.storage_region
+    or new.storage_endpoint is distinct from old.storage_endpoint
+    or new.object_version_id is distinct from old.object_version_id
+    or new.object_generation is distinct from old.object_generation
+  ) then
+    raise exception 'Verified storage pointer and provenance are immutable';
+  end if;
+  return new;
+end;
+$;
+
+drop trigger if exists bridge_assets_verified_pointer_immutable on public.bridge_assets;
+create trigger bridge_assets_verified_pointer_immutable
+before update on public.bridge_assets
+for each row execute function bridge_private.prevent_verified_asset_pointer_mutation();
+
 create schema if not exists bridge_private;
 
 create table if not exists bridge_private.upload_sessions (
