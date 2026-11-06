@@ -533,7 +533,7 @@ function issueAssetStreamToken(assetId: string, userId: string) {
     cipher.update(JSON.stringify({
       assetId,
       userId,
-      expiresAt: Math.floor(Date.now() / 1000) + 120,
+      expiresAt: Math.floor(Date.now() / 1000) + 4 * 60 * 60,
     }), "utf8"),
     cipher.final(),
   ]);
