@@ -25,6 +25,26 @@ async function hasLicenseEntitlement(userId: string, titleId: string): Promise<b
   return Number(rows[0]?.n ?? 0) > 0;
 }
 
+/**
+ * Buyer title access is explicit, user-scoped, revocable and time-bounded.
+ * Keep it separate from a commercial entitlement: both must be valid before
+ * a Buyer can enumerate or download title assets.
+ */
+async function hasActiveBuyerTitleAccess(userId: string, titleId: string): Promise<boolean> {
+  const sql = await getSql();
+  const rows = await sql<{ allowed: boolean }>`
+    select exists (
+      select 1
+      from bridge_buyer_title_access
+      where buyer_user_id = ${userId}
+        and title_id = ${titleId}
+        and revoked_at is null
+        and (expires_at is null or expires_at > now())
+    ) as allowed
+  `;
+  return rows[0]?.allowed === true;
+}
+
 export const requestAssetUpload = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(
@@ -278,21 +298,26 @@ export const requestAssetDownload = createServerFn({ method: "POST" })
     if (!asset) throw new Error("Not found");
     const title = await loadTitle(asset.title_id);
     if (!title || !canReadTitle(actor, title)) throw new Error("Not found");
+    const entitled = await hasLicenseEntitlement(actor.userId, title.id);
     if (actor.accountType === "buyer" && !actor.internalRole) {
-      // Direct asset-ID requests must satisfy the same publication gate as title lookup.
+      // Direct asset-ID requests must satisfy publication, explicit Buyer access,
+      // and commercial entitlement independently of the title lookup path.
       const { assertBuyerPublishable } = await import("./buyer-visibility");
       await assertBuyerPublishable(title.id);
-    }
-    const entitled = await hasLicenseEntitlement(actor.userId, title.id);
-    if (actor.accountType === "buyer" && !actor.internalRole && !entitled) {
-      await writeAudit({
-        actorUserId: actor.userId,
-        action: "asset.download_denied",
-        entityType: "bridge_asset",
-        entityId: asset.id,
-        metadata: { reason: "License entitlement required", kind: asset.kind },
-      });
-      throw new Error("License entitlement required");
+      const activeBuyerAccess = await hasActiveBuyerTitleAccess(actor.userId, title.id);
+      if (!activeBuyerAccess || !entitled) {
+        const reason = !activeBuyerAccess
+          ? "Active Buyer title access required"
+          : "License entitlement required";
+        await writeAudit({
+          actorUserId: actor.userId,
+          action: "asset.download_denied",
+          entityType: "bridge_asset",
+          entityId: asset.id,
+          metadata: { reason, kind: asset.kind },
+        });
+        throw new Error(reason);
+      }
     }
     const decision = downloadDecision({
       kind: asset.kind,
@@ -334,6 +359,23 @@ export const listTitleAssets = createServerFn({ method: "GET" })
       // Asset enumeration is a separate endpoint; do not rely on listTitles/getTitle having run.
       const { assertBuyerPublishable } = await import("./buyer-visibility");
       await assertBuyerPublishable(title.id);
+      const [activeBuyerAccess, entitled] = await Promise.all([
+        hasActiveBuyerTitleAccess(actor.userId, title.id),
+        hasLicenseEntitlement(actor.userId, title.id),
+      ]);
+      if (!activeBuyerAccess || !entitled) {
+        const reason = !activeBuyerAccess
+          ? "Active Buyer title access required"
+          : "License entitlement required";
+        await writeAudit({
+          actorUserId: actor.userId,
+          action: "asset.list_denied",
+          entityType: "bridge_title",
+          entityId: title.id,
+          metadata: { reason },
+        });
+        throw new Error(reason);
+      }
     }
     const sql = await getSql();
     const rows = await sql<{
