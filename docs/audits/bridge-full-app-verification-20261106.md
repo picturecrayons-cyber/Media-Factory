@@ -18,7 +18,7 @@
 | Responsive certification branch | `chore/bridge-responsive-certification-20261105` has 45 branch-scoped Preview variables targeting Testing DB and fail-closed empty integration credentials; a READY Preview exists at commit `eca905d566f4dff298ce0d34f9394face314ee13` |
 | Legacy branch | `feat/crayons-bridge-production` retains Preview Supabase URL `uakpqqardziifcwzvgfx` and non-empty SMTP Preview settings. This is stale/ambiguous configuration and was not changed. |
 
-The responsive-certification Preview is not the current PR #490/#487/#489 code revision. The staging custom hostname does not resolve. The old `feat/crayons-bridge-production` Preview configuration must be retired or corrected only after its ownership/use is confirmed; no Vercel environment values were changed in this audit.
+The responsive-certification Preview was also checked by read-only GET at `https://bridge-qo6e8fkjz-stream-vista-opc-pvt-ltd-s-projects.vercel.app`: homepage and login loaded; `/studio` and the title workspace gated to login. The deployment did not expose a verifiable commit SHA, so it cannot be claimed as the known READY commit or as PR #490/#487/#489. The staging custom hostname does not resolve. The old `feat/crayons-bridge-production` Preview configuration must be retired or corrected only after its ownership/use is confirmed; no Vercel environment values were changed in this audit.
 
 ## Testing DB
 
@@ -77,6 +77,7 @@ This verifies logged-out routing only. It does not verify role-specific authenti
 - PR #486: gate and `workflow-postgres` PASS; 159 tests passed, 0 failed on the checked revision.
 - PR #490: gate and `workflow-postgres` PASS on the checked revision; 159 tests passed, 0 failed.
 - PR #487 and PR #489: no GitHub Actions pull-request workflow run was found for the checked commits. Their base branches are not included in the current CI workflow pull-request branch filter. Do not infer CI success from PR #486/#490.
+- A tokenized streaming URL regression in PR #489 was corrected in commit `f0a0089370c0d5e2a4620cdc5924c20fe4a14cf7`; that commit still has no Actions run.
 - Vercel build status has been rate-limited/failed for the active branch work; no current PR-head Preview was certified.
 
 ## Code-review blockers found
