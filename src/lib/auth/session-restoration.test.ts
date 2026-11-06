@@ -79,20 +79,17 @@ test("refresh waits for confirmation restoration and uses the SDK's current toke
 });
 
 for (const session of [null, { ...confirmedSession, refresh_token: "" }]) {
-  test(`missing ${session ? "refresh token" : "session"} never attempts forced refresh`, async () => {
-    const restored = await restoreSupabaseSession(
-      {
-        getSession: async () => result(session),
-        refreshSession: async () => {
-          assert.fail("must not refresh without a restored token");
-        },
+  test("missing " + (session ? "refresh token" : "session") + " never attempts forced refresh", async () => {
+    const auth = {
+      getSession: async () => result(session),
+      refreshSession: async () => {
+        assert.fail("must not refresh without a restored token");
       },
-      { forceRefresh: true },
-    );
+    };
     if (session) {
-      await assert.rejects(() => restoreSupabaseSession({ getSession: async () => result(session), refreshSession: async () => { assert.fail("must not refresh"); } }, { forceRefresh: true }), /AUTH_REFRESH_TOKEN_MISSING/);
+      await assert.rejects(() => restoreSupabaseSession(auth, { forceRefresh: true }), /AUTH_REFRESH_TOKEN_MISSING/);
     } else {
-      assert.equal(restored, null);
+      assert.equal(await restoreSupabaseSession(auth, { forceRefresh: true }), null);
     }
   });
 }
