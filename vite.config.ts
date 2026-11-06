@@ -49,6 +49,9 @@ function pgliteBootstrapPlugin(): Plugin {
   };
 }
 
+// Derive the browser auth environment from Vercel's deployment context. Do not trust an override.
+process.env.VITE_APP_ENV = process.env.VERCEL_ENV || "development";
+
 // Authentication is owned exclusively by Supabase Auth. Legacy Better Auth
 // popup middleware was retired; auth callbacks are handled by the Supabase flow.
 
