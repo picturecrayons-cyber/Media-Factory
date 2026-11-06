@@ -15,7 +15,7 @@ import {
 
 export const Route = createFileRoute("/admin/workstations")({ component: AdminWorkstations });
 
-const TABS = ["Titles", "Concepts", "QC", "Rights", "Buyers", "Deliveries", "Internal Audit"] as const;
+const TABS = ["Titles", "Concepts", "QC", "Rights", "Buyers", "Deliveries", "Internal Audit", "Audit History"] as const;
 type Tab = (typeof TABS)[number];
 
 const STATUS_LABELS: Record<string, string> = {
