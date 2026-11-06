@@ -929,7 +929,9 @@ function verifiedFor(
   assets: Array<{ id: string; kind: string; verified: boolean }>,
   kind: SimpleAssetKind,
 ) {
-  return assets.find((asset) => asset.verified && (asset.kind === kind || (kind === "poster_vertical" && asset.kind === "poster")));
+  // Assets arrive newest-first. A pending re-upload supersedes the previous verified version.
+  const latest = assets.find((asset) => asset.kind === kind || (kind === "poster_vertical" && asset.kind === "poster"));
+  return latest?.verified ? latest : undefined;
 }
 
 function FileTypeCard({
