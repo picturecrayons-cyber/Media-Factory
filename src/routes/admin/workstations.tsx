@@ -246,9 +246,12 @@ function InternalAudit({ assets, isStorageAdmin }: { assets: any[]; isStorageAdm
       </section>
 
       <section className="space-y-3 rounded-2xl border border-line bg-surface p-5">
-        <div>
-          <h3 className="font-display text-2xl font-semibold">Test-data cleanup preview</h3>
-          <p className="text-sm text-muted">Dry-run candidates only. This tool does not delete database rows, files, multipart sessions or storage objects.</p>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3 className="font-display text-2xl font-semibold">Test-data cleanup preview</h3>
+            <p className="text-sm text-muted">Dry-run candidates only. This tool does not delete database rows, files, multipart sessions or storage objects.</p>
+          </div>
+          {isStorageAdmin ? <Button size="sm" variant="outline" disabled={cleanup.isFetching} onClick={() => void cleanup.refetch()}>{cleanup.isFetching ? "Scanning…" : "Run dry-run scan"}</Button> : null}
         </div>
         {!isStorageAdmin ? <p className="text-sm text-muted">Admin or Super Admin access required.</p> : cleanup.isPending ? <p className="text-sm text-muted">Scanning candidate titles…</p> : cleanup.isError ? <p role="alert" className="text-sm text-red-500">Cleanup inventory unavailable.</p> : (
           <>
