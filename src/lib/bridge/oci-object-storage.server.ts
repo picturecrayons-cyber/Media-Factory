@@ -134,6 +134,7 @@ async function signedFetch(opts: {
   method: "GET" | "HEAD" | "POST" | "DELETE";
   path: string;
   body?: unknown;
+  headers?: Record<string, string>;
 }) {
   const url = new URL(opts.path, endpoint(opts.cfg.region));
   const body = opts.body === undefined ? undefined : JSON.stringify(opts.body);
@@ -145,7 +146,7 @@ async function signedFetch(opts: {
     contentType: body === undefined ? undefined : "application/json",
   });
   const safeHeaders = Object.fromEntries(
-    Object.entries(headers).map(([key, value]) => [toLatin1(key), toLatin1(value)]),
+    Object.entries({ ...headers, ...(opts.headers ?? {}) }).map(([key, value]) => [toLatin1(key), toLatin1(value)]),
   );
   // Fail closed when OCI signing/namespace/PAR requests stall. The caller receives
   // a bounded error instead of leaving the browser upload UI in "Preparing…" forever.
@@ -328,11 +329,12 @@ export async function signDownload(opts: { key: string; expiresIn?: number }) {
   return { url: signed.url, key: opts.key, bucket: signed.bucket, method: "GET" as const };
 }
 
-export async function getObjectResponse(key: string) {
+export async function getObjectResponse(key: string, range?: string) {
   const cfg = config();
   const namespace = await resolveNamespace(cfg);
   const path = `/n/${encodeURIComponent(namespace)}/b/${encodeURIComponent(cfg.bucket)}/o/${encodedObjectName(key)}`;
-  return signedFetch({ cfg, method: "GET", path });
+  if (range && !/^bytes=(?:\d+-\d*|-\d+)$/.test(range)) throw new Error("Object byte range is invalid");
+  return signedFetch({ cfg, method: "GET", path, headers: range ? { range } : undefined });
 }
 
 export async function verifyObject(key: string, expectedContentType?: string | null) {

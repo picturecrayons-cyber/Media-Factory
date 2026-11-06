@@ -14,6 +14,7 @@ import { downloadDecision } from "./delivery-policy";
 import { uploadUrlLifetimeSeconds } from "./upload-url-lifetime";
 import { validateOttIngestFile, type OttIngestKind } from "./ott-ingest-spec";
 import { validatePartManifest } from "./upload-manifest.ts";
+import { createAssetStreamToken } from "./asset-stream-token.server";
 
 const UPLOADABLE: ReadonlySet<string> = new Set(["DRAFT", "UPLOADING", "PREPARING"]);
 
@@ -554,16 +555,22 @@ export const requestAssetDownload = createServerFn({ method: "POST" })
       });
       throw new Error(decision.reason);
     }
-    const { signDownload } = await import("./oci-object-storage.server");
-    const signed = await signDownload({ key: asset.verified_object_key! });
+    if (actor.accountType === "buyer" && !actor.internalRole) {
+      const { assertBuyerPublishable } = await import("./buyer-visibility");
+      await assertBuyerPublishable(title.id);
+    }
+    const token = createAssetStreamToken(actor.userId, asset.id, 60);
     await writeAudit({
       actorUserId: actor.userId,
-      action: "asset.download_signed",
+      action: "asset.stream_token_issued",
       entityType: "bridge_asset",
       entityId: asset.id,
     });
-    // Never return bucket names or object keys in the download response, including to Buyers.
-    return { url: signed.url, method: signed.method };
+    return {
+      url: `/api/assets/${encodeURIComponent(asset.id)}/stream?token=${encodeURIComponent(token)}`,
+      method: "GET" as const,
+      expiresIn: 60,
+    };
   });
 
 export const listTitleAssets = createServerFn({ method: "GET" })
@@ -620,271 +627,41 @@ export const listTitleAssets = createServerFn({ method: "GET" })
         })),
     };
   });
- limit 1
+
+/** Issue a short-lived capability only after current server-side authorization. */
+export const createAssetStreamCapability = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({ assetId: z.string().min(8) }))
+  .handler(async ({ context, data }) => {
+    const actor = await requireVerifiedActor(context.userId);
+    const sql = await getSql();
+    const rows = await sql<{ id:string; title_id:string; kind:string; verified_object_key:string|null; checksum_sha256:string|null; byte_size:number|null }>`
+      select id,title_id,kind,verified_object_key,checksum_sha256,byte_size
+      from bridge_assets where id=${data.assetId} limit 1
     `;
     const asset = rows[0];
-    if (!asset) throw new Error("Not found");
+    if (!asset || !asset.verified_object_key || !/^[a-f0-9]{64}$/.test(asset.checksum_sha256 ?? "") || Number(asset.byte_size ?? 0) <= 0) {
+      throw new Error("Only SHA-256 verified immutable assets can be streamed");
+    }
     const title = await loadTitle(asset.title_id);
-    if (!title || !canReadTitle(actor, title)) throw new Error("Not found");
-    const entitled = await hasLicenseEntitlement(actor.userId, title.id);
+    if (!title || !canReadTitle(actor,title)) throw new Error("Not found");
+    const entitledRows = await sql<{ ok:boolean }>`
+      select exists(select 1 from bridge_entitlements
+        where user_id=${actor.userId} and title_id=${title.id}
+          and access_type='license') as ok
+    `;
     const decision = downloadDecision({
       kind: asset.kind,
       actorIsOwner: title.ownerUserId === actor.userId,
       actorIsInternal: Boolean(actor.internalRole),
       accountType: actor.accountType,
-      hasLicenseEntitlement: entitled,
+      hasLicenseEntitlement: Boolean(entitledRows[0]?.ok),
     });
-    if (!decision.allow) {
-      await writeAudit({
-        actorUserId: actor.userId,
-        action: "asset.download_denied",
-        entityType: "bridge_asset",
-        entityId: asset.id,
-        metadata: { reason: decision.reason, kind: asset.kind },
-      });
-      throw new Error(decision.reason);
+    if (!decision.allow) throw new Error("Streaming entitlement is not active");
+    if (actor.accountType === "buyer" && !actor.internalRole) {
+      const { assertBuyerPublishable } = await import("./buyer-visibility");
+      await assertBuyerPublishable(title.id);
     }
-    const { signDownload } = await import("./oci-object-storage.server");
-    const signed = await signDownload({ key: asset.s3_key });
-    await writeAudit({
-      actorUserId: actor.userId,
-      action: "asset.download_signed",
-      entityType: "bridge_asset",
-      entityId: asset.id,
-    });
-    return signed;
-  });
-
-export const listTitleAssets = createServerFn({ method: "GET" })
-  .middleware([authMiddleware])
-  .validator(z.object({ titleId: z.string().min(8) }))
-  .handler(async ({ context, data }) => {
-    const actor = await requireVerifiedActor(context.userId);
-    const title = await loadTitle(data.titleId);
-    if (!title || !canReadTitle(actor, title)) throw new Error("Not found");
-    const sql = await getSql();
-    const buyer = actor.accountType === "buyer" && !actor.internalRole;
-    const rows = await sql<{
-      id: string; kind: string; s3_key: string; content_type: string | null;
-      byte_size: number | null; created_at: string | Date;
-      storage_provider: string | null; storage_bucket: string | null;
-      storage_namespace: string | null; storage_region: string | null;
-      storage_endpoint: string | null; checksum_sha256: string | null;
-      verified_object_key: string | null; object_version_id: string | null;
-      object_generation: string | null; storage_verified_at: string | Date | null;
-    }>`
-      select id, kind, s3_key, content_type, byte_size, created_at,
-        storage_provider, storage_bucket, storage_namespace, storage_region,
-        storage_endpoint, checksum_sha256, verified_object_key, object_version_id,
-        object_generation, storage_verified_at
-      from bridge_assets where title_id = ${title.id} and byte_size > 0 order by created_at desc
-    `;
-    return {
-      assets: rows
-        .filter((r) => !buyer || !["master", "technical", "censor_certificate"].includes(r.kind))
-        .map((r) => ({
-          id: r.id,
-          kind: r.kind,
-          key: buyer ? null : r.s3_key,
-          contentType: r.content_type,
-          byteSize: r.byte_size,
-          verified: Number(r.byte_size) > 0 && Boolean(r.verified_object_key && r.checksum_sha256),
-          ...(buyer ? {} : {
-            storageLocation: r.verified_object_key ? {
-              provider: r.storage_provider,
-              objectKey: r.verified_object_key,
-              bucket: r.storage_bucket,
-              namespace: r.storage_namespace,
-              region: r.storage_region,
-              endpoint: r.storage_endpoint,
-              checksumSha256: r.checksum_sha256,
-              objectVersionId: r.object_version_id,
-              objectGeneration: r.object_generation,
-              verifiedAt: r.storage_verified_at instanceof Date
-                ? r.storage_verified_at.toISOString()
-                : r.storage_verified_at ? String(r.storage_verified_at) : null,
-            } : null,
-          }),
-          createdAt: r.created_at instanceof Date ? r.created_at.toISOString() : String(r.created_at),
-        })),
-    };
-  });
- limit 1
-    `;
-    const asset = rows[0];
-    if (!asset) throw new Error("Not found");
-    const title = await loadTitle(asset.title_id);
-    if (!title || !canReadTitle(actor, title)) throw new Error("Not found");
-    const entitled = await hasLicenseEntitlement(actor.userId, title.id);
-    const decision = downloadDecision({
-      kind: asset.kind,
-      actorIsOwner: title.ownerUserId === actor.userId,
-      actorIsInternal: Boolean(actor.internalRole),
-      accountType: actor.accountType,
-      hasLicenseEntitlement: entitled,
-    });
-    if (!decision.allow) {
-      await writeAudit({
-        actorUserId: actor.userId,
-        action: "asset.download_denied",
-        entityType: "bridge_asset",
-        entityId: asset.id,
-        metadata: { reason: decision.reason, kind: asset.kind },
-      });
-      throw new Error(decision.reason);
-    }
-    const { signDownload } = await import("./oci-object-storage.server");
-    const signed = await signDownload({ key: asset.verified_object_key! });
-    await writeAudit({
-      actorUserId: actor.userId,
-      action: "asset.download_signed",
-      entityType: "bridge_asset",
-      entityId: asset.id,
-    });
-    // Never return bucket names or object keys in the download response, including to Buyers.
-    return { url: signed.url, method: signed.method };
-  });
-
-export const listTitleAssets = createServerFn({ method: "GET" })
-  .middleware([authMiddleware])
-  .validator(z.object({ titleId: z.string().min(8) }))
-  .handler(async ({ context, data }) => {
-    const actor = await requireVerifiedActor(context.userId);
-    const title = await loadTitle(data.titleId);
-    if (!title || !canReadTitle(actor, title)) throw new Error("Not found");
-    const sql = await getSql();
-    const buyer = actor.accountType === "buyer" && !actor.internalRole;
-    const rows = await sql<{
-      id: string; kind: string; s3_key: string; content_type: string | null;
-      byte_size: number | null; created_at: string | Date;
-      storage_provider: string | null; storage_bucket: string | null;
-      storage_namespace: string | null; storage_region: string | null;
-      storage_endpoint: string | null; checksum_sha256: string | null;
-      verified_object_key: string | null; object_version_id: string | null;
-      object_generation: string | null; storage_verified_at: string | Date | null;
-    }>`
-      select id, kind, s3_key, content_type, byte_size, created_at,
-        storage_provider, storage_bucket, storage_namespace, storage_region,
-        storage_endpoint, checksum_sha256, verified_object_key, object_version_id,
-        object_generation, storage_verified_at
-      from bridge_assets where title_id = ${title.id} and byte_size > 0 order by created_at desc
-    `;
-    return {
-      assets: rows
-        .filter((r) => !buyer || !["master", "technical", "censor_certificate"].includes(r.kind))
-        .map((r) => ({
-          id: r.id,
-          kind: r.kind,
-          key: buyer ? null : r.s3_key,
-          contentType: r.content_type,
-          byteSize: r.byte_size,
-          verified: Number(r.byte_size) > 0 && Boolean(r.verified_object_key && r.checksum_sha256),
-          ...(buyer ? {} : {
-            storageLocation: r.verified_object_key ? {
-              provider: r.storage_provider,
-              objectKey: r.verified_object_key,
-              bucket: r.storage_bucket,
-              namespace: r.storage_namespace,
-              region: r.storage_region,
-              endpoint: r.storage_endpoint,
-              checksumSha256: r.checksum_sha256,
-              objectVersionId: r.object_version_id,
-              objectGeneration: r.object_generation,
-              verifiedAt: r.storage_verified_at instanceof Date
-                ? r.storage_verified_at.toISOString()
-                : r.storage_verified_at ? String(r.storage_verified_at) : null,
-            } : null,
-          }),
-          createdAt: r.created_at instanceof Date ? r.created_at.toISOString() : String(r.created_at),
-        })),
-    };
-  });
- limit 1
-    `;
-    const asset = rows[0];
-    if (!asset) throw new Error("Not found");
-    const title = await loadTitle(asset.title_id);
-    if (!title || !canReadTitle(actor, title)) throw new Error("Not found");
-    const entitled = await hasLicenseEntitlement(actor.userId, title.id);
-    const decision = downloadDecision({
-      kind: asset.kind,
-      actorIsOwner: title.ownerUserId === actor.userId,
-      actorIsInternal: Boolean(actor.internalRole),
-      accountType: actor.accountType,
-      hasLicenseEntitlement: entitled,
-    });
-    if (!decision.allow) {
-      await writeAudit({
-        actorUserId: actor.userId,
-        action: "asset.download_denied",
-        entityType: "bridge_asset",
-        entityId: asset.id,
-        metadata: { reason: decision.reason, kind: asset.kind },
-      });
-      throw new Error(decision.reason);
-    }
-    const { signDownload } = await import("./oci-object-storage.server");
-    const signed = await signDownload({ key: asset.s3_key });
-    await writeAudit({
-      actorUserId: actor.userId,
-      action: "asset.download_signed",
-      entityType: "bridge_asset",
-      entityId: asset.id,
-    });
-    return signed;
-  });
-
-export const listTitleAssets = createServerFn({ method: "GET" })
-  .middleware([authMiddleware])
-  .validator(z.object({ titleId: z.string().min(8) }))
-  .handler(async ({ context, data }) => {
-    const actor = await requireVerifiedActor(context.userId);
-    const title = await loadTitle(data.titleId);
-    if (!title || !canReadTitle(actor, title)) throw new Error("Not found");
-    const sql = await getSql();
-    const buyer = actor.accountType === "buyer" && !actor.internalRole;
-    const rows = await sql<{
-      id: string; kind: string; s3_key: string; content_type: string | null;
-      byte_size: number | null; created_at: string | Date;
-      storage_provider: string | null; storage_bucket: string | null;
-      storage_namespace: string | null; storage_region: string | null;
-      storage_endpoint: string | null; checksum_sha256: string | null;
-      verified_object_key: string | null; object_version_id: string | null;
-      object_generation: string | null; storage_verified_at: string | Date | null;
-    }>`
-      select id, kind, s3_key, content_type, byte_size, created_at,
-        storage_provider, storage_bucket, storage_namespace, storage_region,
-        storage_endpoint, checksum_sha256, verified_object_key, object_version_id,
-        object_generation, storage_verified_at
-      from bridge_assets where title_id = ${title.id} and byte_size > 0 order by created_at desc
-    `;
-    return {
-      assets: rows
-        .filter((r) => !buyer || !["master", "technical", "censor_certificate"].includes(r.kind))
-        .map((r) => ({
-          id: r.id,
-          kind: r.kind,
-          key: buyer ? null : r.s3_key,
-          contentType: r.content_type,
-          byteSize: r.byte_size,
-          verified: Number(r.byte_size) > 0 && Boolean(r.verified_object_key && r.checksum_sha256),
-          ...(buyer ? {} : {
-            storageLocation: r.verified_object_key ? {
-              provider: r.storage_provider,
-              objectKey: r.verified_object_key,
-              bucket: r.storage_bucket,
-              namespace: r.storage_namespace,
-              region: r.storage_region,
-              endpoint: r.storage_endpoint,
-              checksumSha256: r.checksum_sha256,
-              objectVersionId: r.object_version_id,
-              objectGeneration: r.object_generation,
-              verifiedAt: r.storage_verified_at instanceof Date
-                ? r.storage_verified_at.toISOString()
-                : r.storage_verified_at ? String(r.storage_verified_at) : null,
-            } : null,
-          }),
-          createdAt: r.created_at instanceof Date ? r.created_at.toISOString() : String(r.created_at),
-        })),
-    };
+    const token = createAssetStreamToken(actor.userId, asset.id, 60);
+    return { url: `/api/assets/${encodeURIComponent(asset.id)}/stream?token=${encodeURIComponent(token)}`, method: "GET" as const, expiresIn: 60 };
   });

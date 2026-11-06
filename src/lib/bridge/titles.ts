@@ -671,3 +671,41 @@ export const listAuditLogs = createServerFn({ method: "GET" })
       })),
     };
   });
+
+
+/**
+ * Permanently removes only an owned DRAFT with no uploaded assets or active
+ * multipart sessions. Object cleanup is deliberately not implicit: an object
+ * must never be orphaned by a browser-triggered cascade delete.
+ */
+export const deleteDraftTitle = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({ id: z.string().min(8).max(128), confirmName: z.string().min(1).max(160) }))
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    const sql = await getSql();
+    return sql.transaction(async (tx) => {
+      const rows = await tx<{id:string;name:string;status:string;owner_user_id:string}> `
+        select id,name,status,owner_user_id from bridge_titles where id=${data.id} for update
+      `;
+      const title = rows[0];
+      if (!title) throw new Error("Draft not found");
+      if (title.status !== "DRAFT") throw new Error("Only DRAFT titles can be deleted");
+      if (title.owner_user_id !== actor.userId && !(actor.internalRole === "super_admin" || actor.internalRole === "admin")) {
+        throw new Error("You are not authorized to delete this draft");
+      }
+      if (title.name !== data.confirmName) throw new Error("Title confirmation does not match");
+      const assets = await tx<{n:number}>`select count(*)::int as n from bridge_assets where title_id=${title.id}`;
+      if (Number(assets[0]?.n ?? 0) > 0) throw new Error("Draft contains media assets. Remove and verify storage cleanup before deleting the title.");
+      const active = await tx<{n:number}>`
+        select count(*)::int as n from bridge_private.upload_sessions s
+        join bridge_assets a on a.id=s.asset_id
+        where a.title_id=${title.id} and s.state in ('initiated','uploading','assembling','verification_pending')
+      `;
+      if (Number(active[0]?.n ?? 0) > 0) throw new Error("Draft has active uploads and cannot be deleted");
+      await tx`delete from bridge_titles where id=${title.id} and status='DRAFT'`;
+      await writeAudit({actorUserId:actor.userId,action:"title.draft_deleted",entityType:"bridge_title",entityId:title.id,metadata:{titleName:title.name}},tx);
+      return { deleted:true as const, id:title.id };
+    });
+  });
