@@ -609,6 +609,7 @@ export const getLoopPublication = createServerFn({ method: "GET" })
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
+    if (actor.accountType === "buyer" && !actor.internalRole) throw new Error("Forbidden");
     assertPermission(actor, "title.read_catalog");
     const sql = await getSql();
 
