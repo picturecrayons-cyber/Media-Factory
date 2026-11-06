@@ -8,6 +8,7 @@ const concepts = source("./story-concept-api.ts");
 const form = source("../../components/bridge/story-concept-form.tsx");
 const conceptRoute = source("../../routes/story-concepts.$conceptId.tsx");
 const desk = source("../../components/bridge/story-concept-desk.tsx");
+const conceptMigration = source("../../../supabase/migrations/20261106_story_concept_workflow_integrity.sql");
 
 test("arbitrary external treatment and screenplay URLs are never accepted or returned as private materials", () => {
   assert.doesNotMatch(concepts, /treatmentUrl: z\\.string\\(\\)\\.url/);
@@ -35,12 +36,24 @@ test("concept creation is atomic and audit is in the same transaction", () => {
   assert.match(concepts, /writeAudit\([\s\S]*?\}, tx\)/);
 });
 
-test("concept creation has an idempotency key and pending-review initial state", () => {
-  assert.match(concepts, /idempotencyKey: z\.string\(\)\.uuid\(\)/);
-  assert.match(concepts, /on conflict \(idempotency_key\) do nothing/);
+test("concept creation uses actor-scoped request-hash idempotency ledger", () => {
+  assert.match(concepts, /idempotencyKey: z\\.string\\(\\)\\.uuid\\(\\)/);
+  assert.match(concepts, /bridge_story_concept_idempotency/);
+  assert.match(concepts, /request_hash/);
+  assert.match(concepts, /IDEMPOTENCY_KEY_REUSED_WITH_DIFFERENT_PAYLOAD/);
+  assert.match(concepts, /pg_advisory_xact_lock/);
+  assert.doesNotMatch(concepts, /idempotency_key\\s*\\)\\s*do nothing/i);
+  assert.doesNotMatch(concepts, /bridge_story_concept_submissions where idempotency_key/);
   assert.match(concepts, /'PENDING_REVIEW'/);
 });
 
+test("workflow migration preserves legacy states and does not rewrite existing submissions", () => {
+  assert.match(conceptMigration, /ADD COLUMN IF NOT EXISTS reviewed_by/);
+  assert.match(conceptMigration, /bridge_story_concept_idempotency/);
+  assert.match(conceptMigration, /'INTRODUCED_TO_BUYERS'/);
+  assert.doesNotMatch(conceptMigration, /UPDATE public\\.bridge_story_concept_submissions/i);
+  assert.doesNotMatch(conceptMigration, /ADD COLUMN IF NOT EXISTS idempotency_key/);
+});
 test("concept review actions are admin-only and fee certification gates buyer evaluation", () => {
   assert.match(concepts, /actor\.internalRole !== "admin" && actor\.internalRole !== "super_admin"/);
   assert.match(concepts, /data\.status === "BUYER_EVALUATION_APPROVED" && !current\.fee_certified_at/);
