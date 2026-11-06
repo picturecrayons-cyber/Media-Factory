@@ -513,6 +513,7 @@ export const listTitleAssets = createServerFn({ method: "GET" })
           ...(buyer ? {} : {
             storageLocation: r.verified_object_key ? {
               provider: r.storage_provider,
+              objectKey: r.verified_object_key,
               bucket: r.storage_bucket,
               namespace: r.storage_namespace,
               region: r.storage_region,
