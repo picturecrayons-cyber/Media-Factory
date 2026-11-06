@@ -32,7 +32,7 @@ export function RequireBridge({
   const qc = useQueryClient();
   const [retrying, setRetrying] = useState(false);
   const [retryError, setRetryError] = useState<string | null>(null);
-  const { user, isPending } = useCurrentUserState();
+  const { user, isPending, authError, retry: retryAuth } = useCurrentUserState();
   const sessionQ = useQuery({
     queryKey: ["bridge-session", user?.id],
     queryFn: () => getBridgeSession(),
@@ -49,7 +49,16 @@ export function RequireBridge({
   if (isPending || (user && sessionQ.isPending)) {
     return (
       <Frame>
-        <p className="text-sm text-muted">Opening your desk…</p>
+        <p role="status" aria-live="polite" className="text-sm text-muted">Opening your desk…</p>
+      </Frame>
+    );
+  }
+  if (authError) {
+    return (
+      <Frame>
+        <h1 className="font-display text-2xl">Secure session unavailable</h1>
+        <p role="alert" className="text-sm text-muted">{authError}</p>
+        <Button type="button" onClick={retryAuth}>Retry session</Button>
       </Frame>
     );
   }
