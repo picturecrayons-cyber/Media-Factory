@@ -340,7 +340,15 @@ export const listTitleAssets = createServerFn({ method: "GET" })
           where l.entity_type = 'bridge_asset' and l.entity_id = a.id
             and l.action = 'asset.upload_verified'
             and l.metadata->>'checksumAlgorithm' = 'SHA-256'
-            and l.metadata->>'checksumSha256' ~ '^[0-9a-f]{64}
+            and l.metadata->>'checksumSha256' ~ '^[0-9a-f]{64}$'
+            and l.metadata->>'sealedKey' = a.s3_key
+            and l.metadata->>'byteSize' ~ '^[0-9]+$'
+            and (l.metadata->>'byteSize')::bigint = a.byte_size
+        ) as provenance_verified
+      from bridge_assets a
+      where a.title_id = ${title.id} and a.byte_size > 0
+      order by a.created_at desc
+    `;
     return {
       assets: rows
         .filter((r) => !buyer || !["master", "technical", "censor_certificate"].includes(r.kind))
@@ -352,46 +360,7 @@ export const listTitleAssets = createServerFn({ method: "GET" })
           byteSize: r.byte_size,
           verified: Number(r.byte_size) > 0 && r.provenance_verified,
           checksumSha256: r.checksum_sha256,
-          createdAt:
-            r.created_at instanceof Date ? r.created_at.toISOString() : String(r.created_at),
-        })),
-    };
-  });
-
-            and l.metadata->>'sealedKey' = a.s3_key
-            and l.metadata->>'byteSize' ~ '^[0-9]+
-    return {
-      assets: rows
-        .filter((r) => !buyer || !["master", "technical", "censor_certificate"].includes(r.kind))
-        .map((r) => ({
-          id: r.id,
-          kind: r.kind,
-          key: buyer ? null : r.s3_key,
-          contentType: r.content_type,
-          byteSize: r.byte_size,
-          verified: Number(r.byte_size) > 0,
-          createdAt:
-            r.created_at instanceof Date ? r.created_at.toISOString() : String(r.created_at),
-        })),
-    };
-  });
-
-            and (l.metadata->>'byteSize')::bigint = a.byte_size
-        ) as provenance_verified
-      from bridge_assets a where a.title_id = ${title.id} and a.byte_size > 0 order by a.created_at desc
-    `;
-    return {
-      assets: rows
-        .filter((r) => !buyer || !["master", "technical", "censor_certificate"].includes(r.kind))
-        .map((r) => ({
-          id: r.id,
-          kind: r.kind,
-          key: buyer ? null : r.s3_key,
-          contentType: r.content_type,
-          byteSize: r.byte_size,
-          verified: Number(r.byte_size) > 0,
-          createdAt:
-            r.created_at instanceof Date ? r.created_at.toISOString() : String(r.created_at),
+          createdAt: r.created_at instanceof Date ? r.created_at.toISOString() : String(r.created_at),
         })),
     };
   });
