@@ -31,16 +31,16 @@ export function MyStoryConcepts() {
   const concepts = query.data?.concepts ?? [];
   if (!concepts.length) {
     return (
-      <section>
-        <h2 className="mb-3 text-lg font-semibold">Story concepts</h2>
+      <section className="min-w-0 space-y-3">
+        <h2 className="m-0 block w-full min-w-0 break-words text-lg font-semibold leading-tight tracking-tight">Story concepts</h2>
         <p className="text-sm text-muted">No story concepts submitted yet.</p>
       </section>
     );
   }
 
   return (
-    <section>
-      <h2 className="mb-3 text-lg font-semibold">Story concepts</h2>
+    <section className="min-w-0 space-y-3">
+      <h2 className="m-0 block w-full min-w-0 break-words text-lg font-semibold leading-tight tracking-tight">Story concepts</h2>
       <ul className="divide-y divide-line rounded-sm border border-line">
         {concepts.map((c) => {
           const logline = listLogline(c.logline);
