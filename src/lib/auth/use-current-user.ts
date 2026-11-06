@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import type { User } from "@supabase/supabase-js";
 import { getSupabaseSession, subscribeAuthChange } from "./client";
 
 export type AppUser = {
@@ -17,8 +18,8 @@ export type CurrentUserState = {
   retry: () => void;
 };
 
-function normalize(user: AppUser | null | undefined): AppUser | null {
-  if (!user || !("id" in user)) return null;
+function normalize(user: User | null | undefined): AppUser | null {
+  if (!user) return null;
   return {
     id: user.id,
     displayName: (user as any).user_metadata?.name ?? (user as any).user_metadata?.full_name ?? null,
@@ -42,7 +43,13 @@ export function useCurrentUserState(): CurrentUserState {
     let alive = true;
     let authChanged = false;
     setState({ user: null, isPending: true, authError: null });
-    const unsubscribe = subscribeAuthChange((_event, session) => {
+    const unsubscribe = subscribeAuthChange((event, session) => {
+      if (event === "INITIAL_SESSION") {
+        // INITIAL_SESSION is not sufficient to unlock protected data queries;
+        // wait for the awaited getSession() result below.
+        if (alive) setState({ user: normalize(session?.user), isPending: true, authError: null });
+        return;
+      }
       authChanged = true;
       if (alive) {
         setState({ user: normalize(session?.user), isPending: false, authError: null });
