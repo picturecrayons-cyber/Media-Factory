@@ -96,7 +96,9 @@ test("Buyer title, asset-list and direct-download paths independently require pu
   assert.match(assets, /if \(actor\.accountType === "buyer" && !actor\.internalRole\)/);
   assert.match(assets, /function hasActiveBuyerTitleAccess[\s\S]*buyer_user_id = \$\{userId\}[\s\S]*revoked_at is null[\s\S]*expires_at is null or expires_at > now\(\)/);
   assert.match(assets, /hasActiveBuyerTitleAccess\(actor\.userId, title\.id\)/);
+  assert.match(assets, /const activeBuyerAccess = await hasActiveBuyerTitleAccess\(actor\.userId, title\.id\)/);
   assert.match(assets, /asset\.list_denied/);
+  assert.match(assets, /asset\.download_denied/);
   assert.match(assets, /where user_id = \$\{userId\} and title_id = \$\{titleId\} and access_type = 'license'/);
 });
 
