@@ -1,6 +1,6 @@
+import { useEffect, useState } from "react";
 import { ArrowUpRight, AudioLines, Camera, Cloud, Film, Image, ShieldCheck, Workflow } from "lucide-react";
-import type { BridgeActor } from "@/lib/bridge/session";
-import { canAccessDitWorkspace } from "@/lib/bridge/rbac";
+import { getDitWorkspaceAccess } from "@/lib/bridge/session";
 
 type Workstream = {
   title: string;
@@ -62,8 +62,35 @@ function WorkstreamCard({ item }: { item: Workstream }) {
   );
 }
 
-export function DitWorkspace({ actor }: { actor: BridgeActor }) {
-  if (!canAccessDitWorkspace(actor)) {
+type DitAccessState = "loading" | "allowed" | "denied";
+
+export function DitWorkspace() {
+  const [access, setAccess] = useState<DitAccessState>("loading");
+
+  useEffect(() => {
+    let cancelled = false;
+    void getDitWorkspaceAccess()
+      .then((result) => {
+        if (!cancelled) setAccess(result.allowed ? "allowed" : "denied");
+      })
+      .catch(() => {
+        // Fail closed if the authenticated server check cannot be completed.
+        if (!cancelled) setAccess("denied");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (access === "loading") {
+    return (
+      <section className="rounded-2xl border border-line bg-surface p-5" aria-live="polite" role="status">
+        <p className="text-sm text-muted">Checking DIT workspace access…</p>
+      </section>
+    );
+  }
+
+  if (access === "denied") {
     return (
       <section className="rounded-2xl border border-line bg-surface p-5" aria-labelledby="dit-access-title">
         <h2 id="dit-access-title" className="font-semibold">DIT workspace access required</h2>
