@@ -9,8 +9,8 @@ const form = source("../../components/bridge/story-concept-form.tsx");
 const conceptRoute = source("../../routes/story-concepts.$conceptId.tsx");
 
 test("finished film catalog and owner queries exclude story concepts", () => {
-    assert.match(titles, /coalesce\\((?:t\\.)?submission_type, 'finished_film'\\) = 'finished_film'/);
-  assert.match(titles, /coalesce\(submission_type, 'finished_film'\) = 'finished_film'/);
+  assert.match(titles, /coalesce\((?:t\.)?submission_type, 'finished_film'\) = 'finished_film'/);
+  assert.match(titles, /coalesce\((?:t\.)?submission_type, 'finished_film'\) = 'finished_film'/);
 });
 
 test("generic title loader rejects concept records rather than showing a film workspace", () => {
@@ -35,7 +35,7 @@ test("concept creation has an idempotency key and pending-review initial state",
 
 test("concept review actions are admin-only and fee certification gates buyer evaluation", () => {
   assert.match(concepts, /actor\.internalRole !== "admin" && actor\.internalRole !== "super_admin"/);
-    assert.match(concepts, /data\\.status === \"BUYER_EVALUATION_APPROVED\" && !current\\.fee_certified_at/);
+  assert.match(concepts, /data\.status === "BUYER_EVALUATION_APPROVED" && !current\.fee_certified_at/);
 });
 
 test("concept detail workspace does not load film assets or QC workflow", () => {
