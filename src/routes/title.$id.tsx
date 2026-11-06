@@ -728,19 +728,41 @@ function FilesPanel({
             </div>
             <button
               type="button"
-              onClick={() => {
+              onClick={async () => {
                 cancelRequestedRef.current = true;
                 uploadAttemptRef.current += 1;
-                uploadXhrRef.current?.abort();
                 const session = activeMultipart.current;
                 activeMultipart.current = null;
+                uploadXhrRef.current?.abort();
                 if (session) {
-                  clearUploadSession(session.titleId, session.kind);
-                  void abortAssetMultipart({ data: { assetId: session.assetId, sessionId: session.sessionId, sessionToken: session.sessionToken } }).catch(() => undefined);
+                  try {
+                    // Do not forget the browser session until the provider abort and
+                    // server-side manifest cleanup have both been acknowledged.
+                    await abortAssetMultipart({
+                      data: {
+                        assetId: session.assetId,
+                        sessionId: session.sessionId,
+                        sessionToken: session.sessionToken,
+                      },
+                    });
+                    clearUploadSession(session.titleId, session.kind);
+                  } catch {
+                    activeMultipart.current = session;
+                    writeUploadSession(session);
+                    cancelRequestedRef.current = false;
+                    setUploading(session.kind);
+                    announce(
+                      "Multipart cleanup could not be confirmed. Do not start a replacement upload; retry Cancel or resume this same file.",
+                      "error",
+                      true,
+                    );
+                    return;
+                  }
                 }
+                cancelRequestedRef.current = false;
                 setProgress(null);
-                announce("Upload cancelled. Completed parts from this attempt were discarded.", "error", true);
-                if (!uploadXhrRef.current) setUploading(null);
+                announce("Upload cancelled. Provider parts and the durable part manifest were discarded.", "error", true);
+                setUploading(null);
               }}
               className="rounded-full border border-line bg-surface px-3 py-1.5 text-xs font-semibold"
             >
