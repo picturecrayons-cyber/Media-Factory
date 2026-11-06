@@ -13,6 +13,7 @@ import {
   abortAssetMultipart,
   beginAssetMultipart,
   commitAssetMultipart,
+  recordAssetMultipartPart,
   confirmAssetUpload,
   listTitleAssets,
   requestAssetDownload,
@@ -378,7 +379,7 @@ function FilesPanel({
   }
 
   function transferWithProgress(kind: SimpleAssetKind, url: string, method: string, file: File, contentType: string) {
-    return new Promise<void>((resolve, reject) => {
+    return new Promise<string>((resolve, reject) => {
       const xhr = new XMLHttpRequest();
       uploadXhrRef.current = xhr;
       const startedAt = Date.now();
@@ -424,7 +425,7 @@ function FilesPanel({
   }
 
   function putPart(url: string, blob: Blob, contentType: string, onLoaded: (loaded: number) => void) {
-    return new Promise<void>((resolve, reject) => {
+    return new Promise<string>((resolve, reject) => {
       const xhr = new XMLHttpRequest();
       uploadXhrRef.current = xhr;
       let stall: ReturnType<typeof setTimeout> | undefined;
@@ -442,8 +443,11 @@ function FilesPanel({
       xhr.onload = () => {
         if (stall) clearTimeout(stall);
         uploadXhrRef.current = null;
-        if (xhr.status >= 200 && xhr.status < 300) resolve();
-        else reject(new Error(`Part upload failed (${xhr.status}). Completed parts were kept. Choose the same file to continue.`));
+        if (xhr.status >= 200 && xhr.status < 300) {
+          const etag = xhr.getResponseHeader("etag")?.replaceAll('"', "");
+          if (!etag) reject(new Error("OCI did not expose the uploaded part ETag; check bucket CORS ExposeHeaders"));
+          else resolve(etag);
+        } else reject(new Error(`Part upload failed (${xhr.status}). Completed parts were kept. Choose the same file to continue.`));
       };
       xhr.onerror = () => {
         if (stall) clearTimeout(stall);
@@ -486,6 +490,7 @@ function FilesPanel({
         kind,
         assetId: signed.assetId,
         uploadId: started.uploadId,
+        sessionId: started.sessionId,
         partBaseUrl: started.partBaseUrl,
         sessionToken: started.sessionToken,
         fileName: file.name,
@@ -518,7 +523,7 @@ function FilesPanel({
         for (let attempt = 1; attempt <= 4 && !sent; attempt += 1) {
           assertAttemptActive();
           try {
-            await putPart(session.partBaseUrl + String(part), file.slice(start, end), contentType, (loaded) => {
+            const etag = await putPart(session.partBaseUrl + String(part), file.slice(start, end), contentType, (loaded) => {
               const transferred = Math.min(session!.fileSize, baseLoaded + loaded);
               setProgress({
                 kind,
@@ -539,13 +544,17 @@ function FilesPanel({
             await new Promise((resolve) => setTimeout(resolve, attempt * 2000));
           }
         }
+        await recordAssetMultipartPart({ data: {
+          assetId: session.assetId, sessionId: session.sessionId, sessionToken: session.sessionToken,
+          partNumber: part, byteStart: start, byteEnd: end, etag,
+        } });
         session = { ...session, completedParts: [...session.completedParts, part] };
         writeUploadSession(session);
         activeMultipart.current = session;
       }
       assertAttemptActive();
       await withTimeout(
-        commitAssetMultipart({ data: { assetId: session.assetId, sessionToken: session.sessionToken } }),
+        commitAssetMultipart({ data: { assetId: session.assetId, sessionId: session.sessionId, sessionToken: session.sessionToken } }),
         30_000,
         "Multipart commit",
       );
@@ -718,7 +727,7 @@ function FilesPanel({
                 activeMultipart.current = null;
                 if (session) {
                   clearUploadSession(session.titleId, session.kind);
-                  void abortAssetMultipart({ data: { assetId: session.assetId, sessionToken: session.sessionToken } }).catch(() => undefined);
+                  void abortAssetMultipart({ data: { assetId: session.assetId, sessionId: session.sessionId, sessionToken: session.sessionToken } }).catch(() => undefined);
                 }
                 setProgress(null);
                 announce("Upload cancelled. Completed parts from this attempt were discarded.", "error", true);
