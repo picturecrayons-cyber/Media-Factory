@@ -50,7 +50,7 @@ function Buyer() {
   return (
     <RequireBridge allow="buyer">
       {(actor) => (
-        <BridgeShell actor={actor} title="Buyer dashboard">
+        <BridgeShell actor={actor} title="Buyer Portal">
           <p className="mb-6 max-w-2xl text-sm leading-relaxed text-muted">
             Discover licensing-ready titles, open a listing, then license only after captured payment.
           </p>
