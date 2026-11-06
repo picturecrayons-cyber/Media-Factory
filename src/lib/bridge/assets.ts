@@ -194,7 +194,7 @@ export const recordAssetMultipartPart = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     const asset = await openUploadAsset(context.userId, data.assetId);
     const { verifyMultipartSession } = await import("./multipart-session.server");
-    verifyMultipartSession(data.sessionToken, {
+    const claims = verifyMultipartSession(data.sessionToken, {
       sessionId: data.sessionId, actorUserId: context.userId, assetId: asset.id, objectKey: asset.s3_key,
     });
     const sql = await getSql();
@@ -208,7 +208,7 @@ export const recordAssetMultipartPart = createServerFn({ method: "POST" })
       limit 1
     `;
     const session = sessions[0];
-    if (!session || !["initiated","uploading"].includes(session.state)) throw new Error("Multipart session is not active");
+    if (!session || claims.uploadId !== session.provider_upload_id || !["initiated","uploading"].includes(session.state)) throw new Error("Multipart session is not active or does not match its provider upload");
     if (data.byteEnd > Number(session.expected_size) || data.byteEnd <= data.byteStart) throw new Error("Part byte range is invalid");
     const { listMultipartUploadParts } = await import("./oci-object-storage.server");
     const providerParts = await listMultipartUploadParts(asset.s3_key, session.provider_upload_id);
@@ -284,7 +284,7 @@ export const commitAssetMultipart = createServerFn({ method: "POST" })
       limit 1
     `;
     const stored = sessions[0];
-    if (!stored || !["uploading","initiated"].includes(stored.state)) throw new Error("Multipart session cannot be committed");
+    if (!stored || sessionClaims.uploadId !== stored.provider_upload_id || sessionClaims.partBaseUrl !== stored.part_base_url || !["uploading","initiated","assembling"].includes(stored.state)) throw new Error("Multipart session cannot be committed");
     const savedParts = await sql<{
       part_number: number; byte_start: number; byte_end: number; etag: string;
     }>`
@@ -414,6 +414,8 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
       sealedKey,
     });
     if (confirmed) {
+      await sql`update bridge_private.upload_sessions set state='verified', updated_at=now() where asset_id=${asset.id} and state in ('assembling','verification_pending')`;
+      await sql`update bridge_private.asset_verification_jobs set status='succeeded', locked_at=null, last_error=null, updated_at=now() where asset_id=${asset.id}`;
       // UPLOADED is only recorded after persistVerifiedAsset succeeds.
       await sql`
         update loop_media_migration_queue
