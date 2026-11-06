@@ -4,6 +4,7 @@ import { multipartTargetAllowed } from "./multipart-upload.ts";
 
 type MultipartSessionClaims = {
   version: 1;
+  sessionId: string;
   actorUserId: string;
   assetId: string;
   objectKey: string;
@@ -13,6 +14,7 @@ type MultipartSessionClaims = {
 };
 
 type ExpectedSession = {
+  sessionId: string;
   actorUserId: string;
   assetId: string;
   objectKey: string;
@@ -47,6 +49,7 @@ export function signMultipartSession(
     throw new Error("OCI multipart session target is invalid");
   }
   if (
+    !claims.sessionId ||
     !claims.actorUserId ||
     !claims.assetId ||
     !claims.objectKey ||
@@ -85,6 +88,7 @@ export function verifyMultipartSession(
   const region = bridgeEnv.ociRegion();
   if (
     claims.version !== 1 ||
+    claims.sessionId !== expected.sessionId ||
     claims.actorUserId !== expected.actorUserId ||
     claims.assetId !== expected.assetId ||
     claims.objectKey !== expected.objectKey ||

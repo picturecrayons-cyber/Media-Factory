@@ -2,11 +2,12 @@ export const MULTIPART_PART_SIZE = 16 * 1024 * 1024;
 export const MULTIPART_MIN_FILE = 512 * 1024 * 1024;
 
 export type UploadSession = {
-  version: 2;
+  version: 3;
   titleId: string;
   kind: string;
   assetId: string;
   uploadId: string;
+  sessionId: string;
   partBaseUrl: string;
   sessionToken: string;
   fileName: string;

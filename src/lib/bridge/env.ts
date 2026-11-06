@@ -20,6 +20,7 @@ export const bridgeEnv = {
   ociNamespace: () => read("OCI_NAMESPACE"),
   ociBucket: () => read("OCI_BUCKET_NAME"),
   uploadSessionSecret: () => read("BRIDGE_UPLOAD_SESSION_SECRET"),
+  assetStreamSecret: () => read("BRIDGE_ASSET_STREAM_SECRET"),
   // Legacy AWS/S3 compatibility adapter only; never used by production readiness.
   awsRegion: () => read("AWS_REGION"),
   awsBucket: () => read("AWS_S3_MEDIA_BUCKET") || read("S3_MEDIA_BUCKET") || read("AWS_S3_BUCKET"),
