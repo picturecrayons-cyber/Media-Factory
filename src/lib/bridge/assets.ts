@@ -284,6 +284,16 @@ export const requestAssetDownload = createServerFn({ method: "POST" })
       await assertBuyerPublishable(title.id);
     }
     const entitled = await hasLicenseEntitlement(actor.userId, title.id);
+    if (actor.accountType === "buyer" && !actor.internalRole && !entitled) {
+      await writeAudit({
+        actorUserId: actor.userId,
+        action: "asset.download_denied",
+        entityType: "bridge_asset",
+        entityId: asset.id,
+        metadata: { reason: "License entitlement required", kind: asset.kind },
+      });
+      throw new Error("License entitlement required");
+    }
     const decision = downloadDecision({
       kind: asset.kind,
       actorIsOwner: title.ownerUserId === actor.userId,
