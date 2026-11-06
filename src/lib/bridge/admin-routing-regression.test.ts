@@ -118,6 +118,9 @@ test("Buyer media previews use short-lived signed first-party streaming tokens",
   const assets = read("./assets.ts");
   const route = read("../../routes/api/assets/stream.ts");
   const previewUrl = read("./preview-url.ts");
+  const routeTree = read("../../routeTree.gen.ts");
+  assert.match(routeTree, /ApiAssetsStreamRouteImport/);
+  assert.match(routeTree, /ApiAssetsStreamRoute: ApiAssetsStreamRoute/);
   assert.match(assets, /createCipheriv/);
   assert.match(assets, /createDecipheriv/);
   assert.match(assets, /cipher\.getAuthTag\(\)/);
