@@ -93,6 +93,7 @@ The latest test output recorded 159 tests passed, 0 failed. Regression coverage 
 ## 6. Explicitly NOT VERIFIED / blocked
 
 - No live OCI multipart upload or object HEAD verification was performed.
+- Migration 0023 (which adds `checksum_sha256` and multipart-session schema) was not applied. The current upload-confirmation regression uses an ETag fixture; it does not prove cryptographic SHA-256 computation or persistence. SHA-256 verification remains NOT VERIFIED.
 - No real Buyer/Studio browser session was exercised against a deployed Preview.
 - No authenticated visual screenshot/DOM acceptance test was performed for the Studio layout.
 - Supabase Preview check is skipped because Supabase branch previews are not associated/enabled.
