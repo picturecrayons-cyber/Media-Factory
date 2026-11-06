@@ -888,8 +888,10 @@ function FileTypeCard({
   onFile,
   onDownload,
   canUpload,
+  storageLocation,
 }: {
   canUpload: boolean;
+  storageLocation: { provider: string | null; bucket: string | null; namespace: string | null; region: string | null; endpoint: string | null; path: string } | null | undefined;
   kind: SimpleAssetKind;
   label: string;
   status: string;
@@ -906,6 +908,17 @@ function FileTypeCard({
         <div>
           <p className="text-sm font-semibold">{label}</p>
           <p className={`mt-1 text-xs font-semibold ${ready ? "text-green-700" : "text-muted"}`}>{ready ? "Ready" : status}</p>
+          {ready ? (
+            <details className="mt-2 text-xs">
+              <summary className="cursor-pointer font-semibold text-accent">Storage verified · {storageLocation?.bucket || "Location not recorded"}</summary>
+              <dl className="mt-2 grid gap-1 break-all text-muted">
+                <div><dt className="inline font-semibold text-fg">Provider: </dt><dd className="inline">{storageLocation?.provider === "oci" ? "Oracle Cloud Infrastructure (OCI)" : storageLocation?.provider === "aws_s3" ? "Amazon S3" : storageLocation?.provider === "cloudflare_r2" ? "Cloudflare R2" : storageLocation?.provider || "Not recorded"}</dd></div>
+                <div><dt className="inline font-semibold text-fg">Bucket: </dt><dd className="inline">{storageLocation?.bucket || "Not recorded"}</dd></div>
+                <div><dt className="inline font-semibold text-fg">Region: </dt><dd className="inline">{storageLocation?.region || "Not recorded"}</dd></div>
+                <div><dt className="inline font-semibold text-fg">Path: </dt><dd className="inline">{storageLocation?.path || "Not available"}</dd></div>
+              </dl>
+            </details>
+          ) : null}
           <p className="mt-2 text-[11px] leading-5 text-muted">
             {spec.extensions.map((ext) => ext.replace(".", "").toUpperCase()).join(", ")}
           </p>
