@@ -8,6 +8,12 @@ type PreviewAsset = {
   contentType: string | null;
   byteSize: number | null;
   verified: boolean;
+  storageLocation?: {
+    provider: string | null; bucket: string | null; namespace: string | null;
+    region: string | null; endpoint: string | null; objectKey: string | null;
+    checksumSha256: string | null; objectVersionId: string | null;
+    objectGeneration: string | null; verifiedAt: string | null;
+  } | null;
 };
 
 function isVideo(asset: PreviewAsset) {
@@ -138,6 +144,22 @@ export function AssetPreviewGallery({ assets }: { assets: PreviewAsset[] }) {
                 <div className="p-4">
                   <p className="text-sm font-semibold capitalize">{asset.kind.replaceAll("_", " ")}</p>
                   <p className="mt-1 text-xs text-muted">{prettySize(asset.byteSize)} · Storage verified</p>
+                  {asset.storageLocation ? (
+                    <details className="mt-2 rounded-lg border border-line bg-surface p-2 text-xs">
+                      <summary className="cursor-pointer font-semibold">Storage provenance</summary>
+                      <dl className="mt-2 grid gap-1 break-all text-muted">
+                        <div><dt className="inline font-semibold text-fg">Provider: </dt><dd className="inline">{asset.storageLocation.provider ?? "—"}</dd></div>
+                        <div><dt className="inline font-semibold text-fg">Bucket: </dt><dd className="inline">{asset.storageLocation.bucket ?? "—"}</dd></div>
+                        <div><dt className="inline font-semibold text-fg">Namespace: </dt><dd className="inline">{asset.storageLocation.namespace ?? "—"}</dd></div>
+                        <div><dt className="inline font-semibold text-fg">Region: </dt><dd className="inline">{asset.storageLocation.region ?? "—"}</dd></div>
+                        <div><dt className="inline font-semibold text-fg">Endpoint: </dt><dd className="inline">{asset.storageLocation.endpoint ?? "—"}</dd></div>
+                        <div><dt className="inline font-semibold text-fg">Verified object: </dt><dd className="inline">{asset.storageLocation.objectKey ?? "—"}</dd></div>
+                        <div><dt className="inline font-semibold text-fg">SHA-256: </dt><dd className="inline">{asset.storageLocation.checksumSha256 ?? "—"}</dd></div>
+                        <div><dt className="inline font-semibold text-fg">Version: </dt><dd className="inline">{asset.storageLocation.objectVersionId ?? asset.storageLocation.objectGeneration ?? "Not supplied by provider"}</dd></div>
+                        <div><dt className="inline font-semibold text-fg">Verified at: </dt><dd className="inline">{asset.storageLocation.verifiedAt ?? "—"}</dd></div>
+                      </dl>
+                    </details>
+                  ) : null}
                 </div>
               </button>
             </article>
