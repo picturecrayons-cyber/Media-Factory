@@ -93,6 +93,8 @@ test("Studio package workflow actions fail closed until all seven storage-verifi
   const readiness = read("./qc-readiness.ts");
   assert.match(readiness, /REQUIRED_QC_FILES/);
   assert.match(readiness, /assertSevenFilesStorageVerified/);
+  assert.match(readiness, /assets\.find\(\(asset\) => required\.kinds/);
+  assert.match(workflowDesk, /assetsQuery\.data\?\.assets\.find/);
   assert.match(workflowDesk, /qcFileCount === 7/);
   assert.match(workflowDesk, /\["UPLOADING", "PREPARING"\]\.includes\(title\.status\) && !qcFilesReady/);
   assert.match(titles, /data\.to === "PREPARING"\) await assertSevenFilesStorageVerified/);
@@ -113,6 +115,7 @@ test("Buyer title DTO and asset responses strip storage keys and internal workfl
   assert.match(titles, /events: buyer \? \[\]/);
   assert.match(titles, /await assertBuyerPublishable\(title\.id\)/);
   assert.match(assets, /\.\.\.\(buyer \? \{\} : \{\s*key: r\.s3_key/);
+  assert.match(assets, /not \$\{buyer\} or byte_size > 0/);
   assert.match(assets, /\.\.\.\(buyer \? \{\} : \{/);
   assert.match(buyerRoute, /Authorized buyer listing/);
   assert.doesNotMatch(buyerRoute, /Upload Files[\s\S]{0,80}actor\.accountType === "buyer"/);
