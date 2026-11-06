@@ -18,7 +18,7 @@ Repository migrations:
 - `migrations/0024_bridge_testing_workspace_rls.sql`
 - `migrations/0022_bridge_asset_storage_provenance.sql`
 
-The provider allow-list is enforced by a CHECK constraint (not a PostgreSQL ENUM type): `oci`, `aws_s3`, `cloudflare_r2`.
+The provider allow-list is enforced by CHECK constraints (not a PostgreSQL ENUM type). The live schema currently has two overlapping constraints; their effective intersection accepts `oci`, `aws_s3`, and `cloudflare_r2`. The redundant constraint should be consolidated in a later Testing DB migration.
 
 ## 2. RLS inventory
 
@@ -96,8 +96,8 @@ The latest test output recorded 159 tests passed, 0 failed. Regression coverage 
 
 ## 6. Explicitly NOT VERIFIED / blocked
 
-- No live OCI multipart upload or object HEAD verification was performed.
-- Migration 0023 (which adds `checksum_sha256` and multipart-session schema) was not applied. The current upload-confirmation regression uses an ETag fixture; it does not prove cryptographic SHA-256 computation or persistence. SHA-256 verification remains NOT VERIFIED.
+- Migration 0023 (`bridge_server_authoritative_uploads_0023_20261106`) is now recorded as applied in the Testing DB migration ledger. The `checksum_sha256` column and private multipart/session/job tables are present. This corrects the earlier statement that migration 0023 had not been applied.
+- No live OCI multipart upload or object HEAD verification was performed. SHA-256 live object digest and persistence remain NOT VERIFIED; the migration ledger and schema presence do not prove runtime digest computation.
 - No real Buyer/Studio browser session was exercised against a deployed Preview.
 - No authenticated visual screenshot/DOM acceptance test was performed for the Studio layout.
 - Supabase Preview check is skipped because Supabase branch previews are not associated/enabled.
