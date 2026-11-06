@@ -1,5 +1,4 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { requireUser } from "@/lib/auth/verify.server";
 import { requireVerifiedActor } from "@/lib/bridge/session";
 import { getSql } from "@/lib/db";
 import { verifyAssetStreamToken } from "@/lib/bridge/asset-stream-token.server";
@@ -11,17 +10,13 @@ import { assertBuyerPublishable } from "@/lib/bridge/buyer-visibility";
 
 export const Route = createFileRoute("/api/assets/$id/stream")({
   server: { handlers: { GET: async ({ request, params }) => {
-    const bearer = request.headers.get("authorization")?.match(/^Bearer\s+(.+)$/i)?.[1];
-    if (!bearer) return Response.json({ error:"Unauthorized" },{status:401});
-    let authUser;
-    try { authUser = await requireUser(bearer); }
-    catch { return Response.json({ error:"Unauthorized" },{status:401}); }
-    let actor;
-    try { actor = await requireVerifiedActor(authUser.id); }
-    catch { return Response.json({ error:"Forbidden" },{status:403}); }
     const token = new URL(request.url).searchParams.get("token") ?? "";
-    try { verifyAssetStreamToken(token,params.id,actor.userId); }
-    catch { return Response.json({error:"Unauthorized"},{status:401}); }
+    let claims;
+    try { claims = verifyAssetStreamToken(token, params.id); }
+    catch { return Response.json({ error: "Unauthorized" }, { status: 401 }); }
+    let actor;
+    try { actor = await requireVerifiedActor(claims.actorUserId); }
+    catch { return Response.json({ error: "Forbidden" }, { status: 403 }); }
 
     const sql = await getSql();
     const rows = await sql<{
