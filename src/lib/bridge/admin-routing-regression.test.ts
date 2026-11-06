@@ -103,6 +103,10 @@ test("Buyer title DTO and asset responses strip storage keys and internal workfl
   const titles = read("./titles.ts");
   const assets = read("./assets.ts");
   const buyerRoute = read("../../routes/title.$id.tsx");
+  const workflow = read("./workflow.ts");
+  const publication = read("./loop-publication.ts");
+  assert.match(workflow, /\(!actor\.internalRole && actor\.accountType === "buyer"\)/);
+  assert.match(publication, /actor\.accountType === "buyer" && !actor\.internalRole\) throw new Error\("Forbidden"\)/);
   assert.match(titles, /function mapBuyerTitle/);
   assert.match(titles, /posterKey: null/);
   assert.match(titles, /masterKey: null/);
