@@ -88,7 +88,7 @@ create table if not exists bridge_private.upload_sessions (
   provider_upload_id text not null,
   part_base_url text not null,
   expected_size bigint not null check (expected_size > 0),
-  part_size integer not null check (part_size between 5242880 and 67108864),
+  part_size integer not null check (part_size between 10485760 and 67108864),
   state text not null default 'initiated'
     check (state in ('initiated','uploading','assembling','verification_pending','verified','failed','aborted','expired')),
   idempotency_key text not null,
