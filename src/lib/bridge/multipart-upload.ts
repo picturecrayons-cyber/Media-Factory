@@ -7,6 +7,7 @@ export type UploadSession = {
   kind: string;
   assetId: string;
   uploadId: string;
+  sessionId: string;
   partBaseUrl: string;
   sessionToken: string;
   fileName: string;
