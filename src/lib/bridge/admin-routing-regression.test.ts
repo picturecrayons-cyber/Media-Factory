@@ -106,3 +106,11 @@ test("Loop readiness GET is read-only and generic reviewer cannot mint unbound a
   assert.match(workstation, /data\.decision === "PASS" \|\| data\.decision === "APPROVE"/);
   assert.match(workstation, /Evidence-bound QC\/Legal approval is required/);
 });
+
+test("Buyer publication SQL binds the selected package to active rights and exact current QC/Legal evidence", () => {
+  const migration = read("../../../migrations/0022_bridge_buyer_publication_evidence.sql");
+  assert.match(migration, /join public\.bridge_rights_grants r[\s\S]*r\.id = p\.rights_grant_id/);
+  assert.match(migration, /r\.status = 'VALID'[\s\S]*r\.window_end > now\(\)/);
+  assert.match(migration, /q\.id = p\.qc_case_id[\s\S]*q\.reviewer_findings -> 0 ->> 'masterKey' = t\.master_key[\s\S]*q\.reviewer_findings -> 0 ->> 'posterKey' = t\.poster_key/);
+  assert.match(migration, /l\.id = p\.legal_case_id[\s\S]*l\.evidence -> 0 ->> 'grantId' = r\.id::text/);
+});
