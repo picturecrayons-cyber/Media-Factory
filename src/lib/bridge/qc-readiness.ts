@@ -30,7 +30,7 @@ export async function assertSevenFilesStorageVerified(tx: Sql, titleId: string) 
   );
   if (missing.length) {
     throw new Error(
-      `QC blocked: all 7 mandatory files must be Storage verified (missing or unverified: ${missing.map((item) => item.label).join(", ")})`
+      `Package blocked: all 7 mandatory files must be Storage verified (missing or unverified: ${missing.map((item) => item.label).join(", ")})`
     );
   }
 
