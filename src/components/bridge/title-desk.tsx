@@ -4,45 +4,62 @@ import { useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { StatusChip } from "@/components/bridge/status-rail";
-import { createTitle, listTitles } from "@/lib/bridge/titles";
+import { createTitle, deleteDraftTitle, listTitles } from "@/lib/bridge/titles";
 import { BRIDGE_LOOP_LANES } from "@/lib/bridge/loop-lanes";
 
 export function TitleList({ empty, query = "" }: { empty: string; query?: string }) {
   const titlesQ = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles() });
+  const qc = useQueryClient();
+  const navigate = useNavigate();
+  const [pendingDelete, setPendingDelete] = useState<{id:string;name:string}|null>(null);
+  const [confirmName, setConfirmName] = useState("");
+  const remove = useMutation({
+    mutationFn: () => {
+      if (!pendingDelete) throw new Error("Select a draft first");
+      return deleteDraftTitle({data:{id:pendingDelete.id,confirmName}});
+    },
+    onSuccess: () => {
+      toast("Draft deleted");
+      setPendingDelete(null); setConfirmName("");
+      void qc.invalidateQueries({queryKey:["bridge-titles"]});
+    },
+    onError: (e) => toast(e instanceof Error ? e.message : "Draft deletion failed"),
+  });
   const titles = (titlesQ.data?.titles ?? []).filter((t) => !query || `${t.name} ${t.language} ${t.year ?? ""}`.toLowerCase().includes(query.toLowerCase()));
   if (titlesQ.isPending) return <p className="text-sm text-muted">Loading titles…</p>;
-  if (titlesQ.isError) {
-    return (
-      <div role="alert" className="flex flex-wrap items-center gap-3 text-sm text-accent">
-        <p>Could not load titles.</p>
-        <Button type="button" onClick={() => void titlesQ.refetch()}>Retry</Button>
-      </div>
-    );
-  }
+  if (titlesQ.isError) return <div role="alert" className="flex flex-wrap items-center gap-3 text-sm text-accent"><p>Could not load titles.</p><Button type="button" onClick={() => void titlesQ.refetch()}>Retry</Button></div>;
   if (!titles.length) return <p className="text-sm text-muted">{empty}</p>;
-  return (
+  return <>
     <ul className="divide-y divide-line rounded-sm border border-line">
-      {titles.map((t) => (
-        <li key={t.id}>
-          <Link
-            to="/title/$id"
-            params={{ id: t.id }}
-            className="flex flex-wrap items-center justify-between gap-3 px-4 py-4 hover:bg-fg/5"
-          >
-            <div>
-              <p className="font-medium">{t.name}</p>
-              <p className="text-sm text-muted">
-                {t.contentType ? `${t.contentType} · ` : ""}
-                {t.language}
-                {t.year ? ` · ${t.year}` : ""}
-              </p>
-            </div>
-            <StatusChip status={t.status} />
+      {titles.map((t) => <li key={t.id} className="flex min-w-0 flex-wrap items-center justify-between gap-3 px-4 py-4 hover:bg-fg/5">
+        <div className="min-w-0 flex-1">
+          <Link to="/title/$id" params={{id:t.id}} className="block min-w-0">
+            <p className="break-words font-medium">{t.name}</p>
+            <p className="text-sm text-muted">{t.contentType ? `${t.contentType} · ` : ""}{t.language}{t.year ? ` · ${t.year}` : ""}</p>
           </Link>
-        </li>
-      ))}
+        </div>
+        <div className="flex max-w-full flex-wrap items-center gap-2">
+          <StatusChip status={t.status} />
+          {t.status === "DRAFT" ? <>
+            <Button type="button" size="sm" onClick={() => navigate({to:"/title/$id",params:{id:t.id}})}>Continue</Button>
+            <Button type="button" size="sm" variant="outline" onClick={() => {setPendingDelete({id:t.id,name:t.name});setConfirmName("");}}>Delete</Button>
+          </> : null}
+        </div>
+      </li>)}
     </ul>
-  );
+    {pendingDelete ? <div className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4" role="presentation">
+      <section role="alertdialog" aria-modal="true" aria-labelledby="draft-delete-title" className="w-full max-w-md space-y-4 rounded-xl border border-line bg-surface p-5 shadow-xl">
+        <h2 id="draft-delete-title" className="text-lg font-semibold">Delete draft permanently?</h2>
+        <p className="text-sm text-muted">This action is restricted to DRAFT titles without uploaded assets or active multipart sessions. Type the exact title to confirm.</p>
+        <p className="font-medium">{pendingDelete.name}</p>
+        <input aria-label="Confirm title name" value={confirmName} onChange={(e)=>setConfirmName(e.target.value)} className="h-11 w-full rounded-lg border border-line bg-elevated px-3" />
+        <div className="flex flex-wrap justify-end gap-2">
+          <Button type="button" variant="outline" onClick={()=>{setPendingDelete(null);setConfirmName("");}}>Cancel</Button>
+          <Button type="button" variant="destructive" disabled={remove.isPending || confirmName!==pendingDelete.name} onClick={()=>remove.mutate()}>{remove.isPending?"Deleting…":"Permanently delete"}</Button>
+        </div>
+      </section>
+    </div> : null}
+  </>;
 }
 
 export function CreateTitleForm({ concise = false }: { concise?: boolean } = {}) {
