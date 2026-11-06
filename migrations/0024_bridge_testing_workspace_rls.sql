@@ -147,14 +147,7 @@ with check (
   )
 );
 
-drop policy if exists bridge_titles_owner_update on public.bridge_titles;
-create policy bridge_titles_owner_update on public.bridge_titles
-for update to authenticated
-using (bridge_private.can_manage_title(id))
-with check (
-  bridge_private.can_manage_title(id)
-  and (owner_user_id = bridge_private.current_user_id() or bridge_private.is_admin())
-);
+-- Title UPDATE remains server-authoritative; no direct Data API update policy is created.
 
 -- Asset metadata and object keys remain Studio/internal-only. Buyer asset access
 -- must go through the entitlement-checked streaming API, never direct table reads.
