@@ -5,6 +5,11 @@ begin;
 create schema if not exists bridge_private;
 
 alter table public.bridge_assets
+  drop constraint if exists bridge_assets_kind_chk;
+alter table public.bridge_assets
+  add constraint bridge_assets_kind_chk check (kind in ('poster','poster_vertical','poster_horizontal','thumbnail','screener','master','subtitle','technical','censor_certificate'));
+
+alter table public.bridge_assets
   add column if not exists storage_provider text,
   add column if not exists storage_bucket text,
   add column if not exists storage_namespace text,
@@ -73,6 +78,7 @@ create table if not exists bridge_private.upload_sessions (
   id text primary key,
   asset_id text not null references public.bridge_assets(id) on delete cascade,
   actor_user_id text not null,
+  actor_is_internal boolean not null default false,
   provider text not null check (provider in ('oci','aws_s3','cloudflare_r2')),
   bucket text not null,
   namespace text,
