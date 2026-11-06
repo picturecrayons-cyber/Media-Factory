@@ -101,6 +101,7 @@ test("Studio package workflow actions fail closed until all seven storage-verifi
   assert.match(workflowDesk, /\["UPLOADING", "PREPARING"\]\.includes\(title\.status\) && !qcFilesReady/);
   assert.match(titles, /data\.to === "PREPARING"\) await assertSevenFilesStorageVerified/);
   assert.match(titles, /data\.to === "QC_REVIEW"\) await assertVerifiedTitleIngestReady/);
+  assert.match(titles, /a\.kind in \('poster', 'poster_vertical'\)/);
 });
 
 test("Buyer title DTO and asset responses strip storage keys and internal workflow history", () => {
