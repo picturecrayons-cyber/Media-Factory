@@ -370,9 +370,9 @@ export const abortAssetMultipart = createServerFn({ method: "POST" })
         !["initiated","uploading"].includes(active[0].state)) throw new Error("Multipart session cannot be aborted");
     const { abortMultipartUpload } = await import("./oci-object-storage.server");
     await abortMultipartUpload(session.partBaseUrl, asset.s3_key);
-    await sql`update bridge_private.upload_sessions set state='aborted', updated_at=now() where id=${data.sessionId}`;
-    // Remove the durable manifest only after OCI confirms the multipart abort.
+    // Delete the manifest before changing state so a transient DB failure remains retryable.
     await sql`delete from bridge_private.upload_parts where session_id=${data.sessionId}`;
+    await sql`update bridge_private.upload_sessions set state='aborted', updated_at=now() where id=${data.sessionId}`;
     await writeAudit({
       actorUserId: context.userId,
       action: "asset.multipart_aborted",
