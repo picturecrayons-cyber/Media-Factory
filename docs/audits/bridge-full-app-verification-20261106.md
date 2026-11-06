@@ -44,7 +44,7 @@ Target: `jbymleftneggcgutlcqu` only.
 - The Testing DB security advisor therefore counts 36 RLS/no-policy findings (33 public + 3 private). These tables remain deny-by-default and are not to be opened with blanket policies.
 - Rollback-only role assertions previously recorded 10 PASS, including Creator ownership, Buyer denial, verified admin, unverified Creator denial and no automatic super_admin bypass.
 
-The live policy count is 17, not 18 as stated in one earlier draft note.
+The live policy count is 17, not 18 as stated in one earlier draft note. A rollback-only revoked-Studio-membership assertion reproduced an authorization bypass: `can_manage_title` returned true for a Studio user whose membership row was `removed`, because `owner_user_id` matched. This is a security blocker, not merely an advisor warning.
 
 ### Storage provenance
 
@@ -87,9 +87,9 @@ These are source-level findings; they were not exercised against authenticated r
 
 2. **Worker crash recovery (high):** job claiming selects only `queued` and `failed`. A job left `running` after process termination is not reclaimed by a stale-lock timeout. Add a bounded stale-running reclaim policy and retry ceiling/dead-letter state.
 
-3. **Buyer visibility inconsistency (high):** `canReadTitle` permits Buyers based on title status alone. `getTitle` then skips `assertBuyerPublishable` when that status check succeeds; `listTitleAssets` uses the same status-based check. The Buyer catalog list has a separate publication predicate. Align direct-ID title and asset reads with the same title publication, buyer-specific authorization/entitlement, territory, language and active-window checks; add Buyer A/B tests.
+3. **Buyer visibility and response redaction (critical):** `canReadTitle` permits Buyers based on title status alone. `getTitle` then skips `assertBuyerPublishable` when that status check succeeds; `listTitleAssets` uses the same status-based check. The Buyer catalog list has a separate global publication predicate but does not filter by a buyer-specific access row. More seriously, Buyer `listTitles` and `getTitle` both pass database rows through `mapTitle`, which includes `ownerUserId`, `ownerOrganizationId`, `posterKey` and `masterKey`; `getTitle` also returns title event history. This conflicts with Buyer-safe response requirements and can disclose storage keys/internal workflow metadata. Add a dedicated Buyer-safe DTO, redact keys/owner IDs/events, and enforce buyer-specific access plus publication, territory, language and active-window gates in list, direct-ID, asset-list and download handlers. Add Buyer A/B tests.
 
-4. **Studio membership bypass (high):** server RBAC and the Testing DB `can_manage_title` helper allow direct `owner_user_id` matches as an alternative to active Studio organization membership. This lets a Studio profile that owns the row continue through that path even if membership is no longer active. The stated policy is active-membership-only; make Studio ownership depend on active membership and active organization status.
+4. **Studio membership bypass (critical; reproduced on Testing DB):** server RBAC and the Testing DB `can_manage_title` helper allow direct `owner_user_id` matches as an alternative to active Studio organization membership. A rollback-only Testing DB test created a Studio owner with membership status `removed`; `bridge_private.can_manage_title(title_id)` returned `true`. The stated policy is active-membership-only. Make Studio ownership depend on a matching active membership and active organization status in both SQL and server RBAC, and remove the direct owner-user fallback for Studio titles.
 
 5. **Draft deletion referential safety (medium/high):** `deleteDraftTitle` checks many important references but does not check every title child FK found in the schema, including title events, gate certifications, buyer access, language rights, license/package records, story-concept submissions and investor references. A hard delete may cascade records not explicitly approved for deletion. Expand the blocker query or use an audited soft-delete model.
 
