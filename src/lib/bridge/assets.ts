@@ -618,7 +618,7 @@ export async function streamAssetWithToken(token: string, rangeHeader?: string |
       "accept-ranges": "bytes",
       "content-type": asset.content_type || upstream.headers.get("content-type") || "application/octet-stream",
     });
-    for (const name of ["content-length", "content-range", "etag"]) {
+    for (const name of ["content-length", "content-range"]) {
       const value = upstream.headers.get(name);
       if (value) headers.set(name, value);
     }
