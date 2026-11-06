@@ -9,21 +9,19 @@ import { NewSubmissionPanel } from "@/components/bridge/new-submission-panel";
 import { listTitles } from "@/lib/bridge/titles";
 import { listMyStoryConcepts } from "@/lib/bridge/story-concept-api";
 import { STORY_CONCEPT_ENABLED } from "@/lib/bridge/story-concept";
+import type { BridgeActor } from "@/lib/bridge/session";
 
 export const Route = createFileRoute("/studio")({ component: Studio });
 
 function Studio() {
   return (
     <RequireBridge allow="studio">
-      {(actor) => {
-        const unused = actor;
-        return <StudioWorkspace actor={unused} />;
-      }}
+      {(actor) => <StudioWorkspace actor={actor} />}
     </RequireBridge>
   );
 }
 
-function StudioWorkspace({ actor }: { actor: { organizationName?: string | null; displayName?: string | null } }) {
+function StudioWorkspace({ actor }: { actor: BridgeActor }) {
   const titlesQuery = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles() });
   const conceptsQuery = useQuery({
     queryKey: ["my-story-concepts"],
@@ -37,7 +35,7 @@ function StudioWorkspace({ actor }: { actor: { organizationName?: string | null;
   const preparing = films.filter((title) => title.status.toUpperCase() === "PREPARING").length;
 
   return (
-    <BridgeShell actor={actor as never} title="Studio">
+    <BridgeShell actor={actor} title="Studio">
       <div className="mx-auto max-w-7xl space-y-8 pb-16">
         <section className="relative isolate overflow-hidden rounded-3xl bg-[#101d2b] px-6 py-8 text-white shadow-xl shadow-slate-900/10 sm:px-9 sm:py-10">
           <div aria-hidden="true" className="pointer-events-none absolute -right-16 -top-28 -z-10 h-80 w-80 rounded-full border border-white/10" />
