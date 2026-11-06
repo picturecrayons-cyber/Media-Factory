@@ -318,6 +318,14 @@ function FilesPanel({
     contentType: string | null;
     byteSize: number | null;
     verified: boolean;
+    storageLocation: {
+      provider: string | null;
+      bucket: string | null;
+      namespace: string | null;
+      region: string | null;
+      endpoint: string | null;
+      path: string;
+    } | null;
   }>;
   onAssetsChanged: () => Promise<unknown> | unknown;
 }) {
@@ -775,6 +783,7 @@ function FilesPanel({
                     canUpload={canUpload}
                     onFile={(file) => void uploadFile(kind, file)}
                     onDownload={verified ? () => void download(verified.id) : undefined}
+                    storageLocation={verified?.storageLocation}
                   />
                 );
               })}
@@ -864,7 +873,7 @@ function kindLabel(kind: SimpleAssetKind) {
 }
 
 function verifiedFor(
-  assets: Array<{ id: string; kind: string; verified: boolean }>,
+  assets: Array<{ id: string; kind: string; verified: boolean; storageLocation?: { provider: string | null; bucket: string | null; namespace: string | null; region: string | null; endpoint: string | null; path: string } | null }>,
   kind: SimpleAssetKind,
 ) {
   return assets.find((asset) => asset.verified && (asset.kind === kind || (kind === "poster_vertical" && asset.kind === "poster")));
