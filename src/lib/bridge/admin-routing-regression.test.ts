@@ -93,7 +93,10 @@ test("Buyer title, asset-list and direct-download paths independently require pu
   assert.match(titles, /actor\.accountType === "buyer" && !actor\.internalRole[\s\S]{0,260}assertBuyerPublishable\(title\.id\)/);
   assert.match(assets, /Direct asset-ID requests must satisfy the same publication gate[\s\S]{0,240}assertBuyerPublishable\(title\.id\)/);
   assert.match(assets, /Asset enumeration is a separate endpoint[\s\S]{0,240}assertBuyerPublishable\(title\.id\)/);
-  assert.match(assets, /if \(actor\.accountType === "buyer" && !actor\.internalRole && !entitled\)/);
+  assert.match(assets, /if \(actor\.accountType === "buyer" && !actor\.internalRole\)/);
+  assert.match(assets, /function hasActiveBuyerTitleAccess[\s\S]*buyer_user_id = \$\{userId\}[\s\S]*revoked_at is null[\s\S]*expires_at is null or expires_at > now\(\)/);
+  assert.match(assets, /hasActiveBuyerTitleAccess\(actor\.userId, title\.id\)/);
+  assert.match(assets, /asset\.list_denied/);
   assert.match(assets, /where user_id = \$\{userId\} and title_id = \$\{titleId\} and access_type = 'license'/);
 });
 
