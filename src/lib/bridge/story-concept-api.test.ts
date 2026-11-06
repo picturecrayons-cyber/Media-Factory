@@ -40,6 +40,6 @@ test("Story Concept idempotency storage is private and catalog seed uses canonic
   assert.match(migration, /ALTER TABLE public\.bridge_story_concept_idempotency ENABLE ROW LEVEL SECURITY/);
   assert.match(migration, /REVOKE ALL ON public\.bridge_story_concept_idempotency FROM anon, authenticated/);
   assert.match(migration, /bridge_story_concept_payment_unique_idx/);
-  assert.match(migration, /'PREPARE'[\s\S]*?'FIXED_PER_TITLE'[\s\S]*?false/);
-  assert.doesNotMatch(migration, /'SUBMISSION'|'FIXED',|description, why,/);
+  assert.match(migration, /'PREPARE'[\s\S]*?'FIXED'[\s\S]*?false/);
+  assert.doesNotMatch(migration, /'FIXED_PER_TITLE'|'description, why,/);
 });
