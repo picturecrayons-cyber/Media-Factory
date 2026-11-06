@@ -29,15 +29,37 @@ test("only a verified upload sets the master reference, once, with an audit even
       checksum: "etag-1",
       sourceKey: "bridge/creator/title1234/master/video.mp4",
       sealedKey: "bridge/creator/title1234/master/video.mp4.verified/uuid-1",
+      storageProvider: "oci",
+      storageBucket: "bridge-staging-test",
+      storageNamespace: "test-namespace",
+      storageRegion: "ap-south-1",
+      storageEndpoint: "https://objectstorage.ap-south-1.oraclecloud.com",
     };
-    const state = async () => (await db.query<{ master_key: string | null; byte_size: number | null }>(`
-      select t.master_key, a.byte_size from bridge_titles t join bridge_assets a on a.title_id=t.id
+    const state = async () => (await db.query<{
+      master_key: string | null; byte_size: number | null;
+      storage_provider: string | null; storage_bucket: string | null;
+      storage_namespace: string | null; storage_region: string | null; storage_endpoint: string | null;
+    }>(`
+      select t.master_key, a.byte_size, a.storage_provider, a.storage_bucket,
+             a.storage_namespace, a.storage_region, a.storage_endpoint
+      from bridge_titles t join bridge_assets a on a.title_id=t.id
       where a.id='asset1234'`)).rows[0];
-    assert.deepEqual(await state(), { master_key: null, byte_size: null });
+    assert.deepEqual(await state(), {
+      master_key: null, byte_size: null, storage_provider: null, storage_bucket: null,
+      storage_namespace: null, storage_region: null, storage_endpoint: null,
+    });
     assert.equal(await persistVerifiedAsset(sql, { ...args, actorUserId: "intruder" }), false);
     assert.deepEqual(await state(), { master_key: null, byte_size: null });
     assert.equal(await persistVerifiedAsset(sql, args), true);
-    assert.deepEqual(await state(), { master_key: "bridge/creator/title1234/master/video.mp4.verified/uuid-1", byte_size: 120 });
+    assert.deepEqual(await state(), {
+      master_key: "bridge/creator/title1234/master/video.mp4.verified/uuid-1",
+      byte_size: 120,
+      storage_provider: "oci",
+      storage_bucket: "bridge-staging-test",
+      storage_namespace: "test-namespace",
+      storage_region: "ap-south-1",
+      storage_endpoint: "https://objectstorage.ap-south-1.oraclecloud.com",
+    });
     assert.equal(await persistVerifiedAsset(sql, args), false);
     assert.equal(await persistVerifiedAsset(sql, { ...args, assetId: "asset1234", sourceKey: "wrong" }), false);
     // A caller cannot verify an asset while supplying a different title ID.
