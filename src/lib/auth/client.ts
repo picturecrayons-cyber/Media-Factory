@@ -24,12 +24,7 @@ export async function hasSupabaseRecoverySession(): Promise<boolean> {
 export async function getSupabaseSession(
   opts: { forceRefresh?: boolean } = {},
 ): Promise<Session | null> {
-  try {
-    return await restoreSupabaseSession(supabase.auth, opts);
-  } catch (err) {
-    console.warn("[auth] Session restoration failed:", err);
-    return null;
-  }
+  return restoreSupabaseSession(supabase.auth, opts);
 }
 
 export async function getBearerToken(): Promise<string | null> {
