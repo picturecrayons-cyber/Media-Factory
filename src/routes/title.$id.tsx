@@ -379,7 +379,7 @@ function FilesPanel({
   }
 
   function transferWithProgress(kind: SimpleAssetKind, url: string, method: string, file: File, contentType: string) {
-    return new Promise<string>((resolve, reject) => {
+    return new Promise<void>((resolve, reject) => {
       const xhr = new XMLHttpRequest();
       uploadXhrRef.current = xhr;
       const startedAt = Date.now();
