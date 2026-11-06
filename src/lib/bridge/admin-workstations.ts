@@ -47,8 +47,9 @@ export const reviewAdminTitle = createServerFn({ method: "POST" })
     const actor = await actorFor(context.userId);
     if (!actor.internalRole) throw new Error("Forbidden");
     const sql = await getSql();
-    const rows = await sql<{ id: string; status: string; master_key: string | null; poster_key: string | null }>
-      `select id, status, master_key, poster_key from bridge_titles where id = ${data.titleId} limit 1`;
+    return await sql.transaction(async (tx) => {
+      const rows = await tx<{ id: string; status: string; master_key: string | null; poster_key: string | null }>
+      `select id, status, master_key, poster_key from bridge_titles where id = ${data.titleId} limit 1 for update`;
     const title = rows[0];
     if (!title) throw new Error("Title not found");
     let next: string | null = null;
@@ -80,8 +81,8 @@ export const reviewAdminTitle = createServerFn({ method: "POST" })
     } else if (data.decision === "FAIL") {
       assertPermission(actor, "title.qc_review");
       if (title.status !== "QC_REVIEW") throw new Error("Title is not in QC review");
-      await sql`insert into bridge_qc_cases (title_id, status, reviewer_findings, reviewed_by, reviewed_at) values (${title.id}, 'FAILED', ${JSON.stringify(data.notes ? [{ note: data.notes }] : [])}::jsonb, ${actor.userId}, now())`;
-      await writeAudit({ actorUserId: actor.userId, action: "qc.fail", entityType: "bridge_title", entityId: title.id, metadata: { notes: data.notes ?? null } });
+      await tx`insert into bridge_qc_cases (title_id, status, reviewer_findings, reviewed_by, reviewed_at) values (${title.id}, 'FAILED', ${JSON.stringify(data.notes ? [{ note: data.notes }] : [])}::jsonb, ${actor.userId}, now())`;
+      await writeAudit({ actorUserId: actor.userId, action: "qc.fail", entityType: "bridge_title", entityId: title.id, metadata: { notes: data.notes ?? null } }, tx);
       return { ok: true, status: "QC_REVIEW" };
     } else if (data.decision === "APPROVE") {
       assertPermission(actor, "title.rights_review");
@@ -97,6 +98,7 @@ export const reviewAdminTitle = createServerFn({ method: "POST" })
           and window_start is not null and window_start <= now()
           and window_end is not null and window_end > now()
         order by created_at desc
+        for update
       `;
       const grant = grants.length === 1 ? grants[0] : null;
       if (!grant ||
@@ -106,21 +108,22 @@ export const reviewAdminTitle = createServerFn({ method: "POST" })
         throw new Error("Exactly one active, complete rights draft from another user is required for Legal approval");
       }
       legalEvidence = JSON.stringify([{ grantId: grant.id, note: data.notes ?? null }]);
-      await sql`update bridge_rights_grants set status = 'VALID' where id = ${grant.id} and status = 'DRAFT'`;
+      await tx`update bridge_rights_grants set status = 'VALID' where id = ${grant.id} and status = 'DRAFT'`;
       next = "LICENSING_READY"; action = "rights.approve";
     } else {
       assertPermission(actor, "title.rights_review");
       if (title.status !== "RIGHTS_REVIEW") throw new Error("Title is not in rights review");
-      await sql`insert into bridge_legal_cases (title_id, status, evidence, reviewed_by, reviewed_at) values (${title.id}, 'REJECTED', ${JSON.stringify(data.notes ? [{ note: data.notes }] : [])}::jsonb, ${actor.userId}, now())`;
-      await writeAudit({ actorUserId: actor.userId, action: "rights.reject", entityType: "bridge_title", entityId: title.id, metadata: { notes: data.notes ?? null } });
+      await tx`insert into bridge_legal_cases (title_id, status, evidence, reviewed_by, reviewed_at) values (${title.id}, 'REJECTED', ${JSON.stringify(data.notes ? [{ note: data.notes }] : [])}::jsonb, ${actor.userId}, now())`;
+      await writeAudit({ actorUserId: actor.userId, action: "rights.reject", entityType: "bridge_title", entityId: title.id, metadata: { notes: data.notes ?? null } }, tx);
       return { ok: true, status: "RIGHTS_REVIEW" };
     }
-    await sql`update bridge_titles set status = ${next}, updated_at = now() where id = ${title.id}`;
-    await sql`insert into bridge_title_events (title_id, from_status, to_status, actor_user_id, note) values (${title.id}, ${title.status}, ${next}, ${actor.userId}, ${data.notes ?? null})`;
-    if (data.decision === "PASS" && qcEvidence) await sql`insert into bridge_qc_cases (title_id, status, reviewer_findings, reviewed_by, reviewed_at) values (${title.id}, 'PASSED', ${qcEvidence}::jsonb, ${actor.userId}, now())`;
-    if (data.decision === "APPROVE" && legalEvidence) await sql`insert into bridge_legal_cases (title_id, status, evidence, reviewed_by, reviewed_at) values (${title.id}, 'APPROVED', ${legalEvidence}::jsonb, ${actor.userId}, now())`;
-    await writeAudit({ actorUserId: actor.userId, action, entityType: "bridge_title", entityId: title.id, metadata: { from: title.status, to: next, notes: data.notes ?? null } });
+    await tx`update bridge_titles set status = ${next}, updated_at = now() where id = ${title.id}`;
+    await tx`insert into bridge_title_events (title_id, from_status, to_status, actor_user_id, note) values (${title.id}, ${title.status}, ${next}, ${actor.userId}, ${data.notes ?? null})`;
+    if (data.decision === "PASS" && qcEvidence) await tx`insert into bridge_qc_cases (title_id, status, reviewer_findings, reviewed_by, reviewed_at) values (${title.id}, 'PASSED', ${qcEvidence}::jsonb, ${actor.userId}, now())`;
+    if (data.decision === "APPROVE" && legalEvidence) await tx`insert into bridge_legal_cases (title_id, status, evidence, reviewed_by, reviewed_at) values (${title.id}, 'APPROVED', ${legalEvidence}::jsonb, ${actor.userId}, now())`;
+    await writeAudit({ actorUserId: actor.userId, action, entityType: "bridge_title", entityId: title.id, metadata: { from: title.status, to: next, notes: data.notes ?? null } }, tx);
     return { ok: true, status: next };
+    });
   });
 
 const gateInput = z.object({
