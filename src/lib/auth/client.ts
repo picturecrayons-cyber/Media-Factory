@@ -21,13 +21,19 @@ export async function hasSupabaseRecoverySession(): Promise<boolean> {
     window.sessionStorage.getItem(RECOVERY_MARKER_KEY) === data.session.access_token;
 }
 
+export async function getSupabaseSessionStrict(
+  opts: { forceRefresh?: boolean } = {},
+): Promise<Session | null> {
+  return restoreSupabaseSession(supabase.auth, opts);
+}
+
 export async function getSupabaseSession(
   opts: { forceRefresh?: boolean } = {},
 ): Promise<Session | null> {
   try {
-    return await restoreSupabaseSession(supabase.auth, opts);
+    return await getSupabaseSessionStrict(opts);
   } catch (err) {
-    console.warn("[auth] Session restoration failed:", err);
+    console.warn("[auth] Session restoration failed:", err instanceof Error ? err.message : "Unknown error");
     return null;
   }
 }
