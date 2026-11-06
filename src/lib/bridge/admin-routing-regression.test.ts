@@ -130,6 +130,8 @@ test("Buyer media previews use short-lived signed first-party streaming tokens",
   const gallery = read("../../components/bridge/asset-preview-gallery.tsx");
   const routeTree = read("../../routeTree.gen.ts");
   assert.doesNotMatch(gallery, /<\/article>\s*<\/article>/);
+  assert.match(gallery, /const latestPoster = assets\.find/);
+  assert.match(gallery, /const seenKinds = new Set/);
   assert.match(routeTree, /ApiAssetsStreamRouteImport/);
   assert.match(routeTree, /ApiAssetsStreamRoute: ApiAssetsStreamRoute/);
   assert.match(assets, /createCipheriv/);
