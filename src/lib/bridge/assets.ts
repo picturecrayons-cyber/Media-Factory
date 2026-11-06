@@ -13,6 +13,7 @@ import { persistVerifiedAsset } from "./asset-confirmation";
 import { downloadDecision } from "./delivery-policy";
 import { uploadUrlLifetimeSeconds } from "./upload-url-lifetime";
 import { validateOttIngestFile, type OttIngestKind } from "./ott-ingest-spec";
+import { validatePartManifest } from "./upload-manifest.ts";
 
 const UPLOADABLE: ReadonlySet<string> = new Set(["DRAFT", "UPLOADING", "PREPARING"]);
 
@@ -113,24 +114,60 @@ export const beginAssetMultipart = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     const asset = await openUploadAsset(context.userId, data.assetId);
     if (asset.byte_size != null) return { assetId: asset.id, alreadyVerified: true as const };
+    const sql = await getSql();
     const { assertMultipartSessionSigningReady, signMultipartSession } = await import("./multipart-session.server");
-    // Check the signing key before creating an OCI multipart upload; otherwise a missing
-    // app secret could leave an unmanageable remote multipart upload behind.
     assertMultipartSessionSigningReady();
-    const { beginMultipartUpload } = await import("./oci-object-storage.server");
+    // Reuse the currently active server session for this asset/size. Browser storage is
+    // only a convenience; the durable session and part manifest live in bridge_private.
+    const active = await sql<{
+      id: string; provider_upload_id: string; part_base_url: string; expires_at: string | Date;
+    }>`
+      select id, provider_upload_id, part_base_url, expires_at
+      from bridge_private.upload_sessions
+      where asset_id = ${asset.id} and actor_user_id = ${context.userId}
+        and expected_size = ${data.byteSize}
+        and state in ('initiated','uploading') and expires_at > now()
+      order by created_at desc limit 1
+    `;
     const expiresIn = uploadUrlLifetimeSeconds(data.byteSize);
-    const started = await beginMultipartUpload({
-      key: asset.s3_key,
-      contentType: asset.content_type || "application/octet-stream",
-      expiresIn,
-    });
-    const expiresAt = Date.now() + expiresIn * 1000;
+    const expiresAt = active[0] ? new Date(active[0].expires_at).getTime() : Date.now() + expiresIn * 1000;
+    let sessionId: string;
+    let uploadId: string;
+    let partBaseUrl: string;
+    if (active[0]) {
+      sessionId = active[0].id;
+      uploadId = active[0].provider_upload_id;
+      partBaseUrl = active[0].part_base_url;
+    } else {
+      const { beginMultipartUpload, storageTarget } = await import("./oci-object-storage.server");
+      const started = await beginMultipartUpload({
+        key: asset.s3_key,
+        contentType: asset.content_type || "application/octet-stream",
+        expiresIn,
+      });
+      const target = await storageTarget();
+      sessionId = randomBytes(16).toString("hex");
+      uploadId = started.uploadId;
+      partBaseUrl = started.partBaseUrl;
+      await sql`
+        insert into bridge_private.upload_sessions
+          (id, asset_id, actor_user_id, provider, bucket, namespace, region, endpoint,
+           source_object_key, provider_upload_id, part_base_url, expected_size, part_size,
+           idempotency_key, expires_at)
+        values
+          (${sessionId}, ${asset.id}, ${context.userId}, ${target.provider}, ${target.bucket},
+           ${target.namespace}, ${target.region}, ${target.endpoint}, ${asset.s3_key},
+           ${uploadId}, ${partBaseUrl}, ${data.byteSize}, 16777216,
+           ${randomBytes(16).toString("hex")}, to_timestamp(${expiresAt / 1000}))
+      `;
+    }
     const sessionToken = signMultipartSession({
+      sessionId,
       actorUserId: context.userId,
       assetId: asset.id,
       objectKey: asset.s3_key,
-      uploadId: started.uploadId,
-      partBaseUrl: started.partBaseUrl,
+      uploadId,
+      partBaseUrl,
       expiresAt,
     });
     await writeAudit({
@@ -138,40 +175,119 @@ export const beginAssetMultipart = createServerFn({ method: "POST" })
       action: "asset.multipart_started",
       entityType: "bridge_asset",
       entityId: asset.id,
-      metadata: { titleId: asset.title_id, byteSize: data.byteSize, expiresAt },
+      metadata: { titleId: asset.title_id, byteSize: data.byteSize, sessionId },
     });
-    return {
-      assetId: asset.id,
-      alreadyVerified: false as const,
-      uploadId: started.uploadId,
-      partBaseUrl: started.partBaseUrl,
-      sessionToken,
-      expiresAt,
-    };
+    return { assetId: asset.id, sessionId, alreadyVerified: false as const, uploadId, partBaseUrl, sessionToken, expiresAt };
+  });
+
+export const recordAssetMultipartPart = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({
+    assetId: z.string().min(8),
+    sessionId: z.string().min(8),
+    sessionToken: z.string().min(32).max(12000),
+    partNumber: z.number().int().positive().max(10000),
+    byteStart: z.number().int().nonnegative(),
+    byteEnd: z.number().int().positive(),
+    etag: z.string().min(1).max(512),
+  }))
+  .handler(async ({ context, data }) => {
+    const asset = await openUploadAsset(context.userId, data.assetId);
+    const { verifyMultipartSession } = await import("./multipart-session.server");
+    verifyMultipartSession(data.sessionToken, {
+      sessionId: data.sessionId, actorUserId: context.userId, assetId: asset.id, objectKey: asset.s3_key,
+    });
+    const sql = await getSql();
+    const sessions = await sql<{
+      expected_size: number; part_size: number; provider_upload_id: string; state: string;
+    }>`
+      select expected_size, part_size, provider_upload_id, state
+      from bridge_private.upload_sessions
+      where id = ${data.sessionId} and asset_id = ${asset.id}
+        and actor_user_id = ${context.userId} and expires_at > now()
+      limit 1
+    `;
+    const session = sessions[0];
+    if (!session || !["initiated","uploading"].includes(session.state)) throw new Error("Multipart session is not active");
+    if (data.byteEnd > Number(session.expected_size) || data.byteEnd <= data.byteStart) throw new Error("Part byte range is invalid");
+    const { listMultipartUploadParts } = await import("./oci-object-storage.server");
+    const providerParts = await listMultipartUploadParts(asset.s3_key, session.provider_upload_id);
+    const providerPart = providerParts.find((part) => part.partNumber === data.partNumber);
+    const expectedLength = data.byteEnd - data.byteStart;
+    if (!providerPart || providerPart.etag !== data.etag.replaceAll('"', "") || providerPart.size !== expectedLength) {
+      throw new Error("Part ETag or byte length does not match OCI's server-side part listing");
+    }
+    await sql`
+      insert into bridge_private.upload_parts (session_id, part_number, byte_start, byte_end, etag)
+      values (${data.sessionId}, ${data.partNumber}, ${data.byteStart}, ${data.byteEnd}, ${providerPart.etag})
+      on conflict (session_id, part_number) do update
+        set byte_start = excluded.byte_start, byte_end = excluded.byte_end,
+            etag = excluded.etag, recorded_at = now()
+    `;
+    await sql`update bridge_private.upload_sessions set state='uploading', updated_at=now() where id=${data.sessionId}`;
+    return { recorded: true, partNumber: data.partNumber };
   });
 
 export const commitAssetMultipart = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .validator(z.object({ assetId: z.string().min(8), sessionToken: z.string().min(32).max(12000) }))
+  .validator(z.object({
+    assetId: z.string().min(8), sessionId: z.string().min(8),
+    sessionToken: z.string().min(32).max(12000),
+  }))
   .handler(async ({ context, data }) => {
     const asset = await openUploadAsset(context.userId, data.assetId);
     if (asset.byte_size != null) return { committed: true };
     const { verifyMultipartSession } = await import("./multipart-session.server");
-    const session = verifyMultipartSession(data.sessionToken, {
-      actorUserId: context.userId,
-      assetId: asset.id,
-      objectKey: asset.s3_key,
+    const sessionClaims = verifyMultipartSession(data.sessionToken, {
+      sessionId: data.sessionId, actorUserId: context.userId, assetId: asset.id, objectKey: asset.s3_key,
     });
-    const { commitMultipartUpload } = await import("./oci-object-storage.server");
-    await commitMultipartUpload(session.partBaseUrl, asset.s3_key);
+    const sql = await getSql();
+    const sessions = await sql<{
+      expected_size: number; part_size: number; provider_upload_id: string; part_base_url: string; state: string;
+    }>`
+      select expected_size, part_size, provider_upload_id, part_base_url, state
+      from bridge_private.upload_sessions
+      where id = ${data.sessionId} and asset_id = ${asset.id}
+        and actor_user_id = ${context.userId} and expires_at > now()
+      limit 1
+    `;
+    const stored = sessions[0];
+    if (!stored || !["uploading","initiated"].includes(stored.state)) throw new Error("Multipart session cannot be committed");
+    const savedParts = await sql<{
+      part_number: number; byte_start: number; byte_end: number; etag: string;
+    }>`
+      select part_number, byte_start, byte_end, etag
+      from bridge_private.upload_parts where session_id = ${data.sessionId}
+      order by part_number
+    `;
+    const manifest = validatePartManifest(savedParts.map((part) => ({
+      partNumber: Number(part.part_number), byteStart: Number(part.byte_start),
+      byteEnd: Number(part.byte_end), etag: part.etag,
+    })), { expectedSize: Number(stored.expected_size), partSize: Number(stored.part_size) });
+    const { listMultipartUploadParts, commitMultipartUpload } = await import("./oci-object-storage.server");
+    const providerParts = await listMultipartUploadParts(asset.s3_key, stored.provider_upload_id);
+    if (providerParts.length !== manifest.length || manifest.some((part) => {
+      const actual = providerParts.find((candidate) => candidate.partNumber === part.partNumber);
+      return !actual || actual.etag !== part.etag.replaceAll('"', "") || actual.size !== part.byteEnd - part.byteStart;
+    })) {
+      throw new Error("Persisted part manifest does not match OCI's current multipart parts");
+    }
+    await sql`update bridge_private.upload_sessions set state='assembling', updated_at=now() where id=${data.sessionId}`;
+    await commitMultipartUpload(sessionClaims.partBaseUrl, asset.s3_key, manifest);
+    await sql`
+      update bridge_private.upload_sessions set state='verification_pending', updated_at=now()
+      where id=${data.sessionId}
+    `;
+    await sql`
+      insert into bridge_private.asset_verification_jobs (asset_id, session_id)
+      values (${asset.id}, ${data.sessionId})
+      on conflict (session_id) do nothing
+    `;
     await writeAudit({
-      actorUserId: context.userId,
-      action: "asset.multipart_committed",
-      entityType: "bridge_asset",
-      entityId: asset.id,
-      metadata: { expiresAt: session.expiresAt },
+      actorUserId: context.userId, action: "asset.multipart_committed",
+      entityType: "bridge_asset", entityId: asset.id, metadata: { sessionId: data.sessionId },
     });
-    return { committed: true };
+    return { committed: true, verificationQueued: true };
   });
 
 export const abortAssetMultipart = createServerFn({ method: "POST" })
