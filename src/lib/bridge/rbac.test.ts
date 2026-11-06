@@ -184,6 +184,13 @@ describe("PRD authorization matrix", () => {
     assert.equal(canAccessDitWorkspace(actor("unverified-studio", "studio", null, false)), false);
   });
 
+  it("explicitly denies DIT workspace access to QC, legal, and finance reviewers", () => {
+    for (const reviewer of [qc, legal, finance]) {
+      assert.equal(canAccessDitWorkspace(reviewer), false);
+      assert.equal(hasPermission(reviewer, "dit.workspace"), false);
+    }
+  });
+
   it("shares title access only with verified Studio accounts in the same Studio organization", () => {
     const member: Actor = {
       ...actor("studio-member", "studio"),
