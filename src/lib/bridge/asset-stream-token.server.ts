@@ -19,7 +19,7 @@ export function createAssetStreamToken(actorUserId: string, assetId: string, ttl
   const payload = Buffer.from(JSON.stringify({version:1,actorUserId,assetId,expiresAt:Date.now()+ttlSeconds*1000})).toString("base64url");
   return `${payload}.${signature(payload).toString("base64url")}`;
 }
-export function verifyAssetStreamToken(token: string, expectedAssetId: string, expectedActorUserId: string) {
+export function verifyAssetStreamToken(token: string, expectedAssetId: string, expectedActorUserId?: string) {
   if (!token || token.length > 4096) throw new Error("Asset stream token is invalid");
   const parts = token.split(".");
   if (parts.length !== 2) throw new Error("Asset stream token is invalid");
@@ -29,7 +29,7 @@ export function verifyAssetStreamToken(token: string, expectedAssetId: string, e
   let claims: AssetStreamClaims;
   try { claims = JSON.parse(Buffer.from(parts[0],"base64url").toString("utf8")) as AssetStreamClaims; }
   catch { throw new Error("Asset stream token payload is invalid"); }
-  if (claims.version !== 1 || claims.assetId !== expectedAssetId || claims.actorUserId !== expectedActorUserId ||
+  if (claims.version !== 1 || claims.assetId !== expectedAssetId || (expectedActorUserId !== undefined && claims.actorUserId !== expectedActorUserId) ||
       !Number.isSafeInteger(claims.expiresAt) || claims.expiresAt <= Date.now()) {
     throw new Error("Asset stream token is expired or not bound to this authenticated actor and asset");
   }
