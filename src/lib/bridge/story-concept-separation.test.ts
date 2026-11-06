@@ -37,7 +37,7 @@ test("concept creation is atomic and audit is in the same transaction", () => {
 });
 
 test("concept creation uses actor-scoped request-hash idempotency ledger", () => {
-  assert.match(concepts, /idempotencyKey: z\\.string\\(\\)\\.uuid\\(\\)/);
+  assert.equal(concepts.includes("idempotencyKey: z.string().uuid()"), true);
   assert.match(concepts, /bridge_story_concept_idempotency/);
   assert.match(concepts, /request_hash/);
   assert.match(concepts, /IDEMPOTENCY_KEY_REUSED_WITH_DIFFERENT_PAYLOAD/);
@@ -51,7 +51,7 @@ test("workflow migration preserves legacy states and does not rewrite existing s
   assert.match(conceptMigration, /ADD COLUMN IF NOT EXISTS reviewed_by/);
   assert.match(conceptMigration, /bridge_story_concept_idempotency/);
   assert.match(conceptMigration, /'INTRODUCED_TO_BUYERS'/);
-  assert.doesNotMatch(conceptMigration, /UPDATE public\\.bridge_story_concept_submissions/i);
+  assert.equal(conceptMigration.includes("UPDATE public.bridge_story_concept_submissions"), false);
   assert.doesNotMatch(conceptMigration, /ADD COLUMN IF NOT EXISTS idempotency_key/);
 });
 test("concept review actions are admin-only and fee certification gates buyer evaluation", () => {
