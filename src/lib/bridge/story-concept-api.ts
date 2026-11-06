@@ -128,6 +128,7 @@ export const createStoryConceptSubmission = createServerFn({ method: "POST" })
         treatmentUrl: data.treatmentUrl || null,
         screenplayUrl: data.screenplayUrl || null,
         language: data.language,
+        paymentId: data.paymentId ?? null,
       }))
       .digest("hex");
 
@@ -164,6 +165,20 @@ export const createStoryConceptSubmission = createServerFn({ method: "POST" })
         if (!data.paymentId) {
           throw new Error("A verified Story / Concept submission payment is required.");
         }
+        const rate = await tx<{ base_price_paise: number | null }>`
+          select base_price_paise
+          from bridge_service_rates
+          where service_code = 'STORY_CONCEPT_NETWORK_SUBMISSION'
+            and active = true
+            and currency = 'INR'
+            and effective_from <= now()
+            and (effective_to is null or effective_to > now())
+          order by effective_from desc, version desc
+          limit 1
+        `;
+        if (!rate[0] || rate[0].base_price_paise === null || Number(rate[0].base_price_paise) <= 0) {
+          throw new Error("A certified active Story / Concept submission rate is required.");
+        }
         const payment = await tx<{ id: string; amount_paise: number }>`
           select id, amount_paise
           from bridge_payments
@@ -175,8 +190,8 @@ export const createStoryConceptSubmission = createServerFn({ method: "POST" })
             and title_id is null
           for update
         `;
-        if (!payment[0] || Number(payment[0].amount_paise) <= 0) {
-          throw new Error("No matching captured Story / Concept submission payment was found.");
+        if (!payment[0] || Number(payment[0].amount_paise) !== Number(rate[0].base_price_paise)) {
+          throw new Error("No matching captured Story / Concept payment at the certified rate was found.");
         }
 
         const titleId = randomBytes(16).toString("hex");
