@@ -510,7 +510,11 @@ export const requestAssetDownload = createServerFn({ method: "POST" })
       });
       throw new Error(decision.reason);
     }
-    if (actor.accountType === "buyer" && !actor.internalRole) {\n      const { assertBuyerPublishable } = await import("./buyer-visibility");\n      await assertBuyerPublishable(title.id);\n    }\n    const { createAssetStreamToken } = await import("./asset-stream-token.server");
+    if (actor.accountType === "buyer" && !actor.internalRole) {
+      const { assertBuyerPublishable } = await import("./buyer-visibility");
+      await assertBuyerPublishable(title.id);
+    }
+    const { createAssetStreamToken } = await import("./asset-stream-token.server");
     const token = createAssetStreamToken(actor.userId, asset.id, 60);
     await writeAudit({
       actorUserId: actor.userId,
