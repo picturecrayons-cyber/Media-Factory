@@ -1,9 +1,6 @@
-import { useNavigate } from "@tanstack/react-router";
-import { useMutation } from "@tanstack/react-query";
 import { useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { createStoryConceptSubmission } from "@/lib/bridge/story-concept-api";
 
 const GENRES = [
   "Drama",
@@ -30,8 +27,6 @@ const PLATFORMS = [
 ];
 
 export function StoryConceptForm() {
-  const navigate = useNavigate();
-  const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
   const [titleName, setTitleName] = useState("");
   const [logline, setLogline] = useState("");
   const [synopsis, setSynopsis] = useState("");
@@ -42,30 +37,6 @@ export function StoryConceptForm() {
   const [treatmentUrl, setTreatmentUrl] = useState("");
   const [screenplayUrl, setScreenplayUrl] = useState("");
 
-  const mut = useMutation({
-    mutationFn: () =>
-      createStoryConceptSubmission({
-        data: {
-          idempotencyKey,
-          titleName,
-          logline,
-          synopsis,
-          language,
-          genre,
-          targetPlatforms,
-          estimatedBudgetRange: estimatedBudgetRange || undefined,
-          treatmentUrl: treatmentUrl || undefined,
-          screenplayUrl: screenplayUrl || undefined,
-        },
-      }),
-    onSuccess: (res) => {
-      setIdempotencyKey(crypto.randomUUID());
-      toast("Story / Concept submitted for review");
-      void navigate({ to: "/title/$id", params: { id: res.titleId } });
-    },
-    onError: (err) =>
-      toast(err instanceof Error ? err.message : "Could not submit concept"),
-  });
 
   function toggle(value: string, list: string[], setList: (v: string[]) => void) {
     setList(list.includes(value) ? list.filter((x) => x !== value) : [...list, value]);
@@ -74,7 +45,6 @@ export function StoryConceptForm() {
   function onSubmit(e: FormEvent) {
     e.preventDefault();
     toast("Story / Concept submission is locked until verified payment checkout is available.");
-    return;
     if (logline.trim().length < 10) {
       toast("Logline must be at least 10 characters");
       return;
@@ -87,7 +57,7 @@ export function StoryConceptForm() {
   }
 
   return (
-    <form onSubmit={onSubmit} onInput={() => setIdempotencyKey(crypto.randomUUID())} className="grid gap-4 sm:grid-cols-2">
+    <form onSubmit={onSubmit} className="grid gap-4 sm:grid-cols-2">
       <label className="text-sm sm:col-span-2">
         Working title
         <input
