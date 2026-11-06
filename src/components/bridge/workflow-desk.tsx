@@ -20,7 +20,7 @@ import type { BridgeActor } from "@/lib/bridge/session";
 import type { BridgeTitle } from "@/lib/bridge/types";
 
 const stages = ["Prepare", "Business", "Distribution", "Revenue"] as const;
-export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: BridgeActor }) {
+export function WorkflowDesk({ title, actor, qcIngestReady = false, qcIngestMissing = [] }: { title: BridgeTitle; actor: BridgeActor; qcIngestReady?: boolean; qcIngestMissing?: string[] }) {
   const [stage, setStage] = useState<(typeof stages)[number]>("Prepare");
   const [settlementRef, setSettlementRef] = useState("");
   const [invoiceRef, setInvoiceRef] = useState("");
@@ -98,11 +98,11 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
   const grants = workflow.data?.grants ?? [];
   const valid = grants.find((g) => g.status === "VALID" && new Date(g.window_end) > new Date());
   const pub = publication.data?.publication;
-  const button = (label: string, run: () => Promise<unknown>) => (
+  const button = (label: string, run: () => Promise<unknown>, disabled = false) => (
     <button
       type="button"
       className="rounded-lg border border-line px-4 py-2 text-sm disabled:opacity-50"
-      disabled={action.isPending}
+      disabled={action.isPending || disabled}
       onClick={() => action.mutate(run)}
     >
       {label}
@@ -177,8 +177,14 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                                 : "QC_REVIEW",
                         },
                       }),
+                    title.status === "PREPARING" && !qcIngestReady,
                   )
                 : null}
+              {title.status === "PREPARING" && !qcIngestReady ? (
+                <p role="status" className="text-sm text-muted">
+                  QC submission locked. Missing verified assets: {qcIngestMissing.length ? qcIngestMissing.join(", ") : "verification evidence is still loading or unavailable"}.
+                </p>
+              ) : null}
               {title.status === "QC_REVIEW" && hasPermission(actor, "title.qc_review") ? (
                 <>
                   {input(
