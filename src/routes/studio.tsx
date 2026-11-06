@@ -20,8 +20,8 @@ function Studio() {
               <NewSubmissionPanel />
             </header>
 
-            <section>
-              <h2 className="mb-3 text-lg font-semibold">Finished films</h2>
+            <section className="min-w-0 space-y-3">
+              <h2 className="m-0 block w-full min-w-0 break-words text-lg font-semibold leading-tight tracking-tight">Finished films</h2>
               <TitleList empty="No finished films yet. Start with a new submission." />
             </section>
 
