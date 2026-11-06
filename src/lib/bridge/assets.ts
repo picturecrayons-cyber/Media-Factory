@@ -555,16 +555,22 @@ export const requestAssetDownload = createServerFn({ method: "POST" })
       });
       throw new Error(decision.reason);
     }
-    const { signDownload } = await import("./oci-object-storage.server");
-    const signed = await signDownload({ key: asset.verified_object_key! });
+    if (actor.accountType === "buyer" && !actor.internalRole) {
+      const { assertBuyerPublishable } = await import("./buyer-visibility");
+      await assertBuyerPublishable(title.id);
+    }
+    const token = createAssetStreamToken(actor.userId, asset.id, 60);
     await writeAudit({
       actorUserId: actor.userId,
-      action: "asset.download_signed",
+      action: "asset.stream_token_issued",
       entityType: "bridge_asset",
       entityId: asset.id,
     });
-    // Never return bucket names or object keys in the download response, including to Buyers.
-    return { url: signed.url, method: signed.method };
+    return {
+      url: `/api/assets/${encodeURIComponent(asset.id)}/stream?token=${encodeURIComponent(token)}`,
+      method: "GET" as const,
+      expiresIn: 60,
+    };
   });
 
 export const listTitleAssets = createServerFn({ method: "GET" })
