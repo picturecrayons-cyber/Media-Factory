@@ -20,11 +20,11 @@ async function fixture() {
     values ('qc-title-123','qc-title','QC title','owner','independent_creator','PREPARING');
     insert into bridge_assets
       (id,title_id,kind,s3_key,created_by,byte_size,verified_object_key,checksum_sha256,
-       storage_provider,storage_bucket,storage_verified_at)
+       storage_provider,storage_bucket,storage_namespace,storage_region,storage_endpoint,storage_verified_at)
     values
-      ('qc-master-1','qc-title-123','master','sealed/master','owner',100,'sealed/master',repeat('a',64),'oci','bucket',now()),
-      ('qc-poster-1','qc-title-123','poster','sealed/poster','owner',100,'sealed/poster',repeat('b',64),'oci','bucket',now()),
-      ('qc-cert-1','qc-title-123','censor_certificate','sealed/cert','owner',100,'sealed/cert',repeat('c',64),'oci','bucket',now());
+      ('qc-master-1','qc-title-123','master','sealed/master','owner',100,'sealed/master',repeat('a',64),'oci','bucket','namespace','ap-mumbai-1','https://objectstorage.ap-mumbai-1.oraclecloud.com',now()),
+      ('qc-poster-1','qc-title-123','poster','sealed/poster','owner',100,'sealed/poster',repeat('b',64),'oci','bucket','namespace','ap-mumbai-1','https://objectstorage.ap-mumbai-1.oraclecloud.com',now()),
+      ('qc-cert-1','qc-title-123','censor_certificate','sealed/cert','owner',100,'sealed/cert',repeat('c',64),'oci','bucket','namespace','ap-mumbai-1','https://objectstorage.ap-mumbai-1.oraclecloud.com',now());
     insert into bridge_rights_grants (title_id,evidence,status,created_by)
     values ('qc-title-123','[{"type":"AUTHORIZATION_ATTESTATION","rightsBasis":"OWNER","authorizationConfirmed":true}]'::jsonb,'DRAFT','owner');
     insert into bridge_title_submission_intake
