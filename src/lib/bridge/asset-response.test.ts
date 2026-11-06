@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mapBridgeAssetResponse } from "./assets.ts";
+import { mapBridgeAssetResponse } from "./asset-response.ts";
 
 const row = {
   id: "asset-test-001",
