@@ -222,6 +222,16 @@ export const recordChannelPayment = createServerFn({ method: "POST" })
     const actor = await requireVerifiedActor(context.userId);
     assertPermission(actor, "finance.record_settlement");
     const sql = await getSql();
+    const reconciled = await sql<{ net_amount_minor: number | string | null; statement_status: string }>`
+      select net_amount_minor, statement_status
+      from public.bridge_channel_statement_lines
+      where id = ${data.statementLineId}
+      limit 1
+    `;
+    const netAmount = reconciled[0]?.statement_status === "RECONCILED" && reconciled[0].net_amount_minor != null
+      ? Number(reconciled[0].net_amount_minor)
+      : null;
+    assertFullSettlementAmount(data.paidAmountMinor, Number.isSafeInteger(netAmount) ? netAmount : null);
 
     return sql.transaction(async (tx) => {
       const updated = await tx<{ id: string }>`
