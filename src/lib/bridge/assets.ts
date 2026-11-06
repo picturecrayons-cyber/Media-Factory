@@ -717,11 +717,11 @@ export const listTitleAssets = createServerFn({ method: "GET" })
         .map((r) => ({
           id: r.id,
           kind: r.kind,
-          key: buyer ? null : r.s3_key,
           contentType: r.content_type,
           byteSize: r.byte_size,
           verified: Number(r.byte_size) > 0 && Boolean(r.verified_object_key && r.checksum_sha256),
           ...(buyer ? {} : {
+            key: r.s3_key,
             storageLocation: r.verified_object_key ? {
               provider: r.storage_provider,
               objectKey: r.verified_object_key,
