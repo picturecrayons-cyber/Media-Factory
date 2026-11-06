@@ -4,7 +4,7 @@ import { assertImmutableVerifiedPointer, validatePartManifest } from "./upload-m
 
 test("accepts a contiguous complete manifest with an undersized final part", () => {
   const result = validatePartManifest([
-    { partNumber: 2, byteStart: 5_242_880, byteEnd: 6_000_000, etag: "etag-2" },
+    { partNumber: 2, byteStart: 10_485_760, byteEnd: 11_000_000, etag: "etag-2" },
     { partNumber: 1, byteStart: 0, byteEnd: 5_242_880, etag: "etag-1" },
   ], { expectedSize: 6_000_000, partSize: 5_242_880 });
   assert.deepEqual(result.map((part) => part.partNumber), [1, 2]);
