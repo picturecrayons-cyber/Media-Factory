@@ -34,9 +34,8 @@ function prettySize(bytes: number | null) {
 
 
 export function AssetPosterSlot({ assets }: { assets: PreviewAsset[] }) {
-  const poster = assets.find((asset) =>
-    asset.verified && ["poster_vertical", "poster"].includes(asset.kind) && isImage(asset)
-  );
+  const latestPoster = assets.find((asset) => ["poster_vertical", "poster"].includes(asset.kind));
+  const poster = latestPoster?.verified && isImage(latestPoster) ? latestPoster : undefined;
   const [url, setUrl] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
 
@@ -103,7 +102,13 @@ export function AssetPreviewGallery({ assets }: { assets: PreviewAsset[] }) {
     setLoadingId(null);
   }
 
-  const mediaAssets = assets.filter((asset) => asset.verified && (isImage(asset) || isVideo(asset)));
+  const seenKinds = new Set<string>();
+  const mediaAssets = assets.filter((asset) => {
+    const slot = asset.kind === "poster" ? "poster_vertical" : asset.kind;
+    if (seenKinds.has(slot)) return false;
+    seenKinds.add(slot);
+    return asset.verified && (isImage(asset) || isVideo(asset));
+  });
 
   if (!mediaAssets.length) {
     return (
