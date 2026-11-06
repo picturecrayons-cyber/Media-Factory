@@ -23,6 +23,7 @@ test("Story Concept creation requires an active service and verified captured pa
   assert.match(api, /verified_at is not null/);
   assert.match(api, /title_id is null/);
   assert.match(api, /amount_paise\) <= 0/);
+  assert.match(api, /payment_id, logline/);
 });
 
 test("Story Concept curation locks the row and audits in the same transaction", () => {
@@ -36,6 +37,7 @@ test("Story Concept idempotency storage is private and catalog seed uses canonic
   assert.match(migration, /PRIMARY KEY \(actor_user_id, idempotency_key\)/);
   assert.match(migration, /ALTER TABLE public\.bridge_story_concept_idempotency ENABLE ROW LEVEL SECURITY/);
   assert.match(migration, /REVOKE ALL ON public\.bridge_story_concept_idempotency FROM anon, authenticated/);
+  assert.match(migration, /bridge_story_concept_payment_unique_idx/);
   assert.match(migration, /'PREPARE'[\s\S]*?'FIXED_PER_TITLE'[\s\S]*?false/);
   assert.doesNotMatch(migration, /'SUBMISSION'|'FIXED',|description, why,/);
 });
