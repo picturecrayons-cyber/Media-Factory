@@ -10,7 +10,7 @@ const REQUIRED_QC_FILES = [
   { label: "censor/legal certificate", kinds: ["censor_certificate"] },
 ] as const;
 
-export async function assertVerifiedTitleIngestReady(tx: Sql, titleId: string) {
+export async function assertSevenFilesStorageVerified(tx: Sql, titleId: string) {
   const assets = await tx<{
     kind: string; checksum_sha256: string | null; verified_object_key: string | null;
     storage_provider: string | null; storage_bucket: string | null; storage_namespace: string | null;
@@ -34,6 +34,10 @@ export async function assertVerifiedTitleIngestReady(tx: Sql, titleId: string) {
     );
   }
 
+}
+
+export async function assertVerifiedTitleIngestReady(tx: Sql, titleId: string) {
+  await assertSevenFilesStorageVerified(tx, titleId);
   const rights = await tx<{
     authority_type: string | null;
     authorization_evidence_type: string | null;
