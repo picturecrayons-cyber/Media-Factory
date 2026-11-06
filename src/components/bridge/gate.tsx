@@ -32,11 +32,11 @@ export function RequireBridge({
   const qc = useQueryClient();
   const [retrying, setRetrying] = useState(false);
   const [retryError, setRetryError] = useState<string | null>(null);
-  const { user, isPending } = useCurrentUserState();
+  const { user, isPending, error: authError, retry: retryAuth } = useCurrentUserState();
   const sessionQ = useQuery({
     queryKey: ["bridge-session", user?.id],
     queryFn: () => getBridgeSession(),
-    enabled: !isPending && Boolean(user),
+    enabled: !isPending && !authError && Boolean(user),
     retry: false,
   });
   const verifyMail = useMutation({
@@ -50,6 +50,15 @@ export function RequireBridge({
     return (
       <Frame>
         <p className="text-sm text-muted">Opening your desk…</p>
+      </Frame>
+    );
+  }
+  if (authError) {
+    return (
+      <Frame>
+        <h1 className="font-display text-2xl">Sign-in status unavailable</h1>
+        <p role="alert" className="text-sm text-muted">{authError}</p>
+        <Button type="button" onClick={retryAuth}>Retry authentication</Button>
       </Frame>
     );
   }
