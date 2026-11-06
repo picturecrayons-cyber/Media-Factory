@@ -332,9 +332,15 @@ export const abortAssetMultipart = createServerFn({ method: "POST" })
     const session = verifyMultipartSession(data.sessionToken, {
       sessionId: data.sessionId, actorUserId: context.userId, assetId: asset.id, objectKey: asset.s3_key,
     });
+    const sql = await getSql();
+    const active = await sql<{ provider_upload_id: string; state: string }>`
+      select provider_upload_id,state from bridge_private.upload_sessions
+      where id=${data.sessionId} and asset_id=${asset.id} and actor_user_id=${context.userId} limit 1
+    `;
+    if (!active[0] || active[0].provider_upload_id !== session.uploadId ||
+        !["initiated","uploading"].includes(active[0].state)) throw new Error("Multipart session cannot be aborted");
     const { abortMultipartUpload } = await import("./oci-object-storage.server");
     await abortMultipartUpload(session.partBaseUrl, asset.s3_key);
-    const sql = await getSql();
     await sql`update bridge_private.upload_sessions set state='aborted', updated_at=now() where id=${data.sessionId}`;
     await writeAudit({
       actorUserId: context.userId,
