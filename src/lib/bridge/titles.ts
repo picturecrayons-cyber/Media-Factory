@@ -676,6 +676,7 @@ export const listAuditLogs = createServerFn({ method: "GET" })
  * Any asset row (including a pending upload reservation) blocks deletion.
  */
 export async function deleteDraftTitleForUser(authUserId: string, id: string) {
+  if (!/^[A-Za-z0-9_-]{8,80}$/.test(id)) throw new Error("Invalid title id.");
   assertNotDevUser(authUserId);
   const actor = await requireVerifiedActor(authUserId);
   if (actor.internalRole || !["independent_creator", "studio"].includes(actor.accountType)) {
