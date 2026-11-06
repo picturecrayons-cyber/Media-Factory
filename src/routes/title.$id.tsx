@@ -108,6 +108,7 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
   const pubQ = useQuery({
     queryKey: ["loop-pub", id],
     queryFn: () => getLoopPublication({ data: { bridgeTitleId: id } }),
+    enabled: Boolean(actor.internalRole) || actor.accountType !== "buyer",
   });
 
   const reviewQ = useQuery({
