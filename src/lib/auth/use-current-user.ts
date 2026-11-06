@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
-import { getStoredSupabaseUser, getSupabaseSession, subscribeAuthChange } from "./client";
+import { useCallback, useEffect, useState } from "react";
+import type { User } from "@supabase/supabase-js";
+import { getSupabaseSessionStrict, subscribeAuthChange } from "./client";
 
 export type AppUser = {
   id: string;
@@ -10,9 +11,14 @@ export type AppUser = {
   signupAccountTypeHint: string | null;
 };
 
-export type CurrentUserState = { user: AppUser | null; isPending: boolean };
+export type CurrentUserState = {
+  user: AppUser | null;
+  isPending: boolean;
+  authError: string | null;
+  retry: () => void;
+};
 
-function normalize(user: ReturnType<typeof getStoredSupabaseUser>): AppUser | null {
+function normalize(user: User | null | undefined): AppUser | null {
   if (!user) return null;
   return {
     id: user.id,
@@ -25,33 +31,54 @@ function normalize(user: ReturnType<typeof getStoredSupabaseUser>): AppUser | nu
 }
 
 export function useCurrentUserState(): CurrentUserState {
-  const [state, setState] = useState<CurrentUserState>(() => ({
+  const [state, setState] = useState<Omit<CurrentUserState, "retry">>({
     user: null,
     isPending: true,
-  }));
+    authError: null,
+  });
+  const [attempt, setAttempt] = useState(0);
+  const retry = useCallback(() => setAttempt((value) => value + 1), []);
 
   useEffect(() => {
     let alive = true;
     let authChanged = false;
-    const unsubscribe = subscribeAuthChange((_event, session) => {
+    setState({ user: null, isPending: true, authError: null });
+    const unsubscribe = subscribeAuthChange((event, session) => {
+      if (event === "INITIAL_SESSION") {
+        // Keep protected queries gated until the awaited session read completes.
+        if (alive) setState({ user: normalize(session?.user), isPending: true, authError: null });
+        return;
+      }
       authChanged = true;
-      if (alive) {
-        setState({ user: normalize(session?.user ?? null), isPending: false });
-      }
+      if (alive) setState({ user: normalize(session?.user), isPending: false, authError: null });
     });
-    void getSupabaseSession().then((session) => {
-      // A newer confirmation/refresh/sign-out event wins over this initial read.
-      if (alive && !authChanged) {
-        setState({ user: normalize(session?.user ?? null), isPending: false });
-      }
-    });
+
+    void getSupabaseSessionStrict()
+      .then((session) => {
+        // A newer confirmation/refresh/sign-out/account-switch event wins.
+        if (alive && !authChanged) {
+          setState({ user: normalize(session?.user), isPending: false, authError: null });
+        }
+      })
+      .catch((error: unknown) => {
+        if (!alive || authChanged) return;
+        console.error("[auth] Initial session resolution failed", {
+          message: error instanceof Error ? error.message : "Unknown session error",
+        });
+        setState({
+          user: null,
+          isPending: false,
+          authError: "Your secure session could not be restored. Retry before opening protected workspace data.",
+        });
+      });
+
     return () => {
       alive = false;
       unsubscribe();
     };
-  }, []);
+  }, [attempt]);
 
-  return state;
+  return { ...state, retry };
 }
 
 export function useCurrentUser(): AppUser | null {
