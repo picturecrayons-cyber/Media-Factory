@@ -115,6 +115,7 @@ export const beginAssetMultipart = createServerFn({ method: "POST" })
     const asset = await openUploadAsset(context.userId, data.assetId);
     if (asset.byte_size != null) return { assetId: asset.id, alreadyVerified: true as const };
     const sql = await getSql();
+    const sessionActor = await requireVerifiedActor(context.userId);
     const { assertMultipartSessionSigningReady, signMultipartSession } = await import("./multipart-session.server");
     assertMultipartSessionSigningReady();
     // Reuse the currently active server session for this asset/size. Browser storage is
@@ -151,11 +152,11 @@ export const beginAssetMultipart = createServerFn({ method: "POST" })
       partBaseUrl = started.partBaseUrl;
       await sql`
         insert into bridge_private.upload_sessions
-          (id, asset_id, actor_user_id, provider, bucket, namespace, region, endpoint,
+          (id, asset_id, actor_user_id, actor_is_internal, provider, bucket, namespace, region, endpoint,
            source_object_key, provider_upload_id, part_base_url, expected_size, part_size,
            idempotency_key, expires_at)
         values
-          (${sessionId}, ${asset.id}, ${context.userId}, ${target.provider}, ${target.bucket},
+          (${sessionId}, ${asset.id}, ${context.userId}, ${Boolean(sessionActor.internalRole)}, ${target.provider}, ${target.bucket},
            ${target.namespace}, ${target.region}, ${target.endpoint}, ${asset.s3_key},
            ${uploadId}, ${partBaseUrl}, ${data.byteSize}, 16777216,
            ${randomBytes(16).toString("hex")}, to_timestamp(${expiresAt / 1000}))
