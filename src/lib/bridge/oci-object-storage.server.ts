@@ -224,22 +224,98 @@ export async function beginMultipartUpload(opts: { key: string; contentType: str
   return { uploadId: parsed.uploadId, partBaseUrl };
 }
 
-async function authorizedMultipart(partBaseUrl: string, objectKey: string, method: "POST" | "DELETE") {
+async function authorizedMultipart(
+  partBaseUrl: string,
+  objectKey: string,
+  method: "POST" | "DELETE",
+  body?: unknown,
+) {
   const cfg = config();
   if (!multipartTargetAllowed(partBaseUrl, cfg.region, objectKey)) {
     throw new Error("Multipart upload target is not the asset being confirmed");
   }
-  return fetch(partBaseUrl, { method, redirect: "error", signal: AbortSignal.timeout(30_000) });
+  return fetch(partBaseUrl, {
+    method,
+    headers: body === undefined ? undefined : { "content-type": "application/json" },
+    body: body === undefined ? undefined : JSON.stringify(body),
+    redirect: "error",
+    signal: AbortSignal.timeout(30_000),
+  });
 }
 
-export async function commitMultipartUpload(partBaseUrl: string, objectKey: string) {
-  const res = await authorizedMultipart(partBaseUrl, objectKey, "POST");
-  if (!res.ok && res.status !== 409) throw new Error(`OCI multipart commit failed (${res.status})`);
+export type OciMultipartPart = { partNumber: number; etag: string; size: number };
+
+export async function listMultipartUploadParts(objectKey: string, uploadId: string): Promise<OciMultipartPart[]> {
+  const cfg = config();
+  const namespace = await resolveNamespace(cfg);
+  const all: OciMultipartPart[] = [];
+  let page: string | null = null;
+  do {
+    const query = new URLSearchParams({ uploadId });
+    if (page) query.set("page", page);
+    const path = `/n/${encodeURIComponent(namespace)}/b/${encodeURIComponent(cfg.bucket)}/u/${encodedObjectName(objectKey)}?${query.toString()}`;
+    const res = await signedFetch({ cfg, method: "GET", path });
+    if (!res.ok) throw new Error(`OCI multipart part listing failed (${res.status})`);
+    const body = await res.json() as { items?: Array<{ partNumber?: number; etag?: string; size?: number }> };
+    for (const item of body.items ?? []) {
+      if (!Number.isSafeInteger(item.partNumber) || typeof item.etag !== "string" ||
+          !Number.isSafeInteger(item.size) || (item.size ?? 0) <= 0) {
+        throw new Error("OCI returned an invalid multipart part record");
+      }
+      all.push({ partNumber: item.partNumber!, etag: item.etag.replaceAll('"', ""), size: item.size! });
+    }
+    page = res.headers.get("opc-next-page");
+    if (all.length > 10_000) throw new Error("OCI multipart upload exceeds the 10,000-part limit");
+  } while (page);
+  return all.sort((a, b) => a.partNumber - b.partNumber);
+}
+
+export async function commitMultipartUpload(
+  partBaseUrl: string,
+  objectKey: string,
+  parts: readonly { partNumber: number; etag: string }[],
+) {
+  if (parts.length === 0) throw new Error("Cannot commit an empty multipart manifest");
+  const res = await authorizedMultipart(partBaseUrl, objectKey, "POST", {
+    partsToCommit: parts.map((part) => ({ partNum: part.partNumber, etag: part.etag })),
+  });
+  if (!res.ok) throw new Error(`OCI multipart commit failed (${res.status})`);
 }
 
 export async function abortMultipartUpload(partBaseUrl: string, objectKey: string) {
   const res = await authorizedMultipart(partBaseUrl, objectKey, "DELETE");
   if (!res.ok && res.status !== 404) throw new Error(`OCI multipart cancel failed (${res.status})`);
+}
+
+export async function storageTarget() {
+  const cfg = config();
+  return {
+    provider: "oci" as const,
+    bucket: cfg.bucket,
+    namespace: await resolveNamespace(cfg),
+    region: cfg.region,
+    endpoint: endpoint(cfg.region),
+  };
+}
+
+export async function computeObjectSha256(key: string): Promise<string> {
+  const cfg = config();
+  const namespace = await resolveNamespace(cfg);
+  const path = `/n/${encodeURIComponent(namespace)}/b/${encodeURIComponent(cfg.bucket)}/o/${encodedObjectName(key)}`;
+  const res = await signedFetch({ cfg, method: "GET", path });
+  if (!res.ok || !res.body) throw new Error(`OCI object checksum read failed (${res.status})`);
+  const hash = createHash("sha256");
+  const reader = res.body.getReader();
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      hash.update(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  return hash.digest("hex");
 }
 
 export async function signDownload(opts: { key: string; expiresIn?: number }) {
