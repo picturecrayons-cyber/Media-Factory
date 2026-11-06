@@ -14,6 +14,7 @@ import { downloadDecision } from "./delivery-policy";
 import { uploadUrlLifetimeSeconds } from "./upload-url-lifetime";
 import { validateOttIngestFile, type OttIngestKind } from "./ott-ingest-spec";
 import { validatePartManifest } from "./upload-manifest.ts";
+import { createAssetStreamToken } from "./asset-stream-token.server";
 
 const UPLOADABLE: ReadonlySet<string> = new Set(["DRAFT", "UPLOADING", "PREPARING"]);
 
@@ -619,4 +620,42 @@ export const listTitleAssets = createServerFn({ method: "GET" })
           createdAt: r.created_at instanceof Date ? r.created_at.toISOString() : String(r.created_at),
         })),
     };
+  });
+
+/** Issue a short-lived capability only after current server-side authorization. */
+export const createAssetStreamCapability = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({ assetId: z.string().min(8) }))
+  .handler(async ({ context, data }) => {
+    const actor = await requireVerifiedActor(context.userId);
+    const sql = await getSql();
+    const rows = await sql<{ id:string; title_id:string; kind:string; verified_object_key:string|null; checksum_sha256:string|null; byte_size:number|null }>`
+      select id,title_id,kind,verified_object_key,checksum_sha256,byte_size
+      from bridge_assets where id=${data.assetId} limit 1
+    `;
+    const asset = rows[0];
+    if (!asset || !asset.verified_object_key || !/^[a-f0-9]{64}$/.test(asset.checksum_sha256 ?? "") || Number(asset.byte_size ?? 0) <= 0) {
+      throw new Error("Only SHA-256 verified immutable assets can be streamed");
+    }
+    const title = await loadTitle(asset.title_id);
+    if (!title || !canReadTitle(actor,title)) throw new Error("Not found");
+    const entitledRows = await sql<{ ok:boolean }>`
+      select exists(select 1 from bridge_entitlements
+        where user_id=${actor.userId} and title_id=${title.id}
+          and access_type='license' and (expires_at is null or expires_at > now())) as ok
+    `;
+    const decision = downloadDecision({
+      kind: asset.kind,
+      actorIsOwner: title.ownerUserId === actor.userId,
+      actorIsInternal: Boolean(actor.internalRole),
+      accountType: actor.accountType,
+      hasLicenseEntitlement: Boolean(entitledRows[0]?.ok),
+    });
+    if (!decision.allow) throw new Error("Streaming entitlement is not active");
+    if (actor.accountType === "buyer" && !actor.internalRole) {
+      const { assertBuyerPublishable } = await import("./buyer-visibility");
+      await assertBuyerPublishable(title.id);
+    }
+    const token = createAssetStreamToken(actor.userId, asset.id, 60);
+    return { url: `/api/assets/${encodeURIComponent(asset.id)}/stream?token=${encodeURIComponent(token)}`, method: "GET" as const, expiresIn: 60 };
   });
