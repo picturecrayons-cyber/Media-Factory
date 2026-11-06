@@ -8,6 +8,14 @@ type PreviewAsset = {
   contentType: string | null;
   byteSize: number | null;
   verified: boolean;
+  storageLocation: {
+    provider: string | null;
+    bucket: string | null;
+    namespace: string | null;
+    region: string | null;
+    endpoint: string | null;
+    path: string;
+  } | null;
 };
 
 function isVideo(asset: PreviewAsset) {
@@ -18,6 +26,30 @@ function isVideo(asset: PreviewAsset) {
 function isImage(asset: PreviewAsset) {
   return ["poster", "poster_vertical", "poster_horizontal", "thumbnail"].includes(asset.kind) ||
     Boolean(asset.contentType?.toLowerCase().startsWith("image/"));
+}
+
+function storageProviderLabel(provider: string | null) {
+  if (provider === "oci") return "Oracle Cloud Infrastructure (OCI)";
+  if (provider === "aws_s3") return "Amazon S3";
+  if (provider === "cloudflare_r2") return "Cloudflare R2";
+  return provider || "Not recorded";
+}
+
+function StorageLocation({ asset }: { asset: PreviewAsset }) {
+  const storage = asset.storageLocation;
+  return (
+    <details className="mt-2 rounded-lg border border-line bg-surface/70 px-3 py-2 text-xs">
+      <summary className="cursor-pointer font-semibold text-accent">Storage location · {storage?.bucket || "Not recorded"}</summary>
+      <dl className="mt-2 grid gap-1.5 break-all text-muted">
+        <div><dt className="inline font-semibold text-fg">Provider: </dt><dd className="inline">{storageProviderLabel(storage?.provider ?? null)}</dd></div>
+        <div><dt className="inline font-semibold text-fg">Bucket: </dt><dd className="inline">{storage?.bucket || "Not recorded"}</dd></div>
+        {storage?.namespace ? <div><dt className="inline font-semibold text-fg">Namespace: </dt><dd className="inline">{storage.namespace}</dd></div> : null}
+        <div><dt className="inline font-semibold text-fg">Region: </dt><dd className="inline">{storage?.region || "Not recorded"}</dd></div>
+        <div><dt className="inline font-semibold text-fg">Endpoint: </dt><dd className="inline">{storage?.endpoint || "Not recorded"}</dd></div>
+        <div><dt className="inline font-semibold text-fg">Object key: </dt><dd className="inline">{storage?.path || "Not available"}</dd></div>
+      </dl>
+    </details>
+  );
 }
 
 function prettySize(bytes: number | null) {
@@ -138,6 +170,7 @@ export function AssetPreviewGallery({ assets }: { assets: PreviewAsset[] }) {
                 <div className="p-4">
                   <p className="text-sm font-semibold capitalize">{asset.kind.replaceAll("_", " ")}</p>
                   <p className="mt-1 text-xs text-muted">{prettySize(asset.byteSize)} · Storage verified</p>
+                  <StorageLocation asset={asset} />
                 </div>
               </button>
             </article>

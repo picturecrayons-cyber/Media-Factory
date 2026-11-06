@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { mapBridgeAssetResponse } from "./asset-response";
 import { z } from "zod";
 import { randomBytes } from "node:crypto";
 import { authMiddleware } from "@/lib/auth/middleware";
@@ -52,7 +53,7 @@ export const requestAssetUpload = createServerFn({ method: "POST" })
       contentType: data.contentType,
     });
     if (!ingestValidation.ok) throw new Error(ingestValidation.message);
-    const { signUpload, titleAssetKey } = await import("./oci-object-storage.server");
+    const { signUpload, titleAssetKey, getStorageProvenance } = await import("./oci-object-storage.server");
     const key = titleAssetKey({
       ownerUserId: title.ownerUserId,
       titleId: title.id,
@@ -65,10 +66,17 @@ export const requestAssetUpload = createServerFn({ method: "POST" })
       expiresIn: uploadUrlLifetimeSeconds(data.byteSize),
     });
     const id = randomBytes(16).toString("hex");
+    const storage = getStorageProvenance();
     const sql = await getSql();
     await sql`
-      insert into bridge_assets (id, title_id, kind, s3_key, content_type, created_by)
-      values (${id}, ${title.id}, ${data.kind}, ${key}, ${data.contentType}, ${actor.userId})
+      insert into bridge_assets (
+        id, title_id, kind, s3_key, content_type, created_by,
+        storage_provider, storage_bucket, storage_namespace, storage_region, storage_endpoint
+      ) values (
+        ${id}, ${title.id}, ${data.kind}, ${key}, ${data.contentType}, ${actor.userId},
+        ${storage.storageProvider}, ${storage.storageBucket}, ${storage.storageNamespace},
+        ${storage.storageRegion}, ${storage.storageEndpoint}
+      )
     `;
     await writeAudit({
       actorUserId: actor.userId,
@@ -184,7 +192,7 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
     if (asset.byte_size != null)
       return { assetId: asset.id, byteSize: Number(asset.byte_size), verified: true };
 
-    const { verifyObject, sealVerifiedObject } = await import("./oci-object-storage.server");
+    const { verifyObject, sealVerifiedObject, getStorageProvenance } = await import("./oci-object-storage.server");
     const object = await verifyObject(asset.s3_key, asset.content_type);
     if (data.expectedByteSize != null && object.byteSize !== data.expectedByteSize) {
       throw new Error("Uploaded object size does not match the file that was sent");
@@ -200,7 +208,9 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
     }
     // Persist asset/title/audit state first. Do not advance the migration queue
     // if persistence fails: its prior state remains the truthful state.
+    const storage = getStorageProvenance();
     const confirmed = await persistVerifiedAsset(sql, {
+      ...storage,
       assetId: asset.id,
       actorUserId: actor.userId,
       internalActor: Boolean(actor.internalRole),
@@ -322,23 +332,21 @@ export const listTitleAssets = createServerFn({ method: "GET" })
       s3_key: string;
       content_type: string | null;
       byte_size: number | null;
+      storage_provider: string | null;
+      storage_bucket: string | null;
+      storage_namespace: string | null;
+      storage_region: string | null;
+      storage_endpoint: string | null;
       created_at: string | Date;
     }>`
-      select id, kind, s3_key, content_type, byte_size, created_at
+      select id, kind, s3_key, content_type, byte_size,
+             storage_provider, storage_bucket, storage_namespace, storage_region, storage_endpoint,
+             created_at
       from bridge_assets where title_id = ${title.id} and byte_size > 0 order by created_at desc
     `;
     return {
       assets: rows
         .filter((r) => !buyer || !["master", "technical", "censor_certificate"].includes(r.kind))
-        .map((r) => ({
-          id: r.id,
-          kind: r.kind,
-          key: buyer ? null : r.s3_key,
-          contentType: r.content_type,
-          byteSize: r.byte_size,
-          verified: Number(r.byte_size) > 0,
-          createdAt:
-            r.created_at instanceof Date ? r.created_at.toISOString() : String(r.created_at),
-        })),
+        .map((r) => mapBridgeAssetResponse(r, buyer)),
     };
   });

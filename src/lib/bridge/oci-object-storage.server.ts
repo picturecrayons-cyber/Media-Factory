@@ -77,6 +77,18 @@ function config(): OciConfig {
   };
 }
 
+/** Server-only configured storage target. Never exposes credentials or signed URLs. */
+export function getStorageProvenance() {
+  const cfg = config();
+  return {
+    storageProvider: "oci" as const,
+    storageBucket: cfg.bucket,
+    storageNamespace: cfg.namespace ?? null,
+    storageRegion: cfg.region,
+    storageEndpoint: endpoint(cfg.region),
+  };
+}
+
 function endpoint(region: string) {
   return `https://objectstorage.${region}.oraclecloud.com`;
 }
