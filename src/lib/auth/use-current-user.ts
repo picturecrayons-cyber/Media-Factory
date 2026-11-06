@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import type { User } from "@supabase/supabase-js";
+import type { User } from "@supabase/supabase-js";
 import { getSupabaseSession, subscribeAuthChange } from "./client";
 
 export type AppUser = {
