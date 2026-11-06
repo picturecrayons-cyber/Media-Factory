@@ -116,6 +116,11 @@ test("Loop readiness GET is read-only and generic reviewer approvals are evidenc
   assert.match(workstation, /Exactly one active, complete rights draft from another user is required/);
   assert.match(workstation, /grantId: grant\.id/);
   assert.match(workstation, /sql\.transaction\(async \(tx\) =>/);
+  const review = workstation.slice(
+    workstation.indexOf("export const reviewAdminTitle"),
+    workstation.indexOf("const gateInput"),
+  );
+  assert.doesNotMatch(review, /await sql(?:<|`)/);
   assert.match(workstation, /limit 1 for update/);
   assert.match(workstation, /order by created_at desc[\s\S]*for update/);
   assert.match(workstation, /metadata: \{ from: title\.status, to: next, notes: data\.notes \?\? null \} \}, tx\)/);
