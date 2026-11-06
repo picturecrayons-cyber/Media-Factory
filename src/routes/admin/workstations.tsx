@@ -216,18 +216,25 @@ function InternalAudit({ assets, isStorageAdmin }: { assets: any[]; isStorageAdm
               </dl>
             ) : null}
             <div className="overflow-x-auto rounded-xl border border-line">
-              <table className="w-full min-w-[980px] text-left text-xs">
+              <table className="w-full min-w-[1440px] text-left text-xs">
                 <thead className="border-b border-line text-muted"><tr>
-                  {["Asset", "Kind", "Bucket", "Namespace", "Region", "SHA-256", "Verified at", "OCI check"].map((label) => <th key={label} className="px-3 py-3">{label}</th>)}
+                  {["Source / verified object", "Kind", "Provider", "Bucket", "Namespace", "Region", "Endpoint", "Object version", "Generation", "SHA-256", "Verified at", "OCI HEAD"].map((label) => <th key={label} className="px-3 py-3">{label}</th>)}
                 </tr></thead>
                 <tbody className="divide-y divide-line">
                   {storageAssets.slice(0, 100).map((asset) => (
                     <tr key={asset.id}>
-                      <td className="max-w-[220px] break-all px-3 py-3 font-mono">{asset.verified_object_key ?? asset.s3_key ?? asset.id}</td>
+                      <td className="max-w-[280px] break-all px-3 py-3 font-mono">
+                        <span className="block text-muted">Source: {asset.source_object_key ?? "—"}</span>
+                        <span className="mt-1 block">Verified: {asset.verified_object_key ?? asset.s3_key ?? asset.id}</span>
+                      </td>
                       <td className="px-3 py-3">{asset.kind}</td>
+                      <td className="px-3 py-3">{asset.storage_provider ?? "—"}</td>
                       <td className="px-3 py-3">{asset.storage_bucket ?? "—"}</td>
                       <td className="px-3 py-3">{asset.storage_namespace ?? "—"}</td>
                       <td className="px-3 py-3">{asset.storage_region ?? "—"}</td>
+                      <td className="max-w-[220px] break-all px-3 py-3">{asset.storage_endpoint ?? "—"}</td>
+                      <td className="max-w-[160px] break-all px-3 py-3">{asset.object_version_id ?? "—"}</td>
+                      <td className="max-w-[160px] break-all px-3 py-3">{asset.object_generation ?? "—"}</td>
                       <td className="max-w-[180px] break-all px-3 py-3">{asset.checksum_sha256 ?? "—"}</td>
                       <td className="px-3 py-3">{asset.storage_verified_at ? String(asset.storage_verified_at) : "—"}</td>
                       <td className="px-3 py-3">
@@ -235,7 +242,7 @@ function InternalAudit({ assets, isStorageAdmin }: { assets: any[]; isStorageAdm
                       </td>
                     </tr>
                   ))}
-                  {!storageAssets.length ? <tr><td colSpan={8} className="px-3 py-5 text-muted">No asset provenance records returned.</td></tr> : null}
+                  {!storageAssets.length ? <tr><td colSpan={12} className="px-3 py-5 text-muted">No asset provenance records returned.</td></tr> : null}
                 </tbody>
               </table>
             </div>
