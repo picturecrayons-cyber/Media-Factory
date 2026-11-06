@@ -347,7 +347,7 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
     if (asset.byte_size != null)
       return { assetId: asset.id, byteSize: Number(asset.byte_size), verified: true };
 
-    const { verifyObject, sealVerifiedObject } = await import("./oci-object-storage.server");
+    const { verifyObject, sealVerifiedObject, computeObjectSha256, storageTarget } = await import("./oci-object-storage.server");
     const object = await verifyObject(asset.s3_key, asset.content_type);
     if (data.expectedByteSize != null && object.byteSize !== data.expectedByteSize) {
       throw new Error("Uploaded object size does not match the file that was sent");
@@ -361,6 +361,9 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
     if (sealed.byteSize !== object.byteSize || !sealed.etag) {
       throw new Error("Verified copy differs from the uploaded object");
     }
+    const checksumSha256 = await computeObjectSha256(sealedKey);
+    if (!/^[a-f0-9]{64}$/.test(checksumSha256)) throw new Error("Storage SHA-256 verification returned an invalid digest");
+    const storage = await storageTarget();
     // Persist asset/title/audit state first. Do not advance the migration queue
     // if persistence fails: its prior state remains the truthful state.
     const confirmed = await persistVerifiedAsset(sql, {
@@ -372,6 +375,9 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
       byteSize: sealed.byteSize,
       contentType: sealed.contentType,
       checksum: sealed.etag,
+      checksumSha256,
+      storage,
+      objectVersionId: sealed.versionId ?? null,
       sourceKey: asset.s3_key,
       sealedKey,
     });
