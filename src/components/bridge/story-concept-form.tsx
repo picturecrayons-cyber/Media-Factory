@@ -45,14 +45,6 @@ export function StoryConceptForm() {
   function onSubmit(e: FormEvent) {
     e.preventDefault();
     toast("Story / Concept submission is locked until verified payment checkout is available.");
-    if (logline.trim().length < 10) {
-      toast("Logline must be at least 10 characters");
-      return;
-    }
-    if (synopsis.trim().length < 40) {
-      toast("Synopsis must be at least 40 characters");
-      return;
-    }
     mut.mutate();
   }
 
