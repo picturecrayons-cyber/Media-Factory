@@ -31,6 +31,7 @@ const PLATFORMS = [
 
 export function StoryConceptForm() {
   const navigate = useNavigate();
+  const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
   const [titleName, setTitleName] = useState("");
   const [logline, setLogline] = useState("");
   const [synopsis, setSynopsis] = useState("");
@@ -45,6 +46,7 @@ export function StoryConceptForm() {
     mutationFn: () =>
       createStoryConceptSubmission({
         data: {
+          idempotencyKey,
           titleName,
           logline,
           synopsis,
@@ -57,6 +59,7 @@ export function StoryConceptForm() {
         },
       }),
     onSuccess: (res) => {
+      setIdempotencyKey(crypto.randomUUID());
       toast("Story / Concept submitted for review");
       void navigate({ to: "/title/$id", params: { id: res.titleId } });
     },
@@ -82,7 +85,7 @@ export function StoryConceptForm() {
   }
 
   return (
-    <form onSubmit={onSubmit} className="grid gap-4 sm:grid-cols-2">
+    <form onSubmit={onSubmit} onInput={() => setIdempotencyKey(crypto.randomUUID())} className="grid gap-4 sm:grid-cols-2">
       <label className="text-sm sm:col-span-2">
         Working title
         <input
@@ -200,14 +203,14 @@ export function StoryConceptForm() {
       </label>
 
       <div className="rounded-xl border border-line bg-elevated p-4 text-xs leading-relaxed text-muted sm:col-span-2">
-        Submitting places this concept in the admin curation queue. It does not publish to
-        Loop or the public buyer catalog. Payment gate remains locked until the fee is
-        certified.
+        Story / Concept submissions do not publish to Loop or the public buyer catalog.
+        Submission is currently locked: service pricing and verified payment checkout are not
+        certified. Existing film submissions remain unaffected.
       </div>
 
       <div className="sm:col-span-2">
-        <Button type="submit" disabled={mut.isPending} className="w-full rounded-full sm:w-auto sm:px-8">
-          {mut.isPending ? "Submitting…" : "Submit to Network"}
+        <Button type="submit" disabled className="w-full rounded-full sm:w-auto sm:px-8">
+          Submission locked — payment verification pending
         </Button>
       </div>
     </form>
