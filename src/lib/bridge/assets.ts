@@ -292,18 +292,18 @@ export const commitAssetMultipart = createServerFn({ method: "POST" })
 
 export const abortAssetMultipart = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .validator(z.object({ assetId: z.string().min(8), sessionToken: z.string().min(32).max(12000) }))
+  .validator(z.object({ assetId: z.string().min(8), sessionId: z.string().min(8), sessionToken: z.string().min(32).max(12000) }))
   .handler(async ({ context, data }) => {
     const asset = await openUploadAsset(context.userId, data.assetId);
     if (asset.byte_size != null) throw new Error("A verified asset cannot be aborted");
     const { verifyMultipartSession } = await import("./multipart-session.server");
     const session = verifyMultipartSession(data.sessionToken, {
-      actorUserId: context.userId,
-      assetId: asset.id,
-      objectKey: asset.s3_key,
+      sessionId: data.sessionId, actorUserId: context.userId, assetId: asset.id, objectKey: asset.s3_key,
     });
     const { abortMultipartUpload } = await import("./oci-object-storage.server");
     await abortMultipartUpload(session.partBaseUrl, asset.s3_key);
+    const sql = await getSql();
+    await sql`update bridge_private.upload_sessions set state='aborted', updated_at=now() where id=${data.sessionId}`;
     await writeAudit({
       actorUserId: context.userId,
       action: "asset.multipart_aborted",
