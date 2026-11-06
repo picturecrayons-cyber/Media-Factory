@@ -486,14 +486,18 @@ export const listTitleAssets = createServerFn({ method: "GET" })
     const sql = await getSql();
     const buyer = actor.accountType === "buyer" && !actor.internalRole;
     const rows = await sql<{
-      id: string;
-      kind: string;
-      s3_key: string;
-      content_type: string | null;
-      byte_size: number | null;
-      created_at: string | Date;
+      id: string; kind: string; s3_key: string; content_type: string | null;
+      byte_size: number | null; created_at: string | Date;
+      storage_provider: string | null; storage_bucket: string | null;
+      storage_namespace: string | null; storage_region: string | null;
+      storage_endpoint: string | null; checksum_sha256: string | null;
+      verified_object_key: string | null; object_version_id: string | null;
+      object_generation: string | null; storage_verified_at: string | Date | null;
     }>`
-      select id, kind, s3_key, content_type, byte_size, created_at
+      select id, kind, s3_key, content_type, byte_size, created_at,
+        storage_provider, storage_bucket, storage_namespace, storage_region,
+        storage_endpoint, checksum_sha256, verified_object_key, object_version_id,
+        object_generation, storage_verified_at
       from bridge_assets where title_id = ${title.id} and byte_size > 0 order by created_at desc
     `;
     return {
@@ -505,9 +509,23 @@ export const listTitleAssets = createServerFn({ method: "GET" })
           key: buyer ? null : r.s3_key,
           contentType: r.content_type,
           byteSize: r.byte_size,
-          verified: Number(r.byte_size) > 0,
-          createdAt:
-            r.created_at instanceof Date ? r.created_at.toISOString() : String(r.created_at),
+          verified: Number(r.byte_size) > 0 && Boolean(r.verified_object_key && r.checksum_sha256),
+          ...(buyer ? {} : {
+            storageLocation: r.verified_object_key ? {
+              provider: r.storage_provider,
+              bucket: r.storage_bucket,
+              namespace: r.storage_namespace,
+              region: r.storage_region,
+              endpoint: r.storage_endpoint,
+              checksumSha256: r.checksum_sha256,
+              objectVersionId: r.object_version_id,
+              objectGeneration: r.object_generation,
+              verifiedAt: r.storage_verified_at instanceof Date
+                ? r.storage_verified_at.toISOString()
+                : r.storage_verified_at ? String(r.storage_verified_at) : null,
+            } : null,
+          }),
+          createdAt: r.created_at instanceof Date ? r.created_at.toISOString() : String(r.created_at),
         })),
     };
   });
