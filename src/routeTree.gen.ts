@@ -271,6 +271,7 @@ export interface FileRoutesByTo {
   '/onboarding': typeof OnboardingRoute
   '/privacy': typeof PrivacyRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/revenue': typeof RevenueRoute
   '/signup': typeof SignupRoute
   '/studio': typeof StudioRoute
   '/submit-film': typeof SubmitFilmRoute
@@ -307,6 +308,7 @@ export interface FileRoutesById {
   '/onboarding': typeof OnboardingRoute
   '/privacy': typeof PrivacyRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/revenue': typeof RevenueRoute
   '/signup': typeof SignupRoute
   '/studio': typeof StudioRoute
   '/submit-film': typeof SubmitFilmRoute
@@ -380,6 +382,7 @@ export interface FileRouteTypes {
     | '/onboarding'
     | '/privacy'
     | '/reset-password'
+    | '/revenue'
     | '/signup'
     | '/studio'
     | '/submit-film'
@@ -415,6 +418,7 @@ export interface FileRouteTypes {
     | '/onboarding'
     | '/privacy'
     | '/reset-password'
+    | '/revenue'
     | '/signup'
     | '/studio'
     | '/submit-film'
