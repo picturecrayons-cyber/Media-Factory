@@ -13,6 +13,7 @@ import {
   abortAssetMultipart,
   beginAssetMultipart,
   commitAssetMultipart,
+  getAssetMultipartStatus,
   recordAssetMultipartPart,
   confirmAssetUpload,
   listTitleAssets,
@@ -503,6 +504,14 @@ function FilesPanel({
       };
       writeUploadSession(session);
     }
+    activeMultipart.current = session;
+    // The database manifest is authoritative. localStorage retains only the selected
+    // file fingerprint and signed capability needed to reconnect this browser.
+    const durable = await getAssetMultipartStatus({ data: {
+      assetId: session.assetId, sessionId: session.sessionId, sessionToken: session.sessionToken,
+    } });
+    session = { ...session, completedParts: durable.completedParts, committed: durable.committed };
+    writeUploadSession(session);
     activeMultipart.current = session;
     if (!session.committed) {
       const total = partCount(session.fileSize, session.partSize);
