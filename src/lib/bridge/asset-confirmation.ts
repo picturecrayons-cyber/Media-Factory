@@ -11,10 +11,12 @@ export async function persistVerifiedAsset(sql: Pick<Sql, "query">, opts: {
   byteSize: number;
   contentType: string | null;
   checksum: string | null;
+  etag?: string | null;
   sourceKey: string;
   sealedKey: string;
 }): Promise<boolean> {
   if (!Number.isSafeInteger(opts.byteSize) || opts.byteSize <= 0) throw new Error("Uploaded object is empty");
+  if (!/^[0-9a-f]{64}$/.test(opts.checksum ?? "")) throw new Error("A verified SHA-256 checksum is required before asset persistence");
   // Owner and internal confirmation must not reference the optional Studio
   // organization tables. Production can persist a verified asset before
   // migration 0021 is applied. PostgreSQL plans the whole statement, so an
@@ -81,7 +83,7 @@ async function persistVerifiedAssetScoped(
       returning a.id, a.title_id, a.kind, a.s3_key
     ), title_set as (
       update bridge_titles t set
-        poster_key = case when v.kind = 'poster' then v.s3_key else t.poster_key end,
+        poster_key = case when v.kind in ('poster','poster_vertical') then v.s3_key else t.poster_key end,
         master_key = case when v.kind = 'master' then v.s3_key else t.master_key end,
         updated_at = now()
       from verified v where t.id = v.title_id returning t.id
@@ -92,7 +94,12 @@ async function persistVerifiedAssetScoped(
         'titleId', v.title_id,
         'kind', v.kind,
         'byteSize', $1,
-        'checksum', $9::text
+        'checksum', $9::text,
+        'checksumAlgorithm', 'SHA-256',
+        'checksumSha256', $9::text,
+        'etag', $10::text,
+        'sourceKey', $7::text,
+        'sealedKey', $6::text
       )
     from verified v join title_set t on t.id = v.title_id
     returning entity_id
@@ -106,6 +113,7 @@ async function persistVerifiedAssetScoped(
     opts.sourceKey,
     opts.titleId,
     opts.checksum,
+    opts.etag ?? null,
   ]);
   return Boolean(rows[0]);
 }
