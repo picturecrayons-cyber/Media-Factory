@@ -52,6 +52,7 @@ create table if not exists bridge_private.upload_sessions (
   endpoint text not null,
   source_object_key text not null,
   provider_upload_id text not null,
+  part_base_url text not null,
   expected_size bigint not null check (expected_size > 0),
   part_size integer not null check (part_size between 5242880 and 67108864),
   state text not null default 'initiated'
