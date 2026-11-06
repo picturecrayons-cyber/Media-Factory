@@ -27,9 +27,10 @@ test("server-authoritative upload migration adds provenance, immutable pointers 
       values ('asset-test','title-test','master','source/key','source/key','owner');
       insert into bridge_private.upload_sessions
         (id,asset_id,actor_user_id,provider,bucket,region,endpoint,source_object_key,
-         provider_upload_id,expected_size,part_size,idempotency_key,expires_at)
+         provider_upload_id,part_base_url,expected_size,part_size,idempotency_key,expires_at)
       values ('session-test','asset-test','owner','oci','test-bucket','ap-mumbai-1',
         'https://objectstorage.ap-mumbai-1.oraclecloud.com','source/key','upload-test',
+        'https://objectstorage.ap-mumbai-1.oraclecloud.com/p/test/n/test/b/test/u/source/key/id/upload-test/',
         6000000,5242880,'idem-test',now()+interval '1 hour');
       insert into bridge_private.upload_parts (session_id,part_number,byte_start,byte_end,etag)
       values ('session-test',1,0,5242880,'etag-1'),('session-test',2,5242880,6000000,'etag-2');
