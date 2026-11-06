@@ -26,20 +26,46 @@ async function hasLicenseEntitlement(userId: string, titleId: string): Promise<b
 }
 
 /**
- * Buyer title access is explicit, user-scoped, revocable and time-bounded.
- * Keep it separate from a commercial entitlement: both must be valid before
- * a Buyer can enumerate or download title assets.
+ * Buyer access supports explicit individual and organization grants.
+ * Organization grants require a currently active membership for a verified
+ * Buyer in the exact active canonical organization. This is independent of
+ * the commercial entitlement and publication gates.
  */
 async function hasActiveBuyerTitleAccess(userId: string, titleId: string): Promise<boolean> {
   const sql = await getSql();
   const rows = await sql<{ allowed: boolean }>`
     select exists (
       select 1
-      from bridge_buyer_title_access
-      where buyer_user_id = ${userId}
-        and title_id = ${titleId}
-        and revoked_at is null
-        and (expires_at is null or expires_at > now())
+      from bridge_buyer_title_access a
+      where a.title_id = ${titleId}
+        and a.revoked_at is null
+        and (a.expires_at is null or a.expires_at > now())
+        and (
+          (
+            a.access_scope = 'user'
+            and a.buyer_user_id = ${userId}
+            and a.buyer_organization_id is null
+          )
+          or
+          (
+            a.access_scope = 'organization'
+            and a.buyer_user_id is null
+            and exists (
+              select 1
+              from bridge_profiles bp
+              join bridge_organization_memberships m
+                on m.user_id = bp.user_id
+               and m.organization_id = a.buyer_organization_id
+               and m.status = 'active'
+              join bridge_organizations o
+                on o.id = m.organization_id
+               and o.status = 'active'
+              where bp.user_id = ${userId}
+                and bp.account_type = 'buyer'
+                and bp.email_verified = true
+            )
+          )
+        )
     ) as allowed
   `;
   return rows[0]?.allowed === true;

@@ -52,27 +52,23 @@ async function loadActorByBridgeUserId(userId: string): Promise<BridgeActor | nu
   if (!rows[0]) return null;
 
   const actor = mapRow(rows[0]);
-  if (actor.accountType !== "studio" || !actor.emailVerified) return actor;
+  if (!["studio", "buyer"].includes(actor.accountType) || !actor.emailVerified) return actor;
 
-  // Organization scope is an optional, server-resolved capability. If its
-  // schema is absent, keep the profile available but do not grant organization
-  // scope. Never infer an ID from organization_name or use another environment's ID.
+  // Resolve scope only from an exact active membership and active canonical
+  // organization. Never infer organization identity from organization_name.
   try {
     const memberships = await sql<{ organization_id: string }>`
-      select bp.organization_id
-      from bridge_profiles bp
-      join bridge_organization_memberships m
-        on m.organization_id = bp.organization_id
-       and m.user_id = bp.user_id
-       and m.status = 'active'
+      select m.organization_id::text as organization_id
+      from bridge_organization_memberships m
       join bridge_organizations o
         on o.id = m.organization_id
        and o.status = 'active'
-      where bp.user_id = ${userId}
-        and bp.organization_id is not null
-      limit 1
+      where m.user_id = ${userId}
+        and m.status = 'active'
+      limit 2
     `;
-    actor.organizationId = memberships[0]?.organization_id ?? null;
+    // Ambiguous membership is denied rather than selecting an arbitrary org.
+    actor.organizationId = memberships.length === 1 ? memberships[0].organization_id : null;
   } catch (error) {
     if (!isMissingOrganizationSchemaError(error)) throw error;
     actor.organizationId = null;

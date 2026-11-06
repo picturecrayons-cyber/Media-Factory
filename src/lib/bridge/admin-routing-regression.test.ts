@@ -94,8 +94,11 @@ test("Buyer title, asset-list and direct-download paths independently require pu
   assert.match(assets, /Direct asset-ID requests must satisfy the same publication gate[\s\S]{0,240}assertBuyerPublishable\(title\.id\)/);
   assert.match(assets, /Asset enumeration is a separate endpoint[\s\S]{0,240}assertBuyerPublishable\(title\.id\)/);
   assert.match(assets, /if \(actor\.accountType === "buyer" && !actor\.internalRole\)/);
-  assert.match(assets, /function hasActiveBuyerTitleAccess[\s\S]*buyer_user_id = \$\{userId\}[\s\S]*revoked_at is null[\s\S]*expires_at is null or expires_at > now\(\)/);
+  assert.match(assets, /function hasActiveBuyerTitleAccess[\s\S]*access_scope = 'user'[\s\S]*buyer_user_id = \$\{userId\}[\s\S]*access_scope = 'organization'[\s\S]*buyer_organization_id[\s\S]*m\.status = 'active'[\s\S]*o\.status = 'active'[\s\S]*bp\.account_type = 'buyer'[\s\S]*bp\.email_verified = true[\s\S]*revoked_at is null[\s\S]*expires_at is null or expires_at > now\(\)/);
   assert.match(assets, /hasActiveBuyerTitleAccess\(actor\.userId, title\.id\)/);
+  assert.match(session, /\["studio", "buyer"\]/);
+  assert.match(session, /m\.status = 'active'[\s\S]*o\.status = 'active'/);
+  assert.match(session, /memberships\.length === 1/);
   assert.match(assets, /const activeBuyerAccess = await hasActiveBuyerTitleAccess\(actor\.userId, title\.id\)/);
   assert.match(assets, /asset\.list_denied/);
   assert.match(assets, /asset\.download_denied/);
@@ -132,4 +135,18 @@ test("Buyer publication SQL binds the selected package to active rights and exac
   assert.match(migration, /r\.status = 'VALID'[\s\S]*r\.window_end > now\(\)/);
   assert.match(migration, /q\.id = p\.qc_case_id[\s\S]*q\.reviewer_findings -> 0 ->> 'masterKey' = t\.master_key[\s\S]*q\.reviewer_findings -> 0 ->> 'posterKey' = t\.poster_key/);
   assert.match(migration, /l\.id = p\.legal_case_id[\s\S]*l\.evidence -> 0 ->> 'grantId' = r\.id::text/);
+});
+
+
+test("dual-mode Buyer grants preserve individual rows and require exact active organization membership", () => {
+  const migration = read("../../../migrations/0023_bridge_buyer_organization_access.sql");
+  assert.match(migration, /add column if not exists access_scope text not null default 'user'/i);
+  assert.match(migration, /buyer_organization_id uuid references bridge_organizations\(id\)/i);
+  assert.match(migration, /buyer_user_id drop not null/i);
+  assert.match(migration, /access_scope = 'user'[\s\S]*buyer_user_id is not null[\s\S]*buyer_organization_id is null/i);
+  assert.match(migration, /access_scope = 'organization'[\s\S]*buyer_user_id is null[\s\S]*buyer_organization_id is not null/i);
+  assert.match(migration, /bridge_organization_memberships[\s\S]*m\.status = 'active'[\s\S]*bridge_organizations[\s\S]*o\.status = 'active'/i);
+  assert.match(migration, /bp\.account_type = 'buyer'[\s\S]*bp\.email_verified = true/i);
+  assert.match(migration, /revoked_at is null[\s\S]*expires_at is null or a\.expires_at > now\(\)/i);
+  assert.match(migration, /create or replace function public\.bridge_can_read_title/i);
 });
