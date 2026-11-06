@@ -709,7 +709,9 @@ export const listTitleAssets = createServerFn({ method: "GET" })
         storage_provider, storage_bucket, storage_namespace, storage_region,
         storage_endpoint, checksum_sha256, verified_object_key, object_version_id,
         object_generation, storage_verified_at
-      from bridge_assets where title_id = ${title.id} and byte_size > 0 order by created_at desc
+      from bridge_assets where title_id = ${title.id}
+        and (not ${buyer} or byte_size > 0)
+      order by created_at desc
     `;
     return {
       assets: rows
