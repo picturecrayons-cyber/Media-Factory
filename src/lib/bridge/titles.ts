@@ -12,6 +12,7 @@ import { writeAudit } from "./audit";
 import { assertNotDevUser } from "./guards";
 import { loopStageType } from "./loop-lanes";
 import { assertBuyerPublishable, getBuyerGateStatus } from "./buyer-visibility";
+import { hasVerifiedMasterAndArtwork } from "./asset-roles";
 
 type TitleRow = {
   id: string;
@@ -532,7 +533,8 @@ async function assertLicensingReady(titleId: string) {
       ) as master_ok,
       exists (
         select 1 from bridge_assets a
-        where a.title_id = t.id and a.kind = 'poster' and coalesce(a.byte_size, 0) > 0
+        where a.title_id = t.id and a.kind in ('poster', 'poster_vertical') and coalesce(a.byte_size, 0) > 0
+          and (t.poster_key is null or a.s3_key = t.poster_key)
       ) as poster_ok,
       exists (
         select 1 from bridge_destination_packages p
@@ -590,10 +592,7 @@ export const advanceTitle = createServerFn({ method: "POST" })
         kind: string;
         s3_key: string;
       }>`select kind,s3_key from bridge_assets where title_id=${title.id} and byte_size>0`;
-      if (
-        !verified.some((a) => a.kind === "master" && a.s3_key === title.masterKey) ||
-        !verified.some((a) => a.kind === "poster" && a.s3_key === title.posterKey)
-      )
+      if (!hasVerifiedMasterAndArtwork(verified, title.masterKey, title.posterKey))
         throw new Error("Verified master and artwork required before QC");
     }
     assertTransition(title.status, data.to);
