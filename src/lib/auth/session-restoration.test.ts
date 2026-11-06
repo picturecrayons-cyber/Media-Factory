@@ -175,12 +175,15 @@ test("session storage/auth read failures are not silently classified as signed-o
 });
 
 test("Bridge protected consumers remain gated until strict session initialization completes", () => {
+  const provider = readFileSync(new URL("./provider.tsx", import.meta.url), "utf8");
   const hook = readFileSync(new URL("./use-current-user.ts", import.meta.url), "utf8");
-  assert.match(hook, /getSupabaseSessionStrict/);
-  assert.match(hook, /event === "INITIAL_SESSION"/);
-  assert.match(hook, /isPending: true/);
-  assert.match(hook, /authError:/);
-  assert.match(hook, /retry/);
+  assert.match(provider, /getSupabaseSessionStrict/);
+  assert.match(provider, /event !== "INITIAL_SESSION"/);
+  assert.match(provider, /authRevision\.current === revisionBeforeRead/);
+  assert.match(provider, /if \(isPending\)/);
+  assert.match(provider, /authError/);
+  assert.match(provider, /retry/);
+  assert.match(hook, /useAuthSessionState/);
 
   const login = readFileSync(new URL("../../routes/login.tsx", import.meta.url), "utf8");
   assert.match(login, /if \(isPending \|\| busy \|\| error \|\| authError \|\| !user\) return/);
