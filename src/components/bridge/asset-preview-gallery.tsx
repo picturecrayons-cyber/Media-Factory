@@ -85,7 +85,7 @@ export function AssetPreviewGallery({ assets }: { assets: PreviewAsset[] }) {
     setFailedId(null);
     setLoadingId(asset.id);
     try {
-      // Resolve an expiring, server-authorized URL only after the user requests a preview.
+      // Resolve an expiring, server-authorized first-party stream token only after the user requests a preview.
       const signed = await requestAssetDownload({ data: { assetId: asset.id } });
       if (!signed?.url) throw new Error("Preview URL unavailable");
       setPreviewUrl(previewUrlFor(signed.url, asset.kind, asset.contentType));
@@ -162,7 +162,7 @@ export function AssetPreviewGallery({ assets }: { assets: PreviewAsset[] }) {
                   </details>
                 ) : null}
               </div>
-            </article>  </article>
+            </article>
           ))}
         </div>
       </section>
