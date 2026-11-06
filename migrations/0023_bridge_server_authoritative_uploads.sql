@@ -2,6 +2,8 @@
 -- Apply only after staging isolation and RLS policy review. This migration is additive.
 begin;
 
+create schema if not exists bridge_private;
+
 alter table public.bridge_assets
   add column if not exists storage_provider text,
   add column if not exists storage_bucket text,
@@ -66,8 +68,6 @@ drop trigger if exists bridge_assets_verified_pointer_immutable on public.bridge
 create trigger bridge_assets_verified_pointer_immutable
 before update on public.bridge_assets
 for each row execute function bridge_private.prevent_verified_asset_pointer_mutation();
-
-create schema if not exists bridge_private;
 
 create table if not exists bridge_private.upload_sessions (
   id text primary key,
