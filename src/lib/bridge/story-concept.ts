@@ -53,6 +53,9 @@ export interface StoryConceptSubmission {
   introduced_to_buyers_at: string | null;
   created_at: string;
   updated_at: string;
+  reviewed_by?: string | null;
+  reviewed_at?: string | null;
+  fee_certified_at?: string | null;
 }
 
 export interface BuyerInterest {

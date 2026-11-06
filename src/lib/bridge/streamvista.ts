@@ -45,7 +45,7 @@ export const createStreamVistaOrder = createServerFn({ method: "POST" })
     return { id: orderId, status: "requested" as const };
   });
 
-export const listStreamVistaOrders = createServerFn({ method: "GET" })
+export const listStreamVistaOrders = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
     assertNotDevUser(context.userId);

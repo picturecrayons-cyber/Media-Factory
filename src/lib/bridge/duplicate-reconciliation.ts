@@ -79,7 +79,7 @@ async function actorFor(userId: string) {
   return actor;
 }
 
-export const listDuplicateReviews = createServerFn({ method: "GET" })
+export const listDuplicateReviews = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
     const actor = await actorFor(context.userId);

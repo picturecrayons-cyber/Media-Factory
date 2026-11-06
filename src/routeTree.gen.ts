@@ -38,6 +38,9 @@ import { Route as AdminWorkstationsRouteImport } from './routes/admin/workstatio
 import { Route as AuthCallbackRouteImport } from './routes/auth/callback'
 import { Route as AuthConfirmRouteImport } from './routes/auth/confirm'
 import { Route as TitleIdRouteImport } from './routes/title.$id'
+import { Route as StoryConceptRouteImport } from './routes/story-concepts'
+import { Route as StoryConceptNewRouteImport } from './routes/story-concepts.new'
+import { Route as StoryConceptConceptIdRouteImport } from './routes/story-concepts.$conceptId'
 import { Route as ApiA2aIndexRouteImport } from './routes/api/a2a/index'
 import { Route as ApiA2aAgentCardRouteImport } from './routes/api/a2a/agent-card'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
@@ -188,6 +191,9 @@ const TitleIdRoute = TitleIdRouteImport.update({
   path: '/title/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const StoryConceptRoute = StoryConceptRouteImport.update({ id: '/story-concepts', path: '/story-concepts', getParentRoute: () => rootRouteImport } as any)
+const StoryConceptNewRoute = StoryConceptNewRouteImport.update({ id: '/story-concepts/new', path: '/story-concepts/new', getParentRoute: () => rootRouteImport } as any)
+const StoryConceptConceptIdRoute = StoryConceptConceptIdRouteImport.update({ id: '/story-concepts/$conceptId', path: '/story-concepts/$conceptId', getParentRoute: () => rootRouteImport } as any)
 const ApiA2aIndexRoute = ApiA2aIndexRouteImport.update({
   id: '/api/a2a/',
   path: '/api/a2a/',
@@ -239,6 +245,9 @@ export interface FileRoutesByFullPath {
   '/auth/callback': typeof AuthCallbackRoute
   '/auth/confirm': typeof AuthConfirmRoute
   '/title/$id': typeof TitleIdRoute
+  '/story-concepts': typeof StoryConceptRoute
+  '/story-concepts/new': typeof StoryConceptNewRoute
+  '/story-concepts/$conceptId': typeof StoryConceptConceptIdRoute
   '/api/a2a/agent-card': typeof ApiA2aAgentCardRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/razorpay/webhook': typeof ApiRazorpayWebhookRoute
@@ -274,6 +283,9 @@ export interface FileRoutesByTo {
   '/auth/callback': typeof AuthCallbackRoute
   '/auth/confirm': typeof AuthConfirmRoute
   '/title/$id': typeof TitleIdRoute
+  '/story-concepts': typeof StoryConceptRoute
+  '/story-concepts/new': typeof StoryConceptNewRoute
+  '/story-concepts/$conceptId': typeof StoryConceptConceptIdRoute
   '/api/a2a/agent-card': typeof ApiA2aAgentCardRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/razorpay/webhook': typeof ApiRazorpayWebhookRoute
@@ -310,6 +322,9 @@ export interface FileRoutesById {
   '/auth/callback': typeof AuthCallbackRoute
   '/auth/confirm': typeof AuthConfirmRoute
   '/title/$id': typeof TitleIdRoute
+  '/story-concepts': typeof StoryConceptRoute
+  '/story-concepts/new': typeof StoryConceptNewRoute
+  '/story-concepts/$conceptId': typeof StoryConceptConceptIdRoute
   '/api/a2a/agent-card': typeof ApiA2aAgentCardRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/razorpay/webhook': typeof ApiRazorpayWebhookRoute
@@ -347,6 +362,9 @@ export interface FileRouteTypes {
     | '/auth/callback'
     | '/auth/confirm'
     | '/title/$id'
+    | '/story-concepts'
+    | '/story-concepts/new'
+    | '/story-concepts/$conceptId'
     | '/api/a2a/agent-card'
     | '/api/auth/$'
     | '/api/razorpay/webhook'
@@ -382,6 +400,9 @@ export interface FileRouteTypes {
     | '/auth/callback'
     | '/auth/confirm'
     | '/title/$id'
+    | '/story-concepts'
+    | '/story-concepts/new'
+    | '/story-concepts/$conceptId'
     | '/api/a2a/agent-card'
     | '/api/auth/$'
     | '/api/razorpay/webhook'
@@ -417,6 +438,9 @@ export interface FileRouteTypes {
     | '/auth/callback'
     | '/auth/confirm'
     | '/title/$id'
+    | '/story-concepts'
+    | '/story-concepts/new'
+    | '/story-concepts/$conceptId'
     | '/api/a2a/agent-card'
     | '/api/auth/$'
     | '/api/razorpay/webhook'
@@ -452,6 +476,9 @@ export interface RootRouteChildren {
   AuthCallbackRoute: typeof AuthCallbackRoute
   AuthConfirmRoute: typeof AuthConfirmRoute
   TitleIdRoute: typeof TitleIdRoute
+  StoryConceptRoute: typeof StoryConceptRoute
+  StoryConceptNewRoute: typeof StoryConceptNewRoute
+  StoryConceptConceptIdRoute: typeof StoryConceptConceptIdRoute
   ApiA2aAgentCardRoute: typeof ApiA2aAgentCardRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiRazorpayWebhookRoute: typeof ApiRazorpayWebhookRoute
@@ -663,6 +690,9 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TitleIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/story-concepts': { id: '/story-concepts'; path: '/story-concepts'; fullPath: '/story-concepts'; preLoaderRoute: typeof StoryConceptRouteImport; parentRoute: typeof rootRouteImport }
+    '/story-concepts/new': { id: '/story-concepts/new'; path: '/story-concepts/new'; fullPath: '/story-concepts/new'; preLoaderRoute: typeof StoryConceptNewRouteImport; parentRoute: typeof rootRouteImport }
+    '/story-concepts/$conceptId': { id: '/story-concepts/$conceptId'; path: '/story-concepts/$conceptId'; fullPath: '/story-concepts/$conceptId'; preLoaderRoute: typeof StoryConceptConceptIdRouteImport; parentRoute: typeof rootRouteImport }
     '/api/a2a/': {
       id: '/api/a2a/'
       path: '/api/a2a'
@@ -733,6 +763,9 @@ const rootRouteChildren: RootRouteChildren = {
   AuthCallbackRoute: AuthCallbackRoute,
   AuthConfirmRoute: AuthConfirmRoute,
   TitleIdRoute: TitleIdRoute,
+  StoryConceptRoute: StoryConceptRoute,
+  StoryConceptNewRoute: StoryConceptNewRoute,
+  StoryConceptConceptIdRoute: StoryConceptConceptIdRoute,
   ApiA2aAgentCardRoute: ApiA2aAgentCardRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiRazorpayWebhookRoute: ApiRazorpayWebhookRoute,

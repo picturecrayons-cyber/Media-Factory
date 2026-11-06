@@ -146,7 +146,7 @@ export function isPrivateBridgeOperator(actor: Actor): boolean {
   return canAccessDashboard(actor);
 }
 
-export const getBridgeSession = createServerFn({ method: "GET" })
+export const getBridgeSession = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
     assertNotDevUser(context.userId);
@@ -163,7 +163,7 @@ export const getBridgeSession = createServerFn({ method: "GET" })
     }
   });
 
-export const getDashboardSession = createServerFn({ method: "GET" })
+export const getDashboardSession = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
     assertNotDevUser(context.userId);
@@ -172,7 +172,7 @@ export const getDashboardSession = createServerFn({ method: "GET" })
     return { profile: actor };
   });
 
-export const getBridgePublicStatus = createServerFn({ method: "GET" }).handler(async () => {
+export const getBridgePublicStatus = createServerFn({ method: "POST" }).handler(async () => {
   return {
     product: PRODUCT_NAME,
     owner: LEGAL_OWNER,

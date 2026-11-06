@@ -148,7 +148,7 @@ export async function grantFromCapturedPayment(opts: {
   return { paymentId: payment.id, entitled: true, titleId: payment.title_id };
 }
 
-export const getCheckoutConfig = createServerFn({ method: "GET" })
+export const getCheckoutConfig = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
     assertNotDevUser(context.userId);
@@ -314,7 +314,7 @@ export const verifyLicensePayment = createServerFn({ method: "POST" })
     });
   });
 
-export const listOwnEntitlements = createServerFn({ method: "GET" })
+export const listOwnEntitlements = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
     const actor = await requireVerifiedActor(context.userId);

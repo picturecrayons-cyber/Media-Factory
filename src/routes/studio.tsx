@@ -15,7 +15,7 @@ function Studio() {
           <div className="mx-auto max-w-3xl space-y-10 px-1 pb-16">
             <header className="space-y-4">
               <p className="max-w-xl text-sm text-muted">
-                Finished films and story concepts stay separate. Production services are on the admin desk. The film master is uploaded from the title.
+                Choose the right submission pathway. Finished films and unproduced story concepts have separate workspaces and review processes.
               </p>
               <NewSubmissionPanel />
             </header>

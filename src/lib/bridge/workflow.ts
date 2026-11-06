@@ -139,7 +139,7 @@ export const reviewTitleWorkflow = createServerFn({ method: "POST" })
     return (await getSql()).transaction((tx) => reviewWorkflow(tx, actor, data));
   });
 
-export const getTitleWorkflow = createServerFn({ method: "GET" })
+export const getTitleWorkflow = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(z.object({ titleId: z.string().min(8) }))
   .handler(async ({ context, data }) => {
@@ -193,7 +193,7 @@ export const getTitleWorkflow = createServerFn({ method: "GET" })
   });
 
 // Read canonical, deduplicated captured events; never infer revenue from orders or current title price.
-export const getTitleRevenue = createServerFn({ method: "GET" })
+export const getTitleRevenue = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(z.object({ titleId: z.string().min(8) }))
   .handler(async ({ context, data }) => {

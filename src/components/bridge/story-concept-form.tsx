@@ -32,6 +32,7 @@ const PLATFORMS = [
 export function StoryConceptForm() {
   const navigate = useNavigate();
   const [titleName, setTitleName] = useState("");
+  const [idempotencyKey] = useState(() => crypto.randomUUID());
   const [logline, setLogline] = useState("");
   const [synopsis, setSynopsis] = useState("");
   const [language, setLanguage] = useState("Malayalam");
@@ -46,6 +47,7 @@ export function StoryConceptForm() {
       createStoryConceptSubmission({
         data: {
           titleName,
+          idempotencyKey,
           logline,
           synopsis,
           language,
@@ -58,7 +60,7 @@ export function StoryConceptForm() {
       }),
     onSuccess: (res) => {
       toast("Story / Concept submitted for review");
-      void navigate({ to: "/title/$id", params: { id: res.titleId } });
+      void navigate({ to: "/story-concepts/$conceptId" as never, params: { conceptId: res.concept.id } as never });
     },
     onError: (err) =>
       toast(err instanceof Error ? err.message : "Could not submit concept"),

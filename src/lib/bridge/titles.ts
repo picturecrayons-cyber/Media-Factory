@@ -83,9 +83,9 @@ async function hasTitleMergeColumn(sql: Sql): Promise<boolean> {
 
 async function listCatalog(sql: Sql): Promise<TitleRow[]> {
   if (!(await hasTitleMergeColumn(sql))) {
-    return sql<TitleRow>`select * from bridge_titles order by updated_at desc limit 200`;
+    return sql<TitleRow>`select * from bridge_titles where coalesce(submission_type, 'finished_film') = 'finished_film' order by updated_at desc limit 200`;
   }
-  return sql<TitleRow>`select * from bridge_titles where merged_into_title_id is null order by updated_at desc limit 200`;
+  return sql<TitleRow>`select * from bridge_titles where merged_into_title_id is null and coalesce(submission_type, 'finished_film') = 'finished_film' order by updated_at desc limit 200`;
 }
 
 async function listOwned(sql: Sql, userId: string, organizationId: string | null | undefined): Promise<TitleRow[]> {
@@ -93,13 +93,14 @@ async function listOwned(sql: Sql, userId: string, organizationId: string | null
   const mergeColumnAvailable = await hasTitleMergeColumn(sql);
   if (!orgId) {
     return mergeColumnAvailable
-      ? sql<TitleRow>`select * from bridge_titles where owner_user_id = ${userId} and merged_into_title_id is null order by updated_at desc limit 200`
-      : sql<TitleRow>`select * from bridge_titles where owner_user_id = ${userId} order by updated_at desc limit 200`;
+      ? sql<TitleRow>`select * from bridge_titles where owner_user_id = ${userId} and merged_into_title_id is null and coalesce(submission_type, 'finished_film') = 'finished_film' order by updated_at desc limit 200`
+      : sql<TitleRow>`select * from bridge_titles where owner_user_id = ${userId} and coalesce(submission_type, 'finished_film') = 'finished_film' order by updated_at desc limit 200`;
   }
   return mergeColumnAvailable
     ? sql<TitleRow>`
         select t.* from bridge_titles t
         where t.merged_into_title_id is null
+          and coalesce(t.submission_type, 'finished_film') = 'finished_film'
           and (
             t.owner_user_id = ${userId}
             or (
@@ -117,7 +118,8 @@ async function listOwned(sql: Sql, userId: string, organizationId: string | null
       `
     : sql<TitleRow>`
         select t.* from bridge_titles t
-        where t.owner_user_id = ${userId}
+        where coalesce(t.submission_type, 'finished_film') = 'finished_film'
+          and (t.owner_user_id = ${userId}
           or (
             t.owner_account_type = 'studio'
             and t.owner_organization_id = ${orgId}
@@ -128,6 +130,7 @@ async function listOwned(sql: Sql, userId: string, organizationId: string | null
                 and m.status = 'active'
             )
           )
+        ))
         order by t.updated_at desc limit 200
       `;
 }
@@ -146,6 +149,7 @@ export async function loadTitle(id: string): Promise<BridgeTitle | null> {
   const rows = await sql<TitleRow>`
     select t.* from bridge_titles t
     where t.id = ${id}
+      and coalesce(t.submission_type, 'finished_film') = 'finished_film'
     limit 1
   `;
   return rows[0] ? mapTitle(rows[0]) : null;
@@ -329,7 +333,7 @@ export const createTitle = createServerFn({ method: "POST" })
     return { title, submission: isPublicSubmission };
   });
 
-export const listTitles = createServerFn({ method: "GET" })
+export const listTitles = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
     assertNotDevUser(context.userId);
@@ -344,6 +348,7 @@ export const listTitles = createServerFn({ method: "GET" })
         rows = await sql<TitleRow>`
           select t.* from bridge_titles t
           where t.merged_into_title_id is null
+            and coalesce(t.submission_type, 'finished_film') = 'finished_film'
             and t.status in ('LIVE_FOR_BUYERS','IN_NEGOTIATION','LICENSED','DELIVERED')
             and public.bridge_title_buyer_visibility(t.id)
           order by t.updated_at desc limit 200
@@ -351,7 +356,8 @@ export const listTitles = createServerFn({ method: "GET" })
       } else {
         rows = await sql<TitleRow>`
           select t.* from bridge_titles t
-          where t.status in ('LIVE_FOR_BUYERS','IN_NEGOTIATION','LICENSED','DELIVERED')
+          where coalesce(t.submission_type, 'finished_film') = 'finished_film'
+            and t.status in ('LIVE_FOR_BUYERS','IN_NEGOTIATION','LICENSED','DELIVERED')
             and public.bridge_title_buyer_visibility(t.id)
           order by t.updated_at desc limit 200
         `;
@@ -370,7 +376,7 @@ export const listTitles = createServerFn({ method: "GET" })
     }) };
   });
 
-export const getTitle = createServerFn({ method: "GET" })
+export const getTitle = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(z.object({ id: z.string().min(8) }))
   .handler(async ({ context, data }) => {
@@ -639,7 +645,7 @@ export const advanceTitle = createServerFn({ method: "POST" })
     });
   });
 
-export const listAuditLogs = createServerFn({ method: "GET" })
+export const listAuditLogs = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
     const actor = await requireVerifiedActor(context.userId);
