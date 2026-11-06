@@ -485,7 +485,9 @@ export const requestAssetDownload = createServerFn({ method: "POST" })
     }>`
       select id, title_id, kind, verified_object_key, checksum_sha256, byte_size
       from bridge_assets where id = ${data.assetId} and byte_size > 0
-        and verified_object_key is not null and checksum_sha256 ~ '^[a-f0-9]{64}    `;
+        and verified_object_key is not null and length(checksum_sha256) = 64
+        and checksum_sha256 !~ '[^a-f0-9]' limit 1
+    `;
     const asset = rows[0];
     if (!asset) throw new Error("Not found");
     const title = await loadTitle(asset.title_id);
