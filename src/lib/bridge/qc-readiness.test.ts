@@ -92,3 +92,18 @@ test("package preparation requires seven verified files but not the later rights
     await db.close();
   }
 });
+
+
+test("a newer pending replacement blocks an older verified file from counting as ready", async () => {
+  const { db, sql } = await fixture();
+  try {
+    await db.exec(`insert into bridge_assets (id,title_id,kind,s3_key,created_by)
+      values ('qc-master-pending','qc-title-123','master','source/new-master.mp4','owner');`);
+    await assert.rejects(
+      () => assertSevenFilesStorageVerified(sql as never, "qc-title-123"),
+      /main film/
+    );
+  } finally {
+    await db.close();
+  }
+});
