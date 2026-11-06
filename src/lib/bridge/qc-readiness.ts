@@ -3,15 +3,18 @@ import type { Sql } from "../db.ts";
 export async function assertVerifiedTitleIngestReady(tx: Sql, titleId: string) {
   const assets = await tx<{
     kind: string; checksum_sha256: string | null; verified_object_key: string | null;
-    storage_provider: string | null; storage_bucket: string | null; storage_verified_at: string | Date | null;
+    storage_provider: string | null; storage_bucket: string | null; storage_namespace: string | null;
+    storage_region: string | null; storage_endpoint: string | null; storage_verified_at: string | Date | null;
   }>`
-    select kind, checksum_sha256, verified_object_key, storage_provider, storage_bucket, storage_verified_at
+    select kind, checksum_sha256, verified_object_key, storage_provider, storage_bucket,
+      storage_namespace, storage_region, storage_endpoint, storage_verified_at
     from bridge_assets where title_id=${titleId} and coalesce(byte_size,0)>0
   `;
   const valid = (kind: string) => assets.some((asset) =>
     asset.kind === kind &&
     Boolean(asset.verified_object_key) &&
-    Boolean(asset.storage_provider && asset.storage_bucket && asset.storage_verified_at) &&
+    Boolean(asset.storage_provider && asset.storage_bucket && asset.storage_namespace &&
+      asset.storage_region && asset.storage_endpoint && asset.storage_verified_at) &&
     Boolean(asset.checksum_sha256 && /^[a-f0-9]{64}$/.test(asset.checksum_sha256))
   );
   if (!valid("master")) throw new Error("QC blocked: main film requires immutable storage verification and SHA-256");
