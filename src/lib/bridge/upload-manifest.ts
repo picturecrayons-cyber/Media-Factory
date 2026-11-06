@@ -19,7 +19,7 @@ export function validatePartManifest(
   if (!Number.isSafeInteger(expected.expectedSize) || expected.expectedSize <= 0) {
     throw new Error("Expected upload size must be a positive safe integer");
   }
-  if (!Number.isSafeInteger(expected.partSize) || expected.partSize < 5 * 1024 * 1024) {
+  if (!Number.isSafeInteger(expected.partSize) || expected.partSize < 10 * 1024 * 1024) {
     throw new Error("Multipart part size is invalid");
   }
   if (!Array.isArray(parts) || parts.length === 0 || parts.length > (expected.maxParts ?? 10_000)) {
