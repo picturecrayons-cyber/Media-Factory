@@ -170,3 +170,43 @@ test("title owner can confirm an upload when organization tables are absent", as
     await db.close();
   }
 });
+
+
+test("verified vertical poster updates the canonical poster reference", async () => {
+  const db = new PGlite();
+  try {
+    await db.waitReady;
+    await db.exec("create role anon; create role authenticated;");
+    await db.exec(readFileSync(join(process.cwd(), "migrations/0004_bridge.sql"), "utf8"));
+    await db.exec(readFileSync(join(process.cwd(), "migrations/0021_bridge_organizations.sql"), "utf8"));
+    await db.exec(readFileSync(join(process.cwd(), "migrations/0023_bridge_server_authoritative_uploads.sql"), "utf8"));
+    await db.exec(`insert into bridge_titles (id,slug,name,owner_user_id,owner_account_type)
+      values ('poster-title','poster-title','Poster title','creator','independent_creator');
+      insert into bridge_assets (id,title_id,kind,s3_key,content_type,created_by)
+      values ('poster-asset','poster-title','poster_vertical','source/poster.jpg','image/jpeg','creator');`);
+    const sql = { query: async <T>(query: string, params: unknown[]) => (await db.query<T>(query, params)).rows };
+    const verifiedKey = "sealed/poster.jpg.verified/poster-asset";
+    const ok = await persistVerifiedAsset(sql, {
+      assetId: "poster-asset",
+      actorUserId: "creator",
+      internalActor: false,
+      titleId: "poster-title",
+      kind: "poster_vertical",
+      byteSize: 120,
+      contentType: "image/jpeg",
+      checksum: "poster-etag",
+      checksumSha256: "d".repeat(64),
+      storage: { provider: "oci", bucket: "test-bucket", namespace: "test-ns", region: "ap-mumbai-1", endpoint: "https://objectstorage.ap-mumbai-1.oraclecloud.com" },
+      objectVersionId: null,
+      sourceKey: "source/poster.jpg",
+      sealedKey: verifiedKey,
+    });
+    assert.equal(ok, true);
+    const title = (await db.query<{ poster_key: string | null }>(
+      "select poster_key from bridge_titles where id='poster-title'",
+    )).rows[0];
+    assert.equal(title?.poster_key, verifiedKey);
+  } finally {
+    await db.close();
+  }
+});
