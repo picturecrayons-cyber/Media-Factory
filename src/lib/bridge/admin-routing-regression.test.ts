@@ -93,6 +93,8 @@ test("Buyer title, asset-list and direct-download paths independently require pu
   assert.match(titles, /actor\.accountType === "buyer" && !actor\.internalRole[\s\S]{0,260}assertBuyerPublishable\(title\.id\)/);
   assert.match(assets, /Direct asset-ID requests must satisfy the same publication gate[\s\S]{0,240}assertBuyerPublishable\(title\.id\)/);
   assert.match(assets, /Asset enumeration is a separate endpoint[\s\S]{0,240}assertBuyerPublishable\(title\.id\)/);
+  assert.match(assets, /if \(actor\.accountType === "buyer" && !actor\.internalRole && !entitled\)/);
+  assert.match(assets, /where user_id = \$\{userId\} and title_id = \$\{titleId\} and access_type = 'license'/);
 });
 
 test("Loop readiness GET is read-only and generic reviewer approvals are evidence-bound", () => {
