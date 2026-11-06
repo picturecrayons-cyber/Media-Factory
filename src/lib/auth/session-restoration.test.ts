@@ -107,7 +107,7 @@ test("expired refresh token cannot fall back to a stale authenticated session", 
 test("onboarding and workspace wait for restoration and scope cached profiles to identity", () => {
   for (const path of ["../../routes/onboarding.tsx", "../../components/bridge/gate.tsx"]) {
     const source = readFileSync(new URL(path, import.meta.url), "utf8");
-    assert.match(source, /enabled: !isPending && Boolean\(user\)/);
+    assert.match(source, /enabled: !isPending && !authError && Boolean\(user\)/);
     assert.match(source, /queryKey: \["bridge-session", user\?\.id\]/);
     assert.match(source, /if \(!user\) return <RedirectToSignIn/);
   }
