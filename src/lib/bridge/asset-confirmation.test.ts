@@ -5,6 +5,16 @@ import { join } from "node:path";
 import { PGlite } from "@electric-sql/pglite";
 import { persistVerifiedAsset } from "./asset-confirmation.ts";
 
+test("rejects ETag-shaped checksum values before touching persistence", async () => {
+  let queried = false;
+  const sql = { query: async () => { queried = true; return []; } } as never;
+  await assert.rejects(() => persistVerifiedAsset(sql, {
+    assetId: "asset1234", actorUserId: "creator", internalActor: false,
+    titleId: "title1234", kind: "master", byteSize: 120, contentType: "video/mp4",
+    checksum: "multipart-etag-1", sourceKey: "source", sealedKey: "source.verified/asset1234",
+  }), /SHA-256/);
+  assert.equal(queried, false);
+});
 test("only a verified upload sets the master reference, once, with an audit event", async () => {
   const db = new PGlite();
   try {
