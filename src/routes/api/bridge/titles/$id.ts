@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { assertSameSiteRequest } from "@/lib/auth/isolation.server";
+import { assertSameSiteRequest, CrossSiteRequestError } from "@/lib/auth/isolation.server";
 import { requireUser, UnauthorizedError } from "@/lib/auth/verify.server";
 import { deleteDraftTitleForUser } from "@/lib/bridge/titles";
 
@@ -18,8 +18,13 @@ export const Route = createFileRoute("/api/bridge/titles/$id")({
           if (error instanceof UnauthorizedError) {
             return Response.json({ error: "Authentication required." }, { status: 401 });
           }
+          if (error instanceof CrossSiteRequestError) {
+            return Response.json({ error: "Cross-site request blocked." }, { status: 403 });
+          }
           const message = error instanceof Error ? error.message : "";
-          if (message === "Forbidden") return Response.json({ error: "You cannot delete this draft." }, { status: 403 });
+          if (message === "Forbidden" || message === "Email verification required" || message === "Profile required") {
+            return Response.json({ error: "You cannot delete this draft." }, { status: 403 });
+          }
           if (message === "Not found") return Response.json({ error: "Draft not found." }, { status: 404 });
           if (message.includes("Only DRAFT") || message.includes("assets or upload") || message.includes("changed")) {
             return Response.json({ error: message }, { status: 409 });
