@@ -12,6 +12,7 @@
 | Workspace RLS helpers and policies | `bridge_testing_workspace_rls_20261106` | APPLIED |
 | Asset provenance columns and provider allow-list | `bridge_asset_storage_provenance_0022_20261106` | APPLIED |
 | Remove direct title-update policy; retain server-authoritative mutation | `bridge_titles_no_browser_update_policy_20261106` | APPLIED |
+| Require verified Creator/Studio identity for workspace ownership | `bridge_workspace_verified_identity_guard_20261106` | APPLIED |
 
 Repository migrations:
 - `migrations/0024_bridge_testing_workspace_rls.sql`
@@ -49,6 +50,9 @@ A rollback-only transaction temporarily granted only the privileges needed to ex
 | Buyer draft insert denied | PASS |
 | Verified admin reads workspace | PASS |
 | `super_admin` has no global bypass | PASS |
+| Verified Creator can read own draft | PASS |
+| Unverified Creator cannot read own draft | PASS |
+| Unverified Creator draft insert denied | PASS |
 
 A post-rollback query confirmed zero synthetic fixture titles remained. A separate post-test privilege audit confirmed zero anon/authenticated public-table grants.
 
