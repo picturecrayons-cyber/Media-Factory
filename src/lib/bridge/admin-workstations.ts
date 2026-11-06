@@ -52,6 +52,12 @@ export const reviewAdminTitle = createServerFn({ method: "POST" })
     if (!title) throw new Error("Title not found");
     let next: string | null = null;
     let action = "admin.review";
+    // This legacy generic reviewer endpoint cannot bind approvals to immutable
+    // current-asset / rights-grant evidence. Fail closed rather than minting
+    // buyer-visible PASSED or APPROVED cases from free-form notes.
+    if (data.decision === "PASS" || data.decision === "APPROVE") {
+      throw new Error("Evidence-bound QC/Legal approval is required; use the dedicated evidence review workflow.");
+    }
     if (data.decision === "ACCEPT") {
       assertPermission(actor, "title.advance_upload");
       if (title.status !== "PREPARING") throw new Error("Submission is not awaiting acceptance");
