@@ -278,6 +278,11 @@ export const requestAssetDownload = createServerFn({ method: "POST" })
     if (!asset) throw new Error("Not found");
     const title = await loadTitle(asset.title_id);
     if (!title || !canReadTitle(actor, title)) throw new Error("Not found");
+    if (actor.accountType === "buyer" && !actor.internalRole) {
+      // Direct asset-ID requests must satisfy the same publication gate as title lookup.
+      const { assertBuyerPublishable } = await import("./buyer-visibility");
+      await assertBuyerPublishable(title.id);
+    }
     const entitled = await hasLicenseEntitlement(actor.userId, title.id);
     const decision = downloadDecision({
       kind: asset.kind,
@@ -314,8 +319,13 @@ export const listTitleAssets = createServerFn({ method: "GET" })
     const actor = await requireVerifiedActor(context.userId);
     const title = await loadTitle(data.titleId);
     if (!title || !canReadTitle(actor, title)) throw new Error("Not found");
-    const sql = await getSql();
     const buyer = actor.accountType === "buyer" && !actor.internalRole;
+    if (buyer) {
+      // Asset enumeration is a separate endpoint; do not rely on listTitles/getTitle having run.
+      const { assertBuyerPublishable } = await import("./buyer-visibility");
+      await assertBuyerPublishable(title.id);
+    }
+    const sql = await getSql();
     const rows = await sql<{
       id: string;
       kind: string;
