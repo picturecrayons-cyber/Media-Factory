@@ -37,7 +37,6 @@ export function StoryConceptForm() {
   const [treatmentUrl, setTreatmentUrl] = useState("");
   const [screenplayUrl, setScreenplayUrl] = useState("");
 
-
   function toggle(value: string, list: string[], setList: (v: string[]) => void) {
     setList(list.includes(value) ? list.filter((x) => x !== value) : [...list, value]);
   }
@@ -45,7 +44,6 @@ export function StoryConceptForm() {
   function onSubmit(e: FormEvent) {
     e.preventDefault();
     toast("Story / Concept submission is locked until verified payment checkout is available.");
-    mut.mutate();
   }
 
   return (
