@@ -92,15 +92,15 @@ function requireCurationStaff(actor: { internalRole?: string | null }) {
 const createPayloadSchema = z.object({
   idempotencyKey: z.string().uuid(),
   paymentId: z.string().min(8).max(160).optional(),
-  titleName: z.string().min(1).max(160),
-  logline: z.string().min(10).max(500),
-  synopsis: z.string().min(40).max(8000),
+  titleName: z.string().trim().min(1).max(160),
+  logline: z.string().trim().min(10).max(500),
+  synopsis: z.string().trim().min(40).max(8000),
   genre: z.array(z.string().min(1).max(40)).max(12).default([]),
   estimatedBudgetRange: z.string().max(80).optional(),
   targetPlatforms: z.array(z.string().min(1).max(40)).max(12).default([]),
   treatmentUrl: z.string().url().max(500).optional().or(z.literal("")),
   screenplayUrl: z.string().url().max(500).optional().or(z.literal("")),
-  language: z.string().min(2).max(40).default("Malayalam"),
+  language: z.string().trim().min(2).max(40).default("Malayalam"),
 });
 
 export const createStoryConceptSubmission = createServerFn({ method: "POST" })
@@ -328,7 +328,7 @@ export const updateStoryConceptCuration = createServerFn({ method: "POST" })
           update bridge_story_concept_submissions
           set
             curation_status = ${data.status},
-            admin_notes = ${data.adminNotes ?? null},
+            admin_notes = ${data.adminNotes === undefined ? current.admin_notes : data.adminNotes},
             updated_at = now(),
             introduced_to_buyers_at = case
               when ${data.status} = 'INTRODUCED_TO_BUYERS' then coalesce(introduced_to_buyers_at, now())
