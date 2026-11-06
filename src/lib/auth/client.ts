@@ -30,12 +30,7 @@ export async function getSupabaseSessionStrict(
 export async function getSupabaseSession(
   opts: { forceRefresh?: boolean } = {},
 ): Promise<Session | null> {
-  try {
-    return await getSupabaseSessionStrict(opts);
-  } catch (err) {
-    console.warn("[auth] Session restoration failed:", err instanceof Error ? err.message : "Unknown error");
-    return null;
-  }
+  return getSupabaseSessionStrict(opts);
 }
 
 export async function getBearerToken(): Promise<string | null> {
