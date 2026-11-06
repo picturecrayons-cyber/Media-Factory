@@ -39,8 +39,6 @@ export function StoryConceptForm() {
   const [genre, setGenre] = useState<string[]>([]);
   const [targetPlatforms, setTargetPlatforms] = useState<string[]>([]);
   const [estimatedBudgetRange, setEstimatedBudgetRange] = useState("");
-  const [treatmentUrl, setTreatmentUrl] = useState("");
-  const [screenplayUrl, setScreenplayUrl] = useState("");
 
   const mut = useMutation({
     mutationFn: () =>
@@ -54,8 +52,6 @@ export function StoryConceptForm() {
           genre,
           targetPlatforms,
           estimatedBudgetRange: estimatedBudgetRange || undefined,
-          treatmentUrl: treatmentUrl || undefined,
-          screenplayUrl: screenplayUrl || undefined,
         },
       }),
     onSuccess: (res) => {
@@ -179,27 +175,7 @@ export function StoryConceptForm() {
         </div>
       </div>
 
-      <label className="text-sm sm:col-span-2">
-        Treatment URL (optional)
-        <input
-          type="url"
-          value={treatmentUrl}
-          onChange={(e) => setTreatmentUrl(e.target.value)}
-          className="mt-1 h-11 w-full rounded-lg border border-line-strong bg-elevated px-3"
-          placeholder="https://…"
-        />
-      </label>
-
-      <label className="text-sm sm:col-span-2">
-        Screenplay URL (optional)
-        <input
-          type="url"
-          value={screenplayUrl}
-          onChange={(e) => setScreenplayUrl(e.target.value)}
-          className="mt-1 h-11 w-full rounded-lg border border-line-strong bg-elevated px-3"
-          placeholder="https://…"
-        />
-      </label>
+      <p className="text-xs text-muted sm:col-span-2">Treatment and screenplay must be uploaded through verified private Bridge storage; external URLs are not accepted.</p>
 
       <div className="rounded-xl border border-line bg-elevated p-4 text-xs leading-relaxed text-muted sm:col-span-2">
         Submitting places this concept in the admin curation queue. It does not publish to
