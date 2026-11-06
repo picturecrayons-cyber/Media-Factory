@@ -4,10 +4,19 @@ import { useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { StatusChip } from "@/components/bridge/status-rail";
-import { createTitle, listTitles } from "@/lib/bridge/titles";
+import { createTitle, deleteDraftTitle, listTitles } from "@/lib/bridge/titles";
 import { BRIDGE_LOOP_LANES } from "@/lib/bridge/loop-lanes";
 
 export function TitleList({ empty, query = "" }: { empty: string; query?: string }) {
+  const qc = useQueryClient();
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => deleteDraftTitle({ data: { id } }),
+    onSuccess: () => {
+      toast.success("Draft deleted");
+      void qc.invalidateQueries({ queryKey: ["bridge-titles"] });
+    },
+    onError: (err) => toast.error(err instanceof Error ? err.message : "Could not delete draft"),
+  });
   const titlesQ = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles() });
   const titles = (titlesQ.data?.titles ?? []).filter((t) => !query || `${t.name} ${t.language} ${t.year ?? ""}`.toLowerCase().includes(query.toLowerCase()));
   if (titlesQ.isPending) return <p className="text-sm text-muted">Loading titles…</p>;
@@ -23,22 +32,46 @@ export function TitleList({ empty, query = "" }: { empty: string; query?: string
   return (
     <ul className="divide-y divide-line rounded-sm border border-line">
       {titles.map((t) => (
-        <li key={t.id}>
+        <li key={t.id} className="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
           <Link
             to="/title/$id"
             params={{ id: t.id }}
-            className="flex flex-wrap items-center justify-between gap-3 px-4 py-4 hover:bg-fg/5"
+            className="flex min-w-0 flex-1 flex-wrap items-center justify-between gap-3 rounded-md hover:bg-fg/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
           >
-            <div>
-              <p className="font-medium">{t.name}</p>
-              <p className="text-sm text-muted">
+            <span className="min-w-0 flex-1">
+              <span className="block break-words font-medium leading-snug">{t.name}</span>
+              <span className="mt-1 block text-sm text-muted">
                 {t.contentType ? `${t.contentType} · ` : ""}
                 {t.language}
                 {t.year ? ` · ${t.year}` : ""}
-              </p>
-            </div>
+              </span>
+            </span>
             <StatusChip status={t.status} />
           </Link>
+          {t.status === "DRAFT" ? (
+            <div className="flex shrink-0 flex-wrap items-center gap-2">
+              <Link
+                to="/title/$id"
+                params={{ id: t.id }}
+                className="inline-flex min-h-9 items-center justify-center rounded-full border border-line-strong px-4 text-sm font-medium hover:bg-fg/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+              >
+                Continue
+              </Link>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={deleteMutation.isPending}
+                onClick={() => {
+                  if (window.confirm(`Permanently delete the empty draft “${t.name}”? This cannot be undone.`)) {
+                    deleteMutation.mutate(t.id);
+                  }
+                }}
+                className="min-h-9 rounded-full px-4 text-sm"
+              >
+                {deleteMutation.isPending ? "Deleting…" : "Delete"}
+              </Button>
+            </div>
+          ) : null}
         </li>
       ))}
     </ul>
