@@ -13,6 +13,11 @@ export async function persistVerifiedAsset(sql: Pick<Sql, "query">, opts: {
   checksum: string | null;
   sourceKey: string;
   sealedKey: string;
+  storageProvider?: string;
+  storageBucket?: string;
+  storageNamespace?: string | null;
+  storageRegion?: string;
+  storageEndpoint?: string;
 }): Promise<boolean> {
   if (!Number.isSafeInteger(opts.byteSize) || opts.byteSize <= 0) throw new Error("Uploaded object is empty");
   // Owner and internal confirmation must not reference the optional Studio
@@ -41,6 +46,11 @@ async function persistVerifiedAssetScoped(
     checksum: string | null;
     sourceKey: string;
     sealedKey: string;
+    storageProvider?: string;
+    storageBucket?: string;
+    storageNamespace?: string | null;
+    storageRegion?: string;
+    storageEndpoint?: string;
   },
   studioScope: boolean,
 ): Promise<boolean> {
@@ -64,7 +74,15 @@ async function persistVerifiedAssetScoped(
               )` : "";
   const rows = await sql.query<{ entity_id: string }>(`
     with verified as (
-      update bridge_assets a set byte_size = $1, content_type = coalesce($2, a.content_type), s3_key = $6
+      update bridge_assets a set
+        byte_size = $1,
+        content_type = coalesce($2, a.content_type),
+        s3_key = $6,
+        storage_provider = coalesce($10, a.storage_provider),
+        storage_bucket = coalesce($11, a.storage_bucket),
+        storage_namespace = coalesce($12, a.storage_namespace),
+        storage_region = coalesce($13, a.storage_region),
+        storage_endpoint = coalesce($14, a.storage_endpoint)
       where a.id = $3 and a.created_by = $4 and a.byte_size is null and a.s3_key = $7
         and a.title_id = $8
         and exists (
@@ -106,6 +124,11 @@ async function persistVerifiedAssetScoped(
     opts.sourceKey,
     opts.titleId,
     opts.checksum,
+    opts.storageProvider ?? null,
+    opts.storageBucket ?? null,
+    opts.storageNamespace ?? null,
+    opts.storageRegion ?? null,
+    opts.storageEndpoint ?? null,
   ]);
   return Boolean(rows[0]);
 }
