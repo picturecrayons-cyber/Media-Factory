@@ -668,6 +668,7 @@ export const deleteDraftTitle = createServerFn({ method: "POST" })
       const [refs] = await tx<{
         has_assets: boolean; has_financial_records: boolean; has_service_records: boolean;
         has_duplicate_review: boolean; has_legacy_payment: boolean; has_legacy_entitlement: boolean;
+        has_publication_records: boolean; has_review_records: boolean; has_destination_package: boolean;
       }>`
         select
           exists(select 1 from bridge_assets where title_id = ${data.id}) as has_assets,
@@ -677,11 +678,18 @@ export const deleteDraftTitle = createServerFn({ method: "POST" })
           exists(select 1 from bridge_title_duplicate_reviews
             where candidate_title_id = ${data.id} or canonical_title_id = ${data.id}) as has_duplicate_review,
           exists(select 1 from bridge_payments where title_id = ${data.id}) as has_legacy_payment,
-          exists(select 1 from bridge_entitlements where title_id = ${data.id}) as has_legacy_entitlement
+          exists(select 1 from bridge_entitlements where title_id = ${data.id}) as has_legacy_entitlement,
+          exists(select 1 from bridge_loop_publications where bridge_title_id = ${data.id})
+            or exists(select 1 from loop_titles where bridge_title_id = ${data.id}) as has_publication_records,
+          exists(select 1 from bridge_qc_cases where title_id = ${data.id})
+            or exists(select 1 from bridge_legal_cases where title_id = ${data.id})
+            or exists(select 1 from bridge_rights_grants where title_id = ${data.id}) as has_review_records,
+          exists(select 1 from bridge_destination_packages where title_id = ${data.id}) as has_destination_package
       `;
       if (refs?.has_assets) throw new Error("This draft has uploaded assets. Remove and verify its storage objects first; the draft was not deleted.");
       if (refs?.has_financial_records || refs?.has_service_records || refs?.has_duplicate_review ||
-          refs?.has_legacy_payment || refs?.has_legacy_entitlement) {
+          refs?.has_legacy_payment || refs?.has_legacy_entitlement || refs?.has_publication_records ||
+          refs?.has_review_records || refs?.has_destination_package) {
         throw new Error("This draft has linked commercial or reconciliation records and cannot be deleted from the Studio list.");
       }
 
