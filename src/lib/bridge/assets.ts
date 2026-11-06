@@ -562,14 +562,14 @@ export async function streamAssetWithToken(token: string, rangeHeader?: string |
     const rows = await sql<{
       id: string; title_id: string; kind: string; verified_object_key: string;
       checksum_sha256: string; byte_size: number; content_type: string | null;
-    }>\`
+    }>`
       select id, title_id, kind, verified_object_key, checksum_sha256, byte_size, content_type
       from bridge_assets
-      where id = \${claims.assetId} and byte_size > 0
+      where id = ${claims.assetId} and byte_size > 0
         and verified_object_key is not null
         and length(checksum_sha256) = 64 and checksum_sha256 !~ '[^a-f0-9]'
       limit 1
-    \`;
+    `;
     const asset = rows[0];
     if (!asset) return new Response("Not found", { status: 404 });
     const title = await loadTitle(asset.title_id);
@@ -630,12 +630,12 @@ export const requestAssetDownload = createServerFn({ method: "POST" })
     const rows = await sql<{
       id: string; title_id: string; kind: string; verified_object_key: string | null;
       checksum_sha256: string | null; byte_size: number | null;
-    }>\`
+    }>`
       select id, title_id, kind, verified_object_key, checksum_sha256, byte_size
-      from bridge_assets where id = \${data.assetId} and byte_size > 0
+      from bridge_assets where id = ${data.assetId} and byte_size > 0
         and verified_object_key is not null and length(checksum_sha256) = 64
         and checksum_sha256 !~ '[^a-f0-9]' limit 1
-    \`;
+    `;
     const asset = rows[0];
     if (!asset) throw new Error("Not found");
     const title = await loadTitle(asset.title_id);
@@ -688,13 +688,13 @@ export const listTitleAssets = createServerFn({ method: "GET" })
       storage_endpoint: string | null; checksum_sha256: string | null;
       verified_object_key: string | null; object_version_id: string | null;
       object_generation: string | null; storage_verified_at: string | Date | null;
-    }>\`
+    }>`
       select id, kind, s3_key, content_type, byte_size, created_at,
         storage_provider, storage_bucket, storage_namespace, storage_region,
         storage_endpoint, checksum_sha256, verified_object_key, object_version_id,
         object_generation, storage_verified_at
-      from bridge_assets where title_id = \${title.id} and byte_size > 0 order by created_at desc
-    \`;
+      from bridge_assets where title_id = ${title.id} and byte_size > 0 order by created_at desc
+    `;
     return {
       assets: rows
         .filter((r) => !buyer || !["master", "technical", "censor_certificate"].includes(r.kind))
