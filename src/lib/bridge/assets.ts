@@ -518,8 +518,12 @@ export const requestAssetDownload = createServerFn({ method: "POST" })
       entityType: "bridge_asset",
       entityId: asset.id,
     });
-    // Never return bucket names or object keys in the download response, including to Buyers.
-    return { url: signed.url, method: signed.method };
+    // Return only a short-lived Bridge stream capability. Never expose OCI PARs,
+    // bucket names, or object keys to the browser or Buyer responses.
+    return {
+      url: `/api/assets/${asset.id}/stream?token=${encodeURIComponent(token)}`,
+      method: "GET" as const,
+    };
   });
 
 export const listTitleAssets = createServerFn({ method: "GET" })
