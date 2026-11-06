@@ -295,7 +295,7 @@ export const updateStoryConceptCuration = createServerFn({ method: "POST" })
       }
       const rows = await tx<ConceptRow>`
         update bridge_story_concept_submissions
-        set curation_status = ${data.status}, admin_notes = ${data.adminNotes ?? null},
+        set curation_status = ${data.status}, admin_notes = case when ${data.adminNotes !== undefined} then ${data.adminNotes ?? null} else admin_notes end,
             reviewed_by = ${actor.userId}, reviewed_at = now(), updated_at = now(),
             introduced_to_buyers_at = case when ${data.status} = 'BUYER_EVALUATION_APPROVED' then coalesce(introduced_to_buyers_at, now()) else null end
         where id = ${data.id} returning *

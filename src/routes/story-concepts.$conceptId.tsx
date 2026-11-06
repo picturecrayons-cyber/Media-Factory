@@ -18,8 +18,8 @@ function StoryConceptWorkspace() {
           <div><h2 className="text-sm font-semibold">Logline</h2><p className="mt-1 text-sm">{c.logline}</p></div>
           <div><h2 className="text-sm font-semibold">Synopsis</h2><p className="mt-1 whitespace-pre-wrap text-sm">{c.synopsis}</p></div>
           <div className="grid gap-3 sm:grid-cols-2"><div><h2 className="text-sm font-semibold">Genre</h2><p className="text-sm text-muted">{c.genre.join(", ") || "—"}</p></div><div><h2 className="text-sm font-semibold">Estimated budget</h2><p className="text-sm text-muted">{c.estimated_budget_range || "—"}</p></div><div className="sm:col-span-2"><h2 className="text-sm font-semibold">Target platforms / outcome</h2><p className="text-sm text-muted">{c.target_platforms.join(", ") || "—"}</p></div></div>
-          {c.treatment_url ? <p className="text-sm"><a href={c.treatment_url} target="_blank" rel="noreferrer">Open treatment</a></p> : null}
-          {c.screenplay_url ? <p className="text-sm"><a href={c.screenplay_url} target="_blank" rel="noreferrer">Open screenplay</a></p> : null}
+          {c.treatment_url ? <p className="text-xs text-muted">Treatment reference submitted — secure private access pending.</p> : null}
+          {c.screenplay_url ? <p className="text-xs text-muted">Screenplay reference submitted — secure private access pending.</p> : null}
           <div className="rounded-xl border border-line p-4"><p className="text-sm font-semibold">Admin review</p><p className="mt-1 text-sm">{c.curation_status.replaceAll("_", " ")}</p><p className="mt-1 text-xs text-muted">{c.admin_notes || "No reviewer comments."}</p></div>
           <div className="rounded-xl border border-line p-4"><p className="text-sm font-semibold">Payment certification</p><p className="mt-1 text-sm">{c.feeCertified ? "CERTIFIED" : "LOCKED — fee certification pending"}</p></div>
           <p className="text-xs text-muted">Submitted {new Date(c.created_at).toLocaleString()}. This concept is not published to Loop automatically.</p>
