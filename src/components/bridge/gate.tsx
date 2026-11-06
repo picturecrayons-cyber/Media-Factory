@@ -32,7 +32,7 @@ export function RequireBridge({
   const qc = useQueryClient();
   const [retrying, setRetrying] = useState(false);
   const [retryError, setRetryError] = useState<string | null>(null);
-  const { user, isPending, error: authError, retry: retryAuth } = useCurrentUserState();
+  const { user, isPending, authError, retry: retryAuth } = useCurrentUserState();
   const sessionQ = useQuery({
     queryKey: ["bridge-session", user?.id],
     queryFn: () => getBridgeSession(),
