@@ -213,10 +213,23 @@ export const verifyOciAssetForAdmin = createServerFn({ method: "POST" })
   });
 
 function assertTestingDatabaseForCleanup() {
+  const expectedProject = "jbymleftneggcgutlcqu";
   const supabaseUrl = bridgeEnv.supabaseUrl();
-  if (!supabaseUrl) throw new Error("Cannot verify database environment; cleanup preview is blocked");
-  const host = new URL(supabaseUrl).hostname;
-  if (!host.startsWith("jbymleftneggcgutlcqu.")) {
+  const databaseUrl = bridgeEnv.databaseUrl();
+  if (!supabaseUrl || !databaseUrl) {
+    throw new Error("Cannot verify both Supabase project and Postgres connection; cleanup preview is blocked");
+  }
+  const supabaseHost = new URL(supabaseUrl).hostname;
+  const database = new URL(databaseUrl);
+  const databaseIdentity = [
+    database.hostname,
+    decodeURIComponent(database.username),
+    database.pathname,
+  ].join(" ").toLowerCase();
+  if (
+    !supabaseHost.startsWith(expectedProject + ".") ||
+    !databaseIdentity.includes(expectedProject)
+  ) {
     throw new Error("Test-data cleanup preview is restricted to STAGING DB jbymleftneggcgutlcqu");
   }
 }
