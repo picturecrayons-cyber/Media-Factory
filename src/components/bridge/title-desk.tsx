@@ -41,7 +41,7 @@ export function TitleList({ empty, query = "" }: { empty: string; query?: string
         <div className="flex max-w-full flex-wrap items-center gap-2">
           <StatusChip status={t.status} />
           {t.status === "DRAFT" ? <>
-            <Button type="button" size="sm" onClick={() => navigate({to:"/title/$id",params:{id:t.id}})}>Continue</Button>
+            <Button type="button" size="sm" onClick={() => navigate({to:"/studio/submissions/$id/edit",params:{id:t.id}})}>Continue</Button>
             <Button type="button" size="sm" variant="outline" onClick={() => {setPendingDelete({id:t.id,name:t.name});setConfirmName("");}}>Delete</Button>
           </> : null}
         </div>
