@@ -331,7 +331,7 @@ export async function signDownload(opts: { key: string; expiresIn?: number }) {
 
 export function isValidObjectByteRange(range: string): boolean {
   // Accept one RFC byte-range-spec. Multi-range requests are intentionally rejected.
-  return /^bytes=(?:\\d+-\\d*|-\\d+)$/i.test(range.trim());
+  return /^bytes=(?:\d+-\d*|-\d+)$/i.test(range.trim());
 }
 
 export async function getObjectResponse(key: string, range?: string) {
