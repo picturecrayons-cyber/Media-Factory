@@ -486,7 +486,7 @@ function FilesPanel({
       assertAttemptActive();
       if (started.alreadyVerified) return signed.assetId;
       session = {
-        version: 2,
+        version: 3,
         titleId,
         kind,
         assetId: signed.assetId,
@@ -845,7 +845,7 @@ function readUploadSession(titleId: string, kind: string): UploadSession | null 
     const raw = localStorage.getItem(sessionStorageKey(titleId, kind));
     if (!raw) return null;
     const session = JSON.parse(raw) as UploadSession;
-    if (session.version !== 2 || session.titleId !== titleId || session.kind !== kind || typeof session.sessionToken !== "string" || !Array.isArray(session.completedParts)) return null;
+    if (session.version !== 3 || session.titleId !== titleId || session.kind !== kind || typeof session.sessionToken !== "string" || !Array.isArray(session.completedParts)) return null;
     if (session.expiresAt <= Date.now()) {
       localStorage.removeItem(sessionStorageKey(titleId, kind));
       return null;
