@@ -90,7 +90,7 @@ function requireCurationStaff(actor: { internalRole?: string | null }) {
 }
 
 const createPayloadSchema = z.object({
-  titleName: z.string().trim().min(2).max(160).refine((value) => !/^test(?:$|[\\s_-]|\\d)|^(?:asdf|dummy|sample|untitled)$/i.test(value), { message: "Enter a real title, not a test placeholder." }),
+  titleName: z.string().trim().min(2).max(160).refine((value) => !/^test(?:$|[\s_-]|\d)|^(?:asdf|dummy|sample|untitled)$/i.test(value), { message: "Enter a real title, not a test placeholder." }),
   logline: z.string().min(10).max(500),
   synopsis: z.string().min(40).max(8000),
   genre: z.array(z.string().min(1).max(40)).max(12).default([]),
