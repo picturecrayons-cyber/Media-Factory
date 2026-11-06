@@ -64,11 +64,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setAuthError(null);
 
     const unsubscribe = subscribeAuthChange((event, nextSession) => {
-      authRevision.current += 1;
       if (!alive) return;
       setSession(nextSession);
       setUser(normalize(nextSession?.user));
       if (event !== "INITIAL_SESSION") {
+        authRevision.current += 1;
         authChanged = true;
         setAuthError(null);
         setIsPending(false);
