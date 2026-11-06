@@ -86,3 +86,23 @@ test("shared title workspace has an explicit role gate and Studio list scope", (
   const profiles = read("./profiles.ts");
   assert.match(profiles, /insert into bridge_organization_memberships/);
 });
+
+test("Buyer title, asset-list and direct-download paths independently require publication eligibility", () => {
+  const titles = read("./titles.ts");
+  const assets = read("./assets.ts");
+  assert.match(titles, /actor\.accountType === "buyer" && !actor\.internalRole[\s\S]{0,260}assertBuyerPublishable\(title\.id\)/);
+  assert.match(assets, /Direct asset-ID requests must satisfy the same publication gate[\s\S]{0,240}assertBuyerPublishable\(title\.id\)/);
+  assert.match(assets, /Asset enumeration is a separate endpoint[\s\S]{0,240}assertBuyerPublishable\(title\.id\)/);
+});
+
+test("Loop readiness GET is read-only and generic reviewer cannot mint unbound approvals", () => {
+  const publication = read("./loop-publication.ts");
+  const workstation = read("./admin-workstations.ts");
+  const readiness = publication.slice(
+    publication.indexOf("export const listLoopPublicationReadiness"),
+    publication.indexOf("export const authorizeLoopPublication"),
+  );
+  assert.doesNotMatch(readiness, /\b(update|insert|delete)\s+(?:bridge_loop_publications|loop_titles)/i);
+  assert.match(workstation, /data\.decision === "PASS" \|\| data\.decision === "APPROVE"/);
+  assert.match(workstation, /Evidence-bound QC\/Legal approval is required/);
+});
