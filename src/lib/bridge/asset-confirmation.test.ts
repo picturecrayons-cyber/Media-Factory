@@ -12,6 +12,7 @@ test("only a verified upload sets the master reference, once, with an audit even
     await db.exec("create role anon; create role authenticated;");
     await db.exec(readFileSync(join(process.cwd(), "migrations/0004_bridge.sql"), "utf8"));
     await db.exec(readFileSync(join(process.cwd(), "migrations/0021_bridge_organizations.sql"), "utf8"));
+    await db.exec(readFileSync(join(process.cwd(), "migrations/0023_bridge_server_authoritative_uploads.sql"), "utf8"));
     await db.exec(`insert into bridge_titles (id,slug,name,owner_user_id,owner_account_type)
       values ('title1234','title','Title','creator','independent_creator');
       insert into bridge_assets (id,title_id,kind,s3_key,content_type,created_by)
@@ -139,6 +140,7 @@ test("title owner can confirm an upload when organization tables are absent", as
     await db.waitReady;
     await db.exec("create role anon; create role authenticated;");
     await db.exec(readFileSync(join(process.cwd(), "migrations/0004_bridge.sql"), "utf8"));
+    await db.exec(readFileSync(join(process.cwd(), "migrations/0023_bridge_server_authoritative_uploads.sql"), "utf8"));
     await db.exec(`insert into bridge_titles (id,slug,name,owner_user_id,owner_account_type,status)
       values ('title1234','title','Title','creator','independent_creator','PREPARING');
       insert into bridge_assets (id,title_id,kind,s3_key,content_type,created_by)
