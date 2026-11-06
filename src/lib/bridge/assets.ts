@@ -10,7 +10,6 @@ import { loadTitle } from "./titles";
 import { writeAudit } from "./audit";
 import { assertNotDevUser } from "./guards";
 import { persistVerifiedAsset } from "./asset-confirmation";
-import { evaluateVerifiedTitleIngestReadiness } from "./qc-ingest-gate";
 import { downloadDecision } from "./delivery-policy";
 import { uploadUrlLifetimeSeconds } from "./upload-url-lifetime";
 import { validateOttIngestFile, type OttIngestKind } from "./ott-ingest-spec";
@@ -330,8 +329,12 @@ export const listTitleAssets = createServerFn({ method: "GET" })
       byte_size: number | null;
       created_at: string | Date;
       provenance_verified: boolean;
+      checksum_sha256: string | null;
     }>`
       select a.id, a.kind, a.s3_key, a.content_type, a.byte_size, a.created_at,
+        (select l.metadata->>'checksumSha256' from bridge_audit_logs l
+          where l.entity_type = 'bridge_asset' and l.entity_id = a.id and l.action = 'asset.upload_verified'
+          order by l.created_at desc limit 1) as checksum_sha256,
         exists (
           select 1 from bridge_audit_logs l
           where l.entity_type = 'bridge_asset' and l.entity_id = a.id
@@ -348,7 +351,7 @@ export const listTitleAssets = createServerFn({ method: "GET" })
           contentType: r.content_type,
           byteSize: r.byte_size,
           verified: Number(r.byte_size) > 0 && r.provenance_verified,
-          checksumSha256: null,
+          checksumSha256: r.checksum_sha256,
           createdAt:
             r.created_at instanceof Date ? r.created_at.toISOString() : String(r.created_at),
         })),
