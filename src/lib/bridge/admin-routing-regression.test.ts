@@ -122,7 +122,7 @@ test("Buyer media previews use short-lived signed first-party streaming tokens",
   assert.match(assets, /createDecipheriv/);
   assert.match(assets, /cipher\.getAuthTag\(\)/);
   assert.match(assets, /decipher\.setAuthTag\(tag\)/);
-  assert.match(assets, /expiresAt: Math\.floor\(Date\.now\(\) \/ 1000\) \+ 120/);
+  assert.match(assets, /expiresAt: Math\.floor\(Date\.now\(\) \/ 1000\) \+ 4 \* 60 \* 60/);
   assert.match(assets, /assertBuyerPublishable\(title\.id\)/);
   assert.match(assets, /return \{ url: "\/api\/assets\/stream\?token="/);
   assert.match(route, /streamAssetWithToken\(token, request\.headers\.get\("range"\)\)/);
