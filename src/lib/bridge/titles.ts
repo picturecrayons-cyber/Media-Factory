@@ -639,6 +639,75 @@ export const advanceTitle = createServerFn({ method: "POST" })
     });
   });
 
+export const deleteDraftTitle = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({ id: z.string().min(8).max(128) }))
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    const title = await loadTitle(data.id);
+    if (!title) throw new Error("Draft not found");
+    if (title.status !== "DRAFT") throw new Error("Only DRAFT submissions can be deleted");
+    if (title.masterKey || title.posterKey) {
+      throw new Error("This draft still references uploaded storage objects. Remove and verify those objects before deleting the draft.");
+    }
+    if (title.ownerUserId !== actor.userId && actor.internalRole !== "admin") {
+      throw new Error("Only the draft owner or an authorized admin can delete this draft");
+    }
+
+    const sql = await getSql();
+    return sql.transaction(async (tx) => {
+      const [locked] = await tx<{ status: string; owner_user_id: string }>`
+        select status, owner_user_id from bridge_titles where id = ${data.id} for update
+      `;
+      if (!locked || locked.status !== "DRAFT") throw new Error("Draft changed; refresh before deleting");
+      if (locked.owner_user_id !== actor.userId && actor.internalRole !== "admin") {
+        throw new Error("Draft ownership changed; refresh before deleting");
+      }
+
+      const [refs] = await tx<{
+        has_assets: boolean; has_financial_records: boolean; has_service_records: boolean;
+        has_duplicate_review: boolean; has_legacy_payment: boolean; has_legacy_entitlement: boolean;
+        has_publication_records: boolean; has_review_records: boolean; has_destination_package: boolean;
+      }>`
+        select
+          exists(select 1 from bridge_assets where title_id = ${data.id}) as has_assets,
+          exists(select 1 from bridge_financial_ledger where title_id = ${data.id}) as has_financial_records,
+          exists(select 1 from bridge_service_orders where title_id = ${data.id})
+            or exists(select 1 from bridge_service_quotes where title_id = ${data.id}) as has_service_records,
+          exists(select 1 from bridge_title_duplicate_reviews
+            where candidate_title_id = ${data.id} or canonical_title_id = ${data.id}) as has_duplicate_review,
+          exists(select 1 from bridge_payments where title_id = ${data.id}) as has_legacy_payment,
+          exists(select 1 from bridge_entitlements where title_id = ${data.id}) as has_legacy_entitlement,
+          exists(select 1 from bridge_loop_publications where bridge_title_id = ${data.id})
+            or exists(select 1 from loop_titles where bridge_title_id = ${data.id}) as has_publication_records,
+          exists(select 1 from bridge_qc_cases where title_id = ${data.id})
+            or exists(select 1 from bridge_legal_cases where title_id = ${data.id})
+            or exists(select 1 from bridge_rights_grants where title_id = ${data.id}) as has_review_records,
+          exists(select 1 from bridge_destination_packages where title_id = ${data.id}) as has_destination_package
+      `;
+      if (refs?.has_assets) throw new Error("This draft has uploaded assets. Remove and verify its storage objects first; the draft was not deleted.");
+      if (refs?.has_financial_records || refs?.has_service_records || refs?.has_duplicate_review ||
+          refs?.has_legacy_payment || refs?.has_legacy_entitlement || refs?.has_publication_records ||
+          refs?.has_review_records || refs?.has_destination_package) {
+        throw new Error("This draft has linked commercial or reconciliation records and cannot be deleted from the Studio list.");
+      }
+
+      const deleted = await tx<{ id: string }>`
+        delete from bridge_titles where id = ${data.id} and status = 'DRAFT' returning id
+      `;
+      if (!deleted[0]) throw new Error("Draft was not deleted; refresh and retry");
+      await writeAudit({
+        actorUserId: actor.userId,
+        action: "title.draft_delete",
+        entityType: "bridge_title",
+        entityId: data.id,
+        metadata: { titleName: title.name, cascadePolicy: "database_foreign_keys" },
+      }, tx);
+      return { deleted: true as const, titleId: data.id };
+    });
+  });
+
 export const listAuditLogs = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
