@@ -52,7 +52,7 @@ async function loadActorByBridgeUserId(userId: string): Promise<BridgeActor | nu
   if (!rows[0]) return null;
 
   const actor = mapRow(rows[0]);
-  if (!["studio", "buyer"].includes(actor.accountType) || !actor.emailVerified) return actor;
+  if ((actor.accountType !== "studio" && actor.accountType !== "buyer") || !actor.emailVerified) return actor;
 
   // Resolve scope only from an exact active membership and active canonical
   // organization. Never infer organization identity from organization_name.
