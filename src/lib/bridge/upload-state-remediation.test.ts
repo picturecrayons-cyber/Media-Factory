@@ -49,6 +49,7 @@ test("sealing failure never advances loop_media_migration_queue to UPLOADED or V
     await db.waitReady;
     await db.exec("create role anon; create role authenticated;");
     await db.exec(readFileSync(join(process.cwd(), "migrations/0004_bridge.sql"), "utf8"));
+    await db.exec(readFileSync(join(process.cwd(), "migrations/0022_bridge_asset_storage_provenance.sql"), "utf8"));
 
     // Set up loop_media_migration_queue table as used in bridge
     await db.exec(`
@@ -106,6 +107,7 @@ test("atomic state transition: migration queue and title master/poster only adva
     await db.waitReady;
     await db.exec("create role anon; create role authenticated;");
     await db.exec(readFileSync(join(process.cwd(), "migrations/0004_bridge.sql"), "utf8"));
+    await db.exec(readFileSync(join(process.cwd(), "migrations/0022_bridge_asset_storage_provenance.sql"), "utf8"));
     await db.exec(readFileSync(join(process.cwd(), "migrations/0021_bridge_organizations.sql"), "utf8"));
 
     await db.exec(`
