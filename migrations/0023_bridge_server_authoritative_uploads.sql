@@ -50,7 +50,7 @@ create or replace function bridge_private.prevent_verified_asset_pointer_mutatio
 returns trigger
 language plpgsql
 set search_path = pg_catalog
-as $
+as $bridge_function$
 begin
   if old.verified_object_key is not null and (
     new.verified_object_key is distinct from old.verified_object_key
@@ -67,7 +67,7 @@ begin
   end if;
   return new;
 end;
-$;
+$bridge_function$;
 
 drop trigger if exists bridge_assets_verified_pointer_immutable on public.bridge_assets;
 create trigger bridge_assets_verified_pointer_immutable
