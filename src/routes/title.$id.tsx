@@ -108,6 +108,7 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
   const pubQ = useQuery({
     queryKey: ["loop-pub", id],
     queryFn: () => getLoopPublication({ data: { bridgeTitleId: id } }),
+    enabled: Boolean(actor.internalRole) || actor.accountType !== "buyer",
   });
 
   const reviewQ = useQuery({
@@ -126,6 +127,26 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
   if (titleQ.isError)
     return <p role="alert">Title workspace unavailable: {titleQ.error.message}</p>;
   if (!title) return <p className="text-sm text-muted">Title not found.</p>;
+
+  if (actor.accountType === "buyer" && !actor.internalRole) {
+    return (
+      <div className="space-y-5">
+        <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
+          <div className="grid gap-5 md:grid-cols-[180px_1fr]">
+            <AssetPosterSlot assets={assets} />
+            <div className="min-w-0">
+              <p className="text-xs font-semibold uppercase tracking-wider text-accent">Authorized buyer listing</p>
+              <h1 className="mt-1 font-display text-2xl font-semibold">{title.name}</h1>
+              <p className="mt-1 text-sm text-muted">{title.language}{title.year ? ` · ${title.year}` : ""}{title.runtimeMinutes ? ` · ${title.runtimeMinutes} min` : ""}</p>
+              {title.synopsis ? <p className="mt-4 max-w-3xl text-sm leading-6 text-muted">{title.synopsis}</p> : null}
+              <p className="mt-4 text-xs text-muted">Internal workflow, storage provenance and ingest controls are not available in the Buyer Portal.</p>
+            </div>
+          </div>
+        </section>
+        <AssetPreviewGallery assets={assets} />
+      </div>
+    );
+  }
 
   const qcReady =
     reviewQ.data?.qc?.status === "PASSED" &&
@@ -908,7 +929,9 @@ function verifiedFor(
   assets: Array<{ id: string; kind: string; verified: boolean }>,
   kind: SimpleAssetKind,
 ) {
-  return assets.find((asset) => asset.verified && (asset.kind === kind || (kind === "poster_vertical" && asset.kind === "poster")));
+  // Assets arrive newest-first. A pending re-upload supersedes the previous verified version.
+  const latest = assets.find((asset) => asset.kind === kind || (kind === "poster_vertical" && asset.kind === "poster"));
+  return latest?.verified ? latest : undefined;
 }
 
 function FileTypeCard({

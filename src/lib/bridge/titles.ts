@@ -12,7 +12,7 @@ import { writeAudit } from "./audit";
 import { assertNotDevUser } from "./guards";
 import { loopStageType } from "./loop-lanes";
 import { assertBuyerPublishable, getBuyerGateStatus } from "./buyer-visibility";
-import { assertVerifiedTitleIngestReady } from "./qc-readiness";
+import { assertSevenFilesStorageVerified, assertVerifiedTitleIngestReady } from "./qc-readiness";
 
 type TitleRow = {
   id: string;
@@ -66,6 +66,18 @@ export function mapTitle(r: TitleRow): BridgeTitle {
     credits: r.credits,
     createdAt: asIso(r.created_at),
     updatedAt: asIso(r.updated_at),
+  };
+}
+
+/** Buyer DTO deliberately strips internal storage object references and owner identifiers. */
+function mapBuyerTitle(row: TitleRow): BridgeTitle {
+  const title = mapTitle(row);
+  return {
+    ...title,
+    ownerUserId: "",
+    ownerOrganizationId: null,
+    posterKey: null,
+    masterKey: null,
   };
 }
 
@@ -363,7 +375,7 @@ export const listTitles = createServerFn({ method: "GET" })
     }
     return { titles: rows.flatMap((row) => {
       try {
-        return [mapTitle(row)];
+        return [actor.accountType === "buyer" && !actor.internalRole ? mapBuyerTitle(row) : mapTitle(row)];
       } catch (error) {
         console.error("[bridge] skipped unreadable title", row?.id, error);
         return [];
@@ -384,9 +396,11 @@ export const getTitle = createServerFn({ method: "GET" })
       const assigned = await sql<{ id: string }>
         `select id from bridge_title_investors where title_id = ${title.id} and investor_user_id = ${actor.userId} limit 1`;
       if (!assigned[0]) throw new Error("Not found");
-    } else if (!canReadTitle(actor, title)) {
-      if (actor.accountType !== "buyer") throw new Error("Not found");
+    } else if (actor.accountType === "buyer" && !actor.internalRole) {
+      if (!canReadTitle(actor, title)) throw new Error("Not found");
       await assertBuyerPublishable(title.id);
+    } else if (!canReadTitle(actor, title)) {
+      throw new Error("Not found");
     }
     const events = await sql<{
       from_status: string | null;
@@ -398,9 +412,16 @@ export const getTitle = createServerFn({ method: "GET" })
       select from_status, to_status, actor_user_id, note, created_at
       from bridge_title_events where title_id = ${title.id} order by created_at asc
     `;
+    const buyer = actor.accountType === "buyer" && !actor.internalRole;
     return {
-      title,
-      events: events.map((e) => ({
+      title: buyer ? {
+        ...title,
+        ownerUserId: "",
+        ownerOrganizationId: null,
+        posterKey: null,
+        masterKey: null,
+      } : title,
+      events: buyer ? [] : events.map((e) => ({
         from: e.from_status,
         to: e.to_status,
         actorUserId: e.actor_user_id,
@@ -533,7 +554,7 @@ async function assertLicensingReady(titleId: string) {
       ) as master_ok,
       exists (
         select 1 from bridge_assets a
-        where a.title_id = t.id and a.kind = 'poster' and coalesce(a.byte_size, 0) > 0
+        where a.title_id = t.id and a.kind in ('poster', 'poster_vertical') and coalesce(a.byte_size, 0) > 0
       ) as poster_ok,
       exists (
         select 1 from bridge_destination_packages p
@@ -593,7 +614,7 @@ export const advanceTitle = createServerFn({ method: "POST" })
       }>`select kind,s3_key from bridge_assets where title_id=${title.id} and byte_size>0`;
       if (
         !verified.some((a) => a.kind === "master" && a.s3_key === title.masterKey) ||
-        !verified.some((a) => a.kind === "poster" && a.s3_key === title.posterKey)
+        !verified.some((a) => ["poster", "poster_vertical"].includes(a.kind) && a.s3_key === title.posterKey)
       )
         throw new Error("Verified master and artwork required before QC");
     }
@@ -616,6 +637,7 @@ export const advanceTitle = createServerFn({ method: "POST" })
       }>`select status from bridge_titles where id=${title.id} for update`;
       if (!locked || locked.status !== title.status)
         throw new Error("Title changed; refresh before retrying");
+      if (data.to === "PREPARING") await assertSevenFilesStorageVerified(tx, title.id);
       if (data.to === "QC_REVIEW") await assertVerifiedTitleIngestReady(tx, title.id);
       await recordTransition(
         {

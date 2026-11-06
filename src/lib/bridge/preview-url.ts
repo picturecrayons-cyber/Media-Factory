@@ -1,6 +1,7 @@
-/** Browser playback needs a media type and inline disposition.
- * The stored object is not rewritten. These are response overrides on the read link. */
+/** First-party stream endpoints own media headers; legacy absolute read links use OCI response overrides. */
 export function previewUrlFor(signedUrl: string, kind: string, contentType: string | null) {
+  // First-party proxy endpoints already set inline media headers and use an opaque token.
+  if (signedUrl.startsWith("/")) return signedUrl;
   const url = new URL(signedUrl);
   const type = inlineContentType(kind, contentType);
   if (type) url.searchParams.set("httpResponseContentType", type);

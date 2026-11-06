@@ -5,12 +5,19 @@ import { Button } from "@/components/ui/button";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { StoryConceptDesk } from "@/components/bridge/story-concept-desk";
-import { listAdminWorkstations, reviewAdminTitle, setBuyerPublicationGate } from "@/lib/bridge/admin-workstations";
+import {
+  listAdminWorkstations,
+  listTestDataCleanupCandidates,
+  reviewAdminTitle,
+  setBuyerPublicationGate,
+  verifyOciAssetForAdmin,
+  verifyOciBucketForAdmin,
+} from "@/lib/bridge/admin-workstations";
 import { listDuplicateReviews, openDuplicateReview, decideDuplicateReview } from "@/lib/bridge/duplicate-reconciliation";
 
 export const Route = createFileRoute("/admin/workstations")({ component: AdminWorkstations });
 
-const TABS = ["Titles", "Concepts", "QC", "Rights", "Assets", "Buyers", "Deliveries", "Audit"] as const;
+const TABS = ["Titles", "Concepts", "QC", "Rights", "Buyers", "Deliveries", "Internal Audit", "Audit History"] as const;
 type Tab = (typeof TABS)[number];
 
 const STATUS_LABELS: Record<string, string> = {
@@ -22,12 +29,12 @@ const STATUS_LABELS: Record<string, string> = {
 function AdminWorkstations() {
   return (
     <RequireBridge allow="internal">
-      {(actor) => <BridgeShell actor={actor} title="Admin"><WorkstationBody /></BridgeShell>}
+      {(actor) => <BridgeShell actor={actor} title="Admin Desk"><WorkstationBody actor={actor} /></BridgeShell>}
     </RequireBridge>
   );
 }
 
-function WorkstationBody() {
+function WorkstationBody({ actor }: { actor: { internalRole: string | null } }) {
   const qc = useQueryClient();
   const query = useQuery({ queryKey: ["admin-workstations"], queryFn: () => listAdminWorkstations() });
   const review = useMutation({
@@ -52,7 +59,7 @@ function WorkstationBody() {
   return (
     <div className="space-y-6">
       <section className="rounded-3xl border border-line bg-surface p-6 sm:p-8">
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">Bridge Admin</p>
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">Internal operations</p>
         <div className="mt-2 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <h2 className="font-display text-3xl font-semibold">Control titles. Clear gates. Release safely.</h2>
@@ -81,9 +88,6 @@ function WorkstationBody() {
       ) : activeTab === "Rights" ? (
         <ReviewQueue title="Rights Review" description="Clear ownership, territory, language and window before licensing." titles={rightsQueue}
           actions={[["APPROVE", "Approve → Licensing"], ["REJECT", "Reject"]]} mutation={review} />
-      ) : activeTab === "Assets" ? (
-        <SimpleTable title="Assets" description={data.assets.length + " base assets · " + data.assetVersions.length + " versioned assets"}
-          rows={data.assets} fields={["kind", "s3_key", "content_type", "byte_size"]} />
       ) : activeTab === "Buyers" ? (
         <BuyerRelease titles={data.titles} qc={data.qc} legal={data.legal} gate={gate}
           onGate={(titleId, gateName) => gate.mutate({ data: { titleId, gate: gateName as "OTT", decision: "PASS" } })} />
@@ -96,6 +100,8 @@ function WorkstationBody() {
           <SimpleTable title="Bridge Publications" description={data.publications.length + " persisted authorization records"}
             rows={data.publications} titleName={titleName} fields={["bridge_title_id", "authorization_status", "territories", "languages", "window_end"]} />
         </div>
+      ) : activeTab === "Internal Audit" ? (
+        <InternalAudit assets={data.assets} isStorageAdmin={actor.internalRole === "admin" || actor.internalRole === "super_admin"} />
       ) : (
         <SimpleTable title="Audit History" description="Persisted operator activity. No UI-only decisions."
           rows={data.audit} fields={["action", "entity_type", "entity_id", "actor_user_id", "created_at"]} />
@@ -165,4 +171,121 @@ function SimpleTable({ title, description, rows, fields, titleName }: { title: s
 }
 function BuyerRelease({ titles, onGate }: { titles: any[]; qc?: any; legal?: any; gate?: any; onGate: (titleId: string, gateName: string) => void }) {
   return <section className="space-y-3"><SectionHeader title="Buyer release" description="Pass a gate only after the required check." />{titles.map((t) => <div key={t.id} className="flex items-center justify-between rounded-2xl border border-line p-4"><span>{t.name}</span><ActionButton label="Pass gate" onClick={() => onGate(t.id, "buyer")} /></div>)}</section>;
+}
+
+
+function InternalAudit({ assets, isStorageAdmin }: { assets: any[]; isStorageAdmin: boolean }) {
+  const qc = useQueryClient();
+  const bucket = useMutation({
+    mutationFn: () => verifyOciBucketForAdmin(),
+  });
+  const cleanup = useQuery({
+    queryKey: ["bridge-test-data-cleanup-preview"],
+    queryFn: () => listTestDataCleanupCandidates(),
+    enabled: isStorageAdmin,
+  });
+  const verifyAsset = useMutation({
+    mutationFn: (assetId: string) => verifyOciAssetForAdmin({ data: { assetId } }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-workstations"] }),
+  });
+  const storageAssets = assets.filter((asset) => asset.verified_object_key || asset.s3_key);
+  return (
+    <div className="space-y-6">
+      <section className="space-y-3 rounded-2xl border border-line bg-surface p-5">
+        <div>
+          <h3 className="font-display text-2xl font-semibold">Storage provenance & OCI verification</h3>
+          <p className="text-sm text-muted">Internal-only view of verified object references, bucket metadata and read-only provider checks.</p>
+        </div>
+        {!isStorageAdmin ? (
+          <p className="rounded-xl border border-line p-4 text-sm text-muted">Storage audit and cleanup preview require Admin or Super Admin privileges.</p>
+        ) : (
+          <>
+            <div className="flex flex-wrap items-center gap-3">
+              <Button disabled={bucket.isPending} onClick={() => bucket.mutate()}>
+                {bucket.isPending ? "Checking OCI…" : "Verify OCI bucket access"}
+              </Button>
+              {bucket.data ? <span className="text-xs text-muted">Verified {bucket.data.verifiedAt} · {bucket.data.region}</span> : null}
+            </div>
+            {bucket.isError ? <p role="alert" className="text-sm text-red-500">{bucket.error instanceof Error ? bucket.error.message : "OCI bucket verification failed"}</p> : null}
+            {bucket.data ? (
+              <dl className="grid gap-2 rounded-xl border border-line p-3 text-xs sm:grid-cols-2">
+                <div><dt className="font-semibold">Provider</dt><dd>{bucket.data.provider}</dd></div>
+                <div><dt className="font-semibold">Bucket</dt><dd className="break-all">{bucket.data.bucket}</dd></div>
+                <div><dt className="font-semibold">Namespace</dt><dd className="break-all">{bucket.data.namespace}</dd></div>
+                <div><dt className="font-semibold">Endpoint</dt><dd className="break-all">{bucket.data.endpoint}</dd></div>
+              </dl>
+            ) : null}
+            <div className="overflow-x-auto rounded-xl border border-line">
+              <table className="w-full min-w-[1440px] text-left text-xs">
+                <thead className="border-b border-line text-muted"><tr>
+                  {["Source / verified object", "Kind", "Provider", "Bucket", "Namespace", "Region", "Endpoint", "Object version", "Generation", "SHA-256", "Verified at", "OCI HEAD"].map((label) => <th key={label} className="px-3 py-3">{label}</th>)}
+                </tr></thead>
+                <tbody className="divide-y divide-line">
+                  {storageAssets.slice(0, 100).map((asset) => (
+                    <tr key={asset.id}>
+                      <td className="max-w-[280px] break-all px-3 py-3 font-mono">
+                        <span className="block text-muted">Source: {asset.source_object_key ?? "—"}</span>
+                        <span className="mt-1 block">Verified: {asset.verified_object_key ?? asset.s3_key ?? asset.id}</span>
+                      </td>
+                      <td className="px-3 py-3">{asset.kind}</td>
+                      <td className="px-3 py-3">{asset.storage_provider ?? "—"}</td>
+                      <td className="px-3 py-3">{asset.storage_bucket ?? "—"}</td>
+                      <td className="px-3 py-3">{asset.storage_namespace ?? "—"}</td>
+                      <td className="px-3 py-3">{asset.storage_region ?? "—"}</td>
+                      <td className="max-w-[220px] break-all px-3 py-3">{asset.storage_endpoint ?? "—"}</td>
+                      <td className="max-w-[160px] break-all px-3 py-3">{asset.object_version_id ?? "—"}</td>
+                      <td className="max-w-[160px] break-all px-3 py-3">{asset.object_generation ?? "—"}</td>
+                      <td className="max-w-[180px] break-all px-3 py-3">{asset.checksum_sha256 ?? "—"}</td>
+                      <td className="px-3 py-3">{asset.storage_verified_at ? String(asset.storage_verified_at) : "—"}</td>
+                      <td className="px-3 py-3">
+                        <Button size="sm" variant="outline" disabled={verifyAsset.isPending || !asset.verified_object_key} onClick={() => verifyAsset.mutate(asset.id)}>Run HEAD check</Button>
+                      </td>
+                    </tr>
+                  ))}
+                  {!storageAssets.length ? <tr><td colSpan={12} className="px-3 py-5 text-muted">No asset provenance records returned.</td></tr> : null}
+                </tbody>
+              </table>
+            </div>
+            {verifyAsset.data ? <p role="status" className="text-sm">Last object check: {verifyAsset.data.matchesRecordedSize ? "PASS — recorded size matches OCI" : "FAIL — recorded size differs from OCI"} ({verifyAsset.data.observedByteSize} bytes)</p> : null}
+            {verifyAsset.isError ? <p role="alert" className="text-sm text-red-500">{verifyAsset.error instanceof Error ? verifyAsset.error.message : "Object verification failed"}</p> : null}
+          </>
+        )}
+      </section>
+
+      <section className="space-y-3 rounded-2xl border border-line bg-surface p-5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3 className="font-display text-2xl font-semibold">Test-data cleanup preview</h3>
+            <p className="text-sm text-muted">STAGING DB only · dry-run candidates only. This tool does not delete database rows, files, multipart sessions or storage objects.</p>
+          </div>
+          {isStorageAdmin ? <Button size="sm" variant="outline" disabled={cleanup.isFetching} onClick={() => void cleanup.refetch()}>{cleanup.isFetching ? "Scanning…" : "Run dry-run scan"}</Button> : null}
+        </div>
+        {!isStorageAdmin ? <p className="text-sm text-muted">Admin or Super Admin access required.</p> : cleanup.isPending ? <p className="text-sm text-muted">Scanning candidate titles…</p> : cleanup.isError ? <p role="alert" className="text-sm text-red-500">Cleanup inventory unavailable.</p> : (
+          <>
+            <p className="text-sm font-semibold">{cleanup.data.candidates.length} possible test-data title(s) found.</p>
+            <div className="overflow-x-auto rounded-xl border border-line">
+              <table className="w-full min-w-[760px] text-left text-xs">
+                <thead className="border-b border-line text-muted"><tr>
+                  {["Title", "Status", "Assets", "Rights", "Legal", "Packages", "Publications"].map((label) => <th key={label} className="px-3 py-3">{label}</th>)}
+                </tr></thead>
+                <tbody className="divide-y divide-line">
+                  {cleanup.data.candidates.map((item: any) => <tr key={item.id}>
+                    <td className="px-3 py-3"><span className="font-semibold">{item.name}</span><span className="mt-1 block break-all font-mono text-muted">{item.id}</span></td>
+                    <td className="px-3 py-3">{item.status}</td>
+                    <td className="px-3 py-3">{item.asset_count}</td>
+                    <td className="px-3 py-3">{item.rights_count}</td>
+                    <td className="px-3 py-3">{item.legal_count}</td>
+                    <td className="px-3 py-3">{item.package_count}</td>
+                    <td className="px-3 py-3">{item.publication_count}</td>
+                  </tr>)}
+                  {!cleanup.data.candidates.length ? <tr><td colSpan={7} className="px-3 py-5 text-muted">No obvious test/demo/fixture/sample title names found. This is not proof that no test data exists.</td></tr> : null}
+                </tbody>
+              </table>
+            </div>
+            <p className="text-xs text-muted">Deletion remains blocked pending a separately approved, dependency-aware cleanup plan and exact environment confirmation.</p>
+          </>
+        )}
+      </section>
+    </div>
+  );
 }

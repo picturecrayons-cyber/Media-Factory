@@ -49,22 +49,23 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
     "master", "screener", "poster_vertical", "poster_horizontal",
     "thumbnail", "subtitle", "censor_certificate",
   ] as const;
-  const qcFileCount = requiredQcKinds.filter((kind) =>
-    assetsQuery.data?.assets.some((asset) =>
-      asset.verified &&
-      (asset.kind === kind || (kind === "poster_vertical" && asset.kind === "poster")) &&
-      Boolean(
-        asset.storageLocation?.provider &&
-        asset.storageLocation.objectKey &&
-        asset.storageLocation.bucket &&
-        asset.storageLocation.namespace &&
-        asset.storageLocation.region &&
-        asset.storageLocation.endpoint &&
-        asset.storageLocation.checksumSha256 &&
-        asset.storageLocation.verifiedAt
-      )
-    )
-  ).length;
+  const qcFileCount = requiredQcKinds.filter((kind) => {
+    // listTitleAssets is newest-first; a pending replacement must supersede an older verified file.
+    const latest = assetsQuery.data?.assets.find((asset) =>
+      asset.kind === kind || (kind === "poster_vertical" && asset.kind === "poster")
+    );
+    return Boolean(
+      latest?.verified &&
+      latest.storageLocation?.provider &&
+      latest.storageLocation.objectKey &&
+      latest.storageLocation.bucket &&
+      latest.storageLocation.namespace &&
+      latest.storageLocation.region &&
+      latest.storageLocation.endpoint &&
+      latest.storageLocation.checksumSha256 &&
+      latest.storageLocation.verifiedAt
+    );
+  }).length;
   const qcFilesReady = !assetsQuery.isPending && !assetsQuery.isFetching && !assetsQuery.isError && qcFileCount === 7;
   const canFinance = canOperateOnTitle(actor, title, "title.read_own", "finance.read");
   const revenue = useQuery({
@@ -184,14 +185,27 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                   ? "Upload and verify all seven required files: main film, trailer, vertical poster, horizontal artwork, thumbnail, subtitles, and censor/legal certificate. Submit for QC unlocks only at 7/7 Storage verified."
                   : `Lifecycle: ${title.status}. QC: ${workflow.data?.qc?.status ?? "Not reviewed"}.`}
               </p>
-              {title.status === "PREPARING" ? (
-                <p className="text-sm" role="status" aria-live="polite">
-                  {assetsQuery.isPending || assetsQuery.isFetching
-                    ? "Storage verification: checking the seven mandatory files…"
-                    : assetsQuery.isError
-                      ? "Storage verification unavailable. Submit for QC is disabled."
-                      : `Storage verified: ${qcFileCount}/7 mandatory files.`}
-                </p>
+              {["UPLOADING", "PREPARING"].includes(title.status) ? (
+                <div className="rounded-xl border border-line bg-elevated/40 p-4" aria-live="polite">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-sm font-semibold">Package readiness</span>
+                    <span className="text-sm font-semibold tabular-nums">
+                      {assetsQuery.isPending || assetsQuery.isFetching ? "Checking…" : assetsQuery.isError ? "Unavailable" : `${qcFileCount}/7 verified`}
+                    </span>
+                  </div>
+                  <div className="mt-2 h-2 overflow-hidden rounded-full bg-line">
+                    <div className="h-full rounded-full bg-accent transition-all" style={{ width: `${assetsQuery.isError || assetsQuery.isPending || assetsQuery.isFetching ? 0 : (qcFileCount / 7) * 100}%` }} />
+                  </div>
+                  <p className="mt-2 text-xs text-muted">
+                    {assetsQuery.isPending || assetsQuery.isFetching
+                      ? "Checking server-confirmed storage provenance…"
+                      : assetsQuery.isError
+                        ? "Storage verification unavailable. Workflow actions remain disabled."
+                        : qcFilesReady
+                          ? "All mandatory files are verified. Package workflow actions are available."
+                          : `${7 - qcFileCount} mandatory file(s) still need complete Storage verified status.`}
+                  </p>
+                </div>
               ) : null}
               {canOperateOnTitle(actor, title, "title.advance_upload", "title.ingest_internal") &&
               ["DRAFT", "UPLOADING", "PREPARING"].includes(title.status)
@@ -213,7 +227,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                                 : "QC_REVIEW",
                         },
                       }),
-                    title.status === "PREPARING" && !qcFilesReady,
+                    ["UPLOADING", "PREPARING"].includes(title.status) && !qcFilesReady,
                   )
                 : null}
               {title.status === "QC_REVIEW" && hasPermission(actor, "title.qc_review") ? (

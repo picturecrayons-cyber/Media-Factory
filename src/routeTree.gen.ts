@@ -42,6 +42,7 @@ import { Route as ApiA2aIndexRouteImport } from './routes/api/a2a/index'
 import { Route as ApiA2aAgentCardRouteImport } from './routes/api/a2a/agent-card'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as ApiRazorpayWebhookRouteImport } from './routes/api/razorpay/webhook'
+import { Route as ApiAssetsStreamRouteImport } from './routes/api/assets/stream'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -208,6 +209,11 @@ const ApiRazorpayWebhookRoute = ApiRazorpayWebhookRouteImport.update({
   path: '/api/razorpay/webhook',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiAssetsStreamRoute = ApiAssetsStreamRouteImport.update({
+  id: '/api/assets/stream',
+  path: '/api/assets/stream',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -242,6 +248,7 @@ export interface FileRoutesByFullPath {
   '/api/a2a/agent-card': typeof ApiA2aAgentCardRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/razorpay/webhook': typeof ApiRazorpayWebhookRoute
+  '/api/assets/stream': typeof ApiAssetsStreamRoute
   '/api/a2a/': typeof ApiA2aIndexRoute
 }
 export interface FileRoutesByTo {
@@ -277,6 +284,7 @@ export interface FileRoutesByTo {
   '/api/a2a/agent-card': typeof ApiA2aAgentCardRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/razorpay/webhook': typeof ApiRazorpayWebhookRoute
+  '/api/assets/stream': typeof ApiAssetsStreamRoute
   '/api/a2a': typeof ApiA2aIndexRoute
 }
 export interface FileRoutesById {
@@ -313,6 +321,7 @@ export interface FileRoutesById {
   '/api/a2a/agent-card': typeof ApiA2aAgentCardRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/razorpay/webhook': typeof ApiRazorpayWebhookRoute
+  '/api/assets/stream': typeof ApiAssetsStreamRoute
   '/api/a2a/': typeof ApiA2aIndexRoute
 }
 export interface FileRouteTypes {
@@ -350,6 +359,7 @@ export interface FileRouteTypes {
     | '/api/a2a/agent-card'
     | '/api/auth/$'
     | '/api/razorpay/webhook'
+    | '/api/assets/stream'
     | '/api/a2a/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -385,6 +395,7 @@ export interface FileRouteTypes {
     | '/api/a2a/agent-card'
     | '/api/auth/$'
     | '/api/razorpay/webhook'
+    | '/api/assets/stream'
     | '/api/a2a'
   id:
     | '__root__'
@@ -420,6 +431,7 @@ export interface FileRouteTypes {
     | '/api/a2a/agent-card'
     | '/api/auth/$'
     | '/api/razorpay/webhook'
+    | '/api/assets/stream'
     | '/api/a2a/'
   fileRoutesById: FileRoutesById
 }
@@ -455,6 +467,7 @@ export interface RootRouteChildren {
   ApiA2aAgentCardRoute: typeof ApiA2aAgentCardRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiRazorpayWebhookRoute: typeof ApiRazorpayWebhookRoute
+  ApiAssetsStreamRoute: typeof ApiAssetsStreamRoute
   ApiA2aIndexRoute: typeof ApiA2aIndexRoute
 }
 
@@ -691,6 +704,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiRazorpayWebhookRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/assets/stream': {
+      id: '/api/assets/stream'
+      path: '/api/assets/stream'
+      fullPath: '/api/assets/stream'
+      preLoaderRoute: typeof ApiAssetsStreamRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -736,6 +756,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiA2aAgentCardRoute: ApiA2aAgentCardRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiRazorpayWebhookRoute: ApiRazorpayWebhookRoute,
+  ApiAssetsStreamRoute: ApiAssetsStreamRoute,
   ApiA2aIndexRoute: ApiA2aIndexRoute,
 }
 export const routeTree = rootRouteImport

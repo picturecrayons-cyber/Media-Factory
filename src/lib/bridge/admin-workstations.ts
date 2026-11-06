@@ -7,6 +7,8 @@ import { requireVerifiedActor } from "./session";
 import { writeAudit } from "./audit";
 import { assertNotDevUser } from "./guards";
 import { assertVerifiedTitleIngestReady } from "./qc-readiness";
+import { verifyBucketAccess, verifyObject } from "./oci-object-storage.server";
+import { bridgeEnv } from "./env.ts";
 
 async function actorFor(userId: string) {
   assertNotDevUser(userId);
@@ -20,10 +22,17 @@ export const listAdminWorkstations = createServerFn({ method: "GET" })
     if (!actor.internalRole) throw new Error("Forbidden");
     assertPermission(actor, "title.read_catalog");
     const sql = await getSql();
+    const storageAdmin = actor.internalRole === "admin" || actor.internalRole === "super_admin";
+    const assetsQuery = storageAdmin
+      ? sql`select id, title_id, kind, s3_key, source_object_key, content_type, byte_size, storage_provider, storage_bucket, storage_namespace, storage_region, storage_endpoint, checksum_sha256, verified_object_key, object_version_id, object_generation, storage_verified_at, created_at from bridge_assets order by created_at desc limit 300`
+      : sql`select id, title_id, kind, content_type, byte_size, created_at from bridge_assets order by created_at desc limit 300`;
+    const assetVersionsQuery = storageAdmin
+      ? sql`select id, title_id, asset_group, asset_type, version, language, codec, s3_key, processing_state, created_at from bridge_asset_versions order by created_at desc limit 300`
+      : sql`select id, title_id, asset_group, asset_type, version, language, codec, processing_state, created_at from bridge_asset_versions order by created_at desc limit 300`;
     const [titles, assets, assetVersions, qc, legal, rights, packages, publications, profiles, audit] = await Promise.all([
       sql`select id, name, owner_user_id, owner_account_type, status, language, updated_at from bridge_titles order by updated_at desc limit 200`,
-      sql`select id, title_id, kind, s3_key, content_type, byte_size, created_at from bridge_assets order by created_at desc limit 300`,
-      sql`select id, title_id, asset_group, asset_type, version, language, codec, s3_key, processing_state, created_at from bridge_asset_versions order by created_at desc limit 300`,
+      assetsQuery,
+      assetVersionsQuery,
       sql`select id, title_id, asset_version_id, status, automated_findings, reviewer_findings, reviewed_by, reviewed_at, created_at from bridge_qc_cases order by created_at desc limit 200`,
       sql`select id, title_id, status, classification, evidence, restrictions, reviewed_by, reviewed_at, created_at from bridge_legal_cases order by created_at desc limit 200`,
       sql`select id, title_id, grant_type, territories, languages, media, window_start, window_end, exclusivity, status, created_by, created_at from bridge_rights_grants order by created_at desc limit 200`,
@@ -151,4 +160,108 @@ export const setBuyerPublicationGate = createServerFn({ method: "POST" })
     await writeAudit({actorUserId:actor.userId,action:`buyer_gate.${data.gate.toLowerCase()}.${data.decision.toLowerCase()}`,entityType:"bridge_title",entityId:data.titleId,metadata:{gate:data.gate,decision:data.decision,notes:data.notes??null}});
     const result=await sql<{ok:boolean}>`select public.bridge_title_buyer_visibility(${data.titleId}) as ok`;
     return {ok:true,gate:data.gate,decision:data.decision,publishable:result[0]?.ok===true};
+  });
+
+function assertStorageAdmin(actor: { internalRole: string | null }) {
+  if (actor.internalRole !== "admin" && actor.internalRole !== "super_admin") {
+    throw new Error("Admin or Super Admin access required");
+  }
+}
+
+export const verifyOciBucketForAdmin = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }) => {
+    const actor = await actorFor(context.userId);
+    assertStorageAdmin(actor);
+    const result = await verifyBucketAccess();
+    await writeAudit({
+      actorUserId: actor.userId,
+      action: "storage.bucket_verified",
+      entityType: "oci_bucket",
+      entityId: result.bucket,
+      metadata: { provider: result.provider, region: result.region, verifiedAt: result.verifiedAt },
+    });
+    return result;
+  });
+
+export const verifyOciAssetForAdmin = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({ assetId: z.string().min(8) }))
+  .handler(async ({ context, data }) => {
+    const actor = await actorFor(context.userId);
+    assertStorageAdmin(actor);
+    const sql = await getSql();
+    const rows = await sql<{
+      id: string; title_id: string; kind: string; verified_object_key: string | null;
+      byte_size: number | null; content_type: string | null; checksum_sha256: string | null;
+    }>`
+      select id, title_id, kind, verified_object_key, byte_size, content_type, checksum_sha256
+      from bridge_assets where id = ${data.assetId} limit 1
+    `;
+    const asset = rows[0];
+    if (!asset?.verified_object_key) throw new Error("Verified object reference is missing");
+    const result = await verifyObject(asset.verified_object_key, asset.content_type);
+    const matchesRecordedSize = Number(asset.byte_size) === result.byteSize;
+    await writeAudit({
+      actorUserId: actor.userId,
+      action: "storage.object_verified",
+      entityType: "bridge_asset",
+      entityId: asset.id,
+      metadata: { provider: "oci", matchesRecordedSize, observedByteSize: result.byteSize },
+    });
+    return { assetId: asset.id, matchesRecordedSize, observedByteSize: result.byteSize, contentType: result.contentType };
+  });
+
+function assertTestingDatabaseForCleanup() {
+  const expectedProject = "jbymleftneggcgutlcqu";
+  const supabaseUrl = bridgeEnv.supabaseUrl();
+  const databaseUrl = bridgeEnv.databaseUrl();
+  if (!supabaseUrl || !databaseUrl) {
+    throw new Error("Cannot verify both Supabase project and Postgres connection; cleanup preview is blocked");
+  }
+  const supabaseHost = new URL(supabaseUrl).hostname;
+  const database = new URL(databaseUrl);
+  const databaseIdentity = [
+    database.hostname,
+    decodeURIComponent(database.username),
+    database.pathname,
+  ].join(" ").toLowerCase();
+  if (
+    !supabaseHost.startsWith(expectedProject + ".") ||
+    !databaseIdentity.includes(expectedProject)
+  ) {
+    throw new Error("Test-data cleanup preview is restricted to STAGING DB jbymleftneggcgutlcqu");
+  }
+}
+
+/** Read-only dry-run inventory. No row or object is deleted by this endpoint. */
+export const listTestDataCleanupCandidates = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }) => {
+    const actor = await actorFor(context.userId);
+    assertStorageAdmin(actor);
+    assertTestingDatabaseForCleanup();
+    const sql = await getSql();
+    const rows = await sql<{
+      id: string; name: string; status: string; updated_at: string | Date;
+      asset_count: number; rights_count: number; legal_count: number;
+      package_count: number; publication_count: number;
+    }>`
+      select t.id, t.name, t.status, t.updated_at,
+        (select count(*)::int from bridge_assets a where a.title_id=t.id) as asset_count,
+        (select count(*)::int from bridge_rights_grants r where r.title_id=t.id) as rights_count,
+        (select count(*)::int from bridge_legal_cases l where l.title_id=t.id) as legal_count,
+        (select count(*)::int from bridge_destination_packages p where p.title_id=t.id) as package_count,
+        (select count(*)::int from bridge_loop_publications p where p.bridge_title_id=t.id) as publication_count
+      from bridge_titles t
+      where lower(t.name) ~ '(^|[^a-z0-9])(test|demo|fixture|sample)([^a-z0-9]|$)'
+      order by t.updated_at desc limit 100
+    `;
+    await writeAudit({
+      actorUserId: actor.userId,
+      action: "test_data.cleanup_dry_run",
+      entityType: "bridge_title",
+      metadata: { candidateCount: rows.length, destructive: false },
+    });
+    return { candidates: rows, destructive: false };
   });

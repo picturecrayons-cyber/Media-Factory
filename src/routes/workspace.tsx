@@ -14,13 +14,17 @@ function Workspace() {
   const search=useMemo(()=>query.trim(),[query]);
   return <RequireBridge allow="workspace">{(actor)=>{
     const canCreate=hasPermission(actor,"title.create");
-    return <BridgeShell actor={actor} title="Titles">
+    return <BridgeShell actor={actor} title={actor.accountType === "studio" ? "Studio Portal" : "Creator workspace"}>
       <div className="space-y-5">
         <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h2 className="font-display text-xl font-semibold">Title library</h2>
-              <p className="mt-1 text-sm text-muted">Search and open the canonical Bridge record for every title.</p>
+              <h2 className="font-display text-xl font-semibold">{actor.accountType === "studio" ? "Studio dashboard" : "Title library"}</h2>
+              <p className="mt-1 text-sm text-muted">
+                {actor.accountType === "studio"
+                  ? "Manage your studio catalog. Open a title to see seven-file package readiness and stage-gated workflow actions."
+                  : "Search and open the canonical Bridge record for every title."}
+              </p>
             </div>
             {canCreate?<Button onClick={()=>setShowCreate(!showCreate)} className="rounded-full px-5">{showCreate?"Cancel":"New Title"}</Button>:null}
           </div>
