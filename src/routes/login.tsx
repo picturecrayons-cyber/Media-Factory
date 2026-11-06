@@ -38,8 +38,11 @@ function Login() {
           void navigate({ to: s.home || "/dashboard" });
         }
       })
-      .catch(() => {
-        void navigate({ to: "/onboarding" });
+      .catch((error: unknown) => {
+        console.error("[Login workspace resolution failed]", {
+          message: error instanceof Error ? error.message : "Unknown workspace error",
+        });
+        setError("Your account is signed in, but its Bridge workspace could not be loaded. Retry without signing out.");
       });
   }, [isPending, busy, error, authError, user, navigate]);
 
