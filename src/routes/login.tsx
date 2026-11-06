@@ -15,7 +15,7 @@ function isSafeRedirect(url: string | null): boolean {
 }
 
 function Login() {
-  const { user, isPending } = useCurrentUserState();
+  const { user, isPending, authError, retry } = useCurrentUserState();
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -25,7 +25,7 @@ function Login() {
 
   // If already authenticated with Supabase session, resolve profile and route to dashboard
   useEffect(() => {
-    if (isPending || !user) return;
+    if (isPending || busy || error || authError || !user) return;
     void getBridgeSession()
       .then((s) => {
         const nextParam =
@@ -41,7 +41,7 @@ function Login() {
       .catch(() => {
         void navigate({ to: "/onboarding" });
       });
-  }, [isPending, user, navigate]);
+  }, [isPending, busy, error, authError, user, navigate]);
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -51,7 +51,8 @@ function Login() {
     try {
       await signInWithEmail(email.trim(), password);
       // Session established; let the useEffect resolve profile or route
-      const s = await getBridgeSession().catch(() => null);
+      const s = await getBridgeSession();
+      if (!s?.home) throw new Error("Workspace session is unavailable. Please retry.");
       const nextParam =
         typeof window !== "undefined"
           ? new URLSearchParams(window.location.search).get("next")
@@ -96,7 +97,14 @@ function Login() {
           </p>
         </div>
 
-        <form className="space-y-4" onSubmit={(e) => void onSubmit(e)}>
+        {authError ? (
+        <div role="alert" className="rounded-xl border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-600 dark:text-red-400">
+          {authError}
+          <button type="button" onClick={retry} className="ml-2 font-semibold underline">Retry session</button>
+        </div>
+      ) : null}
+
+      <form className="space-y-4" onSubmit={(e) => void onSubmit(e)}>
           <label className="block text-sm font-medium text-fg">
             Email
             <input
@@ -159,6 +167,7 @@ function Login() {
               className="rounded-xl border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-600 dark:text-red-400"
             >
               {error}
+              <button type="button" onClick={() => setError(null)} className="ml-2 font-semibold underline">Retry workspace</button>
             </div>
           ) : null}
 
