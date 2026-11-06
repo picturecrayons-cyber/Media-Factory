@@ -193,10 +193,10 @@ export const verifyOciAssetForAdmin = createServerFn({ method: "POST" })
     const rows = await sql<{
       id: string; title_id: string; kind: string; verified_object_key: string | null;
       byte_size: number | null; content_type: string | null; checksum_sha256: string | null;
-    }>\`
+    }>`
       select id, title_id, kind, verified_object_key, byte_size, content_type, checksum_sha256
-      from bridge_assets where id = \${data.assetId} limit 1
-    \`;
+      from bridge_assets where id = ${data.assetId} limit 1
+    `;
     const asset = rows[0];
     if (!asset?.verified_object_key) throw new Error("Verified object reference is missing");
     const result = await verifyObject(asset.verified_object_key, asset.content_type);
@@ -222,7 +222,7 @@ export const listTestDataCleanupCandidates = createServerFn({ method: "GET" })
       id: string; name: string; status: string; updated_at: string | Date;
       asset_count: number; rights_count: number; legal_count: number;
       package_count: number; publication_count: number;
-    }>\`
+    }>`
       select t.id, t.name, t.status, t.updated_at,
         (select count(*)::int from bridge_assets a where a.title_id=t.id) as asset_count,
         (select count(*)::int from bridge_rights_grants r where r.title_id=t.id) as rights_count,
@@ -232,7 +232,7 @@ export const listTestDataCleanupCandidates = createServerFn({ method: "GET" })
       from bridge_titles t
       where lower(t.name) ~ '(^|[^a-z0-9])(test|demo|fixture|sample)([^a-z0-9]|$)'
       order by t.updated_at desc limit 100
-    \`;
+    `;
     await writeAudit({
       actorUserId: actor.userId,
       action: "test_data.cleanup_dry_run",
