@@ -238,3 +238,34 @@ test("persistence failure does not advance migration queue state", async () => {
   assert.match(successBlock, /set status = 'UPLOADED'/);
   assert.match(successBlock, /set status = 'VERIFIED'/);
 });
+
+
+test("storage provenance provider constraint accepts only OCI, AWS S3, and Cloudflare R2", async () => {
+  const db = new PGlite();
+  try {
+    await db.waitReady;
+    await db.exec("create role anon; create role authenticated;");
+    await db.exec(readFileSync(join(process.cwd(), "migrations/0004_bridge.sql"), "utf8"));
+    await db.exec(readFileSync(join(process.cwd(), "migrations/0022_bridge_asset_storage_provenance.sql"), "utf8"));
+    await db.exec(`
+      insert into bridge_titles (id, slug, name, owner_user_id, owner_account_type)
+      values ('provider-test-title', 'provider-test-title', 'Provider Test', 'creator', 'independent_creator');
+      insert into bridge_assets (id, title_id, kind, s3_key, created_by, storage_provider)
+      values
+        ('provider-oci', 'provider-test-title', 'poster', 'provider/oci', 'creator', 'oci'),
+        ('provider-s3', 'provider-test-title', 'poster', 'provider/s3', 'creator', 'aws_s3'),
+        ('provider-r2', 'provider-test-title', 'poster', 'provider/r2', 'creator', 'cloudflare_r2');
+    `);
+    const providers = (await db.query<{ storage_provider: string }>(
+      "select storage_provider from bridge_assets order by storage_provider",
+    )).rows.map((r) => r.storage_provider);
+    assert.deepEqual(providers, ["aws_s3", "cloudflare_r2", "oci"]);
+    await assert.rejects(
+      db.query(`insert into bridge_assets (id,title_id,kind,s3_key,created_by,storage_provider)
+        values ('provider-invalid','provider-test-title','poster','provider/invalid','creator','invalid_provider')`),
+      /bridge_assets_storage_provider_check|check constraint/i,
+    );
+  } finally {
+    await db.close();
+  }
+});
