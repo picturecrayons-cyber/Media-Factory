@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
-import { requestAssetDownload } from "@/lib/bridge/assets";
-import { previewUrlFor } from "@/lib/bridge/preview-url";
+import { createAssetStreamCapability } from "@/lib/bridge/assets";
 
 type PreviewAsset = {
   id: string;
@@ -45,9 +44,9 @@ export function AssetPosterSlot({ assets }: { assets: PreviewAsset[] }) {
     setUrl(null);
     setFailed(false);
     if (!poster) return () => { active = false; };
-    void requestAssetDownload({ data: { assetId: poster.id } })
+    void createAssetStreamCapability({ data: { assetId: poster.id } })
       .then((signed) => {
-        if (active && signed?.url) setUrl(previewUrlFor(signed.url, poster.kind, poster.contentType));
+        if (active && signed?.url) setUrl(signed.url);
         else if (active) setFailed(true);
       })
       .catch(() => { if (active) setFailed(true); });
@@ -86,9 +85,9 @@ export function AssetPreviewGallery({ assets }: { assets: PreviewAsset[] }) {
     setLoadingId(asset.id);
     try {
       // Resolve an expiring, server-authorized URL only after the user requests a preview.
-      const signed = await requestAssetDownload({ data: { assetId: asset.id } });
+      const signed = await createAssetStreamCapability({ data: { assetId: asset.id } });
       if (!signed?.url) throw new Error("Preview URL unavailable");
-      setPreviewUrl(previewUrlFor(signed.url, asset.kind, asset.contentType));
+      setPreviewUrl(signed.url);
     } catch {
       setFailedId(asset.id);
     } finally {
