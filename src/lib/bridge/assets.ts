@@ -711,7 +711,7 @@ export const listTitleAssets = createServerFn({ method: "GET" })
         object_generation, storage_verified_at
       from bridge_assets where title_id = ${title.id}
         and (not ${buyer} or byte_size > 0)
-      order by created_at desc
+      order by created_at desc, id desc
     `;
     return {
       assets: rows
