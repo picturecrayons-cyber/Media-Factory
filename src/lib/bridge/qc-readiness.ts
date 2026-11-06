@@ -16,7 +16,7 @@ export async function assertSevenFilesStorageVerified(tx: Sql, titleId: string) 
     storage_provider: string | null; storage_bucket: string | null; storage_namespace: string | null;
     storage_region: string | null; storage_endpoint: string | null; storage_verified_at: string | Date | null;
   }>`
-    select kind, checksum_sha256, verified_object_key, storage_provider, storage_bucket,
+    select kind, created_at, checksum_sha256, verified_object_key, storage_provider, storage_bucket,
       storage_namespace, storage_region, storage_endpoint, storage_verified_at
     from bridge_assets where title_id=${titleId} order by created_at desc
   `;
