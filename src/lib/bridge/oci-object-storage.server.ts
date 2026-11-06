@@ -256,14 +256,14 @@ export async function listMultipartUploadParts(objectKey: string, uploadId: stri
     const path = `/n/${encodeURIComponent(namespace)}/b/${encodeURIComponent(cfg.bucket)}/u/${encodedObjectName(objectKey)}?${query.toString()}`;
     const res = await signedFetch({ cfg, method: "GET", path });
     if (!res.ok) throw new Error(`OCI multipart part listing failed (${res.status})`);
-    const body = await res.json() as { items?: Array<{ partNumber?: number; partNum?: number; etag?: string; size?: number }> };
+    const body = await res.json() as { items?: Array<{ partNumber?: number; partNum?: number; etag?: string; size?: number | string }> };
     for (const item of body.items ?? []) {
       const partNumber = item.partNumber ?? item.partNum;
       if (!Number.isSafeInteger(partNumber) || typeof item.etag !== "string" ||
-          !Number.isSafeInteger(item.size) || (item.size ?? 0) <= 0) {
+          !Number.isSafeInteger(Number(item.size)) || Number(item.size ?? 0) <= 0) {
         throw new Error("OCI returned an invalid multipart part record");
       }
-      all.push({ partNumber: partNumber!, etag: item.etag.replaceAll('"', ""), size: item.size! });
+      all.push({ partNumber: partNumber!, etag: item.etag.replaceAll('"', ""), size: Number(item.size) });
     }
     page = res.headers.get("opc-next-page");
     if (all.length > 10_000) throw new Error("OCI multipart upload exceeds the 10,000-part limit");
