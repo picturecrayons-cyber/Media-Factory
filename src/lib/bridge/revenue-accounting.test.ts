@@ -31,3 +31,16 @@ test("payment recording requires exact full reconciled settlement", () => {
   assert.throws(() => assertFullSettlementAmount(8_751, 8_750), /must equal the reconciled net/);
   assert.throws(() => assertFullSettlementAmount(8_750, null), /reconciled net amount/);
 });
+
+
+test("reported net rejects safe-integer overflow", () => {
+  assert.throws(() => computeReportedNetMinor(Number.MAX_SAFE_INTEGER, 1), /safe minor-unit range/);
+});
+
+test("payment recording requires exact full reconciled settlement", () => {
+  assert.equal(assertFullSettlementAmount(8_750, 8_750), undefined);
+  assert.throws(() => assertFullSettlementAmount(0, 8_750), /positive safe minor-unit/);
+  assert.throws(() => assertFullSettlementAmount(8_749, 8_750), /must equal the reconciled net/);
+  assert.throws(() => assertFullSettlementAmount(8_751, 8_750), /must equal the reconciled net/);
+  assert.throws(() => assertFullSettlementAmount(8_750, null), /reconciled net amount/);
+});
