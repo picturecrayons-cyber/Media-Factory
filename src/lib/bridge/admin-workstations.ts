@@ -47,17 +47,14 @@ export const reviewAdminTitle = createServerFn({ method: "POST" })
     const actor = await actorFor(context.userId);
     if (!actor.internalRole) throw new Error("Forbidden");
     const sql = await getSql();
-    const rows = await sql<{ id: string; status: string }>`select id, status from bridge_titles where id = ${data.titleId} limit 1`;
+    const rows = await sql<{ id: string; status: string; master_key: string | null; poster_key: string | null }>
+      `select id, status, master_key, poster_key from bridge_titles where id = ${data.titleId} limit 1`;
     const title = rows[0];
     if (!title) throw new Error("Title not found");
     let next: string | null = null;
     let action = "admin.review";
-    // This legacy generic reviewer endpoint cannot bind approvals to immutable
-    // current-asset / rights-grant evidence. Fail closed rather than minting
-    // buyer-visible PASSED or APPROVED cases from free-form notes.
-    if (data.decision === "PASS" || data.decision === "APPROVE") {
-      throw new Error("Evidence-bound QC/Legal approval is required; use the dedicated evidence review workflow.");
-    }
+    let qcEvidence: string | null = null;
+    let legalEvidence: string | null = null;
     if (data.decision === "ACCEPT") {
       assertPermission(actor, "title.advance_upload");
       if (title.status !== "PREPARING") throw new Error("Submission is not awaiting acceptance");
@@ -65,6 +62,20 @@ export const reviewAdminTitle = createServerFn({ method: "POST" })
     } else if (data.decision === "PASS") {
       assertPermission(actor, "title.qc_review");
       if (title.status !== "QC_REVIEW") throw new Error("Title is not in QC review");
+      if (!title.master_key || !title.poster_key) throw new Error("Current master and poster are required for QC approval");
+      const verifiedAssets = await sql<{ kind: string; s3_key: string }>`
+        select kind, s3_key from bridge_assets
+        where title_id = ${title.id} and byte_size > 0 and kind in ('master','poster')
+      `;
+      if (!verifiedAssets.some((asset) => asset.kind === "master" && asset.s3_key === title.master_key) ||
+          !verifiedAssets.some((asset) => asset.kind === "poster" && asset.s3_key === title.poster_key)) {
+        throw new Error("Verified current master and poster versions are required for QC approval");
+      }
+      qcEvidence = JSON.stringify([{
+        note: data.notes ?? null,
+        masterKey: title.master_key,
+        posterKey: title.poster_key,
+      }]);
       next = "RIGHTS_REVIEW"; action = "qc.pass";
     } else if (data.decision === "FAIL") {
       assertPermission(actor, "title.qc_review");
@@ -75,6 +86,27 @@ export const reviewAdminTitle = createServerFn({ method: "POST" })
     } else if (data.decision === "APPROVE") {
       assertPermission(actor, "title.rights_review");
       if (title.status !== "RIGHTS_REVIEW") throw new Error("Title is not in rights review");
+      const grants = await sql<{
+        id: string; created_by: string; territories: unknown; languages: unknown; media: unknown;
+        window_start: string | Date | null; window_end: string | Date | null;
+      }>`
+        select id, created_by, territories, languages, media, window_start, window_end
+        from bridge_rights_grants
+        where title_id = ${title.id} and status = 'DRAFT'
+          and created_by <> ${actor.userId}
+          and window_start is not null and window_start <= now()
+          and window_end is not null and window_end > now()
+        order by created_at desc
+      `;
+      const grant = grants.length === 1 ? grants[0] : null;
+      if (!grant ||
+          !Array.isArray(grant.territories) || grant.territories.length === 0 ||
+          !Array.isArray(grant.languages) || grant.languages.length === 0 ||
+          !Array.isArray(grant.media) || grant.media.length === 0) {
+        throw new Error("Exactly one active, complete rights draft from another user is required for Legal approval");
+      }
+      legalEvidence = JSON.stringify([{ grantId: grant.id, note: data.notes ?? null }]);
+      await sql`update bridge_rights_grants set status = 'VALID' where id = ${grant.id} and status = 'DRAFT'`;
       next = "LICENSING_READY"; action = "rights.approve";
     } else {
       assertPermission(actor, "title.rights_review");
@@ -85,8 +117,8 @@ export const reviewAdminTitle = createServerFn({ method: "POST" })
     }
     await sql`update bridge_titles set status = ${next}, updated_at = now() where id = ${title.id}`;
     await sql`insert into bridge_title_events (title_id, from_status, to_status, actor_user_id, note) values (${title.id}, ${title.status}, ${next}, ${actor.userId}, ${data.notes ?? null})`;
-    if (data.decision === "PASS") await sql`insert into bridge_qc_cases (title_id, status, reviewer_findings, reviewed_by, reviewed_at) values (${title.id}, 'PASSED', ${JSON.stringify(data.notes ? [{ note: data.notes }] : [])}::jsonb, ${actor.userId}, now())`;
-    if (data.decision === "APPROVE") await sql`insert into bridge_legal_cases (title_id, status, evidence, reviewed_by, reviewed_at) values (${title.id}, 'APPROVED', ${JSON.stringify(data.notes ? [{ note: data.notes }] : [])}::jsonb, ${actor.userId}, now())`;
+    if (data.decision === "PASS" && qcEvidence) await sql`insert into bridge_qc_cases (title_id, status, reviewer_findings, reviewed_by, reviewed_at) values (${title.id}, 'PASSED', ${qcEvidence}::jsonb, ${actor.userId}, now())`;
+    if (data.decision === "APPROVE" && legalEvidence) await sql`insert into bridge_legal_cases (title_id, status, evidence, reviewed_by, reviewed_at) values (${title.id}, 'APPROVED', ${legalEvidence}::jsonb, ${actor.userId}, now())`;
     await writeAudit({ actorUserId: actor.userId, action, entityType: "bridge_title", entityId: title.id, metadata: { from: title.status, to: next, notes: data.notes ?? null } });
     return { ok: true, status: next };
   });
