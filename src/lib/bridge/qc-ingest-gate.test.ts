@@ -1,9 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { evaluateVerifiedTitleIngestReadiness, REQUIRED_QC_ASSET_SLOTS } from "./qc-ingest-gate.ts";
+import { evaluateVerifiedTitleIngestReadiness, REQUIRED_QC_ASSET_SLOTS, type QCIngestAssetEvidence } from "./qc-ingest-gate.ts";
 
 const digest = "a".repeat(64);
-function completeAssets() {
+function completeAssets(): QCIngestAssetEvidence[] {
   return REQUIRED_QC_ASSET_SLOTS.map(({ kinds }, index) => ({
     kind: kinds[0], s3Key: `asset-${index}.verified/asset-${index}`,
     byteSize: 100 + index, checksumSha256: digest, provenanceVerified: true,
