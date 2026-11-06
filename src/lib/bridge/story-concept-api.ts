@@ -91,7 +91,7 @@ function requireCurationStaff(actor: { internalRole?: string | null }) {
 
 const createPayloadSchema = z.object({
   idempotencyKey: z.string().uuid(),
-  paymentId: z.string().uuid().optional(),
+  paymentId: z.string().min(8).max(160).optional(),
   titleName: z.string().min(1).max(160),
   logline: z.string().min(10).max(500),
   synopsis: z.string().min(40).max(8000),
@@ -169,7 +169,7 @@ export const createStoryConceptSubmission = createServerFn({ method: "POST" })
         const payment = await tx<{ id: string; amount_paise: number }>`
           select id, amount_paise
           from bridge_payments
-          where id = ${data.paymentId}::uuid
+          where id = ${data.paymentId}
             and user_id = ${actor.userId}
             and purpose = 'story_concept_submission'
             and status = 'captured'
