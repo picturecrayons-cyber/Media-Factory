@@ -5,13 +5,15 @@ import { Button } from "@/components/ui/button";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { StoryConceptDesk } from "@/components/bridge/story-concept-desk";
-import { listAdminWorkstations, reviewAdminTitle, setBuyerPublicationGate } from "@/lib/bridge/admin-workstations";
-import { listDuplicateReviews, openDuplicateReview, decideDuplicateReview } from "@/lib/bridge/duplicate-reconciliation";
 import {
+  listAdminWorkstations,
   listTestDataCleanupCandidates,
+  reviewAdminTitle,
+  setBuyerPublicationGate,
   verifyOciAssetForAdmin,
   verifyOciBucketForAdmin,
 } from "@/lib/bridge/admin-workstations";
+import { listDuplicateReviews, openDuplicateReview, decideDuplicateReview } from "@/lib/bridge/duplicate-reconciliation";
 
 export const Route = createFileRoute("/admin/workstations")({ component: AdminWorkstations });
 
@@ -229,7 +231,7 @@ function InternalAudit({ assets, isStorageAdmin }: { assets: any[]; isStorageAdm
                       <td className="max-w-[180px] break-all px-3 py-3">{asset.checksum_sha256 ?? "—"}</td>
                       <td className="px-3 py-3">{asset.storage_verified_at ? String(asset.storage_verified_at) : "—"}</td>
                       <td className="px-3 py-3">
-                        <Button size="sm" variant="outline" disabled={verifyAsset.isPending || !asset.verified_object_key} onClick={() => verifyAsset.mutate(asset.id)}>Verify object</Button>
+                        <Button size="sm" variant="outline" disabled={verifyAsset.isPending || !asset.verified_object_key} onClick={() => verifyAsset.mutate(asset.id)}>Run HEAD check</Button>
                       </td>
                     </tr>
                   ))}
