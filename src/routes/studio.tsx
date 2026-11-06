@@ -14,7 +14,7 @@ function Studio() {
       {(actor) => (
         <BridgeShell actor={actor} title="Studio">
           <div className="space-y-10 pb-16">
-            <DitWorkspace actor={actor} />
+            <DitWorkspace />
             <div className="mx-auto max-w-3xl space-y-10 px-1">
             <header className="space-y-4">
               <p className="max-w-xl text-sm text-muted">
