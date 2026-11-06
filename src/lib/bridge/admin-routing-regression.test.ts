@@ -108,7 +108,7 @@ test("Buyer title DTO and asset responses strip storage keys and internal workfl
   assert.match(titles, /masterKey: null/);
   assert.match(titles, /events: buyer \? \[\]/);
   assert.match(titles, /await assertBuyerPublishable\(title\.id\)/);
-  assert.match(assets, /key: buyer \? null : r\.s3_key/);
+  assert.match(assets, /\.\.\.\(buyer \? \{\} : \{\s*key: r\.s3_key/);
   assert.match(assets, /\.\.\.\(buyer \? \{\} : \{/);
   assert.match(buyerRoute, /Authorized buyer listing/);
   assert.doesNotMatch(buyerRoute, /Upload Files[\s\S]{0,80}actor\.accountType === "buyer"/);
