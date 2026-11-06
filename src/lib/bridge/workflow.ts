@@ -7,59 +7,7 @@ import { assertPermission, canReadTitle, canOperateOnTitle, type Actor } from ".
 import { loadTitle } from "./titles";
 import { loopLicenseInput, producerSharePaise } from "./workflow-policy";
 import { bridgeEnv } from "./env";
-
-export async function assertVerifiedTitleIngestReady(tx: Sql, titleId: string) {
-  const assets = await tx<{
-    kind: string; checksum_sha256: string | null; verified_object_key: string | null;
-    storage_provider: string | null; storage_bucket: string | null; storage_verified_at: string | Date | null;
-  }>`
-    select kind, checksum_sha256, verified_object_key, storage_provider, storage_bucket, storage_verified_at
-    from bridge_assets where title_id=${titleId} and coalesce(byte_size,0)>0
-  `;
-  const valid = (kind: string) => assets.some((asset) =>
-    asset.kind === kind &&
-    Boolean(asset.verified_object_key) &&
-    Boolean(asset.storage_provider && asset.storage_bucket && asset.storage_verified_at) &&
-    Boolean(asset.checksum_sha256 && /^[a-f0-9]{64}$/.test(asset.checksum_sha256))
-  );
-  if (!valid("master")) throw new Error("QC blocked: main film requires immutable storage verification and SHA-256");
-  if (!["poster","poster_vertical","poster_horizontal"].some(valid)) {
-    throw new Error("QC blocked: at least one verified poster is required");
-  }
-  if (!valid("censor_certificate")) {
-    throw new Error("QC blocked: verified censor/legal certificate is required");
-  }
-  const rights = await tx<{
-    authority_type: string | null;
-    authorization_evidence_type: string | null;
-    authorization_confirmed: boolean;
-    evidence: Array<{ type?: string; rightsBasis?: string; authorizationConfirmed?: boolean }>;
-  }>`
-    select i.authority_type, i.authorization_evidence_type, i.authorization_confirmed, g.evidence
-    from bridge_title_submission_intake i
-    join bridge_rights_grants g on g.title_id=i.title_id
-    where i.title_id=${titleId} and g.status in ('DRAFT','VALID')
-    order by g.created_at desc limit 1
-  `;
-  const rightsRow = rights[0];
-  const allowedAuthority = new Set([
-    "RIGHTS_OWNER","LICENSEE_WITH_ONWARD_RIGHTS","DISTRIBUTOR_SALES_AGENT","PRODUCER",
-  ]);
-  const attestation = rightsRow?.evidence?.some((item) =>
-    item.type === "AUTHORIZATION_ATTESTATION" &&
-    Boolean(item.rightsBasis) &&
-    item.authorizationConfirmed === true
-  );
-  if (
-    !rightsRow ||
-    !allowedAuthority.has(rightsRow.authority_type ?? "") ||
-    !rightsRow.authorization_evidence_type ||
-    rightsRow.authorization_confirmed !== true ||
-    !attestation
-  ) {
-    throw new Error("QC blocked: rights-holder classification and authorization evidence are incomplete");
-  }
-}
+import { assertVerifiedTitleIngestReady } from "./qc-readiness";
 
 async function audit(tx: Sql, user: string, title: string, action: string, metadata: object) {
   await tx`insert into bridge_audit_logs(actor_user_id,action,entity_type,entity_id,metadata)
