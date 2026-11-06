@@ -8,6 +8,7 @@ import { writeAudit } from "./audit";
 import { assertNotDevUser } from "./guards";
 import { assertVerifiedTitleIngestReady } from "./qc-readiness";
 import { verifyBucketAccess, verifyObject } from "./oci-object-storage.server";
+import { bridgeEnv } from "./env.ts";
 
 async function actorFor(userId: string) {
   assertNotDevUser(userId);
@@ -211,12 +212,22 @@ export const verifyOciAssetForAdmin = createServerFn({ method: "POST" })
     return { assetId: asset.id, matchesRecordedSize, observedByteSize: result.byteSize, contentType: result.contentType };
   });
 
+function assertTestingDatabaseForCleanup() {
+  const supabaseUrl = bridgeEnv.supabaseUrl();
+  if (!supabaseUrl) throw new Error("Cannot verify database environment; cleanup preview is blocked");
+  const host = new URL(supabaseUrl).hostname;
+  if (!host.startsWith("jbymleftneggcgutlcqu.")) {
+    throw new Error("Test-data cleanup preview is restricted to STAGING DB jbymleftneggcgutlcqu");
+  }
+}
+
 /** Read-only dry-run inventory. No row or object is deleted by this endpoint. */
 export const listTestDataCleanupCandidates = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
     const actor = await actorFor(context.userId);
     assertStorageAdmin(actor);
+    assertTestingDatabaseForCleanup();
     const sql = await getSql();
     const rows = await sql<{
       id: string; name: string; status: string; updated_at: string | Date;
