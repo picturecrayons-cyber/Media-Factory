@@ -7,6 +7,7 @@ const titles = source("./titles.ts");
 const concepts = source("./story-concept-api.ts");
 const form = source("../../components/bridge/story-concept-form.tsx");
 const conceptRoute = source("../../routes/story-concepts.$conceptId.tsx");
+const desk = source("../../components/bridge/story-concept-desk.tsx");
 
 test("finished film catalog and owner queries exclude story concepts", () => {
   assert.match(titles, /coalesce\((?:t\.)?submission_type, 'finished_film'\) = 'finished_film'/);
