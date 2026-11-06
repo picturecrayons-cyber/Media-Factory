@@ -64,7 +64,7 @@ export const reviewAdminTitle = createServerFn({ method: "POST" })
       assertPermission(actor, "title.qc_review");
       if (title.status !== "QC_REVIEW") throw new Error("Title is not in QC review");
       if (!title.master_key || !title.poster_key) throw new Error("Current master and poster are required for QC approval");
-      const verifiedAssets = await sql<{ kind: string; s3_key: string }>`
+      const verifiedAssets = await tx<{ kind: string; s3_key: string }>`
         select kind, s3_key from bridge_assets
         where title_id = ${title.id} and byte_size > 0 and kind in ('master','poster')
       `;
@@ -87,7 +87,7 @@ export const reviewAdminTitle = createServerFn({ method: "POST" })
     } else if (data.decision === "APPROVE") {
       assertPermission(actor, "title.rights_review");
       if (title.status !== "RIGHTS_REVIEW") throw new Error("Title is not in rights review");
-      const grants = await sql<{
+      const grants = await tx<{
         id: string; created_by: string; territories: unknown; languages: unknown; media: unknown;
         window_start: string | Date | null; window_end: string | Date | null;
       }>`
