@@ -1,3 +1,4 @@
+import { evaluateVerifiedTitleIngestReadiness } from "./qc-ingest-gate";
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { randomBytes } from "node:crypto";
@@ -586,15 +587,45 @@ export const advanceTitle = createServerFn({ method: "POST" })
     if (["RIGHTS_REVIEW", "LICENSING_READY"].includes(data.to))
       throw new Error("Use the recorded QC or legal review action");
     if (data.to === "QC_REVIEW") {
-      const verified = await (await getSql())<{
+      const sql = await getSql();
+      const verified = await sql<{
         kind: string;
         s3_key: string;
-      }>`select kind,s3_key from bridge_assets where title_id=${title.id} and byte_size>0`;
-      if (
-        !verified.some((a) => a.kind === "master" && a.s3_key === title.masterKey) ||
-        !verified.some((a) => a.kind === "poster" && a.s3_key === title.posterKey)
-      )
-        throw new Error("Verified master and artwork required before QC");
+        byte_size: number | null;
+        checksum_sha256: string | null;
+        provenance_verified: boolean;
+      }>`
+        select a.kind, a.s3_key, a.byte_size,
+          l.metadata->>'checksumSha256' as checksum_sha256,
+          exists (
+            select 1 from bridge_audit_logs proof
+            where proof.entity_type = 'bridge_asset' and proof.entity_id = a.id
+              and proof.action = 'asset.upload_verified'
+              and proof.metadata->>'checksumAlgorithm' = 'SHA-256'
+              and proof.metadata->>'checksumSha256' ~ '^[0-9a-f]{64}$'
+              and proof.metadata->>'sealedKey' = a.s3_key
+              and proof.metadata->>'byteSize' ~ '^[0-9]+$'
+              and (proof.metadata->>'byteSize')::bigint = a.byte_size
+          ) as provenance_verified
+        from bridge_assets a
+        left join lateral (
+          select metadata from bridge_audit_logs
+          where entity_type = 'bridge_asset' and entity_id = a.id
+            and action = 'asset.upload_verified'
+          order by created_at desc limit 1
+        ) l on true
+        where a.title_id = ${title.id} and a.byte_size > 0
+      `;
+      const readiness = evaluateVerifiedTitleIngestReadiness(
+        verified.map((asset) => ({
+          kind: asset.kind, s3Key: asset.s3_key, byteSize: asset.byte_size,
+          checksumSha256: asset.checksum_sha256, provenanceVerified: asset.provenance_verified,
+        })),
+        { masterKey: title.masterKey, posterKey: title.posterKey },
+      );
+      if (!readiness.ready) {
+        throw new Error(`QC submission blocked. Missing independently verified assets: ${readiness.missingSlots.join(", ")}`);
+      }
     }
     assertTransition(title.status, data.to);
     const perm = permissionForTransition(title.status, data.to);
