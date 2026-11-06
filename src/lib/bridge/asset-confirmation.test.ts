@@ -49,7 +49,10 @@ test("only a verified upload sets the master reference, once, with an audit even
       storage_namespace: null, storage_region: null, storage_endpoint: null,
     });
     assert.equal(await persistVerifiedAsset(sql, { ...args, actorUserId: "intruder" }), false);
-    assert.deepEqual(await state(), { master_key: null, byte_size: null });
+    assert.deepEqual(await state(), {
+      master_key: null, byte_size: null, storage_provider: null, storage_bucket: null,
+      storage_namespace: null, storage_region: null, storage_endpoint: null,
+    });
     assert.equal(await persistVerifiedAsset(sql, args), true);
     assert.deepEqual(await state(), {
       master_key: "bridge/creator/title1234/master/video.mp4.verified/uuid-1",
