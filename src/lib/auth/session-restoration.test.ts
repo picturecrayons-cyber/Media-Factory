@@ -89,19 +89,22 @@ for (const session of [null, { ...confirmedSession, refresh_token: "" }]) {
       },
       { forceRefresh: true },
     );
-    assert.equal(restored, null);
+    if (session) {
+      await assert.rejects(() => restoreSupabaseSession({ getSession: async () => result(session), refreshSession: async () => { assert.fail("must not refresh"); } }, { forceRefresh: true }), /AUTH_REFRESH_TOKEN_MISSING/);
+    } else {
+      assert.equal(restored, null);
+    }
   });
 }
 
 test("expired refresh token cannot fall back to a stale authenticated session", async () => {
-  const restored = await restoreSupabaseSession(
+  await assert.rejects(() => restoreSupabaseSession(
     {
       getSession: async () => result(confirmedSession),
       refreshSession: async () => result(null, new Error("Invalid Refresh Token")),
     },
     { forceRefresh: true },
-  );
-  assert.equal(restored, null);
+  ), /Invalid Refresh Token/);
 });
 
 test("onboarding and workspace wait for restoration and scope cached profiles to identity", () => {
@@ -114,6 +117,7 @@ test("onboarding and workspace wait for restoration and scope cached profiles to
   const hook = readFileSync(new URL("./use-current-user.ts", import.meta.url), "utf8");
   assert.doesNotMatch(hook, /user: normalize\(getStoredSupabaseUser\(\)\)/);
   assert.match(hook, /alive && !authChanged/);
+  assert.match(hook, /authError: "Your secure session could not be restored/);
 });
 
 test("PKCE exchange persists a session and forced refresh returns the rotated bearer", async () => {
