@@ -115,8 +115,6 @@ export const createStoryConceptSubmission = createServerFn({ method: "POST" })
     const actor = await requireVerifiedActor(context.userId);
     assertPermission(actor, actor.internalRole ? "title.ingest_internal" : "title.create");
 
-    const titleId = randomBytes(16).toString("hex");
-    const slug = slugify(data.titleName, titleId);
     const sql = await getSql();
 
     const requestHash = createHash("sha256")
@@ -200,10 +198,10 @@ export const createStoryConceptSubmission = createServerFn({ method: "POST" })
         `;
         const conceptRows = await tx<ConceptRow>`
           insert into bridge_story_concept_submissions (
-            title_id, logline, synopsis, treatment_url, screenplay_url,
+            title_id, payment_id, logline, synopsis, treatment_url, screenplay_url,
             genre, estimated_budget_range, target_platforms, curation_status
           ) values (
-            ${titleId}, ${data.logline.trim()}, ${data.synopsis.trim()},
+            ${titleId}, ${data.paymentId}, ${data.logline.trim()}, ${data.synopsis.trim()},
             ${data.treatmentUrl || null}, ${data.screenplayUrl || null},
             ${data.genre}, ${data.estimatedBudgetRange ?? null}, ${data.targetPlatforms}, 'PENDING'
           )
