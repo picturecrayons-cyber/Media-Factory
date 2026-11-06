@@ -10,6 +10,7 @@ import { loadTitle } from "./titles";
 import { writeAudit } from "./audit";
 import { assertNotDevUser } from "./guards";
 import { persistVerifiedAsset } from "./asset-confirmation";
+import { evaluateVerifiedTitleIngestReadiness } from "./qc-ingest-gate";
 import { downloadDecision } from "./delivery-policy";
 import { uploadUrlLifetimeSeconds } from "./upload-url-lifetime";
 import { validateOttIngestFile, type OttIngestKind } from "./ott-ingest-spec";
@@ -198,6 +199,10 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
     if (sealed.byteSize !== object.byteSize || !sealed.etag) {
       throw new Error("Verified copy differs from the uploaded object");
     }
+    // Hash the immutable destination itself. ETags (especially multipart ETags)
+    // are not SHA-256 checksums and are retained only as separate provenance metadata.
+    const checksum = await (await import("./oci-object-storage.server")).sha256Object(sealedKey, sealed.byteSize);
+    if (checksum.byteSize !== sealed.byteSize) throw new Error("Sealed object checksum size mismatch");
     // Persist asset/title/audit state first. Do not advance the migration queue
     // if persistence fails: its prior state remains the truthful state.
     const confirmed = await persistVerifiedAsset(sql, {
@@ -208,7 +213,8 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
       kind: asset.kind,
       byteSize: sealed.byteSize,
       contentType: sealed.contentType,
-      checksum: sealed.etag,
+      checksum: checksum.checksumSha256,
+      etag: sealed.etag,
       sourceKey: asset.s3_key,
       sealedKey,
     });
@@ -323,9 +329,53 @@ export const listTitleAssets = createServerFn({ method: "GET" })
       content_type: string | null;
       byte_size: number | null;
       created_at: string | Date;
+      provenance_verified: boolean;
     }>`
-      select id, kind, s3_key, content_type, byte_size, created_at
-      from bridge_assets where title_id = ${title.id} and byte_size > 0 order by created_at desc
+      select a.id, a.kind, a.s3_key, a.content_type, a.byte_size, a.created_at,
+        exists (
+          select 1 from bridge_audit_logs l
+          where l.entity_type = 'bridge_asset' and l.entity_id = a.id
+            and l.action = 'asset.upload_verified'
+            and l.metadata->>'checksumAlgorithm' = 'SHA-256'
+            and l.metadata->>'checksumSha256' ~ '^[0-9a-f]{64}
+    return {
+      assets: rows
+        .filter((r) => !buyer || !["master", "technical", "censor_certificate"].includes(r.kind))
+        .map((r) => ({
+          id: r.id,
+          kind: r.kind,
+          key: buyer ? null : r.s3_key,
+          contentType: r.content_type,
+          byteSize: r.byte_size,
+          verified: Number(r.byte_size) > 0 && r.provenance_verified,
+          checksumSha256: null,
+          createdAt:
+            r.created_at instanceof Date ? r.created_at.toISOString() : String(r.created_at),
+        })),
+    };
+  });
+
+            and l.metadata->>'sealedKey' = a.s3_key
+            and l.metadata->>'byteSize' ~ '^[0-9]+
+    return {
+      assets: rows
+        .filter((r) => !buyer || !["master", "technical", "censor_certificate"].includes(r.kind))
+        .map((r) => ({
+          id: r.id,
+          kind: r.kind,
+          key: buyer ? null : r.s3_key,
+          contentType: r.content_type,
+          byteSize: r.byte_size,
+          verified: Number(r.byte_size) > 0,
+          createdAt:
+            r.created_at instanceof Date ? r.created_at.toISOString() : String(r.created_at),
+        })),
+    };
+  });
+
+            and (l.metadata->>'byteSize')::bigint = a.byte_size
+        ) as provenance_verified
+      from bridge_assets a where a.title_id = ${title.id} and a.byte_size > 0 order by a.created_at desc
     `;
     return {
       assets: rows
