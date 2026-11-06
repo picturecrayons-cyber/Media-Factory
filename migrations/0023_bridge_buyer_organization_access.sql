@@ -4,13 +4,24 @@
 alter table public.bridge_buyer_title_access
   add column if not exists access_scope text not null default 'user',
   add column if not exists buyer_organization_id uuid
-    references public.bridge_organizations(id) on delete cascade;
+    references public.bridge_organizations(id) on delete restrict;
 
 alter table public.bridge_buyer_title_access
   alter column buyer_user_id drop not null;
 
 alter table public.bridge_buyer_title_access
   drop constraint if exists bridge_buyer_title_access_pkey;
+
+-- Replace the old composite key (which required buyer_user_id) with a stable
+-- row key so organization-scoped grants can leave buyer_user_id NULL.
+alter table public.bridge_buyer_title_access
+  add column if not exists id uuid default gen_random_uuid();
+
+alter table public.bridge_buyer_title_access
+  alter column id set not null;
+
+alter table public.bridge_buyer_title_access
+  add constraint bridge_buyer_title_access_pkey primary key (id);
 
 alter table public.bridge_buyer_title_access
   add constraint bridge_buyer_title_access_scope_check
@@ -65,6 +76,13 @@ as $$
                 a.access_scope = 'user'
                 and a.buyer_user_id = public.bridge_current_user_id()
                 and a.buyer_organization_id is null
+                and exists (
+                  select 1
+                  from public.bridge_profiles bp
+                  where bp.user_id = public.bridge_current_user_id()
+                    and bp.account_type = 'buyer'
+                    and bp.email_verified = true
+                )
               )
               or
               (

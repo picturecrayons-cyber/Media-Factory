@@ -143,6 +143,9 @@ test("dual-mode Buyer grants preserve individual rows and require exact active o
   assert.match(migration, /add column if not exists access_scope text not null default 'user'/i);
   assert.match(migration, /buyer_organization_id uuid references bridge_organizations\(id\)/i);
   assert.match(migration, /buyer_user_id drop not null/i);
+  assert.match(migration, /add column if not exists id uuid default gen_random_uuid\(\)/i);
+  assert.match(migration, /primary key \(id\)/i);
+  assert.match(migration, /bp\.account_type = 'buyer'[\s\S]*bp\.email_verified = true/i);
   assert.match(migration, /access_scope = 'user'[\s\S]*buyer_user_id is not null[\s\S]*buyer_organization_id is null/i);
   assert.match(migration, /access_scope = 'organization'[\s\S]*buyer_user_id is null[\s\S]*buyer_organization_id is not null/i);
   assert.match(migration, /bridge_organization_memberships[\s\S]*m\.status = 'active'[\s\S]*bridge_organizations[\s\S]*o\.status = 'active'/i);
