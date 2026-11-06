@@ -29,7 +29,7 @@ const STATUS_LABELS: Record<string, string> = {
 function AdminWorkstations() {
   return (
     <RequireBridge allow="internal">
-      {(actor) => <BridgeShell actor={actor} title="Admin"><WorkstationBody actor={actor} /></BridgeShell>}
+      {(actor) => <BridgeShell actor={actor} title="Admin Desk"><WorkstationBody actor={actor} /></BridgeShell>}
     </RequireBridge>
   );
 }
@@ -59,7 +59,7 @@ function WorkstationBody({ actor }: { actor: { internalRole: string | null } }) 
   return (
     <div className="space-y-6">
       <section className="rounded-3xl border border-line bg-surface p-6 sm:p-8">
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">Bridge Admin</p>
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">Internal operations</p>
         <div className="mt-2 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <h2 className="font-display text-3xl font-semibold">Control titles. Clear gates. Release safely.</h2>
