@@ -30,16 +30,21 @@ as $$
           and r.window_start <= now()
           and r.window_end is not null
           and r.window_end > now()
-          and jsonb_typeof(r.territories) = 'array'
-          and jsonb_array_length(r.territories) > 0
-          and jsonb_typeof(r.languages) = 'array'
-          and jsonb_array_length(r.languages) > 0
-          and jsonb_typeof(r.media) = 'array'
-          and jsonb_array_length(r.media) > 0
+          and jsonb_array_length(
+            case when jsonb_typeof(r.territories) = 'array' then r.territories else '[]'::jsonb end
+          ) > 0
+          and jsonb_array_length(
+            case when jsonb_typeof(r.languages) = 'array' then r.languages else '[]'::jsonb end
+          ) > 0
+          and jsonb_array_length(
+            case when jsonb_typeof(r.media) = 'array' then r.media else '[]'::jsonb end
+          ) > 0
           and (
             r.media @> jsonb_build_array(p.destination)
             or exists (
-              select 1 from jsonb_array_elements_text(r.media) m(value)
+              select 1 from jsonb_array_elements_text(
+                case when jsonb_typeof(r.media) = 'array' then r.media else '[]'::jsonb end
+              ) m(value)
               where upper(m.value) in ('OTT','STREAMING','DIGITAL','ALL','*')
             )
             or (
