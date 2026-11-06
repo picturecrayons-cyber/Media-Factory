@@ -6,6 +6,7 @@ import { assertPermission } from "./rbac";
 import { requireVerifiedActor } from "./session";
 import { writeAudit } from "./audit";
 import { assertNotDevUser } from "./guards";
+import { assertVerifiedTitleIngestReady } from "./qc-readiness";
 
 async function actorFor(userId: string) {
   assertNotDevUser(userId);
@@ -55,10 +56,12 @@ export const reviewAdminTitle = createServerFn({ method: "POST" })
     if (data.decision === "ACCEPT") {
       assertPermission(actor, "title.advance_upload");
       if (title.status !== "PREPARING") throw new Error("Submission is not awaiting acceptance");
+      await assertVerifiedTitleIngestReady(sql, title.id);
       next = "QC_REVIEW"; action = "submission.accept";
     } else if (data.decision === "PASS") {
       assertPermission(actor, "title.qc_review");
       if (title.status !== "QC_REVIEW") throw new Error("Title is not in QC review");
+      await assertVerifiedTitleIngestReady(sql, title.id);
       next = "RIGHTS_REVIEW"; action = "qc.pass";
     } else if (data.decision === "FAIL") {
       assertPermission(actor, "title.qc_review");
@@ -103,6 +106,9 @@ export const setBuyerPublicationGate = createServerFn({ method: "POST" })
     const rows = await sql<{ id: string }>`select id from bridge_titles where id = ${data.titleId} limit 1`;
     if (!rows[0]) throw new Error("Title not found");
 
+    if (data.decision === "PASS" && (data.gate === "PACKAGING" || data.gate === "DELIVERY")) {
+      await assertVerifiedTitleIngestReady(sql, data.titleId);
+    }
     const value = data.decision === "PASS"
       ? ({OTT:"READY",PACKAGING:"COMPLETE",CURATION:"APPROVED",DELIVERY:"READY"} as const)[data.gate]
       : data.decision === "REVOKE" && data.gate === "DELIVERY" ? "REVOKED"
