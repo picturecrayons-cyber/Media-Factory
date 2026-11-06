@@ -510,8 +510,8 @@ export const requestAssetDownload = createServerFn({ method: "POST" })
       });
       throw new Error(decision.reason);
     }
-    const { signDownload } = await import("./oci-object-storage.server");
-    const signed = await signDownload({ key: asset.verified_object_key! });
+    const { createAssetStreamToken } = await import("./asset-stream-token.server");
+    const token = createAssetStreamToken(actor.userId, asset.id, 60);
     await writeAudit({
       actorUserId: actor.userId,
       action: "asset.download_signed",
@@ -608,7 +608,7 @@ export const listTitleAssets = createServerFn({ method: "GET" })
       entityType: "bridge_asset",
       entityId: asset.id,
     });
-    return signed;
+    return { url: `/api/assets/${encodeURIComponent(asset.id)}/stream?token=${encodeURIComponent(token)}`, method: "GET" as const };
   });
 
 export const listTitleAssets = createServerFn({ method: "GET" })
