@@ -24,7 +24,7 @@ export const listAdminWorkstations = createServerFn({ method: "GET" })
     const sql = await getSql();
     const storageAdmin = actor.internalRole === "admin" || actor.internalRole === "super_admin";
     const assetsQuery = storageAdmin
-      ? sql`select id, title_id, kind, s3_key, content_type, byte_size, storage_provider, storage_bucket, storage_namespace, storage_region, storage_endpoint, checksum_sha256, verified_object_key, object_version_id, object_generation, storage_verified_at, created_at from bridge_assets order by created_at desc limit 300`
+      ? sql`select id, title_id, kind, s3_key, source_object_key, content_type, byte_size, storage_provider, storage_bucket, storage_namespace, storage_region, storage_endpoint, checksum_sha256, verified_object_key, object_version_id, object_generation, storage_verified_at, created_at from bridge_assets order by created_at desc limit 300`
       : sql`select id, title_id, kind, content_type, byte_size, created_at from bridge_assets order by created_at desc limit 300`;
     const assetVersionsQuery = storageAdmin
       ? sql`select id, title_id, asset_group, asset_type, version, language, codec, s3_key, processing_state, created_at from bridge_asset_versions order by created_at desc limit 300`
