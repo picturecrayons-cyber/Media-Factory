@@ -616,7 +616,9 @@ export const advanceTitle = createServerFn({ method: "POST" })
       }>`select status from bridge_titles where id=${title.id} for update`;
       if (!locked || locked.status !== title.status)
         throw new Error("Title changed; refresh before retrying");
-      if (data.to === "QC_REVIEW") await assertVerifiedTitleIngestReady(tx, title.id);
+      if (data.to === "PREPARING" || data.to === "QC_REVIEW") {
+        await assertVerifiedTitleIngestReady(tx, title.id);
+      }
       await recordTransition(
         {
           titleId: title.id,
