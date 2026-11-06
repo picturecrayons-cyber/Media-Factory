@@ -33,7 +33,7 @@ export const Route = createFileRoute("/api/assets/$id/stream")({
     if(!title || !canReadTitle(actor,title)) return Response.json({error:"Forbidden"},{status:403});
     const ent=await sql<{ok:boolean}>`
       select exists(select 1 from bridge_entitlements where user_id=${actor.userId}
-        and title_id=${title.id} and access_type='license' and (expires_at is null or expires_at>now())) as ok
+        and title_id=${title.id} and access_type='license') as ok
     `;
     const decision=downloadDecision({
       kind:asset.kind, actorIsOwner:title.ownerUserId===actor.userId,
