@@ -25,10 +25,10 @@ export async function processNextAssetVerificationJob(): Promise<{ processed: bo
     const rows = await sql.query<{
       asset_id: string; title_id: string; kind: string; source_key: string;
       content_type: string | null; byte_size: number | null; created_by: string;
-      expected_size: number; actor_user_id: string; provider_upload_id: string;
+      expected_size: number; actor_user_id: string; actor_is_internal: boolean; provider_upload_id: string;
     }>(`
       select a.id as asset_id, a.title_id, a.kind, a.s3_key as source_key,
-        a.content_type, a.byte_size, a.created_by, s.expected_size, s.actor_user_id,
+        a.content_type, a.byte_size, a.created_by, s.expected_size, s.actor_user_id, s.actor_is_internal,
         s.provider_upload_id
       from public.bridge_assets a
       join bridge_private.upload_sessions s on s.asset_id=a.id
@@ -65,7 +65,7 @@ export async function processNextAssetVerificationJob(): Promise<{ processed: bo
     const persisted = await persistVerifiedAsset(sql, {
       assetId: asset.asset_id,
       actorUserId: asset.actor_user_id,
-      internalActor: false,
+      internalActor: asset.actor_is_internal,
       titleId: asset.title_id,
       kind: asset.kind,
       byteSize: sealed.byteSize,
