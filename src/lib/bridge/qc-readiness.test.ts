@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { PGlite } from "@electric-sql/pglite";
-import { assertVerifiedTitleIngestReady } from "./qc-readiness.ts";
+import { assertSevenFilesStorageVerified, assertVerifiedTitleIngestReady } from "./qc-readiness.ts";
 
 async function fixture() {
   const db = new PGlite();
@@ -76,6 +76,18 @@ test("QC readiness rejects any missing member of the seven-file package", async 
       () => assertVerifiedTitleIngestReady(sql as never, "qc-title-123"),
       /subtitles/
     );
+  } finally {
+    await db.close();
+  }
+});
+
+
+test("package preparation requires seven verified files but not the later rights-review evidence", async () => {
+  const { db, sql } = await fixture();
+  try {
+    await db.exec("delete from bridge_title_submission_intake where title_id='qc-title-123'; delete from bridge_rights_grants where title_id='qc-title-123';");
+    await assert.doesNotReject(() => assertSevenFilesStorageVerified(sql as never, "qc-title-123"));
+    await assert.rejects(() => assertVerifiedTitleIngestReady(sql as never, "qc-title-123"), /rights-holder classification/);
   } finally {
     await db.close();
   }
