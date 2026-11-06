@@ -67,6 +67,7 @@ ALTER TABLE public.bridge_story_concept_submissions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.bridge_buyer_interest ENABLE ROW LEVEL SECURITY;
 
 -- 5. Optional service catalog entry (fee stays configurable / locked)
+-- FIXED is the canonical pricing_method enum/check value in the Testing schema.
 INSERT INTO public.bridge_service_catalog
   (code, category, name, description, classification, pricing_method, unit_label, customer_visible, active)
 VALUES
@@ -76,7 +77,7 @@ VALUES
     'Story / Concept Network Submission',
     'Submit a story or concept for admin curation and introduction to verified buyers.',
     'BILLABLE',
-    'FIXED_PER_TITLE',
+    'FIXED',
     'submission',
     true,
     false   -- locked until fee is certified
