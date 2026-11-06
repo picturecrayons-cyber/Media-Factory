@@ -119,6 +119,20 @@ export const beginAssetMultipart = createServerFn({ method: "POST" })
     const { assertMultipartSessionSigningReady, signMultipartSession } = await import("./multipart-session.server");
     assertMultipartSessionSigningReady();
 
+    // Retry deletion for manifests whose provider upload was already aborted or expired.
+    const staleSessions = await sql<{ id: string }>`
+      select s.id
+      from bridge_private.upload_sessions s
+      join bridge_assets a on a.id = s.asset_id
+      where a.title_id = ${asset.title_id}
+        and s.actor_user_id = ${context.userId}
+        and s.state in ('aborted','expired')
+        and exists (select 1 from bridge_private.upload_parts p where p.session_id = s.id)
+    `;
+    for (const stale of staleSessions) {
+      await sql`delete from bridge_private.upload_parts where session_id = ${stale.id}`;
+    }
+
     // Expired, uncommitted attempts are reaped before creating a replacement session.
     // Keep resumable sessions alive until their expiry; never abort a live upload.
     const expiredSessions = await sql<{
@@ -370,9 +384,9 @@ export const abortAssetMultipart = createServerFn({ method: "POST" })
         !["initiated","uploading"].includes(active[0].state)) throw new Error("Multipart session cannot be aborted");
     const { abortMultipartUpload } = await import("./oci-object-storage.server");
     await abortMultipartUpload(session.partBaseUrl, asset.s3_key);
-    // Delete the manifest before changing state so a transient DB failure remains retryable.
-    await sql`delete from bridge_private.upload_parts where session_id=${data.sessionId}`;
     await sql`update bridge_private.upload_sessions set state='aborted', updated_at=now() where id=${data.sessionId}`;
+    // A later begin call retries this deletion if the manifest cleanup itself failed.
+    await sql`delete from bridge_private.upload_parts where session_id=${data.sessionId}`;
     await writeAudit({
       actorUserId: context.userId,
       action: "asset.multipart_aborted",
