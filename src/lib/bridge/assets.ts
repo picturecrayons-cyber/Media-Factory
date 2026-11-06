@@ -1,6 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { bridgeEnv } from "./env.ts";
 import { assertBuyerPublishable } from "./buyer-visibility.ts";
@@ -522,28 +522,44 @@ function assetStreamSecret() {
   return secret;
 }
 
+function assetStreamKey() {
+  return createHash("sha256").update(assetStreamSecret()).digest();
+}
+
 function issueAssetStreamToken(assetId: string, userId: string) {
-  const payload = Buffer.from(JSON.stringify({
-    assetId,
-    userId,
-    expiresAt: Math.floor(Date.now() / 1000) + 120,
-  })).toString("base64url");
-  const signature = createHmac("sha256", assetStreamSecret()).update(payload).digest("base64url");
-  return payload + "." + signature;
+  const iv = randomBytes(12);
+  const cipher = createCipheriv("aes-256-gcm", assetStreamKey(), iv);
+  const encrypted = Buffer.concat([
+    cipher.update(JSON.stringify({
+      assetId,
+      userId,
+      expiresAt: Math.floor(Date.now() / 1000) + 120,
+    }), "utf8"),
+    cipher.final(),
+  ]);
+  return [
+    iv.toString("base64url"),
+    encrypted.toString("base64url"),
+    cipher.getAuthTag().toString("base64url"),
+  ].join(".");
 }
 
 type AssetStreamClaims = { assetId: string; userId: string; expiresAt: number };
 
 function verifyAssetStreamToken(token: string): AssetStreamClaims {
   if (token.length > 2048) throw new Error("Invalid preview token");
-  const [payload, signature, extra] = token.split(".");
-  if (!payload || !signature || extra) throw new Error("Invalid preview token");
-  const expected = createHmac("sha256", assetStreamSecret()).update(payload).digest();
-  const received = Buffer.from(signature, "base64url");
-  if (received.length !== expected.length || !timingSafeEqual(received, expected)) {
+  const [ivPart, encryptedPart, tagPart, extra] = token.split(".");
+  if (!ivPart || !encryptedPart || !tagPart || extra) throw new Error("Invalid preview token");
+  const iv = Buffer.from(ivPart, "base64url");
+  const encrypted = Buffer.from(encryptedPart, "base64url");
+  const tag = Buffer.from(tagPart, "base64url");
+  if (iv.length !== 12 || tag.length !== 16 || encrypted.length > 1024) {
     throw new Error("Invalid preview token");
   }
-  const claims = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as AssetStreamClaims;
+  const decipher = createDecipheriv("aes-256-gcm", assetStreamKey(), iv);
+  decipher.setAuthTag(tag);
+  const decoded = Buffer.concat([decipher.update(encrypted), decipher.final()]).toString("utf8");
+  const claims = JSON.parse(decoded) as AssetStreamClaims;
   if (
     !claims || typeof claims.assetId !== "string" || typeof claims.userId !== "string" ||
     !Number.isSafeInteger(claims.expiresAt) || claims.expiresAt <= Math.floor(Date.now() / 1000)
