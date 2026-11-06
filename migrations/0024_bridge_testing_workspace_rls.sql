@@ -202,9 +202,14 @@ create policy bridge_title_submission_intake_workspace_select on public.bridge_t
 for select to authenticated
 using (bridge_private.can_read_workspace_title(title_id));
 
-drop policy if exists bridge_title_submission_intake_owner_write on public.bridge_title_submission_intake;
-create policy bridge_title_submission_intake_owner_write on public.bridge_title_submission_intake
-for all to authenticated
+drop policy if exists bridge_title_submission_intake_owner_insert on public.bridge_title_submission_intake;
+create policy bridge_title_submission_intake_owner_insert on public.bridge_title_submission_intake
+for insert to authenticated
+with check (bridge_private.can_manage_title(title_id));
+
+drop policy if exists bridge_title_submission_intake_owner_update on public.bridge_title_submission_intake;
+create policy bridge_title_submission_intake_owner_update on public.bridge_title_submission_intake
+for update to authenticated
 using (bridge_private.can_manage_title(title_id))
 with check (bridge_private.can_manage_title(title_id));
 
