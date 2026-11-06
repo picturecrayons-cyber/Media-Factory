@@ -300,6 +300,23 @@ export async function storageTarget() {
   };
 }
 
+/** Read-only OCI GetBucket check; never changes bucket configuration or objects. */
+export async function verifyBucketAccess() {
+  const cfg = config();
+  const namespace = await resolveNamespace(cfg);
+  const path = `/n/${encodeURIComponent(namespace)}/b/${encodeURIComponent(cfg.bucket)}`;
+  const response = await signedFetch({ cfg, method: "GET", path });
+  if (!response.ok) throw new Error(`OCI bucket verification failed (${response.status})`);
+  return {
+    provider: "oci" as const,
+    bucket: cfg.bucket,
+    namespace,
+    region: cfg.region,
+    endpoint: endpoint(cfg.region),
+    verifiedAt: new Date().toISOString(),
+  };
+}
+
 export async function computeObjectSha256(key: string): Promise<string> {
   const cfg = config();
   const namespace = await resolveNamespace(cfg);
