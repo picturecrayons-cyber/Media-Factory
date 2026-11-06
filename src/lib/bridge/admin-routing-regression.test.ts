@@ -89,12 +89,14 @@ test("shared title workspace has an explicit role gate and Studio list scope", (
 
 test("Studio package workflow actions fail closed until all seven storage-verified files are present", () => {
   const workflowDesk = read("../../components/bridge/workflow-desk.tsx");
+  const titleRoute = read("../../routes/title.$id.tsx");
   const titles = read("./titles.ts");
   const readiness = read("./qc-readiness.ts");
   assert.match(readiness, /REQUIRED_QC_FILES/);
   assert.match(readiness, /assertSevenFilesStorageVerified/);
   assert.match(readiness, /assets\.find\(\(asset\) => required\.kinds/);
   assert.match(workflowDesk, /assetsQuery\.data\?\.assets\.find/);
+  assert.match(titleRoute, /const latest = assets\.find/);
   assert.match(workflowDesk, /qcFileCount === 7/);
   assert.match(workflowDesk, /\["UPLOADING", "PREPARING"\]\.includes\(title\.status\) && !qcFilesReady/);
   assert.match(titles, /data\.to === "PREPARING"\) await assertSevenFilesStorageVerified/);
