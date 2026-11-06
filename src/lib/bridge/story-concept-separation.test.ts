@@ -47,3 +47,24 @@ test("concept detail workspace does not load film assets or QC workflow", () => 
 test("concept workspace explicitly avoids automatic Loop publication", () => {
   assert.match(conceptRoute, /not published to Loop automatically/i);
 });
+
+test("Studio concept list uses the dedicated concepts API and submission identity", () => {
+  const listRoute = source("../../routes/story-concepts.tsx");
+  assert.match(listRoute, /listMyStoryConcepts/);
+  assert.match(listRoute, /c\.id/);
+  assert.match(listRoute, /story-concepts\//);
+});
+test("invalid concept identifiers fail validation without title fallback", () => {
+  assert.match(concepts, /conceptId: z\.string\(\)\.uuid\(\)/);
+  assert.match(concepts, /Story concept not found/);
+  assert.doesNotMatch(concepts, /loadTitle\(data\.conceptId\)/);
+});
+test("admin review actions enforce verified internal admin identity", () => {
+  assert.match(concepts, /requireVerifiedActor\(context\.userId\)/);
+  assert.match(concepts, /actor\.internalRole !== "admin" && actor\.internalRole !== "super_admin"/);
+});
+test("reviewer comment controls preserve and submit actual comments", () => {
+  assert.match(desk, /Reviewer comments/);
+  assert.match(desk, /reviewerComments\[c\.id\]/);
+  assert.match(concepts, /admin_notes = case when/);
+});
