@@ -557,6 +557,7 @@ export async function streamAssetWithToken(token: string, rangeHeader?: string |
     const claims = verifyAssetStreamToken(token);
     assertNotDevUser(claims.userId);
     const actor = await requireVerifiedActor(claims.userId);
+    assertPermission(actor, "asset.sign_download");
     const sql = await getSql();
     const rows = await sql<{
       id: string; title_id: string; kind: string; verified_object_key: string;
@@ -595,6 +596,9 @@ export async function streamAssetWithToken(token: string, rangeHeader?: string |
     const headers = new Headers({
       "cache-control": "private, no-store, max-age=0",
       "x-content-type-options": "nosniff",
+      "referrer-policy": "no-referrer",
+      "cross-origin-resource-policy": "same-site",
+      "content-disposition": "inline",
       "accept-ranges": "bytes",
       "content-type": asset.content_type || upstream.headers.get("content-type") || "application/octet-stream",
     });
