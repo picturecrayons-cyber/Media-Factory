@@ -46,7 +46,7 @@ test("server-authoritative upload migration adds provenance, immutable pointers 
     assert.equal(rls.rows[0]?.relforcerowsecurity, true);
     await db.exec(`
       update bridge_assets set verified_object_key='sealed/key', storage_verified_at=now(),
-        checksum_sha256='a'.repeat(64), storage_provider='oci', storage_bucket='test-bucket',
+        checksum_sha256=repeat('a',64), storage_provider='oci', storage_bucket='test-bucket',
         storage_namespace='test-ns', storage_region='ap-mumbai-1',
         storage_endpoint='https://objectstorage.ap-mumbai-1.oraclecloud.com'
       where id='asset-test'
