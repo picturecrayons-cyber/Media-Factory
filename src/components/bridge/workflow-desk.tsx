@@ -65,7 +65,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
       )
     )
   ).length;
-  const qcFilesReady = !assetsQuery.isPending && !assetsQuery.isError && qcFileCount === 7;
+  const qcFilesReady = !assetsQuery.isPending && !assetsQuery.isFetching && !assetsQuery.isError && qcFileCount === 7;
   const canFinance = canOperateOnTitle(actor, title, "title.read_own", "finance.read");
   const revenue = useQuery({
     queryKey: ["title-revenue", title.id],
@@ -181,12 +181,12 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
             <div className="space-y-3">
               <p>
                 {title.status === "PREPARING" || title.status === "UPLOADING" || title.status === "DRAFT"
-                  ? "Step 1: upload the main film. Step 2: keep the posters. Step 3: submit for QC. QC is not reviewed yet."
+                  ? "Upload and verify all seven required files: main film, trailer, vertical poster, horizontal artwork, thumbnail, subtitles, and censor/legal certificate. Submit for QC unlocks only at 7/7 Storage verified."
                   : `Lifecycle: ${title.status}. QC: ${workflow.data?.qc?.status ?? "Not reviewed"}.`}
               </p>
               {title.status === "PREPARING" ? (
                 <p className="text-sm" role="status" aria-live="polite">
-                  {assetsQuery.isPending
+                  {assetsQuery.isPending || assetsQuery.isFetching
                     ? "Storage verification: checking the seven mandatory files…"
                     : assetsQuery.isError
                       ? "Storage verification unavailable. Submit for QC is disabled."
