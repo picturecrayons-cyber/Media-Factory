@@ -134,6 +134,7 @@ async function signedFetch(opts: {
   method: "GET" | "HEAD" | "POST" | "DELETE";
   path: string;
   body?: unknown;
+  timeoutMs?: number;
 }) {
   const url = new URL(opts.path, endpoint(opts.cfg.region));
   const body = opts.body === undefined ? undefined : JSON.stringify(opts.body);
@@ -153,7 +154,7 @@ async function signedFetch(opts: {
     method: opts.method,
     headers: safeHeaders,
     body,
-    signal: AbortSignal.timeout(15_000),
+    signal: AbortSignal.timeout(opts.timeoutMs ?? 15_000),
   });
 }
 
@@ -251,6 +252,30 @@ export async function signDownload(opts: { key: string; expiresIn?: number }) {
   return { url: signed.url, key: opts.key, bucket: signed.bucket, method: "GET" as const };
 }
 
+/** Stream an OCI object through SHA-256 without buffering the media file in memory. */
+export async function sha256Object(key: string, expectedByteSize: number) {
+  if (!Number.isSafeInteger(expectedByteSize) || expectedByteSize <= 0) throw new Error("A positive expected object size is required for checksum verification");
+  const cfg = config();
+  const namespace = await resolveNamespace(cfg);
+  const path = `/n/${encodeURIComponent(namespace)}/b/${encodeURIComponent(cfg.bucket)}/o/${encodedObjectName(key)}`;
+  const res = await signedFetch({ cfg, method: "GET", path, timeoutMs: 30 * 60 * 1000 });
+  if (!res.ok) throw new Error(`OCI object checksum read failed (${res.status})`);
+  if (!res.body) throw new Error("OCI object checksum response has no readable body");
+  const hash = createHash("sha256");
+  const reader = res.body.getReader();
+  let byteSize = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      byteSize += value.byteLength;
+      if (byteSize > expectedByteSize) { await reader.cancel(); throw new Error("OCI object exceeded the expected byte size during checksum verification"); }
+      hash.update(value);
+    }
+  } finally { reader.releaseLock(); }
+  if (byteSize !== expectedByteSize) throw new Error(`OCI object size changed during checksum verification: expected ${expectedByteSize}, received ${byteSize}`);
+  return { byteSize, checksumSha256: hash.digest("hex"), etag: res.headers.get("etag")?.replaceAll('"', "") ?? null };
+}
 export async function verifyObject(key: string, expectedContentType?: string | null) {
   const cfg = config();
   const namespace = await resolveNamespace(cfg);
