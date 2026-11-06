@@ -153,7 +153,7 @@ for update to authenticated
 using (bridge_private.can_manage_title(id))
 with check (
   bridge_private.can_manage_title(id)
-  and owner_user_id = (select owner_user_id from public.bridge_titles current_title where current_title.id = bridge_titles.id)
+  and (owner_user_id = bridge_private.current_user_id() or bridge_private.is_admin())
 );
 
 -- Asset metadata and object keys remain Studio/internal-only. Buyer asset access
