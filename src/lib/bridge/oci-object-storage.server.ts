@@ -343,6 +343,7 @@ export async function verifyObject(key: string, expectedContentType?: string | n
     byteSize: contentLength,
     contentType,
     etag: res.headers.get("etag")?.replaceAll('"', "") ?? null,
+    versionId: res.headers.get("opc-version-id"),
   };
 }
 
