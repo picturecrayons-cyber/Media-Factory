@@ -249,7 +249,7 @@ function InternalAudit({ assets, isStorageAdmin }: { assets: any[]; isStorageAdm
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h3 className="font-display text-2xl font-semibold">Test-data cleanup preview</h3>
-            <p className="text-sm text-muted">Dry-run candidates only. This tool does not delete database rows, files, multipart sessions or storage objects.</p>
+            <p className="text-sm text-muted">STAGING DB only · dry-run candidates only. This tool does not delete database rows, files, multipart sessions or storage objects.</p>
           </div>
           {isStorageAdmin ? <Button size="sm" variant="outline" disabled={cleanup.isFetching} onClick={() => void cleanup.refetch()}>{cleanup.isFetching ? "Scanning…" : "Run dry-run scan"}</Button> : null}
         </div>
