@@ -2,12 +2,14 @@ export const MULTIPART_PART_SIZE = 16 * 1024 * 1024;
 export const MULTIPART_MIN_FILE = 512 * 1024 * 1024;
 
 export type UploadSession = {
-  version: 1;
+  version: 3;
   titleId: string;
   kind: string;
   assetId: string;
   uploadId: string;
+  sessionId: string;
   partBaseUrl: string;
+  sessionToken: string;
   fileName: string;
   fileSize: number;
   lastModified: number;
@@ -57,7 +59,12 @@ export function sameUploadFile(
 }
 
 /** The part URL is a write capability. Accept only this region's Oracle host and this object key. */
-export function multipartTargetAllowed(partBaseUrl: string, region: string, objectKey: string) {
+export function multipartTargetAllowed(
+  partBaseUrl: string,
+  region: string,
+  objectKey: string,
+  uploadId?: string,
+) {
   let url: URL;
   try {
     url = new URL(partBaseUrl);
@@ -70,6 +77,12 @@ export function multipartTargetAllowed(partBaseUrl: string, region: string, obje
   const path = url.pathname;
   if (!path.startsWith("/p/") || !path.endsWith("/")) return false;
   const decoded = safeDecode(path);
+  if (uploadId) {
+    return (
+      decoded.includes(`/u/${objectKey}/id/${uploadId}/`) ||
+      path.includes(`/u/${encodeURIComponent(objectKey)}/id/${encodeURIComponent(uploadId)}/`)
+    );
+  }
   return decoded.includes(`/u/${objectKey}/id/`) || path.includes(`/u/${encodeURIComponent(objectKey)}/id/`);
 }
 
