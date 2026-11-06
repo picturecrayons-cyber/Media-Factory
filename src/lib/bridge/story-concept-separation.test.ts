@@ -42,8 +42,8 @@ test("concept creation uses actor-scoped request-hash idempotency ledger", () =>
   assert.match(concepts, /request_hash/);
   assert.match(concepts, /IDEMPOTENCY_KEY_REUSED_WITH_DIFFERENT_PAYLOAD/);
   assert.match(concepts, /pg_advisory_xact_lock/);
-  assert.doesNotMatch(concepts, /idempotency_key\\s*\\)\\s*do nothing/i);
-  assert.doesNotMatch(concepts, /bridge_story_concept_submissions where idempotency_key/);
+  assert.equal(concepts.includes("on conflict (idempotency_key) do nothing"), false);
+  assert.equal(concepts.includes("bridge_story_concept_submissions where idempotency_key"), false);
   assert.match(concepts, /'PENDING_REVIEW'/);
 });
 
