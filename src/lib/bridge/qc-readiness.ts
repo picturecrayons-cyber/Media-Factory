@@ -12,22 +12,24 @@ const REQUIRED_QC_FILES = [
 
 export async function assertSevenFilesStorageVerified(tx: Sql, titleId: string) {
   const assets = await tx<{
-    kind: string; checksum_sha256: string | null; verified_object_key: string | null;
+    kind: string; created_at: string | Date; checksum_sha256: string | null; verified_object_key: string | null;
     storage_provider: string | null; storage_bucket: string | null; storage_namespace: string | null;
     storage_region: string | null; storage_endpoint: string | null; storage_verified_at: string | Date | null;
   }>`
     select kind, checksum_sha256, verified_object_key, storage_provider, storage_bucket,
       storage_namespace, storage_region, storage_endpoint, storage_verified_at
-    from bridge_assets where title_id=${titleId} and coalesce(byte_size,0)>0
+    from bridge_assets where title_id=${titleId} order by created_at desc
   `;
   const isStorageVerified = (asset: (typeof assets)[number]) =>
     Boolean(asset.verified_object_key) &&
     Boolean(asset.storage_provider && asset.storage_bucket && asset.storage_namespace &&
       asset.storage_region && asset.storage_endpoint && asset.storage_verified_at) &&
     Boolean(asset.checksum_sha256 && /^[a-f0-9]{64}$/.test(asset.checksum_sha256));
-  const missing = REQUIRED_QC_FILES.filter((required) =>
-    !assets.some((asset) => required.kinds.some((kind) => kind === asset.kind) && isStorageVerified(asset))
-  );
+  // Query order is newest-first. A newer pending replacement supersedes an older verified file.
+  const missing = REQUIRED_QC_FILES.filter((required) => {
+    const latest = assets.find((asset) => required.kinds.some((kind) => kind === asset.kind));
+    return !latest || !isStorageVerified(latest);
+  });
   if (missing.length) {
     throw new Error(
       `Package blocked: all 7 mandatory files must be Storage verified (missing or unverified: ${missing.map((item) => item.label).join(", ")})`
