@@ -69,6 +69,18 @@ export function mapTitle(r: TitleRow): BridgeTitle {
   };
 }
 
+/** Buyer DTO deliberately strips internal storage object references and owner identifiers. */
+function mapBuyerTitle(row: TitleRow): BridgeTitle {
+  const title = mapTitle(row);
+  return {
+    ...title,
+    ownerUserId: "",
+    ownerOrganizationId: null,
+    posterKey: null,
+    masterKey: null,
+  };
+}
+
 async function hasTitleMergeColumn(sql: Sql): Promise<boolean> {
   const rows = await sql<{ exists: boolean }>`
     select exists (
@@ -363,7 +375,7 @@ export const listTitles = createServerFn({ method: "GET" })
     }
     return { titles: rows.flatMap((row) => {
       try {
-        return [mapTitle(row)];
+        return [actor.accountType === "buyer" && !actor.internalRole ? mapBuyerTitle(row) : mapTitle(row)];
       } catch (error) {
         console.error("[bridge] skipped unreadable title", row?.id, error);
         return [];
@@ -398,9 +410,16 @@ export const getTitle = createServerFn({ method: "GET" })
       select from_status, to_status, actor_user_id, note, created_at
       from bridge_title_events where title_id = ${title.id} order by created_at asc
     `;
+    const buyer = actor.accountType === "buyer" && !actor.internalRole;
     return {
-      title,
-      events: events.map((e) => ({
+      title: buyer ? {
+        ...title,
+        ownerUserId: "",
+        ownerOrganizationId: null,
+        posterKey: null,
+        masterKey: null,
+      } : title,
+      events: buyer ? [] : events.map((e) => ({
         from: e.from_status,
         to: e.to_status,
         actorUserId: e.actor_user_id,
