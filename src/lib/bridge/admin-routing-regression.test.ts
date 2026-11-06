@@ -86,3 +86,57 @@ test("shared title workspace has an explicit role gate and Studio list scope", (
   const profiles = read("./profiles.ts");
   assert.match(profiles, /insert into bridge_organization_memberships/);
 });
+
+test("Studio package workflow actions fail closed until all seven storage-verified files are present", () => {
+  const workflowDesk = read("../../components/bridge/workflow-desk.tsx");
+  const titles = read("./titles.ts");
+  const readiness = read("./qc-readiness.ts");
+  assert.match(readiness, /REQUIRED_QC_FILES/);
+  assert.match(readiness, /assertSevenFilesStorageVerified/);
+  assert.match(workflowDesk, /qcFileCount === 7/);
+  assert.match(workflowDesk, /\["UPLOADING", "PREPARING"\]\.includes\(title\.status\) && !qcFilesReady/);
+  assert.match(titles, /data\.to === "PREPARING"\) await assertSevenFilesStorageVerified/);
+  assert.match(titles, /data\.to === "QC_REVIEW"\) await assertVerifiedTitleIngestReady/);
+});
+
+test("Buyer title DTO and asset responses strip storage keys and internal workflow history", () => {
+  const titles = read("./titles.ts");
+  const assets = read("./assets.ts");
+  const buyerRoute = read("../../routes/title.$id.tsx");
+  assert.match(titles, /function mapBuyerTitle/);
+  assert.match(titles, /posterKey: null/);
+  assert.match(titles, /masterKey: null/);
+  assert.match(titles, /events: buyer \? \[\]/);
+  assert.match(titles, /await assertBuyerPublishable\(title\.id\)/);
+  assert.match(assets, /key: buyer \? null : r\.s3_key/);
+  assert.match(assets, /\.\.\.\(buyer \? \{\} : \{/);
+  assert.match(buyerRoute, /Authorized buyer listing/);
+  assert.doesNotMatch(buyerRoute, /Upload Files[\s\S]{0,80}actor\.accountType === "buyer"/);
+});
+
+test("Buyer media previews use short-lived signed first-party streaming tokens", () => {
+  const assets = read("./assets.ts");
+  const route = read("../../routes/api/assets/stream.ts");
+  const previewUrl = read("./preview-url.ts");
+  assert.match(assets, /createHmac/);
+  assert.match(assets, /timingSafeEqual/);
+  assert.match(assets, /expiresAt: Math\.floor\(Date\.now\(\) \/ 1000\) \+ 120/);
+  assert.match(assets, /assertBuyerPublishable\(title\.id\)/);
+  assert.match(assets, /return \{ url: "\/api\/assets\/stream\?token="/);
+  assert.match(route, /streamAssetWithToken\(token, request\.headers\.get\("range"\)\)/);
+  assert.match(previewUrl, /if \(signedUrl\.startsWith\("\/"\)\) return signedUrl/);
+  assert.doesNotMatch(assets, /return \{ url: signed\.url/);
+});
+
+test("Internal Audit tools are role restricted and test-data cleanup remains dry-run only", () => {
+  const admin = read("./admin-workstations.ts");
+  const workstation = read("../../routes/admin/workstations.tsx");
+  assert.match(admin, /function assertStorageAdmin/);
+  assert.match(admin, /verifyBucketAccess/);
+  assert.match(admin, /verifyObject/);
+  assert.match(admin, /listTestDataCleanupCandidates/);
+  assert.match(admin, /destructive: false/);
+  assert.match(workstation, /Internal Audit/);
+  assert.match(workstation, /Test-data cleanup preview/);
+  assert.match(workstation, /This tool does not delete database rows/);
+});
