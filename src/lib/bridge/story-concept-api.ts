@@ -50,8 +50,9 @@ function mapConcept(r: ConceptRow): StoryConceptSubmission {
     title_id: r.title_id,
     logline: r.logline,
     synopsis: r.synopsis,
-    treatment_url: r.treatment_url,
-    screenplay_url: r.screenplay_url,
+    // Legacy external URLs are untrusted and never exposed as private materials.
+    treatment_url: null,
+    screenplay_url: null,
     genre: r.genre ?? [],
     estimated_budget_range: r.estimated_budget_range,
     target_platforms: r.target_platforms ?? [],
@@ -103,8 +104,6 @@ const createPayloadSchema = z.object({
   genre: z.array(z.string().min(1).max(40)).max(12).default([]),
   estimatedBudgetRange: z.string().max(80).optional(),
   targetPlatforms: z.array(z.string().min(1).max(40)).max(12).default([]),
-  treatmentUrl: z.string().url().max(500).optional().or(z.literal("")),
-  screenplayUrl: z.string().url().max(500).optional().or(z.literal("")),
   language: z.string().min(2).max(40).default("Malayalam"),
 });
 
@@ -149,12 +148,11 @@ export const createStoryConceptSubmission = createServerFn({ method: "POST" })
         `;
         const rows = await tx<ConceptRow>`
           insert into bridge_story_concept_submissions (
-            title_id, logline, synopsis, treatment_url, screenplay_url,
+            title_id, logline, synopsis,
             genre, estimated_budget_range, target_platforms, curation_status, idempotency_key
           ) values (
-            ${titleId}, ${data.logline}, ${data.synopsis}, ${data.treatmentUrl || null},
-            ${data.screenplayUrl || null}, ${data.genre}, ${data.estimatedBudgetRange ?? null},
-            ${data.targetPlatforms}, 'PENDING_REVIEW', ${data.idempotencyKey}
+            ${titleId}, ${data.logline}, ${data.synopsis}, ${data.genre},
+            ${data.estimatedBudgetRange ?? null}, ${data.targetPlatforms}, 'PENDING_REVIEW', ${data.idempotencyKey}
           ) on conflict (idempotency_key) do nothing
           returning *
         `;
