@@ -22,8 +22,10 @@ test("Story Concept creation requires an active service and verified captured pa
   assert.match(api, /status = 'captured'/);
   assert.match(api, /verified_at is not null/);
   assert.match(api, /title_id is null/);
-  assert.match(api, /amount_paise\) <= 0/);
+  assert.match(api, /base_price_paise/);
+  assert.match(api, /Number\(payment\[0\]\.amount_paise\) !== Number\(rate\[0\]\.base_price_paise\)/);
   assert.match(api, /payment_id, logline/);
+  assert.match(api, /paymentId: data\.paymentId \?\? null/);
 });
 
 test("Story Concept curation locks the row and audits in the same transaction", () => {
