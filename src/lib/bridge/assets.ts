@@ -681,7 +681,7 @@ export const requestAssetDownload = createServerFn({ method: "POST" })
       action: "asset.stream_token_issued",
       entityType: "bridge_asset",
       entityId: asset.id,
-      metadata: { kind: asset.kind, ttlSeconds: 120 },
+      metadata: { kind: asset.kind, ttlSeconds: 4 * 60 * 60 },
     });
     return { url: "/api/assets/stream?token=" + encodeURIComponent(token), method: "GET" as const };
   });
