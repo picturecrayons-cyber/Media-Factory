@@ -42,6 +42,7 @@ import { Route as ApiA2aIndexRouteImport } from './routes/api/a2a/index'
 import { Route as ApiA2aAgentCardRouteImport } from './routes/api/a2a/agent-card'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as ApiRazorpayWebhookRouteImport } from './routes/api/razorpay/webhook'
+import { Route as ApiBridgeTitlesIdRouteImport } from './routes/api/bridge/titles/$id'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -208,6 +209,11 @@ const ApiRazorpayWebhookRoute = ApiRazorpayWebhookRouteImport.update({
   path: '/api/razorpay/webhook',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiBridgeTitlesIdRoute = ApiBridgeTitlesIdRouteImport.update({
+  id: '/api/bridge/titles/$id',
+  path: '/api/bridge/titles/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -242,6 +248,7 @@ export interface FileRoutesByFullPath {
   '/api/a2a/agent-card': typeof ApiA2aAgentCardRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/razorpay/webhook': typeof ApiRazorpayWebhookRoute
+  '/api/bridge/titles/$id': typeof ApiBridgeTitlesIdRoute
   '/api/a2a/': typeof ApiA2aIndexRoute
 }
 export interface FileRoutesByTo {
@@ -455,6 +462,7 @@ export interface RootRouteChildren {
   ApiA2aAgentCardRoute: typeof ApiA2aAgentCardRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiRazorpayWebhookRoute: typeof ApiRazorpayWebhookRoute
+  ApiBridgeTitlesIdRoute: typeof ApiBridgeTitlesIdRoute
   ApiA2aIndexRoute: typeof ApiA2aIndexRoute
 }
 
@@ -691,6 +699,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiRazorpayWebhookRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/bridge/titles/$id': {
+      id: '/api/bridge/titles/$id'
+      path: '/api/bridge/titles/$id'
+      fullPath: '/api/bridge/titles/$id'
+      preLoaderRoute: typeof ApiBridgeTitlesIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -736,6 +751,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiA2aAgentCardRoute: ApiA2aAgentCardRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiRazorpayWebhookRoute: ApiRazorpayWebhookRoute,
+  ApiBridgeTitlesIdRoute: ApiBridgeTitlesIdRoute,
   ApiA2aIndexRoute: ApiA2aIndexRoute,
 }
 export const routeTree = rootRouteImport
