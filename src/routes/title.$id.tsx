@@ -669,27 +669,27 @@ function FilesPanel({
   const groups: { title: string; hint: string; items: [SimpleAssetKind, string][] }[] = [
     {
       title: "1 · Picture",
-      hint: "Main film is required. Trailer is optional.",
+      hint: "Main film and trailer are both required for QC submission.",
       items: [
         ["master", "Required"],
-        ["screener", "Optional"],
+        ["screener", "Required"],
       ],
     },
     {
       title: "2 · Artwork",
-      hint: "Vertical poster, horizontal artwork, and thumbnail.",
+      hint: "All three artwork files are mandatory and must be Storage verified.",
       items: [
-        ["poster_vertical", "Recommended"],
-        ["poster_horizontal", "Recommended"],
-        ["thumbnail", "Recommended"],
+        ["poster_vertical", "Required"],
+        ["poster_horizontal", "Required"],
+        ["thumbnail", "Required"],
       ],
     },
     {
       title: "3 · Documents",
-      hint: "Add these only if you have them.",
+      hint: "Subtitles and the censor/legal certificate are mandatory for QC submission.",
       items: [
-        ["subtitle", "Optional"],
-        ["censor_certificate", "Optional"],
+        ["subtitle", "Required"],
+        ["censor_certificate", "Required"],
       ],
     },
   ];
