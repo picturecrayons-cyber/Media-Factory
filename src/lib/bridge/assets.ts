@@ -269,10 +269,16 @@ export const requestAssetDownload = createServerFn({ method: "POST" })
       id: string;
       title_id: string;
       kind: string;
-      s3_key: string;
+      verified_object_key: string | null;
+      checksum_sha256: string | null;
       byte_size: number | null;
     }>`
-      select id, title_id, kind, s3_key, byte_size from bridge_assets where id = ${data.assetId} and byte_size > 0 limit 1
+      select id, title_id, kind, verified_object_key, checksum_sha256, byte_size
+      from bridge_assets
+      where id = ${data.assetId} and byte_size > 0
+        and verified_object_key is not null
+        and checksum_sha256 ~ '^[a-f0-9]{64}$'
+      limit 1
     `;
     const asset = rows[0];
     if (!asset) throw new Error("Not found");
@@ -286,7 +292,7 @@ export const requestAssetDownload = createServerFn({ method: "POST" })
       accountType: actor.accountType,
       hasLicenseEntitlement: entitled,
     });
-    if (!decision.allow) {
+    if (!decision.allow || (actor.accountType === "buyer" && !actor.internalRole && !entitled)) {
       await writeAudit({
         actorUserId: actor.userId,
         action: "asset.download_denied",
@@ -294,17 +300,25 @@ export const requestAssetDownload = createServerFn({ method: "POST" })
         entityId: asset.id,
         metadata: { reason: decision.reason, kind: asset.kind },
       });
-      throw new Error(decision.reason);
+      throw new Error(decision.reason || "License entitlement required");
     }
-    const { signDownload } = await import("./oci-object-storage.server");
-    const signed = await signDownload({ key: asset.s3_key });
+    if (actor.accountType === "buyer" && !actor.internalRole) {
+      const { assertBuyerPublishable } = await import("./buyer-visibility");
+      await assertBuyerPublishable(title.id);
+    }
+    const { createAssetStreamToken } = await import("./asset-stream-token.server");
+    const token = createAssetStreamToken(actor.userId, asset.id, 60);
     await writeAudit({
       actorUserId: actor.userId,
       action: "asset.download_signed",
       entityType: "bridge_asset",
       entityId: asset.id,
     });
-    return signed;
+    // Return only the application proxy URL; never disclose OCI URLs, keys, or provenance.
+    return {
+      url: `/api/assets/${encodeURIComponent(asset.id)}/stream?token=${encodeURIComponent(token)}`,
+      method: "GET" as const,
+    };
   });
 
 export const listTitleAssets = createServerFn({ method: "GET" })
