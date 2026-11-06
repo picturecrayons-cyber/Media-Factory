@@ -5,7 +5,7 @@
 
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import { requireVerifiedActor } from "./session";
@@ -107,6 +107,18 @@ const createPayloadSchema = z.object({
   language: z.string().min(2).max(40).default("Malayalam"),
 });
 
+function hashCreatePayload(data: z.infer<typeof createPayloadSchema>): string {
+  return createHash("sha256").update(JSON.stringify({
+    titleName: data.titleName,
+    logline: data.logline,
+    synopsis: data.synopsis,
+    genre: data.genre,
+    estimatedBudgetRange: data.estimatedBudgetRange ?? null,
+    targetPlatforms: data.targetPlatforms,
+    language: data.language,
+  })).digest("hex");
+}
+
 export const createStoryConceptSubmission = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(createPayloadSchema)
@@ -116,22 +128,42 @@ export const createStoryConceptSubmission = createServerFn({ method: "POST" })
     const actor = await requireVerifiedActor(context.userId);
     assertPermission(actor, actor.internalRole ? "title.ingest_internal" : "title.create");
     const sql = await getSql();
+    const requestHash = hashCreatePayload(data);
 
-    const existing = await sql<ConceptRow>`
-      select * from bridge_story_concept_submissions where idempotency_key = ${data.idempotencyKey} limit 1
-    `;
-    if (existing[0]) {
-      const owner = await sql<{ owner_user_id: string }>`
-        select owner_user_id from bridge_titles where id = ${existing[0].title_id} limit 1
-      `;
-      if (owner[0]?.owner_user_id !== actor.userId) throw new Error("Forbidden");
-      return { titleId: existing[0].title_id, concept: mapConcept(existing[0]) };
-    }
-
-    const titleId = randomBytes(16).toString("hex");
-    const slug = slugify(data.titleName, titleId);
     try {
-      const concept = await sql.transaction(async (tx) => {
+      const result = await sql.transaction(async (tx) => {
+        // Serialize retries for this actor/key before checking or creating anything.
+        await tx`select pg_advisory_xact_lock(hashtext(${actor.userId}), hashtext(${data.idempotencyKey}))`;
+        const existing = await tx<{
+          request_hash: string;
+          title_id: string;
+          concept_id: string;
+        }>`
+          select request_hash, title_id, concept_id
+          from bridge_story_concept_idempotency
+          where actor_user_id = ${actor.userId} and idempotency_key = ${data.idempotencyKey}
+          limit 1
+        `;
+
+        if (existing[0]) {
+          if (existing[0].request_hash !== requestHash) {
+            throw new Error("IDEMPOTENCY_KEY_REUSED_WITH_DIFFERENT_PAYLOAD");
+          }
+          const replay = await tx<ConceptRow>`
+            select * from bridge_story_concept_submissions where id = ${existing[0].concept_id} limit 1
+          `;
+          if (!replay[0] || replay[0].title_id !== existing[0].title_id) {
+            throw new Error("IDEMPOTENCY_RECORD_INTEGRITY_ERROR");
+          }
+          const owner = await tx<{ owner_user_id: string }>`
+            select owner_user_id from bridge_titles where id = ${existing[0].title_id} limit 1
+          `;
+          if (owner[0]?.owner_user_id !== actor.userId) throw new Error("Forbidden");
+          return { titleId: existing[0].title_id, concept: mapConcept(replay[0]) };
+        }
+
+        const titleId = randomBytes(16).toString("hex");
+        const slug = slugify(data.titleName, titleId);
         await tx`
           insert into bridge_titles (
             id, slug, name, owner_user_id, owner_account_type, status,
@@ -148,38 +180,35 @@ export const createStoryConceptSubmission = createServerFn({ method: "POST" })
         `;
         const rows = await tx<ConceptRow>`
           insert into bridge_story_concept_submissions (
-            title_id, logline, synopsis,
-            genre, estimated_budget_range, target_platforms, curation_status, idempotency_key
+            title_id, logline, synopsis, genre, estimated_budget_range,
+            target_platforms, curation_status
           ) values (
             ${titleId}, ${data.logline}, ${data.synopsis}, ${data.genre},
-            ${data.estimatedBudgetRange ?? null}, ${data.targetPlatforms}, 'PENDING_REVIEW', ${data.idempotencyKey}
-          ) on conflict (idempotency_key) do nothing
+            ${data.estimatedBudgetRange ?? null}, ${data.targetPlatforms}, 'PENDING_REVIEW'
+          )
           returning *
         `;
-        if (!rows[0]) throw new Error("IDEMPOTENCY_REPLAY");
+        const concept = rows[0];
+        if (!concept) throw new Error("STORY_CONCEPT_CREATE_FAILED");
+
+        await tx`
+          insert into bridge_story_concept_idempotency (
+            actor_user_id, idempotency_key, request_hash, title_id, concept_id
+          ) values (
+            ${actor.userId}, ${data.idempotencyKey}, ${requestHash}, ${titleId}, ${concept.id}
+          )
+        `;
         await writeAudit({
           actorUserId: actor.userId,
           action: "story_concept.create",
           entityType: "bridge_story_concept_submission",
-          entityId: rows[0].id,
+          entityId: concept.id,
           metadata: { titleId, status: "PENDING_REVIEW" },
         }, tx);
-        return rows[0];
+        return { titleId, concept: mapConcept(concept) };
       });
-      return { titleId, concept: mapConcept(concept) };
+      return result;
     } catch (err) {
-      const replay = await sql<ConceptRow>`
-        select * from bridge_story_concept_submissions where idempotency_key = ${data.idempotencyKey} limit 1
-      `;
-      if (replay[0]) {
-        const owner = await sql<{ owner_user_id: string }>`
-          select owner_user_id from bridge_titles where id = ${replay[0].title_id} limit 1
-        `;
-        if (owner[0]?.owner_user_id === actor.userId) {
-          return { titleId: replay[0].title_id, concept: mapConcept(replay[0]) };
-        }
-        throw new Error("Forbidden");
-      }
       migrationHint(err);
     }
   });
