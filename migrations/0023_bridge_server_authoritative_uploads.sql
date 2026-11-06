@@ -62,6 +62,7 @@ begin
     or new.storage_endpoint is distinct from old.storage_endpoint
     or new.object_version_id is distinct from old.object_version_id
     or new.object_generation is distinct from old.object_generation
+    or new.storage_verified_at is distinct from old.storage_verified_at
   ) then
     raise exception 'Verified storage pointer and provenance are immutable';
   end if;
