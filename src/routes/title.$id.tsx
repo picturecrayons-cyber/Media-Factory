@@ -38,6 +38,7 @@ import {
   sessionStorageKey,
 } from "@/lib/bridge/multipart-upload";
 import { AssetPosterSlot, AssetPreviewGallery } from "@/components/bridge/asset-preview-gallery";
+import { evaluateVerifiedTitleIngestReadiness } from "@/lib/bridge/qc-ingest-gate";
 
 export const Route = createFileRoute("/title/$id")({
   head: () => ({ meta: [{ name: "robots", content: "noindex, nofollow" }] }),
@@ -116,6 +117,13 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
   const title = titleQ.data?.title;
   const assets = assetsQ.data?.assets ?? [];
   const pub = pubQ.data?.publication;
+  const qcIngest = evaluateVerifiedTitleIngestReadiness(
+    assets.map((asset) => ({
+      kind: asset.kind, s3Key: asset.key ?? "", byteSize: asset.byteSize,
+      checksumSha256: asset.checksumSha256 ?? null, provenanceVerified: asset.verified,
+    })),
+    { masterKey: title?.masterKey ?? null, posterKey: title?.posterKey ?? null },
+  );
   const activeTab: WorkspaceTab =
     chosenTab ??
     (title && ["DRAFT", "UPLOADING", "PREPARING"].includes(title.status) ? "Files" : "Overview");
@@ -145,7 +153,7 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
 
   return (
     <div className="space-y-5">
-      <WorkflowDesk title={title} actor={actor} />
+      <WorkflowDesk title={title} actor={actor} qcIngestReady={qcIngest.ready} qcIngestMissing={qcIngest.missingSlots} />
       {assetsQ.isError ? <p role="alert">Assets unavailable: {assetsQ.error.message}</p> : null}
       <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
         <div className="grid gap-5 md:grid-cols-[180px_1fr]">
