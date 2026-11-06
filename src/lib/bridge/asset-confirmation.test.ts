@@ -25,7 +25,7 @@ test("only a verified upload sets the master reference, once, with an audit even
       kind: "master",
       byteSize: 120,
       contentType: "video/mp4",
-      checksum: "etag-1",
+      checksum: "a".repeat(64), etag: "multipart-etag-1",
       sourceKey: "bridge/creator/title1234/master/video.mp4",
       sealedKey: "bridge/creator/title1234/master/video.mp4.verified/uuid-1",
     };
@@ -46,7 +46,9 @@ test("only a verified upload sets the master reference, once, with an audit even
     );
     assert.equal(audit.rows[0]?.action, "asset.upload_verified");
     const metadata = JSON.parse(audit.rows[0]?.metadata ?? "{}");
-    assert.equal(metadata.checksum, "etag-1");
+    assert.equal(metadata.checksumAlgorithm, "SHA-256");
+    assert.equal(metadata.checksumSha256, "a".repeat(64));
+    assert.equal(metadata.etag, "multipart-etag-1");
     assert.equal(metadata.titleId, "title1234");
     assert.equal(metadata.kind, "master");
   } finally {
@@ -96,7 +98,7 @@ test("same-organization verified Studio member can confirm upload, other organiz
       kind: "master",
       byteSize: 120,
       contentType: "video/mp4",
-      checksum: "etag-staging-test",
+      checksum: "b".repeat(64),
     };
     assert.equal(await persistVerifiedAsset(sql, {
       ...common,
@@ -145,7 +147,7 @@ test("title owner can confirm an upload when organization tables are absent", as
       kind: "screener",
       byteSize: 170,
       contentType: "video/mp4",
-      checksum: "etag-no-org",
+      checksum: "c".repeat(64),
       sourceKey: "bridge/creator/title1234/screener/video.mp4",
       sealedKey: "bridge/creator/title1234/screener/video.mp4.verified/asset1234",
     }), true);
