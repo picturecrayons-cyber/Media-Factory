@@ -6,7 +6,7 @@ import { assertPermission } from "./rbac";
 import { requireVerifiedActor } from "./session";
 import { z } from "zod";
 import { writeAudit } from "./audit";
-import { computeReportedNetMinor } from "./revenue-accounting";
+import { assertFullSettlementAmount, computeReportedNetMinor } from "./revenue-accounting";
 
 type RevenueRow = {
   id: string;
@@ -134,6 +134,9 @@ const recordStatementSchema = z.object({
   receivedAt: z.string().datetime().nullable().optional(),
   estimateAvailableAt: z.string().date().nullable().optional(),
   paymentDueAt: z.string().date().nullable().optional(),
+}).refine((value) => value.estimateAmountMinor != null || value.reportedGrossMinor != null, {
+  message: "A statement must contain an estimate or a reported gross amount",
+  path: ["reportedGrossMinor"],
 }).refine((value) => value.periodEnd >= value.periodStart, {
   message: "Statement period end must not precede its start",
   path: ["periodEnd"],
@@ -206,7 +209,7 @@ export const recordChannelStatement = createServerFn({ method: "POST" })
 
 const recordPaymentSchema = z.object({
   statementLineId: z.string().uuid(),
-  paidAmountMinor: z.number().int().nonnegative(),
+  paidAmountMinor: z.number().int().positive().safe(),
   paymentReference: z.string().trim().min(3).max(160),
   paymentPostedAt: z.string().datetime().optional(),
 });
@@ -232,7 +235,9 @@ export const recordChannelPayment = createServerFn({ method: "POST" })
           and payment_status <> 'PAID'
           and exists (
             select 1 from public.bridge_channel_statement_lines s
-            where s.id = ${data.statementLineId} and s.statement_status = 'RECONCILED'
+            where s.id = ${data.statementLineId}
+              and s.statement_status = 'RECONCILED'
+              and s.net_amount_minor = ${data.paidAmountMinor}
           )
         returning id
       `;
