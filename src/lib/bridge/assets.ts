@@ -228,6 +228,38 @@ export const recordAssetMultipartPart = createServerFn({ method: "POST" })
     return { recorded: true, partNumber: data.partNumber };
   });
 
+export const getAssetMultipartStatus = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({
+    assetId: z.string().min(8), sessionId: z.string().min(8),
+    sessionToken: z.string().min(32).max(12000),
+  }))
+  .handler(async ({ context, data }) => {
+    const asset = await openUploadAsset(context.userId, data.assetId);
+    const { verifyMultipartSession } = await import("./multipart-session.server");
+    verifyMultipartSession(data.sessionToken, {
+      sessionId: data.sessionId, actorUserId: context.userId, assetId: asset.id, objectKey: asset.s3_key,
+    });
+    const sql = await getSql();
+    const sessions = await sql<{ state: string }>`
+      select state from bridge_private.upload_sessions
+      where id=${data.sessionId} and asset_id=${asset.id}
+        and actor_user_id=${context.userId} and expires_at > now()
+      limit 1
+    `;
+    const session = sessions[0];
+    if (!session) throw new Error("Durable multipart session was not found or has expired");
+    const parts = await sql<{ part_number: number }>`
+      select part_number from bridge_private.upload_parts where session_id=${data.sessionId}
+      order by part_number
+    `;
+    return {
+      state: session.state,
+      completedParts: parts.map((part) => Number(part.part_number)),
+      committed: ["assembling","verification_pending","verified"].includes(session.state),
+    };
+  });
+
 export const commitAssetMultipart = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(z.object({
