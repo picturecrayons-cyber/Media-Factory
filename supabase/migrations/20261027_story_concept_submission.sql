@@ -60,7 +60,7 @@ ALTER TABLE public.bridge_buyer_interest ENABLE ROW LEVEL SECURITY;
 
 -- 5. Optional service catalog entry (fee stays configurable / locked)
 INSERT INTO public.bridge_service_catalog
-  (code, category, name, description, why, classification, pricing_method, unit_label, customer_visible, active)
+  (code, category, name, description, classification, pricing_method, unit_label, customer_visible, active)
 VALUES
   (
     'STORY_CONCEPT_NETWORK_SUBMISSION',
