@@ -17,19 +17,15 @@ export function markRecoverySession(accessToken: string): void {
 export async function hasSupabaseRecoverySession(): Promise<boolean> {
   if (typeof window === "undefined") return false;
   const { data, error } = await supabase.auth.getSession();
-  return !error && !!data.session?.access_token &&
+  if (error) throw error;
+  return !!data.session?.access_token &&
     window.sessionStorage.getItem(RECOVERY_MARKER_KEY) === data.session.access_token;
 }
 
 export async function getSupabaseSession(
   opts: { forceRefresh?: boolean } = {},
 ): Promise<Session | null> {
-  try {
-    return await restoreSupabaseSession(supabase.auth, opts);
-  } catch (err) {
-    console.warn("[auth] Session restoration failed:", err);
-    return null;
-  }
+  return restoreSupabaseSession(supabase.auth, opts);
 }
 
 export async function getBearerToken(): Promise<string | null> {
