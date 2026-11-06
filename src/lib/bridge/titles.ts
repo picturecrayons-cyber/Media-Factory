@@ -648,6 +648,9 @@ export const deleteDraftTitle = createServerFn({ method: "POST" })
     const title = await loadTitle(data.id);
     if (!title) throw new Error("Draft not found");
     if (title.status !== "DRAFT") throw new Error("Only DRAFT submissions can be deleted");
+    if (title.masterKey || title.posterKey) {
+      throw new Error("This draft still references uploaded storage objects. Remove and verify those objects before deleting the draft.");
+    }
     if (title.ownerUserId !== actor.userId && actor.internalRole !== "admin") {
       throw new Error("Only the draft owner or an authorized admin can delete this draft");
     }
