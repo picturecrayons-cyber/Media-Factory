@@ -9,6 +9,13 @@ const form = source("../../components/bridge/story-concept-form.tsx");
 const conceptRoute = source("../../routes/story-concepts.$conceptId.tsx");
 const desk = source("../../components/bridge/story-concept-desk.tsx");
 
+test("arbitrary external treatment and screenplay URLs are never accepted or returned as private materials", () => {
+  assert.doesNotMatch(concepts, /treatmentUrl: z\\.string\\(\\)\\.url/);
+  assert.doesNotMatch(concepts, /screenplayUrl: z\\.string\\(\\)\\.url/);
+  assert.match(concepts, /treatment_url: null/);
+  assert.match(concepts, /screenplay_url: null/);
+});
+
 test("finished film catalog and owner queries exclude story concepts", () => {
   assert.match(titles, /coalesce\((?:t\.)?submission_type, 'finished_film'\) = 'finished_film'/);
   assert.match(titles, /coalesce\((?:t\.)?submission_type, 'finished_film'\) = 'finished_film'/);
