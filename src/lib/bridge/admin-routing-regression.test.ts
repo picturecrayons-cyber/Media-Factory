@@ -95,7 +95,7 @@ test("Buyer title, asset-list and direct-download paths independently require pu
   assert.match(assets, /Asset enumeration is a separate endpoint[\s\S]{0,240}assertBuyerPublishable\(title\.id\)/);
 });
 
-test("Loop readiness GET is read-only and generic reviewer cannot mint unbound approvals", () => {
+test("Loop readiness GET is read-only and generic reviewer approvals are evidence-bound", () => {
   const publication = read("./loop-publication.ts");
   const workstation = read("./admin-workstations.ts");
   const readiness = publication.slice(
@@ -103,8 +103,11 @@ test("Loop readiness GET is read-only and generic reviewer cannot mint unbound a
     publication.indexOf("export const authorizeLoopPublication"),
   );
   assert.doesNotMatch(readiness, /\b(update|insert|delete)\s+(?:bridge_loop_publications|loop_titles)/i);
-  assert.match(workstation, /data\.decision === "PASS" \|\| data\.decision === "APPROVE"/);
-  assert.match(workstation, /Evidence-bound QC\/Legal approval is required/);
+  assert.match(workstation, /Verified current master and poster versions are required for QC approval/);
+  assert.match(workstation, /masterKey: title\.master_key[\s\S]*posterKey: title\.poster_key/);
+  assert.match(workstation, /created_by <> \$\{actor\.userId\}/);
+  assert.match(workstation, /Exactly one active, complete rights draft from another user is required/);
+  assert.match(workstation, /grantId: grant\.id/);
 });
 
 test("Buyer publication SQL binds the selected package to active rights and exact current QC/Legal evidence", () => {
