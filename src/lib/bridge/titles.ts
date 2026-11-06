@@ -178,7 +178,7 @@ export const createTitle = createServerFn({ method: "POST" })
       name: z.string().trim().min(2).max(160).refine((value) => !/^test(?:$|[\s_-]|\d)|^(?:asdf|dummy|sample|untitled)$/i.test(value), { message: "Enter a real title, not a test placeholder." }),
       nameMl: z.string().max(160).optional(),
       originalTitle: z.string().max(160).optional(),
-      synopsis: z.string().min(20).max(4000).optional(),
+      synopsis: z.string().trim().min(20).max(4000).optional(),
       language: z.string().min(2).max(40).optional(),
       additionalLanguages: z.array(z.string().min(2).max(40)).max(20).optional(),
       year: z.number().int().min(1895).max(2100).optional(),
