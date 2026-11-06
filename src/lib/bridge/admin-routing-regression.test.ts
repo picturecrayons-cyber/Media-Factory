@@ -145,6 +145,8 @@ test("Internal Audit tools are role restricted and test-data cleanup remains dry
   assert.match(admin, /verifyObject/);
   assert.match(admin, /listTestDataCleanupCandidates/);
   assert.match(admin, /assertTestingDatabaseForCleanup/);
+  assert.match(admin, /bridgeEnv\.databaseUrl\(\)/);
+  assert.match(admin, /databaseIdentity\.includes\(expectedProject\)/);
   assert.match(admin, /jbymleftneggcgutlcqu/);
   assert.match(admin, /destructive: false/);
   assert.match(workstation, /Internal Audit/);
