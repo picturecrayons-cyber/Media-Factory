@@ -134,6 +134,7 @@ async function signedFetch(opts: {
   method: "GET" | "HEAD" | "POST" | "DELETE";
   path: string;
   body?: unknown;
+  headers?: Record<string, string>;
 }) {
   const url = new URL(opts.path, endpoint(opts.cfg.region));
   const body = opts.body === undefined ? undefined : JSON.stringify(opts.body);
@@ -145,7 +146,7 @@ async function signedFetch(opts: {
     contentType: body === undefined ? undefined : "application/json",
   });
   const safeHeaders = Object.fromEntries(
-    Object.entries(headers).map(([key, value]) => [toLatin1(key), toLatin1(value)]),
+    Object.entries({ ...headers, ...(opts.headers ?? {}) }).map(([key, value]) => [toLatin1(key), toLatin1(value)]),
   );
   // Fail closed when OCI signing/namespace/PAR requests stall. The caller receives
   // a bounded error instead of leaving the browser upload UI in "Preparing…" forever.
@@ -224,22 +225,99 @@ export async function beginMultipartUpload(opts: { key: string; contentType: str
   return { uploadId: parsed.uploadId, partBaseUrl };
 }
 
-async function authorizedMultipart(partBaseUrl: string, objectKey: string, method: "POST" | "DELETE") {
+async function authorizedMultipart(
+  partBaseUrl: string,
+  objectKey: string,
+  method: "POST" | "DELETE",
+  body?: unknown,
+) {
   const cfg = config();
   if (!multipartTargetAllowed(partBaseUrl, cfg.region, objectKey)) {
     throw new Error("Multipart upload target is not the asset being confirmed");
   }
-  return fetch(partBaseUrl, { method, redirect: "error", signal: AbortSignal.timeout(30_000) });
+  return fetch(partBaseUrl, {
+    method,
+    headers: body === undefined ? undefined : { "content-type": "application/json" },
+    body: body === undefined ? undefined : JSON.stringify(body),
+    redirect: "error",
+    signal: AbortSignal.timeout(30_000),
+  });
 }
 
-export async function commitMultipartUpload(partBaseUrl: string, objectKey: string) {
-  const res = await authorizedMultipart(partBaseUrl, objectKey, "POST");
-  if (!res.ok && res.status !== 409) throw new Error(`OCI multipart commit failed (${res.status})`);
+export type OciMultipartPart = { partNumber: number; etag: string; size: number };
+
+export async function listMultipartUploadParts(objectKey: string, uploadId: string): Promise<OciMultipartPart[]> {
+  const cfg = config();
+  const namespace = await resolveNamespace(cfg);
+  const all: OciMultipartPart[] = [];
+  let page: string | null = null;
+  do {
+    const query = new URLSearchParams({ uploadId });
+    if (page) query.set("page", page);
+    const path = `/n/${encodeURIComponent(namespace)}/b/${encodeURIComponent(cfg.bucket)}/u/${encodedObjectName(objectKey)}?${query.toString()}`;
+    const res = await signedFetch({ cfg, method: "GET", path });
+    if (!res.ok) throw new Error(`OCI multipart part listing failed (${res.status})`);
+    const body = await res.json() as { items?: Array<{ partNumber?: number; partNum?: number; etag?: string; size?: number | string }> };
+    for (const item of body.items ?? []) {
+      const partNumber = item.partNumber ?? item.partNum;
+      if (!Number.isSafeInteger(partNumber) || typeof item.etag !== "string" ||
+          !Number.isSafeInteger(Number(item.size)) || Number(item.size ?? 0) <= 0) {
+        throw new Error("OCI returned an invalid multipart part record");
+      }
+      all.push({ partNumber: partNumber!, etag: item.etag.replaceAll('"', ""), size: Number(item.size) });
+    }
+    page = res.headers.get("opc-next-page");
+    if (all.length > 10_000) throw new Error("OCI multipart upload exceeds the 10,000-part limit");
+  } while (page);
+  return all.sort((a, b) => a.partNumber - b.partNumber);
+}
+
+export async function commitMultipartUpload(
+  partBaseUrl: string,
+  objectKey: string,
+  parts: readonly { partNumber: number; etag: string }[],
+) {
+  if (parts.length === 0) throw new Error("Cannot commit an empty multipart manifest");
+  const res = await authorizedMultipart(partBaseUrl, objectKey, "POST", {
+    partsToCommit: parts.map((part) => ({ partNum: part.partNumber, etag: part.etag })),
+  });
+  if (!res.ok) throw new Error(`OCI multipart commit failed (${res.status})`);
 }
 
 export async function abortMultipartUpload(partBaseUrl: string, objectKey: string) {
   const res = await authorizedMultipart(partBaseUrl, objectKey, "DELETE");
   if (!res.ok && res.status !== 404) throw new Error(`OCI multipart cancel failed (${res.status})`);
+}
+
+export async function storageTarget() {
+  const cfg = config();
+  return {
+    provider: "oci" as const,
+    bucket: cfg.bucket,
+    namespace: await resolveNamespace(cfg),
+    region: cfg.region,
+    endpoint: endpoint(cfg.region),
+  };
+}
+
+export async function computeObjectSha256(key: string): Promise<string> {
+  const cfg = config();
+  const namespace = await resolveNamespace(cfg);
+  const path = `/n/${encodeURIComponent(namespace)}/b/${encodeURIComponent(cfg.bucket)}/o/${encodedObjectName(key)}`;
+  const res = await signedFetch({ cfg, method: "GET", path });
+  if (!res.ok || !res.body) throw new Error(`OCI object checksum read failed (${res.status})`);
+  const hash = createHash("sha256");
+  const reader = res.body.getReader();
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      hash.update(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  return hash.digest("hex");
 }
 
 export async function signDownload(opts: { key: string; expiresIn?: number }) {
@@ -249,6 +327,26 @@ export async function signDownload(opts: { key: string; expiresIn?: number }) {
     expiresIn: opts.expiresIn ?? 300,
   });
   return { url: signed.url, key: opts.key, bucket: signed.bucket, method: "GET" as const };
+}
+
+export function isValidObjectByteRange(range: string): boolean {
+  // Accept one RFC byte-range-spec. Multi-range requests are intentionally rejected.
+  return /^bytes=(?:\d+-\d*|-\d+)$/i.test(range.trim());
+}
+
+export async function getObjectResponse(key: string, range?: string) {
+  const cfg = config();
+  const namespace = await resolveNamespace(cfg);
+  const path = `/n/${encodeURIComponent(namespace)}/b/${encodeURIComponent(cfg.bucket)}/o/${encodedObjectName(key)}`;
+  if (range && !isValidObjectByteRange(range)) throw new Error("Object byte range is invalid");
+  const upstream = await signedFetch({
+    cfg, method: "GET", path,
+    headers: range ? { Range: range.trim() } : undefined,
+  });
+  if (range && upstream.status !== 206 && upstream.status !== 416) {
+    throw new Error(`OCI did not honor the requested byte range (${upstream.status})`);
+  }
+  return upstream;
 }
 
 export async function verifyObject(key: string, expectedContentType?: string | null) {
@@ -267,6 +365,7 @@ export async function verifyObject(key: string, expectedContentType?: string | n
     byteSize: contentLength,
     contentType,
     etag: res.headers.get("etag")?.replaceAll('"', "") ?? null,
+    versionId: res.headers.get("opc-version-id"),
   };
 }
 
