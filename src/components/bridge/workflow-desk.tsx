@@ -49,22 +49,23 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
     "master", "screener", "poster_vertical", "poster_horizontal",
     "thumbnail", "subtitle", "censor_certificate",
   ] as const;
-  const qcFileCount = requiredQcKinds.filter((kind) =>
-    assetsQuery.data?.assets.some((asset) =>
-      asset.verified &&
-      (asset.kind === kind || (kind === "poster_vertical" && asset.kind === "poster")) &&
-      Boolean(
-        asset.storageLocation?.provider &&
-        asset.storageLocation.objectKey &&
-        asset.storageLocation.bucket &&
-        asset.storageLocation.namespace &&
-        asset.storageLocation.region &&
-        asset.storageLocation.endpoint &&
-        asset.storageLocation.checksumSha256 &&
-        asset.storageLocation.verifiedAt
-      )
-    )
-  ).length;
+  const qcFileCount = requiredQcKinds.filter((kind) => {
+    // listTitleAssets is newest-first; a pending replacement must supersede an older verified file.
+    const latest = assetsQuery.data?.assets.find((asset) =>
+      asset.kind === kind || (kind === "poster_vertical" && asset.kind === "poster")
+    );
+    return Boolean(
+      latest?.verified &&
+      latest.storageLocation?.provider &&
+      latest.storageLocation.objectKey &&
+      latest.storageLocation.bucket &&
+      latest.storageLocation.namespace &&
+      latest.storageLocation.region &&
+      latest.storageLocation.endpoint &&
+      latest.storageLocation.checksumSha256 &&
+      latest.storageLocation.verifiedAt
+    );
+  }).length;
   const qcFilesReady = !assetsQuery.isPending && !assetsQuery.isFetching && !assetsQuery.isError && qcFileCount === 7;
   const canFinance = canOperateOnTitle(actor, title, "title.read_own", "finance.read");
   const revenue = useQuery({
