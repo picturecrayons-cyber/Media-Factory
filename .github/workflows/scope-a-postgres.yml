@@ -38,6 +38,7 @@ jobs:
       DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/bridge_scope_a
       PGSSLMODE: disable
       NODE_ENV: test
+      SCOPE_A_DISPOSABLE_DATABASE: "1"
 
     steps:
       - uses: actions/checkout@v4
