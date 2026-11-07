@@ -194,3 +194,41 @@ This document is documentation-only. It does not authorize or perform:
 
 **Production: HOLD / NOT CERTIFIED / NO-GO.**  
 **App-inu pani kittaruthu.**
+
+
+## 15. Bridge-first agreement model and reference separation
+
+**Product decision:** Crayons Bridge is the rights, agreement and authorization control plane. Therefore, the first workflow artifact for a new title/partner commercial relationship should be a **Bridge Agreement Proposal**, created and versioned in Bridge before any downstream channel-specific license draft is activated.
+
+The intended sequence is:
+
+1. **Bridge proposal draft:** an authorized internal operator creates a title-specific proposal in Bridge. Identify the actual contracting legal entity/entities, rights principal, proposed counterparty/licensee, intended distribution channel, rights scope and proposed commercial terms. “Crayons Bridge” is the product/control-plane name; it must not automatically be treated as a legal contracting person or rights owner.
+2. **Rights and signer verification:** verify the rights principal, ownership/chain-of-title evidence, mandate and the authority of each proposed signer. If these are missing or ambiguous, the proposal may remain an explicitly unverified internal draft, but it must not be represented as an executed agreement or an authorized license.
+3. **Counterparty review and acceptance:** the Creator/Studio or other authorized counterparty reviews the exact immutable proposal version and records acceptance/rejection. Acceptance is not by itself legal execution, rights authorization, QC approval or publication permission.
+4. **Execution:** obtain the legally appropriate signatures/e-signature completion from all required parties. Store the executed document reference, version/hash and execution evidence separately from the proposal reference.
+5. **Independent legal review:** an independent Legal reviewer verifies the executed agreement, parties, signer authority, ownership/mandate evidence, scope and commercial terms. A proposal acceptance must not auto-approve Legal.
+6. **Rights and license authorization:** only after the required evidence and approvals pass may the authorized service create/activate a title- and counterparty-specific rights grant/license.
+7. **Channel-specific activation:** create a downstream distribution license or entitlement for the selected buyer organization and distribution channel (for example, Crayons Loop + TVOD). This must not be confused with the upstream Bridge proposal or the executed master agreement.
+8. **QC and publication gates:** QC, delivery readiness, publication authorization and public availability remain independent gates. No automatic publication follows from proposal acceptance or agreement execution.
+
+### Required distinct identifiers
+
+These identifiers represent different records and must never be overloaded into one another:
+
+| Field / identifier | Meaning | May it substitute for another field? |
+|---|---|---|
+| proposal_reference | Unique Bridge-generated reference for a specific proposal/version (example format: BRIDGE-PROP-2026-MR-001; illustrative only) | No. It is not an executed contract reference. |
+| executed_agreement_reference | Reference to the final agreement actually executed by the required parties, with its immutable document/version evidence | No. Never populate from a proposal number. |
+| ownership_evidence_reference | Reference to the source document(s) proving ownership, chain of title or authority to license the relevant rights | No. It is not the proposal or agreement reference. |
+| buyer_organization_id | Canonical Bridge organization ID of the legal/commercial licensee or transaction buyer | No. It is not a channel or display label. |
+| distribution_channel_id | Canonical identifier for the delivery/distribution channel or platform (e.g. the Loop channel) | No. A channel is not necessarily the legal buyer or contracting party. |
+
+The proposal should also identify the **contracting legal entity** independently from the Bridge product name, rights principal, intermediary/distributor, buyer organization and distribution channel. Confirm the exact legal entity from corporate and contract records; do not infer it from a UI heading or brand.
+
+### Relationship to the current Production form
+
+The current title page form labelled **“License to Crayons Loop · TVOD”** is a downstream Loop-specific license-draft surface. It is not, by itself, the Bridge-first proposal/contract workflow described above. Its existing fields (territory, languages, license window, executed agreement reference, ownership evidence reference, rights-owner share and exclusivity) should be populated only from verified, applicable evidence and a separately approved implementation. Do not put a Bridge proposal reference in its executed-agreement field.
+
+For Malayalakkara Residency, the example reference BRIDGE-PROP-2026-MR-001 remains illustrative/proposal-only. The previously discussed 35% Bridge / 65% Content Owner split remains proposed and unverified until confirmed by the executed agreement. No territory (including WORLDWIDE), language scope, window or exclusivity is presumed.
+
+This section is a design clarification only. It does not authorize saving a Production draft, writing database records, issuing a proposal to a counterparty, executing an agreement, creating a license, or changing publication state.
