@@ -40,8 +40,8 @@ export async function saveLoopLicense(
   const now = Date.now();
   const startAt = new Date(data.windowStart).getTime();
   const endAt = new Date(data.windowEnd).getTime();
-  if (!Number.isFinite(startAt) || !Number.isFinite(endAt) || startAt <= now || endAt <= startAt)
-    throw new Error("License window must start in the future and end after it");
+  if (!Number.isFinite(startAt) || !Number.isFinite(endAt) || endAt <= now || endAt <= startAt)
+    throw new Error("License window must be unexpired and end after its start");
 
   // Exact resubmissions are idempotent. The title row lock serializes concurrent drafts.
   const [existing] = await tx<{ id: string; status: string }>`
@@ -155,6 +155,23 @@ export async function reviewWorkflow(tx: Sql, actor: Actor, data: z.infer<typeof
       throw new Error("Another legal reviewer must approve this license");
     if (data.decision === "APPROVE" && new Date(grant.window_end) <= new Date())
       throw new Error("License has expired");
+    if (data.decision === "APPROVE") {
+      const [overlap] = await tx<{ id: string }>`
+        select id from bridge_rights_grants
+        where title_id=${data.titleId}
+          and id <> ${data.grantId}
+          and status in ('DRAFT','VALID')
+          and media @> '["CRAYONS_LOOP","TVOD"]'::jsonb
+          and territories ?| array['WORLDWIDE']
+          and territories ?| array['WORLDWIDE']
+          and window_start < (select window_end from bridge_rights_grants where id=${data.grantId})
+          and window_end > (select window_start from bridge_rights_grants where id=${data.grantId})
+          and languages ?| (select array(select jsonb_array_elements_text(languages)) from bridge_rights_grants where id=${data.grantId})
+        limit 1 for update
+      `;
+      if (overlap)
+        throw new Error("Conflicting overlapping Loop TVOD grant exists; resolve all competing drafts before legal approval");
+    }
     await tx`insert into bridge_legal_cases(title_id,status,evidence,reviewed_by,reviewed_at)
       values (${data.titleId},${data.decision === "APPROVE" ? "APPROVED" : "REJECTED"},
       ${JSON.stringify([{ grantId: data.grantId, note: data.note }])}::jsonb,${actor.userId},now())`;
