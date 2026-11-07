@@ -100,6 +100,8 @@ function Login() {
           <label className="block text-sm font-medium text-fg">
             Email
             <input
+              id="login-email"
+              name="email"
               required
               autoComplete="email"
               type="email"
@@ -122,6 +124,8 @@ function Login() {
             </span>
             <div className="relative mt-1.5">
               <input
+                id="login-password"
+                name="password"
                 required
                 autoComplete="current-password"
                 type={showPassword ? "text" : "password"}
