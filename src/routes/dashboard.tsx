@@ -35,6 +35,12 @@ const ADMIN_MODULES = [
     to: "/admin/workstations",
   },
   {
+    title: "Buyer CRM & invitations",
+    description: "Manage organization-owned buyer contacts, pipeline stages and invitations.",
+    to: "/buyer-crm",
+    action: "Open Buyer CRM",
+  },
+  {
     title: "Buyer desk & licensing",
     description: "Buyer activity, offers and licensing workflow.",
     to: "/buyer",
