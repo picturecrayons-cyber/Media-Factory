@@ -37,7 +37,49 @@ export async function saveLoopLicense(
     )
   )
     throw new Error("Forbidden");
-  if (new Date(data.windowEnd) <= new Date()) throw new Error("License window has expired");
+  const now = Date.now();
+  const startAt = new Date(data.windowStart).getTime();
+  const endAt = new Date(data.windowEnd).getTime();
+  if (!Number.isFinite(startAt) || !Number.isFinite(endAt) || startAt <= now || endAt <= startAt)
+    throw new Error("License window must start in the future and end after it");
+
+  // Exact resubmissions are idempotent. The title row lock serializes concurrent drafts.
+  const [existing] = await tx<{ id: string; status: string }>`
+    select id,status from bridge_rights_grants
+    where title_id=${data.titleId}
+      and grant_type='DISTRIBUTION'
+      and territories=${JSON.stringify(data.territories)}::jsonb
+      and languages=${JSON.stringify(data.languages)}::jsonb
+      and media='["CRAYONS_LOOP","TVOD"]'::jsonb
+      and window_start=${data.windowStart}::timestamptz
+      and window_end=${data.windowEnd}::timestamptz
+      and exclusivity=${data.exclusivity}
+      and evidence->0->>'agreementReference'=${data.agreementReference}
+      and evidence->0->>'ownershipReference'=${data.ownershipReference}
+      and evidence->0->'commercialTerms'=${JSON.stringify({
+        rightsOwnerSharePct: data.rightsOwnerSharePct,
+        distributorSharePct: data.distributorSharePct,
+      })}::jsonb
+      and status in ('DRAFT','VALID')
+    order by created_at desc limit 1 for update
+  `;
+  if (existing) return { grantId: existing.id, existing: true };
+
+  // Fail closed on any overlapping Loop TVOD grant for the same title and rights scope.
+  const [conflict] = await tx<{ id: string; exclusivity: string; status: string }>`
+    select id,exclusivity,status from bridge_rights_grants
+    where title_id=${data.titleId}
+      and status in ('DRAFT','VALID')
+      and media @> '["CRAYONS_LOOP","TVOD"]'::jsonb
+      and territories ?| array['WORLDWIDE']
+      and languages ?| ${data.languages}::text[]
+      and window_start < ${data.windowEnd}::timestamptz
+      and window_end > ${data.windowStart}::timestamptz
+    order by created_at desc limit 1 for update
+  `;
+  if (conflict)
+    throw new Error("Overlapping Loop TVOD rights grant exists; reconcile the existing agreement before creating another draft");
+
   const [grant] = await tx<{ id: string }>`insert into bridge_rights_grants
     (title_id,grant_type,territories,languages,media,window_start,window_end,exclusivity,evidence,status,created_by)
     values (${data.titleId},'DISTRIBUTION',${JSON.stringify(data.territories)}::jsonb,${JSON.stringify(data.languages)}::jsonb,
@@ -53,7 +95,7 @@ export async function saveLoopLicense(
         },
       ])}::jsonb,'DRAFT',${actor.userId}) returning id`;
   await audit(tx, actor.userId, data.titleId, "license.loop_draft", { grantId: grant.id });
-  return { grantId: grant.id };
+  return { grantId: grant.id, existing: false };
 }
 
 export const submitLoopLicense = createServerFn({ method: "POST" })
@@ -87,7 +129,12 @@ export async function reviewWorkflow(tx: Sql, actor: Actor, data: z.infer<typeof
     const assets = await tx<{
       kind: string;
       s3_key: string;
-    }>`select kind,s3_key from bridge_assets where title_id=${data.titleId} and byte_size>0`;
+      created_by: string | null;
+    }>`select kind,s3_key,created_by from bridge_assets where title_id=${data.titleId} and coalesce(byte_size,0)>0`;
+    if (!assets.length || assets.some((asset) => !asset.created_by))
+      throw new Error("Asset submitter identity is missing; independent QC cannot be established");
+    if (assets.some((asset) => asset.created_by === actor.userId))
+      throw new Error("An independent QC reviewer must not be an uploader of this title's assets");
     if (
       data.decision === "APPROVE" &&
       !hasVerifiedMasterAndArtwork(assets, title.master_key, title.poster_key)
