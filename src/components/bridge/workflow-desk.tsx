@@ -279,18 +279,10 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                   {g.status === "DRAFT" &&
                   title.status === "RIGHTS_REVIEW" &&
                   hasPermission(actor, "title.rights_review") ? (
-                    <div className="flex gap-2">
-                      {button("Approve rights / license", () =>
-                        reviewTitleWorkflow({
-                          data: {
-                            titleId: title.id,
-                            stage: "LEGAL",
-                            decision: "APPROVE",
-                            note,
-                            grantId: g.id,
-                          },
-                        }),
-                      )}
+                    <div className="space-y-2">
+                      <p className="text-xs text-muted-foreground">
+                        Approval is blocked until executed-agreement and ownership evidence receive independent, recorded verification.
+                      </p>
                       {button("Reject", () =>
                         reviewTitleWorkflow({
                           data: {
