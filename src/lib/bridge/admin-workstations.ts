@@ -19,19 +19,22 @@ export const listAdminWorkstations = createServerFn({ method: "GET" })
     if (!actor.internalRole) throw new Error("Forbidden");
     assertPermission(actor, "title.read_catalog");
     const sql = await getSql();
-    const [titles, assets, assetVersions, qc, legal, rights, packages, publications, profiles, audit] = await Promise.all([
+    const [titles, assets, assetVersions, qc, legal, rights, rightsEvidence, packages, publications, profiles, audit] = await Promise.all([
       sql`select id, name, owner_user_id, owner_account_type, status, language, updated_at from bridge_titles order by updated_at desc limit 200`,
       sql`select id, title_id, kind, s3_key, content_type, byte_size, created_at from bridge_assets order by created_at desc limit 300`,
       sql`select id, title_id, asset_group, asset_type, version, language, codec, s3_key, processing_state, created_at from bridge_asset_versions order by created_at desc limit 300`,
       sql`select id, title_id, asset_version_id, status, automated_findings, reviewer_findings, reviewed_by, reviewed_at, created_at from bridge_qc_cases order by created_at desc limit 200`,
       sql`select id, title_id, status, classification, evidence, restrictions, reviewed_by, reviewed_at, created_at from bridge_legal_cases order by created_at desc limit 200`,
       sql`select id, title_id, grant_type, territories, languages, media, window_start, window_end, exclusivity, status, created_by, created_at from bridge_rights_grants order by created_at desc limit 200`,
+      sql`select e.id,e.title_id,e.rights_grant_id,e.evidence_type,e.asset_version_id,e.checksum_sha256,e.submitted_by,e.status,e.created_at,av.asset_type,av.s3_key
+        from bridge_rights_evidence e join bridge_asset_versions av on av.id=e.asset_version_id
+        where e.status='PENDING' order by e.created_at asc limit 200`,
       sql`select id, title_id, destination, package_version, rights_grant_id, qc_case_id, legal_case_id, readiness_state, authorized_by, authorized_at, created_at, commercial_model, distributor_exclusivity, revenue_share_percent from bridge_destination_packages order by created_at desc limit 200`,
       sql`select id, bridge_title_id, loop_title_id, authorization_status, territories, languages, exploitation_models, window_start, window_end, approved_by, approved_at, revoked_at, updated_at from bridge_loop_publications order by updated_at desc limit 200`,
       sql`select user_id, email, display_name, account_type, organization_name, internal_role, email_verified, created_at, updated_at from bridge_profiles order by updated_at desc limit 200`,
       sql`select id, actor_user_id, action, entity_type, entity_id, metadata, created_at from bridge_audit_logs order by created_at desc limit 200`,
     ]);
-    return JSON.parse(JSON.stringify({ titles, assets, assetVersions, qc, legal, rights, packages, publications, profiles, audit }, (_, value) => typeof value === "bigint" ? value.toString() : value));
+    return JSON.parse(JSON.stringify({ titles, assets, assetVersions, qc, legal, rights, rightsEvidence, packages, publications, profiles, audit }, (_, value) => typeof value === "bigint" ? value.toString() : value));
   });
 
 const reviewInput = z.object({
