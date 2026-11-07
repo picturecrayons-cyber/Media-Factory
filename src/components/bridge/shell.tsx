@@ -2,19 +2,46 @@ import { Link } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 import { UserButton } from "@/lib/auth/gates";
 import type { BridgeActor } from "@/lib/bridge/session";
+import { hasPermission } from "@/lib/bridge/rbac";
 import { cn } from "@/lib/cn";
 
 type NavItem = { to: string; label: string };
 
-const NAV: NavItem[] = [
-  { to: "/dashboard", label: "Dashboard" },
-  { to: "/workspace", label: "Titles" },
-  { to: "/deliveries", label: "Deliveries" },
-  { to: "/account", label: "Account" },
-];
+function navigationFor(actor: BridgeActor): NavItem[] {
+  const items: NavItem[] = [];
+
+  if (actor.internalRole === "super_admin") {
+    items.push({ to: "/dashboard", label: "Dashboard" });
+  }
+
+  items.push({ to: "/workspace", label: "Titles" });
+
+  if (hasPermission(actor, "delivery.read")) {
+    items.push({ to: "/deliveries", label: "Deliveries" });
+  }
+
+  if (actor.internalRole) {
+    items.push({ to: "/internal", label: "Operations" });
+  }
+
+  if (actor.internalRole === "admin" || actor.internalRole === "super_admin") {
+    items.push({ to: "/admin", label: "Admin" });
+  }
+
+  items.push({ to: "/account", label: "Account" });
+  return items;
+}
 
 function NavLink({ item }: { item: NavItem }) {
-  return <Link to={item.to} className="bridge-nav-item" activeProps={{ className: "bridge-nav-item bridge-nav-active" }}>{item.label}</Link>;
+  return (
+    <Link
+      to={item.to}
+      className="bridge-nav-item shrink-0"
+      activeProps={{ className: "bridge-nav-item bridge-nav-active shrink-0" }}
+    >
+      {item.label}
+    </Link>
+  );
 }
 
 export function BrandMark({ className }: { className?: string }) {
@@ -33,17 +60,21 @@ export function BrandMark({ className }: { className?: string }) {
 }
 
 export function BridgeShell({ actor, title, children }: { actor: BridgeActor; title: string; children: ReactNode }) {
+  const nav = navigationFor(actor);
+
   return (
     <div className="min-h-screen bg-bg text-fg">
       <header className="sticky top-0 z-50 border-b border-line bg-surface/88 backdrop-blur-xl">
-        <div className="mx-auto flex max-w-[1440px] items-center gap-6 px-4 py-3.5 sm:px-6 lg:px-8">
+        <div className="mx-auto flex max-w-[1440px] flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3.5 sm:px-6 lg:px-8">
           <BrandMark />
-          <nav className="hidden flex-1 items-center gap-1 md:flex">{NAV.map((item) => <NavLink key={item.label} item={item} />)}</nav>
-          <a href="https://crayonsloop.in/" target="_blank" rel="noreferrer" className="hidden text-sm font-semibold text-muted transition hover:text-fg lg:inline">Open Crayons Loop ↗</a>
+          <a href="https://crayonsloop.in/" target="_blank" rel="noreferrer" className="hidden text-sm font-semibold text-muted transition hover:text-fg lg:order-3 lg:inline">Open Crayons Loop ↗</a>
           <div className="ml-auto flex items-center gap-3">
             {actor.internalRole ? <span className="hidden rounded-full border border-line px-3 py-1 text-xs text-muted sm:inline">{actor.internalRole.replaceAll("_", " ")}</span> : null}
             <UserButton />
           </div>
+          <nav aria-label="Main navigation" className="order-3 flex w-full items-center gap-1 overflow-x-auto pb-1 md:order-none md:w-auto md:flex-1 md:pb-0">
+            {nav.map((item) => <NavLink key={item.label} item={item} />)}
+          </nav>
         </div>
       </header>
       <main className="mx-auto max-w-[1440px] px-4 py-6 sm:px-6 lg:px-8">
