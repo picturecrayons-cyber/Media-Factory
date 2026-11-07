@@ -84,8 +84,11 @@ function WorkstationBody() {
         <ReviewQueue title="QC Review" description="Review technical quality before rights review." titles={qcQueue}
           actions={[["PASS", "Approve → Rights"], ["FAIL", "Fail QC"]]} mutation={review} />
       ) : activeTab === "Rights" ? (
-        <ReviewQueue title="Rights Review" description="Approval is unavailable until executed-agreement and ownership evidence receive independent verification." titles={rightsQueue}
-          actions={[["REJECT", "Reject"]]} mutation={review} />
+        <div className="space-y-6">
+          <ReviewQueue title="Rights Review" description="Reject or hold titles here. Licensing approval is only available after the independent evidence queue below is cleared." titles={rightsQueue}
+            actions={[[ "REJECT", "Reject" ]]} mutation={review} />
+          <RightsEvidenceQueue evidence={data.rightsEvidence ?? []} titleName={titleName} mutation={evidenceReview} />
+        </div>
       ) : activeTab === "Assets" ? (
         <SimpleTable title="Assets" description={data.assets.length + " base assets · " + data.assetVersions.length + " versioned assets"}
           rows={data.assets} fields={["kind", "s3_key", "content_type", "byte_size"]} />
@@ -106,7 +109,7 @@ function WorkstationBody() {
           rows={data.audit} fields={["action", "entity_type", "entity_id", "actor_user_id", "created_at"]} />
       )}
 
-      {review.isError || gate.isError ? <p className="rounded-xl border border-line p-4 text-sm">Action failed: {String(review.error ?? gate.error)}</p> : null}
+      {review.isError || gate.isError || evidenceReview.isError ? <p className="rounded-xl border border-line p-4 text-sm">Action failed: {String(review.error ?? gate.error ?? evidenceReview.error)}</p> : null}
     </div>
   );
 }
@@ -147,6 +150,36 @@ function DuplicateReviewSection() {
       {!r.persisted ? <Button size="sm" disabled={openMutation.isPending} onClick={() => openMutation.mutate({ data: { candidateTitleId: r.candidateTitleId, canonicalTitleId: r.canonicalTitleId } })}>Open review</Button> : <div className="flex flex-wrap gap-2"><Button size="sm" variant="outline" disabled={decideMutation.isPending} onClick={() => decideMutation.mutate({ data: { reviewId: r.id, decision: "HOLD", identityConfidence: r.identityConfidence, rightsConflictStatus: r.rightsConflictStatus ?? "UNKNOWN", territoryConflictStatus: r.territoryConflictStatus ?? "UNKNOWN", windowConflictStatus: r.windowConflictStatus ?? "UNKNOWN", assetReferenceStatus: r.assetReferenceStatus ?? "UNKNOWN", deliveryReferenceStatus: r.deliveryReferenceStatus ?? "UNKNOWN", buyerMappingStatus: r.buyerMappingStatus ?? "UNKNOWN" } })}>Hold</Button><Button size="sm" variant="outline" disabled={decideMutation.isPending} onClick={() => decideMutation.mutate({ data: { reviewId: r.id, decision: "NO_MERGE", identityConfidence: r.identityConfidence, rightsConflictStatus: r.rightsConflictStatus ?? "UNKNOWN", territoryConflictStatus: r.territoryConflictStatus ?? "UNKNOWN", windowConflictStatus: r.windowConflictStatus ?? "UNKNOWN", assetReferenceStatus: r.assetReferenceStatus ?? "UNKNOWN", deliveryReferenceStatus: r.deliveryReferenceStatus ?? "UNKNOWN", buyerMappingStatus: r.buyerMappingStatus ?? "UNKNOWN" } })}>No merge</Button><Button size="sm" disabled={decideMutation.isPending || r.identityConfidence !== "CONFIRMED"} onClick={() => decideMutation.mutate({ data: { reviewId: r.id, decision: "APPROVE", identityConfidence: "CONFIRMED", rightsConflictStatus: r.rightsConflictStatus ?? "CLEAR", territoryConflictStatus: r.territoryConflictStatus ?? "CLEAR", windowConflictStatus: r.windowConflictStatus ?? "CLEAR", assetReferenceStatus: r.assetReferenceStatus ?? "CLEAR", deliveryReferenceStatus: r.deliveryReferenceStatus ?? "CLEAR", buyerMappingStatus: r.buyerMappingStatus ?? "CLEAR" } })}>Approve reconciliation</Button></div>}
     </div>)}</div>}
   </section>;
+}
+
+function RightsEvidenceQueue({ evidence, titleName, mutation }: { evidence: any[]; titleName: Map<any, any>; mutation: any }) {
+  const [notes, setNotes] = useState<Record<string, string>>({});
+  return (
+    <section className="space-y-3">
+      <SectionHeader title="Independent evidence verification" description="Inspect the actual stored document before recording a legal verification decision. The document checksum is bound to the uploaded asset version." />
+      {evidence.length ? evidence.map((item) => (
+        <article key={item.id} className="space-y-3 rounded-2xl border border-line bg-surface p-4">
+          <div>
+            <p className="font-medium">{titleName.get(item.title_id) ?? item.title_id}</p>
+            <p className="text-xs text-muted">{item.evidence_type.replaceAll("_", " ")} · {item.asset_type} · submitted by {item.submitted_by}</p>
+            <p className="break-all text-xs text-muted">Asset: {item.s3_key} · SHA-256: {item.checksum_sha256}</p>
+          </div>
+          <label className="grid gap-1 text-sm">
+            Reviewer findings and basis
+            <input value={notes[item.id] ?? ""} onChange={(event) => setNotes((current) => ({ ...current, [item.id]: event.target.value }))}
+              className="rounded-lg border border-line bg-elevated p-2" minLength={8} maxLength={2000}
+              placeholder="Record the source document inspected and what was verified" />
+          </label>
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" disabled={mutation.isPending || (notes[item.id] ?? "").trim().length < 8}
+              onClick={() => mutation.mutate({ data: { evidenceId: item.id, decision: "VERIFIED", note: notes[item.id] } })}>Verify document</Button>
+            <Button size="sm" variant="outline" disabled={mutation.isPending || (notes[item.id] ?? "").trim().length < 8}
+              onClick={() => mutation.mutate({ data: { evidenceId: item.id, decision: "REJECTED", note: notes[item.id] } })}>Reject document</Button>
+          </div>
+        </article>
+      )) : <Empty text="No pending evidence documents. A legal reviewer cannot approve a license until both required evidence classes are independently verified." />}
+    </section>
+  );
 }
 
 function Empty({ text }: { text: string }) { return <div className="rounded-2xl border border-dashed border-line p-6 text-sm text-muted">{text}</div>; }
