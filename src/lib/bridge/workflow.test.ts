@@ -83,7 +83,7 @@ async function fixture() {
       poster_key text,
       updated_at timestamptz
     );
-    create table bridge_assets(id text,title_id text,kind text,s3_key text,byte_size bigint);
+    create table bridge_assets(id text,title_id text,kind text,s3_key text,byte_size bigint,created_by text);
     create table bridge_title_events(title_id text,from_status text,to_status text,actor_user_id text,note text);
     create table bridge_audit_logs(actor_user_id text,action text,entity_type text,entity_id text,metadata text);`);
     await db.exec(
@@ -95,9 +95,9 @@ async function fixture() {
     await db.exec(`insert into bridge_titles(id,owner_user_id,status,master_key,poster_key,updated_at)
       values('title-123','owner','QC_REVIEW','sealed/master','sealed/poster',now());
     insert into bridge_assets values
-      ('master','title-123','master','sealed/master',100),
-      ('legacy-poster','title-123','poster','older/unreferenced-poster',100),
-      ('poster-vertical','title-123','poster_vertical','sealed/poster',100);`);
+      ('master','title-123','master','sealed/master',100,'owner'),
+      ('legacy-poster','title-123','poster','older/unreferenced-poster',100,'owner'),
+      ('poster-vertical','title-123','poster_vertical','sealed/poster',100,'owner');`);
     function adapter(query: (text: string, params?: unknown[]) => Promise<{ rows: unknown[] }>) {
       const sql = (async (strings: TemplateStringsArray, ...params: unknown[]) => {
         let text = strings[0];
@@ -302,6 +302,58 @@ test("concurrent reviewer calls cannot approve the same lifecycle twice", async 
     await f.db.close();
   }
 });
+
+test("QC reviewer cannot approve or reject a title whose assets they uploaded", async () => {
+  const f = await fixture();
+  try {
+    const uploaderReviewer = { ...owner, internalRole: "qc_reviewer" as const };
+    await assert.rejects(
+      f.sql.transaction((tx) =>
+        f.review(tx, uploaderReviewer, {
+          titleId: "title-123",
+          stage: "QC",
+          decision: "APPROVE",
+          note: "Uploader attempting independent QC",
+        }),
+      ),
+      /independent QC reviewer/,
+    );
+    assert.equal((await f.sql.query("select * from bridge_qc_cases")).length, 0);
+    assert.equal(
+      (await f.sql.query<{ status: string }>("select status from bridge_titles"))[0].status,
+      "QC_REVIEW",
+    );
+  } finally {
+    await f.db.close();
+  }
+});
+
+test("exact license resubmission is idempotent and conflicting overlap is rejected", async () => {
+  const f = await fixture();
+  try {
+    const first = (await f.sql.transaction((tx) => f.save(tx, owner, license))) as {
+      grantId: string; existing?: boolean;
+    };
+    const repeated = (await f.sql.transaction((tx) => f.save(tx, owner, license))) as {
+      grantId: string; existing?: boolean;
+    };
+    assert.equal(repeated.grantId, first.grantId);
+    assert.equal(repeated.existing, true);
+    assert.equal((await f.sql.query("select * from bridge_rights_grants")).length, 1);
+
+    await assert.rejects(
+      f.sql.transaction((tx) => f.save(tx, owner, {
+        ...license,
+        exclusivity: "EXCLUSIVE",
+      })),
+      /Overlapping Loop TVOD rights grant/,
+    );
+    assert.equal((await f.sql.query("select * from bridge_rights_grants")).length, 1);
+  } finally {
+    await f.db.close();
+  }
+});
+
 test("license author cannot approve their own agreement", async () => {
   const f = await fixture();
   try {
@@ -341,9 +393,9 @@ test("Submit for QC advances PREPARING with the referenced vertical poster and w
     `);
     await f.sql.query(`
       insert into bridge_assets values
-        ('qc-master','qc-submit-title','master','sealed/qc-master',4096),
-        ('qc-old-poster','qc-submit-title','poster','older/unreferenced-poster',512),
-        ('qc-vertical-poster','qc-submit-title','poster_vertical','sealed/qc-poster',1024)
+        ('qc-master','qc-submit-title','master','sealed/qc-master',4096,'owner'),
+        ('qc-old-poster','qc-submit-title','poster','older/unreferenced-poster',512,'owner'),
+        ('qc-vertical-poster','qc-submit-title','poster_vertical','sealed/qc-poster',1024,'owner')
     `);
     const title = {
       id: "qc-submit-title",
