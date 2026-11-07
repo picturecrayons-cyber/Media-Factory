@@ -5,7 +5,7 @@
 
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import { requireVerifiedActor } from "./session";
@@ -90,15 +90,17 @@ function requireCurationStaff(actor: { internalRole?: string | null }) {
 }
 
 const createPayloadSchema = z.object({
-  titleName: z.string().min(1).max(160),
-  logline: z.string().min(10).max(500),
-  synopsis: z.string().min(40).max(8000),
+  idempotencyKey: z.string().uuid(),
+  paymentId: z.string().min(8).max(160).optional(),
+  titleName: z.string().trim().min(1).max(160),
+  logline: z.string().trim().min(10).max(500),
+  synopsis: z.string().trim().min(40).max(8000),
   genre: z.array(z.string().min(1).max(40)).max(12).default([]),
   estimatedBudgetRange: z.string().max(80).optional(),
   targetPlatforms: z.array(z.string().min(1).max(40)).max(12).default([]),
   treatmentUrl: z.string().url().max(500).optional().or(z.literal("")),
   screenplayUrl: z.string().url().max(500).optional().or(z.literal("")),
-  language: z.string().min(2).max(40).default("Malayalam"),
+  language: z.string().trim().min(2).max(40).default("Malayalam"),
 });
 
 export const createStoryConceptSubmission = createServerFn({ method: "POST" })
@@ -113,68 +115,131 @@ export const createStoryConceptSubmission = createServerFn({ method: "POST" })
     const actor = await requireVerifiedActor(context.userId);
     assertPermission(actor, actor.internalRole ? "title.ingest_internal" : "title.create");
 
-    const titleId = randomBytes(16).toString("hex");
-    const slug = slugify(data.titleName, titleId);
     const sql = await getSql();
 
+    const requestHash = createHash("sha256")
+      .update(JSON.stringify({
+        titleName: data.titleName.trim(),
+        logline: data.logline.trim(),
+        synopsis: data.synopsis.trim(),
+        genre: data.genre,
+        estimatedBudgetRange: data.estimatedBudgetRange ?? null,
+        targetPlatforms: data.targetPlatforms,
+        treatmentUrl: data.treatmentUrl || null,
+        screenplayUrl: data.screenplayUrl || null,
+        language: data.language,
+        paymentId: data.paymentId ?? null,
+      }))
+      .digest("hex");
+
     try {
-      await sql`
-        insert into bridge_titles (
-          id, slug, name, owner_user_id, owner_account_type, status,
-          synopsis, language, content_type, owner_organization_id, submission_type
-        ) values (
-          ${titleId},
-          ${slug},
-          ${data.titleName},
-          ${actor.userId},
-          ${actor.accountType},
-          ${"DRAFT"},
-          ${data.synopsis},
-          ${data.language},
-          ${"OTHER"},
-          ${actor.accountType === "studio" ? actor.organizationId ?? null : null},
-          ${"story_concept"}
-        )
-      `;
+      const result = await sql.transaction(async (tx) => {
+        // Serialize retries for this actor/key before checking the durable record.
+        await tx`select pg_advisory_xact_lock(hashtextextended(${`story-concept:${actor.userId}:${data.idempotencyKey}`}, 0))`;
+        const prior = await tx<{ request_hash: string; title_id: string; concept_id: string }>`
+          select request_hash, title_id, concept_id
+          from bridge_story_concept_idempotency
+          where actor_user_id = ${actor.userId}
+            and idempotency_key = ${data.idempotencyKey}::uuid
+          limit 1
+        `;
+        if (prior[0]) {
+          if (prior[0].request_hash !== requestHash) {
+            throw new Error("Idempotency key was already used with a different submission.");
+          }
+          const existing = await tx<ConceptRow>`
+            select * from bridge_story_concept_submissions where id = ${prior[0].concept_id}::uuid limit 1
+          `;
+          if (!existing[0]) throw new Error("Previously accepted submission could not be recovered.");
+          return { titleId: prior[0].title_id, concept: existing[0] };
+        }
 
-      await sql`
-        insert into bridge_title_events (title_id, from_status, to_status, actor_user_id, note)
-        values (${titleId}, null, ${"DRAFT"}, ${actor.userId}, ${"story concept submission received"})
-      `;
+        const service = await tx<{ active: boolean }>`
+          select active from bridge_service_catalog
+          where code = 'STORY_CONCEPT_NETWORK_SUBMISSION'
+          limit 1
+        `;
+        if (!service[0]?.active) {
+          throw new Error("Story / Concept network submission is locked pending service certification.");
+        }
+        if (!data.paymentId) {
+          throw new Error("A verified Story / Concept submission payment is required.");
+        }
+        const rate = await tx<{ base_price_paise: number | null }>`
+          select base_price_paise
+          from bridge_service_rates
+          where service_code = 'STORY_CONCEPT_NETWORK_SUBMISSION'
+            and active = true
+            and currency = 'INR'
+            and effective_from <= now()
+            and (effective_to is null or effective_to > now())
+          order by effective_from desc, version desc
+          limit 1
+        `;
+        if (!rate[0] || rate[0].base_price_paise === null || Number(rate[0].base_price_paise) <= 0) {
+          throw new Error("A certified active Story / Concept submission rate is required.");
+        }
+        const payment = await tx<{ id: string; amount_paise: number }>`
+          select id, amount_paise
+          from bridge_payments
+          where id = ${data.paymentId}
+            and user_id = ${actor.userId}
+            and purpose = 'story_concept_submission'
+            and status = 'captured'
+            and verified_at is not null
+            and title_id is null
+          for update
+        `;
+        if (!payment[0] || Number(payment[0].amount_paise) !== Number(rate[0].base_price_paise)) {
+          throw new Error("No matching captured Story / Concept payment at the certified rate was found.");
+        }
 
-      const conceptRows = await sql<ConceptRow>`
-        insert into bridge_story_concept_submissions (
-          title_id, logline, synopsis, treatment_url, screenplay_url,
-          genre, estimated_budget_range, target_platforms, curation_status
-        ) values (
-          ${titleId},
-          ${data.logline},
-          ${data.synopsis},
-          ${data.treatmentUrl || null},
-          ${data.screenplayUrl || null},
-          ${data.genre},
-          ${data.estimatedBudgetRange ?? null},
-          ${data.targetPlatforms},
-          ${"PENDING"}
-        )
-        returning *
-      `;
-
-      const concept = conceptRows[0];
-      if (!concept) throw new Error("Story concept create failed");
-
-      await writeAudit({
-        actorUserId: actor.userId,
-        action: "story_concept.create",
-        entityType: "bridge_story_concept_submission",
-        entityId: concept.id,
-        metadata: { titleId },
+        const titleId = randomBytes(16).toString("hex");
+        const slug = slugify(data.titleName, titleId);
+        await tx`
+          insert into bridge_titles (
+            id, slug, name, owner_user_id, owner_account_type, status,
+            synopsis, language, content_type, owner_organization_id, submission_type
+          ) values (
+            ${titleId}, ${slug}, ${data.titleName.trim()}, ${actor.userId},
+            ${actor.accountType}, 'DRAFT', ${data.synopsis.trim()}, ${data.language},
+            'OTHER', ${actor.accountType === "studio" ? actor.organizationId ?? null : null},
+            'story_concept'
+          )
+        `;
+        await tx`
+          insert into bridge_title_events (title_id, from_status, to_status, actor_user_id, note)
+          values (${titleId}, null, 'DRAFT', ${actor.userId}, 'story concept submission received')
+        `;
+        const conceptRows = await tx<ConceptRow>`
+          insert into bridge_story_concept_submissions (
+            title_id, payment_id, logline, synopsis, treatment_url, screenplay_url,
+            genre, estimated_budget_range, target_platforms, curation_status
+          ) values (
+            ${titleId}, ${data.paymentId}, ${data.logline.trim()}, ${data.synopsis.trim()},
+            ${data.treatmentUrl || null}, ${data.screenplayUrl || null},
+            ${data.genre}, ${data.estimatedBudgetRange ?? null}, ${data.targetPlatforms}, 'PENDING'
+          )
+          returning *
+        `;
+        const concept = conceptRows[0];
+        if (!concept) throw new Error("Story concept create failed");
+        await tx`
+          insert into bridge_story_concept_idempotency
+            (actor_user_id, idempotency_key, request_hash, title_id, concept_id)
+          values
+            (${actor.userId}, ${data.idempotencyKey}::uuid, ${requestHash}, ${titleId}, ${concept.id})
+        `;
+        await writeAudit({
+          actorUserId: actor.userId,
+          action: "story_concept.create",
+          entityType: "bridge_story_concept_submission",
+          entityId: concept.id,
+          metadata: { titleId, idempotencyKey: data.idempotencyKey },
+        }, tx);
+        return { titleId, concept };
       });
-
-      return {
-        titleId,
-        concept: mapConcept(concept),
-      };
+      return { titleId: result.titleId, concept: mapConcept(result.concept) };
     } catch (err) {
       migrationHint(err);
     }
@@ -263,43 +328,41 @@ export const updateStoryConceptCuration = createServerFn({ method: "POST" })
 
     const sql = await getSql();
     try {
-      const existing = await sql<ConceptRow>`
-        select * from bridge_story_concept_submissions where id = ${data.id} limit 1
-      `;
-      const current = existing[0];
-      if (!current) throw new Error("Not found");
-
-      const from = current.curation_status as CurationStatus;
-      const allowed = CURATION_TRANSITIONS[from] ?? [];
-      if (!allowed.includes(data.status)) {
-        throw new Error(`Invalid curation transition: ${from} → ${data.status}`);
-      }
-
-      const rows = await sql<ConceptRow>`
-        update bridge_story_concept_submissions
-        set
-          curation_status = ${data.status},
-          admin_notes = ${data.adminNotes ?? null},
-          updated_at = now(),
-          introduced_to_buyers_at = case
-            when ${data.status} = 'INTRODUCED_TO_BUYERS' then coalesce(introduced_to_buyers_at, now())
-            else introduced_to_buyers_at
-          end
-        where id = ${data.id}
-        returning *
-      `;
-
-      const concept = rows[0];
-      if (!concept) throw new Error("Not found");
-
-      await writeAudit({
-        actorUserId: actor.userId,
-        action: "story_concept.curation_update",
-        entityType: "bridge_story_concept_submission",
-        entityId: concept.id,
-        metadata: { from, status: data.status },
+      const concept = await sql.transaction(async (tx) => {
+        const existing = await tx<ConceptRow>`
+          select * from bridge_story_concept_submissions where id = ${data.id}::uuid for update
+        `;
+        const current = existing[0];
+        if (!current) throw new Error("Not found");
+        const from = current.curation_status as CurationStatus;
+        const allowed = CURATION_TRANSITIONS[from] ?? [];
+        if (!allowed.includes(data.status)) {
+          throw new Error(`Invalid curation transition: ${from} → ${data.status}`);
+        }
+        const rows = await tx<ConceptRow>`
+          update bridge_story_concept_submissions
+          set
+            curation_status = ${data.status},
+            admin_notes = ${data.adminNotes === undefined ? current.admin_notes : data.adminNotes},
+            updated_at = now(),
+            introduced_to_buyers_at = case
+              when ${data.status} = 'INTRODUCED_TO_BUYERS' then coalesce(introduced_to_buyers_at, now())
+              else introduced_to_buyers_at
+            end
+          where id = ${data.id}::uuid
+          returning *
+        `;
+        const updated = rows[0];
+        if (!updated) throw new Error("Not found");
+        await writeAudit({
+          actorUserId: actor.userId,
+          action: "story_concept.curation_update",
+          entityType: "bridge_story_concept_submission",
+          entityId: updated.id,
+          metadata: { from, status: data.status },
+        }, tx);
+        return updated;
       });
-
       return { concept: mapConcept(concept) };
     } catch (err) {
       migrationHint(err);

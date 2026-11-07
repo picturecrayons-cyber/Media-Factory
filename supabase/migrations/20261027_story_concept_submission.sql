@@ -39,6 +39,14 @@ CREATE TABLE IF NOT EXISTS public.bridge_story_concept_submissions (
 CREATE INDEX IF NOT EXISTS bridge_story_concept_curation_idx
   ON public.bridge_story_concept_submissions (curation_status, created_at DESC);
 
+-- One captured payment can authorize at most one concept submission.
+ALTER TABLE public.bridge_story_concept_submissions
+  ADD COLUMN IF NOT EXISTS payment_id text REFERENCES public.bridge_payments(id) ON DELETE RESTRICT;
+
+CREATE UNIQUE INDEX IF NOT EXISTS bridge_story_concept_payment_unique_idx
+  ON public.bridge_story_concept_submissions (payment_id)
+  WHERE payment_id IS NOT NULL;
+
 -- 3. Admin-mediated buyer interest
 CREATE TABLE IF NOT EXISTS public.bridge_buyer_interest (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -59,15 +67,15 @@ ALTER TABLE public.bridge_story_concept_submissions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.bridge_buyer_interest ENABLE ROW LEVEL SECURITY;
 
 -- 5. Optional service catalog entry (fee stays configurable / locked)
+-- FIXED is the canonical pricing_method enum/check value in the Testing schema.
 INSERT INTO public.bridge_service_catalog
-  (code, category, name, description, why, classification, pricing_method, unit_label, customer_visible, active)
+  (code, category, name, description, classification, pricing_method, unit_label, customer_visible, active)
 VALUES
   (
     'STORY_CONCEPT_NETWORK_SUBMISSION',
-    'SUBMISSION',
+    'PREPARE',
     'Story / Concept Network Submission',
     'Submit a story or concept for admin curation and introduction to verified buyers.',
-    'Places the concept in front of the curated buyer network after professional review.',
     'BILLABLE',
     'FIXED',
     'submission',
@@ -75,3 +83,24 @@ VALUES
     false   -- locked until fee is certified
   )
 ON CONFLICT (code) DO NOTHING;
+
+-- 6. Durable idempotency records. The API checks captured payment before
+-- creating a title; the unique actor/key pair prevents duplicate retries.
+CREATE TABLE IF NOT EXISTS public.bridge_story_concept_idempotency (
+  actor_user_id text NOT NULL,
+  idempotency_key uuid NOT NULL,
+  request_hash text NOT NULL,
+  title_id text NOT NULL REFERENCES public.bridge_titles(id) ON DELETE CASCADE,
+  concept_id uuid NOT NULL REFERENCES public.bridge_story_concept_submissions(id) ON DELETE CASCADE,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (actor_user_id, idempotency_key),
+  UNIQUE (concept_id)
+);
+
+CREATE INDEX IF NOT EXISTS bridge_story_concept_idempotency_title_idx
+  ON public.bridge_story_concept_idempotency (title_id);
+
+ALTER TABLE public.bridge_story_concept_idempotency ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON public.bridge_story_concept_idempotency FROM anon, authenticated;
+REVOKE ALL ON public.bridge_story_concept_submissions FROM anon, authenticated;
+REVOKE ALL ON public.bridge_buyer_interest FROM anon, authenticated;
