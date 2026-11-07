@@ -1,59 +1,19 @@
-import { useEffect, useState } from "react";
-import { getStoredSupabaseUser, getSupabaseSession, subscribeAuthChange } from "./client";
+import { useAuthSessionState } from "./provider";
 
-export type AppUser = {
-  id: string;
-  displayName: string | null;
-  primaryEmail: string | null;
-  profileImageUrl: string | null;
-  /** Untrusted role hint from signup metadata; server authorization never trusts this field. */
-  signupAccountTypeHint: string | null;
+export type { AppUser } from "./provider";
+export type CurrentUserState = {
+  user: import("./provider").AppUser | null;
+  isPending: boolean;
+  authError: string | null;
+  retry: () => void;
 };
 
-export type CurrentUserState = { user: AppUser | null; isPending: boolean };
-
-function normalize(user: ReturnType<typeof getStoredSupabaseUser>): AppUser | null {
-  if (!user) return null;
-  return {
-    id: user.id,
-    displayName: user.user_metadata?.name ?? user.user_metadata?.full_name ?? null,
-    primaryEmail: user.email ?? null,
-    profileImageUrl: user.user_metadata?.avatar_url ?? null,
-    signupAccountTypeHint:
-      typeof user.user_metadata?.account_type === "string" ? user.user_metadata.account_type : null,
-  };
-}
-
+/** All Bridge routes share the single root-level auth bootstrap. */
 export function useCurrentUserState(): CurrentUserState {
-  const [state, setState] = useState<CurrentUserState>(() => ({
-    user: null,
-    isPending: true,
-  }));
-
-  useEffect(() => {
-    let alive = true;
-    let authChanged = false;
-    const unsubscribe = subscribeAuthChange((_event, session) => {
-      authChanged = true;
-      if (alive) {
-        setState({ user: normalize(session?.user ?? null), isPending: false });
-      }
-    });
-    void getSupabaseSession().then((session) => {
-      // A newer confirmation/refresh/sign-out event wins over this initial read.
-      if (alive && !authChanged) {
-        setState({ user: normalize(session?.user ?? null), isPending: false });
-      }
-    });
-    return () => {
-      alive = false;
-      unsubscribe();
-    };
-  }, []);
-
-  return state;
+  const { user, isPending, authError, retry } = useAuthSessionState();
+  return { user, isPending, authError, retry };
 }
 
-export function useCurrentUser(): AppUser | null {
-  return useCurrentUserState().user;
+export function useCurrentUser(): import("./provider").AppUser | null {
+  return useAuthSessionState().user;
 }
