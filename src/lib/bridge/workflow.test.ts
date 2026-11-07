@@ -10,6 +10,7 @@ import { z } from "zod";
 import * as policy from "./workflow-policy.ts";
 import * as rbac from "./rbac.ts";
 import * as assetRoles from "./asset-roles.ts";
+import { submitTitleForQc } from "./title-submission.ts";
 import type { Sql } from "../db";
 
 type TestDb = {
@@ -324,6 +325,55 @@ test("license author cannot approve their own agreement", async () => {
     assert.equal(
       (await f.sql.query<{ status: string }>("select status from bridge_rights_grants"))[0].status,
       "DRAFT",
+    );
+  } finally {
+    await f.db.close();
+  }
+});
+
+
+test("Submit for QC advances PREPARING with the referenced vertical poster and writes lifecycle plus audit only", async () => {
+  const f = await fixture();
+  try {
+    await f.sql.query(`
+      insert into bridge_titles(id,owner_user_id,status,master_key,poster_key,updated_at)
+      values ('qc-submit-title','owner','PREPARING','sealed/qc-master','sealed/qc-poster',now());
+      insert into bridge_assets values
+        ('qc-master','qc-submit-title','master','sealed/qc-master',4096),
+        ('qc-old-poster','qc-submit-title','poster','older/unreferenced-poster',512),
+        ('qc-vertical-poster','qc-submit-title','poster_vertical','sealed/qc-poster',1024);
+    `);
+    const title = {
+      id: "qc-submit-title",
+      status: "PREPARING" as const,
+      masterKey: "sealed/qc-master",
+      posterKey: "sealed/qc-poster",
+    };
+    const result = await submitTitleForQc(f.sql, title as never, "owner", "Submit verified title for QC");
+    assert.equal(result.title.status, "QC_REVIEW");
+    assert.equal(
+      (await f.sql.query<{ status: string }>(
+        "select status from bridge_titles where id='qc-submit-title'",
+      ))[0].status,
+      "QC_REVIEW",
+    );
+    assert.equal(
+      (await f.sql.query(
+        "select * from bridge_title_events where title_id='qc-submit-title' and from_status='PREPARING' and to_status='QC_REVIEW'",
+      )).length,
+      1,
+    );
+    assert.equal(
+      (await f.sql.query(
+        "select * from bridge_audit_logs where entity_id='qc-submit-title' and action='title.advance'",
+      )).length,
+      1,
+    );
+    assert.equal(
+      (await f.sql.query(
+        "select * from bridge_qc_cases where title_id='qc-submit-title'",
+      )).length,
+      0,
     );
   } finally {
     await f.db.close();
