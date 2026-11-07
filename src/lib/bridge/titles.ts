@@ -534,7 +534,7 @@ async function assertLicensingReady(titleId: string) {
       exists (
         select 1 from bridge_assets a
         where a.title_id = t.id and a.kind in ('poster', 'poster_vertical') and coalesce(a.byte_size, 0) > 0
-          and (t.poster_key is null or a.s3_key = t.poster_key)
+          and t.poster_key is not null and a.s3_key = t.poster_key
       ) as poster_ok,
       exists (
         select 1 from bridge_destination_packages p
