@@ -32,3 +32,16 @@ test("entitlement and title transition happen before webhook is marked processed
   assert.ok(entitlement < processed);
   assert.ok(transition < processed);
 });
+
+test("Bridge captures validate provider amount, currency, and captured status before granting access", () => {
+  assert.match(source, /payment\.status !== "captured"/);
+  assert.match(source, /Number\(payment\.amount\) !== Number\(localPayment\.amount_paise\)/);
+  assert.match(source, /payment\.currency !== localPayment\.currency \|\| localPayment\.currency !== "INR"/);
+});
+
+test("package payments grant package entitlement and license the package instead of a generic title entitlement", () => {
+  assert.match(source, /if \(localPayment\.package_id\)/);
+  assert.match(source, /from\("bridge_package_entitlements"\)\.upsert/);
+  assert.match(source, /action: "licensing\.language_package_licensed"/);
+  assert.match(source, /from\("bridge_license_packages"\)\.update\(\{[\s\S]*status: "LICENSED"/);
+});
