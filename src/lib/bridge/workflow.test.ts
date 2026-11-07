@@ -168,7 +168,7 @@ const license = {
   distributorSharePct: 20,
 };
 
-test("real SQL services persist QC, independently approved license, lifecycle and audit", async () => {
+test("QC may pass but legal approval fails closed until agreement and ownership evidence are verified", async () => {
   const f = await fixture();
   try {
     const saved = (await f.sql.transaction((tx) => f.save(tx, owner, license))) as {
@@ -182,24 +182,27 @@ test("real SQL services persist QC, independently approved license, lifecycle an
         note: "Playback and codec checked",
       }),
     );
-    await f.sql.transaction((tx) =>
-      f.review(tx, legal, {
-        titleId: "title-123",
-        stage: "LEGAL",
-        decision: "APPROVE",
-        note: "Ownership and agreement verified",
-        grantId: saved.grantId,
-      }),
+    await assert.rejects(
+      f.sql.transaction((tx) =>
+        f.review(tx, legal, {
+          titleId: "title-123",
+          stage: "LEGAL",
+          decision: "APPROVE",
+          note: "Ownership and agreement reviewed",
+          grantId: saved.grantId,
+        }),
+      ),
+      /independent, recorded verification/,
     );
     assert.equal(
       (await f.sql.query<{ status: string }>("select status from bridge_titles"))[0].status,
-      "LICENSING_READY",
+      "RIGHTS_REVIEW",
     );
     assert.equal(
       (await f.sql.query<{ status: string }>("select status from bridge_rights_grants"))[0].status,
-      "VALID",
+      "DRAFT",
     );
-    assert.equal((await f.sql.query("select * from bridge_audit_logs")).length, 3);
+    assert.equal((await f.sql.query("select * from bridge_legal_cases")).length, 0);
   } finally {
     await f.db.close();
   }
