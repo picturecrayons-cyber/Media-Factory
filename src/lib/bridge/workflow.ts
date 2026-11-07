@@ -147,12 +147,15 @@ export async function reviewWorkflow(tx: Sql, actor: Actor, data: z.infer<typeof
     if (!data.grantId) throw new Error("Select a license draft");
     const [grant] = await tx<{
       status: string;
+      window_start: string;
       window_end: string;
       created_by: string;
-    }>`select status,window_end,created_by from bridge_rights_grants where id=${data.grantId} and title_id=${data.titleId} for update`;
+    }>`select status,window_start,window_end,created_by from bridge_rights_grants where id=${data.grantId} and title_id=${data.titleId} for update`;
     if (!grant || grant.status !== "DRAFT") throw new Error("License draft is unavailable");
     if (grant.created_by === actor.userId)
       throw new Error("Another legal reviewer must approve this license");
+    if (data.decision === "APPROVE" && new Date(grant.window_start) > new Date())
+      throw new Error("License window has not started");
     if (data.decision === "APPROVE" && new Date(grant.window_end) <= new Date())
       throw new Error("License has expired");
     if (data.decision === "APPROVE") {
@@ -162,7 +165,6 @@ export async function reviewWorkflow(tx: Sql, actor: Actor, data: z.infer<typeof
           and id <> ${data.grantId}
           and status in ('DRAFT','VALID')
           and media @> '["CRAYONS_LOOP","TVOD"]'::jsonb
-          and territories ?| array['WORLDWIDE']
           and territories ?| array['WORLDWIDE']
           and window_start < (select window_end from bridge_rights_grants where id=${data.grantId})
           and window_end > (select window_start from bridge_rights_grants where id=${data.grantId})
