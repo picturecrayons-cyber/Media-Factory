@@ -68,8 +68,9 @@ export const reviewAdminTitle = createServerFn({ method: "POST" })
       return { ok: true, status: "QC_REVIEW" };
     } else if (data.decision === "APPROVE") {
       assertPermission(actor, "title.rights_review");
-      if (title.status !== "RIGHTS_REVIEW") throw new Error("Title is not in rights review");
-      next = "LICENSING_READY"; action = "rights.approve";
+      throw new Error(
+        "Generic admin rights approval is disabled. Approve only a specific license grant after independent legal review and evidence verification.",
+      );
     } else {
       assertPermission(actor, "title.rights_review");
       if (title.status !== "RIGHTS_REVIEW") throw new Error("Title is not in rights review");
