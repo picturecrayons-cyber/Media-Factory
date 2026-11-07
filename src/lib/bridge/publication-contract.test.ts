@@ -120,6 +120,10 @@ test("status alignment never bypasses operator, rights or commercial coverage", 
     { grants: [{ ...grant, territories: ["US"] }], allowed: true, data },
     { grants: [grant], allowed: false, data },
     { grants: [grant], allowed: true, data: { ...data, accessTier: "SVOD" } },
+    { grants: [grant], allowed: true, data: { ...data, windowStart: null } },
+    { grants: [grant], allowed: true, data: { ...data, windowEnd: null } },
+    { grants: [grant], allowed: true, data: { ...data, windowStart: "2027-01-01T00:00:00.000Z", windowEnd: "2026-01-01T00:00:00.000Z" } },
+    { grants: [grant], allowed: true, data: { ...data, territories: ["IN"] } },
   ]) {
     const h = harness(scenario.grants, scenario.allowed);
     await assert.rejects(h.authorize({ context, data: scenario.data }));

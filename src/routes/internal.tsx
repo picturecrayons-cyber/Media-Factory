@@ -150,13 +150,11 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
 
   // Authorization Form State
   const [selectedTitleId, setSelectedTitleId] = useState<string>("");
-  const [territories, setTerritories] = useState("IN");
-  const [languages, setLanguages] = useState("Malayalam");
+  const [territories, setTerritories] = useState("");
+  const [languages, setLanguages] = useState("");
   const [model] = useState<ExploitationModel>("TVOD");
   const [windowStart, setWindowStart] = useState("");
   const [windowEnd, setWindowEnd] = useState("");
-  const [rightsOwnerShare, setRightsOwnerShare] = useState<string>("80");
-  const [distributorShare, setDistributorShare] = useState<string>("20");
   const [extendTitleId, setExtendTitleId] = useState<string | null>(null);
   const [newExtendEnd, setNewExtendEnd] = useState<string>("");
 
@@ -178,10 +176,6 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
           accessTier: "TVOD",
           windowStart: windowStart ? new Date(windowStart).toISOString() : null,
           windowEnd: windowEnd ? new Date(windowEnd).toISOString() : null,
-          commercialTerms: {
-            rightsOwnerSharePct: Number(rightsOwnerShare) || 0,
-            distributorSharePct: Number(distributorShare) || 0,
-          },
         },
       }),
     onSuccess: () => {
@@ -193,6 +187,28 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
     onError: (err) =>
       toast.error(err instanceof Error ? err.message : "Distribution authorization failed"),
   });
+
+  const submitPublication = () => {
+    const requestedTerritories = territories.split(",").map((value) => value.trim()).filter(Boolean);
+    const requestedLanguages = languages.split(",").map((value) => value.trim()).filter(Boolean);
+    if (requestedTerritories.length !== 1 || requestedTerritories[0] !== "WORLDWIDE") {
+      toast.error("Loop currently supports WORLDWIDE only. Confirm the approved rights grant covers this territory before continuing.");
+      return;
+    }
+    if (!requestedLanguages.length) {
+      toast.error("Enter the language or languages covered by the approved rights grant.");
+      return;
+    }
+    if (!windowStart || !windowEnd) {
+      toast.error("Enter both publication window dates from the approved rights grant.");
+      return;
+    }
+    if (new Date(windowEnd) <= new Date(windowStart)) {
+      toast.error("Window end must be after window start.");
+      return;
+    }
+    publishMut.mutate(selectedTitleId);
+  };
 
   const suspendMut = useMutation({
     mutationFn: (bridgeTitleId: string) =>
@@ -386,12 +402,12 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
 
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 text-xs">
             <label className="block space-y-1">
-              <span className="font-semibold text-muted">Territories (comma-separated)</span>
+              <span className="font-semibold text-muted">Territory</span>
               <input
                 value={territories}
                 onChange={(e) => setTerritories(e.target.value)}
                 className="h-9 w-full rounded-xl border border-line bg-elevated px-3 text-fg focus:outline-none"
-                placeholder="IN, AE, US"
+                placeholder="WORLDWIDE (only if rights grant covers it)"
               />
             </label>
 
@@ -401,7 +417,7 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
                 value={languages}
                 onChange={(e) => setLanguages(e.target.value)}
                 className="h-9 w-full rounded-xl border border-line bg-elevated px-3 text-fg focus:outline-none"
-                placeholder="Malayalam, Tamil"
+                placeholder="Languages in approved rights grant"
               />
             </label>
 
@@ -409,6 +425,7 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
               <span className="font-semibold text-muted">Window Start</span>
               <input
                 type="datetime-local"
+                required
                 value={windowStart}
                 onChange={(e) => setWindowStart(e.target.value)}
                 className="h-9 w-full rounded-xl border border-line bg-elevated px-3 text-fg focus:outline-none"
@@ -419,42 +436,24 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
               <span className="font-semibold text-muted">Window End</span>
               <input
                 type="datetime-local"
+                required
                 value={windowEnd}
                 onChange={(e) => setWindowEnd(e.target.value)}
                 className="h-9 w-full rounded-xl border border-line bg-elevated px-3 text-fg focus:outline-none"
               />
             </label>
 
-            <label className="block space-y-1">
-              <span className="font-semibold text-muted">Rights-Owner Share (%)</span>
-              <input
-                type="number"
-                min="0"
-                max="100"
-                value={rightsOwnerShare}
-                onChange={(e) => setRightsOwnerShare(e.target.value)}
-                className="h-9 w-full rounded-xl border border-line bg-elevated px-3 text-fg focus:outline-none"
-              />
-            </label>
-
-            <label className="block space-y-1">
-              <span className="font-semibold text-muted">Distributor Share (%)</span>
-              <input
-                type="number"
-                min="0"
-                max="100"
-                value={distributorShare}
-                onChange={(e) => setDistributorShare(e.target.value)}
-                className="h-9 w-full rounded-xl border border-line bg-elevated px-3 text-fg focus:outline-none"
-              />
-            </label>
           </div>
+
+          <p className="text-xs leading-relaxed text-muted">
+            Loop preflight currently accepts WORLDWIDE TVOD only. Enter only languages and dates supported by the approved rights grant. The server independently verifies rights coverage, current assets, QC, legal approval, and approved revenue shares; this form cannot override those checks.
+          </p>
 
           <div className="flex items-center gap-3 pt-2">
             <Button
               type="button"
               disabled={publishMut.isPending}
-              onClick={() => publishMut.mutate(selectedTitleId)}
+              onClick={submitPublication}
               className="rounded-full px-5 text-xs font-semibold"
             >
               {publishMut.isPending
