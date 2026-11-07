@@ -354,6 +354,43 @@ test("exact license resubmission is idempotent and conflicting overlap is reject
   }
 });
 
+test("legal approval rejects overlapping competing Loop TVOD drafts", async () => {
+  const f = await fixture();
+  try {
+    const saved = (await f.sql.transaction((tx) => f.save(tx, owner, license))) as {
+      grantId: string;
+    };
+    await f.sql.query(`
+      insert into bridge_rights_grants
+        (title_id,grant_type,territories,languages,media,window_start,window_end,exclusivity,evidence,status,created_by)
+      values
+        ('title-123','DISTRIBUTION','["WORLDWIDE"]'::jsonb,'["Malayalam"]'::jsonb,
+         '["CRAYONS_LOOP","TVOD"]'::jsonb,'2026-01-01T00:00:00Z','2099-01-01T00:00:00Z',
+         'EXCLUSIVE','[{"agreementReference":"competing-agreement"}]'::jsonb,'DRAFT','owner')
+    `);
+    await f.sql.query("update bridge_titles set status='RIGHTS_REVIEW'");
+    await assert.rejects(
+      f.sql.transaction((tx) =>
+        f.review(tx, legal, {
+          titleId: "title-123",
+          stage: "LEGAL",
+          decision: "APPROVE",
+          note: "Check overlapping competing agreement",
+          grantId: saved.grantId,
+        }),
+      ),
+      /Conflicting overlapping Loop TVOD grant/,
+    );
+    assert.equal(
+      (await f.sql.query<{ status: string }>("select status from bridge_rights_grants where id=$1", [saved.grantId]))[0].status,
+      "DRAFT",
+    );
+    assert.equal((await f.sql.query("select * from bridge_legal_cases")).length, 0);
+  } finally {
+    await f.db.close();
+  }
+});
+
 test("license author cannot approve their own agreement", async () => {
   const f = await fixture();
   try {
