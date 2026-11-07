@@ -39,7 +39,7 @@ export async function saveLoopLicense(
     throw new Error("Forbidden");
   if (new Date(data.windowEnd) <= new Date()) throw new Error("License window has expired");
 
-  const [prior] = await tx<{
+  const priorRows = await tx<{
     id: string;
     status: string;
     territories: string[];
@@ -57,8 +57,10 @@ export async function saveLoopLicense(
     where title_id=${data.titleId}
       and evidence @> ${JSON.stringify([{ agreementReference: data.agreementReference }])}::jsonb
     order by created_at asc
-    limit 1
     for update`;
+  if (priorRows.length > 1)
+    throw new Error("Multiple records already use this agreement reference; legacy reconciliation is required before retrying");
+  const prior = priorRows[0];
 
   const commercialTerms = {
     rightsOwnerSharePct: data.rightsOwnerSharePct,
@@ -189,14 +191,56 @@ export async function reviewWorkflow(tx: Sql, actor: Actor, data: z.infer<typeof
       throw new Error("Another legal reviewer must approve this license");
     if (data.decision === "APPROVE" && new Date(grant.window_end) <= new Date())
       throw new Error("License has expired");
-    if (data.decision === "APPROVE")
-      throw new Error(
-        "Rights approval is blocked until executed-agreement and ownership evidence have independent, recorded verification",
-      );
-    await tx`insert into bridge_legal_cases(title_id,status,evidence,reviewed_by,reviewed_at)
-      values (${data.titleId},'REJECTED',
-      ${JSON.stringify([{ grantId: data.grantId, note: data.note }])}::jsonb,${actor.userId},now())`;
-    await tx`update bridge_rights_grants set status='REVOKED' where id=${data.grantId}`;
+    if (data.decision === "APPROVE") {
+      const verifiedEvidence = await tx<{
+        id: string;
+        evidence_type: string;
+        asset_version_id: string;
+        checksum_sha256: string;
+        submitted_by: string;
+        reviewed_by: string;
+      }>`select e.id,e.evidence_type,e.asset_version_id,e.checksum_sha256,e.submitted_by,e.reviewed_by
+        from bridge_rights_evidence e
+        join bridge_asset_versions av on av.id=e.asset_version_id
+        join bridge_rights_evidence_reviews er
+          on er.evidence_id=e.id
+          and er.decision='VERIFIED'
+          and er.reviewer_user_id=e.reviewed_by
+          and lower(er.evidence_checksum_sha256)=lower(e.checksum_sha256)
+        where e.rights_grant_id=${data.grantId}
+          and e.title_id=${data.titleId}
+          and e.status='VERIFIED'
+          and e.reviewed_by is not null
+          and e.reviewed_by <> ${grant.created_by}
+          and e.reviewed_by <> e.submitted_by
+          and av.asset_group='DOCUMENT'
+          and av.processing_state='PASSED'
+          and lower(av.checksum_sha256)=lower(e.checksum_sha256)
+        for update of e,av`;
+      const verifiedTypes = new Set(verifiedEvidence.map((item) => item.evidence_type));
+      if (!verifiedTypes.has("EXECUTED_AGREEMENT") || !verifiedTypes.has("OWNERSHIP_CHAIN"))
+        throw new Error("Legal approval requires independently reviewed executed-agreement and ownership-chain documents with matching SHA-256 checksums");
+      await tx`insert into bridge_legal_cases(title_id,status,evidence,reviewed_by,reviewed_at)
+        values (${data.titleId},'APPROVED',
+        ${JSON.stringify([{
+          grantId: data.grantId,
+          note: data.note,
+          verifiedEvidence: verifiedEvidence.map((item) => ({
+            evidenceId: item.id,
+            evidenceType: item.evidence_type,
+            assetVersionId: item.asset_version_id,
+            checksumSha256: item.checksum_sha256,
+            submittedBy: item.submitted_by,
+            reviewedBy: item.reviewed_by,
+          })),
+        }])}::jsonb,${actor.userId},now())`;
+      await tx`update bridge_rights_grants set status='VALID' where id=${data.grantId}`;
+    } else {
+      await tx`insert into bridge_legal_cases(title_id,status,evidence,reviewed_by,reviewed_at)
+        values (${data.titleId},'REJECTED',
+        ${JSON.stringify([{ grantId: data.grantId, note: data.note }])}::jsonb,${actor.userId},now())`;
+      await tx`update bridge_rights_grants set status='REVOKED' where id=${data.grantId}`;
+    }
   }
   const next =
     data.decision === "REJECT"
