@@ -11,6 +11,7 @@ import { requireVerifiedActor } from "./session";
 import { writeAudit } from "./audit";
 import { assertNotDevUser } from "./guards";
 import { loopStageType } from "./loop-lanes";
+import { FINISHED_FILM_SUBMISSION_TYPE } from "./submission-types";
 import { assertBuyerPublishable, getBuyerGateStatus } from "./buyer-visibility";
 import { submitTitleForQc } from "./title-submission";
 
@@ -371,6 +372,41 @@ export const listTitles = createServerFn({ method: "GET" })
     }) };
   });
 
+export const listFinishedFilmTitles = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    const sql = await getSql();
+    let rows: TitleRow[] = [];
+    if (actor.internalRole && hasPermission(actor, "title.read_catalog")) {
+      rows = (await hasTitleMergeColumn(sql))
+        ? await sql<TitleRow>`select t.* from bridge_titles t where t.submission_type = ${FINISHED_FILM_SUBMISSION_TYPE} and t.merged_into_title_id is null order by t.updated_at desc limit 200`
+        : await sql<TitleRow>`select t.* from bridge_titles t where t.submission_type = ${FINISHED_FILM_SUBMISSION_TYPE} order by t.updated_at desc limit 200`;
+    } else if (actor.accountType === "buyer") {
+      assertPermission(actor, "title.read_catalog");
+      rows = (await hasTitleMergeColumn(sql))
+        ? await sql<TitleRow>`select t.* from bridge_titles t where t.submission_type = ${FINISHED_FILM_SUBMISSION_TYPE} and t.merged_into_title_id is null and t.status in ('LIVE_FOR_BUYERS','IN_NEGOTIATION','LICENSED','DELIVERED') and public.bridge_title_buyer_visibility(t.id) order by t.updated_at desc limit 200`
+        : await sql<TitleRow>`select t.* from bridge_titles t where t.submission_type = ${FINISHED_FILM_SUBMISSION_TYPE} and t.status in ('LIVE_FOR_BUYERS','IN_NEGOTIATION','LICENSED','DELIVERED') and public.bridge_title_buyer_visibility(t.id) order by t.updated_at desc limit 200`;
+    } else {
+      assertPermission(actor, "title.read_own");
+      const orgId = actor.accountType === "studio" ? actor.organizationId ?? null : null;
+      const mergeColumnAvailable = await hasTitleMergeColumn(sql);
+      if (!orgId) {
+        rows = mergeColumnAvailable
+          ? await sql<TitleRow>`select t.* from bridge_titles t where t.submission_type = ${FINISHED_FILM_SUBMISSION_TYPE} and t.owner_user_id = ${actor.userId} and t.merged_into_title_id is null order by t.updated_at desc limit 200`
+          : await sql<TitleRow>`select t.* from bridge_titles t where t.submission_type = ${FINISHED_FILM_SUBMISSION_TYPE} and t.owner_user_id = ${actor.userId} order by t.updated_at desc limit 200`;
+      } else {
+        rows = mergeColumnAvailable
+          ? await sql<TitleRow>`select t.* from bridge_titles t where t.submission_type = ${FINISHED_FILM_SUBMISSION_TYPE} and t.merged_into_title_id is null and (t.owner_user_id = ${actor.userId} or (t.owner_account_type = 'studio' and t.owner_organization_id = ${orgId} and exists (select 1 from bridge_organization_memberships m where m.organization_id = ${orgId} and m.user_id = ${actor.userId} and m.status = 'active'))) order by t.updated_at desc limit 200`
+          : await sql<TitleRow>`select t.* from bridge_titles t where t.submission_type = ${FINISHED_FILM_SUBMISSION_TYPE} and (t.owner_user_id = ${actor.userId} or (t.owner_account_type = 'studio' and t.owner_organization_id = ${orgId} and exists (select 1 from bridge_organization_memberships m where m.organization_id = ${orgId} and m.user_id = ${actor.userId} and m.status = 'active'))) order by t.updated_at desc limit 200`;
+      }
+    }
+    return { titles: rows.flatMap((row) => {
+      try { return [mapTitle(row)]; }
+      catch (error) { console.error("[bridge] skipped unreadable finished film", row?.id, error); return []; }
+    }) };
+  });
 export const getTitle = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .validator(z.object({ id: z.string().min(8) }))

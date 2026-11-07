@@ -22,7 +22,7 @@ function Studio() {
 
             <section>
               <h2 className="mb-3 text-lg font-semibold">Finished films</h2>
-              <TitleList empty="No finished films yet. Start with a new submission." />
+              <TitleList empty="No finished films yet. Start with a new submission." finishedFilmsOnly />
             </section>
 
             <MyStoryConcepts />

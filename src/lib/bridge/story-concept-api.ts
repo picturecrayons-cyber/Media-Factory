@@ -12,6 +12,7 @@ import { requireVerifiedActor } from "./session";
 import { assertPermission } from "./rbac";
 import { writeAudit } from "./audit";
 import { assertNotDevUser } from "./guards";
+import { STORY_CONCEPT_SUBMISSION_TYPE } from "./submission-types";
 import {
   STORY_CONCEPT_ENABLED,
   CURATION_TRANSITIONS,
@@ -192,12 +193,21 @@ export const listMyStoryConcepts = createServerFn({ method: "GET" })
         select c.*, t.name as title_name
         from bridge_story_concept_submissions c
         join bridge_titles t on t.id = c.title_id
-        where t.owner_user_id = ${actor.userId}
-           or (
-             t.owner_account_type = 'studio'
-             and t.owner_organization_id is not null
-             and t.owner_organization_id = ${actor.organizationId ?? null}
-           )
+        where t.submission_type = ${STORY_CONCEPT_SUBMISSION_TYPE}
+          and (
+            t.owner_user_id = ${actor.userId}
+            or (
+              t.owner_account_type = 'studio'
+              and t.owner_organization_id is not null
+              and t.owner_organization_id = ${actor.organizationId ?? null}
+              and exists (
+                select 1 from bridge_organization_memberships m
+                where m.organization_id = t.owner_organization_id
+                  and m.user_id = ${actor.userId}
+                  and m.status = 'active'
+              )
+            )
+          )
         order by c.created_at desc
         limit 100
       `;
@@ -230,7 +240,8 @@ export const listPendingStoryConcepts = createServerFn({ method: "GET" })
         select c.*, t.name as title_name, t.owner_user_id
         from bridge_story_concept_submissions c
         join bridge_titles t on t.id = c.title_id
-        where c.curation_status in ('PENDING', 'UNDER_REVIEW', 'APPROVED')
+        where t.submission_type = ${STORY_CONCEPT_SUBMISSION_TYPE}
+          and c.curation_status in ('PENDING', 'UNDER_REVIEW', 'APPROVED')
         order by c.created_at asc
         limit 200
       `;
