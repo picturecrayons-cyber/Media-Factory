@@ -194,9 +194,9 @@ export async function reviewWorkflow(tx: Sql, actor: Actor, data: z.infer<typeof
         "Rights approval is blocked until executed-agreement and ownership evidence have independent, recorded verification",
       );
     await tx`insert into bridge_legal_cases(title_id,status,evidence,reviewed_by,reviewed_at)
-      values (${data.titleId},${data.decision === "APPROVE" ? "APPROVED" : "REJECTED"},
+      values (${data.titleId},'REJECTED',
       ${JSON.stringify([{ grantId: data.grantId, note: data.note }])}::jsonb,${actor.userId},now())`;
-    await tx`update bridge_rights_grants set status=${data.decision === "APPROVE" ? "VALID" : "REVOKED"} where id=${data.grantId}`;
+    await tx`update bridge_rights_grants set status='REVOKED' where id=${data.grantId}`;
   }
   const next =
     data.decision === "REJECT"
