@@ -6,6 +6,7 @@ import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { StoryConceptDesk } from "@/components/bridge/story-concept-desk";
 import { listAdminWorkstations, reviewAdminTitle, setBuyerPublicationGate } from "@/lib/bridge/admin-workstations";
+import { reviewRightsEvidenceFn } from "@/lib/bridge/rights-evidence";
 import { listDuplicateReviews, openDuplicateReview, decideDuplicateReview } from "@/lib/bridge/duplicate-reconciliation";
 
 export const Route = createFileRoute("/admin/workstations")({ component: AdminWorkstations });
@@ -36,6 +37,10 @@ function WorkstationBody() {
   });
   const gate = useMutation({
     mutationFn: setBuyerPublicationGate,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-workstations"] }),
+  });
+  const evidenceReview = useMutation({
+    mutationFn: reviewRightsEvidenceFn,
     onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-workstations"] }),
   });
   const [activeTab, setActiveTab] = useState<Tab>("Titles");
