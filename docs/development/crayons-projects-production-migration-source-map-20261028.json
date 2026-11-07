@@ -1,0 +1,388 @@
+{
+  "title": "Crayons Bridge production migration history to repository source map",
+  "generated_on": "2026-10-28",
+  "production_project_ref": "mlmgugivsyoxzdgwkbpu",
+  "test_project_ref": "jbymleftneggcgutlcqu",
+  "production_ledger_count": 52,
+  "source_policy": "This is a read-only source availability map. CANDIDATE_ONLY and VERSION_DIVERGENCE do not establish SQL equivalence. No migration is safe to mark applied based on this map alone.",
+  "statuses": {
+    "EXACT_MATCH": "The current repository contains an exact matching migration version and source SQL.",
+    "CANDIDATE_ONLY": "A semantically related local file exists, but exact SQL equivalence, ordering, grants, policies and side effects are not established.",
+    "VERSION_DIVERGENCE": "A related current file exists, but its timestamp differs from the recorded production migration version.",
+    "MISSING_SOURCE": "No exact source file was identified in the current repository tree."
+  },
+  "history": [
+    {
+      "version": "20260925141006",
+      "name": "create_legacy_import_schema",
+      "local_source": null,
+      "status": "MISSING_SOURCE",
+      "notes": "No exact timestamped SQL source found in current tree; legacy 0001/0002 files are not proven equivalents."
+    },
+    {
+      "version": "20260925170237",
+      "name": "bridge_auth_schema",
+      "local_source": "migrations/0001_auth.sql",
+      "status": "CANDIDATE_ONLY",
+      "notes": "Better Auth table schema appears related; exact SQL and side effects not proven."
+    },
+    {
+      "version": "20260925170239",
+      "name": "bridge_operational_schema",
+      "local_source": "migrations/0004_bridge.sql",
+      "status": "CANDIDATE_ONLY",
+      "notes": "Canonical Bridge core tables are present, but this is not an exact timestamped migration match."
+    },
+    {
+      "version": "20260925170241",
+      "name": "bridge_webhook_retry",
+      "local_source": "migrations/0005_bridge_webhook_retry.sql",
+      "status": "CANDIDATE_ONLY",
+      "notes": "Legacy file overlaps webhook retry fields; exact historical SQL not proven."
+    },
+    {
+      "version": "20260925170308",
+      "name": "bridge_fk_indexes",
+      "local_source": null,
+      "status": "MISSING_SOURCE",
+      "notes": "No exact source file identified."
+    },
+    {
+      "version": "20260925193451",
+      "name": "bridge_webhook_processing_token",
+      "local_source": "migrations/0005_bridge_webhook_retry.sql",
+      "status": "CANDIDATE_ONLY",
+      "notes": "Contains processing token fields; separate historical version requires exact diff."
+    },
+    {
+      "version": "20260925214917",
+      "name": "loop_canonical_runtime_baseline",
+      "local_source": "migrations/0006_loop_canonical.sql",
+      "status": "CANDIDATE_ONLY",
+      "notes": "Loop baseline appears related; exact equivalence unverified."
+    },
+    {
+      "version": "20260925214936",
+      "name": "loop_runtime_rls_and_plans",
+      "local_source": null,
+      "status": "MISSING_SOURCE",
+      "notes": "No exact source file identified."
+    },
+    {
+      "version": "20260925220714",
+      "name": "bridge_loop_verified_identity_links",
+      "local_source": "migrations/0007a_identity_links.sql",
+      "status": "CANDIDATE_ONLY",
+      "notes": "Identity-link schema appears related; exact equivalence unverified."
+    },
+    {
+      "version": "20260926045625",
+      "name": "loop_payment_events_own_read_policy",
+      "local_source": null,
+      "status": "MISSING_SOURCE",
+      "notes": "No exact source file identified."
+    },
+    {
+      "version": "20260926054626",
+      "name": "add_poster_studio_schema",
+      "local_source": null,
+      "status": "MISSING_SOURCE",
+      "notes": "No exact source file identified."
+    },
+    {
+      "version": "20260927094608",
+      "name": "harden_server_only_grants_and_fk_indexes",
+      "local_source": "migrations/0008_bridge_data_api_lockdown.sql",
+      "status": "CANDIDATE_ONLY",
+      "notes": "Partial conceptual overlap; historical grants and index changes need exact SQL."
+    },
+    {
+      "version": "20260927114947",
+      "name": "streamvista_media_os_service_pipeline",
+      "local_source": "migrations/0007_streamvista_media_os.sql",
+      "status": "CANDIDATE_ONLY",
+      "notes": "Service pipeline appears related; exact equivalence unverified."
+    },
+    {
+      "version": "20260927215559",
+      "name": "bridge_data_api_lockdown",
+      "local_source": "migrations/0008_bridge_data_api_lockdown.sql",
+      "status": "CANDIDATE_ONLY",
+      "notes": "Name aligns, but exact version and side effects not proven."
+    },
+    {
+      "version": "20260927215742",
+      "name": "bridge_buyer_title_access",
+      "local_source": "migrations/0009_buyer_title_access.sql",
+      "status": "CANDIDATE_ONLY",
+      "notes": "Likely related source; must compare full SQL and grants."
+    },
+    {
+      "version": "20260927215758",
+      "name": "bridge_buyer_title_access_20260928",
+      "local_source": null,
+      "status": "MISSING_SOURCE",
+      "notes": "Second buyer-access version has no exact current source file."
+    },
+    {
+      "version": "20260928102539",
+      "name": "bridge_profile_welcome_email_marker",
+      "local_source": null,
+      "status": "MISSING_SOURCE",
+      "notes": "No exact source file identified."
+    },
+    {
+      "version": "20260928120120",
+      "name": "bridge_prd_phase1",
+      "local_source": "migrations/0010_bridge_prd_phase1.sql",
+      "status": "CANDIDATE_ONLY",
+      "notes": "Related PRD schema; exact historical SQL not proven."
+    },
+    {
+      "version": "20260928154653",
+      "name": "bridge_auth_protected_read_policies",
+      "local_source": "migrations/0012_bridge_rls_identity_binding.sql",
+      "status": "CANDIDATE_ONLY",
+      "notes": "Related policy source; exact historical SQL and policy set need diff."
+    },
+    {
+      "version": "20260929154225",
+      "name": "bind_bridge_rls_identity_and_read_scope",
+      "local_source": "migrations/0012_bridge_rls_identity_binding.sql",
+      "status": "CANDIDATE_ONLY",
+      "notes": "Related identity binding source; exact equivalence unverified."
+    },
+    {
+      "version": "20260929162737",
+      "name": "harden_bridge_rls_helpers_rpc_surface",
+      "local_source": "migrations/0013_harden_bridge_rls_helpers.sql",
+      "status": "CANDIDATE_ONLY",
+      "notes": "Related helper hardening source; exact equivalence unverified."
+    },
+    {
+      "version": "20260930092721",
+      "name": "grant_authenticated_bridge_current_internal_role",
+      "local_source": null,
+      "status": "MISSING_SOURCE",
+      "notes": "No exact source file identified."
+    },
+    {
+      "version": "20261002171708",
+      "name": "loop_release_safety",
+      "local_source": null,
+      "status": "MISSING_SOURCE",
+      "notes": "No exact source file identified."
+    },
+    {
+      "version": "20261004051643",
+      "name": "loop_semantic_search",
+      "local_source": null,
+      "status": "MISSING_SOURCE",
+      "notes": "No exact source file identified."
+    },
+    {
+      "version": "20261004052641",
+      "name": "move_vector_to_extensions_schema",
+      "local_source": null,
+      "status": "MISSING_SOURCE",
+      "notes": "No exact source file identified."
+    },
+    {
+      "version": "20261004052646",
+      "name": "rebind_loop_semantic_rpc_vector_schema",
+      "local_source": null,
+      "status": "MISSING_SOURCE",
+      "notes": "No exact source file identified."
+    },
+    {
+      "version": "20261004102348",
+      "name": "delivery_trace_finance",
+      "local_source": "migrations/0015_delivery_trace_finance.sql",
+      "status": "CANDIDATE_ONLY",
+      "notes": "Related delivery/finance schema; exact equivalence unverified."
+    },
+    {
+      "version": "20261005112318",
+      "name": "investor_account_type_20261005",
+      "local_source": "migrations/0016_investor_account_type.sql",
+      "status": "CANDIDATE_ONLY",
+      "notes": "Related account type change; exact historical version unverified."
+    },
+    {
+      "version": "20261005124904",
+      "name": "bridge_dmca",
+      "local_source": "migrations/0011_bridge_dmca.sql",
+      "status": "CANDIDATE_ONLY",
+      "notes": "Related DMCA schema; exact equivalence unverified."
+    },
+    {
+      "version": "20261005125643",
+      "name": "lock_down_bridge_client_grants",
+      "local_source": "migrations/0008_bridge_data_api_lockdown.sql",
+      "status": "CANDIDATE_ONLY",
+      "notes": "Related grant hardening; exact SQL may be distinct."
+    },
+    {
+      "version": "20261005125847",
+      "name": "explicit_deny_policies_for_internal_tables",
+      "local_source": null,
+      "status": "MISSING_SOURCE",
+      "notes": "No exact source file identified."
+    },
+    {
+      "version": "20261006100425",
+      "name": "allow_bridge_supabase_auth_onboarding_verification",
+      "local_source": null,
+      "status": "MISSING_SOURCE",
+      "notes": "No exact source file identified."
+    },
+    {
+      "version": "20261006152111",
+      "name": "bridge_buyer_publication_gates",
+      "local_source": "migrations/0017_bridge_buyer_publication_gates.sql",
+      "status": "CANDIDATE_ONLY",
+      "notes": "Related publication-gate schema; exact equivalence unverified."
+    },
+    {
+      "version": "20261006154551",
+      "name": "harden_authz_server_only_surfaces_20261006",
+      "local_source": "migrations/0013_harden_bridge_rls_helpers.sql",
+      "status": "CANDIDATE_ONLY",
+      "notes": "Partial conceptual overlap; historical SQL may include additional surfaces."
+    },
+    {
+      "version": "20261006154553",
+      "name": "legacy_creator_intake_20261006",
+      "local_source": null,
+      "status": "MISSING_SOURCE",
+      "notes": "No exact source file identified."
+    },
+    {
+      "version": "20261006185556",
+      "name": "bridge_commercial_engine_20261006230000",
+      "local_source": "supabase/migrations/20261006230000_bridge_commercial_engine.sql",
+      "status": "VERSION_DIVERGENCE",
+      "notes": "SQL name aligns but current filename version differs from remote version."
+    },
+    {
+      "version": "20261006185640",
+      "name": "harden_bridge_commercial_server_only_20261007000000",
+      "local_source": "supabase/migrations/20261007000000_harden_bridge_commercial_server_only.sql",
+      "status": "VERSION_DIVERGENCE",
+      "notes": "SQL name aligns but current filename version differs from remote version."
+    },
+    {
+      "version": "20261006195531",
+      "name": "bridge_commercial_control_plane_20261007013000",
+      "local_source": "supabase/migrations/20261007013000_bridge_commercial_control_plane.sql",
+      "status": "VERSION_DIVERGENCE",
+      "notes": "SQL name aligns but current filename version differs from remote version."
+    },
+    {
+      "version": "20261006195536",
+      "name": "bridge_financial_reversal_hardening_20261007020000",
+      "local_source": "supabase/migrations/20261007020000_bridge_financial_reversal_hardening.sql",
+      "status": "VERSION_DIVERGENCE",
+      "notes": "SQL name aligns but current filename version differs from remote version."
+    },
+    {
+      "version": "20261006195607",
+      "name": "bridge_commercial_performance_indexes_20261007023000",
+      "local_source": "supabase/migrations/20261007023000_bridge_commercial_performance_indexes.sql",
+      "status": "VERSION_DIVERGENCE",
+      "notes": "SQL name aligns but current filename version differs from remote version."
+    },
+    {
+      "version": "20261006231321",
+      "name": "deep_clean_server_only_rls_20261007",
+      "local_source": null,
+      "status": "MISSING_SOURCE",
+      "notes": "No exact source file identified."
+    },
+    {
+      "version": "20261008031103",
+      "name": "loop_watchlists_20261008",
+      "local_source": null,
+      "status": "MISSING_SOURCE",
+      "notes": "No exact source file identified."
+    },
+    {
+      "version": "20261008050017",
+      "name": "p0_bridge_catalog_deal_room_reconciliation_20261008",
+      "local_source": null,
+      "status": "MISSING_SOURCE",
+      "notes": "No exact source file identified."
+    },
+    {
+      "version": "20261008053655",
+      "name": "p0_bridge_catalog_deal_room_reconciliation_v2",
+      "local_source": null,
+      "status": "MISSING_SOURCE",
+      "notes": "No exact source file identified."
+    },
+    {
+      "version": "20261008053658",
+      "name": "p0_bridge_title_catalog_columns_v2",
+      "local_source": null,
+      "status": "MISSING_SOURCE",
+      "notes": "No exact source file identified."
+    },
+    {
+      "version": "20261008053700",
+      "name": "p0_loop_catalog_pranayam_visibility_v2",
+      "local_source": null,
+      "status": "MISSING_SOURCE",
+      "notes": "No exact source file identified."
+    },
+    {
+      "version": "20261008113911",
+      "name": "reconcile_duplicate_title_merge_gate_20261008",
+      "local_source": "migrations/0020_duplicate_title_merge_gate.sql",
+      "status": "CANDIDATE_ONLY",
+      "notes": "Related merge-gate schema; exact remote SQL/version not proven."
+    },
+    {
+      "version": "20261008122836",
+      "name": "enable_merge_table_rls",
+      "local_source": null,
+      "status": "MISSING_SOURCE",
+      "notes": "No exact source file identified."
+    },
+    {
+      "version": "20261009210503",
+      "name": "bridge_rights_ready_submission",
+      "local_source": "migrations/0018_bridge_rights_ready_submission.sql",
+      "status": "CANDIDATE_ONLY",
+      "notes": "Related rights-ready submission source; exact equivalence unverified."
+    },
+    {
+      "version": "20261009210645",
+      "name": "bridge_submission_intake_server_only",
+      "local_source": null,
+      "status": "MISSING_SOURCE",
+      "notes": "No exact source file identified."
+    },
+    {
+      "version": "20261011041046",
+      "name": "bridge_storage_economics_20261011",
+      "local_source": null,
+      "status": "MISSING_SOURCE",
+      "notes": "No exact source file identified."
+    },
+    {
+      "version": "20261016161255",
+      "name": "bridge_assets_kind_constraint_20261016",
+      "local_source": "supabase/migrations/20261004_bridge_assets_add_censor_certificate.sql",
+      "status": "CANDIDATE_ONLY",
+      "notes": "Related asset-kind constraint, but current file is not an exact versioned source match."
+    }
+  ],
+  "required_before_replay": [
+    "Recover the exact SQL for every MISSING_SOURCE version from authoritative PRs/commits or Supabase migration artifacts.",
+    "Diff all CANDIDATE_ONLY and VERSION_DIVERGENCE sources against the exact SQL that was applied.",
+    "Reconcile the current duplicate local version prefix 20261006230000 without changing historical meaning.",
+    "Resolve the conflict between legacy 0018_bridge_service_revenue_engine.sql and the newer commercial engine before selecting one canonical schema path.",
+    "Replay the complete ordered chain on a disposable PostgreSQL 17/Supabase environment and verify tables, columns, constraints, indexes, functions, grants, RLS policies and extension placement.",
+    "Only after the replay passes, prepare a separate test-only migration apply workflow with target assertions and test-only credentials."
+  ]
+}
