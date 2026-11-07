@@ -224,6 +224,7 @@ export const getTitleWorkflow = createServerFn({ method: "GET" })
     const grants = await sql<{
       id: string;
       status: string;
+      created_by: string;
       territories: string[];
       languages: string[];
       window_start: string | Date;
@@ -234,7 +235,13 @@ export const getTitleWorkflow = createServerFn({ method: "GET" })
         ownershipReference?: string;
         commercialTerms?: { rightsOwnerSharePct: number; distributorSharePct: number };
       }>;
-    }>`select id,status,territories,languages,window_start,window_end,exclusivity,evidence from bridge_rights_grants where title_id=${data.titleId} order by created_at desc`;
+    }>`select id,status,created_by,territories,languages,window_start,window_end,exclusivity,evidence from bridge_rights_grants where title_id=${data.titleId} order by created_at desc`;
+    const qcAssetSubmitters = await sql<{ created_by: string | null }>`
+      select distinct created_by from bridge_assets where title_id=${data.titleId}
+    `;
+    const qcReviewerEligible =
+      qcAssetSubmitters.length > 0 &&
+      qcAssetSubmitters.every((asset) => Boolean(asset.created_by) && asset.created_by !== actor.userId);
     const qc = await sql<{
       status: string;
       reviewed_at: string | Date;
@@ -249,6 +256,7 @@ export const getTitleWorkflow = createServerFn({ method: "GET" })
       reviewed_at: string | Date;
     }>`select status,reviewed_at from bridge_legal_cases where title_id=${data.titleId} order by created_at desc limit 1`;
     return {
+      qcReviewerEligible,
       grants: grants.map((g) => ({
         ...g,
         window_start: g.window_start ? new Date(g.window_start).toISOString() : "",
