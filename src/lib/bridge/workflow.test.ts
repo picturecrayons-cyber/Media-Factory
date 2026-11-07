@@ -92,8 +92,11 @@ async function fixture() {
       ).replaceAll("public.", `${schema}.`),
     );
     await db.exec(`insert into bridge_titles(id,owner_user_id,status,master_key,poster_key,updated_at)
-      values('title-123','owner','QC_REVIEW','sealed/master',null,now());
-    insert into bridge_assets values('master','title-123','master','sealed/master',100),('poster-vertical','title-123','poster_vertical','sealed/poster',100);`);
+      values('title-123','owner','QC_REVIEW','sealed/master','sealed/poster',now());
+    insert into bridge_assets values
+      ('master','title-123','master','sealed/master',100),
+      ('legacy-poster','title-123','poster','older/unreferenced-poster',100),
+      ('poster-vertical','title-123','poster_vertical','sealed/poster',100);`);
     function adapter(query: (text: string, params?: unknown[]) => Promise<{ rows: unknown[] }>) {
       const sql = (async (strings: TemplateStringsArray, ...params: unknown[]) => {
         let text = strings[0];
