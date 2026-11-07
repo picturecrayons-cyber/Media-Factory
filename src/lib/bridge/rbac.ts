@@ -166,18 +166,12 @@ function sharesStudioOrganization(
   );
 }
 
-const ROLE_GRANTS: Record<InternalRole, readonly InternalRole[]> = {
-  viewer: [],
-  qc_reviewer: [],
-  legal_reviewer: [],
-  finance: [],
-  admin: ["viewer", "qc_reviewer", "legal_reviewer", "finance", "admin"],
-  super_admin: ["viewer", "qc_reviewer", "legal_reviewer", "finance", "admin", "super_admin"],
-};
-
-export function canGrantInternalRole(actor: Actor, role: InternalRole): boolean {
-  if (!actor.emailVerified || !actor.internalRole) return false;
-  return ROLE_GRANTS[actor.internalRole].includes(role);
+// No single-actor role grants are permitted. The current invite schema does
+// not record an independent approver, so allowing any grant here would
+// falsely claim dual-control governance. Re-enable only with a two-person
+// approval workflow and immutable approval evidence.
+export function canGrantInternalRole(_actor: Actor, _role: InternalRole): boolean {
+  return false;
 }
 
 export function hasAccountPermission(actor: Actor, permission: Permission): boolean {

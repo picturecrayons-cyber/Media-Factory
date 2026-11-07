@@ -87,39 +87,10 @@ Deno.serve(async (req: Request) => {
     if (localPayment) surface = "bridge";
 
     if (surface === "bridge") {
-      // A capture can race the local insert after Razorpay order creation. Return 503 so Razorpay retries it.
-      if (!localPayment) return await failEvent(supabase, id, "Bridge order not persisted yet");
-      if (localPayment.provider_payment_id && localPayment.provider_payment_id !== payment.id) {
-        return new Response("Order linked to another payment", { status: 409 });
-      }
-      if (!localPayment.title_id) return await failEvent(supabase, id, "Bridge license order has no title");
-
-      const now = new Date().toISOString();
-      const { data: updated, error: updateError } = await supabase.from("bridge_payments")
-        .update({ status: "captured", provider_payment_id: payment.id, verified_at: now })
-        .eq("id", localPayment.id).select("id").maybeSingle();
-      if (updateError || !updated) return await failEvent(supabase, id, "Bridge payment update failed");
-
-      const { error: entitlementError } = await supabase.from("bridge_entitlements").upsert({
-        user_id: localPayment.user_id, title_id: localPayment.title_id, payment_id: localPayment.id, access_type: "license",
-      }, { onConflict: "user_id,title_id,access_type", ignoreDuplicates: true });
-      if (entitlementError) return await failEvent(supabase, id, "Bridge entitlement grant failed");
-
-      const { data: title, error: titleError } = await supabase.from("bridge_titles").select("status").eq("id", localPayment.title_id).maybeSingle();
-      if (titleError) return await failEvent(supabase, id, "Bridge title lookup failed");
-      if (title && (title.status === "LIVE_FOR_BUYERS" || title.status === "IN_NEGOTIATION")) {
-        const { error: transitionError } = await supabase.from("bridge_titles").update({ status: "LICENSED", updated_at: now }).eq("id", localPayment.title_id);
-        if (transitionError) return await failEvent(supabase, id, "Bridge title transition failed");
-        const { error: eventError } = await supabase.from("bridge_title_events").insert({
-          title_id: localPayment.title_id, from_status: title.status, to_status: "LICENSED", actor_user_id: localPayment.user_id, note: "razorpay captured webhook",
-        });
-        if (eventError) return await failEvent(supabase, id, "Bridge title event failed");
-      }
-      const { error: auditError } = await supabase.from("bridge_audit_logs").insert({
-        actor_user_id: localPayment.user_id, action: "payment.captured", entity_type: "bridge_payment", entity_id: localPayment.id,
-        metadata: JSON.stringify({ titleId: localPayment.title_id, source: "razorpay-webhook" }),
-      });
-      if (auditError) return await failEvent(supabase, id, "Bridge audit write failed");
+      // All Bridge payment purposes must use their purpose-specific server
+      // fulfillment path. This Edge Function has no tenant/mandate-aware
+      // transaction boundary and must never write Bridge entitlements.
+      return await failEvent(supabase, id, "Bridge payment fulfillment disabled in Edge webhook; use canonical server handler");
     }
   }
 

@@ -109,12 +109,12 @@ describe("PRD authorization matrix", () => {
     }
   });
 
-  it("ordinary admins cannot grant super admin while super admin has an explicit grant matrix", () => {
-    assert.equal(canGrantInternalRole(admin(), "viewer"), true);
-    assert.equal(canGrantInternalRole(admin(), "admin"), true);
-    assert.equal(canGrantInternalRole(admin(), "super_admin"), false);
-    assert.equal(canGrantInternalRole(superAdmin(), "super_admin"), true);
-    assert.equal(canGrantInternalRole(qc, "viewer"), false);
+  it("blocks every single-actor internal role grant until independent approval exists", () => {
+    for (const grantor of [admin(), superAdmin(), qc, legal, finance, viewer()]) {
+      for (const role of ["viewer", "qc_reviewer", "legal_reviewer", "finance", "admin", "super_admin"] as const) {
+        assert.equal(canGrantInternalRole(grantor, role), false, `${grantor.internalRole} must not self-approve ${role}`);
+      }
+    }
     assert.equal(canGrantInternalRole(actor("unverified", "independent_creator", "admin", false), "viewer"), false);
   });
 
@@ -150,9 +150,9 @@ describe("PRD authorization matrix", () => {
     assert.equal(canAccessDashboard(legal), false);
     assert.equal(canAccessDashboard(finance), false);
     assert.equal(canAccessDashboard(viewer()), false);
-    assert.equal(canGrantInternalRole(admin(), "viewer"), true);
+    assert.equal(canGrantInternalRole(admin(), "viewer"), false);
     assert.equal(canGrantInternalRole(admin(), "super_admin"), false);
-    assert.equal(canGrantInternalRole(superAdmin(), "super_admin"), true);
+    assert.equal(canGrantInternalRole(superAdmin(), "super_admin"), false);
     assert.equal(
       canAccessDashboard(actor("super-u", "independent_creator", "super_admin", false)),
       false,
