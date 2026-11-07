@@ -38,6 +38,97 @@ export async function saveLoopLicense(
   )
     throw new Error("Forbidden");
   if (new Date(data.windowEnd) <= new Date()) throw new Error("License window has expired");
+
+  const normalizedAgreementReference = data.agreementReference.trim().toUpperCase();
+  await tx`select pg_advisory_xact_lock(hashtextextended(${`bridge-license-agreement:${normalizedAgreementReference}`},0))`;
+  const priorRows = await tx<{
+    id: string;
+    title_id: string;
+    status: string;
+    territories: string[];
+    languages: string[];
+    window_start: string | Date;
+    window_end: string | Date;
+    exclusivity: string;
+    evidence: Array<{
+      agreementReference?: string;
+      ownershipReference?: string;
+      commercialTerms?: { rightsOwnerSharePct: number; distributorSharePct: number };
+    }>;
+  }>`select id,title_id,status,territories,languages,window_start,window_end,exclusivity,evidence
+    from bridge_rights_grants
+    where exists (
+      select 1
+      from jsonb_array_elements(case when jsonb_typeof(evidence)='array' then evidence else '[]'::jsonb end) as evidence_item(value)
+      where upper(trim(evidence_item.value->>'agreementReference'))=${normalizedAgreementReference}
+    )
+    order by created_at asc
+    for update`;
+  if (priorRows.length > 1)
+    throw new Error("Multiple records already use this agreement reference; legacy reconciliation is required before retrying");
+  const prior = priorRows[0];
+  if (prior && prior.title_id !== data.titleId)
+    throw new Error("Agreement reference is already assigned to another title");
+
+  const commercialTerms = {
+    rightsOwnerSharePct: data.rightsOwnerSharePct,
+    distributorSharePct: data.distributorSharePct,
+  };
+  if (prior) {
+    const priorEvidence = prior.evidence?.[0];
+    const sameSet = (left: string[], right: string[]) =>
+      [...left].map((value) => value.trim().toUpperCase()).sort().join("|") ===
+      [...right].map((value) => value.trim().toUpperCase()).sort().join("|");
+    const sameDraft =
+      sameSet(prior.territories ?? [], data.territories) &&
+      sameSet(prior.languages ?? [], data.languages) &&
+      new Date(prior.window_start).getTime() === new Date(data.windowStart).getTime() &&
+      new Date(prior.window_end).getTime() === new Date(data.windowEnd).getTime() &&
+      prior.exclusivity === data.exclusivity &&
+      priorEvidence?.ownershipReference === data.ownershipReference &&
+      priorEvidence?.commercialTerms?.rightsOwnerSharePct === commercialTerms.rightsOwnerSharePct &&
+      priorEvidence?.commercialTerms?.distributorSharePct === commercialTerms.distributorSharePct;
+    if (!sameDraft) throw new Error("Agreement reference already exists with different licensing terms");
+    if (prior.status !== "DRAFT")
+      throw new Error("This agreement reference already has a non-draft rights decision");
+    return { grantId: prior.id };
+  }
+
+  const existingGrants = await tx<{
+    id: string;
+    status: string;
+    territories: string[];
+    languages: string[];
+    window_start: string | Date;
+    window_end: string | Date;
+    exclusivity: string;
+  }>`select id,status,territories,languages,window_start,window_end,exclusivity
+    from bridge_rights_grants
+    where title_id=${data.titleId} and status in ('DRAFT','VALID')
+    for update`;
+  const requestedStart = new Date(data.windowStart).getTime();
+  const requestedEnd = new Date(data.windowEnd).getTime();
+  const overlaps = existingGrants.some((existing) => {
+    const territoryOverlap =
+      (existing.territories ?? []).some((value) => data.territories.includes(value)) ||
+      (existing.territories ?? []).includes("WORLDWIDE") ||
+      data.territories.includes("WORLDWIDE");
+    const languageOverlap = (existing.languages ?? []).some((language) =>
+      data.languages.some((requested) => requested.trim().toUpperCase() === language.trim().toUpperCase()),
+    );
+    const timeOverlap =
+      new Date(existing.window_start).getTime() < requestedEnd &&
+      requestedStart < new Date(existing.window_end).getTime();
+    return (
+      territoryOverlap &&
+      languageOverlap &&
+      timeOverlap &&
+      (existing.exclusivity === "EXCLUSIVE" || data.exclusivity === "EXCLUSIVE")
+    );
+  });
+  if (overlaps)
+    throw new Error("Conflicting exclusive or non-exclusive rights grant overlaps this title, territory, language and window");
+
   const [grant] = await tx<{ id: string }>`insert into bridge_rights_grants
     (title_id,grant_type,territories,languages,media,window_start,window_end,exclusivity,evidence,status,created_by)
     values (${data.titleId},'DISTRIBUTION',${JSON.stringify(data.territories)}::jsonb,${JSON.stringify(data.languages)}::jsonb,
@@ -108,10 +199,56 @@ export async function reviewWorkflow(tx: Sql, actor: Actor, data: z.infer<typeof
       throw new Error("Another legal reviewer must approve this license");
     if (data.decision === "APPROVE" && new Date(grant.window_end) <= new Date())
       throw new Error("License has expired");
-    await tx`insert into bridge_legal_cases(title_id,status,evidence,reviewed_by,reviewed_at)
-      values (${data.titleId},${data.decision === "APPROVE" ? "APPROVED" : "REJECTED"},
-      ${JSON.stringify([{ grantId: data.grantId, note: data.note }])}::jsonb,${actor.userId},now())`;
-    await tx`update bridge_rights_grants set status=${data.decision === "APPROVE" ? "VALID" : "REVOKED"} where id=${data.grantId}`;
+    if (data.decision === "APPROVE") {
+      const verifiedEvidence = await tx<{
+        id: string;
+        evidence_type: string;
+        asset_version_id: string;
+        checksum_sha256: string;
+        submitted_by: string;
+        reviewed_by: string;
+      }>`select e.id,e.evidence_type,e.asset_version_id,e.checksum_sha256,e.submitted_by,e.reviewed_by
+        from bridge_rights_evidence e
+        join bridge_asset_versions av on av.id=e.asset_version_id and av.title_id=e.title_id
+        join bridge_rights_evidence_reviews er
+          on er.evidence_id=e.id
+          and er.decision='VERIFIED'
+          and er.reviewer_user_id=e.reviewed_by
+          and lower(er.evidence_checksum_sha256)=lower(e.checksum_sha256)
+        where e.rights_grant_id=${data.grantId}
+          and e.title_id=${data.titleId}
+          and e.status='VERIFIED'
+          and e.reviewed_by is not null
+          and e.reviewed_by <> ${grant.created_by}
+          and e.reviewed_by <> e.submitted_by
+          and av.asset_group='DOCUMENT'
+          and av.processing_state='PASSED'
+          and lower(av.checksum_sha256)=lower(e.checksum_sha256)
+        for update of e,av`;
+      const verifiedTypes = new Set(verifiedEvidence.map((item) => item.evidence_type));
+      if (!verifiedTypes.has("EXECUTED_AGREEMENT") || !verifiedTypes.has("OWNERSHIP_CHAIN"))
+        throw new Error("Legal approval requires independently reviewed executed-agreement and ownership-chain documents with matching SHA-256 checksums");
+      await tx`insert into bridge_legal_cases(title_id,status,evidence,reviewed_by,reviewed_at)
+        values (${data.titleId},'APPROVED',
+        ${JSON.stringify([{
+          grantId: data.grantId,
+          note: data.note,
+          verifiedEvidence: verifiedEvidence.map((item) => ({
+            evidenceId: item.id,
+            evidenceType: item.evidence_type,
+            assetVersionId: item.asset_version_id,
+            checksumSha256: item.checksum_sha256,
+            submittedBy: item.submitted_by,
+            reviewedBy: item.reviewed_by,
+          })),
+        }])}::jsonb,${actor.userId},now())`;
+      await tx`update bridge_rights_grants set status='VALID' where id=${data.grantId}`;
+    } else {
+      await tx`insert into bridge_legal_cases(title_id,status,evidence,reviewed_by,reviewed_at)
+        values (${data.titleId},'REJECTED',
+        ${JSON.stringify([{ grantId: data.grantId, note: data.note }])}::jsonb,${actor.userId},now())`;
+      await tx`update bridge_rights_grants set status='REVOKED' where id=${data.grantId}`;
+    }
   }
   const next =
     data.decision === "REJECT"
@@ -179,7 +316,34 @@ export const getTitleWorkflow = createServerFn({ method: "GET" })
       status: string;
       reviewed_at: string | Date;
     }>`select status,reviewed_at from bridge_legal_cases where title_id=${data.titleId} order by created_at desc limit 1`;
+    const documentAssets = await sql<{
+      id: string;
+      asset_type: string;
+      version: number;
+      s3_key: string;
+      checksum_sha256: string;
+    }>`select id,asset_type,version,s3_key,checksum_sha256
+      from bridge_asset_versions
+      where title_id=${data.titleId} and asset_group='DOCUMENT'
+        and processing_state='PASSED' and checksum_sha256 is not null
+      order by created_at desc limit 100`;
+    const rightsEvidence = await sql<{
+      id: string;
+      rights_grant_id: string;
+      evidence_type: string;
+      asset_version_id: string;
+      status: string;
+      submitted_by: string;
+      reviewed_by: string | null;
+      created_at: string | Date;
+    }>`select id,rights_grant_id,evidence_type,asset_version_id,status,submitted_by,reviewed_by,created_at
+      from bridge_rights_evidence where title_id=${data.titleId} order by created_at desc limit 100`;
     return {
+      documentAssets,
+      rightsEvidence: rightsEvidence.map((item) => ({
+        ...item,
+        created_at: new Date(item.created_at).toISOString(),
+      })),
       grants: grants.map((g) => ({
         ...g,
         window_start: g.window_start ? new Date(g.window_start).toISOString() : "",

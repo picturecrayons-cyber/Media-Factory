@@ -92,6 +92,12 @@ async function fixture() {
         "utf8",
       ).replaceAll("public.", `${schema}.`),
     );
+    await db.exec(
+      readFileSync(
+        new URL("../../../migrations/0021_bridge_rights_evidence_verification.sql", import.meta.url),
+        "utf8",
+      ).replaceAll("public.", `${schema}.`),
+    );
     await db.exec(`insert into bridge_titles(id,owner_user_id,status,master_key,poster_key,updated_at)
       values('title-123','owner','QC_REVIEW','sealed/master','sealed/poster',now());
     insert into bridge_assets values
@@ -168,7 +174,7 @@ const license = {
   distributorSharePct: 20,
 };
 
-test("real SQL services persist QC, independently approved license, lifecycle and audit", async () => {
+test("QC may pass but legal approval fails closed until agreement and ownership evidence are verified", async () => {
   const f = await fixture();
   try {
     const saved = (await f.sql.transaction((tx) => f.save(tx, owner, license))) as {
@@ -182,24 +188,27 @@ test("real SQL services persist QC, independently approved license, lifecycle an
         note: "Playback and codec checked",
       }),
     );
-    await f.sql.transaction((tx) =>
-      f.review(tx, legal, {
-        titleId: "title-123",
-        stage: "LEGAL",
-        decision: "APPROVE",
-        note: "Ownership and agreement verified",
-        grantId: saved.grantId,
-      }),
+    await assert.rejects(
+      f.sql.transaction((tx) =>
+        f.review(tx, legal, {
+          titleId: "title-123",
+          stage: "LEGAL",
+          decision: "APPROVE",
+          note: "Ownership and agreement reviewed",
+          grantId: saved.grantId,
+        }),
+      ),
+      /independent, recorded verification/,
     );
     assert.equal(
       (await f.sql.query<{ status: string }>("select status from bridge_titles"))[0].status,
-      "LICENSING_READY",
+      "RIGHTS_REVIEW",
     );
     assert.equal(
       (await f.sql.query<{ status: string }>("select status from bridge_rights_grants"))[0].status,
-      "VALID",
+      "DRAFT",
     );
-    assert.equal((await f.sql.query("select * from bridge_audit_logs")).length, 3);
+    assert.equal((await f.sql.query("select * from bridge_legal_cases")).length, 0);
   } finally {
     await f.db.close();
   }
@@ -302,6 +311,153 @@ test("concurrent reviewer calls cannot approve the same lifecycle twice", async 
     await f.db.close();
   }
 });
+test("agreement references cannot be reused across different titles or letter case", async () => {
+  const f = await fixture();
+  try {
+    await f.sql.transaction((tx) => f.save(tx, owner, license));
+    await f.sql.query(`insert into bridge_titles(id,owner_user_id,status,master_key,poster_key,updated_at)
+      values ('title-456','owner','RIGHTS_REVIEW','sealed/master-2','sealed/poster-2',now())`);
+    await assert.rejects(
+      f.sql.transaction((tx) => f.save(tx, owner, { ...license, titleId: "title-456", agreementReference: "AGREEMENT-123" })),
+      /Agreement reference is already assigned to another title/,
+    );
+    assert.equal((await f.sql.query("select * from bridge_rights_grants")).length, 1);
+  } finally {
+    await f.db.close();
+  }
+});
+
+test("multiple legacy records with the same agreement reference block retry for reconciliation", async () => {
+  const f = await fixture();
+  try {
+    const first = (await f.sql.transaction((tx) => f.save(tx, owner, license))) as { grantId: string };
+    await f.sql.query(`insert into bridge_rights_grants
+      (title_id,grant_type,territories,languages,media,window_start,window_end,exclusivity,evidence,status,created_by)
+      select title_id,grant_type,territories,languages,media,window_start,window_end,exclusivity,evidence,status,created_by
+      from bridge_rights_grants where id=$1`, [first.grantId]);
+    await assert.rejects(
+      f.sql.transaction((tx) => f.save(tx, owner, license)),
+      /Multiple records already use this agreement reference/,
+    );
+    assert.equal((await f.sql.query("select * from bridge_rights_grants")).length, 2);
+  } finally {
+    await f.db.close();
+  }
+});
+
+test("legal approval succeeds only with both independently reviewed, checksum-matched evidence classes", async () => {
+  const f = await fixture();
+  try {
+    const saved = (await f.sql.transaction((tx) => f.save(tx, owner, license))) as { grantId: string };
+    await f.sql.transaction((tx) => f.review(tx, qc, {
+      titleId: "title-123", stage: "QC", decision: "APPROVE", note: "Playback and codec checked",
+    }));
+    const agreementChecksum = "a".repeat(64);
+    const ownershipChecksum = "b".repeat(64);
+    await f.sql.query(`insert into bridge_asset_versions
+      (id,title_id,asset_group,asset_type,version,s3_key,checksum_sha256,byte_size,processing_state,created_by)
+      values
+      ('00000000-0000-4000-8000-000000000001','title-123','DOCUMENT','executed_agreement',1,'sealed/agreement.pdf',$1,1024,'PASSED','owner'),
+      ('00000000-0000-4000-8000-000000000002','title-123','DOCUMENT','ownership_chain',1,'sealed/ownership.pdf',$2,1024,'PASSED','owner')`,
+      [agreementChecksum, ownershipChecksum]);
+    await f.sql.query(`insert into bridge_rights_evidence
+      (id,title_id,rights_grant_id,evidence_type,asset_version_id,checksum_sha256,submitted_by,status,reviewed_by,reviewed_at,review_note)
+      values
+      ('00000000-0000-4000-8000-000000000011','title-123',$1,'EXECUTED_AGREEMENT','00000000-0000-4000-8000-000000000001',$2,'owner','VERIFIED','legal',now(),'Executed agreement checked'),
+      ('00000000-0000-4000-8000-000000000012','title-123',$1,'OWNERSHIP_CHAIN','00000000-0000-4000-8000-000000000002',$3,'owner','VERIFIED','legal',now(),'Ownership chain checked')`,
+      [saved.grantId, agreementChecksum, ownershipChecksum]);
+    await f.sql.query(`insert into bridge_rights_evidence_reviews
+      (evidence_id,decision,reviewer_user_id,evidence_checksum_sha256,note)
+      values
+      ('00000000-0000-4000-8000-000000000011','VERIFIED','legal',$1,'Executed agreement checked'),
+      ('00000000-0000-4000-8000-000000000012','VERIFIED','legal',$2,'Ownership chain checked')`,
+      [agreementChecksum, ownershipChecksum]);
+    await f.sql.transaction((tx) => f.review(tx, legal, {
+      titleId: "title-123", stage: "LEGAL", decision: "APPROVE",
+      note: "Both source documents independently reviewed", grantId: saved.grantId,
+    }));
+    assert.equal((await f.sql.query<{status:string}>("select status from bridge_titles"))[0].status, "LICENSING_READY");
+    assert.equal((await f.sql.query<{status:string}>("select status from bridge_rights_grants"))[0].status, "VALID");
+    const legalCase = (await f.sql.query<{status:string,evidence:unknown}>("select status,evidence from bridge_legal_cases"))[0];
+    assert.equal(legalCase.status, "APPROVED");
+    assert.equal((legalCase.evidence as Array<{verifiedEvidence:Array<unknown>}>)[0].verifiedEvidence.length, 2);
+  } finally {
+    await f.db.close();
+  }
+});
+
+test("legal approval remains blocked when only one required evidence class is verified", async () => {
+  const f = await fixture();
+  try {
+    const saved = (await f.sql.transaction((tx) => f.save(tx, owner, license))) as { grantId: string };
+    await f.sql.transaction((tx) => f.review(tx, qc, {
+      titleId: "title-123", stage: "QC", decision: "APPROVE", note: "Playback and codec checked",
+    }));
+    const checksum = "c".repeat(64);
+    await f.sql.query(`insert into bridge_asset_versions
+      (id,title_id,asset_group,asset_type,version,s3_key,checksum_sha256,byte_size,processing_state,created_by)
+      values ('00000000-0000-4000-8000-000000000003','title-123','DOCUMENT','executed_agreement',1,'sealed/agreement.pdf',$1,1024,'PASSED','owner')`,[checksum]);
+    await f.sql.query(`insert into bridge_rights_evidence
+      (id,title_id,rights_grant_id,evidence_type,asset_version_id,checksum_sha256,submitted_by,status,reviewed_by,reviewed_at,review_note)
+      values ('00000000-0000-4000-8000-000000000013','title-123',$1,'EXECUTED_AGREEMENT','00000000-0000-4000-8000-000000000003',$2,'owner','VERIFIED','legal',now(),'Agreement checked')`,[saved.grantId,checksum]);
+    await f.sql.query(`insert into bridge_rights_evidence_reviews
+      (evidence_id,decision,reviewer_user_id,evidence_checksum_sha256,note)
+      values ('00000000-0000-4000-8000-000000000013','VERIFIED','legal',$1,'Agreement checked')`,[checksum]);
+    await assert.rejects(
+      f.sql.transaction((tx) => f.review(tx, legal, {
+        titleId: "title-123", stage: "LEGAL", decision: "APPROVE",
+        note: "Attempt without ownership chain", grantId: saved.grantId,
+      })),
+      /requires independently reviewed executed-agreement and ownership-chain documents/,
+    );
+    assert.equal((await f.sql.query<{status:string}>("select status from bridge_rights_grants"))[0].status, "DRAFT");
+    assert.equal((await f.sql.query("select * from bridge_legal_cases")).length, 0);
+  } finally {
+    await f.db.close();
+  }
+});
+
+test("saving identical license terms repeatedly reuses one draft and one audit event", async () => {
+  const f = await fixture();
+  try {
+    const first = (await f.sql.transaction((tx) => f.save(tx, owner, license))) as { grantId: string };
+    const second = (await f.sql.transaction((tx) => f.save(tx, owner, license))) as { grantId: string };
+    assert.equal(second.grantId, first.grantId);
+    assert.equal((await f.sql.query("select * from bridge_rights_grants")).length, 1);
+    assert.equal((await f.sql.query("select * from bridge_audit_logs where action='license.loop_draft'")).length, 1);
+  } finally {
+    await f.db.close();
+  }
+});
+
+test("same agreement reference with materially different terms is rejected", async () => {
+  const f = await fixture();
+  try {
+    await f.sql.transaction((tx) => f.save(tx, owner, license));
+    await assert.rejects(
+      f.sql.transaction((tx) => f.save(tx, owner, { ...license, exclusivity: "EXCLUSIVE" })),
+      /different licensing terms/,
+    );
+    assert.equal((await f.sql.query("select * from bridge_rights_grants")).length, 1);
+  } finally {
+    await f.db.close();
+  }
+});
+
+test("overlapping exclusive and non-exclusive grants are rejected", async () => {
+  const f = await fixture();
+  try {
+    await f.sql.transaction((tx) => f.save(tx, owner, { ...license, exclusivity: "EXCLUSIVE" }));
+    await assert.rejects(
+      f.sql.transaction((tx) => f.save(tx, owner, { ...license, agreementReference: "agreement-456" })),
+      /Conflicting exclusive/,
+    );
+    assert.equal((await f.sql.query("select * from bridge_rights_grants")).length, 1);
+  } finally {
+    await f.db.close();
+  }
+});
+
 test("license author cannot approve their own agreement", async () => {
   const f = await fixture();
   try {

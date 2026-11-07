@@ -7,6 +7,7 @@ import {
   submitLoopLicense,
   reviewTitleWorkflow,
 } from "@/lib/bridge/workflow";
+import { submitRightsEvidenceFn } from "@/lib/bridge/rights-evidence";
 import { advanceTitle } from "@/lib/bridge/titles";
 import {
   authorizeLoopPublication,
@@ -69,6 +70,8 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
   const [agreement, setAgreement] = useState("");
   const [ownership, setOwnership] = useState("");
   const [ownerShare, setOwnerShare] = useState("");
+  const [evidenceType, setEvidenceType] = useState<"EXECUTED_AGREEMENT" | "OWNERSHIP_CHAIN">("EXECUTED_AGREEMENT");
+  const [evidenceAssetVersionId, setEvidenceAssetVersionId] = useState("");
   function downloadStatement() {
     const safe = (v: string) =>
       '"' + (/^[=+@-]/.test(v) ? "'" : "") + v.replaceAll('"', '""') + '"';
@@ -277,20 +280,55 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                   </p>
                   <p>Agreement: {g.evidence[0]?.agreementReference ?? "Not recorded"}</p>
                   {g.status === "DRAFT" &&
-                  title.status === "RIGHTS_REVIEW" &&
-                  hasPermission(actor, "title.rights_review") ? (
-                    <div className="flex gap-2">
-                      {button("Approve rights / license", () =>
-                        reviewTitleWorkflow({
+                  canOperateOnTitle(actor, title, "title.update_own", "title.license") ? (
+                    <form
+                      className="grid gap-2 rounded-lg border border-line p-3 sm:grid-cols-2"
+                      onSubmit={(event) => {
+                        event.preventDefault();
+                        action.mutate(() => submitRightsEvidenceFn({
                           data: {
                             titleId: title.id,
-                            stage: "LEGAL",
-                            decision: "APPROVE",
-                            note,
                             grantId: g.id,
+                            evidenceType,
+                            assetVersionId: evidenceAssetVersionId,
                           },
-                        }),
-                      )}
+                        }));
+                      }}
+                    >
+                      <p className="text-sm sm:col-span-2">Attach actual processed document evidence. Text references alone do not count as evidence.</p>
+                      <label className="grid gap-1 text-sm">
+                        Evidence class
+                        <select value={evidenceType} onChange={(event) => setEvidenceType(event.target.value as "EXECUTED_AGREEMENT" | "OWNERSHIP_CHAIN")} className="rounded-lg border border-line bg-elevated p-2">
+                          <option value="EXECUTED_AGREEMENT">Executed agreement</option>
+                          <option value="OWNERSHIP_CHAIN">Ownership chain</option>
+                        </select>
+                      </label>
+                      <label className="grid gap-1 text-sm">
+                        Verified document asset
+                        <select value={evidenceAssetVersionId} onChange={(event) => setEvidenceAssetVersionId(event.target.value)} className="rounded-lg border border-line bg-elevated p-2" required>
+                          <option value="">Select processed document</option>
+                          {(workflow.data?.documentAssets ?? []).map((asset) => (
+                            <option key={asset.id} value={asset.id}>{asset.asset_type} · v{asset.version} · {asset.checksum_sha256.slice(0, 12)}</option>
+                          ))}
+                        </select>
+                      </label>
+                      <button type="submit" disabled={action.isPending || !(workflow.data?.documentAssets ?? []).some((asset) => asset.id === evidenceAssetVersionId)} className="rounded-lg border border-line p-2 text-sm sm:col-span-2">
+                        Submit evidence for independent review
+                      </button>
+                    </form>
+                  ) : null}
+                  {(workflow.data?.rightsEvidence ?? []).filter((item) => item.rights_grant_id === g.id).map((item) => (
+                    <p key={item.id} className="text-xs text-muted">
+                      {item.evidence_type.replaceAll("_", " ")} · {item.status} · submitted by {item.submitted_by}
+                    </p>
+                  ))}
+                  {g.status === "DRAFT" &&
+                  title.status === "RIGHTS_REVIEW" &&
+                  hasPermission(actor, "title.rights_review") ? (
+                    <div className="space-y-2">
+                      <p className="text-xs text-muted-foreground">
+                        Approval is blocked until executed-agreement and ownership evidence receive independent, recorded verification.
+                      </p>
                       {button("Reject", () =>
                         reviewTitleWorkflow({
                           data: {
