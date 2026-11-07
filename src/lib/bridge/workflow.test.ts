@@ -311,6 +311,22 @@ test("concurrent reviewer calls cannot approve the same lifecycle twice", async 
     await f.db.close();
   }
 });
+test("agreement references cannot be reused across different titles or letter case", async () => {
+  const f = await fixture();
+  try {
+    await f.sql.transaction((tx) => f.save(tx, owner, license));
+    await f.sql.query(`insert into bridge_titles(id,owner_user_id,status,master_key,poster_key,updated_at)
+      values ('title-456','owner','RIGHTS_REVIEW','sealed/master-2','sealed/poster-2',now())`);
+    await assert.rejects(
+      f.sql.transaction((tx) => f.save(tx, owner, { ...license, titleId: "title-456", agreementReference: "AGREEMENT-123" })),
+      /Agreement reference is already assigned to another title/,
+    );
+    assert.equal((await f.sql.query("select * from bridge_rights_grants")).length, 1);
+  } finally {
+    await f.db.close();
+  }
+});
+
 test("multiple legacy records with the same agreement reference block retry for reconciliation", async () => {
   const f = await fixture();
   try {
