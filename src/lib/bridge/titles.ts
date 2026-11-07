@@ -34,6 +34,7 @@ type TitleRow = {
   country_of_origin: string | null;
   release_date: string | Date | null;
   credits: Array<{ role: string; name: string }>;
+  submission_type?: string | null;
   created_at: string | Date;
   updated_at: string | Date;
 };
@@ -360,6 +361,10 @@ export const listTitles = createServerFn({ method: "GET" })
     } else {
       assertPermission(actor, "title.read_own");
       rows = await listOwned(sql, actor.userId, actor.accountType === "studio" ? actor.organizationId : null);
+      // Story / Concept submissions have their own workspace and must not be
+      // repeated in the Finished Films title list. Keep older schemas safe:
+      // absent submission_type values continue to behave as finished-film rows.
+      rows = rows.filter((row) => row.submission_type !== "story_concept");
     }
     return { titles: rows.flatMap((row) => {
       try {
