@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { TitleList } from "@/components/bridge/title-desk";
@@ -17,6 +17,9 @@ function Studio() {
               <p className="max-w-xl text-sm text-muted">
                 Finished films and story concepts stay separate. Production services are on the admin desk. The film master is uploaded from the title.
               </p>
+              <Link to="/services" className="inline-flex text-sm font-medium underline underline-offset-4">
+                Explore Creator & Studio services
+              </Link>
               <NewSubmissionPanel />
             </header>
 
