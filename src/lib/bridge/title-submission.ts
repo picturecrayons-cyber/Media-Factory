@@ -1,6 +1,6 @@
 import type { Sql } from "@/lib/db";
 import type { BridgeTitle, TitleStatus } from "./types";
-import { hasVerifiedMasterAndArtwork } from "./asset-roles";
+import { hasVerifiedMasterAndArtwork } from "./asset-roles.ts";
 
 /**
  * Executes the real Submit-for-QC database path. Authentication and permission
