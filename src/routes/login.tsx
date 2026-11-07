@@ -101,6 +101,20 @@ function Login() {
           </p>
         </div>
 
+        {authError ? (
+          <div role="alert" className="rounded-xl border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-600 dark:text-red-400">
+            {authError}
+            <button type="button" onClick={retry} className="ml-2 font-semibold underline">Retry session</button>
+          </div>
+        ) : null}
+
+        {error ? (
+          <div role="alert" className="rounded-xl border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-600 dark:text-red-400">
+            {error}
+            <button type="button" onClick={() => setError(null)} className="ml-2 font-semibold underline">Retry workspace</button>
+          </div>
+        ) : null}
+
         <form className="space-y-4" onSubmit={(e) => void onSubmit(e)}>
           <label className="block text-sm font-medium text-fg">
             Email
@@ -157,15 +171,6 @@ function Login() {
               </button>
             </div>
           </label>
-
-          {error ? (
-            <div
-              role="alert"
-              className="rounded-xl border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-600 dark:text-red-400"
-            >
-              {error}
-            </div>
-          ) : null}
 
           <Button
             type="submit"
