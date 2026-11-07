@@ -39,10 +39,6 @@ export async function saveLoopLicense(
     throw new Error("Forbidden");
   if (new Date(data.windowEnd) <= new Date()) throw new Error("License window has expired");
 
-  // Serialize all licensing changes for this title. The title row is already locked,
-  // and this transaction lock also protects callers that do not share that lock path.
-  await tx`select pg_advisory_xact_lock(hashtextextended(${`bridge-license:${data.titleId}`}, 0))`;
-
   const [prior] = await tx<{
     id: string;
     status: string;
@@ -193,6 +189,10 @@ export async function reviewWorkflow(tx: Sql, actor: Actor, data: z.infer<typeof
       throw new Error("Another legal reviewer must approve this license");
     if (data.decision === "APPROVE" && new Date(grant.window_end) <= new Date())
       throw new Error("License has expired");
+    if (data.decision === "APPROVE")
+      throw new Error(
+        "Rights approval is blocked until executed-agreement and ownership evidence have independent, recorded verification",
+      );
     await tx`insert into bridge_legal_cases(title_id,status,evidence,reviewed_by,reviewed_at)
       values (${data.titleId},${data.decision === "APPROVE" ? "APPROVED" : "REJECTED"},
       ${JSON.stringify([{ grantId: data.grantId, note: data.note }])}::jsonb,${actor.userId},now())`;
