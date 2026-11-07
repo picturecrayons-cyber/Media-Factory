@@ -7,9 +7,22 @@ import { StatusChip } from "@/components/bridge/status-rail";
 import { createTitle, listTitles } from "@/lib/bridge/titles";
 import { BRIDGE_LOOP_LANES } from "@/lib/bridge/loop-lanes";
 
-export function TitleList({ empty, query = "" }: { empty: string; query?: string }) {
+export function TitleList({
+  empty,
+  query = "",
+  contentType,
+}: {
+  empty: string;
+  query?: string;
+  /** Optional exact content-type filter for role dashboards such as Studio Finished Films. */
+  contentType?: string;
+}) {
   const titlesQ = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles() });
-  const titles = (titlesQ.data?.titles ?? []).filter((t) => !query || `${t.name} ${t.language} ${t.year ?? ""}`.toLowerCase().includes(query.toLowerCase()));
+  const titles = (titlesQ.data?.titles ?? []).filter((t) => {
+    const matchesQuery = !query || `${t.name} ${t.language} ${t.year ?? ""}`.toLowerCase().includes(query.toLowerCase());
+    const matchesType = !contentType || t.contentType.trim().toLowerCase() === contentType.trim().toLowerCase();
+    return matchesQuery && matchesType;
+  });
   if (titlesQ.isPending) return <p className="text-sm text-muted">Loading titles…</p>;
   if (titlesQ.isError) {
     return (
