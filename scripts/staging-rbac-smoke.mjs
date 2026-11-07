@@ -3,10 +3,13 @@ import assert from "node:assert/strict";
 import { Client } from "pg";
 import { persistVerifiedAsset } from "../src/lib/bridge/asset-confirmation.ts";
 import { seedStagingRbacFixtures } from "./staging-rbac-fixtures.mjs";
+import { assertCra128Phase0Accepted } from "./staging-rbac-smoke-guard.mjs";
 
-const REQUIRED_PROJECT_REF = "bbtrosuwisnxacuxvegt";
+const REQUIRED_PROJECT_REF = "jbymleftneggcgutlcqu";
 
 function requireStagingOnlyEnvironment() {
+  // This hard gate runs before parsing credentials or opening a network connection.
+  assertCra128Phase0Accepted();
   const projectRef = process.env.BRIDGE_STAGING_PROJECT_REF;
   const supabaseUrl = process.env.BRIDGE_STAGING_SUPABASE_URL;
   const databaseUrlText = process.env.BRIDGE_STAGING_DATABASE_URL;
@@ -50,20 +53,62 @@ async function main() {
 
     const schema = await client.query(`
       select
-        (select relrowsecurity from pg_class where oid = 'public.bridge_organizations'::regclass) as organizations_rls,
-        (select relrowsecurity from pg_class where oid = 'public.bridge_organization_memberships'::regclass) as memberships_rls,
-        has_table_privilege('anon', 'public.bridge_organizations', 'SELECT') as anon_org_select,
-        has_table_privilege('authenticated', 'public.bridge_organizations', 'SELECT') as authenticated_org_select,
-        has_table_privilege('anon', 'public.bridge_organization_memberships', 'SELECT') as anon_membership_select,
-        has_table_privilege('authenticated', 'public.bridge_organization_memberships', 'SELECT') as authenticated_membership_select
+        to_regclass('public.bridge_organizations') is not null as organizations_present,
+        to_regclass('public.bridge_organization_memberships') is not null as memberships_present,
+        (select count(*)::int from pg_class c join pg_namespace n on n.oid=c.relnamespace
+          where n.nspname='public' and c.relkind='r' and not c.relrowsecurity) as rls_disabled_tables
     `);
-    const acl = schema.rows[0];
-    assert.equal(acl.organizations_rls, true, "bridge_organizations RLS must be enabled");
-    assert.equal(acl.memberships_rls, true, "bridge_organization_memberships RLS must be enabled");
-    assert.equal(acl.anon_org_select, false, "anon must not SELECT organizations");
-    assert.equal(acl.authenticated_org_select, false, "authenticated browser role must not SELECT organizations");
-    assert.equal(acl.anon_membership_select, false, "anon must not SELECT memberships");
-    assert.equal(acl.authenticated_membership_select, false, "authenticated browser role must not SELECT memberships");
+    const schemaReady = schema.rows[0];
+    assert.equal(schemaReady.organizations_present, true, "approved STAGING schema must include bridge_organizations before Studio isolation fixtures");
+    assert.equal(schemaReady.memberships_present, true, "approved STAGING schema must include bridge_organization_memberships before Studio isolation fixtures");
+    assert.equal(Number(schemaReady.rls_disabled_tables), 0, "all public Bridge STAGING tables must have RLS enabled");
+
+    const requiredPolicyTables = [
+      "bridge_profiles",
+      "bridge_titles",
+      "bridge_assets",
+      "bridge_asset_versions",
+      "bridge_rights_grants",
+      "bridge_title_events",
+      "bridge_organization_memberships",
+    ];
+    const ownerPolicies = await client.query(`
+      select tablename, count(*)::int as policy_count
+      from pg_policies
+      where schemaname = 'public' and tablename = any($1::text[])
+      group by tablename
+    `, [requiredPolicyTables]);
+    const policiesByTable = new Map(ownerPolicies.rows.map((row) => [row.tablename, Number(row.policy_count)]));
+    for (const table of requiredPolicyTables) {
+      assert.ok((policiesByTable.get(table) ?? 0) > 0, `reviewed ownership RLS policy required for public.${table}`);
+    }
+
+    const acl = await client.query(`
+      select
+        count(*) filter (where grantee in ('anon','authenticated'))::int as direct_grant_rows
+      from information_schema.role_table_grants
+      where table_schema = 'public'
+        and grantee in ('anon','authenticated')
+        and privilege_type in ('SELECT','INSERT','UPDATE','DELETE','TRUNCATE','REFERENCES','TRIGGER')
+    `);
+    assert.equal(Number(acl.rows[0].direct_grant_rows), 0,
+      "anon and authenticated must not retain direct table privileges on the Bridge STAGING schema");
+
+    const policyInventory = await client.query(`
+      select count(*)::int as policy_count from pg_policies where schemaname = 'public'
+    `);
+    assert.ok(Number(policyInventory.rows[0].policy_count) > 0,
+      "reviewed STAGING RLS policies must be installed before synthetic RBAC fixtures can run");
+
+    const sequenceAcl = await client.query(`
+      select count(*)::int as sequence_grant_rows
+      from information_schema.usage_privileges
+      where object_schema = 'public'
+        and object_type = 'SEQUENCE'
+        and grantee in ('anon','authenticated')
+    `);
+    assert.equal(Number(sequenceAcl.rows[0].sequence_grant_rows), 0,
+      "anon and authenticated must not retain direct sequence privileges on Bridge STAGING");
 
     const fixtures = await seedStagingRbacFixtures(client);
 

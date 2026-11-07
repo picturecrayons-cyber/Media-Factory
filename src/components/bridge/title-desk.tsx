@@ -7,7 +7,20 @@ import { StatusChip } from "@/components/bridge/status-rail";
 import { createTitle, listTitles } from "@/lib/bridge/titles";
 import { BRIDGE_LOOP_LANES } from "@/lib/bridge/loop-lanes";
 
-export function TitleList({ empty, query = "" }: { empty: string; query?: string }) {
+const OWNER_PROGRESS: Record<string, { label: string; guidance: string }> = {
+  DRAFT: { label: "Submission started", guidance: "Complete the title details and required rights information." },
+  UPLOADING: { label: "Assets in progress", guidance: "Upload required files to the private title workspace." },
+  PREPARING: { label: "Preparation", guidance: "Complete metadata and asset preparation before review." },
+  QC_REVIEW: { label: "QC review", guidance: "Your title is awaiting the internal quality review." },
+  RIGHTS_REVIEW: { label: "Rights review", guidance: "Your title is awaiting the internal rights and legal review." },
+  LICENSING_READY: { label: "Licensing ready", guidance: "The title is ready for the next authorized licensing step; publication is not implied." },
+  LIVE_FOR_BUYERS: { label: "Buyer availability", guidance: "Visibility remains subject to buyer authorization and active rights." },
+  IN_NEGOTIATION: { label: "In negotiation", guidance: "A buyer discussion is in progress." },
+  LICENSED: { label: "Licensed", guidance: "A license has been recorded for this title." },
+  DELIVERED: { label: "Delivery recorded", guidance: "A delivery record exists; this does not itself confirm consumer playback." },
+};
+
+export function TitleList({ empty, query = "", showProgress = false }: { empty: string; query?: string; showProgress?: boolean }) {
   const titlesQ = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles() });
   const titles = (titlesQ.data?.titles ?? []).filter((t) => !query || `${t.name} ${t.language} ${t.year ?? ""}`.toLowerCase().includes(query.toLowerCase()));
   if (titlesQ.isPending) return <p className="text-sm text-muted">Loading titles…</p>;
@@ -36,6 +49,12 @@ export function TitleList({ empty, query = "" }: { empty: string; query?: string
                 {t.language}
                 {t.year ? ` · ${t.year}` : ""}
               </p>
+              {showProgress && OWNER_PROGRESS[t.status] ? (
+                <div className="mt-2 max-w-xl" aria-label="Title review progress">
+                  <p className="text-xs font-medium">{OWNER_PROGRESS[t.status].label}</p>
+                  <p className="text-xs text-muted">{OWNER_PROGRESS[t.status].guidance}</p>
+                </div>
+              ) : null}
             </div>
             <StatusChip status={t.status} />
           </Link>
