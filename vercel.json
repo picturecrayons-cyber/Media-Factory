@@ -5,5 +5,11 @@
     "deploymentEnabled": {
       "fix/publication-status-contract-20261001": false
     }
-  }
+  },
+  "crons": [
+    {
+      "path": "/api/cron/storage-optimizer",
+      "schedule": "0 2 * * *"
+    }
+  ]
 }
