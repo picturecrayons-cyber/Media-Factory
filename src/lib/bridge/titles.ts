@@ -589,14 +589,6 @@ export const advanceTitle = createServerFn({ method: "POST" })
     }
     if (["RIGHTS_REVIEW", "LICENSING_READY"].includes(data.to))
       throw new Error("Use the recorded QC or legal review action");
-    if (data.to === "QC_REVIEW") {
-      const verified = await (await getSql())<{
-        kind: string;
-        s3_key: string;
-      }>`select kind,s3_key from bridge_assets where title_id=${title.id} and byte_size>0`;
-      if (!hasVerifiedMasterAndArtwork(verified, title.masterKey, title.posterKey))
-        throw new Error("Verified master and artwork required before QC");
-    }
     assertTransition(title.status, data.to);
     const perm = permissionForTransition(title.status, data.to);
     if (!perm) throw new Error("Transition is not available");
