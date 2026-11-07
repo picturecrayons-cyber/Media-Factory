@@ -232,3 +232,44 @@ The current title page form labelled **“License to Crayons Loop · TVOD”** i
 For Malayalakkara Residency, the example reference BRIDGE-PROP-2026-MR-001 remains illustrative/proposal-only. The previously discussed 35% Bridge / 65% Content Owner split remains proposed and unverified until confirmed by the executed agreement. No territory (including WORLDWIDE), language scope, window or exclusivity is presumed.
 
 This section is a design clarification only. It does not authorize saving a Production draft, writing database records, issuing a proposal to a counterparty, executing an agreement, creating a license, or changing publication state.
+
+
+## 16. Creator and Studio dashboard source audit (2026-11-07)
+
+**Audit scope:** read-only inspection of the repository `main` source for `src/routes/creator.tsx`, `src/routes/studio.tsx`, `src/routes/onboarding.tsx`, `src/components/bridge/gate.tsx`, `src/components/bridge/title-desk.tsx`, `src/components/bridge/new-submission-panel.tsx`, `src/components/bridge/my-story-concepts.tsx`, `src/lib/bridge/rbac.ts`, `src/lib/bridge/session.ts` and `src/lib/bridge/titles.ts`. This is a source audit, not authenticated runtime verification.
+
+### Observed current implementation
+
+- Both `/creator` and `/studio` routes exist and are guarded by `RequireBridge` with distinct account-type checks.
+- The Creator page currently consists of a new-submission panel, the user's story concepts, and a `Your titles` list.
+- The Studio page currently consists of a new-submission panel, a `Finished films` list and story concepts. The source page remains a narrow submission/list view, not a complete Studio operations or DIT Control Center.
+- Both pages reuse the same `NewSubmissionPanel`, `TitleList` and `MyStoryConcepts` components. This is shared UI, but it does not yet demonstrate sufficiently differentiated Creator and Studio workflows.
+- The current account permission arrays for `independent_creator` and `studio` are identical. A separate Studio organization scope is present in the actor model and title query logic, but a Studio account can still pass the route's account-type gate when its resolved organization ID is null. Route access therefore does not itself prove active Studio organization membership.
+- The session loader attempts to resolve Studio organization scope through active membership and active organization records. Missing organization schema fails closed for organization scope, but runtime behavior and all title/action endpoints still require independent tests.
+- The Creator and Studio dashboards do not yet implement the proposed Bridge Agreement Proposal inbox, versioned owner acceptance, authorized signer/mandate checks, or agreement lifecycle.
+- PR #453 (Studio dashboard overview) and PR #408 (Creator/Studio onboarding routing) were found as draft work in the inspected GitHub search results; neither is evidence of merged, runtime-certified functionality. PR #408's proposed independent-Creator-to-`/studio` routing must not override the product requirement to keep `/creator` and `/studio` as distinct workspaces.
+
+### Audit verdict
+
+| Requirement | Source status |
+|---|---|
+| Separate `/creator` and `/studio` routes | PRESENT |
+| Authenticated route gates | PRESENT in source |
+| Creator own-title / submission view | PARTIAL |
+| Studio organization-scoped operations dashboard | NOT COMPLETE / NOT VERIFIED |
+| Distinct Creator vs Studio capabilities and UX | NOT COMPLETE |
+| Active Studio membership required for all Studio operations | NOT VERIFIED |
+| Creator/Studio tenant isolation across every API and asset | NOT VERIFIED |
+| Bridge Agreement Proposal inbox and acceptance | NOT IMPLEMENTED |
+| Authenticated desktop/mobile runtime E2E | NOT VERIFIED |
+
+### Required implementation direction
+
+1. Keep `/creator` and `/studio` as distinct, role-scoped workspaces; do not redirect every independent Creator into Studio and do not create duplicate dashboards or backends.
+2. Creator workspace: own submissions/titles, metadata completion, private asset checklist, proposal/contract inbox, status timeline, clarification requests and notifications. No internal QC, Legal, Finance, publication or global catalog controls.
+3. Studio workspace: active organization membership, organization-owned title portfolio, authorized team/member roles, assigned Creator collaboration, production/DIT operations where separately authorized, proposal/contract inbox and organization-level status reporting.
+4. Resolve account type, profile, organization membership and title scope from the authenticated server session. Enforce authorization in every server function and RLS; hiding controls in the UI is insufficient.
+5. Add negative tests for Creator A/B, Studio A/B, Creator-vs-Studio, inactive/missing membership, unassigned Creator, spoofed organization/title IDs, internal-role exclusion, and cross-tenant asset/download access.
+6. Before any Preview E2E, independently prove Preview uses the approved Testing DB and non-production private asset storage. Do not consume Vercel deployment quota without separate explicit approval.
+
+**Boundary:** This section records source findings and implementation requirements only. No application code, schema, RLS, data, environment, email, payment, deployment, merge or Production behavior is changed. Production remains **HOLD / NOT CERTIFIED / NO-GO**. App-inu pani kittaruthu.
