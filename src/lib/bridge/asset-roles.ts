@@ -7,14 +7,15 @@ export function hasVerifiedMasterAndArtwork(
   masterKey: string | null,
   posterKey: string | null,
 ): boolean {
-  const masterReady = Boolean(
-    masterKey && assets.some((asset) => asset.kind === "master" && asset.s3_key === masterKey),
+  if (!masterKey || !posterKey) return false;
+
+  const masterReady = assets.some(
+    (asset) => asset.kind === "master" && asset.s3_key === masterKey,
   );
   const artworkReady = assets.some(
     (asset) =>
       (asset.kind === "poster" || asset.kind === "poster_vertical") &&
-      Boolean(asset.s3_key) &&
-      (posterKey == null || asset.s3_key === posterKey),
+      asset.s3_key === posterKey,
   );
   return masterReady && artworkReady;
 }
