@@ -303,7 +303,7 @@ test("concurrent reviewer calls cannot approve the same lifecycle twice", async 
   }
 });
 
-test("QC reviewer cannot approve or reject a title whose assets they uploaded", async () => {
+test("QC reviewer cannot review a title whose assets they uploaded", async () => {
   const f = await fixture();
   try {
     const uploaderReviewer = { ...owner, internalRole: "qc_reviewer" as const };
@@ -349,6 +349,39 @@ test("exact license resubmission is idempotent and conflicting overlap is reject
       /Overlapping Loop TVOD rights grant/,
     );
     assert.equal((await f.sql.query("select * from bridge_rights_grants")).length, 1);
+  } finally {
+    await f.db.close();
+  }
+});
+
+test("future-dated license drafts cannot be legally approved before their start", async () => {
+  const f = await fixture();
+  try {
+    const futureLicense = {
+      ...license,
+      windowStart: "2027-01-01T00:00:00.000Z",
+      windowEnd: "2099-01-01T00:00:00.000Z",
+    };
+    const saved = (await f.sql.transaction((tx) => f.save(tx, owner, futureLicense))) as {
+      grantId: string;
+    };
+    await f.sql.query("update bridge_titles set status='RIGHTS_REVIEW'");
+    await assert.rejects(
+      f.sql.transaction((tx) =>
+        f.review(tx, legal, {
+          titleId: "title-123",
+          stage: "LEGAL",
+          decision: "APPROVE",
+          note: "Future rights window must remain pending",
+          grantId: saved.grantId,
+        }),
+      ),
+      /License window has not started/,
+    );
+    assert.equal(
+      (await f.sql.query<{ status: string }>("select status from bridge_rights_grants where id=$1", [saved.grantId]))[0].status,
+      "DRAFT",
+    );
   } finally {
     await f.db.close();
   }
