@@ -13,6 +13,8 @@ import { persistVerifiedAsset } from "./asset-confirmation";
 import { downloadDecision } from "./delivery-policy";
 import { uploadUrlLifetimeSeconds } from "./upload-url-lifetime";
 import { validateOttIngestFile, type OttIngestKind } from "./ott-ingest-spec";
+import { encryptMultipartCapability, decryptMultipartCapability } from "./multipart-session-crypto.server";
+import { validateCompletedMultipartParts } from "./multipart-upload";
 
 const UPLOADABLE: ReadonlySet<string> = new Set(["DRAFT", "UPLOADING", "PREPARING"]);
 
@@ -109,45 +111,231 @@ export const beginAssetMultipart = createServerFn({ method: "POST" })
   .validator(z.object({
     assetId: z.string().min(8),
     byteSize: z.number().int().positive().max(200 * 1024 * 1024 * 1024),
+    fileName: z.string().min(1).max(255),
+    lastModified: z.number().int().nonnegative(),
   }))
   .handler(async ({ context, data }) => {
     const asset = await openUploadAsset(context.userId, data.assetId);
     if (asset.byte_size != null) return { assetId: asset.id, alreadyVerified: true as const };
-    const { beginMultipartUpload } = await import("./oci-object-storage.server");
+    const { beginMultipartUpload, abortMultipartUpload } = await import("./oci-object-storage.server");
     const expiresIn = uploadUrlLifetimeSeconds(data.byteSize);
     const started = await beginMultipartUpload({
       key: asset.s3_key,
       contentType: asset.content_type || "application/octet-stream",
       expiresIn,
     });
+    const expiresAt = new Date(Date.now() + expiresIn * 1000);
+    try {
+      const sql = await getSql();
+      await sql`
+        insert into bridge_asset_multipart_sessions
+          (asset_id, title_id, created_by, object_key, upload_id, part_base_url_ciphertext,
+           file_name, file_size, part_size, last_modified, status, expires_at)
+        values
+          (${asset.id}, ${asset.title_id}, ${context.userId}, ${asset.s3_key}, ${started.uploadId},
+           ${encryptMultipartCapability(started.partBaseUrl)}, ${data.fileName}, ${data.byteSize},
+           ${16 * 1024 * 1024}, ${data.lastModified}, 'active', ${expiresAt.toISOString()})
+        on conflict (asset_id) do update set
+          title_id = excluded.title_id,
+          created_by = excluded.created_by,
+          object_key = excluded.object_key,
+          upload_id = excluded.upload_id,
+          part_base_url_ciphertext = excluded.part_base_url_ciphertext,
+          file_name = excluded.file_name,
+          file_size = excluded.file_size,
+          last_modified = excluded.last_modified,
+          part_size = excluded.part_size,
+          status = 'active',
+          expires_at = excluded.expires_at,
+          completed_at = null,
+          updated_at = now()
+      `;
+    } catch (error) {
+      await abortMultipartUpload(started.partBaseUrl, asset.s3_key).catch(() => undefined);
+      throw error;
+    }
     return {
       assetId: asset.id,
       alreadyVerified: false as const,
       uploadId: started.uploadId,
       partBaseUrl: started.partBaseUrl,
-      expiresAt: Date.now() + expiresIn * 1000,
+      expiresAt: expiresAt.getTime(),
+    };
+  });
+
+export const findAssetMultipartSession = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({
+    titleId: z.string().min(8),
+    fileName: z.string().min(1).max(255),
+    byteSize: z.number().int().positive(),
+    lastModified: z.number().int().nonnegative(),
+  }))
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    assertPermission(actor, actor.internalRole ? "title.ingest_internal" : "asset.sign_upload");
+    const title = await loadTitle(data.titleId);
+    if (!title || !canOperateOnTitle(actor, title, "asset.sign_upload", "asset.sign_upload") ||
+        !UPLOADABLE.has(title.status)) throw new Error("Upload recovery is closed for this title");
+    const sql = await getSql();
+    const rows = await sql<{
+      asset_id: string; kind: string; file_name: string; file_size: number;
+      last_modified: number; expires_at: string | Date;
+    }>`
+      select s.asset_id, a.kind, s.file_name, s.file_size, s.last_modified, s.expires_at
+      from bridge_asset_multipart_sessions s
+      join bridge_assets a on a.id = s.asset_id and a.title_id = s.title_id
+      where s.title_id = ${title.id} and s.created_by = ${context.userId}
+        and s.file_name = ${data.fileName} and s.file_size = ${data.byteSize}
+        and s.last_modified = ${data.lastModified} and s.status = 'active'
+        and s.expires_at > now() and a.byte_size is null
+      order by s.updated_at desc
+      limit 2
+    `;
+    if (rows.length > 1) throw new Error("Multiple matching upload sessions exist; choose the intended upload from the session list");
+    const session = rows[0];
+    if (!session) return { found: false as const };
+    return {
+      found: true as const,
+      assetId: session.asset_id,
+      kind: session.kind,
+      fileName: session.file_name,
+      fileSize: Number(session.file_size),
+      lastModified: Number(session.last_modified),
+      expiresAt: new Date(session.expires_at).getTime(),
+    };
+  });
+
+export const resumeAssetMultipart = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({ assetId: z.string().min(8) }))
+  .handler(async ({ context, data }) => {
+    const asset = await openUploadAsset(context.userId, data.assetId);
+    if (asset.byte_size != null) return { alreadyVerified: true as const, completedParts: [] as number[] };
+    const sql = await getSql();
+    const rows = await sql<{
+      upload_id: string; object_key: string; part_base_url_ciphertext: string;
+      file_size: number; part_size: number; status: string; expires_at: string | Date;
+    }>`
+      select upload_id, object_key, part_base_url_ciphertext, file_size, part_size, status, expires_at
+      from bridge_asset_multipart_sessions
+      where asset_id = ${asset.id} and title_id = ${asset.title_id}
+        and created_by = ${context.userId}
+      limit 1
+    `;
+    const session = rows[0];
+    if (!session || session.object_key !== asset.s3_key || session.status !== "active" ||
+        new Date(session.expires_at).getTime() <= Date.now()) {
+      throw new Error("No active resumable upload session exists for this asset");
+    }
+    const { listMultipartUploadParts } = await import("./oci-object-storage.server");
+    const remote = await listMultipartUploadParts(session.object_key, session.upload_id);
+    const total = Math.ceil(Number(session.file_size) / Number(session.part_size));
+    const seen = new Set<number>();
+    const completedParts: number[] = [];
+    for (const part of remote) {
+      const expectedSize = part.partNumber < total
+        ? Number(session.part_size)
+        : Number(session.file_size) - (total - 1) * Number(session.part_size);
+      if (part.partNumber > total || part.size !== expectedSize || seen.has(part.partNumber)) {
+        throw new Error("OCI parts do not match the saved upload manifest; refusing unsafe resume");
+      }
+      seen.add(part.partNumber);
+      completedParts.push(part.partNumber);
+    }
+    return {
+      alreadyVerified: false as const,
+      uploadId: session.upload_id,
+      partBaseUrl: decryptMultipartCapability(session.part_base_url_ciphertext),
+      completedParts: completedParts.sort((a, b) => a - b),
+      expiresAt: new Date(session.expires_at).getTime(),
+      partSize: Number(session.part_size),
     };
   });
 
 export const commitAssetMultipart = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .validator(z.object({ assetId: z.string().min(8), partBaseUrl: z.string().url().max(2000) }))
+  .validator(z.object({ assetId: z.string().min(8) }))
   .handler(async ({ context, data }) => {
     const asset = await openUploadAsset(context.userId, data.assetId);
     if (asset.byte_size != null) return { committed: true };
-    const { commitMultipartUpload } = await import("./oci-object-storage.server");
-    await commitMultipartUpload(data.partBaseUrl, asset.s3_key);
-    return { committed: true };
+    const sql = await getSql();
+    const rows = await sql<{ part_base_url_ciphertext: string; object_key: string; upload_id: string; file_size: number; part_size: number; status: string; expires_at: string | Date }>`
+      select part_base_url_ciphertext, object_key, upload_id, file_size, part_size, status, expires_at
+      from bridge_asset_multipart_sessions
+      where asset_id = ${asset.id} and title_id = ${asset.title_id} and created_by = ${context.userId}
+      limit 1
+    `;
+    const session = rows[0];
+    if (!session || session.object_key !== asset.s3_key) throw new Error("Multipart session not found");
+    if (session.status === "committed") return { committed: true };
+    if (session.status !== "active" || new Date(session.expires_at).getTime() <= Date.now()) {
+      throw new Error("Multipart session is not active or has expired");
+    }
+    const claimed = await sql<{ asset_id: string }>`
+      update bridge_asset_multipart_sessions set status = 'committing', updated_at = now()
+      where asset_id = ${asset.id} and created_by = ${context.userId} and status = 'active'
+      returning asset_id
+    `;
+    if (!claimed[0]) throw new Error("Multipart session is already being committed; refresh before retrying");
+    try {
+      const { listMultipartUploadParts, commitMultipartUpload } = await import("./oci-object-storage.server");
+      const remoteParts = await listMultipartUploadParts(session.object_key, session.upload_id);
+      validateCompletedMultipartParts(remoteParts, Number(session.file_size), Number(session.part_size));
+      await commitMultipartUpload(decryptMultipartCapability(session.part_base_url_ciphertext), asset.s3_key);
+      await sql`
+        update bridge_asset_multipart_sessions
+        set status = 'committed', completed_at = now(), updated_at = now()
+        where asset_id = ${asset.id} and created_by = ${context.userId} and status = 'committing'
+      `;
+      return { committed: true };
+    } catch (error) {
+      await sql`
+        update bridge_asset_multipart_sessions set status = 'active', updated_at = now()
+        where asset_id = ${asset.id} and created_by = ${context.userId} and status = 'committing'
+      `;
+      throw error;
+    }
   });
 
 export const abortAssetMultipart = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .validator(z.object({ assetId: z.string().min(8), partBaseUrl: z.string().url().max(2000) }))
+  .validator(z.object({ assetId: z.string().min(8) }))
   .handler(async ({ context, data }) => {
     const asset = await openUploadAsset(context.userId, data.assetId);
-    const { abortMultipartUpload } = await import("./oci-object-storage.server");
-    await abortMultipartUpload(data.partBaseUrl, asset.s3_key);
-    return { aborted: true };
+    const sql = await getSql();
+    const rows = await sql<{ part_base_url_ciphertext: string; object_key: string; status: string }>`
+      select part_base_url_ciphertext, object_key, status
+      from bridge_asset_multipart_sessions
+      where asset_id = ${asset.id} and title_id = ${asset.title_id} and created_by = ${context.userId}
+      limit 1
+    `;
+    const session = rows[0];
+    if (!session || session.object_key !== asset.s3_key) return { aborted: true };
+    if (session.status === "aborted") return { aborted: true };
+    if (session.status !== "active") throw new Error("Multipart session cannot be aborted in its current state");
+    const claimed = await sql<{ asset_id: string }>`
+      update bridge_asset_multipart_sessions set status = 'aborting', updated_at = now()
+      where asset_id = ${asset.id} and created_by = ${context.userId} and status = 'active'
+      returning asset_id
+    `;
+    if (!claimed[0]) throw new Error("Multipart session is already changing state; refresh before retrying");
+    try {
+      const { abortMultipartUpload } = await import("./oci-object-storage.server");
+      await abortMultipartUpload(decryptMultipartCapability(session.part_base_url_ciphertext), asset.s3_key);
+      await sql`
+        update bridge_asset_multipart_sessions set status = 'aborted', updated_at = now()
+        where asset_id = ${asset.id} and created_by = ${context.userId} and status = 'aborting'
+      `;
+      return { aborted: true };
+    } catch (error) {
+      await sql`
+        update bridge_asset_multipart_sessions set status = 'active', updated_at = now()
+        where asset_id = ${asset.id} and created_by = ${context.userId} and status = 'aborting'
+      `;
+      throw error;
+    }
   });
 
 export const confirmAssetUpload = createServerFn({ method: "POST" })
@@ -184,7 +372,7 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
     if (asset.byte_size != null)
       return { assetId: asset.id, byteSize: Number(asset.byte_size), verified: true };
 
-    const { verifyObject, sealVerifiedObject } = await import("./oci-object-storage.server");
+    const { verifyObject, hashObject, sealVerifiedObject } = await import("./oci-object-storage.server");
     const object = await verifyObject(asset.s3_key, asset.content_type);
     if (data.expectedByteSize != null && object.byteSize !== data.expectedByteSize) {
       throw new Error("Uploaded object size does not match the file that was sent");
@@ -194,9 +382,17 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
     // leads to a duplicate confirmation while the first server call is still running,
     // both attempts target the same sealed object instead of creating orphan copies.
     const sealedKey = `${asset.s3_key}.verified/${asset.id}`;
+    const sourceDigest = await hashObject(asset.s3_key);
+    if (sourceDigest.byteSize !== object.byteSize) {
+      throw new Error("Uploaded object changed during source checksum verification");
+    }
     const sealed = await sealVerifiedObject(asset.s3_key, sealedKey, object.etag);
     if (sealed.byteSize !== object.byteSize || !sealed.etag) {
       throw new Error("Verified copy differs from the uploaded object");
+    }
+    const sealedDigest = await hashObject(sealedKey);
+    if (sealedDigest.byteSize !== sourceDigest.byteSize || sealedDigest.sha256 !== sourceDigest.sha256) {
+      throw new Error("Immutable copy SHA-256 does not match the uploaded source");
     }
     // Persist asset/title/audit state first. Do not advance the migration queue
     // if persistence fails: its prior state remains the truthful state.
@@ -208,7 +404,7 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
       kind: asset.kind,
       byteSize: sealed.byteSize,
       contentType: sealed.contentType,
-      checksum: sealed.etag,
+      checksum: `sha256:${sourceDigest.sha256}`,
       sourceKey: asset.s3_key,
       sealedKey,
     });

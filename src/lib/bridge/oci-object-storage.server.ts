@@ -134,6 +134,7 @@ async function signedFetch(opts: {
   method: "GET" | "HEAD" | "POST" | "DELETE";
   path: string;
   body?: unknown;
+  timeoutMs?: number;
 }) {
   const url = new URL(opts.path, endpoint(opts.cfg.region));
   const body = opts.body === undefined ? undefined : JSON.stringify(opts.body);
@@ -153,7 +154,7 @@ async function signedFetch(opts: {
     method: opts.method,
     headers: safeHeaders,
     body,
-    signal: AbortSignal.timeout(15_000),
+    signal: AbortSignal.timeout(opts.timeoutMs ?? 15_000),
   });
 }
 
@@ -242,6 +243,50 @@ export async function abortMultipartUpload(partBaseUrl: string, objectKey: strin
   if (!res.ok && res.status !== 404) throw new Error(`OCI multipart cancel failed (${res.status})`);
 }
 
+export type OciMultipartPart = {
+  partNumber: number;
+  etag: string;
+  size: number;
+};
+
+/**
+ * Reconcile durable upload state against OCI's authoritative part listing.
+ * This uses the server's signed OCI identity; no browser-supplied PAR URL is trusted.
+ */
+export async function listMultipartUploadParts(objectKey: string, uploadId: string): Promise<OciMultipartPart[]> {
+  if (!uploadId || uploadId.length > 1024) throw new Error("Invalid OCI multipart upload ID");
+  const cfg = config();
+  const namespace = await resolveNamespace(cfg);
+  const parts: OciMultipartPart[] = [];
+  let page: string | undefined;
+  for (let pageCount = 0; pageCount < 100; pageCount += 1) {
+    const query = new URLSearchParams({ uploadId, limit: "1000" });
+    if (page) query.set("page", page);
+    const path =
+      `/n/${encodeURIComponent(namespace)}/b/${encodeURIComponent(cfg.bucket)}/u/${encodedObjectName(objectKey)}?${query.toString()}`;
+    const res = await signedFetch({ cfg, method: "GET", path });
+    if (res.status === 404) throw new Error("OCI multipart upload no longer exists");
+    if (!res.ok) throw new Error(`OCI multipart part listing failed (${res.status})`);
+    const body = (await res.json()) as {
+      items?: Array<{ partNumber?: number; etag?: string; size?: number }>;
+    };
+    if (!Array.isArray(body.items)) throw new Error("OCI multipart part listing returned an invalid response");
+    for (const item of body.items) {
+      const partNumber = Number(item.partNumber);
+      const size = Number(item.size);
+      const etag = typeof item.etag === "string" ? item.etag.replaceAll('"', "") : "";
+      if (!Number.isSafeInteger(partNumber) || partNumber < 1 || partNumber > 10_000 ||
+          !Number.isSafeInteger(size) || size <= 0 || !etag) {
+        throw new Error("OCI multipart part listing contained invalid part metadata");
+      }
+      parts.push({ partNumber, etag, size });
+    }
+    page = res.headers.get("opc-next-page") || undefined;
+    if (!page) return parts;
+  }
+  throw new Error("OCI multipart part listing exceeded the pagination safety limit");
+}
+
 export async function signDownload(opts: { key: string; expiresIn?: number }) {
   const signed = await createPar({
     key: opts.key,
@@ -249,6 +294,46 @@ export async function signDownload(opts: { key: string; expiresIn?: number }) {
     expiresIn: opts.expiresIn ?? 300,
   });
   return { url: signed.url, key: opts.key, bucket: signed.bucket, method: "GET" as const };
+}
+
+/** Hash a byte stream incrementally and fail if its length differs from the trusted declaration. */
+export async function hashReadableStream(stream: ReadableStream<Uint8Array>, expectedBytes: number) {
+  if (!Number.isSafeInteger(expectedBytes) || expectedBytes <= 0) {
+    throw new Error("OCI object checksum read has no valid content length");
+  }
+  const digest = createHash("sha256");
+  const reader = stream.getReader();
+  let byteSize = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      byteSize += value.byteLength;
+      if (byteSize > expectedBytes) throw new Error("OCI object stream exceeded its declared size");
+      digest.update(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  if (byteSize !== expectedBytes) throw new Error("OCI object stream size does not match its declared size");
+  return { byteSize, sha256: digest.digest("hex") };
+}
+
+/** Stream an OCI object through SHA-256 without buffering the media in memory. */
+export async function hashObject(key: string) {
+  const cfg = config();
+  const namespace = await resolveNamespace(cfg);
+  const path = `/n/${encodeURIComponent(namespace)}/b/${encodeURIComponent(cfg.bucket)}/o/${encodedObjectName(key)}`;
+  // Large masters may take much longer than control-plane requests. The body is
+  // consumed incrementally; the timeout bounds a stalled transfer without buffering it.
+  const res = await signedFetch({ cfg, method: "GET", path, timeoutMs: 60 * 60 * 1000 });
+  if (!res.ok) throw new Error(`OCI object checksum read failed (${res.status})`);
+  if (!res.body) throw new Error("OCI object checksum stream is unavailable");
+  const expectedBytes = Number(res.headers.get("content-length") || 0);
+  if (!Number.isSafeInteger(expectedBytes) || expectedBytes <= 0) {
+    throw new Error("OCI object checksum read has no valid content length");
+  }
+  return hashReadableStream(res.body, expectedBytes);
 }
 
 export async function verifyObject(key: string, expectedContentType?: string | null) {
