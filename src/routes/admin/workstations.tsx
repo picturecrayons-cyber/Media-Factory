@@ -72,7 +72,7 @@ function WorkstationBody() {
       </nav>
 
       {activeTab === "Titles" ? (
-        <TitleQueue titles={data.titles} review={review} />
+        <TitleQueue titles={data.titles} assets={data.assets} assetVersions={data.assetVersions} qcCases={data.qc} legalCases={data.legal} rightsGrants={data.rights} review={review} />
       ) : activeTab === "Concepts" ? (
         <StoryConceptDesk />
       ) : activeTab === "QC" ? (
@@ -106,26 +106,76 @@ function WorkstationBody() {
   );
 }
 
-function TitleQueue({ titles, review }: { titles: any[]; review: any }) {
+function TitleQueue({ titles, assets, assetVersions, qcCases, legalCases, rightsGrants, review }: {
+  titles: any[];
+  assets: any[];
+  assetVersions: any[];
+  qcCases: any[];
+  legalCases: any[];
+  rightsGrants: any[];
+  review: any;
+}) {
+  const evidence = (value: string) => <span className="inline-flex rounded-full border border-line px-2 py-0.5 text-[11px] text-muted">{value}</span>;
   return (
-    <section className="space-y-3">
-      <SectionHeader title="Titles" description="One canonical Title ID from intake through delivery." />
-      <div className="overflow-hidden rounded-2xl border border-line bg-surface">
-        {titles.length ? titles.slice(0, 100).map((title) => (
-          <div key={title.id} className="flex flex-col gap-3 border-b border-line p-4 last:border-b-0 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="font-medium">{title.name}</p>
-              <p className="mt-1 text-xs text-muted">{STATUS_LABELS[title.status] ?? title.status} · {title.language}</p>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              {title.status === "PREPARING" ? <ActionButton label="Accept → QC" onClick={() => review.mutate({ data: { titleId: title.id, decision: "ACCEPT" } })} disabled={review.isPending} /> : null}
-              <Link to="/title/$id" params={{ id: title.id }} className="rounded-full border border-line px-3.5 py-1.5 text-xs text-muted hover:border-line-strong hover:text-fg">Open</Link>
-            </div>
-          </div>
-        )) : <Empty text="No titles in the Bridge catalog." />}
+    <section className="space-y-4">
+      <SectionHeader title="Title Intelligence" description="One evidence-aware research record per canonical Bridge title. Unknown facts remain unknown; this panel never promotes a title or changes rights." />
+      <div className="rounded-xl border border-line bg-surface p-3 text-xs leading-relaxed text-muted">
+        Evidence rule: Bridge metadata, public-source research, owner-supplied proof, and operational approvals are separate. IMDb, genre, dubbing, YouTube history and buyer-fit claims are not inferred from a title name or a generic master asset.
+      </div>
+      <div className="space-y-3">
+        {titles.length ? titles.slice(0, 100).map((title) => {
+          const titleAssets = assets.filter((item) => item.title_id === title.id);
+          const titleVersions = assetVersions.filter((item) => item.title_id === title.id);
+          const titleQc = qcCases.filter((item) => item.title_id === title.id);
+          const titleLegal = legalCases.filter((item) => item.title_id === title.id);
+          const titleRights = rightsGrants.filter((item) => item.title_id === title.id);
+          const approvedRights = titleRights.filter((item) => String(item.status ?? "").toUpperCase() === "APPROVED");
+          const territories = [...new Set(approvedRights.flatMap((item) => Array.isArray(item.territories) ? item.territories : []))];
+          return (
+            <article key={title.id} className="rounded-2xl border border-line bg-surface p-4 sm:p-5">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0">
+                  <p className="font-semibold">{title.name}</p>
+                  <p className="mt-1 break-all text-[11px] text-muted">Bridge ID: {title.id}</p>
+                  <p className="mt-1 text-xs text-muted">{STATUS_LABELS[title.status] ?? title.status} · {title.language ?? "Language not recorded"}</p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  {title.status === "PREPARING" ? <ActionButton label="Accept → QC" onClick={() => review.mutate({ data: { titleId: title.id, decision: "ACCEPT" } })} disabled={review.isPending} /> : null}
+                  <Link to="/title/$id" params={{ id: title.id }} className="rounded-full border border-line px-3.5 py-1.5 text-xs text-muted hover:border-line-strong hover:text-fg">Open canonical record</Link>
+                </div>
+              </div>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <IntelligenceField label="Bridge year / runtime" value={[title.year ?? "Year not recorded", title.runtime_minutes ? title.runtime_minutes + " min" : "Runtime not recorded"].join(" · ")} />
+                <IntelligenceField label="Genre" value="Not recorded — verify from source" />
+                <IntelligenceField label="IMDb rating / votes" value="Not verified — source and identity check required" />
+                <IntelligenceField label="Film identity" value="Bridge record only — external identity not verified" />
+                <IntelligenceField label="Hindi-dubbed audio master" value="Not verified — asset metadata alone is insufficient" />
+                <IntelligenceField label="Rights territories" value={territories.length ? territories.join(", ") : "No approved territory grant found"} />
+                <IntelligenceField label="Licence window" value={approvedRights.length ? "Review approved grant dates and duration" : "Not cleared — no approved rights grant"} />
+                <IntelligenceField label="YouTube history (USA / Canada / UK)" value="Not verified — territory-specific history evidence required" />
+              </div>
+              <div className="mt-4 flex flex-wrap gap-2 border-t border-line pt-3 text-xs">
+                {evidence(titleAssets.length + " assets")}
+                {evidence(titleVersions.length + " versions")}
+                {evidence(titleQc.length + " QC records")}
+                {evidence(titleLegal.length + " legal records")}
+                {evidence(titleRights.length + " rights grants")}
+                {evidence(approvedRights.length ? "Approved rights grant exists" : "Rights not cleared")}
+              </div>
+              <p className="mt-3 text-[11px] leading-relaxed text-muted">Research status: INCOMPLETE until source-backed identity, genre, rating, Hindi audio-master evidence, territory rights, licence term and YouTube history are independently recorded and reviewed.</p>
+            </article>
+          );
+        }) : <Empty text="No titles in the Bridge catalog." />}
       </div>
     </section>
   );
+}
+
+function IntelligenceField({ label, value }: { label: string; value: string }) {
+  return <div className="min-w-0 rounded-xl border border-line p-3">
+    <p className="text-[10px] font-semibold uppercase tracking-wider text-muted">{label}</p>
+    <p className="mt-1 text-xs leading-relaxed">{value}</p>
+  </div>;
 }
 
 function DuplicateReviewSection() {
