@@ -223,11 +223,6 @@ export const listPendingStoryConcepts = createServerFn({ method: "GET" })
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
     requireCurationStaff(actor);
-    if (data.status === "INTRODUCED_TO_BUYERS") {
-      throw new Error(
-        "Buyer mapping is blocked: create a persisted organization mandate and a separate material-access grant before introducing this concept.",
-      );
-    }
 
     const sql = await getSql();
     try {
@@ -265,6 +260,11 @@ export const updateStoryConceptCuration = createServerFn({ method: "POST" })
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
     requireCurationStaff(actor);
+    if (data.status === "INTRODUCED_TO_BUYERS") {
+      throw new Error(
+        "Buyer mapping is blocked: create a persisted organization mandate and a separate material-access grant before introducing this concept.",
+      );
+    }
 
     const sql = await getSql();
     try {
