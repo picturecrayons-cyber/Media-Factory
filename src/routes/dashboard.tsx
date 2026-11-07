@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
-import { listTitles } from "@/lib/bridge/titles";
+import { listFinishedFilmTitles } from "@/lib/bridge/titles";
 import { BRIDGE_LOOP_LANES, loopStageType } from "@/lib/bridge/loop-lanes";
 import { getDashboardSession } from "@/lib/bridge/session";
 
@@ -69,8 +69,8 @@ function DashboardBody() {
     retry: false,
   });
   const titlesQ = useQuery({
-    queryKey: ["bridge-titles"],
-    queryFn: () => listTitles(),
+    queryKey: ["bridge-finished-films"],
+    queryFn: () => listFinishedFilmTitles(),
     enabled: dashboardQ.isSuccess,
     retry: 1,
   });

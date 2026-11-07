@@ -2,6 +2,7 @@ import { Link } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 import { UserButton } from "@/lib/auth/gates";
 import type { BridgeActor } from "@/lib/bridge/session";
+import { canAccessDashboard, workspaceHome } from "@/lib/bridge/rbac";
 import { cn } from "@/lib/cn";
 
 type NavItem = { to: string; label: string };
@@ -12,6 +13,14 @@ const NAV: NavItem[] = [
   { to: "/deliveries", label: "Deliveries" },
   { to: "/account", label: "Account" },
 ];
+
+function navigationFor(actor: BridgeActor): NavItem[] {
+  return NAV.map((item) =>
+    item.label === "Dashboard"
+      ? { ...item, to: canAccessDashboard(actor) ? "/dashboard" : workspaceHome(actor) }
+      : item,
+  );
+}
 
 function NavLink({ item }: { item: NavItem }) {
   return <Link to={item.to} className="bridge-nav-item" activeProps={{ className: "bridge-nav-item bridge-nav-active" }}>{item.label}</Link>;
@@ -38,7 +47,7 @@ export function BridgeShell({ actor, title, children }: { actor: BridgeActor; ti
       <header className="sticky top-0 z-50 border-b border-line bg-surface/88 backdrop-blur-xl">
         <div className="mx-auto flex max-w-[1440px] items-center gap-6 px-4 py-3.5 sm:px-6 lg:px-8">
           <BrandMark />
-          <nav className="hidden flex-1 items-center gap-1 md:flex">{NAV.map((item) => <NavLink key={item.label} item={item} />)}</nav>
+          <nav aria-label="Bridge navigation" className="order-3 flex w-full min-w-0 gap-1 overflow-x-auto md:order-none md:flex-1">{navigationFor(actor).map((item) => <NavLink key={item.label} item={item} />)}</nav>
           <a href="https://crayonsloop.in/" target="_blank" rel="noreferrer" className="hidden text-sm font-semibold text-muted transition hover:text-fg lg:inline">Open Crayons Loop ↗</a>
           <div className="ml-auto flex items-center gap-3">
             {actor.internalRole ? <span className="hidden rounded-full border border-line px-3 py-1 text-xs text-muted sm:inline">{actor.internalRole.replaceAll("_", " ")}</span> : null}

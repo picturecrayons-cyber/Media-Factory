@@ -26,7 +26,23 @@ export function MyStoryConcepts() {
 
   if (!STORY_CONCEPT_ENABLED) return null;
   if (query.isLoading) return <p className="text-sm text-muted">Loading concepts…</p>;
-  if (query.isError) return null;
+  if (query.isError) {
+    return (
+      <section role="alert" className="rounded-sm border border-line p-4">
+        <p className="text-sm text-accent">
+          Story concepts could not be loaded. No results are being assumed.
+        </p>
+        <button
+          type="button"
+          disabled={query.isFetching}
+          onClick={() => void query.refetch()}
+          className="mt-3 text-sm font-semibold text-accent underline-offset-4 hover:underline disabled:opacity-50"
+        >
+          {query.isFetching ? "Retrying…" : "Retry"}
+        </button>
+      </section>
+    );
+  }
 
   const concepts = query.data?.concepts ?? [];
   if (!concepts.length) return null;
