@@ -129,14 +129,19 @@ export async function reviewWorkflow(tx: Sql, actor: Actor, data: z.infer<typeof
       kind: string;
       s3_key: string;
       created_by: string | null;
-    }>`select kind,s3_key,created_by from bridge_assets where title_id=${data.titleId} and coalesce(byte_size,0)>0`;
+      byte_size: number | string | null;
+    }>`select kind,s3_key,created_by,byte_size from bridge_assets where title_id=${data.titleId}`;
     if (!assets.length || assets.some((asset) => !asset.created_by))
       throw new Error("Asset submitter identity is missing; independent QC cannot be established");
     if (assets.some((asset) => asset.created_by === actor.userId))
       throw new Error("An independent QC reviewer must not be an uploader of this title's assets");
     if (
       data.decision === "APPROVE" &&
-      !hasVerifiedMasterAndArtwork(assets, title.master_key, title.poster_key)
+      !hasVerifiedMasterAndArtwork(
+        assets.filter((asset) => Number(asset.byte_size) > 0),
+        title.master_key,
+        title.poster_key,
+      )
     )
       throw new Error("Verified current master and artwork are required");
     await tx`insert into bridge_qc_cases(title_id,status,reviewer_findings,reviewed_by,reviewed_at)
