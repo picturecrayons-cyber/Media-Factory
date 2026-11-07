@@ -12,7 +12,6 @@ import { writeAudit } from "./audit";
 import { assertNotDevUser } from "./guards";
 import { loopStageType } from "./loop-lanes";
 import { assertBuyerPublishable, getBuyerGateStatus } from "./buyer-visibility";
-import { hasVerifiedMasterAndArtwork } from "./asset-roles";
 import { submitTitleForQc } from "./title-submission";
 
 type TitleRow = {
