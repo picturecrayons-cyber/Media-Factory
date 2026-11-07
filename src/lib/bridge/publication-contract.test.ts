@@ -8,7 +8,12 @@ import * as rights from "./rights-coverage.ts";
 
 // Execute the real server handler with isolated transport/database dependencies.
 // No database or AWS requests are made by this harness.
-function harness(grants: unknown[], allowed = true, existing = false) {
+function harness(
+  grants: unknown[],
+  allowed = true,
+  existing = false,
+  reviews = { qc_ok: true, legal_ok: true },
+) {
   const writes: { query: string; values: unknown[] }[] = [];
   const title = {
     id: "title-1",
@@ -27,7 +32,7 @@ function harness(grants: unknown[], allowed = true, existing = false) {
         { evidence: [{ commercialTerms: { rightsOwnerSharePct: 80, distributorSharePct: 20 } }] },
       ];
     if (query.includes("from bridge_rights_grants")) return grants;
-    if (query.includes("as qc_ok")) return [{ qc_ok: true, legal_ok: true }];
+    if (query.includes("as qc_ok")) return [reviews];
     if (query.includes("select id from bridge_titles")) return [title];
     if (query.includes("select id from loop_titles"))
       return existing ? [{ id: "loop-existing" }] : [];
@@ -64,7 +69,7 @@ function harness(grants: unknown[], allowed = true, existing = false) {
   const output = transpileModule(source, {
     compilerOptions: { module: ModuleKind.CommonJS },
   }).outputText;
-  const exports: Record<string, (args: unknown) => Promise<unknown>> = {};
+  const exports: Record<string, (...args: unknown[]) => Promise<unknown>> = {};
   runInNewContext(output, {
     exports,
     require: (name: string) => {
@@ -72,7 +77,12 @@ function harness(grants: unknown[], allowed = true, existing = false) {
       return modules[name];
     },
   });
-  return { authorize: exports.authorizeLoopPublication, writes };
+  return {
+    authorize: exports.authorizeLoopPublication,
+    preflight: exports.verifyDistributionPreflight,
+    sql,
+    writes,
+  };
 }
 
 const grant = {
@@ -110,6 +120,37 @@ test("new and existing publications emit the status accepted by the Loop catalog
     assert.match(publication.query, /authorization_status = 'authorized'/);
     assert.ok(publication.values.includes(data.territories));
     assert.ok(publication.values.includes(data.windowEnd));
+  }
+});
+
+test("current QC and matching independent legal approval are mandatory", async () => {
+  for (const reviews of [
+    { qc_ok: false, legal_ok: true },
+    { qc_ok: true, legal_ok: false },
+    { qc_ok: false, legal_ok: false },
+  ]) {
+    const h = harness([grant], true, false, reviews);
+    const result = await h.preflight(
+      h.sql,
+      "title-1",
+      {
+        destination: "CRAYONS_LOOP",
+        territories: ["WORLDWIDE"],
+        languages: ["Malayalam"],
+        exploitationModels: ["TVOD"],
+        windowStart: data.windowStart,
+        windowEnd: data.windowEnd,
+      },
+    );
+    assert.equal((result as { eligible: boolean }).eligible, false);
+    assert.equal(
+      (result as { reasons: string[] }).reasons.some((reason) => reason.includes("QC approval")),
+      !reviews.qc_ok,
+    );
+    assert.equal(
+      (result as { reasons: string[] }).reasons.some((reason) => reason.includes("legal approval")),
+      !reviews.legal_ok,
+    );
   }
 });
 
