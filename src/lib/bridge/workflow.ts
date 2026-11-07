@@ -308,7 +308,34 @@ export const getTitleWorkflow = createServerFn({ method: "GET" })
       status: string;
       reviewed_at: string | Date;
     }>`select status,reviewed_at from bridge_legal_cases where title_id=${data.titleId} order by created_at desc limit 1`;
+    const documentAssets = await sql<{
+      id: string;
+      asset_type: string;
+      version: number;
+      s3_key: string;
+      checksum_sha256: string;
+    }>`select id,asset_type,version,s3_key,checksum_sha256
+      from bridge_asset_versions
+      where title_id=${data.titleId} and asset_group='DOCUMENT'
+        and processing_state='PASSED' and checksum_sha256 is not null
+      order by created_at desc limit 100`;
+    const rightsEvidence = await sql<{
+      id: string;
+      rights_grant_id: string;
+      evidence_type: string;
+      asset_version_id: string;
+      status: string;
+      submitted_by: string;
+      reviewed_by: string | null;
+      created_at: string | Date;
+    }>`select id,rights_grant_id,evidence_type,asset_version_id,status,submitted_by,reviewed_by,created_at
+      from bridge_rights_evidence where title_id=${data.titleId} order by created_at desc limit 100`;
     return {
+      documentAssets,
+      rightsEvidence: rightsEvidence.map((item) => ({
+        ...item,
+        created_at: new Date(item.created_at).toISOString(),
+      })),
       grants: grants.map((g) => ({
         ...g,
         window_start: g.window_start ? new Date(g.window_start).toISOString() : "",
