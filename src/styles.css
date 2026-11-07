@@ -109,3 +109,39 @@
     box-shadow: 0 12px 32px rgba(8, 80, 120, .08);
   }
 }
+
+/* Mobile workspace navigation: scroll within the header, never widen the page. */
+.bridge-mobile-nav {
+  display: none;
+}
+
+@media (max-width: 767px) {
+  .bridge-mobile-nav {
+    display: flex;
+    flex: 1 1 auto;
+    min-width: 0;
+    align-items: center;
+    gap: .25rem;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .bridge-mobile-nav::-webkit-scrollbar {
+    display: none;
+  }
+
+  .bridge-mobile-nav .bridge-nav-item {
+    flex: 0 0 auto;
+    min-height: 40px;
+    white-space: nowrap;
+  }
+}
+
+@media (max-width: 380px) {
+  .bridge-mobile-nav .bridge-nav-item {
+    padding-inline: .5rem;
+    font-size: .76rem;
+  }
+}
