@@ -1,0 +1,75 @@
+name: Bridge GitHub Supervisor
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+  issues: write
+  pull-requests: read
+
+concurrency:
+  group: bridge-github-supervisor
+  cancel-in-progress: false
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Detect recent failed workflow runs and open deduplicated alerts
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const cutoff = Date.now() - 30 * 60 * 1000;
+            const { data } = await github.rest.actions.listWorkflowRunsForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              per_page: 100,
+              status: "completed"
+            });
+
+            const failures = data.workflow_runs.filter(run =>
+              run.name !== "Bridge GitHub Supervisor" &&
+              ["failure", "timed_out", "action_required"].includes(run.conclusion) &&
+              Date.parse(run.updated_at) >= cutoff
+            );
+
+            core.info(`Recent failed runs: ${failures.length}`);
+            const { data: openIssues } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: "open",
+              per_page: 100
+            });
+
+            for (const run of failures) {
+              const marker = `workflow-run-${run.id}`;
+              if (openIssues.some(issue => !issue.pull_request && issue.title.includes(marker))) {
+                core.info(`Alert already open for ${marker}`);
+                continue;
+              }
+
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: `[Automation alert] ${run.name} failed — ${marker}`,
+                body: [
+                  "## GitHub Actions failure detected",
+                  "",
+                  `- Workflow: ${run.name}`,
+                  `- Run: #${run.run_number} (ID ${run.id})`,
+                  `- Branch: ${run.head_branch}`,
+                  `- Exact SHA: ${run.head_sha}`,
+                  `- Conclusion: ${run.conclusion}`,
+                  `- Updated: ${run.updated_at}`,
+                  `- Run URL: ${run.html_url}`,
+                  "",
+                  "This alert is evidence only. It does not certify the application or authorize a merge/deployment.",
+                  "After diagnosis, use the manual recovery workflow only when retry is safe and the underlying cause is understood."
+                ].join("\n")
+              });
+            }

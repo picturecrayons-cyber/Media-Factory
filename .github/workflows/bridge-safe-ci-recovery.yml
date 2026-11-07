@@ -1,0 +1,77 @@
+name: Bridge Safe CI Recovery
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: "Failed GitHub Actions run ID (CI or disposable PostgreSQL verification only)"
+        required: true
+        type: string
+
+permissions:
+  actions: write
+  contents: read
+
+concurrency:
+  group: bridge-safe-ci-recovery
+  cancel-in-progress: false
+
+jobs:
+  rerun-failed-jobs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Validate run and retry failed safe checks only
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const raw = String(core.getInput("run_id")).trim();
+            if (!/^\d+$/.test(raw)) {
+              core.setFailed("run_id must be a numeric GitHub Actions run ID");
+              return;
+            }
+            const runId = Number(raw);
+            const { data: run } = await github.rest.actions.getWorkflowRun({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              run_id: runId
+            });
+
+            // Pin both the display name and immutable GitHub workflow ID.
+            // A different workflow can reuse a display name; names alone are not an allowlist.
+            const allowedWorkflows = new Map([
+              [363476266, "CI"],
+              [374508093, "Scope A PostgreSQL Onboarding Verification"]
+            ]);
+            const allowedName = allowedWorkflows.get(run.workflow_id);
+            if (!allowedName || run.name !== allowedName) {
+              core.setFailed(`Refusing recovery for non-allowlisted workflow id/name: ${run.workflow_id}/${run.name}`);
+              return;
+            }
+            if (!["pull_request", "push", "workflow_dispatch"].includes(run.event)) {
+              core.setFailed(`Refusing recovery for unsupported event: ${run.event}`);
+              return;
+            }
+            if (!/^[0-9a-f]{40}$/i.test(run.head_sha ?? "")) {
+              core.setFailed("Refusing recovery because the run has no valid exact commit SHA");
+              return;
+            }
+            if (run.head_branch === "main") {
+              core.setFailed("Refusing automatic retry of a main-branch run");
+              return;
+            }
+            if (run.status !== "completed" || !["failure", "timed_out"].includes(run.conclusion)) {
+              core.setFailed(`Run is not a completed retryable failure (status=${run.status}, conclusion=${run.conclusion})`);
+              return;
+            }
+            if (run.head_repository?.full_name !== context.repo.owner + "/" + context.repo.repo) {
+              core.setFailed("Refusing recovery for a run from a different repository");
+              return;
+            }
+
+            await github.rest.actions.reRunFailedJobsForWorkflowRun({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              run_id: runId
+            });
+            core.notice(`Requested failed-job retry for ${run.name}, run ${runId}, SHA ${run.head_sha}`);
