@@ -79,8 +79,8 @@ function WorkstationBody() {
         <ReviewQueue title="QC Review" description="Review technical quality before rights review." titles={qcQueue}
           actions={[["PASS", "Approve → Rights"], ["FAIL", "Fail QC"]]} mutation={review} />
       ) : activeTab === "Rights" ? (
-        <ReviewQueue title="Rights Review" description="Clear ownership, territory, language and window before licensing." titles={rightsQueue}
-          actions={[["APPROVE", "Approve → Licensing"], ["REJECT", "Reject"]]} mutation={review} />
+        <ReviewQueue title="Rights Review" description="Approval is unavailable until executed-agreement and ownership evidence receive independent verification." titles={rightsQueue}
+          actions={[["REJECT", "Reject"]]} mutation={review} />
       ) : activeTab === "Assets" ? (
         <SimpleTable title="Assets" description={data.assets.length + " base assets · " + data.assetVersions.length + " versioned assets"}
           rows={data.assets} fields={["kind", "s3_key", "content_type", "byte_size"]} />
