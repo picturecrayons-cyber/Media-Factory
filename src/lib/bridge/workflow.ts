@@ -39,8 +39,11 @@ export async function saveLoopLicense(
     throw new Error("Forbidden");
   if (new Date(data.windowEnd) <= new Date()) throw new Error("License window has expired");
 
+  const normalizedAgreementReference = data.agreementReference.trim().toUpperCase();
+  await tx`select pg_advisory_xact_lock(hashtextextended(${`bridge-license-agreement:${normalizedAgreementReference}`},0))`;
   const priorRows = await tx<{
     id: string;
+    title_id: string;
     status: string;
     territories: string[];
     languages: string[];
@@ -52,15 +55,20 @@ export async function saveLoopLicense(
       ownershipReference?: string;
       commercialTerms?: { rightsOwnerSharePct: number; distributorSharePct: number };
     }>;
-  }>`select id,status,territories,languages,window_start,window_end,exclusivity,evidence
+  }>`select id,title_id,status,territories,languages,window_start,window_end,exclusivity,evidence
     from bridge_rights_grants
-    where title_id=${data.titleId}
-      and evidence @> ${JSON.stringify([{ agreementReference: data.agreementReference }])}::jsonb
+    where exists (
+      select 1
+      from jsonb_array_elements(case when jsonb_typeof(evidence)='array' then evidence else '[]'::jsonb end) ev
+      where upper(trim(ev->>'agreementReference'))=${normalizedAgreementReference}
+    )
     order by created_at asc
     for update`;
   if (priorRows.length > 1)
     throw new Error("Multiple records already use this agreement reference; legacy reconciliation is required before retrying");
   const prior = priorRows[0];
+  if (prior && prior.title_id !== data.titleId)
+    throw new Error("Agreement reference is already assigned to another title");
 
   const commercialTerms = {
     rightsOwnerSharePct: data.rightsOwnerSharePct,
@@ -201,7 +209,7 @@ export async function reviewWorkflow(tx: Sql, actor: Actor, data: z.infer<typeof
         reviewed_by: string;
       }>`select e.id,e.evidence_type,e.asset_version_id,e.checksum_sha256,e.submitted_by,e.reviewed_by
         from bridge_rights_evidence e
-        join bridge_asset_versions av on av.id=e.asset_version_id
+        join bridge_asset_versions av on av.id=e.asset_version_id and av.title_id=e.title_id
         join bridge_rights_evidence_reviews er
           on er.evidence_id=e.id
           and er.decision='VERIFIED'
