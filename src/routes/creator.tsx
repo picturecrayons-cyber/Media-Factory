@@ -27,7 +27,7 @@ function Creator() {
 
             <section>
               <div className="mb-3 flex items-center justify-between">
-                <h2 className="text-lg font-semibold">Your titles</h2>
+                <h2 className="text-lg font-semibold">Finished films</h2>
                 <Link to="/account" className="text-sm text-muted">
                   Account
                 </Link>

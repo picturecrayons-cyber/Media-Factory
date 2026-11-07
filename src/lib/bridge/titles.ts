@@ -13,6 +13,7 @@ import { assertNotDevUser } from "./guards";
 import { loopStageType } from "./loop-lanes";
 import { assertBuyerPublishable, getBuyerGateStatus } from "./buyer-visibility";
 import { submitTitleForQc } from "./title-submission";
+import { filterFinishedFilmRows } from "./submission-classification";
 
 type TitleRow = {
   id: string;
@@ -34,6 +35,7 @@ type TitleRow = {
   country_of_origin: string | null;
   release_date: string | Date | null;
   credits: Array<{ role: string; name: string }>;
+  submission_type?: string | null;
   created_at: string | Date;
   updated_at: string | Date;
 };
@@ -131,6 +133,21 @@ async function listOwned(sql: Sql, userId: string, organizationId: string | null
           )
         order by t.updated_at desc limit 200
       `;
+}
+
+async function loadStoryConceptTitleIds(sql: Sql): Promise<Set<string>> {
+  const table = await sql<{ exists: boolean }>`
+    select exists (
+      select 1 from information_schema.tables
+      where table_schema = 'public' and table_name = 'bridge_story_concept_submissions'
+    ) as exists
+  `;
+  if (!table[0]?.exists) return new Set<string>();
+  const rows = await sql<{ title_id: string }>`
+    select title_id from bridge_story_concept_submissions
+    order by created_at desc limit 5000
+  `;
+  return new Set(rows.map((row) => row.title_id));
 }
 
 function slugify(name: string, id: string): string {
@@ -360,6 +377,9 @@ export const listTitles = createServerFn({ method: "GET" })
     } else {
       assertPermission(actor, "title.read_own");
       rows = await listOwned(sql, actor.userId, actor.accountType === "studio" ? actor.organizationId : null);
+      // Exclude explicitly tagged concepts and legacy concept titles whose
+      // discriminator defaulted to finished_film when the column was introduced.
+      rows = filterFinishedFilmRows(rows, await loadStoryConceptTitleIds(sql));
     }
     return { titles: rows.flatMap((row) => {
       try {
