@@ -337,11 +337,13 @@ test("Submit for QC advances PREPARING with the referenced vertical poster and w
   try {
     await f.sql.query(`
       insert into bridge_titles(id,owner_user_id,status,master_key,poster_key,updated_at)
-      values ('qc-submit-title','owner','PREPARING','sealed/qc-master','sealed/qc-poster',now());
+      values ('qc-submit-title','owner','PREPARING','sealed/qc-master','sealed/qc-poster',now())
+    `);
+    await f.sql.query(`
       insert into bridge_assets values
         ('qc-master','qc-submit-title','master','sealed/qc-master',4096),
         ('qc-old-poster','qc-submit-title','poster','older/unreferenced-poster',512),
-        ('qc-vertical-poster','qc-submit-title','poster_vertical','sealed/qc-poster',1024);
+        ('qc-vertical-poster','qc-submit-title','poster_vertical','sealed/qc-poster',1024)
     `);
     const title = {
       id: "qc-submit-title",
@@ -349,7 +351,7 @@ test("Submit for QC advances PREPARING with the referenced vertical poster and w
       masterKey: "sealed/qc-master",
       posterKey: "sealed/qc-poster",
     };
-    const result = await submitTitleForQc(f.sql, title as never, "owner", "Submit verified title for QC");
+    const result = await submitTitleForQc(f.sql, title, "owner", "Submit verified title for QC");
     assert.equal(result.title.status, "QC_REVIEW");
     assert.equal(
       (await f.sql.query<{ status: string }>(
