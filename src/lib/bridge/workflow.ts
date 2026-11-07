@@ -38,6 +38,91 @@ export async function saveLoopLicense(
   )
     throw new Error("Forbidden");
   if (new Date(data.windowEnd) <= new Date()) throw new Error("License window has expired");
+
+  // Serialize all licensing changes for this title. The title row is already locked,
+  // and this transaction lock also protects callers that do not share that lock path.
+  await tx`select pg_advisory_xact_lock(hashtextextended(${`bridge-license:${data.titleId}`}, 0))`;
+
+  const [prior] = await tx<{
+    id: string;
+    status: string;
+    territories: string[];
+    languages: string[];
+    window_start: string | Date;
+    window_end: string | Date;
+    exclusivity: string;
+    evidence: Array<{
+      agreementReference?: string;
+      ownershipReference?: string;
+      commercialTerms?: { rightsOwnerSharePct: number; distributorSharePct: number };
+    }>;
+  }>`select id,status,territories,languages,window_start,window_end,exclusivity,evidence
+    from bridge_rights_grants
+    where title_id=${data.titleId}
+      and evidence @> ${JSON.stringify([{ agreementReference: data.agreementReference }])}::jsonb
+    order by created_at asc
+    limit 1
+    for update`;
+
+  const commercialTerms = {
+    rightsOwnerSharePct: data.rightsOwnerSharePct,
+    distributorSharePct: data.distributorSharePct,
+  };
+  if (prior) {
+    const priorEvidence = prior.evidence?.[0];
+    const sameSet = (left: string[], right: string[]) =>
+      [...left].map((value) => value.trim().toUpperCase()).sort().join("|") ===
+      [...right].map((value) => value.trim().toUpperCase()).sort().join("|");
+    const sameDraft =
+      sameSet(prior.territories ?? [], data.territories) &&
+      sameSet(prior.languages ?? [], data.languages) &&
+      new Date(prior.window_start).getTime() === new Date(data.windowStart).getTime() &&
+      new Date(prior.window_end).getTime() === new Date(data.windowEnd).getTime() &&
+      prior.exclusivity === data.exclusivity &&
+      priorEvidence?.ownershipReference === data.ownershipReference &&
+      priorEvidence?.commercialTerms?.rightsOwnerSharePct === commercialTerms.rightsOwnerSharePct &&
+      priorEvidence?.commercialTerms?.distributorSharePct === commercialTerms.distributorSharePct;
+    if (!sameDraft) throw new Error("Agreement reference already exists with different licensing terms");
+    if (prior.status !== "DRAFT")
+      throw new Error("This agreement reference already has a non-draft rights decision");
+    return { grantId: prior.id };
+  }
+
+  const existingGrants = await tx<{
+    id: string;
+    status: string;
+    territories: string[];
+    languages: string[];
+    window_start: string | Date;
+    window_end: string | Date;
+    exclusivity: string;
+  }>`select id,status,territories,languages,window_start,window_end,exclusivity
+    from bridge_rights_grants
+    where title_id=${data.titleId} and status in ('DRAFT','VALID')
+    for update`;
+  const requestedStart = new Date(data.windowStart).getTime();
+  const requestedEnd = new Date(data.windowEnd).getTime();
+  const overlaps = existingGrants.some((existing) => {
+    const territoryOverlap =
+      (existing.territories ?? []).some((value) => data.territories.includes(value)) ||
+      (existing.territories ?? []).includes("WORLDWIDE") ||
+      data.territories.includes("WORLDWIDE");
+    const languageOverlap = (existing.languages ?? []).some((language) =>
+      data.languages.some((requested) => requested.trim().toUpperCase() === language.trim().toUpperCase()),
+    );
+    const timeOverlap =
+      new Date(existing.window_start).getTime() < requestedEnd &&
+      requestedStart < new Date(existing.window_end).getTime();
+    return (
+      territoryOverlap &&
+      languageOverlap &&
+      timeOverlap &&
+      (existing.exclusivity === "EXCLUSIVE" || data.exclusivity === "EXCLUSIVE")
+    );
+  });
+  if (overlaps)
+    throw new Error("Conflicting exclusive or non-exclusive rights grant overlaps this title, territory, language and window");
+
   const [grant] = await tx<{ id: string }>`insert into bridge_rights_grants
     (title_id,grant_type,territories,languages,media,window_start,window_end,exclusivity,evidence,status,created_by)
     values (${data.titleId},'DISTRIBUTION',${JSON.stringify(data.territories)}::jsonb,${JSON.stringify(data.languages)}::jsonb,
