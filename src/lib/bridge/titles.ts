@@ -529,7 +529,7 @@ async function assertLicensingReady(titleId: string) {
       ) as screener_ok,
       exists (
         select 1 from bridge_assets a
-        where a.title_id = t.id and a.kind = 'master' and coalesce(a.byte_size, 0) > 0
+        where a.title_id = t.id and a.kind = 'master' and coalesce(a.byte_size, 0) > 0\n          and t.master_key is not null and a.s3_key = t.master_key
       ) as master_ok,
       exists (
         select 1 from bridge_assets a
