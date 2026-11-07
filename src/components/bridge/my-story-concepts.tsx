@@ -4,10 +4,13 @@ import { listMyStoryConcepts } from "@/lib/bridge/story-concept-api";
 import { STORY_CONCEPT_ENABLED } from "@/lib/bridge/story-concept";
 
 const STATUS_LABEL: Record<string, string> = {
+  PENDING_REVIEW: "Pending review",
+  CHANGES_REQUESTED: "Changes requested",
   PENDING: "Pending review",
   UNDER_REVIEW: "Under review",
   APPROVED: "Approved",
   REJECTED: "Rejected",
+  BUYER_EVALUATION_APPROVED: "Buyer / investor evaluation",
   INTRODUCED_TO_BUYERS: "Introduced",
 };
 
@@ -26,7 +29,7 @@ export function MyStoryConcepts() {
 
   if (!STORY_CONCEPT_ENABLED) return null;
   if (query.isLoading) return <p className="text-sm text-muted">Loading concepts…</p>;
-  if (query.isError) return null;
+  if (query.isError) return <div role="alert" className="text-sm text-accent">Could not load story concepts. <button type="button" className="underline" onClick={() => void query.refetch()}>Retry</button></div>;
 
   const concepts = query.data?.concepts ?? [];
   if (!concepts.length) return null;
@@ -40,8 +43,7 @@ export function MyStoryConcepts() {
           return (
             <li key={c.id}>
               <Link
-                to="/title/$id"
-                params={{ id: c.title_id }}
+                to={"/story-concepts/" + c.id as never}
                 className="flex flex-wrap items-center justify-between gap-3 px-4 py-4 hover:bg-fg/5"
               >
                 <div>

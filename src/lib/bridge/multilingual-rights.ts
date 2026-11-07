@@ -68,7 +68,7 @@ function setIncludes(granted: unknown, requested: string[]) {
   return requested.every((v) => set.has(v.toUpperCase()) || set.has("ALL") || set.has("*") || set.has("WORLDWIDE"));
 }
 
-export const listLanguageRights = createServerFn({ method: "GET" })
+export const listLanguageRights = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(z.object({ titleId: z.string().min(8) }))
   .handler(async ({ context, data }) => {
@@ -214,7 +214,7 @@ export const createLicensePackage = createServerFn({ method: "POST" })
     return { packageId: id };
   });
 
-export const listLicensePackages = createServerFn({ method: "GET" })
+export const listLicensePackages = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(z.object({ titleId: z.string().min(8) }))
   .handler(async ({ context, data }) => {

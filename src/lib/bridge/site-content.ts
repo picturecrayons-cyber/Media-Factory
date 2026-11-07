@@ -43,7 +43,7 @@ function mapRow(row: SiteRow) {
   };
 }
 
-export const getPublicSiteContent = createServerFn({ method: "GET" }).handler(async () => {
+export const getPublicSiteContent = createServerFn({ method: "POST" }).handler(async () => {
   const sql = await getSql();
   const rows = await sql<SiteRow>`
     select hero_title, hero_body, workflow_heading, audience_heading,
