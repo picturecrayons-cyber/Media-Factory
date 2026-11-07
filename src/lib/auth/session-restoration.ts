@@ -12,7 +12,8 @@ export async function restoreSupabaseSession(
   opts: { forceRefresh?: boolean } = {},
 ): Promise<Session | null> {
   const restored = await auth.getSession();
-  if (restored.error || !restored.data.session) return null;
+  if (restored.error) throw restored.error;
+  if (!restored.data.session) return null;
   if (!opts.forceRefresh) return restored.data.session;
   if (!restored.data.session.refresh_token) return null;
 
