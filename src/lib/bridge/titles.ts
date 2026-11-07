@@ -13,6 +13,7 @@ import { assertNotDevUser } from "./guards";
 import { loopStageType } from "./loop-lanes";
 import { assertBuyerPublishable, getBuyerGateStatus } from "./buyer-visibility";
 import { hasVerifiedMasterAndArtwork } from "./asset-roles";
+import { submitTitleForQc } from "./title-submission";
 
 type TitleRow = {
   id: string;
@@ -609,7 +610,11 @@ export const advanceTitle = createServerFn({ method: "POST" })
     }
     const expected = nextStatus(title.status);
     if (expected !== data.to) throw new Error("Illegal title transition");
-    return (await getSql()).transaction(async (tx) => {
+    const sql = await getSql();
+    if (data.to === "QC_REVIEW") {
+      return submitTitleForQc(sql, title, actor.userId, data.note);
+    }
+    return sql.transaction(async (tx) => {
       const [locked] = await tx<{
         status: string;
       }>`select status from bridge_titles where id=${title.id} for update`;
