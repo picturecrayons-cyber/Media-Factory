@@ -98,8 +98,8 @@ export async function reviewRightsEvidence(
       g.created_by as grant_created_by,av.checksum_sha256 as asset_checksum,av.processing_state as asset_state
     from bridge_rights_evidence e
     join bridge_rights_grants g on g.id=e.rights_grant_id
-    join bridge_asset_versions av on av.id=e.asset_version_id
-    where e.id=${data.evidenceId} for update of e,g,av`;
+    join bridge_asset_versions av on av.id=e.asset_version_id and av.title_id=e.title_id and av.asset_group='DOCUMENT'
+    where e.id=${data.evidenceId} and g.status='DRAFT' for update of e,g,av`;
   if (!evidence || evidence.status !== "PENDING") throw new Error("Pending rights evidence was not found");
   if (actor.userId === evidence.grant_created_by || actor.userId === evidence.submitted_by)
     throw new Error("The license creator and evidence submitter cannot review this evidence");
