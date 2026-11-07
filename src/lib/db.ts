@@ -1,4 +1,5 @@
 import { pendingMigrations } from "../../scripts/migration-plan.mjs";
+import { resolveDatabaseUrlCandidate } from "./database-url.ts";
 
 /** Which database backend is active. */
 export type DbSource = "postgres" | "pglite";
@@ -8,12 +9,7 @@ export type DbSource = "postgres" | "pglite";
 // Empty/whitespace values are treated as unset to avoid a silent PGLite fallback.
 const rawDatabaseUrl =
   typeof process !== "undefined"
-    ? (
-        process.env.DATABASE_URL ??
-        process.env.POSTGRES_URL ??
-        process.env.SUPABASE_DB_URL ??
-        process.env.SUPABASE_DATABASE_URL
-      )
+    ? resolveDatabaseUrlCandidate(process.env)
     : undefined;
 function normalizePostgresUrl(value: string | undefined): string | undefined {
   if (!value) return undefined;
