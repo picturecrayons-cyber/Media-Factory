@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
@@ -8,20 +8,38 @@ import { hasPermission } from "@/lib/bridge/rbac";
 import type { Actor } from "@/lib/bridge/rbac";
 import {
   VENDOR_JOB_TYPES,
-  canDeliver,
-  createVendorJob,
-  type VendorJob,
   type VendorJobType,
 } from "@/lib/delivery/vendor-jobs";
+import {
+  assignVendorDeliveryJob,
+  listDeliveryDeskTitles,
+  listVendorDeliveryJobs,
+  prepareDestinationPackage,
+  requestVendorDeliveryJob,
+  transitionVendorDeliveryJob,
+} from "@/lib/bridge/vendor-delivery-jobs";
 
 export const Route = createFileRoute("/deliveries")({ component: Deliveries });
 
 const LABELS: Record<VendorJobType, string> = {
   dubbing: "Dubbing request",
-  loudness_check: "Loudness check (not a Dolby encode)",
+  loudness_check: "Loudness check",
   imf_request: "IMF package request",
   dcp_request: "DCP package request",
   human_qc: "Human QC",
+};
+
+type JobState = "requested" | "assigned" | "in_progress" | "in_review" | "blocked" | "signed_off" | "cancelled";
+type VendorJobView = {
+  id: string;
+  title_id: string;
+  title_name: string;
+  job_type: VendorJobType;
+  state: JobState;
+  note: string;
+  requested_by: string;
+  assigned_vendor: string | null;
+  created_at: string;
 };
 
 function Deliveries() {
@@ -38,71 +56,273 @@ function Deliveries() {
 }
 
 function VendorJobs({ actor }: { actor: Actor }) {
+  const queryClient = useQueryClient();
   const canRequest = hasPermission(actor, "title.deliver") || hasPermission(actor, "title.create");
-  const [jobs, setJobs] = useState<VendorJob[]>([]);
+  const canOperate = hasPermission(actor, "title.deliver") && Boolean(actor.internalRole && actor.organizationId);
+  const canRead = hasPermission(actor, "delivery.read");
   const [type, setType] = useState<VendorJobType>("human_qc");
   const [titleId, setTitleId] = useState("");
+  const [note, setNote] = useState("");
+  const [requestKey, setRequestKey] = useState("");
+  const [vendorLabel, setVendorLabel] = useState("");
+  const [packageTitleId, setPackageTitleId] = useState("");
+  const [destination, setDestination] = useState("");
+  const [territory, setTerritory] = useState("");
+  const [packageLanguage, setPackageLanguage] = useState("");
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
 
-  function onRequest() {
-    try {
-      setJobs((prev) => [createVendorJob(type, titleId), ...prev]);
+  const titlesQuery = useQuery({
+    queryKey: ["bridge-titles"],
+    queryFn: () => listDeliveryDeskTitles(),
+    enabled: canRequest || canOperate,
+  });
+  const jobsQuery = useQuery({
+    queryKey: ["bridge-vendor-jobs"],
+    queryFn: () => listVendorDeliveryJobs(),
+    enabled: canRead,
+  });
+  const refresh = async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["bridge-vendor-jobs"] }),
+      queryClient.invalidateQueries({ queryKey: ["bridge-titles"] }),
+    ]);
+  };
+
+  const requestMutation = useMutation({
+    mutationFn: (idempotencyKey: string) => requestVendorDeliveryJob({ data: { titleId, type, note, idempotencyKey } }),
+    onSuccess: async () => {
       setError("");
+      setNotice("Vendor request saved in Bridge.");
+      setNote("");
       setTitleId("");
-    } catch {
-      setError("Title id required. Job stays requested until a reviewer signs off.");
-    }
-  }
+      setRequestKey(crypto.randomUUID());
+      await refresh();
+    },
+    onError: (cause) => {
+      setNotice("");
+      setError(cause instanceof Error ? cause.message : "Vendor request failed. No request was confirmed.");
+    },
+  });
+  const assignMutation = useMutation({
+    mutationFn: (jobId: string) => assignVendorDeliveryJob({ data: { jobId, vendorLabel } }),
+    onSuccess: async () => {
+      setError("");
+      setNotice("Vendor assignment saved.");
+      setVendorLabel("");
+      await refresh();
+    },
+    onError: () => {
+      setNotice("");
+      setError("Vendor assignment failed. Check organization scope and job state.");
+    },
+  });
+  const transitionMutation = useMutation({
+    mutationFn: (input: { jobId: string; action: "start_work" | "submit_review" | "sign_off" | "block" }) =>
+      transitionVendorDeliveryJob({ data: input }),
+    onSuccess: async (result) => {
+      setError("");
+      setNotice(result.state === "signed_off" ? "Human sign-off recorded. This does not authorize external delivery." : "Vendor job status updated.");
+      await refresh();
+    },
+    onError: (cause) => {
+      setNotice("");
+      setError(cause instanceof Error ? cause.message : "The job could not be updated.");
+    },
+  });
+  const packageMutation = useMutation({
+    mutationFn: () => prepareDestinationPackage({ data: { titleId: packageTitleId, destination, territory, language: packageLanguage } }),
+    onSuccess: async () => {
+      setError("");
+      setNotice("Destination package record created in HOLD. No dispatch or publication occurred.");
+      setPackageTitleId("");
+      setDestination("");
+      setTerritory("");
+      setPackageLanguage("");
+      await refresh();
+    },
+    onError: (cause) => {
+      setNotice("");
+      setError(cause instanceof Error ? cause.message : "Package preparation was blocked.");
+    },
+  });
+
+  const titles = titlesQuery.data?.titles ?? [];
+  const jobs = (jobsQuery.data?.jobs ?? []) as VendorJobView[];
+  const busy = requestMutation.isPending || assignMutation.isPending || transitionMutation.isPending || packageMutation.isPending;
 
   return (
     <section className="mb-6 rounded-2xl border border-line bg-surface p-5 sm:p-6">
       <h2 className="font-display text-xl font-semibold">Vendor jobs</h2>
       <p className="mt-1 text-sm text-muted">
-        Dubbing, loudness, IMF, DCP, and human QC open as requested. No auto Dolby, IMF, or DCP master. Delivery only after sign-off.
+        Requests are persisted in Bridge. Vendor assignment and workflow actions are organization-scoped.
+        Sign-off is a human review record, not proof of file delivery or permission to publish.
       </p>
+
       {canRequest ? (
-        <div className="mt-4 flex flex-wrap gap-2">
-          <label htmlFor="vendor-job-type" className="sr-only">Work type</label>
-          <select
-            id="vendor-job-type"
-            name="workType"
-            className="rounded-lg border border-line bg-transparent px-3 py-2 text-sm"
-            value={type}
-            onChange={(e) => setType(e.target.value as VendorJobType)}
+        <div className="mt-4 grid gap-2 sm:grid-cols-[1fr_1.5fr_2fr_auto]">
+          <label className="grid gap-1 text-xs text-muted">
+            Work type
+            <select
+              aria-label="Vendor job type"
+              className="rounded-lg border border-line bg-transparent px-3 py-2 text-sm text-fg"
+              value={type}
+              onChange={(event) => {
+                setType(event.target.value as VendorJobType);
+                setRequestKey(crypto.randomUUID());
+              }}
+            >
+              {VENDOR_JOB_TYPES.map((jobType) => (
+                <option key={jobType} value={jobType}>{LABELS[jobType]}</option>
+              ))}
+            </select>
+          </label>
+          <label className="grid gap-1 text-xs text-muted">
+            Title
+            <select
+              aria-label="Title for vendor job"
+              className="rounded-lg border border-line bg-transparent px-3 py-2 text-sm text-fg"
+              value={titleId}
+              onChange={(event) => {
+                setTitleId(event.target.value);
+                setRequestKey(crypto.randomUUID());
+              }}
+              disabled={titlesQuery.isPending || titles.length === 0}
+            >
+              <option value="">{titlesQuery.isPending ? "Loading titles…" : "Select a title"}</option>
+              {titles.map((title) => <option key={title.id} value={title.id}>{title.name}</option>)}
+            </select>
+          </label>
+          <label className="grid gap-1 text-xs text-muted">
+            Note (optional)
+            <input
+              className="rounded-lg border border-line bg-transparent px-3 py-2 text-sm text-fg"
+              value={note}
+              maxLength={2000}
+              onChange={(event) => {
+                setNote(event.target.value);
+                setRequestKey(crypto.randomUUID());
+              }}
+              placeholder="Scope or technical notes"
+            />
+          </label>
+          <button
+            type="button"
+            className="self-end rounded-lg border border-line px-3 py-2 text-sm disabled:opacity-50"
+            disabled={!titleId || busy || titlesQuery.isPending}
+            onClick={() => {
+              const key = requestKey || crypto.randomUUID();
+              setRequestKey(key);
+              requestMutation.mutate(key);
+            }}
           >
-            {VENDOR_JOB_TYPES.map((jobType) => (
-              <option key={jobType} value={jobType}>
-                {LABELS[jobType]}
-              </option>
-            ))}
-          </select>
-          <label htmlFor="vendor-job-title-id" className="sr-only">Title ID</label>
-          <input
-            id="vendor-job-title-id"
-            name="titleId"
-            aria-label="Title ID"
-            className="rounded-lg border border-line bg-transparent px-3 py-2 text-sm"
-            placeholder="Title id"
-            value={titleId}
-            onChange={(e) => setTitleId(e.target.value)}
-          />
-          <button type="button" className="rounded-lg border border-line px-3 py-2 text-sm" onClick={onRequest}>
             Request
           </button>
         </div>
       ) : (
-        <p className="mt-3 text-sm text-muted">You can view jobs. Request needs delivery write.</p>
+        <p className="mt-3 text-sm text-muted">You can view jobs. Request needs title ownership or delivery write permission.</p>
       )}
-      {error ? <p className="mt-3 text-sm" role="alert">{error}</p> : null}
-      <ul className="mt-4 divide-y divide-line rounded-xl border border-line">
-        {jobs.map((job) => (
-          <li key={job.id} className="flex items-center justify-between gap-3 p-4 text-sm">
-            <span>{LABELS[job.type]} · {job.titleId}</span>
-            <span>{job.state}{canDeliver(job) ? " · download allowed" : " · no output"}</span>
-          </li>
-        ))}
-        {!jobs.length ? <li className="p-4 text-sm text-muted">No vendor jobs yet.</li> : null}
-      </ul>
+
+      {canOperate ? (
+        <div className="mt-5 border-t border-line pt-4">
+          <h3 className="text-sm font-semibold">Prepare destination package</h3>
+          <p className="mt-1 text-xs text-muted">Requires LICENSED title, QC PASS, legal approval, active rights and verified master/poster. New package remains HOLD.</p>
+          <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_1fr_1fr_1fr_auto]">
+            <select
+              aria-label="Title for destination package"
+              className="rounded-lg border border-line bg-transparent px-3 py-2 text-sm text-fg"
+              value={packageTitleId}
+              onChange={(event) => setPackageTitleId(event.target.value)}
+              disabled={titlesQuery.isPending || titles.length === 0}
+            >
+              <option value="">Select licensed title</option>
+              {titles.map((title) => <option key={title.id} value={title.id}>{title.name} · {title.status}</option>)}
+            </select>
+            <input
+              aria-label="Destination"
+              className="rounded-lg border border-line bg-transparent px-3 py-2 text-sm text-fg"
+              value={destination}
+              maxLength={160}
+              onChange={(event) => setDestination(event.target.value)}
+              placeholder="Destination / buyer label"
+            />
+            <input
+              aria-label="Rights territory"
+              className="rounded-lg border border-line bg-transparent px-3 py-2 text-sm text-fg"
+              value={territory}
+              maxLength={80}
+              onChange={(event) => setTerritory(event.target.value)}
+              placeholder="Territory (e.g. IN)"
+            />
+            <input
+              aria-label="Rights language"
+              className="rounded-lg border border-line bg-transparent px-3 py-2 text-sm text-fg"
+              value={packageLanguage}
+              maxLength={80}
+              onChange={(event) => setPackageLanguage(event.target.value)}
+              placeholder="Language (e.g. Malayalam)"
+            />
+            <button
+              type="button"
+              className="rounded-lg border border-line px-3 py-2 text-sm disabled:opacity-50"
+              disabled={!packageTitleId || destination.trim().length < 2 || territory.trim().length < 2 || packageLanguage.trim().length < 2 || busy}
+              onClick={() => packageMutation.mutate()}
+            >
+              Prepare — HOLD
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {error ? <p className="mt-3 text-sm text-red-600" role="alert">{error}</p> : null}
+      {notice ? <p className="mt-3 text-sm text-muted" role="status">{notice}</p> : null}
+
+      <div className="mt-4">
+        <h3 className="text-sm font-semibold">Vendor job history</h3>
+        {jobsQuery.isPending && canRead ? <p className="p-4 text-sm text-muted">Loading vendor jobs…</p> : null}
+        {jobsQuery.isError ? <p className="p-4 text-sm text-red-600" role="alert">Vendor job history is unavailable. No write was attempted.</p> : null}
+        <ul className="mt-2 divide-y divide-line rounded-xl border border-line">
+          {jobs.map((job) => (
+            <li key={job.id} className="grid gap-3 p-4 text-sm">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="font-medium">{LABELS[job.job_type]} · {job.title_name}</span>
+                <span className="rounded-full border border-line px-2 py-1 text-xs">{job.state.replaceAll("_", " ")}</span>
+              </div>
+              <p className="text-xs text-muted">
+                {job.assigned_vendor ? `Vendor: ${job.assigned_vendor} · ` : ""}Requested by {job.requested_by}
+              </p>
+              {canOperate && job.state === "requested" ? (
+                <div className="flex flex-wrap gap-2">
+                  <input
+                    aria-label={`Vendor label for ${job.title_name}`}
+                    className="rounded-lg border border-line bg-transparent px-3 py-2 text-sm"
+                    value={vendorLabel}
+                    onChange={(event) => setVendorLabel(event.target.value)}
+                    placeholder="Vendor label"
+                  />
+                  <button type="button" className="rounded-lg border border-line px-3 py-2 text-xs disabled:opacity-50" disabled={vendorLabel.trim().length < 2 || busy} onClick={() => assignMutation.mutate(job.id)}>Assign vendor</button>
+                  <button type="button" className="rounded-lg border border-line px-3 py-2 text-xs disabled:opacity-50" disabled={busy} onClick={() => transitionMutation.mutate({ jobId: job.id, action: "block" })}>Block</button>
+                </div>
+              ) : null}
+              {canOperate && job.state === "assigned" ? (
+                <button type="button" className="w-fit rounded-lg border border-line px-3 py-2 text-xs" disabled={busy} onClick={() => transitionMutation.mutate({ jobId: job.id, action: "start_work" })}>Start work</button>
+              ) : null}
+              {canOperate && job.state === "in_progress" ? (
+                <button type="button" className="w-fit rounded-lg border border-line px-3 py-2 text-xs" disabled={busy} onClick={() => transitionMutation.mutate({ jobId: job.id, action: "submit_review" })}>Submit for review</button>
+              ) : null}
+              {canOperate && job.state === "in_review" ? (
+                <div className="flex flex-wrap gap-2">
+                  <button type="button" className="rounded-lg border border-line px-3 py-2 text-xs" disabled={busy} onClick={() => transitionMutation.mutate({ jobId: job.id, action: "sign_off" })}>Human sign-off</button>
+                  <button type="button" className="rounded-lg border border-line px-3 py-2 text-xs" disabled={busy} onClick={() => transitionMutation.mutate({ jobId: job.id, action: "block" })}>Block</button>
+                </div>
+              ) : null}
+            </li>
+          ))}
+          {!jobs.length && !jobsQuery.isPending && !jobsQuery.isError ? (
+            <li className="p-4 text-sm text-muted">{canRead ? "No persisted vendor jobs in your organization." : "Vendor job access is not granted to this account."}</li>
+          ) : null}
+        </ul>
+      </div>
     </section>
   );
 }
@@ -119,27 +339,24 @@ function DeliveryList() {
         Open a title to review its canonical Delivery workspace. No rights or fulfilment rules are changed here.
       </p>
       <div className="mt-5 divide-y divide-line rounded-xl border border-line">
-        {titles.map((t) => (
+        {titles.map((title) => (
           <Link
-            key={t.id}
+            key={title.id}
             to="/title/$id"
-            params={{ id: t.id }}
+            params={{ id: title.id }}
             className="flex items-center justify-between gap-3 p-4 hover:bg-fg/5"
           >
             <div>
-              <p className="text-sm font-semibold">{t.name}</p>
-              <p className="text-xs text-muted">
-                {t.language}
-                {t.year ? ` · ${t.year}` : ""}
-              </p>
+              <p className="text-sm font-semibold">{title.name}</p>
+              <p className="text-xs text-muted">{title.language}{title.year ? ` · ${title.year}` : ""}</p>
             </div>
             <span className="rounded-full border border-line px-3 py-1 text-[10px] font-semibold">
-              {t.status === "DELIVERED" ? "DELIVERED" : "OPEN TITLE"}
+              {title.status === "DELIVERED" ? "DELIVERED" : "OPEN TITLE"}
             </span>
           </Link>
         ))}
       </div>
-      {!titles.length ? <p className="mt-5 text-sm text-muted">No titles available.</p> : null}
+      {!titles.length ? <p className="mt-5 text-sm text-muted">No titles available in your permitted scope.</p> : null}
     </section>
   );
 }
