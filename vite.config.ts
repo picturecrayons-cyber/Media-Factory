@@ -9,6 +9,31 @@ import { nitro } from "nitro/vite";
 // @ts-expect-error JS plugin alongside the TS vite config
 import { appEnvPlugin } from "./scripts/app-env-plugin.mjs";
 import { isMigrationFile } from "./scripts/migration-plan.mjs";
+import { assertDatabaseUrlForRuntime, assertSupabaseUrlForRuntime, resolveCanonicalSupabaseUrl } from "./src/lib/supabase-url.ts";
+
+
+// Vercel builds must prove their database and browser-auth project binding
+// before any bundle is produced. Preview/Development are pinned to STAGING DB;
+// Production is pinned to the canonical PRODUCTION DB.
+function validateVercelRuntimeBindings(): void {
+  if (!process.env.VERCEL) return;
+  const vercelEnv = process.env.VERCEL_ENV;
+  if (!vercelEnv) throw new Error("CONFIG_MISSING: VERCEL_ENV is required for the Vercel runtime isolation gate.");
+  const supabaseUrl = resolveCanonicalSupabaseUrl(
+    process.env.VITE_SUPABASE_URL,
+    process.env.NEXT_PUBLIC_SUPABASE_URL,
+  );
+  assertSupabaseUrlForRuntime(supabaseUrl, vercelEnv);
+  const databaseUrl = [
+    process.env.DATABASE_URL,
+    process.env.POSTGRES_URL,
+    process.env.SUPABASE_DB_URL,
+    process.env.SUPABASE_DATABASE_URL,
+  ].map((value) => value?.trim()).find((value): value is string => Boolean(value));
+  assertDatabaseUrlForRuntime(databaseUrl, vercelEnv);
+}
+
+validateVercelRuntimeBindings();
 
 /** The files `src/lib/db.ts` globs — same directory, same non-recursive scope. */
 function hasGlobbedMigrations(root: string): boolean {
@@ -56,6 +81,9 @@ function pgliteBootstrapPlugin(): Plugin {
 export default defineConfig(({ command, isPreview }) => ({
   // NEXT_PUBLIC_ is an explicit public alias for Supabase browser configuration.
   envPrefix: ["VITE_", "NEXT_PUBLIC_"],
+  define: {
+    "import.meta.env.VERCEL_ENV": JSON.stringify(process.env.VERCEL_ENV ?? ""),
+  },
   server: {
     host: "0.0.0.0",
     port: 3000,
