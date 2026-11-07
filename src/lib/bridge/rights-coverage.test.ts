@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { assertPublicationCanExtend, findCoveringRightsGrant, type BridgeRightsGrant } from "./rights-coverage.ts";
+import { assertPublicationCanExtend, findCoveringRightsGrant, hasExclusiveRightsConflict, type BridgeRightsGrant } from "./rights-coverage.ts";
 
 const baseGrant: BridgeRightsGrant = {
   id: "grant-1",
@@ -111,4 +111,35 @@ test("extension cannot restore suspended revoked expired or pending publications
   assert.throws(() => assertPublicationCanExtend("live", "2026-09-29T00:00:00.000Z"), /fresh authorization/);
   assert.doesNotThrow(() => assertPublicationCanExtend("live", null));
   assert.doesNotThrow(() => assertPublicationCanExtend("authorized", null));
+});
+
+
+test("exclusive rights conflict requires overlapping scope and time", () => {
+  const exclusive = { ...baseGrant, id: "exclusive", exclusivity: "EXCLUSIVE" };
+  const overlapping = { ...baseGrant, id: "other", exclusivity: "NON_EXCLUSIVE" };
+  assert.equal(hasExclusiveRightsConflict(exclusive, overlapping), true);
+  assert.equal(hasExclusiveRightsConflict(exclusive, { ...overlapping, territories: ["US"] }), false);
+  assert.equal(hasExclusiveRightsConflict(exclusive, { ...overlapping, languages: ["English"] }), false);
+  assert.equal(hasExclusiveRightsConflict(exclusive, { ...overlapping, media: ["THEATRICAL"] }), false);
+  assert.equal(hasExclusiveRightsConflict(exclusive, {
+    ...overlapping,
+    window_start: "2027-01-01T00:00:00.000Z",
+    window_end: "2028-01-01T00:00:00.000Z",
+  }), false);
+});
+
+test("two non-exclusive grants may overlap, but worldwide and online scopes conflict with exclusive grants", () => {
+  const nonExclusive = { ...baseGrant, id: "non-exclusive", exclusivity: "NON_EXCLUSIVE" };
+  assert.equal(hasExclusiveRightsConflict(nonExclusive, { ...nonExclusive, id: "other" }), false);
+  assert.equal(hasExclusiveRightsConflict(
+    { ...baseGrant, exclusivity: "EXCLUSIVE" },
+    { ...baseGrant, territories: ["IN"], media: ["TVOD"], exclusivity: "NON_EXCLUSIVE" },
+  ), true);
+});
+
+test("malformed or incomplete windows fail closed for exclusive overlap", () => {
+  assert.equal(hasExclusiveRightsConflict(
+    { ...baseGrant, exclusivity: "EXCLUSIVE", window_end: null },
+    { ...baseGrant, id: "other", window_start: "2026-06-01T00:00:00.000Z" },
+  ), true);
 });
