@@ -302,6 +302,47 @@ test("concurrent reviewer calls cannot approve the same lifecycle twice", async 
     await f.db.close();
   }
 });
+test("saving identical license terms repeatedly reuses one draft and one audit event", async () => {
+  const f = await fixture();
+  try {
+    const first = (await f.sql.transaction((tx) => f.save(tx, owner, license))) as { grantId: string };
+    const second = (await f.sql.transaction((tx) => f.save(tx, owner, license))) as { grantId: string };
+    assert.equal(second.grantId, first.grantId);
+    assert.equal((await f.sql.query("select * from bridge_rights_grants")).length, 1);
+    assert.equal((await f.sql.query("select * from bridge_audit_logs where action='license.loop_draft'")).length, 1);
+  } finally {
+    await f.db.close();
+  }
+});
+
+test("same agreement reference with materially different terms is rejected", async () => {
+  const f = await fixture();
+  try {
+    await f.sql.transaction((tx) => f.save(tx, owner, license));
+    await assert.rejects(
+      f.sql.transaction((tx) => f.save(tx, owner, { ...license, exclusivity: "EXCLUSIVE" })),
+      /different licensing terms/,
+    );
+    assert.equal((await f.sql.query("select * from bridge_rights_grants")).length, 1);
+  } finally {
+    await f.db.close();
+  }
+});
+
+test("overlapping exclusive and non-exclusive grants are rejected", async () => {
+  const f = await fixture();
+  try {
+    await f.sql.transaction((tx) => f.save(tx, owner, { ...license, exclusivity: "EXCLUSIVE" }));
+    await assert.rejects(
+      f.sql.transaction((tx) => f.save(tx, owner, { ...license, agreementReference: "agreement-456" })),
+      /Conflicting exclusive/,
+    );
+    assert.equal((await f.sql.query("select * from bridge_rights_grants")).length, 1);
+  } finally {
+    await f.db.close();
+  }
+});
+
 test("license author cannot approve their own agreement", async () => {
   const f = await fixture();
   try {
