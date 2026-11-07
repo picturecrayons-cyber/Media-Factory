@@ -96,7 +96,12 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
     URL.revokeObjectURL(url);
   }
   const grants = workflow.data?.grants ?? [];
-  const valid = grants.find((g) => g.status === "VALID" && new Date(g.window_end) > new Date());
+  const valid = grants.find(
+    (g) =>
+      g.status === "VALID" &&
+      new Date(g.window_start) <= new Date() &&
+      new Date(g.window_end) > new Date(),
+  );
   const pub = publication.data?.publication;
   const button = (label: string, run: () => Promise<unknown>) => (
     <button
@@ -179,7 +184,9 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                       }),
                   )
                 : null}
-              {title.status === "QC_REVIEW" && hasPermission(actor, "title.qc_review") ? (
+              {title.status === "QC_REVIEW" &&
+              hasPermission(actor, "title.qc_review") &&
+              workflow.data?.qcReviewerEligible ? (
                 <>
                   {input(
                     "Technical review findings (include playback/codec checks)",
@@ -197,6 +204,8 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                     }),
                   )}
                 </>
+              ) : title.status === "QC_REVIEW" && hasPermission(actor, "title.qc_review") ? (
+                <p>Blocked: an independent QC reviewer who did not upload this title's assets is required.</p>
               ) : null}
               {workflow.data?.qc?.reviewer_findings.map((f, i) => (
                 <p key={i} className="text-sm">
@@ -278,7 +287,8 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                   <p>Agreement: {g.evidence[0]?.agreementReference ?? "Not recorded"}</p>
                   {g.status === "DRAFT" &&
                   title.status === "RIGHTS_REVIEW" &&
-                  hasPermission(actor, "title.rights_review") ? (
+                  hasPermission(actor, "title.rights_review") &&
+                  g.created_by !== actor.userId ? (
                     <div className="flex gap-2">
                       {button("Approve rights / license", () =>
                         reviewTitleWorkflow({
