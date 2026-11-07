@@ -126,3 +126,32 @@ test("status alignment never bypasses operator, rights or commercial coverage", 
     assert.equal(h.writes.length, 0);
   }
 });
+
+
+test("rejects reversed publication windows before acquiring or writing publication state", async () => {
+  const h = harness([grant]);
+  await assert.rejects(
+    h.authorize({
+      context,
+      data: {
+        ...data,
+        windowStart: "2026-12-01T00:00:00.000Z",
+        windowEnd: "2026-11-01T00:00:00.000Z",
+      },
+    }),
+    /strictly after window start/,
+  );
+  assert.equal(h.writes.length, 0);
+});
+
+test("fails closed when publication validity is missing or not covered by the active rights grant", async () => {
+  for (const scenario of [
+    { grant: { ...grant, window_end: "2026-06-01T00:00:00.000Z" }, input: data },
+    { grant, input: { ...data, windowStart: undefined } },
+    { grant, input: { ...data, windowEnd: undefined } },
+  ]) {
+    const h = harness([scenario.grant]);
+    await assert.rejects(h.authorize({ context, data: scenario.input }));
+    assert.equal(h.writes.length, 0);
+  }
+});
