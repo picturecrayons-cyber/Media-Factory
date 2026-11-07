@@ -5,11 +5,10 @@ import { join } from "node:path";
 const ROOT = process.cwd();
 const FORBIDDEN = [
   "tqzimuwozhipqgyerdff",
-  "rzp_live_",
-  "rzp_test_",
   "AKIA",
   "sk_live_",
 ];
+const RAZORPAY_KEY_ID = /\brzp_(?:live|test)_[A-Za-z0-9]{14,}\b/g;
 const PRIVATE_KEY_PEM = /-----BEGIN (?:RSA )?PRIVATE KEY-----[\r\n]+[A-Za-z0-9+/=\r\n]+-----END (?:RSA )?PRIVATE KEY-----/;
 const ALLOW_BASENAME = new Set(["secret-scan.mjs", "canonical.ts", "canonical.test.ts", "assert-no-legacy-dump.test.mjs"]);
 
@@ -17,7 +16,7 @@ const hits = [];
 
 function walk(dir) {
   for (const name of readdirSync(dir)) {
-    if (name === "node_modules" || name === ".git" || name === "dist" || name === ".output" || name === ".nitro") continue;
+    if (name === "node_modules" || name === ".git" || name === ".vercel" || name === "dist" || name === ".output" || name === ".nitro") continue;
     const p = join(dir, name);
     const st = statSync(p);
     if (st.isDirectory()) walk(p);
@@ -26,6 +25,9 @@ function walk(dir) {
       const text = readFileSync(p, "utf8");
       for (const token of FORBIDDEN) {
         if (text.includes(token)) hits.push({ file: p, token });
+      }
+      for (const match of text.matchAll(RAZORPAY_KEY_ID)) {
+        hits.push({ file: p, token: "Razorpay key ID" });
       }
       if (PRIVATE_KEY_PEM.test(text)) hits.push({ file: p, token: "private-key PEM block" });
     }
