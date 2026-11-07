@@ -273,3 +273,67 @@ This section is a design clarification only. It does not authorize saving a Prod
 6. Before any Preview E2E, independently prove Preview uses the approved Testing DB and non-production private asset storage. Do not consume Vercel deployment quota without separate explicit approval.
 
 **Boundary:** This section records source findings and implementation requirements only. No application code, schema, RLS, data, environment, email, payment, deployment, merge or Production behavior is changed. Production remains **HOLD / NOT CERTIFIED / NO-GO**. App-inu pani kittaruthu.
+
+
+## 17. Master rights anchor and independent multi-buyer licensing
+
+**Product decision:** Crayons Loop is the first in-house distribution channel and an important initial use case, but it is not the only permitted buyer or distribution destination. Crayons Bridge must support multiple independent downstream buyers and platforms without weakening the upstream rights and mandate controls.
+
+### 17.1 Separate upstream rights from downstream commercial deals
+
+Keep these concepts as distinct, linked records:
+
+1. **Rights principal / source rights:** the person or legal entity that owns or controls the relevant rights, supported by source evidence and chain-of-title records.
+2. **Master agreement / Bridge proposal:** the upstream commercial and authorization relationship between the verified rights principal (or authorized representative) and the correct contracting legal entity. It records only the rights, territory, media, language, term, exclusivity, sublicensing and commercial authority actually agreed.
+3. **Distribution-channel relationship:** a delivery destination such as Crayons Loop. A channel is not automatically a legal buyer or contracting party.
+4. **Downstream buyer deal:** a separate buyer-specific agreement/proposal and license grant for each external OTT, TV/satellite channel, aggregator or distributor. Each has its own counterparty, contracting entity, scope, territory, language, media, window, exclusivity, sublicensing, business model, revenue basis, fees, taxes, deductions and settlement terms.
+5. **Publication / entitlement:** buyer- and channel-specific activation only after all applicable upstream and downstream gates pass.
+
+The term “master rights anchor” means a traceable, authoritative rights-and-mandate record in Bridge. It does not mean that a Bridge proposal alone creates ownership, transfers rights, or grants unlimited sublicensing authority.
+
+### 17.2 No downstream deal may exceed the upstream authority
+
+For every proposed buyer grant, the authorization service must prove that the requested scope is within the current, verified upstream rights envelope and any applicable mandate. Evaluate at least:
+
+- title and version / covered assets;
+- rights type and permitted use (TVOD, SVOD, AVOD, broadcast, etc.);
+- territory and language;
+- media, platform, device and distribution mode;
+- start/end dates and any holdbacks or blackout periods;
+- exclusivity and conflicting grants;
+- sublicensing / onward distribution rights;
+- buyer identity and any permitted affiliates;
+- effective, suspended, expired or revoked state of the source rights and mandate.
+
+A downstream grant must be denied or narrowed if any dimension exceeds, conflicts with, or is not evidenced by the upstream authority. Missing dimensions are **UNKNOWN / NOT AUTHORIZED**, not unlimited. No automatic assumption of WORLDWIDE, all languages, all platforms, perpetual term, exclusivity or sublicensing.
+
+### 17.3 Independent buyer terms and grant isolation
+
+- Create a distinct proposal/version, executed agreement reference, buyer organization link and rights grant for each buyer deal. Do not reuse the Crayons Loop license as the template's authoritative executed agreement for another buyer.
+- A buyer's commercial terms are independent: revenue share/basis, currency, deductions, fees, taxes, refunds, chargebacks, reporting, payment cadence, minimum guarantees, advances, recoupment and audit rights are stored per agreement/version where applicable.
+- Buyer A approval, payment, entitlement or delivery must not authorize Buyer B. Buyer A cannot read or mutate Buyer B's proposals, documents, grants, reports, statements, assets or entitlements.
+- A single upstream master agreement may support multiple downstream grants only when it expressly grants Bridge/the contracting distributor the authority to make those grants and the particular buyer scope is within its terms. Otherwise obtain a separate rights-holder consent or amendment before dispatch/activation.
+- Each grant has independent effective dates, status, suspension/revocation, delivery acknowledgement and publication state. Revocation or expiry of an upstream right/mandate must trigger a controlled impact assessment and block affected downstream activation/playback/download/delivery; do not silently rewrite historical records.
+- Do not copy or inherit one buyer's exclusivity, territory, window, revenue split or other terms to another buyer. Detect and block overlapping exclusive grants unless the rights evidence and authorized legal decision explicitly permit the overlap.
+- In-house Loop deals must be represented explicitly as the applicable legal entities and channel relationship. Do not assume the Loop channel label itself is the licensee organization or counterparty.
+
+### 17.4 Required relationship model and reporting
+
+The logical model must support one title/rightsholder relationship linked to multiple proposals, executed agreements, buyer organizations, channels and independently versioned grants. Use explicit foreign keys and immutable references; do not encode buyer/channel identity only in free-text JSON or display labels.
+
+The Admin rights view should show, per title and rights dimension: source evidence and mandate, upstream authority envelope, each buyer's proposal/agreement/grant, current state and dates, conflicts/holdbacks, and downstream delivery/publication status. Access to this consolidated view remains internal-role scoped; Creator/Studio and Buyer views show only their authorized tenant-scoped records.
+
+### 17.5 Additional acceptance and regression tests
+
+1. Crayons Loop and at least two external buyer organizations can each have separate, correctly scoped grants for the same title where upstream authority permits.
+2. A Loop-specific grant or approval cannot be reused as an external buyer's agreement or authorization.
+3. Buyer A cannot discover or access Buyer B records, signed documents, private assets, downloads, revenue or delivery acknowledgements.
+4. A buyer request exceeding upstream territory, language, media, platform, term or sublicensing authority is rejected.
+5. Unknown or missing upstream scope is denied by default; it is never interpreted as unrestricted.
+6. Overlapping exclusive grants are rejected unless an explicit documented exception is authorized.
+7. Upstream mandate expiry, suspension or revocation blocks new and affected downstream grants and runtime entitlements according to the approved revocation policy.
+8. Buyer-specific revenue and settlement terms remain independent and cannot be overwritten by another buyer's deal.
+9. A downstream amendment creates a new immutable version and does not mutate the upstream master agreement or another buyer's deal.
+10. Historical executed agreements, grants and audit events remain traceable after expiry, suspension, revocation or supersession.
+
+**Boundary:** This is an architecture specification only. It does not create buyer records, issue proposals, assert that any title's rights are verified, create or activate grants, or authorize publication. Phase B must reconcile this logical model with the existing Testing schema before any migration is drafted. Production remains **HOLD / NOT CERTIFIED / NO-GO**. App-inu pani kittaruthu.
