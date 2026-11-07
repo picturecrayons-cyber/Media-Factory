@@ -59,8 +59,8 @@ export async function saveLoopLicense(
     from bridge_rights_grants
     where exists (
       select 1
-      from jsonb_array_elements(case when jsonb_typeof(evidence)='array' then evidence else '[]'::jsonb end) ev
-      where upper(trim(ev->>'agreementReference'))=${normalizedAgreementReference}
+      from jsonb_array_elements(case when jsonb_typeof(evidence)='array' then evidence else '[]'::jsonb end) as evidence_item(value)
+      where upper(trim(evidence_item.value->>'agreementReference'))=${normalizedAgreementReference}
     )
     order by created_at asc
     for update`;
