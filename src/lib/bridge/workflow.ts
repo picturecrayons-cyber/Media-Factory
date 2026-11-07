@@ -72,7 +72,6 @@ export async function saveLoopLicense(
       and status in ('DRAFT','VALID')
       and media @> '["CRAYONS_LOOP","TVOD"]'::jsonb
       and territories ?| array['WORLDWIDE']
-      and languages ?| ${data.languages}::text[]
       and window_start < ${data.windowEnd}::timestamptz
       and window_end > ${data.windowStart}::timestamptz
     order by created_at desc limit 1 for update
@@ -168,7 +167,6 @@ export async function reviewWorkflow(tx: Sql, actor: Actor, data: z.infer<typeof
           and territories ?| array['WORLDWIDE']
           and window_start < (select window_end from bridge_rights_grants where id=${data.grantId})
           and window_end > (select window_start from bridge_rights_grants where id=${data.grantId})
-          and languages ?| (select array(select jsonb_array_elements_text(languages)) from bridge_rights_grants where id=${data.grantId})
         limit 1 for update
       `;
       if (overlap)
