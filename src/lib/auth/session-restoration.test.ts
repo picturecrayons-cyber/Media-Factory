@@ -111,9 +111,14 @@ test("onboarding and workspace wait for restoration and scope cached profiles to
     assert.match(source, /queryKey: \["bridge-session", user\?\.id\]/);
     assert.match(source, /if \(!user\) return <RedirectToSignIn/);
   }
+  const provider = readFileSync(new URL("./provider.tsx", import.meta.url), "utf8");
   const hook = readFileSync(new URL("./use-current-user.ts", import.meta.url), "utf8");
-  assert.doesNotMatch(hook, /user: normalize\(getStoredSupabaseUser\(\)\)/);
-  assert.match(hook, /alive && !authChanged/);
+  assert.match(provider, /getSupabaseSessionStrict/);
+  assert.match(provider, /event !== "INITIAL_SESSION"/);
+  assert.match(provider, /authRevision\.current === revisionBeforeRead/);
+  assert.match(provider, /authError/);
+  assert.match(provider, /Retry session/);
+  assert.match(hook, /useAuthSessionState/);
 });
 
 test("PKCE exchange persists a session and forced refresh returns the rotated bearer", async () => {
@@ -161,4 +166,26 @@ test("PKCE exchange persists a session and forced refresh returns the rotated be
   assert.equal(requests.length, 2);
   assert.match(requests[0], /grant_type=pkce/);
   assert.match(requests[1], /grant_type=refresh_token/);
+});
+
+
+test("initial session read failures are surfaced instead of being treated as signed-out", async () => {
+  await assert.rejects(
+    () => restoreSupabaseSession({
+      getSession: async () => result(null, new Error("Auth service offline")),
+      refreshSession: async () => result(null),
+    }),
+    /Auth service offline/,
+  );
+});
+
+test("Bridge protected route waits for centralized session bootstrap and exposes workspace retry", () => {
+  const provider = readFileSync(new URL("./provider.tsx", import.meta.url), "utf8");
+  const gate = readFileSync(new URL("../../components/bridge/gate.tsx", import.meta.url), "utf8");
+  const login = readFileSync(new URL("../../routes/login.tsx", import.meta.url), "utf8");
+  assert.match(provider, /if \(isPending\)/);
+  assert.match(gate, /authError/);
+  assert.match(gate, /Retry session/);
+  assert.match(login, /Retry workspace/);
+  assert.match(login, /if \(!s\?\.home\) throw new Error/);
 });
