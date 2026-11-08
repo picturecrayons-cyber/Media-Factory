@@ -455,6 +455,11 @@ export const getTitle = createServerFn({ method: "GET" })
     const actor = await requireVerifiedActor(context.userId);
     const title = await loadTitle(data.id);
     if (!title) throw new Error("Not found");
+    // Buyer title visibility is a database-backed rights gate. Do not let the
+    // broad catalog status check in canReadTitle bypass explicit buyer access.
+    if (actor.accountType === "buyer" && !actor.internalRole) {
+      await assertBuyerPublishable(title.id);
+    }
     const sql = await getSql();
     if (actor.accountType === "investor" && !actor.internalRole) {
       const assigned = await sql<{ id: string }>
@@ -476,7 +481,7 @@ export const getTitle = createServerFn({ method: "GET" })
     `;
     return {
       title,
-      events: events.map((e) => ({
+      events: actor.accountType === "buyer" && !actor.internalRole ? [] : events.map((e) => ({
         from: e.from_status,
         to: e.to_status,
         actorUserId: e.actor_user_id,
