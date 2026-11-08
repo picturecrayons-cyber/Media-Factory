@@ -13,6 +13,7 @@ import { persistVerifiedAsset } from "./asset-confirmation";
 import { downloadDecision } from "./delivery-policy";
 import { uploadUrlLifetimeSeconds } from "./upload-url-lifetime";
 import { validateOttIngestFile, type OttIngestKind } from "./ott-ingest-spec";
+import { assertBuyerPublishable } from "./buyer-visibility";
 
 const UPLOADABLE: ReadonlySet<string> = new Set(["DRAFT", "UPLOADING", "PREPARING"]);
 
@@ -277,7 +278,11 @@ export const requestAssetDownload = createServerFn({ method: "POST" })
     const asset = rows[0];
     if (!asset) throw new Error("Not found");
     const title = await loadTitle(asset.title_id);
-    if (!title || !canReadTitle(actor, title)) throw new Error("Not found");
+    if (!title) throw new Error("Not found");
+    if (actor.accountType === "buyer" && !actor.internalRole) {
+      await assertBuyerPublishable(title.id);
+    }
+    if (!canReadTitle(actor, title)) throw new Error("Not found");
     const entitled = await hasLicenseEntitlement(actor.userId, title.id);
     const decision = downloadDecision({
       kind: asset.kind,
@@ -313,9 +318,11 @@ export const listTitleAssets = createServerFn({ method: "GET" })
   .handler(async ({ context, data }) => {
     const actor = await requireVerifiedActor(context.userId);
     const title = await loadTitle(data.titleId);
-    if (!title || !canReadTitle(actor, title)) throw new Error("Not found");
-    const sql = await getSql();
+    if (!title) throw new Error("Not found");
     const buyer = actor.accountType === "buyer" && !actor.internalRole;
+    if (buyer) await assertBuyerPublishable(title.id);
+    if (!canReadTitle(actor, title)) throw new Error("Not found");
+    const sql = await getSql();
     const rows = await sql<{
       id: string;
       kind: string;
