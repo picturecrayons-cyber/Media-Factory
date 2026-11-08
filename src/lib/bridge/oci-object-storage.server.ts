@@ -251,6 +251,26 @@ export async function signDownload(opts: { key: string; expiresIn?: number }) {
   return { url: signed.url, key: opts.key, bucket: signed.bucket, method: "GET" as const };
 }
 
+export async function verifyObjectSha256(
+  key: string,
+  expectedContentType?: string | null,
+  maxBytes = 25 * 1024 * 1024,
+) {
+  const head = await verifyObject(key, expectedContentType);
+  if (head.byteSize > maxBytes) throw new Error("Rights evidence document exceeds the 25 MB limit");
+  const cfg = config();
+  const namespace = await resolveNamespace(cfg);
+  const path = `/n/${encodeURIComponent(namespace)}/b/${encodeURIComponent(cfg.bucket)}/o/${encodedObjectName(key)}`;
+  const res = await signedFetch({ cfg, method: "GET", path });
+  if (!res.ok) throw new Error(`OCI evidence download verification failed (${res.status})`);
+  const bytes = Buffer.from(await res.arrayBuffer());
+  if (bytes.byteLength !== head.byteSize) throw new Error("Rights evidence changed while its checksum was calculated");
+  return {
+    ...head,
+    checksumSha256: createHash("sha256").update(bytes).digest("hex"),
+  };
+}
+
 export async function verifyObject(key: string, expectedContentType?: string | null) {
   const cfg = config();
   const namespace = await resolveNamespace(cfg);
