@@ -173,6 +173,8 @@ const reviewInput = z.object({
 
 export async function reviewWorkflow(tx: Sql, actor: Actor, data: z.infer<typeof reviewInput>) {
   data = reviewInput.parse(data);
+  if (data.stage === "LEGAL" && actor.internalRole !== "legal_reviewer")
+    throw new Error("Only an authorized Legal reviewer may approve or reject rights grants");
   assertPermission(actor, data.stage === "QC" ? "title.qc_review" : "title.rights_review");
   const [title] = await tx<{
     status: string;
@@ -215,7 +217,8 @@ export async function reviewWorkflow(tx: Sql, actor: Actor, data: z.infer<typeof
         checksum_sha256: string;
         submitted_by: string;
         reviewed_by: string;
-      }>`select e.id,e.evidence_type,e.asset_version_id,e.checksum_sha256,e.submitted_by,e.reviewed_by
+        related_agreement_evidence_id: string | null;
+      }>`select e.id,e.evidence_type,e.asset_version_id,e.checksum_sha256,e.submitted_by,e.reviewed_by,e.related_agreement_evidence_id
         from bridge_rights_evidence e
         join bridge_asset_versions av on av.id=e.asset_version_id and av.title_id=e.title_id
           and av.asset_group='DOCUMENT' and av.asset_type='RIGHTS_EVIDENCE'
@@ -238,8 +241,13 @@ export async function reviewWorkflow(tx: Sql, actor: Actor, data: z.infer<typeof
           and lower(av.checksum_sha256)=lower(e.checksum_sha256)
         for update of e,av,a`;
       const verifiedTypes = new Set(verifiedEvidence.map((item) => item.evidence_type));
-      if (!verifiedTypes.has("EXECUTED_AGREEMENT") || !verifiedTypes.has("OWNERSHIP_CHAIN"))
-        throw new Error("Legal approval requires independently reviewed executed-agreement and ownership-chain documents with matching SHA-256 checksums");
+      const mandatoryTypes = ["EXECUTED_AGREEMENT", "OWNERSHIP_CHAIN", "SIGNATORY_AUTHORITY", "DISTRIBUTION_AUTHORITY"];
+      if (!mandatoryTypes.every((type) => verifiedTypes.has(type)))
+        throw new Error("Legal approval requires independently verified executed agreement, ownership chain, signatory authority, and Master Distributor / sublicensing authority evidence");
+      const executedAgreementIds = new Set(verifiedEvidence.filter((item) => item.evidence_type === "EXECUTED_AGREEMENT").map((item) => item.id));
+      const supplements = verifiedEvidence.filter((item) => ["SIGNED_AMENDMENT", "SIGNED_ADDENDUM", "RIGHTS_SCHEDULE"].includes(item.evidence_type));
+      if (supplements.some((item) => !item.related_agreement_evidence_id || !executedAgreementIds.has(item.related_agreement_evidence_id)))
+        throw new Error("Every signed amendment, addendum and rights schedule must be independently verified and linked to its executed agreement");
       await tx`insert into bridge_legal_cases(title_id,status,evidence,reviewed_by,reviewed_at)
         values (${data.titleId},'APPROVED',
         ${JSON.stringify([{
@@ -252,6 +260,7 @@ export async function reviewWorkflow(tx: Sql, actor: Actor, data: z.infer<typeof
             checksumSha256: item.checksum_sha256,
             submittedBy: item.submitted_by,
             reviewedBy: item.reviewed_by,
+            relatedAgreementEvidenceId: item.related_agreement_evidence_id,
           })),
         }])}::jsonb,${actor.userId},now())`;
       await tx`update bridge_rights_grants set status='VALID' where id=${data.grantId}`;
