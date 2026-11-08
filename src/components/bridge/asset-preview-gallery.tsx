@@ -71,6 +71,40 @@ export function AssetPreviewGallery({ assets }: { assets: PreviewAsset[] }) {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [failedId, setFailedId] = useState<string | null>(null);
+  const [imageUrls, setImageUrls] = useState<Record<string, string>>({});
+  const [imageFailures, setImageFailures] = useState<Record<string, boolean>>({});
+
+  const verifiedImages = assets.filter((asset) => asset.verified && isImage(asset));
+
+  useEffect(() => {
+    let active = true;
+    setImageUrls({});
+    setImageFailures({});
+    void Promise.all(
+      verifiedImages.map(async (asset) => {
+        try {
+          const signed = await requestAssetDownload({ data: { assetId: asset.id } });
+          if (!signed?.url) throw new Error("Preview URL unavailable");
+          return [asset.id, previewUrlFor(signed.url, asset.kind, asset.contentType)] as const;
+        } catch {
+          return [asset.id, null] as const;
+        }
+      }),
+    ).then((entries) => {
+      if (!active) return;
+      const urls: Record<string, string> = {};
+      const failures: Record<string, boolean> = {};
+      for (const [assetId, url] of entries) {
+        if (url) urls[assetId] = url;
+        else failures[assetId] = true;
+      }
+      setImageUrls(urls);
+      setImageFailures(failures);
+    });
+    return () => {
+      active = false;
+    };
+  }, [assets]);
 
   async function openPreview(asset: PreviewAsset) {
     if (!asset.verified || loadingId) return;
@@ -130,8 +164,23 @@ export function AssetPreviewGallery({ assets }: { assets: PreviewAsset[] }) {
                 className="group block w-full text-left disabled:cursor-wait"
                 aria-label={`Preview ${asset.kind.replaceAll("_", " ")}`}
               >
-                <div className={`grid place-items-center bg-black/5 ${isVideo(asset) ? "aspect-video" : "aspect-[4/3]"}`}>
-                  <span className="rounded-full border border-line bg-surface px-4 py-2 text-sm font-semibold group-hover:border-accent">
+                <div className={`relative grid place-items-center overflow-hidden bg-black/5 ${isVideo(asset) ? "aspect-video" : asset.kind === "poster" || asset.kind === "poster_vertical" ? "aspect-[2/3]" : "aspect-video"}`}>
+                  {isImage(asset) && imageUrls[asset.id] ? (
+                    <img
+                      src={imageUrls[asset.id]}
+                      alt={`Verified ${asset.kind.replaceAll("_", " ")} preview`}
+                      loading="lazy"
+                      className={`h-full w-full ${asset.kind === "poster" || asset.kind === "poster_vertical" ? "object-contain" : "object-cover"}`}
+                      onError={() => setImageFailures((current) => ({ ...current, [asset.id]: true }))}
+                    />
+                  ) : isImage(asset) ? (
+                    <span className="px-4 text-center text-xs text-muted">
+                      {imageFailures[asset.id] ? "Image preview unavailable" : "Loading image preview…"}
+                    </span>
+                  ) : (
+                    <span className="text-xs text-muted">Video preview</span>
+                  )}
+                  <span className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full border border-line bg-surface/95 px-4 py-2 text-sm font-semibold shadow-sm group-hover:border-accent">
                     {loadingId === asset.id ? "Loading preview…" : isVideo(asset) ? "▶ Play video" : "View image"}
                   </span>
                 </div>
