@@ -61,8 +61,6 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
     },
     onError: (e) => setError(e instanceof Error ? e.message : "Action failed"),
   });
-  const [territories, setTerritories] = useState("WORLDWIDE");
-  const [languages, setLanguages] = useState(title.language);
   const [start, setStart] = useState("");
   const [end, setEnd] = useState("");
   const [exclusive, setExclusive] = useState(false);
@@ -213,65 +211,55 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
           ) : null}
           {stage === "Business" ? (
             <div className="space-y-4">
-              <p>
-                License to Crayons Loop · TVOD. A draft requires an independent legal reviewer
-                before publication.
-              </p>
-              {canOperateOnTitle(actor, title, "title.update_own", "title.license") ? (
-                <form
-                  className="grid gap-3 sm:grid-cols-2"
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    action.mutate(() =>
-                      submitLoopLicense({
-                        data: {
-                          titleId: title.id,
-                          territories: territories
-                            .split(",")
-                            .map((v) => v.trim())
-                            .filter(Boolean),
-                          languages: languages
-                            .split(",")
-                            .map((v) => v.trim())
-                            .filter(Boolean),
-                          windowStart: new Date(start).toISOString(),
-                          windowEnd: new Date(end).toISOString(),
-                          exclusivity: exclusive ? "EXCLUSIVE" : "NON_EXCLUSIVE",
-                          agreementReference: agreement,
-                          ownershipReference: ownership,
-                          rightsOwnerSharePct: Number(ownerShare),
-                          distributorSharePct: 100 - Number(ownerShare),
-                        },
-                      }),
-                    );
-                  }}
-                >
-                  {input("Territories", territories, setTerritories)}
-                  {input("Languages", languages, setLanguages)}
-                  {input("Window start", start, setStart, "datetime-local")}
-                  {input("Window end", end, setEnd, "datetime-local")}
-                  {input("Executed agreement reference", agreement, setAgreement)}
-                  {input("Ownership evidence reference", ownership, setOwnership)}
-                  {input(
-                    "Rights owner share % of gross captured INR (before fees/tax/refunds)",
-                    ownerShare,
-                    setOwnerShare,
-                    "number",
-                  )}
-                  <label className="text-sm">
-                    <input
-                      type="checkbox"
-                      checked={exclusive}
-                      onChange={(e) => setExclusive(e.target.checked)}
-                    />{" "}
-                    Exclusive
-                  </label>
-                  <button disabled={action.isPending} className="rounded-lg border border-line p-2">
-                    Save license draft
-                  </button>
-                </form>
-              ) : null}
-              {input("Legal review findings", note, setNote)}
+              <details className="rounded-xl border border-line p-3">
+                <summary className="cursor-pointer text-sm font-semibold">＋ Create TVOD license draft</summary>
+                <p className="mt-2 text-xs text-muted">Worldwide · {title.language}. Legal evidence is required before review.</p>
+                {canOperateOnTitle(actor, title, "title.update_own", "title.license") ? (
+                  <form
+                    className="mt-3 grid gap-3 sm:grid-cols-2"
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      action.mutate(() =>
+                        submitLoopLicense({
+                          data: {
+                            titleId: title.id,
+                            territories: ["WORLDWIDE"],
+                            languages: [title.language],
+                            windowStart: new Date(start).toISOString(),
+                            windowEnd: new Date(end).toISOString(),
+                            exclusivity: exclusive ? "EXCLUSIVE" : "NON_EXCLUSIVE",
+                            agreementReference: agreement,
+                            ownershipReference: ownership,
+                            rightsOwnerSharePct: Number(ownerShare),
+                            distributorSharePct: 100 - Number(ownerShare),
+                          },
+                        }),
+                      );
+                    }}
+                  >
+                    {input("License starts", start, setStart, "datetime-local")}
+                    {input("License ends", end, setEnd, "datetime-local")}
+                    {input("Agreement reference", agreement, setAgreement)}
+                    {input("Ownership evidence reference", ownership, setOwnership)}
+                    {input("Rights owner share (%)", ownerShare, setOwnerShare, "number")}
+                    <label className="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={exclusive}
+                        onChange={(e) => setExclusive(e.target.checked)}
+                      />
+                      Exclusive license
+                    </label>
+                    <button
+                      disabled={action.isPending || !start || !end || agreement.trim().length < 8 || ownership.trim().length < 8 || ownerShare === ""}
+                      className="rounded-lg border border-line px-4 py-2 text-sm sm:col-span-2"
+                    >
+                      {action.isPending ? "Saving…" : "Save draft"}
+                    </button>
+                  </form>
+                ) : null}
+              </details>
+              {input("Legal review note", note, setNote)}
               <p className="text-xs text-muted" aria-live="polite">
                 {note.trim().length < 8
                   ? `Enter at least 8 characters (${note.trim().length}/8).`
