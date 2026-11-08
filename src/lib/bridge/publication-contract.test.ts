@@ -126,3 +126,39 @@ test("status alignment never bypasses operator, rights or commercial coverage", 
     assert.equal(h.writes.length, 0);
   }
 });
+
+
+test("Loop publication readiness GET is SELECT-only and uses the database expiry boundary", () => {
+  const source = readFileSync(new URL("./loop-publication.ts", import.meta.url), "utf8");
+  const start = source.indexOf("export const listLoopPublicationReadiness");
+  const end = source.indexOf("export const authorizeLoopPublication", start);
+  assert.ok(start >= 0 && end > start);
+  const handler = source.slice(start, end);
+  assert.doesNotMatch(handler, /\\b(update|insert|delete)\\s+(bridge_loop_publications|loop_titles)\\b/i);
+  assert.match(handler, /p\\.window_end\\s*<=\\s*now\\(\\)/);
+  assert.match(handler, /p\\.window_end\\s*>\\s*now\\(\\)/);
+  assert.match(handler, /now\\(\\) as database_now/);
+});
+
+test("Loop catalog, details and playback fail closed outside the active Bridge publication window", () => {
+  const source = readFileSync(new URL("../loop/catalog.ts", import.meta.url), "utf8");
+  assert.match(source, /p\\.window_end is null or p\\.window_end > now\\(\\)/);
+  assert.match(source, /p\\.window_start is null or p\\.window_start <= now\\(\\)/);
+  assert.match(source, /l\\.listed = true/);
+  assert.match(source, /join bridge_loop_publications p on p\\.loop_title_id = l\\.id/);
+});
+
+test("CMS loads title and publication data only for the selected tab", () => {
+  const source = readFileSync(new URL("../../routes/cms.tsx", import.meta.url), "utf8");
+  assert.match(source, /enabled: tab === "licensing"/);
+  assert.match(source, /enabled: tab === "publishing"/);
+  assert.match(source, /tab === "ingest" \? <IngestDesk actor=\{actor\} \/> : null/);
+});
+
+test("buyer asset entitlements require captured payment and an active Bridge rights window", () => {
+  const source = readFileSync(new URL("./assets.ts", import.meta.url), "utf8");
+  assert.match(source, /payment\\.status = 'captured'/);
+  assert.match(source, /payment\\.verified_at is not null/);
+  assert.match(source, /rights\\.status = 'VALID'/);
+  assert.match(source, /rights\\.window_end is null or rights\\.window_end > now\\(\\)/);
+});
