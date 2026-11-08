@@ -1,0 +1,3 @@
+# Install in an isolated virtual environment. Pin the resolved MCP SDK
+# version in the deployment lockfile after Windows validation.
+mcp>=1.9,<2
