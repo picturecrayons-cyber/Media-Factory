@@ -6,11 +6,11 @@
 export type SubmissionType = "finished_film" | "story_concept";
 
 export type CurationStatus =
-  | "PENDING"
-  | "UNDER_REVIEW"
+  | "PENDING_REVIEW"
+  | "CHANGES_REQUESTED"
   | "APPROVED"
   | "REJECTED"
-  | "INTRODUCED_TO_BUYERS";
+  | "BUYER_EVALUATION_APPROVED";
 
 export type BuyerInterestLevel =
   | "VIEWED"
@@ -53,6 +53,9 @@ export interface StoryConceptSubmission {
   introduced_to_buyers_at: string | null;
   created_at: string;
   updated_at: string;
+  reviewed_by?: string | null;
+  reviewed_at?: string | null;
+  fee_certified_at?: string | null;
 }
 
 export interface BuyerInterest {
@@ -76,9 +79,9 @@ export interface CreateStoryConceptPayload {
 
 /** Allowed admin curation transitions. */
 export const CURATION_TRANSITIONS: Record<CurationStatus, CurationStatus[]> = {
-  PENDING: ["UNDER_REVIEW", "APPROVED", "REJECTED"],
-  UNDER_REVIEW: ["APPROVED", "REJECTED", "PENDING"],
-  APPROVED: ["INTRODUCED_TO_BUYERS", "UNDER_REVIEW"],
-  REJECTED: ["UNDER_REVIEW", "PENDING"],
-  INTRODUCED_TO_BUYERS: [],
+  PENDING_REVIEW: ["APPROVED", "CHANGES_REQUESTED", "REJECTED"],
+  CHANGES_REQUESTED: ["PENDING_REVIEW", "REJECTED"],
+  APPROVED: ["BUYER_EVALUATION_APPROVED", "CHANGES_REQUESTED", "REJECTED"],
+  REJECTED: ["PENDING_REVIEW"],
+  BUYER_EVALUATION_APPROVED: ["APPROVED", "REJECTED"],
 };

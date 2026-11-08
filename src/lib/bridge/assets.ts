@@ -307,7 +307,7 @@ export const requestAssetDownload = createServerFn({ method: "POST" })
     return signed;
   });
 
-export const listTitleAssets = createServerFn({ method: "GET" })
+export const listTitleAssets = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(z.object({ titleId: z.string().min(8) }))
   .handler(async ({ context, data }) => {

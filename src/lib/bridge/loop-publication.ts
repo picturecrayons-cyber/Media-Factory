@@ -196,7 +196,7 @@ export async function verifyDistributionPreflight(
   };
 }
 
-export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
+export const listLoopPublicationReadiness = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
     assertNotDevUser(context.userId);
@@ -603,7 +603,7 @@ export const extendDistributionWindow = createServerFn({ method: "POST" })
     });
   });
 
-export const getLoopPublication = createServerFn({ method: "GET" })
+export const getLoopPublication = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(z.object({ bridgeTitleId: z.string().min(1) }))
   .handler(async ({ context, data }) => {

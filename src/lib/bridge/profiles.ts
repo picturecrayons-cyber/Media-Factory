@@ -356,7 +356,7 @@ export const confirmEmailVerification = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
-export const listAdminProfiles = createServerFn({ method: "GET" })
+export const listAdminProfiles = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
     assertNotDevUser(context.userId);

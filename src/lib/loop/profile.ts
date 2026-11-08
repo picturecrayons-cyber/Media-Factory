@@ -9,7 +9,7 @@ import type { LoopProfile, LoopWatchProgress, LoopSubscription } from "./types";
  * Get or automatically provision the consumer profile for the authenticated Supabase user.
  * Supports multiple profiles per consumer account (e.g. Primary Adult + Kids profile).
  */
-export const getConsumerProfiles = createServerFn({ method: "GET" })
+export const getConsumerProfiles = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .handler(async ({ context }): Promise<{ profiles: LoopProfile[]; activeProfile: LoopProfile }> => {
     const sql = await getSql();
@@ -150,7 +150,7 @@ export const saveWatchProgress = createServerFn({ method: "POST" })
 /**
  * Get watch progress for continuing watching
  */
-export const getWatchProgress = createServerFn({ method: "GET" })
+export const getWatchProgress = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(z.object({ loopTitleId: z.string().min(1) }))
   .handler(async ({ context, data }): Promise<LoopWatchProgress | null> => {
@@ -212,7 +212,7 @@ export const toggleWatchlist = createServerFn({ method: "POST" })
 /**
  * Check if a title is in consumer watchlist
  */
-export const isTitleInWatchlist = createServerFn({ method: "GET" })
+export const isTitleInWatchlist = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(z.object({ loopTitleId: z.string().min(1) }))
   .handler(async ({ context, data }): Promise<boolean> => {
@@ -228,7 +228,7 @@ export const isTitleInWatchlist = createServerFn({ method: "GET" })
 /**
  * List consumer watchlist titles
  */
-export const getConsumerWatchlist = createServerFn({ method: "GET" })
+export const getConsumerWatchlist = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
     const sql = await getSql();

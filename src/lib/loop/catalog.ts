@@ -63,7 +63,7 @@ function mapCatalogRow(r: CatalogRow): LoopTitle {
  * Strictly reads only titles authorized for consumer distribution by Bridge.
  * Enforces active window, published status, and approval.
  */
-export const getLoopCatalog = createServerFn({ method: "GET" })
+export const getLoopCatalog = createServerFn({ method: "POST" })
   .validator(
     z.object({
       genre: z.string().optional(),
@@ -167,7 +167,7 @@ export const getLoopCatalog = createServerFn({ method: "GET" })
  * Get detailed title presentation for Loop playback and overview.
  * Validates consumer authorization and active distribution window.
  */
-export const getLoopTitleDetails = createServerFn({ method: "GET" })
+export const getLoopTitleDetails = createServerFn({ method: "POST" })
   .validator(z.object({ slugOrId: z.string().min(1) }))
   .handler(async ({ data }) => {
     const sql = await getSql();
@@ -222,7 +222,7 @@ export const getLoopTitleDetails = createServerFn({ method: "GET" })
  * Check consumer playback entitlement for a specific title.
  * Validates whether user is subscribed (SVOD) or has rented/purchased (TVOD) or if title is FREE.
  */
-export const checkPlaybackEntitlement = createServerFn({ method: "GET" })
+export const checkPlaybackEntitlement = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(z.object({ loopTitleId: z.string().min(1) }))
   .handler(async ({ context, data }): Promise<ConsumerEntitlement> => {

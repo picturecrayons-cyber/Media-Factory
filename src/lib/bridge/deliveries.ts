@@ -7,7 +7,7 @@ import { readDeliveryTraces } from "./delivery-traces";
 
 export type { DeliveryTrace } from "./delivery-traces";
 
-export const listDeliveryTraces = createServerFn({ method: "GET" })
+export const listDeliveryTraces = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
     assertNotDevUser(context.userId);

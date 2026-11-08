@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -8,15 +9,19 @@ import {
 import type { CurationStatus } from "@/lib/bridge/story-concept";
 
 const STATUS_LABEL: Record<string, string> = {
+  PENDING_REVIEW: "Pending review",
+  CHANGES_REQUESTED: "Changes requested",
   PENDING: "Pending",
   UNDER_REVIEW: "Under review",
   APPROVED: "Approved",
   REJECTED: "Rejected",
+  BUYER_EVALUATION_APPROVED: "Buyer evaluation approved",
   INTRODUCED_TO_BUYERS: "Introduced to buyers",
 };
 
 export function StoryConceptDesk() {
   const qc = useQueryClient();
+  const [reviewerComments, setReviewerComments] = useState<Record<string, string>>({});
   const query = useQuery({
     queryKey: ["admin-story-concepts"],
     queryFn: () => listPendingStoryConcepts(),
@@ -82,63 +87,27 @@ export function StoryConceptDesk() {
                   ) : null}
                 </div>
                 <Link
-                  to="/title/$id"
-                  params={{ id: c.title_id }}
+                  to={"/story-concepts/" + c.id as never}
                   className="shrink-0 rounded-full border border-line px-3.5 py-1.5 text-xs text-muted hover:border-line-strong hover:text-fg"
                 >
-                  Open title
+                  Open concept
                 </Link>
               </div>
 
+              <label className="mt-4 block space-y-1 text-xs text-muted">Reviewer comments / requested changes<textarea value={reviewerComments[c.id] ?? ""} onChange={(event) => setReviewerComments((current) => ({ ...current, [c.id]: event.target.value }))} maxLength={2000} rows={3} placeholder="Record the decision rationale or specific changes requested…" className="w-full rounded-lg border border-line bg-background px-3 py-2 text-sm text-fg" /></label>
               <div className="mt-4 flex flex-wrap gap-2">
-                {c.curation_status === "PENDING" && (
-                  <Button
-                    size="sm"
-                    disabled={update.isPending}
-                    onClick={() =>
-                      update.mutate({ id: c.id, status: "UNDER_REVIEW" })
-                    }
-                  >
-                    Start review
-                  </Button>
-                )}
-                {(c.curation_status === "PENDING" ||
-                  c.curation_status === "UNDER_REVIEW") && (
+                {c.curation_status === "PENDING_REVIEW" && (
                   <>
-                    <Button
-                      size="sm"
-                      disabled={update.isPending}
-                      onClick={() =>
-                        update.mutate({ id: c.id, status: "APPROVED" })
-                      }
-                    >
-                      Approve
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      disabled={update.isPending}
-                      onClick={() =>
-                        update.mutate({ id: c.id, status: "REJECTED" })
-                      }
-                    >
-                      Reject
-                    </Button>
+                    <Button size="sm" disabled={update.isPending} onClick={() => update.mutate({ id: c.id, status: "APPROVED", adminNotes: reviewerComments[c.id]?.trim() || undefined })}>Accept for curation</Button>
+                    <Button size="sm" variant="outline" disabled={update.isPending} onClick={() => update.mutate({ id: c.id, status: "CHANGES_REQUESTED", adminNotes: reviewerComments[c.id]?.trim() || undefined })}>Request changes</Button>
+                    <Button size="sm" variant="outline" disabled={update.isPending} onClick={() => update.mutate({ id: c.id, status: "REJECTED", adminNotes: reviewerComments[c.id]?.trim() || undefined })}>Reject</Button>
                   </>
                 )}
+                {c.curation_status === "CHANGES_REQUESTED" && (
+                  <Button size="sm" disabled={update.isPending} onClick={() => update.mutate({ id: c.id, status: "PENDING_REVIEW" })}>Reopen review</Button>
+                )}
                 {c.curation_status === "APPROVED" && (
-                  <Button
-                    size="sm"
-                    disabled={update.isPending}
-                    onClick={() =>
-                      update.mutate({
-                        id: c.id,
-                        status: "INTRODUCED_TO_BUYERS",
-                      })
-                    }
-                  >
-                    Introduce to buyers / investors
-                  </Button>
+                  <Button size="sm" disabled={update.isPending} onClick={() => update.mutate({ id: c.id, status: "BUYER_EVALUATION_APPROVED", adminNotes: reviewerComments[c.id]?.trim() || undefined })}>Approve for buyer / investor evaluation</Button>
                 )}
               </div>
 
