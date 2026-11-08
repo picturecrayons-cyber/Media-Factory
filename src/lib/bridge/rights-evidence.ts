@@ -1,10 +1,13 @@
 import { createServerFn } from "@tanstack/react-start";
+import { randomBytes } from "node:crypto";
 import { z } from "zod";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql, type Sql } from "@/lib/db";
 import { requireVerifiedActor } from "./session";
 import { assertPermission, canOperateOnTitle, type Actor } from "./rbac";
 import { writeAudit } from "./audit";
+import { assertNotDevUser } from "./guards";
+import { titleAssetKey, signUpload, verifyObjectSha256, sealVerifiedObject } from "./oci-object-storage.server";
 
 const evidenceInput = z.object({
   titleId: z.string().min(8),
@@ -124,6 +127,141 @@ export async function reviewRightsEvidence(
   }, tx);
   return { evidenceId: evidence.id, status: data.decision };
 }
+
+
+const rightsEvidenceUploadInput = z.object({
+  titleId: z.string().min(8),
+  grantId: z.string().uuid(),
+  evidenceType: z.enum(["EXECUTED_AGREEMENT", "OWNERSHIP_CHAIN"]),
+  filename: z.string().trim().min(1).max(120),
+  contentType: z.enum(["application/pdf", "image/png", "image/jpeg"]),
+  byteSize: z.number().int().positive().max(25 * 1024 * 1024),
+});
+
+export const requestRightsEvidenceUploadFn = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(rightsEvidenceUploadInput)
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    if (actor.internalRole) throw new Error("Only the title owner or authorized Studio member may upload rights evidence");
+    const sql = await getSql();
+    const [title] = await sql<{
+      id: string;
+      owner_user_id: string;
+      owner_account_type: string;
+      owner_organization_id: string | null;
+      status: string;
+    }>`select id,owner_user_id,owner_account_type,owner_organization_id,status
+      from bridge_titles where id=${data.titleId}`;
+    if (!title || title.status !== "RIGHTS_REVIEW" || !canOperateOnTitle(
+      actor,
+      { ownerUserId: title.owner_user_id, ownerAccountType: title.owner_account_type as "independent_creator" | "studio" | "buyer" | "investor", ownerOrganizationId: title.owner_organization_id },
+      "title.update_own",
+      "title.license",
+    )) throw new Error("Rights evidence upload is available only to the title owner during RIGHTS_REVIEW");
+    const [grant] = await sql<{ id: string; status: string }>`select id,status from bridge_rights_grants
+      where id=${data.grantId} and title_id=${data.titleId}`;
+    if (!grant || grant.status !== "DRAFT") throw new Error("Select an active DRAFT license before uploading evidence");
+
+    const assetId = randomBytes(16).toString("hex");
+    const key = titleAssetKey({
+      ownerUserId: title.owner_user_id,
+      titleId: title.id,
+      kind: "rights_document",
+      filename: data.filename,
+    });
+    const signed = await signUpload({ key, contentType: data.contentType, expiresIn: 900 });
+    await sql`insert into bridge_assets(id,title_id,kind,s3_key,content_type,created_by)
+      values (${assetId},${title.id},'rights_document',${key},${data.contentType},${actor.userId})`;
+    await writeAudit({
+      actorUserId: actor.userId,
+      action: "rights.evidence.upload_signed",
+      entityType: "bridge_title",
+      entityId: title.id,
+      metadata: { grantId: data.grantId, assetId, evidenceType: data.evidenceType, byteSize: data.byteSize },
+    });
+    return { assetId, url: signed.url, method: signed.method, key };
+  });
+
+export const confirmRightsEvidenceUploadFn = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({
+    assetId: z.string().min(8),
+    expectedByteSize: z.number().int().positive().max(25 * 1024 * 1024),
+  }))
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    if (actor.internalRole) throw new Error("Only the title owner or authorized Studio member may confirm rights evidence uploads");
+    const sql = await getSql();
+    const [asset] = await sql<{
+      id: string;
+      title_id: string;
+      kind: string;
+      s3_key: string;
+      created_by: string;
+      content_type: string | null;
+      byte_size: number | null;
+      asset_version_id: string | null;
+    }>`select id,title_id,kind,s3_key,created_by,content_type,byte_size,asset_version_id
+      from bridge_assets where id=${data.assetId}`;
+    if (!asset || asset.kind !== "rights_document" || asset.created_by !== actor.userId)
+      throw new Error("Rights document upload was not found for this owner");
+    const [title] = await sql<{
+      id: string;
+      owner_user_id: string;
+      owner_account_type: string;
+      owner_organization_id: string | null;
+      status: string;
+    }>`select id,owner_user_id,owner_account_type,owner_organization_id,status
+      from bridge_titles where id=${asset.title_id}`;
+    if (!title || title.status !== "RIGHTS_REVIEW" || !canOperateOnTitle(
+      actor,
+      { ownerUserId: title.owner_user_id, ownerAccountType: title.owner_account_type as "independent_creator" | "studio" | "buyer" | "investor", ownerOrganizationId: title.owner_organization_id },
+      "title.update_own",
+      "title.license",
+    )) throw new Error("Rights evidence confirmation is closed for this title");
+
+    if (asset.byte_size != null && asset.asset_version_id) {
+      return { assetVersionId: asset.asset_version_id, byteSize: Number(asset.byte_size), checksumVerified: true as const };
+    }
+    const original = await verifyObjectSha256(asset.s3_key, asset.content_type);
+    if (original.byteSize !== data.expectedByteSize) throw new Error("Uploaded evidence size does not match the selected file");
+    if (!original.etag) throw new Error("Object ETag is required for immutable evidence sealing");
+    const sealedKey = `${asset.s3_key}.verified/${asset.id}`;
+    await sealVerifiedObject(asset.s3_key, sealedKey, original.etag);
+    const sealed = await verifyObjectSha256(sealedKey, asset.content_type);
+    if (sealed.byteSize !== original.byteSize || sealed.checksumSha256 !== original.checksumSha256)
+      throw new Error("Sealed rights evidence differs from the uploaded document");
+
+    const assetVersionId = await sql.transaction(async (tx) => {
+      await tx`select id from bridge_titles where id=${title.id} for update`;
+      const [current] = await tx<{ byte_size: number | null; asset_version_id: string | null }>`select byte_size,asset_version_id
+        from bridge_assets where id=${asset.id} and created_by=${actor.userId} for update`;
+      if (!current) throw new Error("Rights document asset is unavailable");
+      if (current.byte_size != null && current.asset_version_id) return current.asset_version_id;
+      const [next] = await tx<{ version: number }>`select coalesce(max(version),0)+1 as version
+        from bridge_asset_versions where title_id=${title.id} and asset_type='RIGHTS_EVIDENCE'`;
+      const [version] = await tx<{ id: string }>`insert into bridge_asset_versions
+        (title_id,asset_group,asset_type,version,s3_key,checksum_sha256,byte_size,processing_state,created_by)
+        values (${title.id},'DOCUMENT','RIGHTS_EVIDENCE',${next.version},${sealedKey},${sealed.checksumSha256},${sealed.byteSize},'PASSED',${actor.userId})
+        returning id`;
+      await tx`update bridge_assets set byte_size=${sealed.byteSize},content_type=${sealed.contentType},
+        s3_key=${sealedKey},sha256=${sealed.checksumSha256},checksum_sha256=${sealed.checksumSha256},
+        asset_version_id=${version.id}
+        where id=${asset.id} and created_by=${actor.userId} and byte_size is null`;
+      await writeAudit({
+        actorUserId: actor.userId,
+        action: "rights.evidence.upload_verified",
+        entityType: "bridge_title",
+        entityId: title.id,
+        metadata: { assetId: asset.id, assetVersionId: version.id, checksumSha256: sealed.checksumSha256, byteSize: sealed.byteSize },
+      }, tx);
+      return version.id;
+    });
+    return { assetVersionId, byteSize: sealed.byteSize, checksumVerified: true as const };
+  });
 
 export const submitRightsEvidenceFn = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
