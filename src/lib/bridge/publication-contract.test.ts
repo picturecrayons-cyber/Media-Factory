@@ -27,6 +27,7 @@ function harness(grants: unknown[], allowed = true, existing = false) {
       return [
         { evidence: [{ commercialTerms: { rightsOwnerSharePct: 80, distributorSharePct: 20 } }] },
       ];
+    if (query.includes("from bridge_asset_versions")) return [];
     if (query.includes("from bridge_rights_grants")) return grants;
     if (query.includes("as qc_ok")) return [{ qc_ok: true, legal_ok: true }];
     if (query.includes("select id from bridge_titles")) return [title];
