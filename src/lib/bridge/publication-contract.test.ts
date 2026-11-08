@@ -126,3 +126,62 @@ test("status alignment never bypasses operator, rights or commercial coverage", 
     assert.equal(h.writes.length, 0);
   }
 });
+
+
+test("Loop publication readiness GET is SELECT-only and uses the database expiry boundary", () => {
+  const source = readFileSync(new URL("./loop-publication.ts", import.meta.url), "utf8");
+  const start = source.indexOf("export const listLoopPublicationReadiness");
+  const end = source.indexOf("export const authorizeLoopPublication", start);
+  assert.ok(start >= 0 && end > start);
+  const handler = source.slice(start, end);
+  assert.doesNotMatch(handler, /\b(update|insert|delete)\s+(bridge_loop_publications|loop_titles)\b/i);
+  assert.match(handler, /p\.window_end\s*<=\s*now\(\)/);
+  assert.match(handler, /p\.window_end\s*>\s*now\(\)/);
+  assert.match(handler, /now\(\) as database_now/);
+  // Readiness may report whether a master exists, but must never select or return its object key.
+  assert.match(handler, /\(b\.master_key is not null\) as has_master/);
+  assert.doesNotMatch(handler, /select[\s\S]*?b\.master_key\s*,/i);
+  assert.doesNotMatch(handler, /master_key:\s*string\s*\|\s*null/);
+  assert.match(handler, /hasMaster:\s*Boolean\(r\.has_master\)/);
+});
+
+test("Loop catalog, details and playback fail closed outside the active Bridge publication window", () => {
+  const source = readFileSync(new URL("../loop/catalog.ts", import.meta.url), "utf8");
+  assert.match(source, /p\.window_end is null or p\.window_end > now\(\)/);
+  assert.match(source, /p\.window_start is null or p\.window_start <= now\(\)/);
+  assert.match(source, /l\.listed = true/);
+  assert.match(source, /join bridge_loop_publications p on p\.loop_title_id = l\.id/);
+});
+
+test("CMS loads title and publication data only for the selected tab", () => {
+  const source = readFileSync(new URL("../../routes/cms.tsx", import.meta.url), "utf8");
+  assert.match(source, /enabled: tab === "licensing"/);
+  assert.match(source, /enabled: tab === "publishing"/);
+  assert.match(source, /tab === "ingest" \? <IngestDesk actor=\{actor\} \/> : null/);
+});
+
+test("buyer asset entitlements require captured payment and an active Bridge rights window", () => {
+  const source = readFileSync(new URL("./assets.ts", import.meta.url), "utf8");
+  assert.match(source, /payment\.status = 'captured'/);
+  assert.match(source, /payment\.verified_at is not null/);
+  assert.match(source, /rights\.status = 'VALID'/);
+  assert.match(source, /rights\.window_end is null or rights\.window_end > now\(\)/);
+});
+
+
+test("Loop responses never expose a master playback path before signed private delivery exists", () => {
+  const catalog = readFileSync(new URL("../loop/catalog.ts", import.meta.url), "utf8");
+  const publication = readFileSync(new URL("./loop-publication.ts", import.meta.url), "utf8");
+  const types = readFileSync(new URL("../loop/types.ts", import.meta.url), "utf8");
+  assert.doesNotMatch(catalog, /playback_path|playbackPath/);
+  assert.doesNotMatch(types, /playbackPath/);
+  assert.doesNotMatch(publication, /playbackPath: r\.playback_path/);
+  assert.match(publication, /playback_path = null/);
+  assert.match(publication, /\$\{title\.poster_key\}, null,/);
+  assert.match(catalog, /canPlay: false/);
+});
+
+test("buyer asset list and signed download both require Bridge buyer publication visibility", () => {
+  const source = readFileSync(new URL("./assets.ts", import.meta.url), "utf8");
+  assert.equal((source.match(/assertBuyerPublishable\(title\.id\)/g) || []).length, 2);
+});

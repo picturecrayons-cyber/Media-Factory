@@ -4,13 +4,14 @@ import { randomBytes } from "node:crypto";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import { ASSET_KINDS } from "./types";
-import { assertPermission, canOperateOnTitle, canReadTitle, hasStaffPermission } from "./rbac";
+import { assertPermission, canOperateOnTitle, canReadTitle } from "./rbac";
 import { requireVerifiedActor } from "./session";
 import { loadTitle } from "./titles";
 import { writeAudit } from "./audit";
 import { assertNotDevUser } from "./guards";
 import { persistVerifiedAsset } from "./asset-confirmation";
 import { downloadDecision } from "./delivery-policy";
+import { assertBuyerPublishable } from "./buyer-visibility";
 import { uploadUrlLifetimeSeconds } from "./upload-url-lifetime";
 import { validateOttIngestFile, type OttIngestKind } from "./ott-ingest-spec";
 
@@ -19,8 +20,22 @@ const UPLOADABLE: ReadonlySet<string> = new Set(["DRAFT", "UPLOADING", "PREPARIN
 async function hasLicenseEntitlement(userId: string, titleId: string): Promise<boolean> {
   const sql = await getSql();
   const rows = await sql<{ n: number }>`
-    select count(*)::int as n from bridge_entitlements
-    where user_id = ${userId} and title_id = ${titleId} and access_type = 'license'
+    select count(*)::int as n
+    from bridge_entitlements e
+    join bridge_payments payment on payment.id = e.payment_id
+    where e.user_id = ${userId}
+      and e.title_id = ${titleId}
+      and e.access_type = 'license'
+      and payment.status = 'captured'
+      and payment.verified_at is not null
+      and exists (
+        select 1
+        from bridge_rights_grants rights
+        where rights.title_id = e.title_id
+          and rights.status = 'VALID'
+          and (rights.window_start is null or rights.window_start <= now())
+          and (rights.window_end is null or rights.window_end > now())
+      )
   `;
   return Number(rows[0]?.n ?? 0) > 0;
 }
@@ -278,6 +293,7 @@ export const requestAssetDownload = createServerFn({ method: "POST" })
     if (!asset) throw new Error("Not found");
     const title = await loadTitle(asset.title_id);
     if (!title || !canReadTitle(actor, title)) throw new Error("Not found");
+    if (actor.accountType === "buyer" && !actor.internalRole) await assertBuyerPublishable(title.id);
     const entitled = await hasLicenseEntitlement(actor.userId, title.id);
     const decision = downloadDecision({
       kind: asset.kind,
@@ -314,8 +330,9 @@ export const listTitleAssets = createServerFn({ method: "GET" })
     const actor = await requireVerifiedActor(context.userId);
     const title = await loadTitle(data.titleId);
     if (!title || !canReadTitle(actor, title)) throw new Error("Not found");
-    const sql = await getSql();
     const buyer = actor.accountType === "buyer" && !actor.internalRole;
+    if (buyer) await assertBuyerPublishable(title.id);
+    const sql = await getSql();
     const rows = await sql<{
       id: string;
       kind: string;

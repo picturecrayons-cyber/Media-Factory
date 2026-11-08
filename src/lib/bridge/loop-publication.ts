@@ -46,7 +46,6 @@ export type PublicationRow = {
   loop_status: string;
   listed: boolean;
   published: boolean;
-  playback_path: string | null;
 };
 
 const publishInput = z.object({
@@ -204,34 +203,22 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
     assertPermission(actor, "title.read_catalog");
     const sql = await getSql();
 
-    // Auto-reevaluate any expired distribution windows
-    await sql`
-      update bridge_loop_publications
-      set authorization_status = 'expired', updated_at = now()
-      where window_end is not null and window_end < now() and authorization_status in ('authorized', 'live')
-    `.catch(() => {});
-
-    await sql`
-      update loop_titles
-      set status = 'expired', published = false, listed = false, updated_at = now()
-      where bridge_title_id in (
-        select bridge_title_id from bridge_loop_publications where authorization_status = 'expired'
-      ) and published = true
-    `.catch(() => {});
-
     const rows = await sql<{
       id: string;
       slug: string;
       name: string;
       status: string;
       language: string;
-      master_key: string | null;
+      has_master: boolean;
       poster_key: string | null;
       synopsis: string;
       year: number | null;
       runtime_minutes: number | null;
       loop_title_id: string | null;
       authorization_status: string | null;
+      effective_authorization_status: string | null;
+      publication_active: boolean | null;
+      database_now: string | Date;
       window_start: string | Date | null;
       window_end: string | Date | null;
       territories: string[] | null;
@@ -240,13 +227,24 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
       loop_status: string | null;
       listed: boolean | null;
       published: boolean | null;
-      playback_path: string | null;
     }>`
-      select b.id, b.slug, b.name, b.status, b.language, b.master_key, b.poster_key,
+      select b.id, b.slug, b.name, b.status, b.language, (b.master_key is not null) as has_master, b.poster_key,
              b.synopsis, b.year, b.runtime_minutes,
-             p.loop_title_id, p.authorization_status, p.window_start, p.window_end,
+             p.loop_title_id, p.authorization_status,
+             case
+               when p.window_end is not null and p.window_end <= now()
+                 and p.authorization_status in ('authorized', 'live') then 'expired'
+               else p.authorization_status
+             end as effective_authorization_status,
+             (
+               p.authorization_status in ('authorized', 'live')
+               and (p.window_start is null or p.window_start <= now())
+               and (p.window_end is null or p.window_end > now())
+             ) as publication_active,
+             now() as database_now,
+             p.window_start, p.window_end,
              p.territories, p.languages, p.exploitation_models,
-             l.status as loop_status, l.listed, l.published, l.playback_path
+             l.status as loop_status, l.listed, l.published
       from bridge_titles b
       left join bridge_loop_publications p on p.bridge_title_id = b.id
       left join loop_titles l on l.id = p.loop_title_id
@@ -271,11 +269,14 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
                 exploitationModels: r.exploitation_models || [],
                 windowStart: iso(r.window_start),
                 windowEnd: iso(r.window_end),
+                now: new Date(r.database_now),
               },
             )
           : null;
         const isReady =
           Boolean(coveringGrant) &&
+          Boolean(r.publication_active) &&
+          ["authorized", "live"].includes((r.effective_authorization_status || "").toLowerCase()) &&
           [
             "LICENSING_READY",
             "LIVE_FOR_BUYERS",
@@ -283,12 +284,19 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
             "LICENSED",
             "DELIVERED",
           ].includes(r.status) &&
-          Boolean(r.master_key) &&
+          Boolean(r.has_master) &&
           Boolean(r.poster_key);
 
         const blockers: string[] = [];
         if (!coveringGrant)
-          blockers.push("A matching rights grant and explicit publication dimensions are required");
+          blockers.push("A matching active rights grant and explicit publication dimensions are required");
+        if (!r.publication_active) {
+          blockers.push(
+            r.window_end && new Date(r.window_end).getTime() <= new Date(r.database_now).getTime()
+              ? "Bridge publication window has expired"
+              : "Bridge publication is not currently inside an active authorized window",
+          );
+        }
         if (
           ![
             "LICENSING_READY",
@@ -300,7 +308,7 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
         ) {
           blockers.push(`Rights status (${r.status}) is not cleared for distribution`);
         }
-        if (!r.master_key) blockers.push("QC master video is missing");
+        if (!r.has_master) blockers.push("QC master video is missing");
         if (!r.poster_key) blockers.push("Artwork/poster is missing");
 
         return {
@@ -309,7 +317,7 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
           name: r.name,
           bridgeStatus: r.status,
           language: r.language,
-          hasMaster: Boolean(r.master_key),
+          hasMaster: Boolean(r.has_master),
           hasPoster: Boolean(r.poster_key),
           ready: isReady,
           blockers,
@@ -317,7 +325,7 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
             ? {
                 destination: "CRAYONS_LOOP" as const,
                 loopTitleId: r.loop_title_id,
-                authorizationStatus: (r.authorization_status?.toUpperCase() ||
+                authorizationStatus: (r.effective_authorization_status?.toUpperCase() ||
                   "PENDING") as DistributionAuthorizationStatus,
                 territories: r.territories || ["IN"],
                 languages: r.languages || [r.language],
@@ -325,9 +333,8 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
                 windowStart: iso(r.window_start),
                 windowEnd: iso(r.window_end),
                 loopStatus: r.loop_status,
-                listed: Boolean(r.listed),
-                published: Boolean(r.published),
-                playbackPath: r.playback_path,
+                listed: Boolean(r.listed) && Boolean(r.publication_active),
+                published: Boolean(r.published) && Boolean(r.publication_active),
               }
             : null,
         };
@@ -382,7 +389,7 @@ export const authorizeLoopPublication = createServerFn({ method: "POST" })
         published, featured, access_tier, updated_at
       ) values (
         ${loopTitleId}, ${title.id}, ${title.slug}, ${title.name}, ${title.synopsis}, ${loopStageType(title.content_type)},
-        ${title.language}, ${title.year}, ${title.runtime_minutes}, ${title.poster_key}, ${title.master_key},
+        ${title.language}, ${title.year}, ${title.runtime_minutes}, ${title.poster_key}, null,
         ${JSON.stringify({
           source: "crayons-bridge-master-distribution",
           lane: loopStageType(title.content_type),
@@ -397,7 +404,7 @@ export const authorizeLoopPublication = createServerFn({ method: "POST" })
         slug = excluded.slug, title = excluded.title, synopsis = excluded.synopsis,
         content_type = excluded.content_type,
         language = excluded.language, year = excluded.year, duration_minutes = excluded.duration_minutes,
-        poster_path = excluded.poster_path, playback_path = excluded.playback_path,
+        poster_path = excluded.poster_path, playback_path = null,
         status = 'approved', listed = true, published = true, access_tier = excluded.access_tier,
         metadata = excluded.metadata, updated_at = now()
     `;
@@ -613,7 +620,7 @@ export const getLoopPublication = createServerFn({ method: "GET" })
     const sql = await getSql();
 
     const rows = await sql<PublicationRow>`
-      select p.*, l.status as loop_status, l.listed, l.published, l.playback_path
+      select p.*, l.status as loop_status, l.listed, l.published
       from bridge_loop_publications p
       join loop_titles l on l.id = p.loop_title_id
       where p.bridge_title_id = ${data.bridgeTitleId}
@@ -639,7 +646,6 @@ export const getLoopPublication = createServerFn({ method: "GET" })
         loopStatus: r.loop_status,
         listed: r.listed,
         published: r.published,
-        playbackPath: r.playback_path,
       },
     };
   });

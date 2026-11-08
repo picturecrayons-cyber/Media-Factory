@@ -17,7 +17,6 @@ type CatalogRow = {
   duration_minutes: number | null;
   poster_path: string | null;
   backdrop_path: string | null;
-  playback_path: string | null;
   maturity_rating: string;
   genres: string;
   access_tier: string;
@@ -44,7 +43,6 @@ function mapCatalogRow(r: CatalogRow): LoopTitle {
     durationMinutes: r.duration_minutes,
     posterPath: r.poster_path,
     backdropPath: r.backdrop_path || r.poster_path,
-    playbackPath: r.playback_path,
     maturityRating: r.maturity_rating || "U",
     genres: (r.genres || "Drama").split(",").map((g) => g.trim()).filter(Boolean),
     accessTier: (r.access_tier as "FREE" | "SVOD" | "TVOD") || "SVOD",
@@ -80,7 +78,7 @@ export const getLoopCatalog = createServerFn({ method: "GET" })
       select
         l.id, l.bridge_title_id, l.slug, l.title, l.synopsis, l.description,
         l.content_type, l.language, l.year, l.duration_minutes, l.poster_path,
-        l.backdrop_path, l.playback_path, l.maturity_rating, l.genres,
+        l.backdrop_path, l.maturity_rating, l.genres,
         l.access_tier, l.tvod_rental_price, l.tvod_purchase_price, l.featured,
         l.published,
         p.authorization_status, p.window_start, p.window_end
@@ -91,7 +89,7 @@ export const getLoopCatalog = createServerFn({ method: "GET" })
         and l.listed = true
         and l.status = 'approved'
         and (p.window_start is null or p.window_start <= now())
-        and (p.window_end is null or p.window_end >= now())
+        and (p.window_end is null or p.window_end > now())
       order by l.featured desc, l.created_at desc
       limit 100
     `;
@@ -175,7 +173,7 @@ export const getLoopTitleDetails = createServerFn({ method: "GET" })
       select
         l.id, l.bridge_title_id, l.slug, l.title, l.synopsis, l.description,
         l.content_type, l.language, l.year, l.duration_minutes, l.poster_path,
-        l.backdrop_path, l.playback_path, l.maturity_rating, l.genres,
+        l.backdrop_path, l.maturity_rating, l.genres,
         l.access_tier, l.tvod_rental_price, l.tvod_purchase_price, l.featured,
         l.published,
         p.authorization_status, p.window_start, p.window_end
@@ -184,7 +182,10 @@ export const getLoopTitleDetails = createServerFn({ method: "GET" })
       where (l.id = ${data.slugOrId} or l.slug = ${data.slugOrId})
         and p.authorization_status = 'authorized'
         and l.published = true
+        and l.listed = true
         and l.status = 'approved'
+        and (p.window_start is null or p.window_start <= now())
+        and (p.window_end is null or p.window_end > now())
       limit 1
     `;
 
@@ -200,7 +201,7 @@ export const getLoopTitleDetails = createServerFn({ method: "GET" })
       select
         l.id, l.bridge_title_id, l.slug, l.title, l.synopsis, l.description,
         l.content_type, l.language, l.year, l.duration_minutes, l.poster_path,
-        l.backdrop_path, l.playback_path, l.maturity_rating, l.genres,
+        l.backdrop_path, l.maturity_rating, l.genres,
         l.access_tier, l.tvod_rental_price, l.tvod_purchase_price, l.featured,
         l.published,
         p.authorization_status, p.window_start, p.window_end
@@ -209,6 +210,10 @@ export const getLoopTitleDetails = createServerFn({ method: "GET" })
       where l.id != ${title.id}
         and p.authorization_status = 'authorized'
         and l.published = true
+        and l.listed = true
+        and l.status = 'approved'
+        and (p.window_start is null or p.window_start <= now())
+        and (p.window_end is null or p.window_end > now())
       limit 6
     `;
 
@@ -230,7 +235,17 @@ export const checkPlaybackEntitlement = createServerFn({ method: "GET" })
 
     // Check title access tier
     const titles = await sql<{ id: string; access_tier: string }>`
-      select id, access_tier from loop_titles where id = ${data.loopTitleId} limit 1
+      select l.id, l.access_tier
+      from loop_titles l
+      join bridge_loop_publications p on p.loop_title_id = l.id
+      where l.id = ${data.loopTitleId}
+        and p.authorization_status = 'authorized'
+        and l.published = true
+        and l.listed = true
+        and l.status = 'approved'
+        and (p.window_start is null or p.window_start <= now())
+        and (p.window_end is null or p.window_end > now())
+      limit 1
     `;
     const title = titles[0];
     if (!title) {
@@ -238,7 +253,7 @@ export const checkPlaybackEntitlement = createServerFn({ method: "GET" })
     }
 
     if (title.access_tier === "FREE") {
-      return { loopTitleId: data.loopTitleId, accessType: "FREE", expiresAt: null, canPlay: true };
+      return { loopTitleId: data.loopTitleId, accessType: "FREE", expiresAt: null, canPlay: false };
     }
 
     // Check SVOD Subscription
@@ -256,7 +271,7 @@ export const checkPlaybackEntitlement = createServerFn({ method: "GET" })
         loopTitleId: data.loopTitleId,
         accessType: "SVOD_SUBSCRIPTION",
         expiresAt: subs[0].expires_at ? new Date(subs[0].expires_at).toISOString() : null,
-        canPlay: true,
+        canPlay: false,
       };
     }
 
@@ -276,7 +291,7 @@ export const checkPlaybackEntitlement = createServerFn({ method: "GET" })
         loopTitleId: data.loopTitleId,
         accessType: (tvods[0].access_type as "TVOD_RENTAL" | "TVOD_PURCHASE") || "TVOD_RENTAL",
         expiresAt: tvods[0].expires_at ? new Date(tvods[0].expires_at).toISOString() : null,
-        canPlay: true,
+        canPlay: false,
       };
     }
 
