@@ -156,6 +156,7 @@ async function fixture() {
     return {
       db, sql, save: exports.saveLoopLicense, review: exports.reviewWorkflow,
       reviewHandler: exports.reviewTitleWorkflow,
+      submitHandler: exports.submitLoopLicense,
       settlementHandler: exports.recordSettlementEvidence,
     };
   } catch (error) {
@@ -389,16 +390,18 @@ test("review server handler rejects Buyer, Creator and Studio roles for QC and L
     await f.sql.query("update bridge_titles set status='RIGHTS_REVIEW'");
     const saved = (await f.sql.transaction((tx) => f.save(tx, owner, license))) as { grantId: string };
     for (const userId of ["buyer", "creator", "studio"]) {
-      await assert.rejects(
-        (f.reviewHandler as (args: unknown) => Promise<unknown>)({
-          context: { userId },
-          data: {
-            titleId: "title-123", stage: "LEGAL", decision: "APPROVE",
-            note: "Unauthorized role must be denied", grantId: saved.grantId,
-          },
-        }),
-        /Forbidden/,
-      );
+      for (const stage of ["QC", "LEGAL"]) {
+        await assert.rejects(
+          (f.reviewHandler as (args: unknown) => Promise<unknown>)({
+            context: { userId },
+            data: {
+              titleId: "title-123", stage, decision: "APPROVE",
+              note: "Unauthorized role must be denied", grantId: saved.grantId,
+            },
+          }),
+          /Forbidden/,
+        );
+      }
     }
     assert.equal((await f.sql.query("select status from bridge_rights_grants"))[0].status, "DRAFT");
     assert.equal((await f.sql.query("select * from bridge_legal_cases")).length, 0);
@@ -419,7 +422,10 @@ test("Studio member cannot create a license for another Studio organization", as
       organizationId: "22222222-2222-4222-8222-222222222222",
     };
     await assert.rejects(
-      f.sql.transaction((tx) => f.save(tx, otherStudio, license)),
+      (f.submitHandler as (args: unknown) => Promise<unknown>)({
+        context: { userId: "studio" },
+        data: license,
+      }),
       /Forbidden/,
     );
     assert.equal((await f.sql.query("select * from bridge_rights_grants")).length, 0);
