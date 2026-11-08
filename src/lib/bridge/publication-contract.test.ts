@@ -21,6 +21,7 @@ function harness(grants: unknown[], allowed = true, existing = false) {
   };
   const sql = async (strings: TemplateStringsArray, ...values: unknown[]) => {
     const query = strings.join("?");
+    if (query.includes("left join bridge_loop_publications")) return [];
     if (query.includes("from bridge_titles")) return [title];
     if (query.includes("select evidence from bridge_rights_grants"))
       return [
@@ -72,7 +73,11 @@ function harness(grants: unknown[], allowed = true, existing = false) {
       return modules[name];
     },
   });
-  return { authorize: exports.authorizeLoopPublication, writes };
+  return {
+    authorize: exports.authorizeLoopPublication,
+    readiness: exports.listLoopPublicationReadiness,
+    writes,
+  };
 }
 
 const grant = {
@@ -111,6 +116,19 @@ test("new and existing publications emit the status accepted by the Loop catalog
     assert.ok(publication.values.includes(data.territories));
     assert.ok(publication.values.includes(data.windowEnd));
   }
+});
+
+test("publication readiness GET is read-only and never performs expiry cleanup writes", async () => {
+  const h = harness([grant]);
+  const result = await h.readiness({ context });
+  assert.deepEqual((result as { titles: unknown[] }).titles, []);
+  assert.equal(h.writes.length, 0);
+});
+
+test("publication readiness requires an authenticated operator permission", async () => {
+  const h = harness([grant], false);
+  await assert.rejects(h.readiness({ context }), /Forbidden/);
+  assert.equal(h.writes.length, 0);
 });
 
 test("status alignment never bypasses operator, rights or commercial coverage", async () => {
