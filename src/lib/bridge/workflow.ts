@@ -306,6 +306,7 @@ export const getTitleWorkflow = createServerFn({ method: "GET" })
       status: string;
       territories: string[];
       languages: string[];
+      media: string[];
       window_start: string | Date;
       window_end: string | Date;
       exclusivity: string;
@@ -314,7 +315,7 @@ export const getTitleWorkflow = createServerFn({ method: "GET" })
         ownershipReference?: string;
         commercialTerms?: { rightsOwnerSharePct: number; distributorSharePct: number };
       }>;
-    }>`select id,status,territories,languages,window_start,window_end,exclusivity,evidence from bridge_rights_grants where title_id=${data.titleId} order by created_at desc`;
+    }>`select id,status,territories,languages,media,window_start,window_end,exclusivity,evidence from bridge_rights_grants where title_id=${data.titleId} order by created_at desc`;
     const qc = await sql<{
       status: string;
       reviewed_at: string | Date;
