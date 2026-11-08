@@ -162,3 +162,21 @@ test("buyer asset entitlements require captured payment and an active Bridge rig
   assert.match(source, /rights\.status = 'VALID'/);
   assert.match(source, /rights\.window_end is null or rights\.window_end > now\(\)/);
 });
+
+
+test("Loop responses never expose a master playback path before signed private delivery exists", () => {
+  const catalog = readFileSync(new URL("../loop/catalog.ts", import.meta.url), "utf8");
+  const publication = readFileSync(new URL("./loop-publication.ts", import.meta.url), "utf8");
+  const types = readFileSync(new URL("../loop/types.ts", import.meta.url), "utf8");
+  assert.doesNotMatch(catalog, /playback_path|playbackPath/);
+  assert.doesNotMatch(types, /playbackPath/);
+  assert.doesNotMatch(publication, /playbackPath: r\.playback_path/);
+  assert.match(publication, /playback_path = null/);
+  assert.match(publication, /\$\{title\.poster_key\}, null,/);
+  assert.match(catalog, /canPlay: false/);
+});
+
+test("buyer asset list and signed download both require Bridge buyer publication visibility", () => {
+  const source = readFileSync(new URL("./assets.ts", import.meta.url), "utf8");
+  assert.equal((source.match(/assertBuyerPublishable\(title\.id\)/g) || []).length, 2);
+});
