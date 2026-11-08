@@ -17,7 +17,6 @@ type CatalogRow = {
   duration_minutes: number | null;
   poster_path: string | null;
   backdrop_path: string | null;
-  playback_path: string | null;
   maturity_rating: string;
   genres: string;
   access_tier: string;
@@ -44,7 +43,6 @@ function mapCatalogRow(r: CatalogRow): LoopTitle {
     durationMinutes: r.duration_minutes,
     posterPath: r.poster_path,
     backdropPath: r.backdrop_path || r.poster_path,
-    playbackPath: r.playback_path,
     maturityRating: r.maturity_rating || "U",
     genres: (r.genres || "Drama").split(",").map((g) => g.trim()).filter(Boolean),
     accessTier: (r.access_tier as "FREE" | "SVOD" | "TVOD") || "SVOD",
@@ -80,7 +78,7 @@ export const getLoopCatalog = createServerFn({ method: "GET" })
       select
         l.id, l.bridge_title_id, l.slug, l.title, l.synopsis, l.description,
         l.content_type, l.language, l.year, l.duration_minutes, l.poster_path,
-        l.backdrop_path, l.playback_path, l.maturity_rating, l.genres,
+        l.backdrop_path, l.maturity_rating, l.genres,
         l.access_tier, l.tvod_rental_price, l.tvod_purchase_price, l.featured,
         l.published,
         p.authorization_status, p.window_start, p.window_end
@@ -175,7 +173,7 @@ export const getLoopTitleDetails = createServerFn({ method: "GET" })
       select
         l.id, l.bridge_title_id, l.slug, l.title, l.synopsis, l.description,
         l.content_type, l.language, l.year, l.duration_minutes, l.poster_path,
-        l.backdrop_path, l.playback_path, l.maturity_rating, l.genres,
+        l.backdrop_path, l.maturity_rating, l.genres,
         l.access_tier, l.tvod_rental_price, l.tvod_purchase_price, l.featured,
         l.published,
         p.authorization_status, p.window_start, p.window_end
@@ -203,7 +201,7 @@ export const getLoopTitleDetails = createServerFn({ method: "GET" })
       select
         l.id, l.bridge_title_id, l.slug, l.title, l.synopsis, l.description,
         l.content_type, l.language, l.year, l.duration_minutes, l.poster_path,
-        l.backdrop_path, l.playback_path, l.maturity_rating, l.genres,
+        l.backdrop_path, l.maturity_rating, l.genres,
         l.access_tier, l.tvod_rental_price, l.tvod_purchase_price, l.featured,
         l.published,
         p.authorization_status, p.window_start, p.window_end
@@ -255,7 +253,7 @@ export const checkPlaybackEntitlement = createServerFn({ method: "GET" })
     }
 
     if (title.access_tier === "FREE") {
-      return { loopTitleId: data.loopTitleId, accessType: "FREE", expiresAt: null, canPlay: true };
+      return { loopTitleId: data.loopTitleId, accessType: "FREE", expiresAt: null, canPlay: false };
     }
 
     // Check SVOD Subscription
@@ -273,7 +271,7 @@ export const checkPlaybackEntitlement = createServerFn({ method: "GET" })
         loopTitleId: data.loopTitleId,
         accessType: "SVOD_SUBSCRIPTION",
         expiresAt: subs[0].expires_at ? new Date(subs[0].expires_at).toISOString() : null,
-        canPlay: true,
+        canPlay: false,
       };
     }
 
@@ -293,7 +291,7 @@ export const checkPlaybackEntitlement = createServerFn({ method: "GET" })
         loopTitleId: data.loopTitleId,
         accessType: (tvods[0].access_type as "TVOD_RENTAL" | "TVOD_PURCHASE") || "TVOD_RENTAL",
         expiresAt: tvods[0].expires_at ? new Date(tvods[0].expires_at).toISOString() : null,
-        canPlay: true,
+        canPlay: false,
       };
     }
 
