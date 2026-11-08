@@ -11,7 +11,7 @@ import { requireVerifiedActor } from "./session";
 import { writeAudit } from "./audit";
 import { assertNotDevUser } from "./guards";
 import { loopStageType } from "./loop-lanes";
-import { assertBuyerPublishable, getBuyerGateStatus } from "./buyer-visibility";
+import { assertBuyerPublishable, assertBuyerTitleAccess, getBuyerGateStatus } from "./buyer-visibility";
 import { submitTitleForQc } from "./title-submission";
 
 type TitleRow = {
@@ -423,6 +423,13 @@ export const listTitles = createServerFn({ method: "GET" })
           where t.merged_into_title_id is null
             and t.status in ('LIVE_FOR_BUYERS','IN_NEGOTIATION','LICENSED','DELIVERED')
             and public.bridge_title_buyer_visibility(t.id)
+            and exists (
+              select 1 from bridge_buyer_title_access a
+              where a.title_id = t.id
+                and a.buyer_user_id = ${actor.userId}
+                and a.revoked_at is null
+                and (a.expires_at is null or a.expires_at > now())
+            )
           order by t.updated_at desc limit 200
         `;
       } else {
@@ -430,6 +437,13 @@ export const listTitles = createServerFn({ method: "GET" })
           select t.* from bridge_titles t
           where t.status in ('LIVE_FOR_BUYERS','IN_NEGOTIATION','LICENSED','DELIVERED')
             and public.bridge_title_buyer_visibility(t.id)
+            and exists (
+              select 1 from bridge_buyer_title_access a
+              where a.title_id = t.id
+                and a.buyer_user_id = ${actor.userId}
+                and a.revoked_at is null
+                and (a.expires_at is null or a.expires_at > now())
+            )
           order by t.updated_at desc limit 200
         `;
       }
@@ -458,7 +472,7 @@ export const getTitle = createServerFn({ method: "GET" })
     // Buyer title visibility is a database-backed rights gate. Do not let the
     // broad catalog status check in canReadTitle bypass explicit buyer access.
     if (actor.accountType === "buyer" && !actor.internalRole) {
-      await assertBuyerPublishable(title.id);
+      await assertBuyerTitleAccess(title.id, actor.userId);
     }
     const sql = await getSql();
     if (actor.accountType === "investor" && !actor.internalRole) {
