@@ -165,6 +165,42 @@ export async function reviewWorkflow(tx: Sql, actor: Actor, data: z.infer<typeof
     if (data.decision === "APPROVE" && new Date(grant.window_end) <= new Date())
       throw new Error("License has expired");
     if (data.decision === "APPROVE") {
+      // Legal approval is a downstream gate: it must independently verify that
+      // the latest QC decision passed against the title's CURRENT master/artwork.
+      const [qcCase] = await tx<{
+        status: string;
+        reviewer_findings: Array<{ masterKey?: string | null; posterKey?: string | null }>;
+      }>`
+        select status,reviewer_findings
+        from bridge_qc_cases
+        where title_id=${data.titleId}
+        order by created_at desc
+        limit 1
+        for update
+      `;
+      if (
+        !qcCase ||
+        qcCase.status !== "PASSED" ||
+        qcCase.reviewer_findings?.[0]?.masterKey !== title.master_key ||
+        qcCase.reviewer_findings?.[0]?.posterKey !== title.poster_key
+      ) {
+        throw new Error("A current PASSED QC review for the referenced master and artwork is required before legal approval");
+      }
+      const currentAssets = await tx<{
+        kind: string;
+        s3_key: string;
+        byte_size: number | string | null;
+      }>`select kind,s3_key,byte_size from bridge_assets where title_id=${data.titleId}`;
+      if (
+        !hasVerifiedMasterAndArtwork(
+          currentAssets.filter((asset) => Number(asset.byte_size) > 0),
+          title.master_key,
+          title.poster_key,
+        )
+      ) {
+        throw new Error("Current verified master and artwork are required before legal approval");
+      }
+
       const [overlap] = await tx<{ id: string }>`
         select id from bridge_rights_grants
         where title_id=${data.titleId}
