@@ -13,7 +13,7 @@ import { persistVerifiedAsset } from "./asset-confirmation";
 import { downloadDecision } from "./delivery-policy";
 import { uploadUrlLifetimeSeconds } from "./upload-url-lifetime";
 import { validateOttIngestFile, type OttIngestKind } from "./ott-ingest-spec";
-import { assertBuyerPublishable } from "./buyer-visibility";
+import { assertBuyerTitleAccess } from "./buyer-visibility";
 
 const UPLOADABLE: ReadonlySet<string> = new Set(["DRAFT", "UPLOADING", "PREPARING"]);
 
@@ -280,7 +280,7 @@ export const requestAssetDownload = createServerFn({ method: "POST" })
     const title = await loadTitle(asset.title_id);
     if (!title) throw new Error("Not found");
     if (actor.accountType === "buyer" && !actor.internalRole) {
-      await assertBuyerPublishable(title.id);
+      await assertBuyerTitleAccess(title.id, actor.userId);
     }
     if (!canReadTitle(actor, title)) throw new Error("Not found");
     const entitled = await hasLicenseEntitlement(actor.userId, title.id);
