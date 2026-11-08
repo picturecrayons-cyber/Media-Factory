@@ -241,9 +241,9 @@ export async function reviewWorkflow(tx: Sql, actor: Actor, data: z.infer<typeof
           and lower(av.checksum_sha256)=lower(e.checksum_sha256)
         for update of e,av,a`;
       const verifiedTypes = new Set(verifiedEvidence.map((item) => item.evidence_type));
-      const mandatoryTypes = ["EXECUTED_AGREEMENT", "OWNERSHIP_CHAIN", "SIGNATORY_AUTHORITY", "DISTRIBUTION_AUTHORITY"];
+      const mandatoryTypes = ["EXECUTED_AGREEMENT", "OWNERSHIP_CHAIN", "SIGNATORY_AUTHORITY", "MASTER_DISTRIBUTOR_AUTHORITY", "SUBLICENSING_AUTHORITY"];
       if (!mandatoryTypes.every((type) => verifiedTypes.has(type)))
-        throw new Error("Legal approval requires independently verified executed agreement, ownership chain, signatory authority, and Master Distributor / sublicensing authority evidence");
+        throw new Error("Legal approval requires independently verified executed agreement, ownership chain, signatory authority, Master Distributor authority, and sublicensing authority evidence");
       const [unresolvedSupplement] = await tx<{ id: string }>`select id from bridge_rights_evidence
         where rights_grant_id=${data.grantId} and evidence_type in ('SIGNED_AMENDMENT','SIGNED_ADDENDUM','RIGHTS_SCHEDULE')
           and status <> 'VERIFIED'
