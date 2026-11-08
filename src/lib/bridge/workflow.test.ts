@@ -672,3 +672,21 @@ test("Submit for QC advances PREPARING with the referenced vertical poster and w
     await f.db.close();
   }
 });
+
+test("generic Admin cannot approve a rights grant even when evidence is present", async () => {
+  const f = await fixture();
+  try {
+    const admin = { ...owner, userId: "admin", internalRole: "admin" as const };
+    const saved = (await f.sql.transaction((tx) => f.save(tx, owner, license))) as { grantId: string };
+    await assert.rejects(
+      f.sql.transaction((tx) => f.review(tx, admin, {
+        titleId: "title-123", stage: "LEGAL", decision: "APPROVE",
+        note: "Admin must not perform Legal verification", grantId: saved.grantId,
+      })),
+      /Only an authorized Legal reviewer may approve or reject rights grants/,
+    );
+    assert.equal((await f.sql.query<{status:string}>("select status from bridge_rights_grants"))[0].status, "DRAFT");
+  } finally {
+    await f.db.close();
+  }
+});
