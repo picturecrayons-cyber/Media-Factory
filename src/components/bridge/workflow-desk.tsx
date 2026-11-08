@@ -74,7 +74,8 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
   const [agreement, setAgreement] = useState("");
   const [ownership, setOwnership] = useState("");
   const [ownerShare, setOwnerShare] = useState("");
-  const [evidenceType, setEvidenceType] = useState<"EXECUTED_AGREEMENT" | "OWNERSHIP_CHAIN">("EXECUTED_AGREEMENT");
+  const [evidenceType, setEvidenceType] = useState<"EXECUTED_AGREEMENT" | "OWNERSHIP_CHAIN" | "SIGNATORY_AUTHORITY" | "DISTRIBUTION_AUTHORITY" | "SIGNED_AMENDMENT" | "SIGNED_ADDENDUM" | "RIGHTS_SCHEDULE">("EXECUTED_AGREEMENT");
+  const [relatedAgreementEvidenceId, setRelatedAgreementEvidenceId] = useState("");
 
   function downloadStatement() {
     const safe = (v: string) =>
@@ -318,11 +319,27 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                       <p className="text-sm sm:col-span-2">Upload the actual legal source document. The server seals it in storage and calculates SHA-256 before it enters independent review. Text references alone do not count as evidence.</p>
                       <label className="grid gap-1 text-sm">
                         Evidence class
-                        <select value={evidenceType} onChange={(event) => setEvidenceType(event.target.value as "EXECUTED_AGREEMENT" | "OWNERSHIP_CHAIN")} className="rounded-lg border border-line bg-elevated p-2" disabled={action.isPending}>
-                          <option value="EXECUTED_AGREEMENT">Executed agreement</option>
+                        <select value={evidenceType} onChange={(event) => setEvidenceType(event.target.value as typeof evidenceType)} className="rounded-lg border border-line bg-elevated p-2" disabled={action.isPending}>
+                          <option value="EXECUTED_AGREEMENT">Executed agreement PDF</option>
                           <option value="OWNERSHIP_CHAIN">Ownership chain</option>
+                          <option value="SIGNATORY_AUTHORITY">Signatory authority</option>
+                          <option value="DISTRIBUTION_AUTHORITY">Master Distributor / sublicensing authority</option>
+                          <option value="SIGNED_AMENDMENT">Signed amendment</option>
+                          <option value="SIGNED_ADDENDUM">Signed addendum</option>
+                          <option value="RIGHTS_SCHEDULE">Rights schedule</option>
                         </select>
                       </label>
+                      {["SIGNED_AMENDMENT", "SIGNED_ADDENDUM", "RIGHTS_SCHEDULE"].includes(evidenceType) ? (
+                        <label className="grid gap-1 text-sm">
+                          Related executed agreement
+                          <select value={relatedAgreementEvidenceId} onChange={(event) => setRelatedAgreementEvidenceId(event.target.value)} className="rounded-lg border border-line bg-elevated p-2" required disabled={action.isPending}>
+                            <option value="">Select verified agreement evidence</option>
+                            {(workflow.data?.rightsEvidence ?? []).filter((item) => item.rights_grant_id === g.id && item.evidence_type === "EXECUTED_AGREEMENT" && item.status === "VERIFIED").map((item) => (
+                              <option key={item.id} value={item.id}>{item.id}</option>
+                            ))}
+                          </select>
+                        </label>
+                      ) : null}
                       <label className="grid gap-1 text-sm">
                         Legal document (PDF, PNG or JPEG; max 25 MB)
                         <input type="file" accept=".pdf,application/pdf,image/png,image/jpeg" disabled={action.isPending}
@@ -349,6 +366,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                               } });
                               await submitRightsEvidenceFn({ data: {
                                 titleId: title.id, grantId: g.id, evidenceType,
+                                relatedAgreementEvidenceId: ["SIGNED_AMENDMENT", "SIGNED_ADDENDUM", "RIGHTS_SCHEDULE"].includes(evidenceType) ? relatedAgreementEvidenceId : undefined,
                                 assetVersionId: verified.assetVersionId,
                               } });
                             });
