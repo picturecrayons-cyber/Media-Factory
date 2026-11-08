@@ -13,12 +13,12 @@ export const Route = createFileRoute("/studio")({ component: Studio });
 function Studio() {
   return (
     <RequireBridge allow="studio">
-      {(actor) => <StudioWorkspace organizationName={actor.organizationName || "Studio workspace"} />}
+      {(actor) => <StudioWorkspace actor={actor} organizationName={actor.organizationName || "Studio workspace"} />}
     </RequireBridge>
   );
 }
 
-function StudioWorkspace({ organizationName }: { organizationName: string }) {
+function StudioWorkspace({ actor, organizationName }: { actor: Parameters<typeof BridgeShell>[0]["actor"]; organizationName: string }) {
   const conceptsQ = useQuery({
     queryKey: ["my-story-concepts"],
     queryFn: () => listMyStoryConcepts(),
@@ -27,7 +27,7 @@ function StudioWorkspace({ organizationName }: { organizationName: string }) {
   const conceptTitleIds = (conceptsQ.data?.concepts ?? []).map((concept) => concept.title_id);
 
   return (
-    <BridgeShell actor={{} as never} title="Studio">
+    <BridgeShell actor={actor} title="Studio">
       <div className="mx-auto max-w-5xl space-y-8 pb-16">
         <section className="rounded-2xl border border-line bg-surface p-5 sm:p-7">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
