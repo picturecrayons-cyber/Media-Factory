@@ -443,7 +443,7 @@ test("multiple legacy records with the same agreement reference block retry for 
   }
 });
 
-test("legal approval succeeds only with both independently reviewed, checksum-matched evidence classes", async () => {
+test("legal approval blocks when signatory and distribution authority evidence are missing", async () => {
   const f = await fixture();
   try {
     const saved = (await f.sql.transaction((tx) => f.save(tx, owner, license))) as { grantId: string };
@@ -474,15 +474,16 @@ test("legal approval succeeds only with both independently reviewed, checksum-ma
       ('00000000-0000-4000-8000-000000000011','VERIFIED','legal',$1,'Executed agreement checked'),
       ('00000000-0000-4000-8000-000000000012','VERIFIED','legal',$2,'Ownership chain checked')`,
       [agreementChecksum, ownershipChecksum]);
-    await f.sql.transaction((tx) => f.review(tx, legal, {
-      titleId: "title-123", stage: "LEGAL", decision: "APPROVE",
-      note: "Both source documents independently reviewed", grantId: saved.grantId,
-    }));
-    assert.equal((await f.sql.query<{status:string}>("select status from bridge_titles"))[0].status, "LICENSING_READY");
-    assert.equal((await f.sql.query<{status:string}>("select status from bridge_rights_grants"))[0].status, "VALID");
-    const legalCase = (await f.sql.query<{status:string,evidence:unknown}>("select status,evidence from bridge_legal_cases"))[0];
-    assert.equal(legalCase.status, "APPROVED");
-    assert.equal((legalCase.evidence as Array<{verifiedEvidence:Array<unknown>}>)[0].verifiedEvidence.length, 2);
+    await assert.rejects(
+      f.sql.transaction((tx) => f.review(tx, legal, {
+        titleId: "title-123", stage: "LEGAL", decision: "APPROVE",
+        note: "Only agreement and ownership evidence supplied", grantId: saved.grantId,
+      })),
+      /requires independently verified executed agreement, ownership chain, signatory authority, and Master Distributor \/ sublicensing authority evidence/,
+    );
+    assert.equal((await f.sql.query<{status:string}>("select status from bridge_titles"))[0].status, "RIGHTS_REVIEW");
+    assert.equal((await f.sql.query<{status:string}>("select status from bridge_rights_grants"))[0].status, "DRAFT");
+    assert.equal((await f.sql.query("select * from bridge_legal_cases")).length, 0);
   } finally {
     await f.db.close();
   }
@@ -512,7 +513,7 @@ test("legal approval remains blocked when only one required evidence class is ve
         titleId: "title-123", stage: "LEGAL", decision: "APPROVE",
         note: "Attempt without ownership chain", grantId: saved.grantId,
       })),
-      /requires independently reviewed executed-agreement and ownership-chain documents/,
+      /requires independently verified executed agreement, ownership chain, signatory authority, and Master Distributor \/ sublicensing authority evidence/,
     );
     assert.equal((await f.sql.query<{status:string}>("select status from bridge_rights_grants"))[0].status, "DRAFT");
     assert.equal((await f.sql.query("select * from bridge_legal_cases")).length, 0);
