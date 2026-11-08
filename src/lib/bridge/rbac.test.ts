@@ -98,6 +98,9 @@ describe("PRD authorization matrix", () => {
     assert.equal(hasPermission(a, "asset.sign_upload"), true);
     assert.equal(hasPermission(a, "users.invite_internal"), true);
     assert.equal(hasPermission(a, "title.license"), true);
+    assert.equal(hasPermission(a, "title.archive"), true);
+    assert.equal(hasPermission(admin(), "title.archive"), false);
+    assert.equal(hasPermission(creator(), "title.archive"), false);
   });
 
   it("viewer, reviewer and finance roles cannot inherit creator mutation powers from account type", () => {
