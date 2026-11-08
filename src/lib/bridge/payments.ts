@@ -9,7 +9,7 @@ import { requireVerifiedActor } from "./session";
 import { assertPermission, canReadTitle } from "./rbac";
 import { loadTitle, recordTransition } from "./titles";
 import { writeAudit } from "./audit";
-import { assertBuyerPublishable } from "./buyer-visibility";
+import { assertBuyerTitleAccess } from "./buyer-visibility";
 import { assertNotDevUser } from "./guards";
 import { canBuyerAccessLicensePackage } from "./buyer-package-access";
 
@@ -199,7 +199,7 @@ export const createLicenseOrder = createServerFn({ method: "POST" })
     assertPermission(actor, "payment.create_order");
     const title = await loadTitle(data.titleId);
     if (!title || (!canReadTitle(actor, title) && actor.accountType !== "buyer")) throw new Error("Not found");
-    await assertBuyerPublishable(title.id);
+    await assertBuyerTitleAccess(title.id, actor.userId);
     const sql = await getSql();
     if (title.status !== "LIVE_FOR_BUYERS" && title.status !== "IN_NEGOTIATION" && title.status !== "LICENSED" && title.status !== "DELIVERED") {
       throw new Error("Title is not open for a new license order");
