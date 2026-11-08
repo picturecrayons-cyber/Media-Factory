@@ -265,8 +265,15 @@ export async function verifyObjectSha256(
   if (!res.ok) throw new Error(`OCI evidence download verification failed (${res.status})`);
   const bytes = Buffer.from(await res.arrayBuffer());
   if (bytes.byteLength !== head.byteSize) throw new Error("Rights evidence changed while its checksum was calculated");
+  const detectedContentType =
+    bytes.subarray(0, 5).toString("ascii") === "%PDF-" ? "application/pdf" :
+    bytes.subarray(0, 8).toString("hex") === "89504e470d0a1a0a" ? "image/png" :
+    bytes.subarray(0, 3).toString("hex") === "ffd8ff" ? "image/jpeg" : null;
+  if (!detectedContentType || (expectedContentType && detectedContentType !== expectedContentType))
+    throw new Error("Rights evidence file signature does not match an accepted PDF, PNG or JPEG document");
   return {
     ...head,
+    detectedContentType,
     checksumSha256: createHash("sha256").update(bytes).digest("hex"),
   };
 }
