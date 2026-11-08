@@ -1,7 +1,8 @@
 /** Browser playback needs a media type and inline disposition.
  * The stored object is not rewritten. These are response overrides on the read link. */
 export function previewUrlFor(signedUrl: string, kind: string, contentType: string | null) {
-  const url = new URL(signedUrl);
+  const base = typeof window !== "undefined" ? window.location.origin : "https://localhost";
+  const url = new URL(signedUrl, base);
   const type = inlineContentType(kind, contentType);
   if (type) url.searchParams.set("httpResponseContentType", type);
   url.searchParams.set("httpResponseContentDisposition", "inline");
