@@ -121,7 +121,14 @@ async function fixture() {
       zod: { z },
       "@/lib/auth/middleware": { authMiddleware: {} },
       "@/lib/db": { getSql: async () => sql },
-      "./session": {},
+      "./session": {
+        requireVerifiedActor: async (userId: string) => ({
+          ...(userId === "buyer" ? { userId, emailVerified: true, accountType: "buyer", internalRole: null } :
+            userId === "studio" ? { userId, emailVerified: true, accountType: "studio", internalRole: null, organizationId: "22222222-2222-4222-8222-222222222222" } :
+            userId === "creator" ? { userId, emailVerified: true, accountType: "independent_creator", internalRole: null } :
+            userId === "qc" ? qc : userId === "legal" ? legal : owner),
+        }),
+      },
       "./rbac": rbac,
       "./asset-roles": assetRoles,
       "./titles": {},
@@ -141,7 +148,10 @@ async function fixture() {
         },
       },
     );
-    return { db, sql, save: exports.saveLoopLicense, review: exports.reviewWorkflow };
+    return {
+      db, sql, save: exports.saveLoopLicense, review: exports.reviewWorkflow,
+      reviewHandler: exports.reviewTitleWorkflow,
+    };
   } catch (error) {
     await db.close();
     throw error;
@@ -323,6 +333,65 @@ test("QC reviewer cannot review a title whose assets they uploaded", async () =>
       (await f.sql.query<{ status: string }>("select status from bridge_titles"))[0].status,
       "QC_REVIEW",
     );
+  } finally {
+    await f.db.close();
+  }
+});
+
+test("concurrent exact license submissions serialize to one grant", async () => {
+  const f = await fixture();
+  try {
+    const results = await Promise.all([
+      f.sql.transaction((tx) => f.save(tx, owner, license)),
+      f.sql.transaction((tx) => f.save(tx, owner, license)),
+    ]) as Array<{ grantId: string; existing?: boolean }>;
+    assert.equal(results[0].grantId, results[1].grantId);
+    assert.equal((await f.sql.query("select * from bridge_rights_grants")).length, 1);
+  } finally {
+    await f.db.close();
+  }
+});
+
+test("review server handler rejects Buyer, Creator and Studio roles for QC and Legal", async () => {
+  const f = await fixture();
+  try {
+    await f.sql.query("update bridge_titles set status='RIGHTS_REVIEW'");
+    const saved = (await f.sql.transaction((tx) => f.save(tx, owner, license))) as { grantId: string };
+    for (const userId of ["buyer", "creator", "studio"]) {
+      await assert.rejects(
+        (f.reviewHandler as (args: unknown) => Promise<unknown>)({
+          context: { userId },
+          data: {
+            titleId: "title-123", stage: "LEGAL", decision: "APPROVE",
+            note: "Unauthorized role must be denied", grantId: saved.grantId,
+          },
+        }),
+        /Forbidden/,
+      );
+    }
+    assert.equal((await f.sql.query("select status from bridge_rights_grants"))[0].status, "DRAFT");
+    assert.equal((await f.sql.query("select * from bridge_legal_cases")).length, 0);
+  } finally {
+    await f.db.close();
+  }
+});
+
+test("Studio member cannot create a license for another Studio organization", async () => {
+  const f = await fixture();
+  try {
+    await f.sql.query(`update bridge_titles
+      set owner_account_type='studio',
+          owner_organization_id='11111111-1111-4111-8111-111111111111'`);
+    const otherStudio = {
+      userId: "studio", emailVerified: true,
+      accountType: "studio" as const, internalRole: null,
+      organizationId: "22222222-2222-4222-8222-222222222222",
+    };
+    await assert.rejects(
+      f.sql.transaction((tx) => f.save(tx, otherStudio, license)),
+      /Forbidden/,
+    );
+    assert.equal((await f.sql.query("select * from bridge_rights_grants")).length, 0);
   } finally {
     await f.db.close();
   }
