@@ -8,6 +8,7 @@ import { loadTitle } from "./titles";
 import { writeAudit } from "./audit";
 import { assertNotDevUser } from "./guards";
 import { assertBuyerPublishable } from "./buyer-visibility";
+import { canBuyerViewLicensePackage } from "./buyer-package-access";
 
 const languageRightInput = z.object({
   titleId: z.string().min(8),
@@ -230,20 +231,24 @@ export const listLicensePackages = createServerFn({ method: "GET" })
     const rows = await sql<{
       id: string; title_id: string; name: string; language_right_ids: unknown; territories: unknown;
       media: unknown; window_start: string | Date | null; window_end: string | Date | null;
-      exclusivity: string; price_paise: number; status: string; delivery_status: string;
+      exclusivity: string; price_paise: number; status: string; delivery_status: string; buyer_user_id: string | null;
     }>`
       select id, title_id, name, language_right_ids, territories, media, window_start, window_end,
-             exclusivity, price_paise, status, delivery_status
+             exclusivity, price_paise, status, delivery_status, buyer_user_id
       from bridge_license_packages
       where title_id = ${data.titleId}
       order by created_at desc
     `;
-    const rightIds = [...new Set(rows.flatMap((r) => Array.isArray(r.language_right_ids) ? r.language_right_ids.map(String) : []))];
+    // Buyers see unclaimed offers and only their own reserved/licensed packages.
+    const visibleRows = actor.accountType === "buyer" && !actor.internalRole
+      ? rows.filter((r) => canBuyerViewLicensePackage({ status: r.status, buyerUserId: r.buyer_user_id }, actor.userId))
+      : rows;
+    const rightIds = [...new Set(visibleRows.flatMap((r) => Array.isArray(r.language_right_ids) ? r.language_right_ids.map(String) : []))];
     const rightRows = rightIds.length ? await sql<{ id: string; language: string }>`
       select id, language from bridge_language_rights where id = any(${rightIds}::uuid[])
     ` : [];
     const languageById = new Map(rightRows.map((r) => [r.id, r.language]));
-    return { packages: rows.map((r) => ({
+    return { packages: visibleRows.map((r) => ({
       id: r.id, titleId: r.title_id, name: r.name,
       languageRightIds: Array.isArray(r.language_right_ids) ? r.language_right_ids : [],
       languages: (Array.isArray(r.language_right_ids) ? r.language_right_ids.map(String) : []).map((id) => languageById.get(id)).filter(Boolean),
