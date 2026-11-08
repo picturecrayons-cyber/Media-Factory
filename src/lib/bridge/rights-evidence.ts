@@ -68,7 +68,17 @@ export async function submitRightsEvidence(
   const [row] = await tx<{ id: string }>`insert into bridge_rights_evidence
     (title_id,rights_grant_id,evidence_type,asset_version_id,checksum_sha256,submitted_by,status)
     values (${data.titleId},${data.grantId},${data.evidenceType},${data.assetVersionId},${asset.checksum_sha256},${actor.userId},'PENDING')
+    on conflict (rights_grant_id,evidence_type,asset_version_id) do nothing
     returning id`;
+  if (!row) {
+    const [existing] = await tx<{ id: string; checksum_sha256: string; submitted_by: string; status: "PENDING" | "VERIFIED" | "REJECTED" }>`select id,checksum_sha256,submitted_by,status
+      from bridge_rights_evidence
+      where rights_grant_id=${data.grantId} and evidence_type=${data.evidenceType} and asset_version_id=${data.assetVersionId}`;
+    if (!existing || existing.submitted_by !== actor.userId ||
+        existing.checksum_sha256.toLowerCase() !== asset.checksum_sha256.toLowerCase())
+      throw new Error("This evidence asset is already registered to another submission; use a new verified document version");
+    return { evidenceId: existing.id, status: existing.status };
+  }
   await writeAudit({
     actorUserId: actor.userId,
     action: "rights.evidence.submit",
