@@ -86,6 +86,9 @@ async function fixture() {
     );
     create table bridge_assets(id text,title_id text,kind text,s3_key text,byte_size bigint);
     alter table bridge_assets add column asset_version_id uuid;
+    alter table bridge_assets add column verified_object_key text;
+    alter table bridge_assets add column storage_verified_at timestamptz;
+    alter table bridge_assets add column checksum_sha256 text;
     create table bridge_title_events(title_id text,from_status text,to_status text,actor_user_id text,note text);
     create table bridge_audit_logs(actor_user_id text,action text,entity_type text,entity_id text,metadata text);`);
     await db.exec(
