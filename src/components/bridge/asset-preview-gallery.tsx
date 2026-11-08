@@ -165,7 +165,7 @@ export function AssetPreviewGallery({ assets }: { assets: PreviewAsset[] }) {
                 aria-label={`Preview ${asset.kind.replaceAll("_", " ")}`}
               >
                 <div className={`relative grid place-items-center overflow-hidden bg-black/5 ${isVideo(asset) ? "aspect-video" : asset.kind === "poster" || asset.kind === "poster_vertical" ? "aspect-[2/3]" : "aspect-video"}`}>
-                  {isImage(asset) && imageUrls[asset.id] ? (
+                  {isImage(asset) && imageUrls[asset.id] && !imageFailures[asset.id] ? (
                     <img
                       src={imageUrls[asset.id]}
                       alt={`Verified ${asset.kind.replaceAll("_", " ")} preview`}
