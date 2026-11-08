@@ -48,7 +48,7 @@ async function publicationFixture() {
     create table bridge_loop_publications (
       id text primary key, bridge_title_id text unique, loop_title_id text,
       authorization_status text, territories text[], languages text[], exploitation_models text[],
-      window_start timestamptz, window_end timestamptz, approved_by text, approved_at timestamptz,
+      window_start timestamptz, window_end timestamptz, approved_by text, approved_at timestamptz, revoked_at timestamptz,
       metadata jsonb, updated_at timestamptz
     );
   `);
