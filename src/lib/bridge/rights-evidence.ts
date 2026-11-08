@@ -277,6 +277,7 @@ export const submitRightsEvidenceFn = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(evidenceInput)
   .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
     return (await getSql()).transaction((tx) => submitRightsEvidence(tx, actor, data));
   });
@@ -285,6 +286,7 @@ export const reviewRightsEvidenceFn = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(evidenceReviewInput)
   .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
     return (await getSql()).transaction((tx) => reviewRightsEvidence(tx, actor, data));
   });
