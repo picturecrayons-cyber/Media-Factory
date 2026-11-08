@@ -320,7 +320,7 @@ export const listTitleAssets = createServerFn({ method: "GET" })
     const title = await loadTitle(data.titleId);
     if (!title) throw new Error("Not found");
     const buyer = actor.accountType === "buyer" && !actor.internalRole;
-    if (buyer) await assertBuyerPublishable(title.id);
+    if (buyer) await assertBuyerTitleAccess(title.id, actor.userId);
     if (!canReadTitle(actor, title)) throw new Error("Not found");
     const sql = await getSql();
     const rows = await sql<{
