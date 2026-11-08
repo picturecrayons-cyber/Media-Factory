@@ -12,7 +12,7 @@ import { titleAssetKey, signUpload, verifyObjectSha256, sealVerifiedObject } fro
 const evidenceInput = z.object({
   titleId: z.string().min(8),
   grantId: z.string().uuid(),
-  evidenceType: z.enum(["EXECUTED_AGREEMENT", "OWNERSHIP_CHAIN", "SIGNATORY_AUTHORITY", "DISTRIBUTION_AUTHORITY", "SIGNED_AMENDMENT", "SIGNED_ADDENDUM", "RIGHTS_SCHEDULE"]),
+  evidenceType: z.enum(["EXECUTED_AGREEMENT", "OWNERSHIP_CHAIN", "SIGNATORY_AUTHORITY", "MASTER_DISTRIBUTOR_AUTHORITY", "SUBLICENSING_AUTHORITY", "SIGNED_AMENDMENT", "SIGNED_ADDENDUM", "RIGHTS_SCHEDULE"]),
   relatedAgreementEvidenceId: z.string().uuid().optional(),
   assetVersionId: z.string().uuid(),
 });
@@ -182,7 +182,7 @@ export async function reviewRightsEvidence(
 const rightsEvidenceUploadInput = z.object({
   titleId: z.string().min(8),
   grantId: z.string().uuid(),
-  evidenceType: z.enum(["EXECUTED_AGREEMENT", "OWNERSHIP_CHAIN", "SIGNATORY_AUTHORITY", "DISTRIBUTION_AUTHORITY", "SIGNED_AMENDMENT", "SIGNED_ADDENDUM", "RIGHTS_SCHEDULE"]),
+  evidenceType: z.enum(["EXECUTED_AGREEMENT", "OWNERSHIP_CHAIN", "SIGNATORY_AUTHORITY", "MASTER_DISTRIBUTOR_AUTHORITY", "SUBLICENSING_AUTHORITY", "SIGNED_AMENDMENT", "SIGNED_ADDENDUM", "RIGHTS_SCHEDULE"]),
   filename: z.string().trim().min(1).max(120),
   contentType: z.enum(["application/pdf", "image/png", "image/jpeg"]),
   byteSize: z.number().int().positive().max(25 * 1024 * 1024),
