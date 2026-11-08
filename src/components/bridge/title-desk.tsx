@@ -7,9 +7,22 @@ import { StatusChip } from "@/components/bridge/status-rail";
 import { createTitle, listTitles } from "@/lib/bridge/titles";
 import { BRIDGE_LOOP_LANES } from "@/lib/bridge/loop-lanes";
 
-export function TitleList({ empty, query = "" }: { empty: string; query?: string }) {
+export function TitleList({
+  empty,
+  query = "",
+  excludeIds = [],
+}: {
+  empty: string;
+  query?: string;
+  excludeIds?: string[];
+}) {
   const titlesQ = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles() });
-  const titles = (titlesQ.data?.titles ?? []).filter((t) => !query || `${t.name} ${t.language} ${t.year ?? ""}`.toLowerCase().includes(query.toLowerCase()));
+  const excluded = new Set(excludeIds);
+  const titles = (titlesQ.data?.titles ?? []).filter(
+    (t) =>
+      !excluded.has(t.id) &&
+      (!query || `${t.name} ${t.language} ${t.year ?? ""}`.toLowerCase().includes(query.toLowerCase())),
+  );
   if (titlesQ.isPending) return <p className="text-sm text-muted">Loading titles…</p>;
   if (titlesQ.isError) {
     return (
@@ -19,19 +32,19 @@ export function TitleList({ empty, query = "" }: { empty: string; query?: string
       </div>
     );
   }
-  if (!titles.length) return <p className="text-sm text-muted">{empty}</p>;
+  if (!titles.length) return <p className="rounded-xl border border-dashed border-line px-4 py-8 text-center text-sm text-muted">{empty}</p>;
   return (
-    <ul className="divide-y divide-line rounded-sm border border-line">
+    <ul className="divide-y divide-line overflow-hidden rounded-xl border border-line bg-surface">
       {titles.map((t) => (
         <li key={t.id}>
           <Link
             to="/title/$id"
             params={{ id: t.id }}
-            className="flex flex-wrap items-center justify-between gap-3 px-4 py-4 hover:bg-fg/5"
+            className="flex flex-wrap items-center justify-between gap-3 px-4 py-4 transition hover:bg-fg/5 sm:px-5"
           >
-            <div>
-              <p className="font-medium">{t.name}</p>
-              <p className="text-sm text-muted">
+            <div className="min-w-0">
+              <p className="truncate font-medium">{t.name}</p>
+              <p className="mt-1 text-sm text-muted">
                 {t.contentType ? `${t.contentType} · ` : ""}
                 {t.language}
                 {t.year ? ` · ${t.year}` : ""}
