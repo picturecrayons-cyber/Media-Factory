@@ -98,11 +98,11 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
   const grants = workflow.data?.grants ?? [];
   const valid = grants.find((g) => g.status === "VALID" && new Date(g.window_end) > new Date());
   const pub = publication.data?.publication;
-  const button = (label: string, run: () => Promise<unknown>) => (
+  const button = (label: string, run: () => Promise<unknown>, disabled = false) => (
     <button
       type="button"
       className="rounded-lg border border-line px-4 py-2 text-sm disabled:opacity-50"
-      disabled={action.isPending}
+      disabled={action.isPending || disabled}
       onClick={() => action.mutate(run)}
     >
       {label}
@@ -266,6 +266,11 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                 </form>
               ) : null}
               {input("Legal review findings", note, setNote)}
+              <p className="text-xs text-muted" aria-live="polite">
+                {note.trim().length < 8
+                  ? `Enter at least 8 characters (${note.trim().length}/8).`
+                  : "Review note meets the minimum length."}
+              </p>
               {grants.map((g) => (
                 <article key={g.id} className="space-y-2 rounded-lg border border-line p-3">
                   <p>
@@ -280,27 +285,33 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                   title.status === "RIGHTS_REVIEW" &&
                   hasPermission(actor, "title.rights_review") ? (
                     <div className="flex gap-2">
-                      {button("Approve rights / license", () =>
-                        reviewTitleWorkflow({
-                          data: {
-                            titleId: title.id,
-                            stage: "LEGAL",
-                            decision: "APPROVE",
-                            note,
-                            grantId: g.id,
-                          },
-                        }),
+                      {button(
+                        "Approve rights / license",
+                        () =>
+                          reviewTitleWorkflow({
+                            data: {
+                              titleId: title.id,
+                              stage: "LEGAL",
+                              decision: "APPROVE",
+                              note,
+                              grantId: g.id,
+                            },
+                          }),
+                        note.trim().length < 8,
                       )}
-                      {button("Reject", () =>
-                        reviewTitleWorkflow({
-                          data: {
-                            titleId: title.id,
-                            stage: "LEGAL",
-                            decision: "REJECT",
-                            note,
-                            grantId: g.id,
-                          },
-                        }),
+                      {button(
+                        "Reject",
+                        () =>
+                          reviewTitleWorkflow({
+                            data: {
+                              titleId: title.id,
+                              stage: "LEGAL",
+                              decision: "REJECT",
+                              note,
+                              grantId: g.id,
+                            },
+                          }),
+                        note.trim().length < 8,
                       )}
                     </div>
                   ) : null}
