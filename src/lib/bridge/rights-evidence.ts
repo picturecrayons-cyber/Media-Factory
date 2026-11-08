@@ -54,7 +54,12 @@ export async function submitRightsEvidence(
     checksum_sha256: string | null;
     created_by: string;
     asset_kind: string;
-  }>`select av.id,av.title_id,av.asset_group,av.processing_state,av.checksum_sha256,av.created_by,a.kind as asset_kind
+    asset_key: string;
+    verified_object_key: string | null;
+    storage_verified_at: string | Date | null;
+    stored_checksum: string | null;
+  }>`select av.id,av.title_id,av.asset_group,av.processing_state,av.checksum_sha256,av.created_by,a.kind as asset_kind,
+      a.s3_key as asset_key,a.verified_object_key,a.storage_verified_at,a.checksum_sha256 as stored_checksum
     from bridge_asset_versions av
     join bridge_assets a on a.asset_version_id=av.id and a.kind='rights_document'
     where av.id=${data.assetVersionId} for update of av,a`;
@@ -65,6 +70,10 @@ export async function submitRightsEvidence(
     asset.processing_state !== "PASSED" ||
     asset.created_by !== actor.userId ||
     !asset.checksum_sha256 ||
+    !asset.storage_verified_at ||
+    asset.verified_object_key !== asset.asset_key ||
+    asset.asset_key === "" ||
+    asset.stored_checksum?.toLowerCase() !== asset.checksum_sha256.toLowerCase() ||
     !/^[a-f0-9]{64}$/i.test(asset.checksum_sha256)
   ) throw new Error("Evidence must be a current, processed DOCUMENT asset with a SHA-256 checksum uploaded by the submitting owner");
 
@@ -110,8 +119,14 @@ export async function reviewRightsEvidence(
     grant_created_by: string;
     asset_checksum: string | null;
     asset_state: string;
+    asset_key: string;
+    verified_object_key: string | null;
+    storage_verified_at: string | Date | null;
+    stored_checksum: string | null;
+    version_key: string;
   }>`select e.id,e.title_id,e.rights_grant_id,e.asset_version_id,e.checksum_sha256,e.submitted_by,e.status,
-      g.created_by as grant_created_by,av.checksum_sha256 as asset_checksum,av.processing_state as asset_state
+      g.created_by as grant_created_by,av.checksum_sha256 as asset_checksum,av.processing_state as asset_state,
+      av.s3_key as version_key,a.s3_key as asset_key,a.verified_object_key,a.storage_verified_at,a.checksum_sha256 as stored_checksum
     from bridge_rights_evidence e
     join bridge_rights_grants g on g.id=e.rights_grant_id and g.status='DRAFT'
     join bridge_asset_versions av on av.id=e.asset_version_id and av.title_id=e.title_id
@@ -124,7 +139,11 @@ export async function reviewRightsEvidence(
   if (
     evidence.asset_state !== "PASSED" ||
     !evidence.asset_checksum ||
-    evidence.asset_checksum.toLowerCase() !== evidence.checksum_sha256.toLowerCase()
+    evidence.asset_checksum.toLowerCase() !== evidence.checksum_sha256.toLowerCase() ||
+    !evidence.storage_verified_at ||
+    evidence.verified_object_key !== evidence.asset_key ||
+    evidence.asset_key !== evidence.version_key ||
+    evidence.stored_checksum?.toLowerCase() !== evidence.checksum_sha256.toLowerCase()
   ) throw new Error("Evidence asset changed or is no longer verified; submit a current document version");
 
   await tx`update bridge_rights_evidence
