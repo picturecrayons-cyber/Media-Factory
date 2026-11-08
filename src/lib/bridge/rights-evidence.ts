@@ -29,6 +29,7 @@ export async function submitRightsEvidence(
 ) {
   const data = evidenceInput.parse(input);
   if (actor.internalRole) throw new Error("Only the title owner or authorized Studio member may submit rights evidence");
+  assertPermission(actor, "asset.sign_upload");
   const [title] = await tx<{
     owner_user_id: string;
     owner_account_type: string;
@@ -183,6 +184,7 @@ export const requestRightsEvidenceUploadFn = createServerFn({ method: "POST" })
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
     if (actor.internalRole) throw new Error("Only the title owner or authorized Studio member may upload rights evidence");
+    assertPermission(actor, "asset.sign_upload");
     const sql = await getSql();
     const [title] = await sql<{
       id: string;
@@ -238,6 +240,7 @@ export const confirmRightsEvidenceUploadFn = createServerFn({ method: "POST" })
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
     if (actor.internalRole) throw new Error("Only the title owner or authorized Studio member may confirm rights evidence uploads");
+    assertPermission(actor, "asset.sign_upload");
     const sql = await getSql();
     const [asset] = await sql<{
       id: string;
