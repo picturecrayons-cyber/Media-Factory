@@ -7,6 +7,11 @@ import {
   submitLoopLicense,
   reviewTitleWorkflow,
 } from "@/lib/bridge/workflow";
+import {
+  submitRightsEvidenceFn,
+  requestRightsEvidenceUploadFn,
+  confirmRightsEvidenceUploadFn,
+} from "@/lib/bridge/rights-evidence";
 import { advanceTitle } from "@/lib/bridge/titles";
 import {
   authorizeLoopPublication,
@@ -69,6 +74,8 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
   const [agreement, setAgreement] = useState("");
   const [ownership, setOwnership] = useState("");
   const [ownerShare, setOwnerShare] = useState("");
+  const [evidenceType, setEvidenceType] = useState<"EXECUTED_AGREEMENT" | "OWNERSHIP_CHAIN">("EXECUTED_AGREEMENT");
+
   function downloadStatement() {
     const safe = (v: string) =>
       '"' + (/^[=+@-]/.test(v) ? "'" : "") + v.replaceAll('"', '""') + '"';
@@ -96,6 +103,26 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
     URL.revokeObjectURL(url);
   }
   const grants = workflow.data?.grants ?? [];
+  const grantGroups = [...grants.reduce((groups, grant) => {
+    const reference = String(grant.evidence?.[0]?.agreementReference ?? "NOT RECORDED").trim().toUpperCase();
+    const group = groups.get(reference) ?? [];
+    group.push(grant);
+    groups.set(reference, group);
+    return groups;
+  }, new Map<string, typeof grants>())].map(([reference, items]) => ({
+    reference,
+    items,
+    conflictingTerms: new Set(items.map((g) => JSON.stringify({
+      exclusivity: g.exclusivity,
+      territories: [...g.territories].sort(),
+      languages: [...g.languages].sort(),
+      media: [...(g.media ?? [])].sort(),
+      windowStart: g.window_start,
+      windowEnd: g.window_end,
+      commercialTerms: g.evidence?.[0]?.commercialTerms ?? null,
+    }))).size > 1,
+    placeholderReference: /NOT\s*EX+ECUTED|TBD|PENDING|NOT RECORDED/.test(reference),
+  }));
   const valid = grants.find((g) => g.status === "VALID" && new Date(g.window_end) > new Date());
   const pub = publication.data?.publication;
   const button = (label: string, run: () => Promise<unknown>) => (
@@ -266,7 +293,16 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                 </form>
               ) : null}
               {input("Legal review findings", note, setNote)}
-              {grants.map((g) => (
+              {grantGroups.map((group) => (
+                <section key={group.reference} className="space-y-2 rounded-xl border border-line p-3">
+                  <div className="flex flex-wrap items-center gap-2 text-sm">
+                    <span className="font-medium">Agreement reference: {group.reference}</span>
+                    <span className="text-xs text-muted">{group.items.length} historical record(s)</span>
+                    {group.conflictingTerms ? <span className="rounded-full border border-amber-500/40 px-2 py-0.5 text-xs text-amber-700">Conflicting terms — legal decision required</span> : null}
+                    {!group.conflictingTerms && group.items.length > 1 ? <span className="rounded-full border border-line px-2 py-0.5 text-xs">Duplicate records — history retained</span> : null}
+                    {group.placeholderReference ? <span className="rounded-full border border-line px-2 py-0.5 text-xs">Placeholder reference — executed source required</span> : null}
+                  </div>
+                  {group.items.map((g) => (
                 <article key={g.id} className="space-y-2 rounded-lg border border-line p-3">
                   <p>
                     {g.status} · {g.exclusivity} · {g.territories.join(", ")} ·{" "}
@@ -277,20 +313,63 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                   </p>
                   <p>Agreement: {g.evidence[0]?.agreementReference ?? "Not recorded"}</p>
                   {g.status === "DRAFT" &&
+                  canOperateOnTitle(actor, title, "title.update_own", "title.license") ? (
+                    <div className="grid gap-2 rounded-lg border border-line p-3 sm:grid-cols-2">
+                      <p className="text-sm sm:col-span-2">Upload the actual legal source document. The server seals it in storage and calculates SHA-256 before it enters independent review. Text references alone do not count as evidence.</p>
+                      <label className="grid gap-1 text-sm">
+                        Evidence class
+                        <select value={evidenceType} onChange={(event) => setEvidenceType(event.target.value as "EXECUTED_AGREEMENT" | "OWNERSHIP_CHAIN")} className="rounded-lg border border-line bg-elevated p-2" disabled={action.isPending}>
+                          <option value="EXECUTED_AGREEMENT">Executed agreement</option>
+                          <option value="OWNERSHIP_CHAIN">Ownership chain</option>
+                        </select>
+                      </label>
+                      <label className="grid gap-1 text-sm">
+                        Legal document (PDF, PNG or JPEG; max 25 MB)
+                        <input type="file" accept=".pdf,application/pdf,image/png,image/jpeg" disabled={action.isPending}
+                          onChange={(event) => {
+                            const file = event.target.files?.[0];
+                            event.currentTarget.value = "";
+                            if (!file) return;
+                            action.mutate(async () => {
+                              const contentType = file.type || (file.name.toLowerCase().endsWith(".pdf") ? "application/pdf" : "");
+                              const signed = await requestRightsEvidenceUploadFn({ data: {
+                                titleId: title.id, grantId: g.id, evidenceType,
+                                filename: file.name, contentType: contentType as "application/pdf" | "image/png" | "image/jpeg",
+                                byteSize: file.size,
+                              } });
+                              const response = await fetch(signed.url, {
+                                method: signed.method,
+                                headers: { "Content-Type": contentType },
+                                body: file,
+                                redirect: "error",
+                              });
+                              if (!response.ok) throw new Error(`Rights evidence upload failed (${response.status})`);
+                              const verified = await confirmRightsEvidenceUploadFn({ data: {
+                                assetId: signed.assetId, expectedByteSize: file.size,
+                              } });
+                              await submitRightsEvidenceFn({ data: {
+                                titleId: title.id, grantId: g.id, evidenceType,
+                                assetVersionId: verified.assetVersionId,
+                              } });
+                            });
+                          }}
+                          className="rounded-lg border border-line bg-elevated p-2 text-xs"
+                        />
+                      </label>
+                    </div>
+                  ) : null}
+                  {(workflow.data?.rightsEvidence ?? []).filter((item) => item.rights_grant_id === g.id).map((item) => (
+                    <p key={item.id} className="text-xs text-muted">
+                      {item.evidence_type.replaceAll("_", " ")} · {item.status} · submitted by {item.submitted_by}
+                    </p>
+                  ))}
+                  {g.status === "DRAFT" &&
                   title.status === "RIGHTS_REVIEW" &&
                   hasPermission(actor, "title.rights_review") ? (
-                    <div className="flex gap-2">
-                      {button("Approve rights / license", () =>
-                        reviewTitleWorkflow({
-                          data: {
-                            titleId: title.id,
-                            stage: "LEGAL",
-                            decision: "APPROVE",
-                            note,
-                            grantId: g.id,
-                          },
-                        }),
-                      )}
+                    <div className="space-y-2">
+                      <p className="text-xs text-muted-foreground">
+                        Approval is blocked until executed-agreement and ownership evidence receive independent, recorded verification.
+                      </p>
                       {button("Reject", () =>
                         reviewTitleWorkflow({
                           data: {
@@ -305,6 +384,8 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                     </div>
                   ) : null}
                 </article>
+                  ))}
+                </section>
               ))}
               {!grants.length ? <p>No license draft recorded.</p> : null}
             </div>

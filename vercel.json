@@ -3,7 +3,8 @@
   "framework": "tanstack-start",
   "git": {
     "deploymentEnabled": {
-      "fix/publication-status-contract-20261001": false
+      "fix/publication-status-contract-20261001": false,
+      "fix/bridge-licensing-p0-idempotency-20261107": false
     }
   }
 }

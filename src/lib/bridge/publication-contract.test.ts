@@ -21,11 +21,13 @@ function harness(grants: unknown[], allowed = true, existing = false) {
   };
   const sql = async (strings: TemplateStringsArray, ...values: unknown[]) => {
     const query = strings.join("?");
+    if (query.includes("left join bridge_loop_publications")) return [];
     if (query.includes("from bridge_titles")) return [title];
     if (query.includes("select evidence from bridge_rights_grants"))
       return [
         { evidence: [{ commercialTerms: { rightsOwnerSharePct: 80, distributorSharePct: 20 } }] },
       ];
+    if (query.includes("from bridge_asset_versions")) return [];
     if (query.includes("from bridge_rights_grants")) return grants;
     if (query.includes("as qc_ok")) return [{ qc_ok: true, legal_ok: true }];
     if (query.includes("select id from bridge_titles")) return [title];
@@ -72,7 +74,11 @@ function harness(grants: unknown[], allowed = true, existing = false) {
       return modules[name];
     },
   });
-  return { authorize: exports.authorizeLoopPublication, writes };
+  return {
+    authorize: exports.authorizeLoopPublication,
+    readiness: exports.listLoopPublicationReadiness,
+    writes,
+  };
 }
 
 const grant = {
@@ -113,11 +119,25 @@ test("new and existing publications emit the status accepted by the Loop catalog
   }
 });
 
+test("publication readiness GET is read-only and never performs expiry cleanup writes", async () => {
+  const h = harness([grant]);
+  const result = await h.readiness({ context });
+  assert.equal((result as { titles: unknown[] }).titles.length, 0);
+  assert.equal(h.writes.length, 0);
+});
+
+test("publication readiness requires an authenticated operator permission", async () => {
+  const h = harness([grant], false);
+  await assert.rejects(h.readiness({ context }), /Forbidden/);
+  assert.equal(h.writes.length, 0);
+});
+
 test("status alignment never bypasses operator, rights or commercial coverage", async () => {
   for (const scenario of [
     { grants: [], allowed: true, data },
     { grants: [{ ...grant, status: "REVOKED" }], allowed: true, data },
     { grants: [{ ...grant, territories: ["US"] }], allowed: true, data },
+    { grants: [{ ...grant, languages: ["English"] }], allowed: true, data: { ...data, languages: ["English"] } },
     { grants: [grant], allowed: false, data },
     { grants: [grant], allowed: true, data: { ...data, accessTier: "SVOD" } },
   ]) {

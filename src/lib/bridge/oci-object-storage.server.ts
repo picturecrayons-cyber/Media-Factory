@@ -198,7 +198,16 @@ export async function signUpload(opts: { key: string; contentType: string; expir
     accessType: "ObjectWrite",
     expiresIn: opts.expiresIn ?? 900,
   });
-  return { url: signed.url, key: opts.key, bucket: signed.bucket, method: "PUT" as const };
+  const cfg = config();
+  return {
+    url: signed.url,
+    key: opts.key,
+    bucket: signed.bucket,
+    namespace: signed.namespace,
+    region: cfg.region,
+    endpoint: endpoint(cfg.region),
+    method: "PUT" as const,
+  };
 }
 
 export async function beginMultipartUpload(opts: { key: string; contentType: string; expiresIn: number }) {
@@ -249,6 +258,33 @@ export async function signDownload(opts: { key: string; expiresIn?: number }) {
     expiresIn: opts.expiresIn ?? 300,
   });
   return { url: signed.url, key: opts.key, bucket: signed.bucket, method: "GET" as const };
+}
+
+export async function verifyObjectSha256(
+  key: string,
+  expectedContentType?: string | null,
+  maxBytes = 25 * 1024 * 1024,
+) {
+  const head = await verifyObject(key, expectedContentType);
+  if (head.byteSize > maxBytes) throw new Error("Rights evidence document exceeds the 25 MB limit");
+  const cfg = config();
+  const namespace = await resolveNamespace(cfg);
+  const path = `/n/${encodeURIComponent(namespace)}/b/${encodeURIComponent(cfg.bucket)}/o/${encodedObjectName(key)}`;
+  const res = await signedFetch({ cfg, method: "GET", path });
+  if (!res.ok) throw new Error(`OCI evidence download verification failed (${res.status})`);
+  const bytes = Buffer.from(await res.arrayBuffer());
+  if (bytes.byteLength !== head.byteSize) throw new Error("Rights evidence changed while its checksum was calculated");
+  const detectedContentType =
+    bytes.subarray(0, 5).toString("ascii") === "%PDF-" ? "application/pdf" :
+    bytes.subarray(0, 8).toString("hex") === "89504e470d0a1a0a" ? "image/png" :
+    bytes.subarray(0, 3).toString("hex") === "ffd8ff" ? "image/jpeg" : null;
+  if (!detectedContentType || (expectedContentType && detectedContentType !== expectedContentType))
+    throw new Error("Rights evidence file signature does not match an accepted PDF, PNG or JPEG document");
+  return {
+    ...head,
+    detectedContentType,
+    checksumSha256: createHash("sha256").update(bytes).digest("hex"),
+  };
 }
 
 export async function verifyObject(key: string, expectedContentType?: string | null) {

@@ -329,7 +329,7 @@ export const listTitleAssets = createServerFn({ method: "GET" })
     `;
     return {
       assets: rows
-        .filter((r) => !buyer || !["master", "technical", "censor_certificate"].includes(r.kind))
+        .filter((r) => !buyer || !["master", "technical", "censor_certificate", "rights_document"].includes(r.kind))
         .map((r) => ({
           id: r.id,
           kind: r.kind,

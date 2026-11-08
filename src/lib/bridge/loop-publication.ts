@@ -142,6 +142,23 @@ export async function verifyDistributionPreflight(
   if (!rightsRequest)
     reasons.push("Publication rights dimensions are required for distribution preflight.");
   if (rightsRequest) {
+    const sourceLanguage = title.language.trim().toUpperCase();
+    const requestedLanguages = rightsRequest.languages.map((language) => language.trim().toUpperCase());
+    if (!requestedLanguages.includes(sourceLanguage)) {
+      reasons.push("Loop currently publishes the source-language master only; the publication must include the title's source language.");
+    }
+    const additionalLanguages = requestedLanguages.filter((language) => language !== sourceLanguage);
+    if (additionalLanguages.length) {
+      const availableRenditions = await sql<{ language: string }>`select distinct upper(language) as language
+        from bridge_asset_versions
+        where title_id=${titleId}
+          and asset_group in ('AUDIO','SUBTITLE')
+          and processing_state='PASSED'
+          and upper(language)=any(${additionalLanguages})`;
+      const available = new Set(availableRenditions.map((item) => item.language));
+      const missing = additionalLanguages.filter((language) => !available.has(language));
+      if (missing.length) reasons.push(`Verified audio or subtitle renditions are missing for: ${missing.join(", ")}.`);
+    }
     const grants = await sql<BridgeRightsGrant>`
       select id, status, territories, languages, media, window_start, window_end, exclusivity
       from bridge_rights_grants
@@ -204,21 +221,6 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
     assertPermission(actor, "title.read_catalog");
     const sql = await getSql();
 
-    // Auto-reevaluate any expired distribution windows
-    await sql`
-      update bridge_loop_publications
-      set authorization_status = 'expired', updated_at = now()
-      where window_end is not null and window_end < now() and authorization_status in ('authorized', 'live')
-    `.catch(() => {});
-
-    await sql`
-      update loop_titles
-      set status = 'expired', published = false, listed = false, updated_at = now()
-      where bridge_title_id in (
-        select bridge_title_id from bridge_loop_publications where authorization_status = 'expired'
-      ) and published = true
-    `.catch(() => {});
-
     const rows = await sql<{
       id: string;
       slug: string;
@@ -274,6 +276,7 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
               },
             )
           : null;
+        const windowExpired = Boolean(r.window_end && new Date(r.window_end).getTime() < Date.now());
         const isReady =
           Boolean(coveringGrant) &&
           [
@@ -302,6 +305,7 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
         }
         if (!r.master_key) blockers.push("QC master video is missing");
         if (!r.poster_key) blockers.push("Artwork/poster is missing");
+        if (windowExpired) blockers.push("The current publication window has expired; a new authorized window is required");
 
         return {
           id: r.id,
@@ -317,16 +321,17 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
             ? {
                 destination: "CRAYONS_LOOP" as const,
                 loopTitleId: r.loop_title_id,
-                authorizationStatus: (r.authorization_status?.toUpperCase() ||
-                  "PENDING") as DistributionAuthorizationStatus,
+                authorizationStatus: (windowExpired && ["authorized", "live"].includes((r.authorization_status || "").toLowerCase())
+                  ? "EXPIRED"
+                  : r.authorization_status?.toUpperCase() || "PENDING") as DistributionAuthorizationStatus,
                 territories: r.territories || ["IN"],
                 languages: r.languages || [r.language],
                 exploitationModels: r.exploitation_models || ["SVOD"],
                 windowStart: iso(r.window_start),
                 windowEnd: iso(r.window_end),
                 loopStatus: r.loop_status,
-                listed: Boolean(r.listed),
-                published: Boolean(r.published),
+                listed: windowExpired ? false : Boolean(r.listed),
+                published: windowExpired ? false : Boolean(r.published),
                 playbackPath: r.playback_path,
               }
             : null,
@@ -461,8 +466,9 @@ export const suspendLoopPublication = createServerFn({ method: "POST" })
     const actor = await requireVerifiedActor(context.userId);
     assertPermission(actor, "loop.revoke");
     return (await getSql()).transaction(async (sql) => {
+      await sql`select id from bridge_titles where id=${data.bridgeTitleId} for update`;
       const pubs = await sql<{ loop_title_id: string }>`
-      select loop_title_id from bridge_loop_publications where bridge_title_id = ${data.bridgeTitleId} limit 1
+      select loop_title_id from bridge_loop_publications where bridge_title_id = ${data.bridgeTitleId} for update
     `;
       if (!pubs[0]) throw new Error("Distribution record not found");
 
@@ -501,8 +507,9 @@ export const revokeLoopPublication = createServerFn({ method: "POST" })
     const actor = await requireVerifiedActor(context.userId);
     assertPermission(actor, "loop.revoke");
     return (await getSql()).transaction(async (sql) => {
+      await sql`select id from bridge_titles where id=${data.bridgeTitleId} for update`;
       const pubs = await sql<{ loop_title_id: string }>`
-      select loop_title_id from bridge_loop_publications where bridge_title_id = ${data.bridgeTitleId} limit 1
+      select loop_title_id from bridge_loop_publications where bridge_title_id = ${data.bridgeTitleId} for update
     `;
       if (!pubs[0]) throw new Error("Distribution record not found");
 
@@ -545,6 +552,7 @@ export const extendDistributionWindow = createServerFn({ method: "POST" })
     const actor = await requireVerifiedActor(context.userId);
     assertPermission(actor, "loop.publish");
     return (await getSql()).transaction(async (sql) => {
+      await sql`select id from bridge_titles where id=${data.bridgeTitleId} for update`;
       const pubs = await sql<{
         loop_title_id: string;
         window_start: string | Date | null;
@@ -556,7 +564,7 @@ export const extendDistributionWindow = createServerFn({ method: "POST" })
       }>`
       select loop_title_id, window_start, authorization_status, revoked_at,
              territories, languages, exploitation_models
-      from bridge_loop_publications where bridge_title_id = ${data.bridgeTitleId} limit 1
+      from bridge_loop_publications where bridge_title_id = ${data.bridgeTitleId} for update
     `;
       const publication = pubs[0];
       if (!publication) throw new Error("Distribution record not found");
@@ -621,13 +629,17 @@ export const getLoopPublication = createServerFn({ method: "GET" })
     `;
     const r = rows[0];
     if (!r) return { publication: null };
+    const windowExpired = Boolean(r.window_end && new Date(r.window_end).getTime() < Date.now());
+    const effectiveAuthorizationStatus = windowExpired && ["authorized", "live"].includes(r.authorization_status.toLowerCase())
+      ? "EXPIRED"
+      : r.authorization_status;
 
     return {
       publication: {
         destination: "CRAYONS_LOOP" as const,
         bridgeTitleId: r.bridge_title_id,
         loopTitleId: r.loop_title_id,
-        authorizationStatus: r.authorization_status,
+        authorizationStatus: effectiveAuthorizationStatus,
         territories: r.territories,
         languages: r.languages,
         exploitationModels: r.exploitation_models,
@@ -636,9 +648,9 @@ export const getLoopPublication = createServerFn({ method: "GET" })
         approvedAt: iso(r.approved_at),
         revokedAt: iso(r.revoked_at),
         commercialTerms: (r.metadata?.commercialTerms as CommercialTermsSummary) || null,
-        loopStatus: r.loop_status,
-        listed: r.listed,
-        published: r.published,
+        loopStatus: windowExpired ? "expired" : r.loop_status,
+        listed: windowExpired ? false : r.listed,
+        published: windowExpired ? false : r.published,
         playbackPath: r.playback_path,
       },
     };
