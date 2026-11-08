@@ -85,6 +85,7 @@ async function fixture() {
       updated_at timestamptz
     );
     create table bridge_assets(id text,title_id text,kind text,s3_key text,byte_size bigint);
+    alter table bridge_assets add column asset_version_id uuid;
     create table bridge_title_events(title_id text,from_status text,to_status text,actor_user_id text,note text);
     create table bridge_audit_logs(actor_user_id text,action text,entity_type text,entity_id text,metadata text);`);
     await db.exec(
@@ -339,6 +340,8 @@ test("repeated identical rights evidence submission reuses one record and one au
       (id,title_id,asset_group,asset_type,version,s3_key,checksum_sha256,byte_size,processing_state,created_by)
       values ($1,'title-123','DOCUMENT','RIGHTS_EVIDENCE',1,'sealed/rights-evidence.pdf',$2,2048,'PASSED','owner')`,
       [assetVersionId,checksum]);
+    await f.sql.query(`insert into bridge_assets(id,title_id,kind,s3_key,byte_size,asset_version_id)
+      values ('rights-evidence-idempotent','title-123','rights_document','sealed/rights-evidence.pdf',2048,$1)`,[assetVersionId]);
     const input = {
       titleId: "title-123",
       grantId: saved.grantId,
@@ -385,9 +388,13 @@ test("legal approval succeeds only with both independently reviewed, checksum-ma
     await f.sql.query(`insert into bridge_asset_versions
       (id,title_id,asset_group,asset_type,version,s3_key,checksum_sha256,byte_size,processing_state,created_by)
       values
-      ('00000000-0000-4000-8000-000000000001','title-123','DOCUMENT','executed_agreement',1,'sealed/agreement.pdf',$1,1024,'PASSED','owner'),
-      ('00000000-0000-4000-8000-000000000002','title-123','DOCUMENT','ownership_chain',1,'sealed/ownership.pdf',$2,1024,'PASSED','owner')`,
+      ('00000000-0000-4000-8000-000000000001','title-123','DOCUMENT','RIGHTS_EVIDENCE',1,'sealed/agreement.pdf',$1,1024,'PASSED','owner'),
+      ('00000000-0000-4000-8000-000000000002','title-123','DOCUMENT','RIGHTS_EVIDENCE',1,'sealed/ownership.pdf',$2,1024,'PASSED','owner')`,
       [agreementChecksum, ownershipChecksum]);
+    await f.sql.query(`insert into bridge_assets(id,title_id,kind,s3_key,byte_size,asset_version_id)
+      values
+      ('rights-agreement','title-123','rights_document','sealed/agreement.pdf',1024,'00000000-0000-4000-8000-000000000001'),
+      ('rights-ownership','title-123','rights_document','sealed/ownership.pdf',1024,'00000000-0000-4000-8000-000000000002')`);
     await f.sql.query(`insert into bridge_rights_evidence
       (id,title_id,rights_grant_id,evidence_type,asset_version_id,checksum_sha256,submitted_by,status,reviewed_by,reviewed_at,review_note)
       values
@@ -424,7 +431,9 @@ test("legal approval remains blocked when only one required evidence class is ve
     const checksum = "c".repeat(64);
     await f.sql.query(`insert into bridge_asset_versions
       (id,title_id,asset_group,asset_type,version,s3_key,checksum_sha256,byte_size,processing_state,created_by)
-      values ('00000000-0000-4000-8000-000000000003','title-123','DOCUMENT','executed_agreement',1,'sealed/agreement.pdf',$1,1024,'PASSED','owner')`,[checksum]);
+      values ('00000000-0000-4000-8000-000000000003','title-123','DOCUMENT','RIGHTS_EVIDENCE',1,'sealed/agreement.pdf',$1,1024,'PASSED','owner')`,[checksum]);
+    await f.sql.query(`insert into bridge_assets(id,title_id,kind,s3_key,byte_size,asset_version_id)
+      values ('rights-agreement-single','title-123','rights_document','sealed/agreement.pdf',1024,'00000000-0000-4000-8000-000000000003')`);
     await f.sql.query(`insert into bridge_rights_evidence
       (id,title_id,rights_grant_id,evidence_type,asset_version_id,checksum_sha256,submitted_by,status,reviewed_by,reviewed_at,review_note)
       values ('00000000-0000-4000-8000-000000000013','title-123',$1,'EXECUTED_AGREEMENT','00000000-0000-4000-8000-000000000003',$2,'owner','VERIFIED','legal',now(),'Agreement checked')`,[saved.grantId,checksum]);
