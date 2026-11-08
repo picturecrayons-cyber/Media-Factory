@@ -449,8 +449,9 @@ export const suspendLoopPublication = createServerFn({ method: "POST" })
     const actor = await requireVerifiedActor(context.userId);
     assertPermission(actor, "loop.revoke");
     return (await getSql()).transaction(async (sql) => {
+      await sql`select id from bridge_titles where id=${data.bridgeTitleId} for update`;
       const pubs = await sql<{ loop_title_id: string }>`
-      select loop_title_id from bridge_loop_publications where bridge_title_id = ${data.bridgeTitleId} limit 1
+      select loop_title_id from bridge_loop_publications where bridge_title_id = ${data.bridgeTitleId} for update
     `;
       if (!pubs[0]) throw new Error("Distribution record not found");
 
@@ -489,8 +490,9 @@ export const revokeLoopPublication = createServerFn({ method: "POST" })
     const actor = await requireVerifiedActor(context.userId);
     assertPermission(actor, "loop.revoke");
     return (await getSql()).transaction(async (sql) => {
+      await sql`select id from bridge_titles where id=${data.bridgeTitleId} for update`;
       const pubs = await sql<{ loop_title_id: string }>`
-      select loop_title_id from bridge_loop_publications where bridge_title_id = ${data.bridgeTitleId} limit 1
+      select loop_title_id from bridge_loop_publications where bridge_title_id = ${data.bridgeTitleId} for update
     `;
       if (!pubs[0]) throw new Error("Distribution record not found");
 
@@ -533,6 +535,7 @@ export const extendDistributionWindow = createServerFn({ method: "POST" })
     const actor = await requireVerifiedActor(context.userId);
     assertPermission(actor, "loop.publish");
     return (await getSql()).transaction(async (sql) => {
+      await sql`select id from bridge_titles where id=${data.bridgeTitleId} for update`;
       const pubs = await sql<{
         loop_title_id: string;
         window_start: string | Date | null;
@@ -544,7 +547,7 @@ export const extendDistributionWindow = createServerFn({ method: "POST" })
       }>`
       select loop_title_id, window_start, authorization_status, revoked_at,
              territories, languages, exploitation_models
-      from bridge_loop_publications where bridge_title_id = ${data.bridgeTitleId} limit 1
+      from bridge_loop_publications where bridge_title_id = ${data.bridgeTitleId} for update
     `;
       const publication = pubs[0];
       if (!publication) throw new Error("Distribution record not found");
