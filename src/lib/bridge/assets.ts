@@ -211,16 +211,28 @@ export const recordAssetMultipartPart = createServerFn({ method: "POST" })
     const session = sessions[0];
     if (!session || claims.uploadId !== session.provider_upload_id || !["initiated","uploading"].includes(session.state)) throw new Error("Multipart session is not active or does not match its provider upload");
     if (data.byteEnd > Number(session.expected_size) || data.byteEnd <= data.byteStart) throw new Error("Part byte range is invalid");
-    const { listMultipartUploadParts } = await import("./oci-object-storage.server");
-    const providerParts = await listMultipartUploadParts(asset.s3_key, session.provider_upload_id);
-    const providerPart = providerParts.find((part) => part.partNumber === data.partNumber);
-    const expectedLength = data.byteEnd - data.byteStart;
-    if (!providerPart || providerPart.etag !== data.etag.replaceAll('"', "") || providerPart.size !== expectedLength) {
-      throw new Error("Part ETag or byte length does not match OCI's server-side part listing");
+    // Do not list every OCI part for every uploaded part. That creates O(n²)
+    // provider-list traffic for large masters. Persist the client-observed ETag
+    // after strict range validation; commitAssetMultipart performs one complete
+    // provider listing and compares every saved ETag/size before assembly.
+    const expectedSize = Number(session.expected_size);
+    const partSize = Number(session.part_size);
+    const expectedStart = (data.partNumber - 1) * partSize;
+    const expectedEnd = Math.min(expectedSize, expectedStart + partSize);
+    const normalizedEtag = data.etag.replaceAll('"', "");
+    if (
+      data.partNumber > Math.ceil(expectedSize / partSize) ||
+      data.byteStart !== expectedStart ||
+      data.byteEnd !== expectedEnd ||
+      !normalizedEtag ||
+      normalizedEtag.length > 512 ||
+      /[\\r\\n]/.test(normalizedEtag)
+    ) {
+      throw new Error("Part number, byte range or ETag is invalid for this upload session");
     }
     await sql`
       insert into bridge_private.upload_parts (session_id, part_number, byte_start, byte_end, etag)
-      values (${data.sessionId}, ${data.partNumber}, ${data.byteStart}, ${data.byteEnd}, ${providerPart.etag})
+      values (${data.sessionId}, ${data.partNumber}, ${data.byteStart}, ${data.byteEnd}, ${normalizedEtag})
       on conflict (session_id, part_number) do update
         set byte_start = excluded.byte_start, byte_end = excluded.byte_end,
             etag = excluded.etag, recorded_at = now()
