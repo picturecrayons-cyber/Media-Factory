@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { ingestRazorpayWebhook } from "@/lib/bridge/payments";
+import { ingestRazorpayWebhook } from "@/lib/bridge/service-revenue";
 
 export const Route = createFileRoute("/api/razorpay/webhook")({
   server: {

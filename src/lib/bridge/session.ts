@@ -8,6 +8,7 @@ import { PRODUCT_NAME, LEGAL_OWNER, PRODUCTION_DOMAIN } from "./canonical";
 import { integrationStatus } from "./env";
 import { assertNotDevUser } from "./guards";
 import { isMissingOrganizationSchemaError, workspaceFailureCode } from "./workspace-schema";
+import { requireDirectBridgeIdentity } from "./authorization-guards";
 
 export type BridgeActor = Actor & {
   email: string;
@@ -86,36 +87,26 @@ async function loadActorByBridgeUserId(userId: string): Promise<BridgeActor | nu
 export async function resolveBridgeUserId(authUserId: string): Promise<string> {
   assertNotDevUser(authUserId);
   const sql = await getSql();
+
+  // The immutable Supabase subject is the canonical identity when it directly
+  // owns a Bridge profile. Only the immutable authenticated subject can resolve a Bridge profile.
   const direct = await sql<{ user_id: string }>`
     select user_id from bridge_profiles where user_id = ${authUserId} limit 1
   `;
-  if (direct[0]?.user_id) return direct[0].user_id;
+  return requireDirectBridgeIdentity(authUserId, direct[0]?.user_id);
 
-  const linked = await sql<{ bridge_user_id: string }>`
-    select bridge_user_id
-    from bridge_loop_identity_links
-    where auth_user_id = ${authUserId}::uuid
-    limit 1
-  `;
-  if (linked[0]?.bridge_user_id) return linked[0].bridge_user_id;
-
-  // Legacy Bridge profiles may predate the Supabase identity-link table.
-  // Recover the mapping only when the authenticated Supabase user's verified
-  // email exactly matches the existing Bridge profile email.
-  const byEmail = await sql<{ bridge_user_id: string }>`
-    select bp.user_id as bridge_user_id
-    from bridge_profiles bp
-    join auth.users au on lower(au.email) = lower(bp.email)
-    where au.id = ${authUserId}::uuid
-      and au.email_confirmed_at is not null
-    limit 1
-  `;
-  return byEmail[0]?.bridge_user_id ?? authUserId;
 }
 
 export async function loadActor(authUserId: string): Promise<BridgeActor | null> {
-  const bridgeUserId = await resolveBridgeUserId(authUserId);
-  return loadActorByBridgeUserId(bridgeUserId);
+  try {
+    const bridgeUserId = await resolveBridgeUserId(authUserId);
+    return loadActorByBridgeUserId(bridgeUserId);
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith("BRIDGE_IDENTITY_UNRESOLVED:")) {
+      return null;
+    }
+    throw error;
+  }
 }
 
 export async function requireActor(userId: string): Promise<BridgeActor> {

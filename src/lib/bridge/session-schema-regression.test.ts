@@ -18,3 +18,14 @@ test("studio organization lookup is optional and fails closed when schema is mis
   assert.match(source, /workspaceFailureCode/);
   assert.doesNotMatch(source, /organization_name.*(?:fallback|organization_id)/i);
 });
+
+test("identity resolver requires direct immutable auth subject and rejects legacy/email inference", () => {
+  const source = readFileSync(new URL("./session.ts", import.meta.url), "utf8");
+  const start = source.indexOf("export async function resolveBridgeUserId");
+  const end = source.indexOf("export async function loadActor", start);
+  const resolver = source.slice(start, end);
+  assert.ok(resolver.includes("requireDirectBridgeIdentity"));
+  assert.equal(resolver.includes("bridge_loop_identity_links"), false);
+  assert.equal(resolver.includes("auth.users"), false);
+  assert.equal(resolver.toLowerCase().includes("email"), false);
+});
