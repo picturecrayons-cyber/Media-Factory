@@ -12,6 +12,7 @@ test("only a verified upload sets the master reference, once, with an audit even
     await db.exec("create role anon; create role authenticated;");
     await db.exec(readFileSync(join(process.cwd(), "migrations/0004_bridge.sql"), "utf8"));
     await db.exec(readFileSync(join(process.cwd(), "migrations/0021_bridge_organizations.sql"), "utf8"));
+    await db.exec(readFileSync(join(process.cwd(), "migrations/0023_bridge_server_authoritative_uploads.sql"), "utf8"));
     await db.exec(`insert into bridge_titles (id,slug,name,owner_user_id,owner_account_type)
       values ('title1234','title','Title','creator','independent_creator');
       insert into bridge_assets (id,title_id,kind,s3_key,content_type,created_by)
@@ -26,6 +27,9 @@ test("only a verified upload sets the master reference, once, with an audit even
       byteSize: 120,
       contentType: "video/mp4",
       checksum: "etag-1",
+      checksumSha256: "a".repeat(64),
+      storage: { provider: "oci", bucket: "test-bucket", namespace: "test-ns", region: "ap-mumbai-1", endpoint: "https://objectstorage.ap-mumbai-1.oraclecloud.com" },
+      objectVersionId: "version-1",
       sourceKey: "bridge/creator/title1234/master/video.mp4",
       sealedKey: "bridge/creator/title1234/master/video.mp4.verified/uuid-1",
     };
@@ -46,7 +50,8 @@ test("only a verified upload sets the master reference, once, with an audit even
     );
     assert.equal(audit.rows[0]?.action, "asset.upload_verified");
     const metadata = JSON.parse(audit.rows[0]?.metadata ?? "{}");
-    assert.equal(metadata.checksum, "etag-1");
+    assert.equal(metadata.checksumEtag, "etag-1");
+    assert.equal(metadata.checksumSha256, "a".repeat(64));
     assert.equal(metadata.titleId, "title1234");
     assert.equal(metadata.kind, "master");
   } finally {
@@ -62,6 +67,7 @@ test("same-organization verified Studio member can confirm upload, other organiz
     await db.exec("create role anon; create role authenticated;");
     await db.exec(readFileSync(join(process.cwd(), "migrations/0004_bridge.sql"), "utf8"));
     await db.exec(readFileSync(join(process.cwd(), "migrations/0021_bridge_organizations.sql"), "utf8"));
+    await db.exec(readFileSync(join(process.cwd(), "migrations/0023_bridge_server_authoritative_uploads.sql"), "utf8"));
     await db.exec(`
       insert into bridge_profiles (user_id,email,display_name,account_type,email_verified)
       values
@@ -97,6 +103,9 @@ test("same-organization verified Studio member can confirm upload, other organiz
       byteSize: 120,
       contentType: "video/mp4",
       checksum: "etag-staging-test",
+      checksumSha256: "b".repeat(64),
+      storage: { provider: "oci", bucket: "test-bucket", namespace: "test-ns", region: "ap-mumbai-1", endpoint: "https://objectstorage.ap-mumbai-1.oraclecloud.com" },
+      objectVersionId: null,
     };
     assert.equal(await persistVerifiedAsset(sql, {
       ...common,
@@ -132,6 +141,7 @@ test("title owner can confirm an upload when organization tables are absent", as
     await db.waitReady;
     await db.exec("create role anon; create role authenticated;");
     await db.exec(readFileSync(join(process.cwd(), "migrations/0004_bridge.sql"), "utf8"));
+    await db.exec(readFileSync(join(process.cwd(), "migrations/0023_bridge_server_authoritative_uploads.sql"), "utf8"));
     await db.exec(`insert into bridge_titles (id,slug,name,owner_user_id,owner_account_type,status)
       values ('title1234','title','Title','creator','independent_creator','PREPARING');
       insert into bridge_assets (id,title_id,kind,s3_key,content_type,created_by)
@@ -146,6 +156,9 @@ test("title owner can confirm an upload when organization tables are absent", as
       byteSize: 170,
       contentType: "video/mp4",
       checksum: "etag-no-org",
+      checksumSha256: "c".repeat(64),
+      storage: { provider: "oci", bucket: "test-bucket", namespace: "test-ns", region: "ap-mumbai-1", endpoint: "https://objectstorage.ap-mumbai-1.oraclecloud.com" },
+      objectVersionId: null,
       sourceKey: "bridge/creator/title1234/screener/video.mp4",
       sealedKey: "bridge/creator/title1234/screener/video.mp4.verified/asset1234",
     }), true);
