@@ -13,7 +13,6 @@ export type LoopTitle = {
   durationMinutes: number | null;
   posterPath: string | null;
   backdropPath: string | null;
-  playbackPath: string | null;
   maturityRating: string;
   genres: string[];
   accessTier: LoopAccessTier;
