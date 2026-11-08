@@ -71,6 +71,7 @@ export const ASSET_KINDS = [
   "subtitle",
   "technical",
   "censor_certificate",
+  "rights_document",
 ] as const;
 export type AssetKind = (typeof ASSET_KINDS)[number];
 
