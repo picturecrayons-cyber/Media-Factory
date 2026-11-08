@@ -456,3 +456,59 @@ export function requiredCopyMatrix(clips: ClipRecord[], audioCount: number, stil
 export function appendAudit<T>(history: readonly T[], event: T): T[] {
   return [...history, event];
 }
+
+
+/**
+ * Non-secret configuration contract for three physically independent vault
+ * destinations. credentialRef is a secret-manager key reference, never a key.
+ */
+export interface StorageDestination {
+  tier: StorageTier;
+  provider: string;
+  accountId: string;
+  region: string;
+  container: string;
+  credentialRef: string;
+}
+
+export function validateStorageTopology(
+  destinations: readonly StorageDestination[],
+): Array<StorageDestination & { failureDomainId: string; storageLocationId: string }> {
+  const required: readonly StorageTier[] = ["MASTER", "BACKUP_1", "BACKUP_2"];
+  if (destinations.length !== required.length) {
+    throw new Error("Exactly three configured storage destinations are required");
+  }
+  const tiers = new Set<StorageTier>();
+  const failureDomains = new Set<string>();
+  const locations = new Set<string>();
+  const normalized = destinations.map((destination) => {
+    for (const [field, value] of Object.entries(destination)) {
+      if (typeof value !== "string" || !value.trim()) {
+        throw new Error(`Storage destination ${field} is required`);
+      }
+    }
+    if (!required.includes(destination.tier)) throw new Error("Unsupported storage tier");
+    if (tiers.has(destination.tier)) throw new Error("Duplicate storage tier");
+    tiers.add(destination.tier);
+    const failureDomainId = [
+      destination.provider,
+      destination.accountId,
+      destination.region,
+    ].map((value) => value.trim().toLowerCase()).join("/");
+    const storageLocationId = [
+      failureDomainId,
+      destination.container.trim().toLowerCase(),
+    ].join("/");
+    if (failureDomains.has(failureDomainId)) {
+      throw new Error("Storage destinations must use three independent provider/account/region failure domains");
+    }
+    if (locations.has(storageLocationId)) throw new Error("Duplicate storage location");
+    failureDomains.add(failureDomainId);
+    locations.add(storageLocationId);
+    return { ...destination, failureDomainId, storageLocationId };
+  });
+  for (const tier of required) {
+    if (!tiers.has(tier)) throw new Error(`Missing storage destination for ${tier}`);
+  }
+  return normalized.sort((a, b) => required.indexOf(a.tier) - required.indexOf(b.tier));
+}
