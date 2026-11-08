@@ -204,21 +204,6 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
     assertPermission(actor, "title.read_catalog");
     const sql = await getSql();
 
-    // Auto-reevaluate any expired distribution windows
-    await sql`
-      update bridge_loop_publications
-      set authorization_status = 'expired', updated_at = now()
-      where window_end is not null and window_end < now() and authorization_status in ('authorized', 'live')
-    `.catch(() => {});
-
-    await sql`
-      update loop_titles
-      set status = 'expired', published = false, listed = false, updated_at = now()
-      where bridge_title_id in (
-        select bridge_title_id from bridge_loop_publications where authorization_status = 'expired'
-      ) and published = true
-    `.catch(() => {});
-
     const rows = await sql<{
       id: string;
       slug: string;
@@ -274,6 +259,7 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
               },
             )
           : null;
+        const windowExpired = Boolean(r.window_end && new Date(r.window_end).getTime() < Date.now());
         const isReady =
           Boolean(coveringGrant) &&
           [
@@ -302,6 +288,7 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
         }
         if (!r.master_key) blockers.push("QC master video is missing");
         if (!r.poster_key) blockers.push("Artwork/poster is missing");
+        if (windowExpired) blockers.push("The current publication window has expired; a new authorized window is required");
 
         return {
           id: r.id,
@@ -317,16 +304,17 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
             ? {
                 destination: "CRAYONS_LOOP" as const,
                 loopTitleId: r.loop_title_id,
-                authorizationStatus: (r.authorization_status?.toUpperCase() ||
-                  "PENDING") as DistributionAuthorizationStatus,
+                authorizationStatus: (windowExpired && ["authorized", "live"].includes((r.authorization_status || "").toLowerCase())
+                  ? "EXPIRED"
+                  : r.authorization_status?.toUpperCase() || "PENDING") as DistributionAuthorizationStatus,
                 territories: r.territories || ["IN"],
                 languages: r.languages || [r.language],
                 exploitationModels: r.exploitation_models || ["SVOD"],
                 windowStart: iso(r.window_start),
                 windowEnd: iso(r.window_end),
                 loopStatus: r.loop_status,
-                listed: Boolean(r.listed),
-                published: Boolean(r.published),
+                listed: windowExpired ? false : Boolean(r.listed),
+                published: windowExpired ? false : Boolean(r.published),
                 playbackPath: r.playback_path,
               }
             : null,
