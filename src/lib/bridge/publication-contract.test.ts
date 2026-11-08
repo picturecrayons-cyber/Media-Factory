@@ -136,6 +136,7 @@ test("status alignment never bypasses operator, rights or commercial coverage", 
     { grants: [], allowed: true, data },
     { grants: [{ ...grant, status: "REVOKED" }], allowed: true, data },
     { grants: [{ ...grant, territories: ["US"] }], allowed: true, data },
+    { grants: [{ ...grant, languages: ["English"] }], allowed: true, data: { ...data, languages: ["English"] } },
     { grants: [grant], allowed: false, data },
     { grants: [grant], allowed: true, data: { ...data, accessTier: "SVOD" } },
   ]) {
