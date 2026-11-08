@@ -19,8 +19,22 @@ const UPLOADABLE: ReadonlySet<string> = new Set(["DRAFT", "UPLOADING", "PREPARIN
 async function hasLicenseEntitlement(userId: string, titleId: string): Promise<boolean> {
   const sql = await getSql();
   const rows = await sql<{ n: number }>`
-    select count(*)::int as n from bridge_entitlements
-    where user_id = ${userId} and title_id = ${titleId} and access_type = 'license'
+    select count(*)::int as n
+    from bridge_entitlements e
+    join bridge_payments payment on payment.id = e.payment_id
+    where e.user_id = ${userId}
+      and e.title_id = ${titleId}
+      and e.access_type = 'license'
+      and payment.status = 'captured'
+      and payment.verified_at is not null
+      and exists (
+        select 1
+        from bridge_rights_grants rights
+        where rights.title_id = e.title_id
+          and rights.status = 'VALID'
+          and (rights.window_start is null or rights.window_start <= now())
+          and (rights.window_end is null or rights.window_end > now())
+      )
   `;
   return Number(rows[0]?.n ?? 0) > 0;
 }
