@@ -7,7 +7,11 @@ import {
   submitLoopLicense,
   reviewTitleWorkflow,
 } from "@/lib/bridge/workflow";
-import { submitRightsEvidenceFn } from "@/lib/bridge/rights-evidence";
+import {
+  submitRightsEvidenceFn,
+  requestRightsEvidenceUploadFn,
+  confirmRightsEvidenceUploadFn,
+} from "@/lib/bridge/rights-evidence";
 import { advanceTitle } from "@/lib/bridge/titles";
 import {
   authorizeLoopPublication,
@@ -71,7 +75,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
   const [ownership, setOwnership] = useState("");
   const [ownerShare, setOwnerShare] = useState("");
   const [evidenceType, setEvidenceType] = useState<"EXECUTED_AGREEMENT" | "OWNERSHIP_CHAIN">("EXECUTED_AGREEMENT");
-  const [evidenceAssetVersionId, setEvidenceAssetVersionId] = useState("");
+
   function downloadStatement() {
     const safe = (v: string) =>
       '"' + (/^[=+@-]/.test(v) ? "'" : "") + v.replaceAll('"', '""') + '"';
@@ -281,41 +285,49 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                   <p>Agreement: {g.evidence[0]?.agreementReference ?? "Not recorded"}</p>
                   {g.status === "DRAFT" &&
                   canOperateOnTitle(actor, title, "title.update_own", "title.license") ? (
-                    <form
-                      className="grid gap-2 rounded-lg border border-line p-3 sm:grid-cols-2"
-                      onSubmit={(event) => {
-                        event.preventDefault();
-                        action.mutate(() => submitRightsEvidenceFn({
-                          data: {
-                            titleId: title.id,
-                            grantId: g.id,
-                            evidenceType,
-                            assetVersionId: evidenceAssetVersionId,
-                          },
-                        }));
-                      }}
-                    >
-                      <p className="text-sm sm:col-span-2">Attach actual processed document evidence. Text references alone do not count as evidence.</p>
+                    <div className="grid gap-2 rounded-lg border border-line p-3 sm:grid-cols-2">
+                      <p className="text-sm sm:col-span-2">Upload the actual legal source document. The server seals it in storage and calculates SHA-256 before it enters independent review. Text references alone do not count as evidence.</p>
                       <label className="grid gap-1 text-sm">
                         Evidence class
-                        <select value={evidenceType} onChange={(event) => setEvidenceType(event.target.value as "EXECUTED_AGREEMENT" | "OWNERSHIP_CHAIN")} className="rounded-lg border border-line bg-elevated p-2">
+                        <select value={evidenceType} onChange={(event) => setEvidenceType(event.target.value as "EXECUTED_AGREEMENT" | "OWNERSHIP_CHAIN")} className="rounded-lg border border-line bg-elevated p-2" disabled={action.isPending}>
                           <option value="EXECUTED_AGREEMENT">Executed agreement</option>
                           <option value="OWNERSHIP_CHAIN">Ownership chain</option>
                         </select>
                       </label>
                       <label className="grid gap-1 text-sm">
-                        Verified document asset
-                        <select value={evidenceAssetVersionId} onChange={(event) => setEvidenceAssetVersionId(event.target.value)} className="rounded-lg border border-line bg-elevated p-2" required>
-                          <option value="">Select processed document</option>
-                          {(workflow.data?.documentAssets ?? []).map((asset) => (
-                            <option key={asset.id} value={asset.id}>{asset.asset_type} · v{asset.version} · {asset.checksum_sha256.slice(0, 12)}</option>
-                          ))}
-                        </select>
+                        Legal document (PDF, PNG or JPEG; max 25 MB)
+                        <input type="file" accept=".pdf,application/pdf,image/png,image/jpeg" disabled={action.isPending}
+                          onChange={(event) => {
+                            const file = event.target.files?.[0];
+                            event.currentTarget.value = "";
+                            if (!file) return;
+                            action.mutate(async () => {
+                              const contentType = file.type || (file.name.toLowerCase().endsWith(".pdf") ? "application/pdf" : "");
+                              const signed = await requestRightsEvidenceUploadFn({ data: {
+                                titleId: title.id, grantId: g.id, evidenceType,
+                                filename: file.name, contentType: contentType as "application/pdf" | "image/png" | "image/jpeg",
+                                byteSize: file.size,
+                              } });
+                              const response = await fetch(signed.url, {
+                                method: signed.method,
+                                headers: { "Content-Type": contentType },
+                                body: file,
+                                redirect: "error",
+                              });
+                              if (!response.ok) throw new Error(`Rights evidence upload failed (${response.status})`);
+                              const verified = await confirmRightsEvidenceUploadFn({ data: {
+                                assetId: signed.assetId, expectedByteSize: file.size,
+                              } });
+                              await submitRightsEvidenceFn({ data: {
+                                titleId: title.id, grantId: g.id, evidenceType,
+                                assetVersionId: verified.assetVersionId,
+                              } });
+                            });
+                          }}
+                          className="rounded-lg border border-line bg-elevated p-2 text-xs"
+                        />
                       </label>
-                      <button type="submit" disabled={action.isPending || !(workflow.data?.documentAssets ?? []).some((asset) => asset.id === evidenceAssetVersionId)} className="rounded-lg border border-line p-2 text-sm sm:col-span-2">
-                        Submit evidence for independent review
-                      </button>
-                    </form>
+                    </div>
                   ) : null}
                   {(workflow.data?.rightsEvidence ?? []).filter((item) => item.rights_grant_id === g.id).map((item) => (
                     <p key={item.id} className="text-xs text-muted">
