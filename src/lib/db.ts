@@ -1,4 +1,5 @@
 import { pendingMigrations } from "../../scripts/migration-plan.mjs";
+import { assertDatabaseUrlForRuntime } from "./supabase-url.ts";
 
 /** Which database backend is active. */
 export type DbSource = "postgres" | "pglite";
@@ -6,14 +7,17 @@ export type DbSource = "postgres" | "pglite";
 // Prefer an explicit DATABASE_URL when present. On Vercel, the native Supabase
 // integration injects POSTGRES_URL, so accept that as the canonical fallback.
 // Empty/whitespace values are treated as unset to avoid a silent PGLite fallback.
+const runtimeEnvironment = typeof process !== "undefined" ? process.env.VERCEL_ENV : undefined;
+const vercelRuntime =
+  typeof process !== "undefined" && Boolean(process.env.VERCEL);
 const rawDatabaseUrl =
   typeof process !== "undefined"
-    ? (
-        process.env.DATABASE_URL ??
-        process.env.POSTGRES_URL ??
-        process.env.SUPABASE_DB_URL ??
-        process.env.SUPABASE_DATABASE_URL
-      )
+    ? [
+        process.env.DATABASE_URL,
+        process.env.POSTGRES_URL,
+        process.env.SUPABASE_DB_URL,
+        process.env.SUPABASE_DATABASE_URL,
+      ].map((value) => value?.trim()).find((value): value is string => Boolean(value))
     : undefined;
 function normalizePostgresUrl(value: string | undefined): string | undefined {
   if (!value) return undefined;
@@ -39,16 +43,18 @@ function normalizePostgresUrl(value: string | undefined): string | undefined {
     throw new Error(`Invalid Bridge database binding: ${message}`);
   }
 }
-const databaseUrl = normalizePostgresUrl(
-  rawDatabaseUrl && rawDatabaseUrl.trim() ? rawDatabaseUrl : undefined,
-);
+const databaseUrl = normalizePostgresUrl(rawDatabaseUrl);
+if (vercelRuntime) {
+  if (!runtimeEnvironment) {
+    throw new Error("CONFIG_MISSING: VERCEL_ENV is required to isolate the Vercel database binding.");
+  }
+  assertDatabaseUrlForRuntime(databaseUrl, runtimeEnvironment);
+}
 
 /**
  * Vercel serverless has no PGLite wasm data file (`/var/task/_libs/pglite.data`).
  * The Grok sandbox keeps the embedded fallback; Vercel must use real Postgres.
  */
-const vercelRuntime =
-  typeof process !== "undefined" && Boolean(process.env.VERCEL);
 const vercelWithoutPostgres = vercelRuntime && !databaseUrl;
 
 function vercelPostgresRequired(): never {
