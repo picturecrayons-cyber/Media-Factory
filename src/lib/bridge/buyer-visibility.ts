@@ -24,3 +24,25 @@ export async function assertBuyerPublishable(titleId: string) {
   const sql = await getSql();
   await sql`select public.bridge_assert_buyer_publishable(${titleId})`;
 }
+
+
+/**
+ * Buyer access is title-specific, not implied by catalog publication status.
+ * The server must verify an active, unexpired grant for this exact buyer.
+ */
+export async function assertBuyerTitleAccess(titleId: string, buyerUserId: string) {
+  if (!buyerUserId.trim()) throw new Error("Not found");
+  const sql = await getSql();
+  const grants = await sql<{ allowed: boolean }>`
+    select exists (
+      select 1
+      from bridge_buyer_title_access a
+      where a.title_id = ${titleId}
+        and a.buyer_user_id = ${buyerUserId}
+        and a.revoked_at is null
+        and (a.expires_at is null or a.expires_at > now())
+    ) as allowed
+  `;
+  if (!grants[0]?.allowed) throw new Error("Not found");
+  await sql`select public.bridge_assert_buyer_publishable(${titleId})`;
+}
