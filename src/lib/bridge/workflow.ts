@@ -514,6 +514,57 @@ export const getTitleRevenue = createServerFn({ method: "GET" })
     };
   });
 
+export type SettlementEvidenceInput = {
+  titleId: string;
+  reference: string;
+  invoiceReference: string;
+  statementReference: string;
+  amountPaise: number;
+};
+
+export async function recordSettlementEvidenceTx(
+  tx: Sql,
+  actor: Actor,
+  data: SettlementEvidenceInput,
+) {
+  assertPermission(actor, "finance.record_settlement");
+  const reference = data.reference.trim();
+  const normalizedReference = reference.toUpperCase();
+  const [claim] = await tx<{ id: string }>`insert into bridge_settlement_reference_claims
+    (reference_normalized,reference,title_id,invoice_reference,statement_reference,amount_paise,currency,created_by)
+    values (${normalizedReference},${reference},${data.titleId},${data.invoiceReference},${data.statementReference},${data.amountPaise},'INR',${actor.userId})
+    on conflict (reference_normalized) do nothing
+    returning id`;
+  if (!claim) {
+    const [existing] = await tx<{
+      title_id: string;
+      invoice_reference: string;
+      statement_reference: string;
+      amount_paise: number | string;
+      currency: string;
+    }>`select title_id,invoice_reference,statement_reference,amount_paise,currency
+      from bridge_settlement_reference_claims where reference_normalized=${normalizedReference}`;
+    if (
+      existing &&
+      existing.title_id === data.titleId &&
+      existing.invoice_reference === data.invoiceReference &&
+      existing.statement_reference === data.statementReference &&
+      Number(existing.amount_paise) === data.amountPaise &&
+      existing.currency === "INR"
+    ) return { status: "EXTERNAL_EVIDENCE_UNVERIFIED" as const, duplicate: true as const };
+    throw new Error("This settlement reference is already recorded with different title or financial terms");
+  }
+  await audit(tx, actor.userId, data.titleId, "finance.settlement_evidence", {
+    reference,
+    invoiceReference: data.invoiceReference,
+    statementReference: data.statementReference,
+    amountPaise: data.amountPaise,
+    currency: "INR",
+    status: "EXTERNAL_EVIDENCE_UNVERIFIED",
+  });
+  return { status: "EXTERNAL_EVIDENCE_UNVERIFIED" as const, duplicate: false as const };
+}
+
 // Records externally executed settlement documents. It never initiates a payout
 // or labels the external transfer as provider-verified.
 export const recordSettlementEvidence = createServerFn({ method: "POST" })
@@ -532,20 +583,5 @@ export const recordSettlementEvidence = createServerFn({ method: "POST" })
     assertPermission(actor, "finance.record_settlement");
     const title = await loadTitle(data.titleId);
     if (!title || !canReadTitle(actor, title)) throw new Error("Not found");
-    return (await getSql()).transaction(async (tx) => {
-      await tx`select pg_advisory_xact_lock(hashtextextended(${`settlement:${data.reference}`},0))`;
-      const prior =
-        await tx`select id from bridge_audit_logs where action='finance.settlement_evidence'
-        and metadata::jsonb->>'reference'=${data.reference} limit 1`;
-      if (prior.length) throw new Error("This settlement reference is already recorded");
-      await audit(tx, actor.userId, data.titleId, "finance.settlement_evidence", {
-        reference: data.reference,
-        invoiceReference: data.invoiceReference,
-        statementReference: data.statementReference,
-        amountPaise: data.amountPaise,
-        currency: "INR",
-        status: "EXTERNAL_EVIDENCE_UNVERIFIED",
-      });
-      return { status: "EXTERNAL_EVIDENCE_UNVERIFIED" as const };
-    });
+    return (await getSql()).transaction((tx) => recordSettlementEvidenceTx(tx, actor, data));
   });
