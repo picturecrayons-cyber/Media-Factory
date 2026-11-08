@@ -62,6 +62,8 @@ export async function submitRightsEvidence(
       a.s3_key as asset_key,a.verified_object_key,a.storage_verified_at,a.checksum_sha256 as stored_checksum
     from bridge_asset_versions av
     join bridge_assets a on a.asset_version_id=av.id and a.kind='rights_document'
+      and a.verified_object_key=av.s3_key and a.storage_verified_at is not null
+      and lower(a.checksum_sha256)=lower(av.checksum_sha256)
     where av.id=${data.assetVersionId} for update of av,a`;
   if (
     !asset ||
@@ -132,6 +134,8 @@ export async function reviewRightsEvidence(
     join bridge_asset_versions av on av.id=e.asset_version_id and av.title_id=e.title_id
       and av.asset_group='DOCUMENT' and av.asset_type='RIGHTS_EVIDENCE'
     join bridge_assets a on a.asset_version_id=av.id and a.kind='rights_document'
+      and a.verified_object_key=av.s3_key and a.storage_verified_at is not null
+      and lower(a.checksum_sha256)=lower(av.checksum_sha256)
     where e.id=${data.evidenceId} for update of e,g,av,a`;
   if (!evidence || evidence.status !== "PENDING") throw new Error("Pending rights evidence was not found");
   if (actor.userId === evidence.grant_created_by || actor.userId === evidence.submitted_by)
