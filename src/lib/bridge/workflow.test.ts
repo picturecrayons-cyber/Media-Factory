@@ -85,7 +85,7 @@ async function fixture() {
     );
     create table bridge_assets(id text,title_id text,kind text,s3_key text,byte_size bigint,created_by text);
     create table bridge_title_events(title_id text,from_status text,to_status text,actor_user_id text,note text);
-    create table bridge_audit_logs(actor_user_id text,action text,entity_type text,entity_id text,metadata text);`);
+    create table bridge_audit_logs(id uuid primary key default gen_random_uuid(),actor_user_id text,action text,entity_type text,entity_id text,metadata text);`);
     await db.exec(
       readFileSync(
         new URL("../../../migrations/0010_bridge_prd_phase1.sql", import.meta.url),
