@@ -7,7 +7,7 @@ import { assertPermission, canReadTitle } from "./rbac";
 import { loadTitle } from "./titles";
 import { writeAudit } from "./audit";
 import { assertNotDevUser } from "./guards";
-import { assertBuyerPublishable } from "./buyer-visibility";
+import { assertBuyerTitleAccess } from "./buyer-visibility";
 import { canBuyerViewLicensePackage } from "./buyer-package-access";
 
 const languageRightInput = z.object({
@@ -78,7 +78,7 @@ export const listLanguageRights = createServerFn({ method: "GET" })
     const title = await loadTitle(data.titleId);
     if (!title) throw new Error("Not found");
     if (actor.accountType === "buyer" && !actor.internalRole) {
-      await assertBuyerPublishable(title.id);
+      await assertBuyerTitleAccess(title.id, actor.userId);
     }
     if (!canReadTitle(actor, title)) throw new Error("Not found");
     const sql = await getSql();
