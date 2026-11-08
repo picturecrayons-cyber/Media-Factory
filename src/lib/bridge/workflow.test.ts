@@ -5,7 +5,7 @@ import { runInNewContext } from "node:vm";
 import { transpileModule, ModuleKind } from "typescript";
 import { PGlite } from "@electric-sql/pglite";
 import { Pool } from "pg";
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { z } from "zod";
 import * as policy from "./workflow-policy.ts";
 import * as rbac from "./rbac.ts";
@@ -159,7 +159,7 @@ async function fixture() {
         exports: rightsEvidenceExports,
         Date,
         require: (name: string) => {
-          if (name === "node:crypto") return require("node:crypto");
+          if (name === "node:crypto") return { randomBytes };
           assert.ok(name in modules, name);
           return modules[name];
         },
