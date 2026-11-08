@@ -318,6 +318,21 @@ test("saving identical license terms repeatedly reuses one draft and one audit e
   }
 });
 
+test("concurrent identical license submissions serialize to one draft and one audit event", async () => {
+  const f = await fixture();
+  try {
+    const results = await Promise.all([
+      f.sql.transaction((tx) => f.save(tx, owner, license)),
+      f.sql.transaction((tx) => f.save(tx, owner, license)),
+    ]) as Array<{ grantId: string }>;
+    assert.equal(results[0].grantId, results[1].grantId);
+    assert.equal((await f.sql.query("select * from bridge_rights_grants")).length, 1);
+    assert.equal((await f.sql.query("select * from bridge_audit_logs where action='license.loop_draft'")).length, 1);
+  } finally {
+    await f.db.close();
+  }
+});
+
 test("same agreement reference with materially different terms is rejected", async () => {
   const f = await fixture();
   try {
