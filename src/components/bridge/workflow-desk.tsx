@@ -96,6 +96,11 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
     URL.revokeObjectURL(url);
   }
   const grants = workflow.data?.grants ?? [];
+  const grantsByAgreement = grants.reduce<Record<string, typeof grants>>((groups, grant) => {
+    const reference = grant.evidence[0]?.agreementReference ?? "Not recorded";
+    (groups[reference] ??= []).push(grant);
+    return groups;
+  }, {});
   const valid = grants.find((g) => g.status === "VALID" && new Date(g.window_end) > new Date());
   const pub = publication.data?.publication;
   const button = (label: string, run: () => Promise<unknown>, disabled = false) => (
@@ -271,51 +276,67 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                   ? `Enter at least 8 characters (${note.trim().length}/8).`
                   : "Review note meets the minimum length."}
               </p>
-              {grants.map((g) => (
-                <article key={g.id} className="space-y-2 rounded-lg border border-line p-3">
-                  <p>
-                    {g.status} · {g.exclusivity} · {g.territories.join(", ")} ·{" "}
-                    {g.languages.join(", ")}
-                  </p>
-                  <p className="text-xs">
-                    {g.window_start} → {g.window_end}
-                  </p>
-                  <p>Agreement: {g.evidence[0]?.agreementReference ?? "Not recorded"}</p>
-                  {g.status === "DRAFT" &&
-                  title.status === "RIGHTS_REVIEW" &&
-                  hasPermission(actor, "title.rights_review") ? (
-                    <div className="flex gap-2">
-                      {button(
-                        "Approve rights / license",
-                        () =>
-                          reviewTitleWorkflow({
-                            data: {
-                              titleId: title.id,
-                              stage: "LEGAL",
-                              decision: "APPROVE",
-                              note,
-                              grantId: g.id,
-                            },
-                          }),
-                        note.trim().length < 8,
-                      )}
-                      {button(
-                        "Reject",
-                        () =>
-                          reviewTitleWorkflow({
-                            data: {
-                              titleId: title.id,
-                              stage: "LEGAL",
-                              decision: "REJECT",
-                              note,
-                              grantId: g.id,
-                            },
-                          }),
-                        note.trim().length < 8,
-                      )}
+              {Object.entries(grantsByAgreement).map(([reference, agreementGrants]) => (
+                <section key={reference} className="space-y-2 rounded-xl border border-line p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <h3 className="font-medium">Agreement: {reference}</h3>
+                      <p className="text-xs text-muted">
+                        {agreementGrants.length} license record{agreementGrants.length === 1 ? "" : "s"}
+                      </p>
                     </div>
-                  ) : null}
-                </article>
+                  </div>
+                  <div className="space-y-2">
+                    {agreementGrants.map((g) => (
+                      <details key={g.id} className="rounded-lg border border-line p-3">
+                        <summary className="cursor-pointer text-sm font-medium">
+                          {g.status} · {g.exclusivity} · {g.territories.join(", ")} ·{" "}
+                          {g.languages.join(", ")}
+                          <span className="block pt-1 text-xs font-normal text-muted">
+                            {g.window_start} → {g.window_end} · View record and review actions
+                          </span>
+                        </summary>
+                        <div className="mt-3 space-y-2 border-t border-line pt-3">
+                          <p className="text-xs">Grant record: {g.id}</p>
+                          {g.status === "DRAFT" &&
+                          title.status === "RIGHTS_REVIEW" &&
+                          hasPermission(actor, "title.rights_review") ? (
+                            <div className="flex flex-wrap gap-2">
+                              {button(
+                                "Approve rights / license",
+                                () =>
+                                  reviewTitleWorkflow({
+                                    data: {
+                                      titleId: title.id,
+                                      stage: "LEGAL",
+                                      decision: "APPROVE",
+                                      note,
+                                      grantId: g.id,
+                                    },
+                                  }),
+                                note.trim().length < 8,
+                              )}
+                              {button(
+                                "Reject",
+                                () =>
+                                  reviewTitleWorkflow({
+                                    data: {
+                                      titleId: title.id,
+                                      stage: "LEGAL",
+                                      decision: "REJECT",
+                                      note,
+                                      grantId: g.id,
+                                    },
+                                  }),
+                                note.trim().length < 8,
+                              )}
+                            </div>
+                          ) : null}
+                        </div>
+                      </details>
+                    ))}
+                  </div>
+                </section>
               ))}
               {!grants.length ? <p>No license draft recorded.</p> : null}
             </div>
