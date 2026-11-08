@@ -12,7 +12,8 @@ import { titleAssetKey, signUpload, verifyObjectSha256, sealVerifiedObject } fro
 const evidenceInput = z.object({
   titleId: z.string().min(8),
   grantId: z.string().uuid(),
-  evidenceType: z.enum(["EXECUTED_AGREEMENT", "OWNERSHIP_CHAIN"]),
+  evidenceType: z.enum(["EXECUTED_AGREEMENT", "OWNERSHIP_CHAIN", "SIGNATORY_AUTHORITY", "DISTRIBUTION_AUTHORITY", "SIGNED_AMENDMENT", "SIGNED_ADDENDUM", "RIGHTS_SCHEDULE"]),
+  relatedAgreementEvidenceId: z.string().uuid().optional(),
   assetVersionId: z.string().uuid(),
 });
 
@@ -80,9 +81,18 @@ export async function submitRightsEvidence(
     !/^[a-f0-9]{64}$/i.test(asset.checksum_sha256)
   ) throw new Error("Evidence must be a current, processed DOCUMENT asset with a SHA-256 checksum uploaded by the submitting owner");
 
+  const supplementary = ["SIGNED_AMENDMENT", "SIGNED_ADDENDUM", "RIGHTS_SCHEDULE"].includes(data.evidenceType);
+  if (supplementary !== Boolean(data.relatedAgreementEvidenceId))
+    throw new Error("Signed amendments, addenda and rights schedules must be linked to their executed agreement");
+  if (data.relatedAgreementEvidenceId) {
+    const [parent] = await tx<{ id: string }>`select id from bridge_rights_evidence
+      where id=${data.relatedAgreementEvidenceId} and title_id=${data.titleId}
+        and rights_grant_id=${data.grantId} and evidence_type='EXECUTED_AGREEMENT'`;
+    if (!parent) throw new Error("Related executed agreement evidence was not found for this grant");
+  }
   const [row] = await tx<{ id: string }>`insert into bridge_rights_evidence
-    (title_id,rights_grant_id,evidence_type,asset_version_id,checksum_sha256,submitted_by,status)
-    values (${data.titleId},${data.grantId},${data.evidenceType},${data.assetVersionId},${asset.checksum_sha256},${actor.userId},'PENDING')
+    (title_id,rights_grant_id,evidence_type,related_agreement_evidence_id,asset_version_id,checksum_sha256,submitted_by,status)
+    values (${data.titleId},${data.grantId},${data.evidenceType},${data.relatedAgreementEvidenceId ?? null},${data.assetVersionId},${asset.checksum_sha256},${actor.userId},'PENDING')
     on conflict (rights_grant_id,evidence_type,asset_version_id) do nothing
     returning id`;
   if (!row) {
@@ -110,6 +120,7 @@ export async function reviewRightsEvidence(
   input: z.infer<typeof evidenceReviewInput>,
 ) {
   const data = evidenceReviewInput.parse(input);
+  if (actor.internalRole !== "legal_reviewer") throw new Error("Only an authorized Legal reviewer may verify rights evidence");
   assertPermission(actor, "title.rights_review");
   const [evidence] = await tx<{
     id: string;
@@ -171,7 +182,7 @@ export async function reviewRightsEvidence(
 const rightsEvidenceUploadInput = z.object({
   titleId: z.string().min(8),
   grantId: z.string().uuid(),
-  evidenceType: z.enum(["EXECUTED_AGREEMENT", "OWNERSHIP_CHAIN"]),
+  evidenceType: z.enum(["EXECUTED_AGREEMENT", "OWNERSHIP_CHAIN", "SIGNATORY_AUTHORITY", "DISTRIBUTION_AUTHORITY", "SIGNED_AMENDMENT", "SIGNED_ADDENDUM", "RIGHTS_SCHEDULE"]),
   filename: z.string().trim().min(1).max(120),
   contentType: z.enum(["application/pdf", "image/png", "image/jpeg"]),
   byteSize: z.number().int().positive().max(25 * 1024 * 1024),
