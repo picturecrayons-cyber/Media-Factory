@@ -103,6 +103,26 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
     URL.revokeObjectURL(url);
   }
   const grants = workflow.data?.grants ?? [];
+  const grantGroups = [...grants.reduce((groups, grant) => {
+    const reference = String(grant.evidence?.[0]?.agreementReference ?? "NOT RECORDED").trim().toUpperCase();
+    const group = groups.get(reference) ?? [];
+    group.push(grant);
+    groups.set(reference, group);
+    return groups;
+  }, new Map<string, typeof grants>())].map(([reference, items]) => ({
+    reference,
+    items,
+    conflictingTerms: new Set(items.map((g) => JSON.stringify({
+      exclusivity: g.exclusivity,
+      territories: [...g.territories].sort(),
+      languages: [...g.languages].sort(),
+      media: [...(g.media ?? [])].sort(),
+      windowStart: g.window_start,
+      windowEnd: g.window_end,
+      commercialTerms: g.evidence?.[0]?.commercialTerms ?? null,
+    }))).size > 1,
+    placeholderReference: /NOT\\s*EX+ECUTED|TBD|PENDING|NOT RECORDED/.test(reference),
+  }));
   const valid = grants.find((g) => g.status === "VALID" && new Date(g.window_end) > new Date());
   const pub = publication.data?.publication;
   const button = (label: string, run: () => Promise<unknown>) => (
@@ -273,7 +293,16 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                 </form>
               ) : null}
               {input("Legal review findings", note, setNote)}
-              {grants.map((g) => (
+              {grantGroups.map((group) => (
+                <section key={group.reference} className="space-y-2 rounded-xl border border-line p-3">
+                  <div className="flex flex-wrap items-center gap-2 text-sm">
+                    <span className="font-medium">Agreement reference: {group.reference}</span>
+                    <span className="text-xs text-muted">{group.items.length} historical record(s)</span>
+                    {group.conflictingTerms ? <span className="rounded-full border border-amber-500/40 px-2 py-0.5 text-xs text-amber-700">Conflicting terms — legal decision required</span> : null}
+                    {!group.conflictingTerms && group.items.length > 1 ? <span className="rounded-full border border-line px-2 py-0.5 text-xs">Duplicate records — history retained</span> : null}
+                    {group.placeholderReference ? <span className="rounded-full border border-line px-2 py-0.5 text-xs">Placeholder reference — executed source required</span> : null}
+                  </div>
+                  {group.items.map((g) => (
                 <article key={g.id} className="space-y-2 rounded-lg border border-line p-3">
                   <p>
                     {g.status} · {g.exclusivity} · {g.territories.join(", ")} ·{" "}
@@ -355,6 +384,8 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                     </div>
                   ) : null}
                 </article>
+                  ))}
+                </section>
               ))}
               {!grants.length ? <p>No license draft recorded.</p> : null}
             </div>
