@@ -76,7 +76,11 @@ export const listLanguageRights = createServerFn({ method: "GET" })
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
     const title = await loadTitle(data.titleId);
-    if (!title || !canReadTitle(actor, title)) throw new Error("Not found");
+    if (!title) throw new Error("Not found");
+    if (actor.accountType === "buyer" && !actor.internalRole) {
+      await assertBuyerPublishable(title.id);
+    }
+    if (!canReadTitle(actor, title)) throw new Error("Not found");
     const sql = await getSql();
     const rows = await sql<LanguageRightRow>`
       select id, title_id, language, right_type, territories, media, window_start, window_end,
@@ -223,10 +227,9 @@ export const listLicensePackages = createServerFn({ method: "GET" })
     const actor = await requireVerifiedActor(context.userId);
     const title = await loadTitle(data.titleId);
     if (!title) throw new Error("Not found");
-    if (!canReadTitle(actor, title)) {
-      if (actor.accountType !== "buyer") throw new Error("Not found");
-      await assertBuyerPublishable(title.id);
-    }
+    const isBuyer = actor.accountType === "buyer" && !actor.internalRole;
+    if (isBuyer) await assertBuyerPublishable(title.id);
+    if (!canReadTitle(actor, title) && !isBuyer) throw new Error("Not found");
     const sql = await getSql();
     const rows = await sql<{
       id: string; title_id: string; name: string; language_right_ids: unknown; territories: unknown;
