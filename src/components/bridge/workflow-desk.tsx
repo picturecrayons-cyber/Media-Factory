@@ -11,6 +11,7 @@ import {
   submitRightsEvidenceFn,
   requestRightsEvidenceUploadFn,
   confirmRightsEvidenceUploadFn,
+  reviewRightsEvidenceFn,
 } from "@/lib/bridge/rights-evidence";
 import { advanceTitle } from "@/lib/bridge/titles";
 import {
@@ -377,9 +378,20 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                     </div>
                   ) : null}
                   {(workflow.data?.rightsEvidence ?? []).filter((item) => item.rights_grant_id === g.id).map((item) => (
-                    <p key={item.id} className="text-xs text-muted">
-                      {item.evidence_type.replaceAll("_", " ")} · {item.status} · submitted by {item.submitted_by}
-                    </p>
+                    <div key={item.id} className="space-y-2 rounded-lg border border-line p-2">
+                      <p className="text-xs text-muted">
+                        {item.evidence_type.replaceAll("_", " ")} · {item.status} · submitted by {item.submitted_by}{item.reviewed_by ? " · reviewed by " + item.reviewed_by : ""}
+                      </p>
+                      {item.status === "PENDING" && actor.internalRole === "legal_reviewer" ? (
+                        <div className="space-y-2">
+                          {input("Independent Legal review note (min 8 characters)", note, setNote)}
+                          <div className="flex flex-wrap gap-2">
+                            {button("Verify evidence", () => reviewRightsEvidenceFn({ data: { evidenceId: item.id, decision: "VERIFIED", note } }))}
+                            {button("Reject evidence", () => reviewRightsEvidenceFn({ data: { evidenceId: item.id, decision: "REJECTED", note } }))}
+                          </div>
+                        </div>
+                      ) : null}
+                    </div>
                   ))}
                   {g.status === "DRAFT" &&
                   title.status === "RIGHTS_REVIEW" &&
