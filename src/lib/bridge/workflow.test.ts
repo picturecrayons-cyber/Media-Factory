@@ -11,6 +11,7 @@ import * as policy from "./workflow-policy.ts";
 import * as rbac from "./rbac.ts";
 import * as assetRoles from "./asset-roles.ts";
 import { submitTitleForQc } from "./title-submission.ts";
+import { submitRightsEvidence } from "./rights-evidence.ts";
 import type { Sql } from "../db";
 
 type TestDb = {
@@ -322,6 +323,33 @@ test("agreement references cannot be reused across different titles or letter ca
       /Agreement reference is already assigned to another title/,
     );
     assert.equal((await f.sql.query("select * from bridge_rights_grants")).length, 1);
+  } finally {
+    await f.db.close();
+  }
+});
+
+test("repeated identical rights evidence submission reuses one record and one audit event", async () => {
+  const f = await fixture();
+  try {
+    await f.sql.query("update bridge_titles set status='RIGHTS_REVIEW' where id='title-123'");
+    const saved = (await f.sql.transaction((tx) => f.save(tx, owner, license))) as { grantId: string };
+    const assetVersionId = "00000000-0000-4000-8000-000000000021";
+    const checksum = "d".repeat(64);
+    await f.sql.query(`insert into bridge_asset_versions
+      (id,title_id,asset_group,asset_type,version,s3_key,checksum_sha256,byte_size,processing_state,created_by)
+      values ($1,'title-123','DOCUMENT','RIGHTS_EVIDENCE',1,'sealed/rights-evidence.pdf',$2,2048,'PASSED','owner')`,
+      [assetVersionId,checksum]);
+    const input = {
+      titleId: "title-123",
+      grantId: saved.grantId,
+      evidenceType: "EXECUTED_AGREEMENT" as const,
+      assetVersionId,
+    };
+    const first = await f.sql.transaction((tx) => submitRightsEvidence(tx, owner, input));
+    const second = await f.sql.transaction((tx) => submitRightsEvidence(tx, owner, input));
+    assert.deepEqual(second, first);
+    assert.equal((await f.sql.query("select * from bridge_rights_evidence")).length, 1);
+    assert.equal((await f.sql.query("select * from bridge_audit_logs where action='rights.evidence.submit'")).length, 1);
   } finally {
     await f.db.close();
   }
