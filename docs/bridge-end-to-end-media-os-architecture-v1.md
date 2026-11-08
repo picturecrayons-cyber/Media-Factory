@@ -295,3 +295,111 @@ Do not create these tables blindly. Reconcile each concept against existing migr
 - Gmail/Hostinger connection cannot expose another mailbox or send without approved sender/action policy.
 
 **Non-negotiable:** App-inu pani kittaruthu. Build additive, evidence-gated, reversible changes; keep Production HOLD.
+
+
+---
+
+## 16. Architecture v0.1 reconciliation addendum
+
+**Purpose:** Close operational-contract gaps identified during the v0.1 review while preserving the existing architecture blueprint. This addendum is part of the same proposal; it does not certify implementation, approve a migration, or authorize a release.
+
+### 16.1 Authority and system boundaries
+
+- **Crayons Bridge is the sole B2B authority** for title identity, source/master custody records, QC decisions, legal evidence, rights grants, buyer mandates, licensing, delivery authorization and publication authorization.
+- **Crayons Loop is downstream delivery only.** It may manage viewer identity, catalogue presentation, subscription/TVOD entitlements, playback sessions and viewing progress, but it must consume a current Bridge-authorized publication. It must never create, infer, widen or renew Bridge rights.
+- Windows Media Factory / Local Media MCP and FFmpeg are processing tools. Their successful output, checksum, upload, payment, AI result or workflow status is not rights approval or publication authorization.
+- Every publication and delivery references an immutable Bridge title UUID and a specific approved publication/version. Loop acknowledges and serves that exact version.
+- Missing, stale, conflicting, expired or revoked authorization fails closed. Revocation and expiry block new access and trigger bounded invalidation of active delivery capabilities.
+
+### 16.2 Canonical account roles, identity and organization isolation
+
+Release 1 external account roles are **Admin, Buyer, Investor, Creator and Studio**. QC reviewer, Legal reviewer, Finance, DIT operator and other operational duties are narrowly scoped permissions, not additional public account types.
+
+- Account RBAC is independent of payment, subscription and service entitlements. Payment does not create a role, organization membership, title right or mandate.
+- Supabase Auth is the authentication authority. Bridge authorization resolves immutable auth.users.id to the Bridge profile (bridge_profiles.user_id), then to active, explicitly approved memberships and mandates. Intended identity mapping: bridge_user_id → bridge_profiles(user_id), auth_user_id → auth.users(id). Do not substitute email, display name, metadata or Better Auth identity.
+- A person may belong to multiple Studio organizations. Each Studio membership requires separate approval, status, scope and audit history. Membership in Studio A grants no access to Studio B.
+- Buyer access is scoped to the verified Buyer user, active Buyer organization, exact title, current mandate/license and permitted action. Buyer A cannot enumerate or access Buyer B resources.
+- Creator dashboard access is a required first-class workspace, not Admin-only. Studio dashboard covers organization/member administration, production and DIT workflows under server-side organization scope.
+- Do not introduce a sixth public Agency role in Release 1 without a separately reviewed product decision. Any existing Agency capability remains explicitly delegated and deny-by-default until its authority and tenant model are approved.
+- Self-approval is prohibited for high-risk rights/legal/finance actions. Enforce submitter/reviewer separation and dual control where policy requires it.
+
+### 16.3 Source master, upload and transfer contract
+
+- The camera/source master is immutable after verified ingest. A replacement is a new version with lineage; never overwrite the original object in place.
+- Upload initiation creates a server-authoritative, actor/title/asset-bound session with a short-lived scoped capability. The server owns the expected object key, provider multipart upload ID, part manifest, expiry and finalization state.
+- Browser memory or IndexedDB may assist retries but is not authoritative evidence. Persist completed-part metadata server-side and reconcile it with the storage provider before resume or completion.
+- Require contiguous, non-duplicated part manifests, provider-side multipart completion, final object HEAD/size verification and independent SHA-256 verification before marking an asset storage-verified.
+- Retry is idempotent and bounded with backoff. Cancellation, abandoned-session cleanup, network interruption, browser restart and worker restart need explicit recovery states. Never delete a completed source part/object merely because a client request timed out.
+- Upload progress distinguishes client-acknowledged bytes, provider-confirmed parts, multipart completion, object verification and checksum verification. A percentage or UI Ready label alone is not proof.
+- Windows Local Media MCP allowlists source directories, rejects traversal and unsafe symlinks, exposes read-only listing/metadata/hash operations by default, and never exposes arbitrary shell execution or OCI credentials to the browser.
+
+### 16.4 Storage provenance, integrity and backup
+
+Every verified asset retains provider, bucket, namespace, region, endpoint, canonical object key, object/version identifier where available, size, content type, ETag (provider metadata, not a universal checksum), expected and observed SHA-256, verification time/actor/tool and source lineage.
+
+- Internal storage provenance, object keys, signed URLs and credentials are never exposed in Buyer-facing DTOs or public Loop responses.
+- Master assets and legal evidence remain private and immutable under retention/legal-hold policy. Derivatives are separate versioned assets.
+- A backup is not verified merely because a copy/upload succeeded. Record independent target identity, checksum comparison, restore test, restore result, timestamp and responsible actor.
+- Define and measure restore objectives before promising an RPO/RTO or archive SLA. No automatic source/legal asset deletion without a separately approved retention and recovery policy.
+
+### 16.5 Media processing and technical QC
+
+- Probe media with recorded tool/version and technical metadata. Generate ABR renditions only from an approved source; do not upscale. Default candidate ladder is 1080p / 720p / 480p, with 360p only when justified by product/device requirements and verified output quality.
+- Keep source master, mezzanine, proxy, review screener, delivery master and streaming renditions as distinct asset classes with explicit lineage.
+- Technical QC is independent from Legal and Rights. Record test profile/version, measured result, defects, retest, reviewer and approval time.
+- The seven-file delivery package is main film, trailer, vertical poster, horizontal artwork, thumbnail, subtitles and censor/legal certificate. Main film is required; trailer may be optional where policy allows. A file is Ready only after storage and content verification. The latest authoritative version controls readiness; a newer pending replacement blocks an older Ready version from silently satisfying the gate.
+- Seven files present does not mean QC, Legal or Rights approval. Missing/invalid documents and unresolved defects remain HOLD / NOT VERIFIED.
+
+### 16.6 Rights, Legal and publication contract
+
+Legal evidence, technical QC and rights authorization are independent gates. Legal review records evidence class, issuer/source, document version, asset checksum, title/version scope, reviewer, decision, reason and time. A checksum proves file identity, not document authenticity or ownership.
+
+A Bridge publication event binds at minimum:
+- Bridge title UUID and title/version;
+- exact approved metadata and asset versions;
+- delivery package and verified delivery asset references;
+- QC decision and Legal evidence/decision references;
+- rights grant, principal/holder, mandate and permitted action;
+- territory, language, platform/destination, exploitation category and commercial model;
+- effective start/end timestamps and timezone, holdbacks/blackouts, exclusivity and sublicense scope;
+- monetization/price model where applicable;
+- approving actor(s), timestamps, audit event and publication version.
+
+Loop acknowledges the exact publication version and rejects stale, superseded, revoked or expired versions. Catalogue eligibility is not playback authorization; playback and checkout independently recheck the current Bridge publication, territory/window and viewer entitlement.
+
+### 16.7 Private delivery and playback
+
+- Use short-lived capabilities bound to authenticated actor, exact asset/version, purpose, permitted method and expiry. A long-lived query-string bearer token must not be the sole authorization.
+- Recheck current Bridge publication/rights state and Loop viewer entitlement at the protected delivery boundary. Apply byte-range handling without exposing the master object or provider credentials.
+- Define and test revocation propagation and the maximum residual access window for already-issued capabilities. If the Bridge authorization service or required state is unavailable, deny new protected access.
+- DRM, DASH, device certification, offline downloads and production playback remain NOT VERIFIED until independently tested on supported clients and deployment targets.
+
+### 16.8 Payment and entitlement separation
+
+- Bridge B2B service invoices/licensing finance and Loop consumer subscription/TVOD are separate business boundaries with distinct order namespaces, webhook secrets, ledgers and reconciliation.
+- One canonical fulfillment contract defines the idempotent transition from verified payment event to the specific service or viewer entitlement. No alternate Edge Function/webhook path may independently grant the same entitlement.
+- Verify provider webhook signature, event identity, order/user/product binding, amount, currency, capture state and replay/idempotency before recording fulfillment. Persist the payment event/ledger transition before making entitlement available.
+- Model refund, partial refund, dispute, reversal, expiry and revocation explicitly. Payment capture is not a rights grant; payment success does not override Bridge publication eligibility.
+- Test mode and synthetic events only until separate approval authorizes live payment activity. No real charges, refunds or transfers are authorized by this architecture addendum.
+
+### 16.9 Cost, observability and operational recovery
+
+Track storage capacity, request/API operations, worker compute, transcoding, CDN/egress, archive retrieval, database/logging and retry overhead by title/project and service order where possible. Bound worker concurrency and retry budgets. Cost visibility must not disclose internal cost basis or margin to customers, Buyers or unauthorized Studio members.
+
+Every critical workflow needs correlated audit and recovery evidence: actor, tenant, title, action, request/session ID, before/after state, provider response class, retry count, checksum/version, timestamp and final disposition. Secrets and signed capabilities are redacted. Recovery workers are idempotent and reconcile provider state before changing local state.
+
+### 16.10 Database, migration and release controls
+
+- Bridge Testing DB (jbymleftneggcgutlcqu) is the proposed shared STAGING target for Bridge and Loop only after CRA-128 proves deployment/project/environment isolation. Bridge Production DB (mlmgugivsyoxzdgwkbpu) is PRODUCTION and never a test target.
+- Before any STAGING write, reconcile migration ledger entries against exact source file hashes, live schema objects, constraints, indexes, triggers, functions, grants, RLS policies, default ACLs and identity dependencies. A missing ledger version is not permission to replay a migration.
+- Current work authorization is READ-ONLY review only. No migration execution or schema/data write is authorized here.
+- Required release sequence: architecture review → complete repository/diff reconciliation → CRA-128 Preview isolation proof → READ-ONLY STAGING schema/security reconciliation → separately approved isolated implementation → exact-head checks and authenticated Preview tests → independent Bridge and Loop certification.
+- Production remains **HOLD / NOT CERTIFIED / NO-GO**. No Production query, write, migration, merge, promotion, deployment, payment, refund, customer email or paid upgrade is authorized by this document.
+
+### 16.11 Unresolved decisions and explicit non-certification
+
+Unresolved evidence/decision items include canonical object-storage provider/region and backup topology; exact schema/table mapping and migration state; publication acknowledgement/revocation protocol; signed delivery token format and residual revocation window; supported ABR/device/DRM matrix; retention/legal-hold and restore objectives; payment ledger ownership across Bridge and Loop; exact DIT hardware/filesystem adapters; cost allocation and customer-facing pricing.
+
+This document describes intended contracts. It does not prove that code, database policies, storage objects, Preview deployments, Windows ingest, payment flows or playback currently satisfy them. Each item requires source review and evidence at the exact deployed commit. **Architecture status remains REVIEW REQUIRED; repository status PARTIAL; STAGING READ-ONLY / ISOLATION GATE; PRODUCTION HOLD / NOT CERTIFIED / NO-GO.**
+
+**Non-regression rule:** App-inu pani kittaruthu.
