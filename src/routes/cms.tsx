@@ -20,27 +20,16 @@ function OperationalCms() {
 function CmsBody({ actor }: { actor: any }) {
   const search = Route.useSearch() as { tab?: Tab };
   const tab: Tab = tabs.includes(search.tab as Tab) ? (search.tab as Tab) : "ingest";
-  const titlesQ = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles() });
-  const pubQ = useQuery({
-    queryKey: ["loop-publication-readiness"],
-    queryFn: () => listLoopPublicationReadiness(),
+  const titlesQ = useQuery({
+    queryKey: ["bridge-titles", "cms-licensing"],
+    queryFn: () => listTitles(),
+    enabled: tab === "licensing",
   });
-  const titles = titlesQ.data?.titles ?? [];
-  const publications = pubQ.data?.titles ?? [];
-  if (titlesQ.isPending || pubQ.isPending)
-    return (
-      <BridgeShell actor={actor} title="Bridge CMS">
-        <p>Loading CMS…</p>
-      </BridgeShell>
-    );
-  if (titlesQ.isError || pubQ.isError)
-    return (
-      <BridgeShell actor={actor} title="Bridge CMS">
-        <p role="alert">
-          CMS data could not be loaded. Refresh to retry; no empty catalog is inferred.
-        </p>
-      </BridgeShell>
-    );
+  const pubQ = useQuery({
+    queryKey: ["loop-publication-readiness", "cms-publishing"],
+    queryFn: () => listLoopPublicationReadiness(),
+    enabled: tab === "publishing",
+  });
 
   return (
     <BridgeShell actor={actor} title="Bridge CMS">
@@ -79,8 +68,24 @@ function CmsBody({ actor }: { actor: any }) {
 
       <div className="mt-6">
         {tab === "ingest" ? <IngestDesk actor={actor} /> : null}
-        {tab === "licensing" ? <LicensingDesk titles={titles} /> : null}
-        {tab === "publishing" ? <PublishingDesk publications={publications} /> : null}
+        {tab === "licensing" ? (
+          titlesQ.isPending ? (
+            <p role="status">Loading licensing titles…</p>
+          ) : titlesQ.isError ? (
+            <p role="alert">Licensing titles could not be loaded. Refresh to retry; no empty catalog is inferred.</p>
+          ) : (
+            <LicensingDesk titles={titlesQ.data?.titles ?? []} />
+          )
+        ) : null}
+        {tab === "publishing" ? (
+          pubQ.isPending ? (
+            <p role="status">Loading publication readiness…</p>
+          ) : pubQ.isError ? (
+            <p role="alert">Publication readiness could not be loaded. Refresh to retry; no empty queue is inferred.</p>
+          ) : (
+            <PublishingDesk publications={pubQ.data?.titles ?? []} />
+          )
+        ) : null}
       </div>
     </BridgeShell>
   );
