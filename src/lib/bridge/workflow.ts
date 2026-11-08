@@ -244,6 +244,12 @@ export async function reviewWorkflow(tx: Sql, actor: Actor, data: z.infer<typeof
       const mandatoryTypes = ["EXECUTED_AGREEMENT", "OWNERSHIP_CHAIN", "SIGNATORY_AUTHORITY", "DISTRIBUTION_AUTHORITY"];
       if (!mandatoryTypes.every((type) => verifiedTypes.has(type)))
         throw new Error("Legal approval requires independently verified executed agreement, ownership chain, signatory authority, and Master Distributor / sublicensing authority evidence");
+      const [unresolvedSupplement] = await tx<{ id: string }>`select id from bridge_rights_evidence
+        where rights_grant_id=${data.grantId} and evidence_type in ('SIGNED_AMENDMENT','SIGNED_ADDENDUM','RIGHTS_SCHEDULE')
+          and status <> 'VERIFIED'
+        limit 1 for update`;
+      if (unresolvedSupplement)
+        throw new Error("All submitted amendments, addenda and rights schedules must be independently verified before Legal approval");
       const executedAgreementIds = new Set(verifiedEvidence.filter((item) => item.evidence_type === "EXECUTED_AGREEMENT").map((item) => item.id));
       const supplements = verifiedEvidence.filter((item) => ["SIGNED_AMENDMENT", "SIGNED_ADDENDUM", "RIGHTS_SCHEDULE"].includes(item.evidence_type));
       if (supplements.some((item) => !item.related_agreement_evidence_id || !executedAgreementIds.has(item.related_agreement_evidence_id)))
