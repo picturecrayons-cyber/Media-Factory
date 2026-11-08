@@ -46,7 +46,6 @@ export type PublicationRow = {
   loop_status: string;
   listed: boolean;
   published: boolean;
-  playback_path: string | null;
 };
 
 const publishInput = z.object({
@@ -228,7 +227,6 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
       loop_status: string | null;
       listed: boolean | null;
       published: boolean | null;
-      playback_path: string | null;
     }>`
       select b.id, b.slug, b.name, b.status, b.language, b.master_key, b.poster_key,
              b.synopsis, b.year, b.runtime_minutes,
@@ -246,7 +244,7 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
              now() as database_now,
              p.window_start, p.window_end,
              p.territories, p.languages, p.exploitation_models,
-             l.status as loop_status, l.listed, l.published, l.playback_path
+             l.status as loop_status, l.listed, l.published
       from bridge_titles b
       left join bridge_loop_publications p on p.bridge_title_id = b.id
       left join loop_titles l on l.id = p.loop_title_id
@@ -337,7 +335,6 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
                 loopStatus: r.loop_status,
                 listed: Boolean(r.listed) && Boolean(r.publication_active),
                 published: Boolean(r.published) && Boolean(r.publication_active),
-                playbackPath: r.playback_path,
               }
             : null,
         };
@@ -392,7 +389,7 @@ export const authorizeLoopPublication = createServerFn({ method: "POST" })
         published, featured, access_tier, updated_at
       ) values (
         ${loopTitleId}, ${title.id}, ${title.slug}, ${title.name}, ${title.synopsis}, ${loopStageType(title.content_type)},
-        ${title.language}, ${title.year}, ${title.runtime_minutes}, ${title.poster_key}, ${title.master_key},
+        ${title.language}, ${title.year}, ${title.runtime_minutes}, ${title.poster_key}, null,
         ${JSON.stringify({
           source: "crayons-bridge-master-distribution",
           lane: loopStageType(title.content_type),
@@ -407,7 +404,7 @@ export const authorizeLoopPublication = createServerFn({ method: "POST" })
         slug = excluded.slug, title = excluded.title, synopsis = excluded.synopsis,
         content_type = excluded.content_type,
         language = excluded.language, year = excluded.year, duration_minutes = excluded.duration_minutes,
-        poster_path = excluded.poster_path, playback_path = excluded.playback_path,
+        poster_path = excluded.poster_path, playback_path = null,
         status = 'approved', listed = true, published = true, access_tier = excluded.access_tier,
         metadata = excluded.metadata, updated_at = now()
     `;
@@ -623,7 +620,7 @@ export const getLoopPublication = createServerFn({ method: "GET" })
     const sql = await getSql();
 
     const rows = await sql<PublicationRow>`
-      select p.*, l.status as loop_status, l.listed, l.published, l.playback_path
+      select p.*, l.status as loop_status, l.listed, l.published
       from bridge_loop_publications p
       join loop_titles l on l.id = p.loop_title_id
       where p.bridge_title_id = ${data.bridgeTitleId}
@@ -649,7 +646,6 @@ export const getLoopPublication = createServerFn({ method: "GET" })
         loopStatus: r.loop_status,
         listed: r.listed,
         published: r.published,
-        playbackPath: r.playback_path,
       },
     };
   });
