@@ -6,7 +6,7 @@ create table if not exists public.bridge_rights_evidence (
   id uuid primary key default gen_random_uuid(),
   title_id text not null references public.bridge_titles(id) on delete restrict,
   rights_grant_id uuid not null references public.bridge_rights_grants(id) on delete restrict,
-  evidence_type text not null check (evidence_type in ('EXECUTED_AGREEMENT','OWNERSHIP_CHAIN','SIGNATORY_AUTHORITY','DISTRIBUTION_AUTHORITY','SIGNED_AMENDMENT','SIGNED_ADDENDUM','RIGHTS_SCHEDULE')),
+  evidence_type text not null check (evidence_type in ('EXECUTED_AGREEMENT','OWNERSHIP_CHAIN','SIGNATORY_AUTHORITY','MASTER_DISTRIBUTOR_AUTHORITY','SUBLICENSING_AUTHORITY','SIGNED_AMENDMENT','SIGNED_ADDENDUM','RIGHTS_SCHEDULE')),
   related_agreement_evidence_id uuid references public.bridge_rights_evidence(id) on delete restrict,
   asset_version_id uuid not null references public.bridge_asset_versions(id) on delete restrict,
   checksum_sha256 char(64) not null check (checksum_sha256 ~ '^[0-9a-fA-F]{64}$'),
