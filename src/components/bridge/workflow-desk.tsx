@@ -121,7 +121,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
       windowEnd: g.window_end,
       commercialTerms: g.evidence?.[0]?.commercialTerms ?? null,
     }))).size > 1,
-    placeholderReference: /NOT\\s*EX+ECUTED|TBD|PENDING|NOT RECORDED/.test(reference),
+    placeholderReference: /NOT\s*EX+ECUTED|TBD|PENDING|NOT RECORDED/.test(reference),
   }));
   const valid = grants.find((g) => g.status === "VALID" && new Date(g.window_end) > new Date());
   const pub = publication.data?.publication;
