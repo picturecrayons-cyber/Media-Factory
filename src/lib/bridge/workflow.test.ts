@@ -354,6 +354,72 @@ test("exact license resubmission is idempotent and conflicting overlap is reject
   }
 });
 
+test("legal approval fails closed when no QC approval exists", async () => {
+  const f = await fixture();
+  try {
+    const saved = (await f.sql.transaction((tx) => f.save(tx, owner, license))) as { grantId: string };
+    await f.sql.query("update bridge_titles set status='RIGHTS_REVIEW'");
+    await assert.rejects(
+      f.sql.transaction((tx) => f.review(tx, legal, {
+        titleId: "title-123", stage: "LEGAL", decision: "APPROVE",
+        note: "Legal review without QC must fail", grantId: saved.grantId,
+      })),
+      /current PASSED QC review/,
+    );
+    assert.equal((await f.sql.query("select status from bridge_rights_grants"))[0].status, "DRAFT");
+    assert.equal((await f.sql.query("select status from bridge_titles"))[0].status, "RIGHTS_REVIEW");
+    assert.equal((await f.sql.query("select * from bridge_legal_cases")).length, 0);
+  } finally {
+    await f.db.close();
+  }
+});
+
+test("legal approval rejects stale QC evidence after the master pointer changes", async () => {
+  const f = await fixture();
+  try {
+    const saved = (await f.sql.transaction((tx) => f.save(tx, owner, license))) as { grantId: string };
+    await f.sql.transaction((tx) => f.review(tx, qc, {
+      titleId: "title-123", stage: "QC", decision: "APPROVE",
+      note: "Current master and artwork reviewed",
+    }));
+    await f.sql.query("update bridge_titles set status='RIGHTS_REVIEW', master_key='replacement/master'");
+    await assert.rejects(
+      f.sql.transaction((tx) => f.review(tx, legal, {
+        titleId: "title-123", stage: "LEGAL", decision: "APPROVE",
+        note: "Stale QC reference must fail", grantId: saved.grantId,
+      })),
+      /current PASSED QC review/,
+    );
+    assert.equal((await f.sql.query("select status from bridge_rights_grants"))[0].status, "DRAFT");
+    assert.equal((await f.sql.query("select * from bridge_legal_cases")).length, 0);
+  } finally {
+    await f.db.close();
+  }
+});
+
+test("legal approval rejects a failed latest QC decision", async () => {
+  const f = await fixture();
+  try {
+    const saved = (await f.sql.transaction((tx) => f.save(tx, owner, license))) as { grantId: string };
+    await f.sql.transaction((tx) => f.review(tx, qc, {
+      titleId: "title-123", stage: "QC", decision: "REJECT",
+      note: "QC found unresolved defects",
+    }));
+    await f.sql.query("update bridge_titles set status='RIGHTS_REVIEW'");
+    await assert.rejects(
+      f.sql.transaction((tx) => f.review(tx, legal, {
+        titleId: "title-123", stage: "LEGAL", decision: "APPROVE",
+        note: "Failed QC cannot be overridden", grantId: saved.grantId,
+      })),
+      /current PASSED QC review/,
+    );
+    assert.equal((await f.sql.query("select status from bridge_rights_grants"))[0].status, "DRAFT");
+    assert.equal((await f.sql.query("select * from bridge_legal_cases")).length, 0);
+  } finally {
+    await f.db.close();
+  }
+});
+
 test("future-dated license drafts cannot be legally approved before their start", async () => {
   const f = await fixture();
   try {
