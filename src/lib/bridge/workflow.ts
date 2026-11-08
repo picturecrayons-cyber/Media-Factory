@@ -530,7 +530,7 @@ export async function recordSettlementEvidenceTx(
   assertPermission(actor, "finance.record_settlement");
   const reference = data.reference.trim();
   const normalizedReference = reference.toUpperCase();
-  if (/^(NOT|TBD|PENDING|UNEXECUTED)/.test(normalizedReference))
+  if (/^(NOT\\s+(EXCECUTED|EXECUTED)|TBD|PENDING|UNEXECUTED)(\\s|$)/.test(normalizedReference))
     throw new Error("A placeholder is not a settlement reference; enter the external bank/provider reference");
   const [claim] = await tx<{ id: string }>`insert into bridge_settlement_reference_claims
     (reference_normalized,reference,title_id,invoice_reference,statement_reference,amount_paise,currency,created_by)
