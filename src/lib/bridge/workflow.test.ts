@@ -690,3 +690,45 @@ test("generic Admin cannot approve a rights grant even when evidence is present"
     await f.db.close();
   }
 });
+
+test("censor certificates cannot be submitted as rights agreement evidence", async () => {
+  const f = await fixture();
+  try {
+    const saved = (await f.sql.transaction((tx) => f.save(tx, owner, license))) as { grantId: string };
+    const checksum = 'f'.repeat(64);
+    await f.sql.query(`insert into bridge_asset_versions
+      (id,title_id,asset_group,asset_type,version,s3_key,checksum_sha256,byte_size,processing_state,created_by)
+      values ($1,'title-123','DOCUMENT','RIGHTS_EVIDENCE',1,'sealed/censor.pdf',$2,1024,'PASSED','owner')`,
+      ['00000000-0000-4000-8000-000000000031', checksum]);
+    await assert.rejects(
+      f.sql.query(`insert into bridge_rights_evidence
+        (title_id,rights_grant_id,evidence_type,asset_version_id,checksum_sha256,submitted_by)
+        values ('title-123',$1,'CENSOR_CERTIFICATE',$2,$3,'owner')`,
+        [saved.grantId, '00000000-0000-4000-8000-000000000031', checksum]),
+      /check constraint/i,
+    );
+  } finally {
+    await f.db.close();
+  }
+});
+
+test("signed addenda must link to an executed agreement evidence record", async () => {
+  const f = await fixture();
+  try {
+    const saved = (await f.sql.transaction((tx) => f.save(tx, owner, license))) as { grantId: string };
+    const checksum = 'e'.repeat(64);
+    await f.sql.query(`insert into bridge_asset_versions
+      (id,title_id,asset_group,asset_type,version,s3_key,checksum_sha256,byte_size,processing_state,created_by)
+      values ($1,'title-123','DOCUMENT','RIGHTS_EVIDENCE',1,'sealed/addendum.pdf',$2,1024,'PASSED','owner')`,
+      ['00000000-0000-4000-8000-000000000032', checksum]);
+    await assert.rejects(
+      f.sql.query(`insert into bridge_rights_evidence
+        (title_id,rights_grant_id,evidence_type,asset_version_id,checksum_sha256,submitted_by)
+        values ('title-123',$1,'SIGNED_ADDENDUM',$2,$3,'owner')`,
+        [saved.grantId, '00000000-0000-4000-8000-000000000032', checksum]),
+      /check constraint/i,
+    );
+  } finally {
+    await f.db.close();
+  }
+});
