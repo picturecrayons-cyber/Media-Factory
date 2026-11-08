@@ -31,6 +31,7 @@ import { asciiUploadName } from "@/lib/bridge/latin1";
 import {
   MULTIPART_MIN_FILE,
   MULTIPART_PART_SIZE,
+  MULTIPART_PART_CONCURRENCY,
   type UploadSession,
   loadedBytes,
   nextPart,
@@ -330,7 +331,7 @@ function FilesPanel({
     typeof window === "undefined" || !("Notification" in window) ? "unsupported" : Notification.permission,
   );
   const [progress, setProgress] = useState<UploadProgress | null>(null);
-  const uploadXhrRef = useRef<XMLHttpRequest | null>(null);
+  const uploadXhrRef = useRef(new Set<XMLHttpRequest>());
   const cancelRequestedRef = useRef(false);
   // Invalidates any in-flight preparation/confirmation continuation after cancel or a newer attempt.
   const uploadAttemptRef = useRef(0);
@@ -382,7 +383,7 @@ function FilesPanel({
   function transferWithProgress(kind: SimpleAssetKind, url: string, method: string, file: File, contentType: string) {
     return new Promise<void>((resolve, reject) => {
       const xhr = new XMLHttpRequest();
-      uploadXhrRef.current = xhr;
+      uploadXhrRef.current.add(xhr);
       const startedAt = Date.now();
       xhr.open(method, url, true);
       xhr.setRequestHeader("content-type", contentType);
@@ -403,20 +404,20 @@ function FilesPanel({
         });
       };
       xhr.onload = () => {
-        uploadXhrRef.current = null;
+        uploadXhrRef.current.delete(xhr);
         if (xhr.status >= 200 && xhr.status < 300) resolve();
         else reject(new Error(`Upload failed (${xhr.status}). No Ready status was set; please retry.`));
       };
       xhr.onerror = () => {
-        uploadXhrRef.current = null;
+        uploadXhrRef.current.delete(xhr);
         reject(new TypeError("The browser could not reach OCI storage. Check the OCI bucket CORS rule for this Preview origin, PUT method and Content-Type header."));
       };
       xhr.ontimeout = () => {
-        uploadXhrRef.current = null;
+        uploadXhrRef.current.delete(xhr);
         reject(new Error("File transfer timed out. No Ready status was set; select the file again to retry."));
       };
       xhr.onabort = () => {
-        uploadXhrRef.current = null;
+        uploadXhrRef.current.delete(xhr);
         reject(new Error(cancelRequestedRef.current
           ? "Upload cancelled. The asset was not marked Ready; select the file again to retry."
           : "File transfer was interrupted. The asset was not marked Ready; select the file again to retry."));
@@ -428,7 +429,7 @@ function FilesPanel({
   function putPart(url: string, blob: Blob, contentType: string, onLoaded: (loaded: number) => void) {
     return new Promise<string>((resolve, reject) => {
       const xhr = new XMLHttpRequest();
-      uploadXhrRef.current = xhr;
+      uploadXhrRef.current.add(xhr);
       let stall: ReturnType<typeof setTimeout> | undefined;
       const bump = () => {
         if (stall) clearTimeout(stall);
@@ -443,7 +444,7 @@ function FilesPanel({
       };
       xhr.onload = () => {
         if (stall) clearTimeout(stall);
-        uploadXhrRef.current = null;
+        uploadXhrRef.current.delete(xhr);
         if (xhr.status >= 200 && xhr.status < 300) {
           const etag = xhr.getResponseHeader("etag")?.replaceAll('"', "");
           if (!etag) reject(new Error("OCI did not expose the uploaded part ETag; check bucket CORS ExposeHeaders"));
@@ -452,12 +453,12 @@ function FilesPanel({
       };
       xhr.onerror = () => {
         if (stall) clearTimeout(stall);
-        uploadXhrRef.current = null;
+        uploadXhrRef.current.delete(xhr);
         reject(new TypeError("connection"));
       };
       xhr.onabort = () => {
         if (stall) clearTimeout(stall);
-        uploadXhrRef.current = null;
+        uploadXhrRef.current.delete(xhr);
         reject(new Error(cancelRequestedRef.current ? "cancelled" : "stalled"));
       };
       bump();
@@ -524,27 +525,44 @@ function FilesPanel({
         total: session.fileSize,
       });
       announce(`Uploading ${kindLabel(kind)} in parts. A connection drop keeps the completed parts.`);
-      for (let part = nextPart(session.completedParts, total); part !== null; part = nextPart(session.completedParts, total)) {
-        assertAttemptActive();
-        const { start, end } = partSlice(session.fileSize, part, session.partSize);
-        const baseLoaded = loadedBytes(session.completedParts, session.fileSize, session.partSize);
-        let sent = false;
-        for (let attempt = 1; attempt <= 4 && !sent; attempt += 1) {
+      const completedPartSet = new Set(session.completedParts);
+      const pendingParts = Array.from({ length: total }, (_, index) => index + 1)
+        .filter((part) => !completedPartSet.has(part));
+      const activePartBytes = new Map<number, number>();
+      const initialLoaded = loadedBytes([...completedPartSet], session.fileSize, session.partSize);
+      const transferStartedAt = Date.now();
+      const updateAggregateProgress = () => {
+        const loaded = Math.min(
+          session!.fileSize,
+          loadedBytes([...completedPartSet], session!.fileSize, session!.partSize) +
+            [...activePartBytes.values()].reduce((sum, value) => sum + value, 0),
+        );
+        const elapsedSeconds = Math.max((Date.now() - transferStartedAt) / 1000, 0.25);
+        const bytesPerSecond = Math.max(0, loaded - initialLoaded) / elapsedSeconds;
+        setProgress({
+          kind,
+          phase: "transferring",
+          percent: Math.min(100, Math.floor((loaded / session!.fileSize) * 100)),
+          etaSeconds: bytesPerSecond > 0 ? Math.max(0, (session!.fileSize - loaded) / bytesPerSecond) : null,
+          loaded,
+          total: session!.fileSize,
+        });
+      };
+      let nextPendingIndex = 0;
+      let firstFailure: unknown = null;
+      const uploadOnePart = async (part: number) => {
+        const { start, end } = partSlice(session!.fileSize, part, session!.partSize);
+        let etag: string | null = null;
+        for (let attempt = 1; attempt <= 4 && !etag; attempt += 1) {
           assertAttemptActive();
           try {
-            const etag = await putPart(session.partBaseUrl + String(part), file.slice(start, end), contentType, (loaded) => {
-              const transferred = Math.min(session!.fileSize, baseLoaded + loaded);
-              setProgress({
-                kind,
-                phase: "transferring",
-                percent: Math.floor((transferred / session!.fileSize) * 100),
-                etaSeconds: null,
-                loaded: transferred,
-                total: session!.fileSize,
-              });
+            etag = await putPart(session!.partBaseUrl + String(part), file.slice(start, end), contentType, (loaded) => {
+              activePartBytes.set(part, loaded);
+              updateAggregateProgress();
             });
-            sent = true;
           } catch (error) {
+            activePartBytes.delete(part);
+            updateAggregateProgress();
             const raw = error instanceof Error ? error.message : "";
             if (raw === "cancelled") throw new Error("Upload cancelled. The asset was not marked Ready.");
             if (attempt === 4) {
@@ -553,14 +571,32 @@ function FilesPanel({
             await new Promise((resolve) => setTimeout(resolve, attempt * 2000));
           }
         }
+        if (!etag) throw new Error("Multipart part did not return a verified ETag");
+        assertAttemptActive();
         await recordAssetMultipartPart({ data: {
-          assetId: session.assetId, sessionId: session.sessionId, sessionToken: session.sessionToken,
+          assetId: session!.assetId, sessionId: session!.sessionId, sessionToken: session!.sessionToken,
           partNumber: part, byteStart: start, byteEnd: end, etag,
         } });
-        session = { ...session, completedParts: [...session.completedParts, part] };
+        completedPartSet.add(part);
+        activePartBytes.delete(part);
+        session = { ...session!, completedParts: [...completedPartSet].sort((a, b) => a - b) };
         writeUploadSession(session);
         activeMultipart.current = session;
-      }
+        updateAggregateProgress();
+      };
+      const worker = async () => {
+        while (firstFailure === null && nextPendingIndex < pendingParts.length) {
+          const part = pendingParts[nextPendingIndex++];
+          try {
+            await uploadOnePart(part);
+          } catch (error) {
+            firstFailure ??= error;
+          }
+        }
+      };
+      const workerCount = Math.min(MULTIPART_PART_CONCURRENCY, pendingParts.length);
+      await Promise.all(Array.from({ length: workerCount }, () => worker()));
+      if (firstFailure !== null) throw firstFailure;
       assertAttemptActive();
       await withTimeout(
         commitAssetMultipart({ data: { assetId: session.assetId, sessionId: session.sessionId, sessionToken: session.sessionToken } }),
@@ -654,7 +690,7 @@ function FilesPanel({
       announce(detail, "error", true);
     } finally {
       if (uploadAttemptRef.current === attemptId) {
-        uploadXhrRef.current = null;
+        uploadXhrRef.current.clear();
         cancelRequestedRef.current = false;
         setUploading(null);
       }
@@ -730,8 +766,7 @@ function FilesPanel({
               type="button"
               onClick={() => {
                 cancelRequestedRef.current = true;
-                uploadAttemptRef.current += 1;
-                uploadXhrRef.current?.abort();
+                for (const xhr of [...uploadXhrRef.current]) xhr.abort();
                 const session = activeMultipart.current;
                 activeMultipart.current = null;
                 if (session) {
@@ -740,7 +775,7 @@ function FilesPanel({
                 }
                 setProgress(null);
                 announce("Upload cancelled. Completed parts from this attempt were discarded.", "error", true);
-                if (!uploadXhrRef.current) setUploading(null);
+                if (uploadXhrRef.current.size === 0) setUploading(null);
               }}
               className="rounded-full border border-line bg-surface px-3 py-1.5 text-xs font-semibold"
             >
