@@ -81,46 +81,72 @@ export async function grantFromCapturedPayment(opts: {
     throw new Error("Payment does not belong to this account");
   }
 
+  if (!payment.title_id) {
+    await sql`
+      update bridge_payments
+      set status = ${"captured"},
+          provider_payment_id = ${opts.paymentId},
+          verified_at = now()
+      where id = ${payment.id}
+        and (provider_payment_id is null or provider_payment_id = ${opts.paymentId})
+    `;
+    return { paymentId: payment.id, entitled: false };
+  }
+
+  if (payment.package_id) {
+    // Capture, package ownership, entitlement and audit commit atomically.
+    // A stale payment cannot license a package reserved by another buyer.
+    await sql.transaction(async (tx) => {
+      const capturedPayment = await tx<{ id: string }>`
+        update bridge_payments
+        set status = ${"captured"},
+            provider_payment_id = ${opts.paymentId},
+            verified_at = now()
+        where id = ${payment.id}
+          and (provider_payment_id is null or provider_payment_id = ${opts.paymentId})
+        returning id
+      `;
+      if (!capturedPayment[0]) throw new Error("Payment is already linked to another payment");
+
+      const licensedPackage = await tx<{ id: string }>`
+        update bridge_license_packages
+        set status = 'LICENSED',
+            payment_id = ${payment.id},
+            updated_at = now()
+        where id = ${payment.package_id}
+          and title_id = ${payment.title_id}
+          and buyer_user_id = ${payment.user_id}
+          and status in ('IN_NEGOTIATION', 'LICENSED')
+        returning id
+      `;
+      if (!licensedPackage[0]) {
+        throw new Error("Payment buyer does not own the reserved license package");
+      }
+
+      await tx`
+        insert into bridge_package_entitlements (package_id, title_id, buyer_user_id, payment_id)
+        values (${licensedPackage[0].id}, ${payment.title_id}, ${payment.user_id}, ${payment.id})
+        on conflict (package_id, buyer_user_id) do nothing
+      `;
+      await writeAudit({
+        actorUserId: opts.actorUserId ?? payment.user_id,
+        action: "licensing.language_package_licensed",
+        entityType: "bridge_license_package",
+        entityId: licensedPackage[0].id,
+        metadata: { titleId: payment.title_id, paymentId: payment.id },
+      }, tx);
+    });
+    return { paymentId: payment.id, entitled: true, titleId: payment.title_id, packageId: payment.package_id };
+  }
+
   await sql`
     update bridge_payments
     set status = ${"captured"},
         provider_payment_id = ${opts.paymentId},
         verified_at = now()
-    where id = ${payment.id} and status <> 'captured'
+    where id = ${payment.id}
+      and (provider_payment_id is null or provider_payment_id = ${opts.paymentId})
   `;
-
-  if (!payment.title_id) {
-    return { paymentId: payment.id, entitled: false };
-  }
-
-  if (payment.package_id) {
-    const pkg = await sql<{ id: string; title_id: string; status: string; delivery_status: string }>`
-      select id, title_id, status, delivery_status
-      from bridge_license_packages
-      where id = ${payment.package_id} and title_id = ${payment.title_id}
-      limit 1
-    `;
-    if (!pkg[0]) throw new Error("License package not found");
-    await sql`
-      insert into bridge_package_entitlements (package_id, title_id, buyer_user_id, payment_id)
-      values (${pkg[0].id}, ${payment.title_id}, ${payment.user_id}, ${payment.id})
-      on conflict (package_id, buyer_user_id) do nothing
-    `;
-    await sql`
-      update bridge_license_packages
-      set status = 'LICENSED', buyer_user_id = ${payment.user_id}, payment_id = ${payment.id}, updated_at = now()
-      where id = ${pkg[0].id}
-    `;
-    await writeAudit({
-      actorUserId: opts.actorUserId ?? payment.user_id,
-      action: "licensing.language_package_licensed",
-      entityType: "bridge_license_package",
-      entityId: pkg[0].id,
-      metadata: { titleId: payment.title_id, paymentId: payment.id },
-    });
-    return { paymentId: payment.id, entitled: true, titleId: payment.title_id, packageId: pkg[0].id };
-  }
-
   await sql`
     insert into bridge_entitlements (user_id, title_id, payment_id, access_type)
     values (${payment.user_id}, ${payment.title_id}, ${payment.id}, ${"license"})
