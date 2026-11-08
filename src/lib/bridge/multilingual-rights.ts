@@ -228,7 +228,7 @@ export const listLicensePackages = createServerFn({ method: "GET" })
     const title = await loadTitle(data.titleId);
     if (!title) throw new Error("Not found");
     const isBuyer = actor.accountType === "buyer" && !actor.internalRole;
-    if (isBuyer) await assertBuyerPublishable(title.id);
+    if (isBuyer) await assertBuyerTitleAccess(title.id, actor.userId);
     if (!canReadTitle(actor, title) && !isBuyer) throw new Error("Not found");
     const sql = await getSql();
     const rows = await sql<{
