@@ -42,4 +42,13 @@ create index if not exists bridge_rights_evidence_reviews_evidence_idx
 alter table public.bridge_rights_evidence enable row level security;
 alter table public.bridge_rights_evidence_reviews enable row level security;
 
+-- Add a private rights-document upload kind without changing existing asset rows.
+alter table public.bridge_assets drop constraint if exists bridge_assets_kind_chk;
+alter table public.bridge_assets
+  add constraint bridge_assets_kind_chk
+  check (kind in (
+    'poster','poster_vertical','poster_horizontal','thumbnail','screener','master',
+    'subtitle','technical','censor_certificate','rights_document'
+  ));
+
 -- No anon/authenticated grants or policies are added. Mutations remain server-side only.
