@@ -142,6 +142,23 @@ export async function verifyDistributionPreflight(
   if (!rightsRequest)
     reasons.push("Publication rights dimensions are required for distribution preflight.");
   if (rightsRequest) {
+    const sourceLanguage = title.language.trim().toUpperCase();
+    const requestedLanguages = rightsRequest.languages.map((language) => language.trim().toUpperCase());
+    if (!requestedLanguages.includes(sourceLanguage)) {
+      reasons.push("Loop currently publishes the source-language master only; the publication must include the title's source language.");
+    }
+    const additionalLanguages = requestedLanguages.filter((language) => language !== sourceLanguage);
+    if (additionalLanguages.length) {
+      const availableRenditions = await sql<{ language: string }>`select distinct upper(language) as language
+        from bridge_asset_versions
+        where title_id=${titleId}
+          and asset_group in ('AUDIO','SUBTITLE')
+          and processing_state='PASSED'
+          and upper(language)=any(${additionalLanguages})`;
+      const available = new Set(availableRenditions.map((item) => item.language));
+      const missing = additionalLanguages.filter((language) => !available.has(language));
+      if (missing.length) reasons.push(`Verified audio or subtitle renditions are missing for: ${missing.join(", ")}.`);
+    }
     const grants = await sql<BridgeRightsGrant>`
       select id, status, territories, languages, media, window_start, window_end, exclusivity
       from bridge_rights_grants
