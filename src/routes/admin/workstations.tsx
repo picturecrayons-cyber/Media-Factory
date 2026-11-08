@@ -166,8 +166,15 @@ function RightsEvidenceQueue({ evidence, titleName, mutation }: { evidence: any[
             <p className="break-all text-xs text-muted">Asset: {item.s3_key} · SHA-256: {item.checksum_sha256}</p>
             <button type="button" className="rounded-lg border border-line px-3 py-2 text-xs"
               onClick={async () => {
-                const signed = await requestAssetDownload({ data: { assetId: item.legacy_asset_id } });
-                window.open(signed.url, "_blank", "noopener,noreferrer");
+                const documentWindow = window.open("about:blank", "_blank");
+                if (documentWindow) documentWindow.opener = null;
+                try {
+                  const signed = await requestAssetDownload({ data: { assetId: item.legacy_asset_id } });
+                  if (documentWindow) documentWindow.location.href = signed.url;
+                } catch (error) {
+                  documentWindow?.close();
+                  throw error;
+                }
               }}>
               Open source document
             </button>
