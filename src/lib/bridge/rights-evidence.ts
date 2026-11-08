@@ -182,8 +182,14 @@ export const requestRightsEvidenceUploadFn = createServerFn({ method: "POST" })
       filename: data.filename,
     });
     const signed = await signUpload({ key, contentType: data.contentType, expiresIn: 900 });
-    await sql`insert into bridge_assets(id,title_id,kind,s3_key,content_type,created_by)
-      values (${assetId},${title.id},'rights_document',${key},${data.contentType},${actor.userId})`;
+    await sql`insert into bridge_assets(
+        id,title_id,kind,s3_key,content_type,created_by,original_filename,
+        storage_provider,storage_bucket,storage_namespace,storage_region,storage_endpoint,source_object_key
+      )
+      values (
+        ${assetId},${title.id},'rights_document',${key},${data.contentType},${actor.userId},${data.filename},
+        'oci',${signed.bucket},${signed.namespace},${signed.region},${signed.endpoint},${key}
+      )`;
     await writeAudit({
       actorUserId: actor.userId,
       action: "rights.evidence.upload_signed",
@@ -214,7 +220,8 @@ export const confirmRightsEvidenceUploadFn = createServerFn({ method: "POST" })
       content_type: string | null;
       byte_size: number | null;
       asset_version_id: string | null;
-    }>`select id,title_id,kind,s3_key,created_by,content_type,byte_size,asset_version_id
+      storage_bucket: string | null;
+    }>`select id,title_id,kind,s3_key,created_by,content_type,byte_size,asset_version_id,storage_bucket
       from bridge_assets where id=${data.assetId}`;
     if (!asset || asset.kind !== "rights_document" || asset.created_by !== actor.userId)
       throw new Error("Rights document upload was not found for this owner");
@@ -259,6 +266,7 @@ export const confirmRightsEvidenceUploadFn = createServerFn({ method: "POST" })
         returning id`;
       await tx`update bridge_assets set byte_size=${sealed.byteSize},content_type=${sealed.contentType},
         s3_key=${sealedKey},sha256=${sealed.checksumSha256},checksum_sha256=${sealed.checksumSha256},
+        verified_object_key=${sealedKey},storage_verified_at=now(),storage_bucket=${asset.storage_bucket},
         asset_version_id=${version.id}
         where id=${asset.id} and created_by=${actor.userId} and byte_size is null`;
       await writeAudit({
