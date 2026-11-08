@@ -363,8 +363,9 @@ export const getTitleWorkflow = createServerFn({ method: "GET" })
       status: string;
       submitted_by: string;
       reviewed_by: string | null;
+      related_agreement_evidence_id: string | null;
       created_at: string | Date;
-    }>`select id,rights_grant_id,evidence_type,asset_version_id,status,submitted_by,reviewed_by,created_at
+    }>`select id,rights_grant_id,evidence_type,asset_version_id,status,submitted_by,reviewed_by,related_agreement_evidence_id,created_at
       from bridge_rights_evidence where title_id=${data.titleId} order by created_at desc limit 100`;
     return {
       documentAssets,
