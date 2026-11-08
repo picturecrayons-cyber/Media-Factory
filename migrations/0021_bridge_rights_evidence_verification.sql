@@ -96,7 +96,7 @@ insert into public.bridge_settlement_reference_claims(
 select
   reference_normalized,reference,title_id,invoice_reference,statement_reference,amount_paise,currency,
   case
-    when reference_normalized ~ '^(NOT|TBD|PENDING|UNEXECUTED)'
+    when reference_normalized ~ '^(NOT[[:space:]]+(EXCECUTED|EXECUTED)|TBD|PENDING|UNEXECUTED)([[:space:]]|$)'
       or term_variants > 1 then 'REVIEW_REQUIRED'
     else 'ACTIVE'
   end,
