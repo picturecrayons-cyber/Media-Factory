@@ -209,7 +209,7 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
       name: string;
       status: string;
       language: string;
-      master_key: string | null;
+      has_master: boolean;
       poster_key: string | null;
       synopsis: string;
       year: number | null;
@@ -228,7 +228,7 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
       listed: boolean | null;
       published: boolean | null;
     }>`
-      select b.id, b.slug, b.name, b.status, b.language, b.master_key, b.poster_key,
+      select b.id, b.slug, b.name, b.status, b.language, (b.master_key is not null) as has_master, b.poster_key,
              b.synopsis, b.year, b.runtime_minutes,
              p.loop_title_id, p.authorization_status,
              case
@@ -284,7 +284,7 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
             "LICENSED",
             "DELIVERED",
           ].includes(r.status) &&
-          Boolean(r.master_key) &&
+          Boolean(r.has_master) &&
           Boolean(r.poster_key);
 
         const blockers: string[] = [];
@@ -308,7 +308,7 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
         ) {
           blockers.push(`Rights status (${r.status}) is not cleared for distribution`);
         }
-        if (!r.master_key) blockers.push("QC master video is missing");
+        if (!r.has_master) blockers.push("QC master video is missing");
         if (!r.poster_key) blockers.push("Artwork/poster is missing");
 
         return {
@@ -317,7 +317,7 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
           name: r.name,
           bridgeStatus: r.status,
           language: r.language,
-          hasMaster: Boolean(r.master_key),
+          hasMaster: Boolean(r.has_master),
           hasPoster: Boolean(r.poster_key),
           ready: isReady,
           blockers,
