@@ -198,7 +198,7 @@ test("QC may pass but legal approval fails closed until agreement and ownership 
           grantId: saved.grantId,
         }),
       ),
-      /independent, recorded verification/,
+      /independently reviewed executed-agreement and ownership-chain documents with matching SHA-256 checksums/,
     );
     assert.equal(
       (await f.sql.query<{ status: string }>("select status from bridge_titles"))[0].status,
@@ -412,6 +412,21 @@ test("legal approval remains blocked when only one required evidence class is ve
     );
     assert.equal((await f.sql.query<{status:string}>("select status from bridge_rights_grants"))[0].status, "DRAFT");
     assert.equal((await f.sql.query("select * from bridge_legal_cases")).length, 0);
+  } finally {
+    await f.db.close();
+  }
+});
+
+test("concurrent identical license saves serialize to one DRAFT grant and one audit event", async () => {
+  const f = await fixture();
+  try {
+    const results = await Promise.all([
+      f.sql.transaction((tx) => f.save(tx, owner, license)),
+      f.sql.transaction((tx) => f.save(tx, owner, license)),
+    ]) as Array<{grantId:string}>;
+    assert.equal(results[0].grantId, results[1].grantId);
+    assert.equal((await f.sql.query("select * from bridge_rights_grants")).length, 1);
+    assert.equal((await f.sql.query("select * from bridge_audit_logs where action='license.loop_draft'")).length, 1);
   } finally {
     await f.db.close();
   }
