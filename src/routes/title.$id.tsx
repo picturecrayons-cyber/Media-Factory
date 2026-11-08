@@ -31,7 +31,6 @@ import { asciiUploadName } from "@/lib/bridge/latin1";
 import {
   MULTIPART_MIN_FILE,
   MULTIPART_PART_SIZE,
-  MULTIPART_PART_CONCURRENCY,
   type UploadSession,
   loadedBytes,
   nextPart,
@@ -594,7 +593,8 @@ function FilesPanel({
           }
         }
       };
-      const workerCount = Math.min(MULTIPART_PART_CONCURRENCY, pendingParts.length);
+      // Keep concurrency conservative; increase only after measured OCI/network testing.
+      const workerCount = Math.min(3, pendingParts.length);
       await Promise.all(Array.from({ length: workerCount }, () => worker()));
       if (firstFailure !== null) throw firstFailure;
       assertAttemptActive();
