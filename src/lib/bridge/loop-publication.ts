@@ -609,13 +609,17 @@ export const getLoopPublication = createServerFn({ method: "GET" })
     `;
     const r = rows[0];
     if (!r) return { publication: null };
+    const windowExpired = Boolean(r.window_end && new Date(r.window_end).getTime() < Date.now());
+    const effectiveAuthorizationStatus = windowExpired && ["authorized", "live"].includes(r.authorization_status.toLowerCase())
+      ? "EXPIRED"
+      : r.authorization_status;
 
     return {
       publication: {
         destination: "CRAYONS_LOOP" as const,
         bridgeTitleId: r.bridge_title_id,
         loopTitleId: r.loop_title_id,
-        authorizationStatus: r.authorization_status,
+        authorizationStatus: effectiveAuthorizationStatus,
         territories: r.territories,
         languages: r.languages,
         exploitationModels: r.exploitation_models,
@@ -624,9 +628,9 @@ export const getLoopPublication = createServerFn({ method: "GET" })
         approvedAt: iso(r.approved_at),
         revokedAt: iso(r.revoked_at),
         commercialTerms: (r.metadata?.commercialTerms as CommercialTermsSummary) || null,
-        loopStatus: r.loop_status,
-        listed: r.listed,
-        published: r.published,
+        loopStatus: windowExpired ? "expired" : r.loop_status,
+        listed: windowExpired ? false : r.listed,
+        published: windowExpired ? false : r.published,
         playbackPath: r.playback_path,
       },
     };
