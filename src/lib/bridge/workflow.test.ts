@@ -90,7 +90,7 @@ async function fixture() {
     alter table bridge_assets add column storage_verified_at timestamptz;
     alter table bridge_assets add column checksum_sha256 text;
     create table bridge_title_events(title_id text,from_status text,to_status text,actor_user_id text,note text);
-    create table bridge_audit_logs(actor_user_id text,action text,entity_type text,entity_id text,metadata text);`);
+    create table bridge_audit_logs(id bigserial primary key,actor_user_id text,action text,entity_type text,entity_id text,metadata text,created_at timestamptz not null default now());`);
     await db.exec(
       readFileSync(
         new URL("../../../migrations/0010_bridge_prd_phase1.sql", import.meta.url),
@@ -152,7 +152,12 @@ async function fixture() {
         },
       },
     );
-    return { db, sql, save: exports.saveLoopLicense, review: exports.reviewWorkflow };
+    return {
+      db, sql,
+      save: exports.saveLoopLicense,
+      review: exports.reviewWorkflow,
+      settle: exports.recordSettlementEvidenceTx,
+    };
   } catch (error) {
     await db.close();
     throw error;
