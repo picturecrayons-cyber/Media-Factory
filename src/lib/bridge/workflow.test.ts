@@ -732,3 +732,59 @@ test("signed addenda must link to an executed agreement evidence record", async 
     await f.db.close();
   }
 });
+
+test("all five independently verified legal evidence classes permit Legal approval", async () => {
+  const f = await fixture();
+  try {
+    const saved = (await f.sql.transaction((tx) => f.save(tx, owner, license))) as { grantId: string };
+    await f.sql.transaction((tx) => f.review(tx, qc, { titleId: 'title-123', stage: 'QC', decision: 'APPROVE', note: 'Playback and codec checked' }));
+    const ids = [
+      '00000000-0000-4000-8000-000000000041',
+      '00000000-0000-4000-8000-000000000042',
+      '00000000-0000-4000-8000-000000000043',
+      '00000000-0000-4000-8000-000000000044',
+      '00000000-0000-4000-8000-000000000045',
+    ];
+    const checksums = ['a','b','c','d','e'].map((v) => v.repeat(64));
+    const types = ['EXECUTED_AGREEMENT','OWNERSHIP_CHAIN','SIGNATORY_AUTHORITY','MASTER_DISTRIBUTOR_AUTHORITY','SUBLICENSING_AUTHORITY'];
+    await f.sql.query(`insert into bridge_asset_versions
+      (id,title_id,asset_group,asset_type,version,s3_key,checksum_sha256,byte_size,processing_state,created_by)
+      values
+      ($1,'title-123','DOCUMENT','RIGHTS_EVIDENCE',1,'sealed/legal-1.pdf',$6,1024,'PASSED','owner'),
+      ($2,'title-123','DOCUMENT','RIGHTS_EVIDENCE',1,'sealed/legal-2.pdf',$7,1024,'PASSED','owner'),
+      ($3,'title-123','DOCUMENT','RIGHTS_EVIDENCE',1,'sealed/legal-3.pdf',$8,1024,'PASSED','owner'),
+      ($4,'title-123','DOCUMENT','RIGHTS_EVIDENCE',1,'sealed/legal-4.pdf',$9,1024,'PASSED','owner'),
+      ($5,'title-123','DOCUMENT','RIGHTS_EVIDENCE',1,'sealed/legal-5.pdf',$10,1024,'PASSED','owner')`,
+      [...ids, ...checksums]);
+    await f.sql.query(`insert into bridge_assets(id,title_id,kind,s3_key,byte_size,asset_version_id,verified_object_key,storage_verified_at,checksum_sha256)
+      values
+      ('legal-asset-1','title-123','rights_document','sealed/legal-1.pdf',1024,$1,'sealed/legal-1.pdf',now(),$6),
+      ('legal-asset-2','title-123','rights_document','sealed/legal-2.pdf',1024,$2,'sealed/legal-2.pdf',now(),$7),
+      ('legal-asset-3','title-123','rights_document','sealed/legal-3.pdf',1024,$3,'sealed/legal-3.pdf',now(),$8),
+      ('legal-asset-4','title-123','rights_document','sealed/legal-4.pdf',1024,$4,'sealed/legal-4.pdf',now(),$9),
+      ('legal-asset-5','title-123','rights_document','sealed/legal-5.pdf',1024,$5,'sealed/legal-5.pdf',now(),$10)`,
+      [...ids, ...checksums]);
+    const evidenceIds = [
+      '00000000-0000-4000-8000-000000000051',
+      '00000000-0000-4000-8000-000000000052',
+      '00000000-0000-4000-8000-000000000053',
+      '00000000-0000-4000-8000-000000000054',
+      '00000000-0000-4000-8000-000000000055',
+    ];
+    for (let i = 0; i < 5; i++) {
+      await f.sql.query(`insert into bridge_rights_evidence
+        (id,title_id,rights_grant_id,evidence_type,asset_version_id,checksum_sha256,submitted_by,status,reviewed_by,reviewed_at,review_note)
+        values ($1,'title-123',$2,$3,$4,$5,'owner','VERIFIED','legal',now(),'Independently checked source document')`,
+        [evidenceIds[i], saved.grantId, types[i], ids[i], checksums[i]]);
+      await f.sql.query(`insert into bridge_rights_evidence_reviews
+        (evidence_id,decision,reviewer_user_id,evidence_checksum_sha256,note)
+        values ($1,'VERIFIED','legal',$2,'Independently checked source document')`,
+        [evidenceIds[i], checksums[i]]);
+    }
+    await f.sql.transaction((tx) => f.review(tx, legal, { titleId: 'title-123', stage: 'LEGAL', decision: 'APPROVE', note: 'All five mandatory Legal evidence classes verified', grantId: saved.grantId }));
+    assert.equal((await f.sql.query<{status:string}>('select status from bridge_rights_grants'))[0].status, 'VALID');
+    assert.equal((await f.sql.query<{status:string}>('select status from bridge_titles'))[0].status, 'LICENSING_READY');
+  } finally {
+    await f.db.close();
+  }
+});
