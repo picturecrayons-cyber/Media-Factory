@@ -4,6 +4,7 @@ import { BridgeShell } from "@/components/bridge/shell";
 import { TitleList } from "@/components/bridge/title-desk";
 import { MyStoryConcepts } from "@/components/bridge/my-story-concepts";
 import { NewSubmissionPanel } from "@/components/bridge/new-submission-panel";
+import { StreamVistaOrders } from "@/components/bridge/streamvista-orders";
 
 export const Route = createFileRoute("/studio")({ component: Studio });
 
@@ -26,6 +27,10 @@ function Studio() {
             </section>
 
             <MyStoryConcepts />
+
+            <section className="border-t border-line pt-8">
+              <StreamVistaOrders />
+            </section>
           </div>
         </BridgeShell>
       )}
