@@ -53,8 +53,11 @@ export async function submitRightsEvidence(
     processing_state: string;
     checksum_sha256: string | null;
     created_by: string;
-  }>`select id,title_id,asset_group,processing_state,checksum_sha256,created_by
-    from bridge_asset_versions where id=${data.assetVersionId} for update`;
+    asset_kind: string;
+  }>`select av.id,av.title_id,av.asset_group,av.processing_state,av.checksum_sha256,av.created_by,a.kind as asset_kind
+    from bridge_asset_versions av
+    join bridge_assets a on a.asset_version_id=av.id and a.kind='rights_document'
+    where av.id=${data.assetVersionId} for update of av,a`;
   if (
     !asset ||
     asset.title_id !== data.titleId ||
