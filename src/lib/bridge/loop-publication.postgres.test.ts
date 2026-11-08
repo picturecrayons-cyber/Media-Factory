@@ -7,6 +7,7 @@ import { ModuleKind, transpileModule } from "typescript";
 import { z } from "zod";
 
 type Db = {
+  exec(text: string): Promise<unknown>;
   query<T = Record<string, unknown>>(text: string, params?: unknown[]): Promise<{ rows: T[] }>;
   transaction<T>(fn: (tx: Db) => Promise<T>): Promise<T>;
   close(): Promise<void>;
@@ -26,7 +27,7 @@ function adapter(db: Db) {
 
 async function publicationFixture() {
   const db = new PGlite() as unknown as Db & { exec(text: string): Promise<unknown> };
-  await db.query(`
+  await db.exec(`
     create table bridge_titles (
       id text primary key, slug text, name text, status text, language text,
       master_key text, poster_key text, synopsis text, year integer,
@@ -52,7 +53,7 @@ async function publicationFixture() {
       metadata jsonb, updated_at timestamptz
     );
   `);
-  await db.query(`
+  await db.exec(`
     insert into bridge_titles values
       ('title-123','film','Test Film','LICENSED','Malayalam','sealed/master','sealed/poster',
        'Test synopsis',2024,120,'Film');
