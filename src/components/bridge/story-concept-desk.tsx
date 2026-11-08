@@ -127,18 +127,10 @@ export function StoryConceptDesk() {
                   </>
                 )}
                 {c.curation_status === "APPROVED" && (
-                  <Button
-                    size="sm"
-                    disabled={update.isPending}
-                    onClick={() =>
-                      update.mutate({
-                        id: c.id,
-                        status: "INTRODUCED_TO_BUYERS",
-                      })
-                    }
-                  >
-                    Introduce to buyers / investors
-                  </Button>
+                  <p className="rounded-lg border border-dashed border-line px-3 py-2 text-xs text-muted">
+                    Buyer / Investor mapping is blocked until an actual organization
+                    assignment and separate material-access grant are available.
+                  </p>
                 )}
               </div>
 
