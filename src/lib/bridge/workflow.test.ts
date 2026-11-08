@@ -361,9 +361,9 @@ test("concurrent settlement evidence submissions reject a duplicate reference in
     assert.equal(results.filter((result) => result.status === "fulfilled").length, 1);
     assert.equal(results.filter((result) => result.status === "rejected").length, 1);
     const records = await f.sql.query(
-      "select id from bridge_audit_logs where action='finance.settlement_evidence' and metadata::jsonb->>'reference'='BANK-SETTLEMENT-2026-0001'",
+      "select count(*)::text as count from bridge_audit_logs where action='finance.settlement_evidence' and metadata::jsonb->>'reference'='BANK-SETTLEMENT-2026-0001'",
     );
-    assert.equal(records.length, 1);
+    assert.equal(records[0].count, "1");
   } finally {
     await f.db.close();
   }
