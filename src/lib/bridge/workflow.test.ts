@@ -126,6 +126,7 @@ async function fixture() {
           ...(userId === "buyer" ? { userId, emailVerified: true, accountType: "buyer", internalRole: null } :
             userId === "studio" ? { userId, emailVerified: true, accountType: "studio", internalRole: null, organizationId: "22222222-2222-4222-8222-222222222222" } :
             userId === "creator" ? { userId, emailVerified: true, accountType: "independent_creator", internalRole: null } :
+            userId === "finance" ? { userId, emailVerified: true, accountType: "independent_creator", internalRole: "finance" } :
             userId === "qc" ? qc : userId === "legal" ? legal : owner),
         }),
       },
@@ -349,7 +350,7 @@ test("concurrent settlement evidence submissions reject a duplicate reference in
   const f = await fixture();
   try {
     const invoke = () => (f.settlementHandler as (args: unknown) => Promise<unknown>)({
-      context: { userId: "owner" },
+      context: { userId: "finance" },
       data: {
         titleId: "title-123",
         reference: "BANK-SETTLEMENT-2026-0001",
@@ -565,6 +566,10 @@ test("legal approval rejects overlapping competing Loop TVOD drafts", async () =
     const saved = (await f.sql.transaction((tx) => f.save(tx, owner, license))) as {
       grantId: string;
     };
+    await f.sql.transaction((tx) => f.review(tx, qc, {
+      titleId: "title-123", stage: "QC", decision: "APPROVE",
+      note: "Current master and artwork passed QC",
+    }));
     await f.sql.query(`
       insert into bridge_rights_grants
         (title_id,grant_type,territories,languages,media,window_start,window_end,exclusivity,evidence,status,created_by)
