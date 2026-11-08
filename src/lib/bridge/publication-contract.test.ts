@@ -138,6 +138,11 @@ test("Loop publication readiness GET is SELECT-only and uses the database expiry
   assert.match(handler, /p\.window_end\s*<=\s*now\(\)/);
   assert.match(handler, /p\.window_end\s*>\s*now\(\)/);
   assert.match(handler, /now\(\) as database_now/);
+  // Readiness may report whether a master exists, but must never select or return its object key.
+  assert.match(handler, /\(b\.master_key is not null\) as has_master/);
+  assert.doesNotMatch(handler, /select[\s\S]*?b\.master_key\s*,/i);
+  assert.doesNotMatch(handler, /master_key:\s*string\s*\|\s*null/);
+  assert.match(handler, /hasMaster:\s*Boolean\(r\.has_master\)/);
 });
 
 test("Loop catalog, details and playback fail closed outside the active Bridge publication window", () => {
