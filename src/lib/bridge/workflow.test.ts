@@ -479,7 +479,7 @@ test("legal approval blocks when signatory and distribution authority evidence a
         titleId: "title-123", stage: "LEGAL", decision: "APPROVE",
         note: "Only agreement and ownership evidence supplied", grantId: saved.grantId,
       })),
-      /requires independently verified executed agreement, ownership chain, signatory authority, and Master Distributor \/ sublicensing authority evidence/,
+      /requires independently verified executed agreement, ownership chain, signatory authority, Master Distributor authority, and sublicensing authority evidence/,
     );
     assert.equal((await f.sql.query<{status:string}>("select status from bridge_titles"))[0].status, "RIGHTS_REVIEW");
     assert.equal((await f.sql.query<{status:string}>("select status from bridge_rights_grants"))[0].status, "DRAFT");
