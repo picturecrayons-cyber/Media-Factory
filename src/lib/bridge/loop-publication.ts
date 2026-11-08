@@ -204,21 +204,6 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
     assertPermission(actor, "title.read_catalog");
     const sql = await getSql();
 
-    // Auto-reevaluate any expired distribution windows
-    await sql`
-      update bridge_loop_publications
-      set authorization_status = 'expired', updated_at = now()
-      where window_end is not null and window_end < now() and authorization_status in ('authorized', 'live')
-    `.catch(() => {});
-
-    await sql`
-      update loop_titles
-      set status = 'expired', published = false, listed = false, updated_at = now()
-      where bridge_title_id in (
-        select bridge_title_id from bridge_loop_publications where authorization_status = 'expired'
-      ) and published = true
-    `.catch(() => {});
-
     const rows = await sql<{
       id: string;
       slug: string;
@@ -232,6 +217,9 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
       runtime_minutes: number | null;
       loop_title_id: string | null;
       authorization_status: string | null;
+      effective_authorization_status: string | null;
+      publication_active: boolean | null;
+      database_now: string | Date;
       window_start: string | Date | null;
       window_end: string | Date | null;
       territories: string[] | null;
@@ -244,7 +232,19 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
     }>`
       select b.id, b.slug, b.name, b.status, b.language, b.master_key, b.poster_key,
              b.synopsis, b.year, b.runtime_minutes,
-             p.loop_title_id, p.authorization_status, p.window_start, p.window_end,
+             p.loop_title_id, p.authorization_status,
+             case
+               when p.window_end is not null and p.window_end <= now()
+                 and p.authorization_status in ('authorized', 'live') then 'expired'
+               else p.authorization_status
+             end as effective_authorization_status,
+             (
+               p.authorization_status in ('authorized', 'live')
+               and (p.window_start is null or p.window_start <= now())
+               and (p.window_end is null or p.window_end > now())
+             ) as publication_active,
+             now() as database_now,
+             p.window_start, p.window_end,
              p.territories, p.languages, p.exploitation_models,
              l.status as loop_status, l.listed, l.published, l.playback_path
       from bridge_titles b
@@ -271,11 +271,14 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
                 exploitationModels: r.exploitation_models || [],
                 windowStart: iso(r.window_start),
                 windowEnd: iso(r.window_end),
+                now: new Date(r.database_now),
               },
             )
           : null;
         const isReady =
           Boolean(coveringGrant) &&
+          Boolean(r.publication_active) &&
+          ["authorized", "live"].includes((r.effective_authorization_status || "").toLowerCase()) &&
           [
             "LICENSING_READY",
             "LIVE_FOR_BUYERS",
@@ -288,7 +291,14 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
 
         const blockers: string[] = [];
         if (!coveringGrant)
-          blockers.push("A matching rights grant and explicit publication dimensions are required");
+          blockers.push("A matching active rights grant and explicit publication dimensions are required");
+        if (!r.publication_active) {
+          blockers.push(
+            r.window_end && new Date(r.window_end).getTime() <= new Date(r.database_now).getTime()
+              ? "Bridge publication window has expired"
+              : "Bridge publication is not currently inside an active authorized window",
+          );
+        }
         if (
           ![
             "LICENSING_READY",
@@ -317,7 +327,7 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
             ? {
                 destination: "CRAYONS_LOOP" as const,
                 loopTitleId: r.loop_title_id,
-                authorizationStatus: (r.authorization_status?.toUpperCase() ||
+                authorizationStatus: (r.effective_authorization_status?.toUpperCase() ||
                   "PENDING") as DistributionAuthorizationStatus,
                 territories: r.territories || ["IN"],
                 languages: r.languages || [r.language],
@@ -325,8 +335,8 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
                 windowStart: iso(r.window_start),
                 windowEnd: iso(r.window_end),
                 loopStatus: r.loop_status,
-                listed: Boolean(r.listed),
-                published: Boolean(r.published),
+                listed: Boolean(r.listed) && Boolean(r.publication_active),
+                published: Boolean(r.published) && Boolean(r.publication_active),
                 playbackPath: r.playback_path,
               }
             : null,
