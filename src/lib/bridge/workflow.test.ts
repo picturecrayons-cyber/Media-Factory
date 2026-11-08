@@ -368,6 +368,36 @@ test("repeated identical rights evidence submission reuses one record and one au
   }
 });
 
+test("concurrent settlement reference submissions are idempotent and reject changed financial terms", async () => {
+  const f = await fixture();
+  const finance = { ...owner, userId: "finance", internalRole: "finance" as const };
+  const input = {
+    titleId: "title-123",
+    reference: "SETTLEMENT-REF-2026-001",
+    invoiceReference: "INV-2026-001",
+    statementReference: "BANK-STATEMENT-001",
+    amountPaise: 125000,
+  };
+  try {
+    const [first, second] = await Promise.all([
+      f.sql.transaction((tx) => f.settle(tx, finance, input)) as Promise<{ status: string; duplicate: boolean }>,
+      f.sql.transaction((tx) => f.settle(tx, finance, { ...input, reference: "settlement-ref-2026-001" })) as Promise<{ status: string; duplicate: boolean }>,
+    ]);
+    assert.equal(first.status, "EXTERNAL_EVIDENCE_UNVERIFIED");
+    assert.equal(second.status, "EXTERNAL_EVIDENCE_UNVERIFIED");
+    assert.deepEqual(new Set([first.duplicate, second.duplicate]), new Set([false, true]));
+    assert.equal((await f.sql.query("select * from bridge_settlement_reference_claims")).length, 1);
+    assert.equal((await f.sql.query("select * from bridge_audit_logs where action='finance.settlement_evidence'")).length, 1);
+    await assert.rejects(
+      f.sql.transaction((tx) => f.settle(tx, finance, { ...input, amountPaise: 125001 })),
+      /already recorded with different title or financial terms/,
+    );
+    assert.equal((await f.sql.query("select * from bridge_settlement_reference_claims")).length, 1);
+  } finally {
+    await f.db.close();
+  }
+});
+
 test("multiple legacy records with the same agreement reference block retry for reconciliation", async () => {
   const f = await fixture();
   try {
