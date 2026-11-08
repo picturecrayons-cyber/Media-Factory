@@ -14,6 +14,8 @@ import {
   requiredCopyMatrix,
   runClapAssistant,
   verifyStorageCopy,
+  validateStorageTopology,
+  type StorageDestination,
   type ClipRecord,
   type CopyVerification,
   type ConversionProfile,
@@ -198,4 +200,30 @@ test("audit append helper never mutates prior history", () => {
   const next = appendAudit(original, { state: "PASS" });
   assert.equal(original.length, 1);
   assert.equal(next.length, 2);
+});
+
+
+test("three-copy topology requires unique provider/account/region failure domains", () => {
+  const destinations: StorageDestination[] = [
+    { tier: "MASTER", provider: "oci", accountId: "account-a", region: "ap-south-1", container: "master", credentialRef: "vault/dit/master" },
+    { tier: "BACKUP_1", provider: "aws", accountId: "account-b", region: "ap-southeast-1", container: "backup-one", credentialRef: "vault/dit/backup-one" },
+    { tier: "BACKUP_2", provider: "offline", accountId: "site-c", region: "kerala-vault", container: "backup-two", credentialRef: "vault/dit/backup-two" },
+  ];
+  const topology = validateStorageTopology(destinations);
+  assert.equal(topology.length, 3);
+  assert.equal(new Set(topology.map((item) => item.failureDomainId)).size, 3);
+  assert.deepEqual(topology.map((item) => item.tier), ["MASTER", "BACKUP_1", "BACKUP_2"]);
+  assert.throws(
+    () => validateStorageTopology([
+      destinations[0],
+      { ...destinations[1], provider: "oci", accountId: "account-a", region: "ap-south-1" },
+      destinations[2],
+    ]),
+    /independent provider\/account\/region failure domains/,
+  );
+  assert.throws(() => validateStorageTopology(destinations.slice(0, 2)), /Exactly three/);
+  assert.throws(
+    () => validateStorageTopology(destinations.map((item) => item.tier === "BACKUP_2" ? { ...item, credentialRef: " " } : item)),
+    /credentialRef is required/,
+  );
 });
