@@ -196,8 +196,8 @@ export const requestRightsEvidenceUploadFn = createServerFn({ method: "POST" })
     const actor = await requireVerifiedActor(context.userId);
     if (actor.internalRole) throw new Error("Only the title owner or authorized Studio member may upload rights evidence");
     assertPermission(actor, "asset.sign_upload");
-    if (data.evidenceType === "EXECUTED_AGREEMENT" && data.contentType !== "application/pdf")
-      throw new Error("The executed Master Agreement must be uploaded as a PDF");
+    if (data.evidenceType === "EXECUTED_AGREEMENT" && (data.contentType !== "application/pdf" || !data.filename.toLowerCase().endsWith(".pdf")))
+      throw new Error("The executed Master Agreement must be uploaded as a PDF file");
     const sql = await getSql();
     const [title] = await sql<{
       id: string;
