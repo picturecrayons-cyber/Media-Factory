@@ -121,7 +121,7 @@ test("new and existing publications emit the status accepted by the Loop catalog
 test("publication readiness GET is read-only and never performs expiry cleanup writes", async () => {
   const h = harness([grant]);
   const result = await h.readiness({ context });
-  assert.deepEqual((result as { titles: unknown[] }).titles, []);
+  assert.equal((result as { titles: unknown[] }).titles.length, 0);
   assert.equal(h.writes.length, 0);
 });
 
