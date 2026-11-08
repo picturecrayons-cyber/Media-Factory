@@ -131,7 +131,12 @@ async function fixture() {
       },
       "./rbac": rbac,
       "./asset-roles": assetRoles,
-      "./titles": {},
+      "./titles": {
+        loadTitle: async () => ({
+          id: "title-123", ownerUserId: "owner", ownerAccountType: "independent_creator",
+          ownerOrganizationId: null, status: "LICENSED",
+        }),
+      },
     "./env": {bridgeEnv:{}},
       "./workflow-policy": policy,
     };
@@ -151,6 +156,7 @@ async function fixture() {
     return {
       db, sql, save: exports.saveLoopLicense, review: exports.reviewWorkflow,
       reviewHandler: exports.reviewTitleWorkflow,
+      settlementHandler: exports.recordSettlementEvidence,
     };
   } catch (error) {
     await db.close();
@@ -333,6 +339,31 @@ test("QC reviewer cannot review a title whose assets they uploaded", async () =>
       (await f.sql.query<{ status: string }>("select status from bridge_titles"))[0].status,
       "QC_REVIEW",
     );
+  } finally {
+    await f.db.close();
+  }
+});
+
+test("concurrent settlement evidence submissions reject a duplicate reference in PostgreSQL", async () => {
+  const f = await fixture();
+  try {
+    const invoke = () => (f.settlementHandler as (args: unknown) => Promise<unknown>)({
+      context: { userId: "owner" },
+      data: {
+        titleId: "title-123",
+        reference: "BANK-SETTLEMENT-2026-0001",
+        invoiceReference: "INVOICE-2026-0001",
+        statementReference: "STATEMENT-2026-0001",
+        amountPaise: 125000,
+      },
+    });
+    const results = await Promise.allSettled([invoke(), invoke()]);
+    assert.equal(results.filter((result) => result.status === "fulfilled").length, 1);
+    assert.equal(results.filter((result) => result.status === "rejected").length, 1);
+    const records = await f.sql.query(
+      "select id from bridge_audit_logs where action='finance.settlement_evidence' and metadata::jsonb->>'reference'='BANK-SETTLEMENT-2026-0001'",
+    );
+    assert.equal(records.length, 1);
   } finally {
     await f.db.close();
   }
