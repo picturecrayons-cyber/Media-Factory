@@ -39,8 +39,60 @@ create table if not exists public.bridge_rights_evidence_reviews (
 create index if not exists bridge_rights_evidence_reviews_evidence_idx
   on public.bridge_rights_evidence_reviews(evidence_id, created_at);
 
+-- A unique, case-insensitive claim protects external settlement references.
+-- Historical audit events remain untouched; the first valid reference claim is backfilled.
+create table if not exists public.bridge_settlement_reference_claims (
+  id uuid primary key default gen_random_uuid(),
+  reference_normalized text not null unique check (reference_normalized <> ''),
+  reference text not null,
+  title_id text not null references public.bridge_titles(id) on delete restrict,
+  invoice_reference text not null,
+  statement_reference text not null,
+  amount_paise bigint not null check (amount_paise > 0),
+  currency text not null default 'INR' check (currency = 'INR'),
+  created_by text not null,
+  created_at timestamptz not null default now()
+);
+
+insert into public.bridge_settlement_reference_claims(
+  reference_normalized,reference,title_id,invoice_reference,statement_reference,amount_paise,currency,created_by,created_at
+)
+select distinct on (upper(btrim(metadata::jsonb->>'reference')))
+  upper(btrim(metadata::jsonb->>'reference')),
+  btrim(metadata::jsonb->>'reference'),
+  entity_id,
+  btrim(metadata::jsonb->>'invoiceReference'),
+  btrim(metadata::jsonb->>'statementReference'),
+  (metadata::jsonb->>'amountPaise')::bigint,
+  coalesce(metadata::jsonb->>'currency','INR'),
+  actor_user_id,
+  created_at
+from public.bridge_audit_logs
+where action='finance.settlement_evidence'
+  and jsonb_typeof(metadata::jsonb)='object'
+  and btrim(coalesce(metadata::jsonb->>'reference','')) <> ''
+  and btrim(coalesce(metadata::jsonb->>'invoiceReference','')) <> ''
+  and btrim(coalesce(metadata::jsonb->>'statementReference','')) <> ''
+  and coalesce(metadata::jsonb->>'amountPaise','') ~ '^[1-9][0-9]*
+
+-- Add a private rights-document upload kind without changing existing asset rows.
+alter table public.bridge_assets drop constraint if exists bridge_assets_kind_chk;
+alter table public.bridge_assets
+  add constraint bridge_assets_kind_chk
+  check (kind in (
+    'poster','poster_vertical','poster_horizontal','thumbnail','screener','master',
+    'subtitle','technical','censor_certificate','rights_document'
+  ));
+
+-- No anon/authenticated grants or policies are added. Mutations remain server-side only.
+
+  and coalesce(metadata::jsonb->>'currency','INR')='INR'
+order by upper(btrim(metadata::jsonb->>'reference')),created_at,id
+on conflict (reference_normalized) do nothing;
+
 alter table public.bridge_rights_evidence enable row level security;
 alter table public.bridge_rights_evidence_reviews enable row level security;
+alter table public.bridge_settlement_reference_claims enable row level security;
 
 -- Add a private rights-document upload kind without changing existing asset rows.
 alter table public.bridge_assets drop constraint if exists bridge_assets_kind_chk;
