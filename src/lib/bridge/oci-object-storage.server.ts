@@ -198,7 +198,16 @@ export async function signUpload(opts: { key: string; contentType: string; expir
     accessType: "ObjectWrite",
     expiresIn: opts.expiresIn ?? 900,
   });
-  return { url: signed.url, key: opts.key, bucket: signed.bucket, method: "PUT" as const };
+  const cfg = config();
+  return {
+    url: signed.url,
+    key: opts.key,
+    bucket: signed.bucket,
+    namespace: signed.namespace,
+    region: cfg.region,
+    endpoint: endpoint(cfg.region),
+    method: "PUT" as const,
+  };
 }
 
 export async function beginMultipartUpload(opts: { key: string; contentType: string; expiresIn: number }) {
