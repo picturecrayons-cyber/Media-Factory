@@ -75,7 +75,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
   const [agreement, setAgreement] = useState("");
   const [ownership, setOwnership] = useState("");
   const [ownerShare, setOwnerShare] = useState("");
-  const [evidenceType, setEvidenceType] = useState<"EXECUTED_AGREEMENT" | "OWNERSHIP_CHAIN" | "SIGNATORY_AUTHORITY" | "DISTRIBUTION_AUTHORITY" | "SIGNED_AMENDMENT" | "SIGNED_ADDENDUM" | "RIGHTS_SCHEDULE">("EXECUTED_AGREEMENT");
+  const [evidenceType, setEvidenceType] = useState<"EXECUTED_AGREEMENT" | "OWNERSHIP_CHAIN" | "SIGNATORY_AUTHORITY" | "MASTER_DISTRIBUTOR_AUTHORITY" | "SUBLICENSING_AUTHORITY" | "SIGNED_AMENDMENT" | "SIGNED_ADDENDUM" | "RIGHTS_SCHEDULE">("EXECUTED_AGREEMENT");
   const [relatedAgreementEvidenceId, setRelatedAgreementEvidenceId] = useState("");
 
   function downloadStatement() {
@@ -324,7 +324,8 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                           <option value="EXECUTED_AGREEMENT">Executed agreement PDF</option>
                           <option value="OWNERSHIP_CHAIN">Ownership chain</option>
                           <option value="SIGNATORY_AUTHORITY">Signatory authority</option>
-                          <option value="DISTRIBUTION_AUTHORITY">Master Distributor / sublicensing authority</option>
+                          <option value="MASTER_DISTRIBUTOR_AUTHORITY">Master Distributor authority</option>
+                          <option value="SUBLICENSING_AUTHORITY">Sublicensing authority</option>
                           <option value="SIGNED_AMENDMENT">Signed amendment</option>
                           <option value="SIGNED_ADDENDUM">Signed addendum</option>
                           <option value="RIGHTS_SCHEDULE">Rights schedule</option>
