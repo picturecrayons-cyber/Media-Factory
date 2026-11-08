@@ -99,22 +99,29 @@ export async function saveLoopLicense(
     status: string;
     territories: string[];
     languages: string[];
+    media: string[];
     window_start: string | Date;
     window_end: string | Date;
     exclusivity: string;
-  }>`select id,status,territories,languages,window_start,window_end,exclusivity
+  }>`select id,status,territories,languages,media,window_start,window_end,exclusivity
     from bridge_rights_grants
     where title_id=${data.titleId} and status in ('DRAFT','VALID')
     for update`;
   const requestedStart = new Date(data.windowStart).getTime();
   const requestedEnd = new Date(data.windowEnd).getTime();
+  const normalized = (values: string[]) => (values ?? []).map((value) => value.trim().toUpperCase());
   const overlaps = existingGrants.some((existing) => {
+    const existingTerritories = normalized(existing.territories);
+    const requestedTerritories = normalized(data.territories);
     const territoryOverlap =
-      (existing.territories ?? []).some((value) => data.territories.includes(value)) ||
-      (existing.territories ?? []).includes("WORLDWIDE") ||
-      data.territories.includes("WORLDWIDE");
-    const languageOverlap = (existing.languages ?? []).some((language) =>
-      data.languages.some((requested) => requested.trim().toUpperCase() === language.trim().toUpperCase()),
+      existingTerritories.includes("WORLDWIDE") ||
+      requestedTerritories.includes("WORLDWIDE") ||
+      existingTerritories.some((value) => requestedTerritories.includes(value));
+    const languageOverlap = normalized(existing.languages).some((value) =>
+      normalized(data.languages).includes(value),
+    );
+    const mediaOverlap = normalized(existing.media).some((value) =>
+      ["CRAYONS_LOOP", "TVOD"].includes(value),
     );
     const timeOverlap =
       new Date(existing.window_start).getTime() < requestedEnd &&
@@ -122,6 +129,7 @@ export async function saveLoopLicense(
     return (
       territoryOverlap &&
       languageOverlap &&
+      mediaOverlap &&
       timeOverlap &&
       (existing.exclusivity === "EXCLUSIVE" || data.exclusivity === "EXCLUSIVE")
     );
