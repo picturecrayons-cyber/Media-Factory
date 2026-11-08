@@ -220,6 +220,8 @@ export async function reviewWorkflow(tx: Sql, actor: Actor, data: z.infer<typeof
         join bridge_asset_versions av on av.id=e.asset_version_id and av.title_id=e.title_id
           and av.asset_group='DOCUMENT' and av.asset_type='RIGHTS_EVIDENCE'
         join bridge_assets a on a.asset_version_id=av.id and a.kind='rights_document'
+          and a.verified_object_key=av.s3_key and a.storage_verified_at is not null
+          and lower(a.checksum_sha256)=lower(e.checksum_sha256)
         join bridge_rights_evidence_reviews er
           on er.evidence_id=e.id
           and er.decision='VERIFIED'
