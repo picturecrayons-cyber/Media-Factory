@@ -50,44 +50,58 @@ create table if not exists public.bridge_settlement_reference_claims (
   statement_reference text not null,
   amount_paise bigint not null check (amount_paise > 0),
   currency text not null default 'INR' check (currency = 'INR'),
+  claim_state text not null default 'ACTIVE' check (claim_state in ('ACTIVE','REVIEW_REQUIRED')),
   created_by text not null,
   created_at timestamptz not null default now()
 );
 
-insert into public.bridge_settlement_reference_claims(
-  reference_normalized,reference,title_id,invoice_reference,statement_reference,amount_paise,currency,created_by,created_at
+with settlement_events as (
+  select
+    id,
+    upper(btrim(metadata::jsonb->>'reference')) as reference_normalized,
+    btrim(metadata::jsonb->>'reference') as reference,
+    entity_id as title_id,
+    btrim(metadata::jsonb->>'invoiceReference') as invoice_reference,
+    btrim(metadata::jsonb->>'statementReference') as statement_reference,
+    (metadata::jsonb->>'amountPaise')::bigint as amount_paise,
+    coalesce(metadata::jsonb->>'currency','INR') as currency,
+    actor_user_id as created_by,
+    created_at
+  from public.bridge_audit_logs
+  where action='finance.settlement_evidence'
+    and jsonb_typeof(metadata::jsonb)='object'
+    and btrim(coalesce(metadata::jsonb->>'reference','')) <> ''
+    and btrim(coalesce(metadata::jsonb->>'invoiceReference','')) <> ''
+    and btrim(coalesce(metadata::jsonb->>'statementReference','')) <> ''
+    and coalesce(metadata::jsonb->>'amountPaise','') ~ '^[1-9][0-9]*$'
+    and coalesce(metadata::jsonb->>'currency','INR')='INR'
+),
+reference_stats as (
+  select reference_normalized,
+    count(*)::int as event_count,
+    count(distinct concat_ws('|',title_id,invoice_reference,statement_reference,amount_paise::text,currency))::int as term_variants
+  from settlement_events
+  group by reference_normalized
+),
+canonical_events as (
+  select distinct on (e.reference_normalized)
+    e.*,s.event_count,s.term_variants
+  from settlement_events e
+  join reference_stats s using(reference_normalized)
+  order by e.reference_normalized,e.created_at,e.id
 )
-select distinct on (upper(btrim(metadata::jsonb->>'reference')))
-  upper(btrim(metadata::jsonb->>'reference')),
-  btrim(metadata::jsonb->>'reference'),
-  entity_id,
-  btrim(metadata::jsonb->>'invoiceReference'),
-  btrim(metadata::jsonb->>'statementReference'),
-  (metadata::jsonb->>'amountPaise')::bigint,
-  coalesce(metadata::jsonb->>'currency','INR'),
-  actor_user_id,
-  created_at
-from public.bridge_audit_logs
-where action='finance.settlement_evidence'
-  and jsonb_typeof(metadata::jsonb)='object'
-  and btrim(coalesce(metadata::jsonb->>'reference','')) <> ''
-  and btrim(coalesce(metadata::jsonb->>'invoiceReference','')) <> ''
-  and btrim(coalesce(metadata::jsonb->>'statementReference','')) <> ''
-  and coalesce(metadata::jsonb->>'amountPaise','') ~ '^[1-9][0-9]*
-
--- Add a private rights-document upload kind without changing existing asset rows.
-alter table public.bridge_assets drop constraint if exists bridge_assets_kind_chk;
-alter table public.bridge_assets
-  add constraint bridge_assets_kind_chk
-  check (kind in (
-    'poster','poster_vertical','poster_horizontal','thumbnail','screener','master',
-    'subtitle','technical','censor_certificate','rights_document'
-  ));
-
--- No anon/authenticated grants or policies are added. Mutations remain server-side only.
-
-  and coalesce(metadata::jsonb->>'currency','INR')='INR'
-order by upper(btrim(metadata::jsonb->>'reference')),created_at,id
+insert into public.bridge_settlement_reference_claims(
+  reference_normalized,reference,title_id,invoice_reference,statement_reference,amount_paise,currency,claim_state,created_by,created_at
+)
+select
+  reference_normalized,reference,title_id,invoice_reference,statement_reference,amount_paise,currency,
+  case
+    when reference_normalized ~ '^(NOT|TBD|PENDING|UNEXECUTED)'
+      or term_variants > 1 then 'REVIEW_REQUIRED'
+    else 'ACTIVE'
+  end,
+  created_by,created_at
+from canonical_events
 on conflict (reference_normalized) do nothing;
 
 alter table public.bridge_rights_evidence enable row level security;
