@@ -218,6 +218,8 @@ export async function reviewWorkflow(tx: Sql, actor: Actor, data: z.infer<typeof
       }>`select e.id,e.evidence_type,e.asset_version_id,e.checksum_sha256,e.submitted_by,e.reviewed_by
         from bridge_rights_evidence e
         join bridge_asset_versions av on av.id=e.asset_version_id and av.title_id=e.title_id
+          and av.asset_group='DOCUMENT' and av.asset_type='RIGHTS_EVIDENCE'
+        join bridge_assets a on a.asset_version_id=av.id and a.kind='rights_document'
         join bridge_rights_evidence_reviews er
           on er.evidence_id=e.id
           and er.decision='VERIFIED'
@@ -232,7 +234,7 @@ export async function reviewWorkflow(tx: Sql, actor: Actor, data: z.infer<typeof
           and av.asset_group='DOCUMENT'
           and av.processing_state='PASSED'
           and lower(av.checksum_sha256)=lower(e.checksum_sha256)
-        for update of e,av`;
+        for update of e,av,a`;
       const verifiedTypes = new Set(verifiedEvidence.map((item) => item.evidence_type));
       if (!verifiedTypes.has("EXECUTED_AGREEMENT") || !verifiedTypes.has("OWNERSHIP_CHAIN"))
         throw new Error("Legal approval requires independently reviewed executed-agreement and ownership-chain documents with matching SHA-256 checksums");
