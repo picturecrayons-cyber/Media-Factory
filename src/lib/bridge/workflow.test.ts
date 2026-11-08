@@ -464,7 +464,7 @@ test("exclusive grants in disjoint exploitation media do not block a Loop TVOD d
   try {
     await f.sql.query(`insert into bridge_rights_grants
       (title_id,grant_type,territories,languages,media,window_start,window_end,exclusivity,evidence,status,created_by)
-      values ('title-123','DISTRIBUTION','["WORLDWIDE"]'::jsonb,'["Malayalam"]'::jsonb,'["CRAYONS_LOOP","SVOD"]'::jsonb,
+      values ('title-123','DISTRIBUTION','["WORLDWIDE"]'::jsonb,'["Malayalam"]'::jsonb,'["SVOD"]'::jsonb,
       '2026-01-01T00:00:00Z','2099-01-01T00:00:00Z','EXCLUSIVE','[]'::jsonb,'DRAFT','owner')`);
     const result = (await f.sql.transaction((tx) => f.save(tx, owner, license))) as {grantId:string};
     assert.ok(result.grantId);
