@@ -530,6 +530,8 @@ export async function recordSettlementEvidenceTx(
   assertPermission(actor, "finance.record_settlement");
   const reference = data.reference.trim();
   const normalizedReference = reference.toUpperCase();
+  if (/^(NOT|TBD|PENDING|UNEXECUTED)/.test(normalizedReference))
+    throw new Error("A placeholder is not a settlement reference; enter the external bank/provider reference");
   const [claim] = await tx<{ id: string }>`insert into bridge_settlement_reference_claims
     (reference_normalized,reference,title_id,invoice_reference,statement_reference,amount_paise,currency,created_by)
     values (${normalizedReference},${reference},${data.titleId},${data.invoiceReference},${data.statementReference},${data.amountPaise},'INR',${actor.userId})
@@ -542,10 +544,14 @@ export async function recordSettlementEvidenceTx(
       statement_reference: string;
       amount_paise: number | string;
       currency: string;
-    }>`select title_id,invoice_reference,statement_reference,amount_paise,currency
+      claim_state: string;
+    }>`select title_id,invoice_reference,statement_reference,amount_paise,currency,claim_state
       from bridge_settlement_reference_claims where reference_normalized=${normalizedReference}`;
+    if (existing?.claim_state === "REVIEW_REQUIRED")
+      throw new Error("This legacy settlement reference requires manual reconciliation; do not reuse it");
     if (
       existing &&
+      existing.claim_state === "ACTIVE" &&
       existing.title_id === data.titleId &&
       existing.invoice_reference === data.invoiceReference &&
       existing.statement_reference === data.statementReference &&
