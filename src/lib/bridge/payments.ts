@@ -11,6 +11,7 @@ import { loadTitle, recordTransition } from "./titles";
 import { writeAudit } from "./audit";
 import { assertBuyerPublishable } from "./buyer-visibility";
 import { assertNotDevUser } from "./guards";
+import { canBuyerAccessLicensePackage } from "./buyer-package-access";
 
 function requireRazorpayKeys() {
   const keyId = bridgeEnv.razorpayKeyId();
@@ -179,13 +180,13 @@ export const createLicenseOrder = createServerFn({ method: "POST" })
     }
     let amountPaise = title.licensingFeePaise;
     if (data.packageId) {
-      const pkg = await sql<{ id: string; title_id: string; price_paise: number; status: string }>`
-        select id, title_id, price_paise, status
+      const pkg = await sql<{ id: string; title_id: string; price_paise: number; status: string; buyer_user_id: string | null }>`
+        select id, title_id, price_paise, status, buyer_user_id
         from bridge_license_packages
         where id = ${data.packageId} and title_id = ${title.id}
         limit 1
       `;
-      if (!pkg[0] || !["READY", "IN_NEGOTIATION"].includes(pkg[0].status)) throw new Error("License package is not available");
+      if (!pkg[0] || !canBuyerAccessLicensePackage({ status: pkg[0].status, buyerUserId: pkg[0].buyer_user_id }, actor.userId)) throw new Error("License package is not available to this buyer");
       amountPaise = Number(pkg[0].price_paise);
     }
     if (amountPaise <= 0) throw new Error("Licensing price is not set");
@@ -214,6 +215,23 @@ export const createLicenseOrder = createServerFn({ method: "POST" })
         keyId,
         paymentRecordId: existing[0].id,
       };
+    }
+
+    if (data.packageId) {
+      // Atomic reservation closes the race where two buyers could both order
+      // the same IN_NEGOTIATION package after reading its previous READY state.
+      const reserved = await sql<{ id: string }>`
+        update bridge_license_packages
+        set status = 'IN_NEGOTIATION', buyer_user_id = ${actor.userId}, updated_at = now()
+        where id = ${data.packageId}
+          and title_id = ${title.id}
+          and (
+            (status = 'READY' and buyer_user_id is null)
+            or (status = 'IN_NEGOTIATION' and buyer_user_id = ${actor.userId})
+          )
+        returning id
+      `;
+      if (!reserved[0]) throw new Error("License package was reserved by another buyer or is no longer available");
     }
 
     const rz = await razorpayFetch<{ id: string; amount: number; currency: string }>("/orders", {
@@ -255,13 +273,7 @@ export const createLicenseOrder = createServerFn({ method: "POST" })
       };
     }
 
-    if (data.packageId) {
-      await sql`
-        update bridge_license_packages
-        set status = 'IN_NEGOTIATION', buyer_user_id = ${actor.userId}, updated_at = now()
-        where id = ${data.packageId} and title_id = ${title.id}
-      `;
-    } else if (title.status === "LIVE_FOR_BUYERS") {
+    if (!data.packageId && title.status === "LIVE_FOR_BUYERS") {
       await recordTransition({
         titleId: title.id,
         from: "LIVE_FOR_BUYERS",
