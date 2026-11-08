@@ -11,7 +11,6 @@ import * as policy from "./workflow-policy.ts";
 import * as rbac from "./rbac.ts";
 import * as assetRoles from "./asset-roles.ts";
 import { submitTitleForQc } from "./title-submission.ts";
-import { submitRightsEvidence } from "./rights-evidence.ts";
 import type { Sql } from "../db";
 
 type TestDb = {
@@ -138,7 +137,34 @@ async function fixture() {
       "./titles": {},
     "./env": {bridgeEnv:{}},
       "./workflow-policy": policy,
+      "./audit": {
+        writeAudit: async (event: { actorUserId: string; action: string; entityType: string; entityId: string; metadata: object }, tx: Sql) => {
+          await tx`insert into bridge_audit_logs(actor_user_id,action,entity_type,entity_id,metadata)
+            values (${event.actorUserId},${event.action},${event.entityType},${event.entityId},${JSON.stringify(event.metadata)})`;
+        },
+      },
+      "./guards": { assertNotDevUser: () => undefined },
+      "./oci-object-storage.server": {
+        titleAssetKey: () => "unused-in-workflow-unit-test",
+        signUpload: async () => { throw new Error("Upload signing is not exercised by this unit test"); },
+        verifyObjectSha256: async () => { throw new Error("Object verification is not exercised by this unit test"); },
+        sealVerifiedObject: async () => { throw new Error("Object sealing is not exercised by this unit test"); },
+      },
     };
+    const rightsEvidenceExports: Record<string, (...args: unknown[]) => unknown> = {};
+    const rightsEvidenceSource = readFileSync(new URL("./rights-evidence.ts", import.meta.url), "utf8");
+    runInNewContext(
+      transpileModule(rightsEvidenceSource, { compilerOptions: { module: ModuleKind.CommonJS } }).outputText,
+      {
+        exports: rightsEvidenceExports,
+        Date,
+        require: (name: string) => {
+          if (name === "node:crypto") return require("node:crypto");
+          assert.ok(name in modules, name);
+          return modules[name];
+        },
+      },
+    );
     const exports: Record<string, (...args: unknown[]) => Promise<unknown>> = {};
     const source = readFileSync(new URL("./workflow.ts", import.meta.url), "utf8");
     runInNewContext(
@@ -157,6 +183,7 @@ async function fixture() {
       save: exports.saveLoopLicense,
       review: exports.reviewWorkflow,
       settle: exports.recordSettlementEvidenceTx,
+      submitRightsEvidence: rightsEvidenceExports.submitRightsEvidence,
     };
   } catch (error) {
     await db.close();
@@ -357,8 +384,8 @@ test("repeated identical rights evidence submission reuses one record and one au
       assetVersionId,
     };
     const [first, second] = await Promise.all([
-      f.sql.transaction((tx) => submitRightsEvidence(tx, owner, input)),
-      f.sql.transaction((tx) => submitRightsEvidence(tx, owner, input)),
+      f.sql.transaction((tx) => f.submitRightsEvidence(tx, owner, input)),
+      f.sql.transaction((tx) => f.submitRightsEvidence(tx, owner, input)),
     ]);
     assert.deepEqual(second, first);
     assert.equal((await f.sql.query("select * from bridge_rights_evidence")).length, 1);
