@@ -4,7 +4,7 @@ import { randomBytes, createHash } from "node:crypto";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import { requireVerifiedActor } from "./session";
-import { assertPermission, canOperateOnTitle } from "./rbac";
+import { assertPermission, canOperateOnTitle, hasPermission } from "./rbac";
 import { loadTitle } from "./titles";
 import { writeAudit } from "./audit";
 import { assertNotDevUser } from "./guards";
@@ -12,6 +12,7 @@ import { bridgeEnv } from "./env";
 import { paymentVerifyBody, verifyRazorpaySignature } from "./razorpay-crypto";
 import { destinationSchema, detectRequiredWork, type DetectedAsset, type RequiredWork } from "./service-pricing";
 import { calculateServiceLine, calculateRefundSplit, calculateNetProfit } from "./commercial-math";
+import { toServiceQuoteResponse } from "./service-quote-response";
 
 const quoteInputSchema = z.object({
   titleId: z.string().min(8),
@@ -386,20 +387,23 @@ export const createServiceQuote = createServerFn({ method: "POST" })
       metadata: { titleId: title.id, quoteNumber, subtotal, taxPaise, total, estimatedCost },
     });
 
-    return {
-      quoteId: quote[0].id,
-      quoteNumber,
-      status: "QUOTED",
-      currency: "INR",
-      subtotalPaise: subtotal,
-      taxPaise,
-      totalPaise: total,
-      estimatedCostPaise: estimatedCost,
-      estimatedMarginPaise: estimatedMargin,
-      detectedAssets: plan.detectedAssets,
-      requiredWork: plan.requiredWork,
-      lines,
-    };
+    return toServiceQuoteResponse(
+      {
+        quoteId: quote[0].id,
+        quoteNumber,
+        status: "QUOTED",
+        currency: "INR",
+        subtotalPaise: subtotal,
+        taxPaise,
+        totalPaise: total,
+        estimatedCostPaise: estimatedCost,
+        estimatedMarginPaise: estimatedMargin,
+        detectedAssets: plan.detectedAssets,
+        requiredWork: plan.requiredWork,
+        lines,
+      },
+      hasPermission(actor, "finance.read"),
+    );
   });
 
 export const acceptServiceQuote = createServerFn({ method: "POST" })
