@@ -307,6 +307,64 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                           {selectedGrant.window_start} → {selectedGrant.window_end}
                         </p>
                         <p className="break-all text-xs text-muted">Grant record: {selectedGrant.id}</p>
+                        <div className="space-y-2 rounded-lg border border-line bg-surface p-3">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <h4 className="text-sm font-semibold">Rights review checklist</h4>
+                            <span className="text-xs text-muted">Evidence-based · no automatic approval</span>
+                          </div>
+                          {(() => {
+                            const evidence = selectedGrant.evidence?.[0];
+                            const terms = evidence?.commercialTerms;
+                            const ownerShare = Number(terms?.rightsOwnerSharePct);
+                            const distributorShare = Number(terms?.distributorSharePct);
+                            const validSplit =
+                              Number.isInteger(ownerShare) &&
+                              Number.isInteger(distributorShare) &&
+                              ownerShare >= 0 &&
+                              distributorShare >= 0 &&
+                              ownerShare + distributorShare === 100;
+                            const validWindow =
+                              Boolean(selectedGrant.window_start) &&
+                              Boolean(selectedGrant.window_end) &&
+                              Number.isFinite(new Date(selectedGrant.window_start).getTime()) &&
+                              Number.isFinite(new Date(selectedGrant.window_end).getTime()) &&
+                              new Date(selectedGrant.window_end) > new Date(selectedGrant.window_start) &&
+                              new Date(selectedGrant.window_end) > new Date();
+                            const checks = [
+                              ["Ownership evidence reference recorded", Boolean(evidence?.ownershipReference?.trim())],
+                              ["Agreement reference recorded", Boolean(evidence?.agreementReference?.trim())],
+                              ["NON-EXCLUSIVE rights confirmed", selectedGrant.exclusivity === "NON_EXCLUSIVE"],
+                              ["Revenue-share split totals 100%", validSplit],
+                              ["Territory, language and validity window recorded", selectedGrant.territories.length > 0 && selectedGrant.languages.length > 0 && validWindow],
+                              ["Independent Legal Reviewer approval completed", selectedGrant.status === "VALID"],
+                            ] as const;
+                            return (
+                              <>
+                                <ul className="grid gap-2 sm:grid-cols-2">
+                                  {checks.map(([label, passed]) => (
+                                    <li key={label} className="flex items-start gap-2 text-xs">
+                                      <span aria-label={passed ? "Passed" : "Pending"} className={passed ? "text-emerald-600" : "text-amber-600"}>
+                                        {passed ? "✓" : "○"}
+                                      </span>
+                                      <span>{label} · {passed ? "Verified in record" : "Pending / not verified"}</span>
+                                    </li>
+                                  ))}
+                                </ul>
+                                <div className="grid gap-1 border-t border-line pt-2 text-xs text-muted sm:grid-cols-2">
+                                  <p>Ownership ref: {evidence?.ownershipReference || "Not recorded"}</p>
+                                  <p>Agreement ref: {evidence?.agreementReference || "Not recorded"}</p>
+                                  <p>Rights owner share: {Number.isInteger(ownerShare) ? `${ownerShare}%` : "Not verified"}</p>
+                                  <p>Distributor share: {Number.isInteger(distributorShare) ? `${distributorShare}%` : "Not verified"}</p>
+                                </div>
+                                <p className="text-xs font-medium" role="status">
+                                  {checks.every(([, passed]) => passed)
+                                    ? "Checklist complete. Legal approval remains governed by the separate reviewer action."
+                                    : "PENDING — do not mark READY until every required item is verified and the independent Legal Reviewer approves."}
+                                </p>
+                              </>
+                            );
+                          })()}
+                        </div>
                         {selectedGrant.status === "DRAFT" &&
                         title.status === "RIGHTS_REVIEW" &&
                         hasPermission(actor, "title.rights_review") ? (
