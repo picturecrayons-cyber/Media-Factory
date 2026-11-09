@@ -248,12 +248,28 @@ function Home() {
                   From rights to audience.
                 </h3>
                 <p className="mt-2 text-sm leading-relaxed text-muted max-w-2xl">
-                  Crayons Bridge manages rights, licensing and distribution authorization. Crayons
-                  Loop is the consumer streaming experience.
+                  Bridge connects approved films with licensed platforms through verified rights, licensing and secure delivery.
                 </p>
               </div>
-
-
+              <div className="grid w-full gap-3 md:grid-cols-[1fr_auto_1fr_auto_1fr] md:items-center">
+                <div className="rounded-xl border border-line bg-white p-4 text-center">
+                  <p className="text-[10px] font-semibold uppercase tracking-widest text-muted">01 · Catalogue</p>
+                  <p className="mt-2 font-display text-lg font-semibold text-fg">Approved Films</p>
+                  <p className="mt-1 text-xs text-muted">Verified title & master</p>
+                </div>
+                <span aria-hidden="true" className="hidden text-xl text-accent md:block">→</span>
+                <div className="rounded-xl border border-line bg-white p-4 text-center">
+                  <p className="text-[10px] font-semibold uppercase tracking-widest text-muted">02 · Licensing</p>
+                  <p className="mt-2 font-display text-lg font-semibold text-fg">Licensed Platforms</p>
+                  <p className="mt-1 text-xs text-muted">Rights, territory & window</p>
+                </div>
+                <span aria-hidden="true" className="hidden text-xl text-accent md:block">→</span>
+                <div className="rounded-xl border border-line bg-white p-4 text-center">
+                  <p className="text-[10px] font-semibold uppercase tracking-widest text-muted">03 · Delivery</p>
+                  <p className="mt-2 font-display text-lg font-semibold text-fg">Authorized Delivery</p>
+                  <p className="mt-1 text-xs text-muted">Bridge-approved packages</p>
+                </div>
+              </div>
             </div>
           </div>
         </section>
