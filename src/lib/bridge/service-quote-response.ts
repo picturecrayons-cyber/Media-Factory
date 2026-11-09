@@ -1,3 +1,5 @@
+import type { DetectedAsset, RequiredWork } from "./service-pricing";
+
 export type ServiceQuoteLine = {
   serviceCode: string;
   rateId: string;
@@ -10,7 +12,7 @@ export type ServiceQuoteLine = {
   lineTotalPaise: number;
   costBasisPaise: number;
   estimatedMarginPaise: number;
-  evidence: unknown;
+  evidence: RequiredWork;
 };
 
 export type ServiceQuote = {
@@ -23,8 +25,8 @@ export type ServiceQuote = {
   totalPaise: number;
   estimatedCostPaise: number;
   estimatedMarginPaise: number;
-  detectedAssets: unknown;
-  requiredWork: unknown;
+  detectedAssets: DetectedAsset[];
+  requiredWork: RequiredWork[];
   lines: ServiceQuoteLine[];
 };
 
