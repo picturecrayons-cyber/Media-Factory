@@ -99,6 +99,9 @@ jobs:
       - name: Verify all nine Merge Gate assertions and security controls
         run: psql -d bridge_scope_a -X -v ON_ERROR_STOP=1 -f scripts/merge-gate-postgres17-assertions.sql
 
+      - name: Run positive and semantic negative merge contract DML tests
+        run: psql -d bridge_scope_a -X -v ON_ERROR_STOP=1 -f scripts/merge-gate-postgres17-semantic-tests.sql
+
       - name: Run nine negative contract tests against isolated database clones
         run: bash scripts/merge-gate-postgres17-negative-tests.sh
 
