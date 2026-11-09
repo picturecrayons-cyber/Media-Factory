@@ -1,9 +1,6 @@
-import { useNavigate } from "@tanstack/react-router";
-import { useMutation } from "@tanstack/react-query";
 import { useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { createStoryConceptSubmission } from "@/lib/bridge/story-concept-api";
 
 const GENRES = [
   "Drama",
@@ -30,7 +27,6 @@ const PLATFORMS = [
 ];
 
 export function StoryConceptForm() {
-  const navigate = useNavigate();
   const [titleName, setTitleName] = useState("");
   const [logline, setLogline] = useState("");
   const [synopsis, setSynopsis] = useState("");
@@ -41,44 +37,13 @@ export function StoryConceptForm() {
   const [treatmentUrl, setTreatmentUrl] = useState("");
   const [screenplayUrl, setScreenplayUrl] = useState("");
 
-  const mut = useMutation({
-    mutationFn: () =>
-      createStoryConceptSubmission({
-        data: {
-          titleName,
-          logline,
-          synopsis,
-          language,
-          genre,
-          targetPlatforms,
-          estimatedBudgetRange: estimatedBudgetRange || undefined,
-          treatmentUrl: treatmentUrl || undefined,
-          screenplayUrl: screenplayUrl || undefined,
-        },
-      }),
-    onSuccess: (res) => {
-      toast("Story / Concept submitted for review");
-      void navigate({ to: "/title/$id", params: { id: res.titleId } });
-    },
-    onError: (err) =>
-      toast(err instanceof Error ? err.message : "Could not submit concept"),
-  });
-
   function toggle(value: string, list: string[], setList: (v: string[]) => void) {
     setList(list.includes(value) ? list.filter((x) => x !== value) : [...list, value]);
   }
 
   function onSubmit(e: FormEvent) {
     e.preventDefault();
-    if (logline.trim().length < 10) {
-      toast("Logline must be at least 10 characters");
-      return;
-    }
-    if (synopsis.trim().length < 40) {
-      toast("Synopsis must be at least 40 characters");
-      return;
-    }
-    mut.mutate();
+    toast("Story / Concept submission is locked until verified payment checkout is available.");
   }
 
   return (
@@ -200,14 +165,14 @@ export function StoryConceptForm() {
       </label>
 
       <div className="rounded-xl border border-line bg-elevated p-4 text-xs leading-relaxed text-muted sm:col-span-2">
-        Submitting places this concept in the admin curation queue. It does not publish to
-        Loop or the public buyer catalog. Payment gate remains locked until the fee is
-        certified.
+        Story / Concept submissions do not publish to Loop or the public buyer catalog.
+        Submission is currently locked: service pricing and verified payment checkout are not
+        certified. Existing film submissions remain unaffected.
       </div>
 
       <div className="sm:col-span-2">
-        <Button type="submit" disabled={mut.isPending} className="w-full rounded-full sm:w-auto sm:px-8">
-          {mut.isPending ? "Submitting…" : "Submit to Network"}
+        <Button type="submit" disabled className="w-full rounded-full sm:w-auto sm:px-8">
+          Submission locked — payment verification pending
         </Button>
       </div>
     </form>
