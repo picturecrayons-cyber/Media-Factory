@@ -113,17 +113,21 @@ function assessTitle(requirement: BuyerRequirement, title: CatalogueTitle) {
   if (!typeFit) blockers.push("Content type does not match the buyer requirement.");
   else if (requirement.content_types.length) reasons.push(`Content type match: ${title.content_type}.`);
 
-  if (!requirement.languages.length && !requirement.content_types.length) {
+  const hasTitleCriteria = requirement.languages.length > 0 || requirement.content_types.length > 0;
+  if (!hasTitleCriteria) {
     blockers.push("Buyer has not supplied enough title-level requirements for a reliable match.");
   }
 
   // Rights, QC, legal approval, and delivery-package checks are deliberately
   // fail-closed until their evidence is loaded and verified by the same server.
-  blockers.push("Rights, territory, legal approval, QC and delivery readiness are not yet verified by this matching view.");
+  if (hasTitleCriteria && languageFit && typeFit) {
+    blockers.push("Rights, territory, legal approval, QC and delivery readiness are not yet verified by this matching view.");
+  }
 
-  const fitScore = (languageFit ? 35 : 0) + (typeFit ? 25 : 0);
-  const matchStatus =
-    !languageFit || !typeFit
+  const fitScore = hasTitleCriteria ? (languageFit ? 35 : 0) + (typeFit ? 25 : 0) : 0;
+  const matchStatus = !hasTitleCriteria
+    ? "needs_review"
+    : !languageFit || !typeFit
       ? "no_match"
       : "rights_blocked";
 
