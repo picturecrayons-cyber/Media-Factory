@@ -28,7 +28,31 @@ export type ServiceQuote = {
   lines: ServiceQuoteLine[];
 };
 
-function customerLine(line: ServiceQuoteLine) {
+type InternalQuoteLineFields = Pick<
+  ServiceQuoteLine,
+  "rateId" | "rateVersion" | "costBasisPaise" | "estimatedMarginPaise" | "evidence"
+>;
+
+type InternalQuoteFields = Pick<
+  ServiceQuote,
+  "estimatedCostPaise" | "estimatedMarginPaise"
+>;
+
+/**
+ * One stable serializable response shape. Internal-only properties are optional
+ * because they are omitted entirely for Creator/Studio actors without finance.read.
+ */
+export type ServiceQuoteResponseLine =
+  Omit<ServiceQuoteLine, keyof InternalQuoteLineFields> &
+  Partial<InternalQuoteLineFields>;
+
+export type ServiceQuoteResponse =
+  Omit<ServiceQuote, keyof InternalQuoteFields | "lines"> &
+  Partial<InternalQuoteFields> & {
+    lines: ServiceQuoteResponseLine[];
+  };
+
+function customerLine(line: ServiceQuoteLine): ServiceQuoteResponseLine {
   return {
     serviceCode: line.serviceCode,
     classification: line.classification,
@@ -44,7 +68,10 @@ function customerLine(line: ServiceQuoteLine) {
  * External Creator/Studio quote responses expose customer pricing only.
  * Internal cost, margin, and rate internals require the explicit finance.read permission.
  */
-export function toServiceQuoteResponse(quote: ServiceQuote, includeInternalFinancials: boolean) {
+export function toServiceQuoteResponse(
+  quote: ServiceQuote,
+  includeInternalFinancials: boolean,
+): ServiceQuoteResponse {
   const common = {
     quoteId: quote.quoteId,
     quoteNumber: quote.quoteNumber,
@@ -60,7 +87,9 @@ export function toServiceQuoteResponse(quote: ServiceQuote, includeInternalFinan
   if (!includeInternalFinancials) {
     return {
       ...common,
-      lines: quote.lines.filter((line) => line.classification !== "INTERNAL").map(customerLine),
+      lines: quote.lines
+        .filter((line) => line.classification !== "INTERNAL")
+        .map(customerLine),
     };
   }
 
