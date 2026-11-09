@@ -665,3 +665,39 @@ export const listAuditLogs = createServerFn({ method: "GET" })
       })),
     };
   });
+
+
+/**
+ * Permanently removes only an untouched DRAFT owned by the verified creator/studio.
+ * Any asset row (including a pending upload reservation) blocks deletion.
+ */
+export async function deleteDraftTitleForUser(authUserId: string, id: string) {
+  if (!/^[A-Za-z0-9_-]{8,80}$/.test(id)) throw new Error("Invalid title id.");
+  assertNotDevUser(authUserId);
+  const actor = await requireVerifiedActor(authUserId);
+  if (actor.internalRole || !["independent_creator", "studio"].includes(actor.accountType)) {
+    throw new Error("Forbidden");
+  }
+  const sql = await getSql();
+  return sql.transaction(async (tx) => {
+    const rows = await tx<TitleRow>`select * from bridge_titles where id = ${id} for update`;
+    const row = rows[0];
+    if (!row) throw new Error("Not found");
+    const title = mapTitle(row);
+    if (title.status !== "DRAFT") throw new Error("Only DRAFT titles can be deleted.");
+    if (!canMutateTitle(actor, title, "title.update_own", "title.license")) throw new Error("Forbidden");
+    const assets = await tx<{ id: string }>`select id from bridge_assets where title_id = ${id} limit 1`;
+    if (assets.length || title.masterKey || title.posterKey) {
+      throw new Error("This draft has registered assets or upload records and cannot be deleted. Contact Bridge support.");
+    }
+    const deleted = await tx<{ id: string }>`
+      delete from bridge_titles where id = ${id} and status = 'DRAFT' returning id
+    `;
+    if (!deleted[0]) throw new Error("Title changed; refresh and try again.");
+    await writeAudit({
+      actorUserId: actor.userId, action: "title.draft_deleted", entityType: "bridge_title",
+      entityId: id, metadata: { previousStatus: "DRAFT" },
+    }, tx);
+    return { deleted: true as const, id };
+  });
+}

@@ -6,42 +6,90 @@ import { Button } from "@/components/ui/button";
 import { StatusChip } from "@/components/bridge/status-rail";
 import { createTitle, listTitles } from "@/lib/bridge/titles";
 import { BRIDGE_LOOP_LANES } from "@/lib/bridge/loop-lanes";
+import { getBearerToken } from "@/lib/auth/client";
+
+type DraftTitle = { id: string; name: string };
 
 export function TitleList({ empty, query = "" }: { empty: string; query?: string }) {
   const titlesQ = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles() });
-  const titles = (titlesQ.data?.titles ?? []).filter((t) => !query || `${t.name} ${t.language} ${t.year ?? ""}`.toLowerCase().includes(query.toLowerCase()));
+  const qc = useQueryClient();
+  const navigate = useNavigate();
+  const [deleteTarget, setDeleteTarget] = useState<DraftTitle | null>(null);
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const token = await getBearerToken();
+      if (!token) throw new Error("Your session has expired. Sign in again.");
+      const response = await fetch(`/api/bridge/titles/${encodeURIComponent(id)}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+        credentials: "same-origin",
+      });
+      const payload = await response.json().catch(() => ({})) as { error?: string };
+      if (!response.ok) throw new Error(payload.error || "Draft could not be deleted.");
+      return id;
+    },
+    onSuccess: () => {
+      toast.success("Draft deleted");
+      setDeleteTarget(null);
+      void qc.invalidateQueries({ queryKey: ["bridge-titles"] });
+    },
+    onError: (error) => toast.error(error instanceof Error ? error.message : "Draft could not be deleted"),
+  });
+  const titles = (titlesQ.data?.titles ?? []).filter((t) =>
+    !query || `${t.name} ${t.language} ${t.year ?? ""}`.toLowerCase().includes(query.toLowerCase()),
+  );
   if (titlesQ.isPending) return <p className="text-sm text-muted">Loading titles…</p>;
-  if (titlesQ.isError) {
-    return (
-      <div role="alert" className="flex flex-wrap items-center gap-3 text-sm text-accent">
-        <p>Could not load titles.</p>
-        <Button type="button" onClick={() => void titlesQ.refetch()}>Retry</Button>
-      </div>
-    );
-  }
+  if (titlesQ.isError) return (
+    <div role="alert" className="flex flex-wrap items-center gap-3 text-sm text-accent">
+      <p>Could not load titles.</p><Button type="button" onClick={() => void titlesQ.refetch()}>Retry</Button>
+    </div>
+  );
   if (!titles.length) return <p className="text-sm text-muted">{empty}</p>;
   return (
-    <ul className="divide-y divide-line rounded-sm border border-line">
-      {titles.map((t) => (
-        <li key={t.id}>
-          <Link
-            to="/title/$id"
-            params={{ id: t.id }}
-            className="flex flex-wrap items-center justify-between gap-3 px-4 py-4 hover:bg-fg/5"
-          >
-            <div>
-              <p className="font-medium">{t.name}</p>
-              <p className="text-sm text-muted">
-                {t.contentType ? `${t.contentType} · ` : ""}
-                {t.language}
-                {t.year ? ` · ${t.year}` : ""}
-              </p>
+    <>
+      <ul className="divide-y divide-line overflow-hidden rounded-xl border border-line bg-surface">
+        {titles.map((title) => {
+          const isDraft = title.status === "DRAFT";
+          return (
+            <li key={title.id} className="flex min-w-0 flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:gap-5 sm:px-5">
+              <div className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+                <Link to="/title/$id" params={{ id: title.id }} className="min-w-0 flex-1 rounded-md outline-offset-4 hover:text-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent">
+                  <p className="break-words font-medium leading-6">{title.name}</p>
+                  <p className="mt-0.5 text-sm leading-5 text-muted">
+                    {title.contentType ? `${title.contentType} · ` : ""}{title.language}{title.year ? ` · ${title.year}` : ""}
+                  </p>
+                </Link>
+                <div className="flex shrink-0 items-center"><StatusChip status={title.status} /></div>
+              </div>
+              {isDraft ? (
+                <div className="flex shrink-0 flex-wrap items-center gap-2 border-t border-line pt-3 sm:border-0 sm:pt-0">
+                  <Button type="button" size="sm" variant="outline" onClick={() => void navigate({ to: "/title/$id", params: { id: title.id } })} className="min-h-9 rounded-full px-4">Continue</Button>
+                  <Button type="button" size="sm" variant="ghost" onClick={() => setDeleteTarget({ id: title.id, name: title.name })} className="min-h-9 rounded-full px-4 text-accent hover:bg-accent/10" disabled={deleteMutation.isPending}>Delete</Button>
+                </div>
+              ) : null}
+            </li>
+          );
+        })}
+      </ul>
+      {deleteTarget ? (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4" onMouseDown={(event) => {
+          if (event.target === event.currentTarget && !deleteMutation.isPending) setDeleteTarget(null);
+        }}>
+          <section role="dialog" aria-modal="true" aria-labelledby="delete-draft-title" aria-describedby="delete-draft-description" className="w-full max-w-md rounded-2xl border border-line bg-surface p-5 shadow-2xl sm:p-6">
+            <h2 id="delete-draft-title" className="font-display text-xl font-semibold">Delete this draft?</h2>
+            <p id="delete-draft-description" className="mt-2 break-words text-sm leading-6 text-muted">
+              “{deleteTarget.name}” will be permanently removed only if it is still an untouched DRAFT with no registered assets or uploads. This action cannot be undone.
+            </p>
+            <div className="mt-6 flex flex-wrap justify-end gap-2">
+              <Button type="button" variant="outline" disabled={deleteMutation.isPending} onClick={() => setDeleteTarget(null)}>Cancel</Button>
+              <Button type="button" variant="danger" disabled={deleteMutation.isPending} onClick={() => deleteMutation.mutate(deleteTarget.id)}>
+                {deleteMutation.isPending ? "Deleting…" : "Delete draft"}
+              </Button>
             </div>
-            <StatusChip status={t.status} />
-          </Link>
-        </li>
-      ))}
-    </ul>
+          </section>
+        </div>
+      ) : null}
+    </>
   );
 }
 
