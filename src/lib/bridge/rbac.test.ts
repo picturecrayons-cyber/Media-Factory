@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { assertPermission, canAccessDashboard, canGrantInternalRole, canMutateTitle, canOperateOnTitle, canReadTitle, hasPermission, hasStaffPermission, permissionForTransition, workspaceHome } from "./rbac.ts";
+import { assertPermission, canAccessDashboard, canAccessTitleWorkspace, canGrantInternalRole, canMutateTitle, canOperateOnTitle, canReadTitle, hasPermission, hasStaffPermission, permissionForTransition, workspaceHome } from "./rbac.ts";
 import type { Actor } from "./rbac.ts";
 
 const actor = (
@@ -161,6 +161,46 @@ describe("PRD authorization matrix", () => {
       canGrantInternalRole(actor("admin-a", "independent_creator", "admin", false), "viewer"),
       false,
     );
+  });
+
+  it("restricts the shared title workspace to creators, studios, and catalog-authorized staff", () => {
+    assert.equal(canAccessTitleWorkspace(creator()), true);
+    assert.equal(canAccessTitleWorkspace(studio()), true);
+    assert.equal(canAccessTitleWorkspace(buyer()), false);
+    assert.equal(canAccessTitleWorkspace(investor()), false);
+    assert.equal(canAccessTitleWorkspace(viewer()), true);
+    assert.equal(canAccessTitleWorkspace(actor("unverified", "studio", null, false)), false);
+  });
+
+  it("shares title access only with verified Studio accounts in the same Studio organization", () => {
+    const member: Actor = {
+      ...actor("studio-member", "studio"),
+      organizationId: "11111111-1111-4111-8111-111111111111",
+    };
+    const sameOrgTitle = {
+      ownerUserId: "studio-owner",
+      ownerAccountType: "studio" as const,
+      ownerOrganizationId: "11111111-1111-4111-8111-111111111111",
+      status: "DRAFT" as const,
+    };
+    const otherOrgTitle = {
+      ...sameOrgTitle,
+      ownerOrganizationId: "22222222-2222-4222-8222-222222222222",
+    };
+    const creatorOwnedSameName = {
+      ...sameOrgTitle,
+      ownerAccountType: "independent_creator" as const,
+    };
+    assert.equal(canReadTitle(member, sameOrgTitle), true);
+    assert.equal(canMutateTitle(member, sameOrgTitle, "title.update_own", "title.license"), true);
+    assert.equal(canOperateOnTitle(member, sameOrgTitle, "asset.sign_upload"), true);
+    assert.equal(canReadTitle(member, otherOrgTitle), false);
+    assert.equal(canMutateTitle(member, otherOrgTitle, "title.update_own", "title.license"), false);
+    assert.equal(canOperateOnTitle(member, otherOrgTitle, "asset.sign_upload"), false);
+    assert.equal(canReadTitle({ ...member, organizationId: null }, sameOrgTitle), false);
+    assert.equal(canReadTitle({ ...member, emailVerified: false }, sameOrgTitle), false);
+    assert.equal(canReadTitle({ ...member, accountType: "buyer" }, sameOrgTitle), false);
+    assert.equal(canReadTitle(member, creatorOwnedSameName), false);
   });
 
   it("routes operators away from the super-admin dashboard", () => {

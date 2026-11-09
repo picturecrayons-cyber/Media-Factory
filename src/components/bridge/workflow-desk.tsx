@@ -61,14 +61,13 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
     },
     onError: (e) => setError(e instanceof Error ? e.message : "Action failed"),
   });
-  const [territories, setTerritories] = useState("WORLDWIDE");
-  const [languages, setLanguages] = useState(title.language);
   const [start, setStart] = useState("");
   const [end, setEnd] = useState("");
   const [exclusive, setExclusive] = useState(false);
   const [agreement, setAgreement] = useState("");
   const [ownership, setOwnership] = useState("");
   const [ownerShare, setOwnerShare] = useState("");
+  const [selectedGrantByAgreement, setSelectedGrantByAgreement] = useState<Record<string, string>>({});
   function downloadStatement() {
     const safe = (v: string) =>
       '"' + (/^[=+@-]/.test(v) ? "'" : "") + v.replaceAll('"', '""') + '"';
@@ -96,13 +95,18 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
     URL.revokeObjectURL(url);
   }
   const grants = workflow.data?.grants ?? [];
+  const grantsByAgreement = grants.reduce<Record<string, typeof grants>>((groups, grant) => {
+    const reference = grant.evidence[0]?.agreementReference ?? "Not recorded";
+    (groups[reference] ??= []).push(grant);
+    return groups;
+  }, {});
   const valid = grants.find((g) => g.status === "VALID" && new Date(g.window_end) > new Date());
   const pub = publication.data?.publication;
-  const button = (label: string, run: () => Promise<unknown>) => (
+  const button = (label: string, run: () => Promise<unknown>, disabled = false) => (
     <button
       type="button"
       className="rounded-lg border border-line px-4 py-2 text-sm disabled:opacity-50"
-      disabled={action.isPending}
+      disabled={action.isPending || disabled}
       onClick={() => action.mutate(run)}
     >
       {label}
@@ -153,8 +157,9 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
           {stage === "Prepare" ? (
             <div className="space-y-3">
               <p>
-                Lifecycle: {title.status}. QC: {workflow.data?.qc?.status ?? "Not reviewed"}. Upload
-                verified master and artwork below before submitting.
+                {title.status === "PREPARING" || title.status === "UPLOADING" || title.status === "DRAFT"
+                  ? "Step 1: upload the main film. Step 2: keep the posters. Step 3: submit for QC. QC is not reviewed yet."
+                  : `Lifecycle: ${title.status}. QC: ${workflow.data?.qc?.status ?? "Not reviewed"}.`}
               </p>
               {canOperateOnTitle(actor, title, "title.advance_upload", "title.ingest_internal") &&
               ["DRAFT", "UPLOADING", "PREPARING"].includes(title.status)
@@ -206,105 +211,141 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
           ) : null}
           {stage === "Business" ? (
             <div className="space-y-4">
-              <p>
-                License to Crayons Loop · TVOD. A draft requires an independent legal reviewer
-                before publication.
+              <details className="rounded-xl border border-line p-3">
+                <summary className="cursor-pointer text-sm font-semibold">＋ Create TVOD license draft</summary>
+                <p className="mt-2 text-xs text-muted">Worldwide · {title.language}. Legal evidence is required before review.</p>
+                {canOperateOnTitle(actor, title, "title.update_own", "title.license") ? (
+                  <form
+                    className="mt-3 grid gap-3 sm:grid-cols-2"
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      action.mutate(() =>
+                        submitLoopLicense({
+                          data: {
+                            titleId: title.id,
+                            territories: ["WORLDWIDE"],
+                            languages: [title.language],
+                            windowStart: new Date(start).toISOString(),
+                            windowEnd: new Date(end).toISOString(),
+                            exclusivity: exclusive ? "EXCLUSIVE" : "NON_EXCLUSIVE",
+                            agreementReference: agreement,
+                            ownershipReference: ownership,
+                            rightsOwnerSharePct: Number(ownerShare),
+                            distributorSharePct: 100 - Number(ownerShare),
+                          },
+                        }),
+                      );
+                    }}
+                  >
+                    {input("License starts", start, setStart, "datetime-local")}
+                    {input("License ends", end, setEnd, "datetime-local")}
+                    {input("Agreement reference", agreement, setAgreement)}
+                    {input("Ownership evidence reference", ownership, setOwnership)}
+                    {input("Rights owner share (%)", ownerShare, setOwnerShare, "number")}
+                    <label className="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={exclusive}
+                        onChange={(e) => setExclusive(e.target.checked)}
+                      />
+                      Exclusive license
+                    </label>
+                    <button
+                      disabled={action.isPending || !start || !end || agreement.trim().length < 8 || ownership.trim().length < 8 || ownerShare === ""}
+                      className="rounded-lg border border-line px-4 py-2 text-sm sm:col-span-2"
+                    >
+                      {action.isPending ? "Saving…" : "Save draft"}
+                    </button>
+                  </form>
+                ) : null}
+              </details>
+              {input("Legal review note", note, setNote)}
+              <p className="text-xs text-muted" aria-live="polite">
+                {note.trim().length < 8
+                  ? `Enter at least 8 characters (${note.trim().length}/8).`
+                  : "Review note meets the minimum length."}
               </p>
-              {canOperateOnTitle(actor, title, "title.update_own", "title.license") ? (
-                <form
-                  className="grid gap-3 sm:grid-cols-2"
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    action.mutate(() =>
-                      submitLoopLicense({
-                        data: {
-                          titleId: title.id,
-                          territories: territories
-                            .split(",")
-                            .map((v) => v.trim())
-                            .filter(Boolean),
-                          languages: languages
-                            .split(",")
-                            .map((v) => v.trim())
-                            .filter(Boolean),
-                          windowStart: new Date(start).toISOString(),
-                          windowEnd: new Date(end).toISOString(),
-                          exclusivity: exclusive ? "EXCLUSIVE" : "NON_EXCLUSIVE",
-                          agreementReference: agreement,
-                          ownershipReference: ownership,
-                          rightsOwnerSharePct: Number(ownerShare),
-                          distributorSharePct: 100 - Number(ownerShare),
-                        },
-                      }),
-                    );
-                  }}
-                >
-                  {input("Territories", territories, setTerritories)}
-                  {input("Languages", languages, setLanguages)}
-                  {input("Window start", start, setStart, "datetime-local")}
-                  {input("Window end", end, setEnd, "datetime-local")}
-                  {input("Executed agreement reference", agreement, setAgreement)}
-                  {input("Ownership evidence reference", ownership, setOwnership)}
-                  {input(
-                    "Rights owner share % of gross captured INR (before fees/tax/refunds)",
-                    ownerShare,
-                    setOwnerShare,
-                    "number",
-                  )}
-                  <label className="text-sm">
-                    <input
-                      type="checkbox"
-                      checked={exclusive}
-                      onChange={(e) => setExclusive(e.target.checked)}
-                    />{" "}
-                    Exclusive
-                  </label>
-                  <button disabled={action.isPending} className="rounded-lg border border-line p-2">
-                    Save license draft
-                  </button>
-                </form>
-              ) : null}
-              {input("Legal review findings", note, setNote)}
-              {grants.map((g) => (
-                <article key={g.id} className="space-y-2 rounded-lg border border-line p-3">
-                  <p>
-                    {g.status} · {g.exclusivity} · {g.territories.join(", ")} ·{" "}
-                    {g.languages.join(", ")}
-                  </p>
-                  <p className="text-xs">
-                    {g.window_start} → {g.window_end}
-                  </p>
-                  <p>Agreement: {g.evidence[0]?.agreementReference ?? "Not recorded"}</p>
-                  {g.status === "DRAFT" &&
-                  title.status === "RIGHTS_REVIEW" &&
-                  hasPermission(actor, "title.rights_review") ? (
-                    <div className="flex gap-2">
-                      {button("Approve rights / license", () =>
-                        reviewTitleWorkflow({
-                          data: {
-                            titleId: title.id,
-                            stage: "LEGAL",
-                            decision: "APPROVE",
-                            note,
-                            grantId: g.id,
-                          },
-                        }),
-                      )}
-                      {button("Reject", () =>
-                        reviewTitleWorkflow({
-                          data: {
-                            titleId: title.id,
-                            stage: "LEGAL",
-                            decision: "REJECT",
-                            note,
-                            grantId: g.id,
-                          },
-                        }),
-                      )}
+              {Object.entries(grantsByAgreement).map(([reference, agreementGrants]) => {
+                const selectedId = selectedGrantByAgreement[reference] ?? agreementGrants[0]?.id ?? "";
+                const selectedGrant = agreementGrants.find((grant) => grant.id === selectedId) ?? agreementGrants[0];
+                return (
+                  <section key={reference} className="space-y-3 rounded-xl border border-line p-3">
+                    <div>
+                      <h3 className="font-medium">Agreement: {reference}</h3>
+                      <p className="text-xs text-muted">
+                        {agreementGrants.length} license records · Select one record to review
+                      </p>
                     </div>
-                  ) : null}
-                </article>
-              ))}
+                    <label className="grid gap-1 text-sm">
+                      Choose license record
+                      <select
+                        value={selectedGrant?.id ?? ""}
+                        onChange={(event) =>
+                          setSelectedGrantByAgreement((current) => ({
+                            ...current,
+                            [reference]: event.target.value,
+                          }))
+                        }
+                        className="w-full rounded-lg border border-line bg-elevated p-3"
+                      >
+                        {agreementGrants.map((grant, index) => (
+                          <option key={grant.id} value={grant.id}>
+                            {index + 1}. {grant.status} · {grant.exclusivity} · {grant.languages.join(", ")} · {new Date(grant.window_start).toLocaleDateString()}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    {selectedGrant ? (
+                      <article className="space-y-3 rounded-lg bg-elevated p-3">
+                        <div className="flex flex-wrap items-center gap-2 text-sm">
+                          <span className="font-semibold">{selectedGrant.status}</span>
+                          <span>· {selectedGrant.exclusivity}</span>
+                          <span>· {selectedGrant.territories.join(", ")}</span>
+                          <span>· {selectedGrant.languages.join(", ")}</span>
+                        </div>
+                        <p className="text-xs text-muted">
+                          {selectedGrant.window_start} → {selectedGrant.window_end}
+                        </p>
+                        <p className="break-all text-xs text-muted">Grant record: {selectedGrant.id}</p>
+                        {selectedGrant.status === "DRAFT" &&
+                        title.status === "RIGHTS_REVIEW" &&
+                        hasPermission(actor, "title.rights_review") ? (
+                          <div className="flex flex-wrap gap-2 border-t border-line pt-3">
+                            {button(
+                              "Approve rights / license",
+                              () =>
+                                reviewTitleWorkflow({
+                                  data: {
+                                    titleId: title.id,
+                                    stage: "LEGAL",
+                                    decision: "APPROVE",
+                                    note,
+                                    grantId: selectedGrant.id,
+                                  },
+                                }),
+                              note.trim().length < 8,
+                            )}
+                            {button(
+                              "Reject",
+                              () =>
+                                reviewTitleWorkflow({
+                                  data: {
+                                    titleId: title.id,
+                                    stage: "LEGAL",
+                                    decision: "REJECT",
+                                    note,
+                                    grantId: selectedGrant.id,
+                                  },
+                                }),
+                              note.trim().length < 8,
+                            )}
+                          </div>
+                        ) : null}
+                      </article>
+                    ) : null}
+                  </section>
+                );
+              })}
               {!grants.length ? <p>No license draft recorded.</p> : null}
             </div>
           ) : null}

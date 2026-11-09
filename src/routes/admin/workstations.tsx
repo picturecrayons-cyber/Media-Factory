@@ -4,12 +4,13 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
+import { StoryConceptDesk } from "@/components/bridge/story-concept-desk";
 import { listAdminWorkstations, reviewAdminTitle, setBuyerPublicationGate } from "@/lib/bridge/admin-workstations";
 import { listDuplicateReviews, openDuplicateReview, decideDuplicateReview } from "@/lib/bridge/duplicate-reconciliation";
 
 export const Route = createFileRoute("/admin/workstations")({ component: AdminWorkstations });
 
-const TABS = ["Titles", "QC", "Rights", "Assets", "Buyers", "Deliveries", "Audit"] as const;
+const TABS = ["Titles", "Concepts", "QC", "Rights", "Assets", "Buyers", "Deliveries", "Audit"] as const;
 type Tab = (typeof TABS)[number];
 
 const STATUS_LABELS: Record<string, string> = {
@@ -72,6 +73,8 @@ function WorkstationBody() {
 
       {activeTab === "Titles" ? (
         <TitleQueue titles={data.titles} review={review} />
+      ) : activeTab === "Concepts" ? (
+        <StoryConceptDesk />
       ) : activeTab === "QC" ? (
         <ReviewQueue title="QC Review" description="Review technical quality before rights review." titles={qcQueue}
           actions={[["PASS", "Approve → Rights"], ["FAIL", "Fail QC"]]} mutation={review} />

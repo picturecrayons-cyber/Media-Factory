@@ -12,6 +12,7 @@ import { writeAudit } from "./audit";
 import { assertNotDevUser } from "./guards";
 import { loopStageType } from "./loop-lanes";
 import { assertBuyerPublishable, getBuyerGateStatus } from "./buyer-visibility";
+import { submitTitleForQc } from "./title-submission";
 
 type TitleRow = {
   id: string;
@@ -20,6 +21,7 @@ type TitleRow = {
   name_ml: string | null;
   owner_user_id: string;
   owner_account_type: string;
+  owner_organization_id?: string | null;
   status: string;
   synopsis: string;
   language: string;
@@ -49,6 +51,7 @@ export function mapTitle(r: TitleRow): BridgeTitle {
     nameMl: r.name_ml,
     ownerUserId: r.owner_user_id,
     ownerAccountType: r.owner_account_type as AccountType,
+    ownerOrganizationId: r.owner_organization_id ?? null,
     status: r.status as TitleStatus,
     synopsis: r.synopsis,
     language: r.language,
@@ -86,16 +89,12 @@ async function listCatalog(sql: Sql): Promise<TitleRow[]> {
   return sql<TitleRow>`select * from bridge_titles where merged_into_title_id is null order by updated_at desc limit 200`;
 }
 
-async function listOwned(sql: Sql, userId: string, organizationName: string | null): Promise<TitleRow[]> {
-  const org = organizationName?.trim() || null;
+async function listOwned(sql: Sql, userId: string, organizationId: string | null | undefined): Promise<TitleRow[]> {
+  const orgId = organizationId || null;
   const mergeColumnAvailable = await hasTitleMergeColumn(sql);
-  if (!org) {
+  if (!orgId) {
     return mergeColumnAvailable
-      ? sql<TitleRow>`
-          select * from bridge_titles
-          where owner_user_id = ${userId} and merged_into_title_id is null
-          order by updated_at desc limit 200
-        `
+      ? sql<TitleRow>`select * from bridge_titles where owner_user_id = ${userId} and merged_into_title_id is null order by updated_at desc limit 200`
       : sql<TitleRow>`select * from bridge_titles where owner_user_id = ${userId} order by updated_at desc limit 200`;
   }
   return mergeColumnAvailable
@@ -104,9 +103,15 @@ async function listOwned(sql: Sql, userId: string, organizationName: string | nu
         where t.merged_into_title_id is null
           and (
             t.owner_user_id = ${userId}
-            or t.owner_user_id in (
-              select user_id from bridge_profiles
-              where organization_name is not null and lower(organization_name) = lower(${org})
+            or (
+              t.owner_account_type = 'studio'
+              and t.owner_organization_id = ${orgId}
+              and exists (
+                select 1 from bridge_organization_memberships m
+                where m.organization_id = ${orgId}
+                  and m.user_id = ${userId}
+                  and m.status = 'active'
+              )
             )
           )
         order by t.updated_at desc limit 200
@@ -114,9 +119,15 @@ async function listOwned(sql: Sql, userId: string, organizationName: string | nu
     : sql<TitleRow>`
         select t.* from bridge_titles t
         where t.owner_user_id = ${userId}
-          or t.owner_user_id in (
-            select user_id from bridge_profiles
-            where organization_name is not null and lower(organization_name) = lower(${org})
+          or (
+            t.owner_account_type = 'studio'
+            and t.owner_organization_id = ${orgId}
+            and exists (
+              select 1 from bridge_organization_memberships m
+              where m.organization_id = ${orgId}
+                and m.user_id = ${userId}
+                and m.status = 'active'
+            )
           )
         order by t.updated_at desc limit 200
       `;
@@ -133,7 +144,11 @@ function slugify(name: string, id: string): string {
 
 export async function loadTitle(id: string): Promise<BridgeTitle | null> {
   const sql = await getSql();
-  const rows = await sql<TitleRow>`select * from bridge_titles where id = ${id} limit 1`;
+  const rows = await sql<TitleRow>`
+    select t.* from bridge_titles t
+    where t.id = ${id}
+    limit 1
+  `;
   return rows[0] ? mapTitle(rows[0]) : null;
 }
 
@@ -187,6 +202,8 @@ export const createTitle = createServerFn({ method: "POST" })
       promotionalRights: z.boolean().optional(),
       rightsBasis: z.enum(["OWNER", "EXCLUSIVE_LICENSEE", "AUTHORIZED_DISTRIBUTOR", "PRODUCER_AUTHORITY"]).optional(),
       authorizationAttested: z.boolean().optional(),
+      authorizationEvidenceType: z.enum(["RIGHTS_AGREEMENT", "CHAIN_OF_TITLE", "AUTHORIZATION_LETTER", "DISTRIBUTION_AGREEMENT", "OTHER"]).optional(),
+      publicSubmission: z.boolean().optional(),
       screenerAccess: z.enum(["BRIDGE_PRIVATE_SCREENER", "SCREENER_PENDING"]).optional(),
       intendedDestinations: z.array(z.string().min(2).max(80)).min(1).max(20).optional(),
     }),
@@ -198,37 +215,115 @@ export const createTitle = createServerFn({ method: "POST" })
     const id = randomBytes(16).toString("hex");
     const slug = slugify(data.name, id);
     const sql = await getSql();
-    await sql`
-      insert into bridge_titles (
-        id, slug, name, name_ml, owner_user_id, owner_account_type, status,
-        synopsis, language, year, runtime_minutes, licensing_fee_paise,
-        content_type, country_of_origin, release_date, credits
-      ) values (
-        ${id}, ${slug}, ${data.name}, ${data.nameMl ?? null}, ${actor.userId}, ${actor.accountType},
-        ${"DRAFT"}, ${data.synopsis ?? ""}, ${data.language ?? "Malayalam"},
-        ${data.year ?? null}, ${data.runtimeMinutes ?? null}, ${data.licensingFeePaise ?? 0},
-        ${loopStageType(data.contentType)}, ${data.countryOfOrigin ?? null},
-        ${data.releaseDate ?? null}, ${JSON.stringify([
-          ...(data.director ? [{ role: "Director", name: data.director }] : []),
-          ...(data.producer ? [{ role: "Producer", name: data.producer }] : []),
-          ...(data.cast ?? []).map((name) => ({ role: "Cast", name })),
-        ])}::jsonb
-      )
-    `;
-    const isPublicSubmission = Boolean((data as { publicSubmission?: boolean }).publicSubmission);
-    await recordTransition({
-      titleId: id,
-      from: null,
-      to: "DRAFT",
-      actorUserId: actor.userId,
-      note: isPublicSubmission ? "public rights-ready submission received" : "created",
-    });
-    await writeAudit({
-      actorUserId: actor.userId,
-      action: isPublicSubmission ? "title.public_submission" : "title.create",
-      entityType: "bridge_title",
-      entityId: id,
-      metadata: { publicSubmission: isPublicSubmission },
+    const isPublicSubmission = data.publicSubmission === true;
+
+    if (isPublicSubmission) {
+      if (
+        !data.territories?.length ||
+        !data.rightsLanguages?.length ||
+        !data.media?.length ||
+        !data.windowStart ||
+        !data.windowEnd ||
+        !data.rightsBasis ||
+        !data.authorizationEvidenceType ||
+        data.authorizationAttested !== true ||
+        !data.intendedDestinations?.length
+      ) {
+        throw new Error("Complete the rights package and authorization evidence details before submitting.");
+      }
+      const windowStart = new Date(data.windowStart);
+      const windowEnd = new Date(data.windowEnd);
+      if (!Number.isFinite(windowStart.getTime()) || !Number.isFinite(windowEnd.getTime()) || windowEnd <= windowStart) {
+        throw new Error("Rights window dates are invalid.");
+      }
+    }
+
+    const authorityType = {
+      OWNER: "RIGHTS_OWNER",
+      EXCLUSIVE_LICENSEE: "LICENSEE_WITH_ONWARD_RIGHTS",
+      AUTHORIZED_DISTRIBUTOR: "DISTRIBUTOR_SALES_AGENT",
+      PRODUCER_AUTHORITY: "PRODUCER",
+    } as const;
+    const rightsPackage = isPublicSubmission ? {
+      territories: data.territories!,
+      languages: data.rightsLanguages!,
+      media: data.media!,
+      windowStart: data.windowStart!,
+      windowEnd: data.windowEnd!,
+      rightsBasis: data.rightsBasis!,
+      evidenceType: data.authorizationEvidenceType!,
+      destinations: data.intendedDestinations!,
+    } : null;
+
+    await sql.transaction(async (tx) => {
+      await tx`
+        insert into bridge_titles (
+          id, slug, name, name_ml, owner_user_id, owner_account_type, status,
+          synopsis, language, year, runtime_minutes, licensing_fee_paise,
+          content_type, country_of_origin, release_date, credits, owner_organization_id
+        ) values (
+          ${id}, ${slug}, ${data.name}, ${data.nameMl ?? null}, ${actor.userId}, ${actor.accountType},
+          ${"DRAFT"}, ${data.synopsis ?? ""}, ${data.language ?? "Malayalam"},
+          ${data.year ?? null}, ${data.runtimeMinutes ?? null}, ${data.licensingFeePaise ?? 0},
+          ${loopStageType(data.contentType)}, ${data.countryOfOrigin ?? null},
+          ${data.releaseDate ?? null}, ${JSON.stringify([
+            ...(data.director ? [{ role: "Director", name: data.director }] : []),
+            ...(data.producer ? [{ role: "Producer", name: data.producer }] : []),
+            ...(data.cast ?? []).map((name) => ({ role: "Cast", name })),
+          ])}::jsonb, ${actor.accountType === "studio" ? actor.organizationId ?? null : null}
+        )
+      `;
+
+      if (rightsPackage) {
+        const evidence = JSON.stringify([{
+          type: "AUTHORIZATION_ATTESTATION",
+          rightsBasis: rightsPackage.rightsBasis,
+          authorizationConfirmed: true,
+        }]);
+        await tx`
+          insert into bridge_rights_grants (
+            title_id, territories, languages, media, window_start, window_end,
+            exclusivity, holdbacks, sublicensing_allowed, promotional_rights,
+            restrictions, evidence, status, created_by
+          ) values (
+            ${id}, ${JSON.stringify(rightsPackage.territories)}::jsonb,
+            ${JSON.stringify(rightsPackage.languages)}::jsonb,
+            ${JSON.stringify(rightsPackage.media)}::jsonb,
+            ${rightsPackage.windowStart}, ${rightsPackage.windowEnd},
+            ${data.exclusivity ?? "NON_EXCLUSIVE"},
+            ${JSON.stringify(data.holdbacks ?? [])}::jsonb,
+            ${data.sublicensingAllowed ?? false}, ${data.promotionalRights ?? false},
+            '[]'::jsonb, ${evidence}::jsonb, 'DRAFT', ${actor.userId}
+          )
+        `;
+
+        await tx`
+          insert into bridge_title_submission_intake (
+            title_id, authority_type, authorization_evidence_type,
+            authorization_confirmed, buyer_channels, screener_mode, screener_url
+          ) values (
+            ${id}, ${authorityType[rightsPackage.rightsBasis]},
+            ${rightsPackage.evidenceType}, true,
+            ${JSON.stringify(rightsPackage.destinations)}::jsonb,
+            'NONE', null
+          )
+        `;
+      }
+
+      await recordTransition({
+        titleId: id,
+        from: null,
+        to: "DRAFT",
+        actorUserId: actor.userId,
+        note: isPublicSubmission ? "public title intake received; rights and evidence review pending" : "created",
+      }, tx);
+      await writeAudit({
+        actorUserId: actor.userId,
+        action: isPublicSubmission ? "title.public_submission" : "title.create",
+        entityType: "bridge_title",
+        entityId: id,
+        metadata: { publicSubmission: isPublicSubmission, rightsGrantStatus: isPublicSubmission ? "DRAFT" : undefined },
+      }, tx);
     });
     const title = await loadTitle(id);
     if (!title) throw new Error("Title create failed");
@@ -264,7 +359,7 @@ export const listTitles = createServerFn({ method: "GET" })
       }
     } else {
       assertPermission(actor, "title.read_own");
-      rows = await listOwned(sql, actor.userId, actor.accountType === "studio" ? actor.organizationName : null);
+      rows = await listOwned(sql, actor.userId, actor.accountType === "studio" ? actor.organizationId : null);
     }
     return { titles: rows.flatMap((row) => {
       try {
@@ -335,7 +430,7 @@ export const updateTitle = createServerFn({ method: "POST" })
     const actor = await requireVerifiedActor(context.userId);
     const title = await loadTitle(data.id);
     if (!title) throw new Error("Not found");
-    const owns = title.ownerUserId === actor.userId && !actor.internalRole;
+    const owns = !actor.internalRole && canMutateTitle(actor, title, "title.update_own", "title.license");
     if (!canMutateTitle(actor, title, "title.update_own", "title.license"))
       throw new Error("Forbidden");
     if (
@@ -435,10 +530,12 @@ async function assertLicensingReady(titleId: string) {
       exists (
         select 1 from bridge_assets a
         where a.title_id = t.id and a.kind = 'master' and coalesce(a.byte_size, 0) > 0
+          and t.master_key is not null and a.s3_key = t.master_key
       ) as master_ok,
       exists (
         select 1 from bridge_assets a
-        where a.title_id = t.id and a.kind = 'poster' and coalesce(a.byte_size, 0) > 0
+        where a.title_id = t.id and a.kind in ('poster', 'poster_vertical') and coalesce(a.byte_size, 0) > 0
+          and t.poster_key is not null and a.s3_key = t.poster_key
       ) as poster_ok,
       exists (
         select 1 from bridge_destination_packages p
@@ -491,27 +588,24 @@ export const advanceTitle = createServerFn({ method: "POST" })
     }
     if (["RIGHTS_REVIEW", "LICENSING_READY"].includes(data.to))
       throw new Error("Use the recorded QC or legal review action");
-    if (data.to === "QC_REVIEW") {
-      const verified = await (await getSql())<{
-        kind: string;
-        s3_key: string;
-      }>`select kind,s3_key from bridge_assets where title_id=${title.id} and byte_size>0`;
-      if (
-        !verified.some((a) => a.kind === "master" && a.s3_key === title.masterKey) ||
-        !verified.some((a) => a.kind === "poster" && a.s3_key === title.posterKey)
-      )
-        throw new Error("Verified master and artwork required before QC");
-    }
     assertTransition(title.status, data.to);
     const perm = permissionForTransition(title.status, data.to);
     if (!perm) throw new Error("Transition is not available");
     assertPermission(actor, perm);
-    if (perm === "title.advance_upload" && title.ownerUserId !== actor.userId && !hasStaffPermission(actor, perm)) {
+    if (
+      perm === "title.advance_upload" &&
+      title.ownerUserId !== actor.userId &&
+      !canMutateTitle(actor, title, perm, perm)
+    ) {
       throw new Error("Forbidden");
     }
     const expected = nextStatus(title.status);
     if (expected !== data.to) throw new Error("Illegal title transition");
-    return (await getSql()).transaction(async (tx) => {
+    const sql = await getSql();
+    if (data.to === "QC_REVIEW") {
+      return submitTitleForQc(sql, title, actor.userId, data.note);
+    }
+    return sql.transaction(async (tx) => {
       const [locked] = await tx<{
         status: string;
       }>`select status from bridge_titles where id=${title.id} for update`;

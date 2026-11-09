@@ -9,6 +9,8 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import * as policy from "./workflow-policy.ts";
 import * as rbac from "./rbac.ts";
+import * as assetRoles from "./asset-roles.ts";
+import { submitTitleForQc } from "./title-submission.ts";
 import type { Sql } from "../db";
 
 type TestDb = {
@@ -71,7 +73,16 @@ async function testDatabase(): Promise<{ db: TestDb; schema: string }> {
 async function fixture() {
   const { db, schema } = await testDatabase();
   try {
-    await db.exec(`create table bridge_titles(id text primary key,owner_user_id text,status text,master_key text,poster_key text,updated_at timestamptz);
+    await db.exec(`create table bridge_titles(
+      id text primary key,
+      owner_user_id text,
+      owner_account_type text not null default 'independent_creator',
+      owner_organization_id uuid,
+      status text,
+      master_key text,
+      poster_key text,
+      updated_at timestamptz
+    );
     create table bridge_assets(id text,title_id text,kind text,s3_key text,byte_size bigint);
     create table bridge_title_events(title_id text,from_status text,to_status text,actor_user_id text,note text);
     create table bridge_audit_logs(actor_user_id text,action text,entity_type text,entity_id text,metadata text);`);
@@ -81,8 +92,12 @@ async function fixture() {
         "utf8",
       ).replaceAll("public.", `${schema}.`),
     );
-    await db.exec(`insert into bridge_titles values('title-123','owner','QC_REVIEW','sealed/master','sealed/poster',now());
-    insert into bridge_assets values('master','title-123','master','sealed/master',100),('poster','title-123','poster','sealed/poster',100);`);
+    await db.exec(`insert into bridge_titles(id,owner_user_id,status,master_key,poster_key,updated_at)
+      values('title-123','owner','QC_REVIEW','sealed/master','sealed/poster',now());
+    insert into bridge_assets values
+      ('master','title-123','master','sealed/master',100),
+      ('legacy-poster','title-123','poster','older/unreferenced-poster',100),
+      ('poster-vertical','title-123','poster_vertical','sealed/poster',100);`);
     function adapter(query: (text: string, params?: unknown[]) => Promise<{ rows: unknown[] }>) {
       const sql = (async (strings: TemplateStringsArray, ...params: unknown[]) => {
         let text = strings[0];
@@ -108,6 +123,7 @@ async function fixture() {
       "@/lib/db": { getSql: async () => sql },
       "./session": {},
       "./rbac": rbac,
+      "./asset-roles": assetRoles,
       "./titles": {},
     "./env": {bridgeEnv:{}},
       "./workflow-policy": policy,
@@ -211,6 +227,27 @@ test("unauthorized review and unverified current assets cannot clear QC", async 
     await f.db.close();
   }
 });
+test("a stale artwork pointer cannot clear QC even when a verified vertical poster exists", async () => {
+  const f = await fixture();
+  try {
+    await f.sql.query("update bridge_titles set poster_key='old/sealed/poster'");
+    await assert.rejects(
+      f.sql.transaction((tx) =>
+        f.review(tx, qc, {
+          titleId: "title-123",
+          stage: "QC",
+          decision: "APPROVE",
+          note: "Check current artwork pointer",
+        }),
+      ),
+      /Verified/,
+    );
+    assert.equal((await f.sql.query("select * from bridge_qc_cases")).length, 0);
+  } finally {
+    await f.db.close();
+  }
+});
+
 test("an audit failure rolls back review records and lifecycle", async () => {
   const f = await fixture();
   try {
@@ -288,6 +325,57 @@ test("license author cannot approve their own agreement", async () => {
     assert.equal(
       (await f.sql.query<{ status: string }>("select status from bridge_rights_grants"))[0].status,
       "DRAFT",
+    );
+  } finally {
+    await f.db.close();
+  }
+});
+
+
+test("Submit for QC advances PREPARING with the referenced vertical poster and writes lifecycle plus audit only", async () => {
+  const f = await fixture();
+  try {
+    await f.sql.query(`
+      insert into bridge_titles(id,owner_user_id,status,master_key,poster_key,updated_at)
+      values ('qc-submit-title','owner','PREPARING','sealed/qc-master','sealed/qc-poster',now())
+    `);
+    await f.sql.query(`
+      insert into bridge_assets values
+        ('qc-master','qc-submit-title','master','sealed/qc-master',4096),
+        ('qc-old-poster','qc-submit-title','poster','older/unreferenced-poster',512),
+        ('qc-vertical-poster','qc-submit-title','poster_vertical','sealed/qc-poster',1024)
+    `);
+    const title = {
+      id: "qc-submit-title",
+      status: "PREPARING" as const,
+      masterKey: "sealed/qc-master",
+      posterKey: "sealed/qc-poster",
+    };
+    const result = await submitTitleForQc(f.sql, title, "owner", "Submit verified title for QC");
+    assert.equal(result.title.status, "QC_REVIEW");
+    assert.equal(
+      (await f.sql.query<{ status: string }>(
+        "select status from bridge_titles where id='qc-submit-title'",
+      ))[0].status,
+      "QC_REVIEW",
+    );
+    assert.equal(
+      (await f.sql.query(
+        "select * from bridge_title_events where title_id='qc-submit-title' and from_status='PREPARING' and to_status='QC_REVIEW'",
+      )).length,
+      1,
+    );
+    assert.equal(
+      (await f.sql.query(
+        "select * from bridge_audit_logs where entity_id='qc-submit-title' and action='title.advance'",
+      )).length,
+      1,
+    );
+    assert.equal(
+      (await f.sql.query(
+        "select * from bridge_qc_cases where title_id='qc-submit-title'",
+      )).length,
+      0,
     );
   } finally {
     await f.db.close();

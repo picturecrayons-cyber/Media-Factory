@@ -6,6 +6,7 @@ import {
 } from "node:crypto";
 import { bridgeEnv } from "./env.ts";
 import { toLatin1 } from "./latin1.ts";
+import { multipartTargetAllowed } from "./multipart-upload.ts";
 
 type OciConfig = {
   tenancy: string;
@@ -200,6 +201,47 @@ export async function signUpload(opts: { key: string; contentType: string; expir
   return { url: signed.url, key: opts.key, bucket: signed.bucket, method: "PUT" as const };
 }
 
+export async function beginMultipartUpload(opts: { key: string; contentType: string; expiresIn: number }) {
+  const cfg = config();
+  const signed = await createPar({
+    key: opts.key,
+    accessType: "ObjectWrite",
+    expiresIn: opts.expiresIn,
+  });
+  const res = await fetch(signed.url, {
+    method: "PUT",
+    headers: { "opc-multipart": "true", "content-type": opts.contentType },
+    redirect: "error",
+    signal: AbortSignal.timeout(20_000),
+  });
+  if (!res.ok) throw new Error(`OCI multipart start failed (${res.status})`);
+  const parsed = (await res.json()) as { uploadId?: string; accessUri?: string };
+  if (!parsed.uploadId || !parsed.accessUri) throw new Error("OCI multipart start returned no upload");
+  const partBaseUrl = new URL(parsed.accessUri, endpoint(cfg.region)).toString();
+  if (!multipartTargetAllowed(partBaseUrl, cfg.region, opts.key)) {
+    throw new Error("OCI multipart target did not match the asset");
+  }
+  return { uploadId: parsed.uploadId, partBaseUrl };
+}
+
+async function authorizedMultipart(partBaseUrl: string, objectKey: string, method: "POST" | "DELETE") {
+  const cfg = config();
+  if (!multipartTargetAllowed(partBaseUrl, cfg.region, objectKey)) {
+    throw new Error("Multipart upload target is not the asset being confirmed");
+  }
+  return fetch(partBaseUrl, { method, redirect: "error", signal: AbortSignal.timeout(30_000) });
+}
+
+export async function commitMultipartUpload(partBaseUrl: string, objectKey: string) {
+  const res = await authorizedMultipart(partBaseUrl, objectKey, "POST");
+  if (!res.ok && res.status !== 409) throw new Error(`OCI multipart commit failed (${res.status})`);
+}
+
+export async function abortMultipartUpload(partBaseUrl: string, objectKey: string) {
+  const res = await authorizedMultipart(partBaseUrl, objectKey, "DELETE");
+  if (!res.ok && res.status !== 404) throw new Error(`OCI multipart cancel failed (${res.status})`);
+}
+
 export async function signDownload(opts: { key: string; expiresIn?: number }) {
   const signed = await createPar({
     key: opts.key,
@@ -300,6 +342,12 @@ async function pollWorkRequest(
         const error = new Error(`OCI object copy ${normalizedStatus.toLowerCase()}`);
         Object.assign(error, { workRequestId, lastStatus: normalizedStatus, requestId, elapsedMs: Date.now() - startTime, ociStage: "WORK_REQUEST_POLL" });
         throw error;
+      // OCI responses can report a terminal successful copy as COMPLETED.
+      // Treat either success label as completion of the work request, then still
+      // verify the destination object with HEAD below before Bridge marks it Ready.
+      if (lastStatus === "SUCCEEDED" || lastStatus === "COMPLETED") return;
+      if (lastStatus === "FAILED" || lastStatus === "CANCELED") {
+        throw new Error(`OCI object copy ${lastStatus.toLowerCase()}`);
       }
     }
 
