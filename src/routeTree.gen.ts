@@ -28,6 +28,7 @@ import { Route as LoopCmsRouteImport } from './routes/loop-cms'
 import { Route as OnboardingRouteImport } from './routes/onboarding'
 import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
+import { Route as RevenueRouteImport } from './routes/revenue'
 import { Route as SignupRouteImport } from './routes/signup'
 import { Route as StudioRouteImport } from './routes/studio'
 import { Route as SubmitFilmRouteImport } from './routes/submit-film'
@@ -138,6 +139,11 @@ const ResetPasswordRoute = ResetPasswordRouteImport.update({
   path: '/reset-password',
   getParentRoute: () => rootRouteImport,
 } as any)
+const RevenueRoute = RevenueRouteImport.update({
+  id: '/revenue',
+  path: '/revenue',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SignupRoute = SignupRouteImport.update({
   id: '/signup',
   path: '/signup',
@@ -229,6 +235,7 @@ export interface FileRoutesByFullPath {
   '/onboarding': typeof OnboardingRoute
   '/privacy': typeof PrivacyRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/revenue': typeof RevenueRoute
   '/signup': typeof SignupRoute
   '/studio': typeof StudioRoute
   '/submit-film': typeof SubmitFilmRoute
@@ -264,6 +271,7 @@ export interface FileRoutesByTo {
   '/onboarding': typeof OnboardingRoute
   '/privacy': typeof PrivacyRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/revenue': typeof RevenueRoute
   '/signup': typeof SignupRoute
   '/studio': typeof StudioRoute
   '/submit-film': typeof SubmitFilmRoute
@@ -300,6 +308,7 @@ export interface FileRoutesById {
   '/onboarding': typeof OnboardingRoute
   '/privacy': typeof PrivacyRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/revenue': typeof RevenueRoute
   '/signup': typeof SignupRoute
   '/studio': typeof StudioRoute
   '/submit-film': typeof SubmitFilmRoute
@@ -337,6 +346,7 @@ export interface FileRouteTypes {
     | '/onboarding'
     | '/privacy'
     | '/reset-password'
+    | '/revenue'
     | '/signup'
     | '/studio'
     | '/submit-film'
@@ -372,6 +382,7 @@ export interface FileRouteTypes {
     | '/onboarding'
     | '/privacy'
     | '/reset-password'
+    | '/revenue'
     | '/signup'
     | '/studio'
     | '/submit-film'
@@ -407,6 +418,7 @@ export interface FileRouteTypes {
     | '/onboarding'
     | '/privacy'
     | '/reset-password'
+    | '/revenue'
     | '/signup'
     | '/studio'
     | '/submit-film'
@@ -443,6 +455,7 @@ export interface RootRouteChildren {
   OnboardingRoute: typeof OnboardingRoute
   PrivacyRoute: typeof PrivacyRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
+  RevenueRoute: typeof RevenueRoute
   SignupRoute: typeof SignupRoute
   StudioRoute: typeof StudioRoute
   SubmitFilmRoute: typeof SubmitFilmRoute
@@ -593,6 +606,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ResetPasswordRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/revenue': {
+      id: '/revenue',
+      path: '/revenue',
+      fullPath: '/revenue',
+      preLoaderRoute: typeof RevenueRouteImport,
+      parentRoute: typeof rootRouteImport,
+    },
     '/signup': {
       id: '/signup'
       path: '/signup'
@@ -724,6 +744,7 @@ const rootRouteChildren: RootRouteChildren = {
   OnboardingRoute: OnboardingRoute,
   PrivacyRoute: PrivacyRoute,
   ResetPasswordRoute: ResetPasswordRoute,
+  RevenueRoute: RevenueRoute,
   SignupRoute: SignupRoute,
   StudioRoute: StudioRoute,
   SubmitFilmRoute: SubmitFilmRoute,
