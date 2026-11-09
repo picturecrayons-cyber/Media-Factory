@@ -18,6 +18,7 @@ import {
 } from "@/lib/bridge/loop-publication";
 import { INTERNAL_ROLES } from "@/lib/bridge/types";
 import { hasPermission } from "@/lib/bridge/rbac";
+import { getPreviewDatabaseIdentity } from "@/lib/bridge/preview-db-identity";
 
 export const Route = createFileRoute("/internal")({ component: Internal });
 
@@ -30,6 +31,7 @@ function Internal() {
             {actor.internalRole?.replaceAll("_", " ")} · {actor.email}
           </p>
           <InternalBody
+            canInspectDatabase={actor.internalRole === "super_admin"}
             canInvite={hasPermission(actor, "users.invite_internal")}
             canPublish={hasPermission(actor, "loop.publish")}
             canRevoke={hasPermission(actor, "loop.revoke")}
@@ -41,22 +43,63 @@ function Internal() {
 }
 
 function InternalBody({
+  canInspectDatabase,
   canInvite,
   canPublish,
   canRevoke,
 }: {
+  canInspectDatabase: boolean;
   canInvite: boolean;
   canPublish: boolean;
   canRevoke: boolean;
 }) {
   const titlesQ = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles() });
   const logsQ = useQuery({ queryKey: ["bridge-audit"], queryFn: () => listAuditLogs() });
+  const previewDbIdentity = useMutation({ mutationFn: () => getPreviewDatabaseIdentity() });
   const titles = titlesQ.data?.titles ?? [];
   if (titlesQ.isError || logsQ.isError)
     return <p role="alert">Operations data could not be loaded. Refresh to retry.</p>;
 
   return (
     <div className="grid gap-12">
+      {canInspectDatabase ? (
+        <section className="space-y-3 rounded-xl border border-line bg-surface p-5">
+          <div>
+            <h2 className="font-display text-xl font-semibold text-fg">Preview database identity</h2>
+            <p className="text-xs text-muted">
+              Read-only PostgreSQL session check. Secrets, connection strings and user data are never returned.
+            </p>
+          </div>
+          <Button
+            type="button"
+            disabled={previewDbIdentity.isPending}
+            onClick={() => previewDbIdentity.mutate()}
+          >
+            {previewDbIdentity.isPending ? "Checking database…" : "Run Preview identity check"}
+          </Button>
+          {previewDbIdentity.isError ? (
+            <p role="alert" className="text-sm text-accent">
+              Database identity check failed or access was denied. No connection details are displayed.
+            </p>
+          ) : null}
+          {previewDbIdentity.data ? (
+            <dl className="grid gap-2 text-xs sm:grid-cols-2">
+              <div><dt className="text-muted">Environment</dt><dd className="font-mono">{previewDbIdentity.data.environment}</dd></div>
+              <div><dt className="text-muted">Database backend</dt><dd className="font-mono">{previewDbIdentity.data.dbSource}</dd></div>
+              <div><dt className="text-muted">Database</dt><dd className="font-mono">{previewDbIdentity.data.databaseName}</dd></div>
+              <div><dt className="text-muted">Current role</dt><dd className="font-mono">{previewDbIdentity.data.currentRole}</dd></div>
+              <div><dt className="text-muted">Session role</dt><dd className="font-mono">{previewDbIdentity.data.sessionRole}</dd></div>
+              <div><dt className="text-muted">PostgreSQL version</dt><dd className="font-mono">{previewDbIdentity.data.serverVersion}</dd></div>
+              <div><dt className="text-muted">Auth project reference</dt><dd className="font-mono">{previewDbIdentity.data.authProjectRef ?? "NOT RESOLVED"}</dd></div>
+              <div><dt className="text-muted">Database project reference</dt><dd className="font-mono">{previewDbIdentity.data.databaseProjectRef ?? "NOT RESOLVED"}</dd></div>
+              <div><dt className="text-muted">Project identity match</dt><dd className="font-mono">{previewDbIdentity.data.projectIdentityMatch === null ? "NOT VERIFIED" : previewDbIdentity.data.projectIdentityMatch ? "PASS" : "MISMATCH"}</dd></div>
+              <div><dt className="text-muted">Read-only transaction</dt><dd className="font-mono">{previewDbIdentity.data.transactionReadOnly ? "YES" : "NO"}</dd></div>
+              <div className="sm:col-span-2"><dt className="text-muted">Checked at</dt><dd className="font-mono">{previewDbIdentity.data.checkedAt}</dd></div>
+            </dl>
+          ) : null}
+        </section>
+      ) : null}
+
       {/* 1. Master Distribution Desk */}
       <DistributionDesk canPublish={canPublish} canRevoke={canRevoke} />
 
