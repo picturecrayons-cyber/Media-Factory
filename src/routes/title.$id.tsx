@@ -12,11 +12,13 @@ import { BRIDGE_LOOP_LANES, loopStageType } from "@/lib/bridge/loop-lanes";
 import {
   abortAssetMultipart,
   beginAssetMultipart,
+  findAssetMultipartSession,
   commitAssetMultipart,
   confirmAssetUpload,
   listTitleAssets,
   requestAssetDownload,
   requestAssetUpload,
+  resumeAssetMultipart,
 } from "@/lib/bridge/assets";
 import { getLoopPublication } from "@/lib/bridge/loop-publication";
 import type { BridgeActor } from "@/lib/bridge/session";
@@ -467,33 +469,92 @@ function FilesPanel({
     }
     let session = existing;
     if (!session) {
-      const signed = await withTimeout(
-        requestAssetUpload({ data: { titleId, kind, filename: asciiUploadName(file.name), contentType, byteSize: file.size } }),
+      // Recover from lost localStorage/device state by matching the server-side
+      // manifest to the authenticated actor, title and exact browser file metadata.
+      const recovered = await withTimeout(
+        findAssetMultipartSession({
+          data: { titleId, fileName: file.name, byteSize: file.size, lastModified: file.lastModified },
+        }),
         20_000,
-        "Upload URL preparation",
+        "Upload session discovery",
       );
       assertAttemptActive();
-      const started = await withTimeout(
-        beginAssetMultipart({ data: { assetId: signed.assetId, byteSize: file.size } }),
-        20_000,
-        "Multipart preparation",
+      if (recovered.found) {
+        if (recovered.kind !== kind) {
+          throw new Error("A matching upload session exists for a different asset type. Resume that upload first.");
+        }
+        const remote = await withTimeout(
+          resumeAssetMultipart({ data: { assetId: recovered.assetId } }),
+          30_000,
+          "Multipart session recovery",
+        );
+        assertAttemptActive();
+        if (remote.alreadyVerified) return recovered.assetId;
+        session = {
+          version: 1,
+          titleId,
+          kind,
+          assetId: recovered.assetId,
+          uploadId: remote.uploadId,
+          partBaseUrl: remote.partBaseUrl,
+          fileName: recovered.fileName,
+          fileSize: recovered.fileSize,
+          lastModified: recovered.lastModified,
+          partSize: remote.partSize,
+          completedParts: remote.completedParts,
+          committed: false,
+          expiresAt: remote.expiresAt,
+        };
+        writeUploadSession(session);
+      } else {
+        const signed = await withTimeout(
+          requestAssetUpload({ data: { titleId, kind, filename: asciiUploadName(file.name), contentType, byteSize: file.size } }),
+          20_000,
+          "Upload URL preparation",
+        );
+        assertAttemptActive();
+        const started = await withTimeout(
+          beginAssetMultipart({ data: { assetId: signed.assetId, byteSize: file.size, fileName: file.name, lastModified: file.lastModified } }),
+          20_000,
+          "Multipart preparation",
+        );
+        assertAttemptActive();
+        if (started.alreadyVerified) return signed.assetId;
+        session = {
+          version: 1,
+          titleId,
+          kind,
+          assetId: signed.assetId,
+          uploadId: started.uploadId,
+          partBaseUrl: started.partBaseUrl,
+          fileName: file.name,
+          fileSize: file.size,
+          lastModified: file.lastModified,
+          partSize: MULTIPART_PART_SIZE,
+          completedParts: [],
+          committed: false,
+          expiresAt: started.expiresAt,
+        };
+        writeUploadSession(session);
+      }
+    }
+    // Reconcile local progress with OCI's authoritative part listing on every resume.
+    // The server also validates ownership, title/object binding, expiry and expected part sizes.
+    if (!session.committed) {
+      const recovered = await withTimeout(
+        resumeAssetMultipart({ data: { assetId: session.assetId } }),
+        30_000,
+        "Multipart session recovery",
       );
       assertAttemptActive();
-      if (started.alreadyVerified) return signed.assetId;
+      if (recovered.alreadyVerified) return session.assetId;
       session = {
-        version: 1,
-        titleId,
-        kind,
-        assetId: signed.assetId,
-        uploadId: started.uploadId,
-        partBaseUrl: started.partBaseUrl,
-        fileName: file.name,
-        fileSize: file.size,
-        lastModified: file.lastModified,
-        partSize: MULTIPART_PART_SIZE,
-        completedParts: [],
-        committed: false,
-        expiresAt: started.expiresAt,
+        ...session,
+        uploadId: recovered.uploadId,
+        partBaseUrl: recovered.partBaseUrl,
+        completedParts: recovered.completedParts,
+        partSize: recovered.partSize,
+        expiresAt: recovered.expiresAt,
       };
       writeUploadSession(session);
     }
@@ -544,7 +605,7 @@ function FilesPanel({
       }
       assertAttemptActive();
       await withTimeout(
-        commitAssetMultipart({ data: { assetId: session.assetId, partBaseUrl: session.partBaseUrl } }),
+        commitAssetMultipart({ data: { assetId: session.assetId } }),
         30_000,
         "Multipart commit",
       );
@@ -717,7 +778,7 @@ function FilesPanel({
                 activeMultipart.current = null;
                 if (session) {
                   clearUploadSession(session.titleId, session.kind);
-                  void abortAssetMultipart({ data: { assetId: session.assetId, partBaseUrl: session.partBaseUrl } }).catch(() => undefined);
+                  void abortAssetMultipart({ data: { assetId: session.assetId } }).catch(() => undefined);
                 }
                 setProgress(null);
                 announce("Upload cancelled. Completed parts from this attempt were discarded.", "error", true);

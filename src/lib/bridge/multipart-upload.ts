@@ -80,3 +80,29 @@ function safeDecode(value: string) {
     return value;
   }
 }
+
+export type RemoteMultipartPart = { partNumber: number; size: number };
+
+/** Validate OCI's authoritative remote part list against the persisted upload manifest. */
+export function validateCompletedMultipartParts(
+  parts: readonly RemoteMultipartPart[],
+  fileSize: number,
+  partSize: number,
+): number[] {
+  if (!Number.isSafeInteger(fileSize) || fileSize <= 0 ||
+      !Number.isSafeInteger(partSize) || partSize < 5 * 1024 * 1024) {
+    throw new Error("Multipart manifest has invalid file or part size");
+  }
+  const total = Math.ceil(fileSize / partSize);
+  if (total > 10_000 || parts.length !== total) {
+    throw new Error("OCI multipart upload is incomplete; refusing to commit");
+  }
+  for (let index = 0; index < total; index += 1) {
+    const part = parts[index];
+    const expectedSize = index < total - 1 ? partSize : fileSize - index * partSize;
+    if (!part || part.partNumber !== index + 1 || part.size !== expectedSize) {
+      throw new Error("OCI multipart parts do not match the complete manifest; refusing to commit");
+    }
+  }
+  return parts.map((part) => part.partNumber);
+}
