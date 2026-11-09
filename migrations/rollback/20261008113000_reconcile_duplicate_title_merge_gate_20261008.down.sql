@@ -19,6 +19,7 @@ declare
   policy_count integer;
   matching_policy_count integer;
   recovery_rows integer;
+  deleted_migration_rows integer;
 begin
   if to_regclass('public._bridge_title_merge_recovery') is null then
     raise exception 'Recovery journal missing; refusing destructive or guessed rollback';
@@ -113,6 +114,15 @@ begin
   -- Keep RLS enabled: it was already enabled by 0020_duplicate_title_merge_gate.sql.
   -- Keep all merge tables/columns/indexes and any business data intact.
   drop table public._bridge_title_merge_recovery;
+
+  -- Remove the exact migration ledger row so a deliberate re-apply can run.
+  delete from public._migrations
+  where name = '20261008113000_reconcile_duplicate_title_merge_gate_20261008.sql';
+  get diagnostics deleted_migration_rows = row_count;
+  if deleted_migration_rows <> 1 then
+    raise exception 'Expected to remove exactly one migration ledger row, removed %',
+      deleted_migration_rows;
+  end if;
 end
 $rollback$;
 
