@@ -155,7 +155,7 @@ export const getBuyerIntelligenceDashboard = createServerFn({ method: "GET" })
         status: "STAGING_CONNECTION_BLOCKED",
         reason: configured.reason,
         mailboxStatus: "NOT_CONFIGURED",
-        metrics: { buyers: 0, requirements: 0, evidence: 0, potentialMatches: 0, rightsBlocked: 0 },
+        metrics: { buyers: null, requirements: null, evidence: null, potentialMatches: null, rightsBlocked: null },
         buyers: [],
         requirements: [],
         matches: [],
