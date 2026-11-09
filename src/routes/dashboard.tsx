@@ -5,6 +5,7 @@ import { BridgeShell } from "@/components/bridge/shell";
 import { listTitles } from "@/lib/bridge/titles";
 import { BRIDGE_LOOP_LANES, loopStageType } from "@/lib/bridge/loop-lanes";
 import { getDashboardSession } from "@/lib/bridge/session";
+import { getBuyerIntelligenceDashboard, getBuyerMailSyncReadiness } from "@/lib/bridge/buyer-intelligence";
 
 export const Route = createFileRoute("/dashboard")({
   head: () => ({ meta: [{ name: "robots", content: "noindex, nofollow" }] }),
@@ -74,6 +75,21 @@ function DashboardBody() {
     enabled: dashboardQ.isSuccess,
     retry: 1,
   });
+  const buyerIntelQ = useQuery({
+    queryKey: ["bridge-buyer-intelligence"],
+    queryFn: () => getBuyerIntelligenceDashboard(),
+    enabled: dashboardQ.isSuccess,
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+    retry: false,
+  });
+  const mailSyncQ = useQuery({
+    queryKey: ["bridge-buyer-mail-sync-readiness"],
+    queryFn: () => getBuyerMailSyncReadiness(),
+    enabled: dashboardQ.isSuccess,
+    staleTime: 60_000,
+    retry: false,
+  });
 
   if (dashboardQ.isPending) return <p className="text-sm text-muted">Checking access…</p>;
   if (dashboardQ.isError) return <p role="alert" className="text-sm text-accent">Super admin access required.</p>;
@@ -128,6 +144,97 @@ function DashboardBody() {
             Open operations
           </Link>
         </div>
+      </section>
+
+      <section aria-labelledby="buyer-intelligence-title" className="rounded-sm border border-line">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-4 py-4">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Buyer Intelligence</p>
+            <h3 id="buyer-intelligence-title" className="font-display text-xl font-semibold">Buyer requirements & catalogue matching</h3>
+            <p className="mt-1 text-sm text-muted">Private Super Admin view · refreshes every 60 seconds · no outbound email or rights action</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => { void buyerIntelQ.refetch(); void mailSyncQ.refetch(); }}
+            disabled={buyerIntelQ.isFetching}
+            className="rounded-sm border border-line px-3 py-2 text-sm font-semibold hover:border-accent disabled:opacity-50"
+          >
+            {buyerIntelQ.isFetching ? "Refreshing…" : "Refresh buyer data"}
+          </button>
+        </div>
+        {buyerIntelQ.isPending ? (
+          <p className="px-4 py-5 text-sm text-muted">Loading private buyer intelligence…</p>
+        ) : buyerIntelQ.isError ? (
+          <p role="alert" className="px-4 py-5 text-sm text-accent">Buyer intelligence is unavailable. Check the STAGING connection and server logs; no empty result is assumed.</p>
+        ) : (
+          <div className="space-y-4 p-4">
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              <span className="rounded-sm border border-line px-2 py-1">STAGING: {buyerIntelQ.data.status.replaceAll("_", " ")}</span>
+              <span className="rounded-sm border border-line px-2 py-1">Hostinger Mail: {mailSyncQ.data?.status?.replaceAll("_", " ") ?? "NOT VERIFIED"}</span>
+              <span className="rounded-sm border border-line px-2 py-1">Catalogue: {buyerIntelQ.data.catalogueCount === null ? "NOT VERIFIED" : buyerIntelQ.data.catalogueCount}</span>
+            </div>
+            {buyerIntelQ.data.status !== "STAGING_CONNECTED" && (
+              <p role="status" className="text-sm text-accent">
+                STAGING data is not connected: {buyerIntelQ.data.reason ?? "connection status unavailable"}. The app will not fall back to Production.
+              </p>
+            )}
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+              <Stat label="Buyer accounts" value={String(buyerIntelQ.data.metrics.buyers)} />
+              <Stat label="Requirements" value={String(buyerIntelQ.data.metrics.requirements)} />
+              <Stat label="Email evidence" value={String(buyerIntelQ.data.metrics.evidence)} />
+              <Stat label="Potential matches" value={String(buyerIntelQ.data.metrics.potentialMatches)} />
+              <Stat label="Rights blocked" value={String(buyerIntelQ.data.metrics.rightsBlocked)} />
+            </div>
+            {mailSyncQ.data && (
+              <div className="rounded-sm border border-line p-3">
+                <p className="text-sm font-semibold">Mailbox sync: {mailSyncQ.data.status.replaceAll("_", " ")}</p>
+                <p className="mt-1 text-sm text-muted">{mailSyncQ.data.detail}</p>
+                <p className="mt-2 text-xs text-muted">No messages are being polled or sent by this app at present.</p>
+              </div>
+            )}
+            {buyerIntelQ.data.requirements.length ? (
+              <div className="space-y-3">
+                <h4 className="font-semibold">Buyer requirement queue</h4>
+                {buyerIntelQ.data.requirements.map((requirement) => (
+                  <article key={requirement.id} className="rounded-sm border border-line p-3">
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <div>
+                        <p className="font-semibold">{requirement.buyer?.organization_name ?? "Buyer account unavailable"}</p>
+                        <p className="mt-1 text-xs text-muted">{requirement.buyer?.primary_contact_email ?? "No verified contact"} · {requirement.requirement_status.replaceAll("_", " ")}</p>
+                      </div>
+                      <span className="rounded-sm border border-line px-2 py-1 text-xs">Confidence {requirement.confidence}%</span>
+                    </div>
+                    <p className="mt-3 text-sm leading-relaxed">{requirement.requirement_summary}</p>
+                    <div className="mt-3 flex flex-wrap gap-1.5 text-xs">
+                      {[...requirement.languages, ...requirement.platforms, ...requirement.commercial_models, ...requirement.territories].map((tag) => (
+                        <span key={tag} className="rounded-sm bg-panel px-2 py-1 text-muted">{tag}</span>
+                      ))}
+                    </div>
+                    {requirement.evidence.length > 0 && (
+                      <div className="mt-3 border-t border-line pt-3">
+                        <p className="text-xs font-semibold uppercase tracking-wider text-muted">Email evidence</p>
+                        {requirement.evidence.slice(0, 2).map((item) => (
+                          <div key={item.id} className="mt-2 text-xs">
+                            <p className="font-medium">{item.subject ?? "Email subject unavailable"}</p>
+                            <p className="mt-1 text-muted">{item.sender ?? "Sender unavailable"} · {item.received_at ? new Date(item.received_at).toLocaleDateString("en-IN") : "Date unavailable"}</p>
+                            {item.extracted_excerpt && <p className="mt-1 leading-relaxed text-muted">“{item.extracted_excerpt}”</p>}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-muted">No buyer requirements were returned from the approved STAGING database.</p>
+            )}
+            {buyerIntelQ.data.catalogueCount === 0 && (
+              <p className="rounded-sm border border-line p-3 text-sm text-accent">
+                Film matching is BLOCKED: STAGING catalogue is empty. Production titles are not copied or queried as a fallback.
+              </p>
+            )}
+          </div>
+        )}
       </section>
 
       <section aria-labelledby="today-title" className="rounded-sm border border-line">
