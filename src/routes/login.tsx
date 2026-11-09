@@ -25,7 +25,10 @@ function Login() {
 
   // If already authenticated with Supabase session, resolve profile and route to dashboard
   useEffect(() => {
-    if (isPending || !user) return;
+    // During an active sign-in submit, onSubmit owns session resolution.
+    // Skipping this effect prevents the auth-state event from starting a
+    // concurrent getBridgeSession() request for the same sign-in.
+    if (isPending || !user || busy) return;
     void getBridgeSession()
       .then((s) => {
         const nextParam =
@@ -41,7 +44,7 @@ function Login() {
       .catch(() => {
         void navigate({ to: "/onboarding" });
       });
-  }, [isPending, user, navigate]);
+  }, [isPending, user, navigate, busy]);
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
