@@ -14,7 +14,7 @@ const FORBIDDEN_REF = "tqzimuwozhipqgyerdff";
 
 function walk(dir, acc = []) {
   for (const name of readdirSync(dir)) {
-    if (name === "node_modules" || name === ".git" || name === "dist" || name === ".output") continue;
+    if (name === "node_modules" || name === ".git" || name === "dist" || name === ".output" || name === ".vercel" || name === "crayons-loop-streaming-platform") continue;
     const p = join(dir, name);
     const st = statSync(p);
     if (st.isDirectory()) walk(p, acc);

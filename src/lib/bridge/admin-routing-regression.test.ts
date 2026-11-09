@@ -34,6 +34,16 @@ test("public onboarding does not silently treat a missing profile as an admin se
   assert.doesNotMatch(onboarding, /internal_role\s*=\s*["']super_admin["']/);
 });
 
+test("getBridgeSession distinguishes unconfigured DB from valid profile states without masking", () => {
+  const session = read("./session.ts");
+  const onboarding = read("../../routes/onboarding.tsx");
+  assert.match(session, /isDatabaseConfigured\(\)/);
+  assert.match(session, /dbStatus:\s*"unconfigured"/);
+  assert.match(onboarding, /bypassSessionError/);
+  assert.match(onboarding, /Continue to Onboarding form/);
+});
+
+
 test("public signup role selector is accessible and limited to supported public roles", () => {
   const signup = read("../../routes/signup.tsx");
   assert.match(signup, /role="radiogroup"/);

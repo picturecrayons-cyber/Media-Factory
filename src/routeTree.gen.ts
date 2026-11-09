@@ -41,6 +41,7 @@ import { Route as TitleIdRouteImport } from './routes/title.$id'
 import { Route as ApiA2aIndexRouteImport } from './routes/api/a2a/index'
 import { Route as ApiA2aAgentCardRouteImport } from './routes/api/a2a/agent-card'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
+import { Route as ApiLoopMediaRouteImport } from './routes/api/loop/media'
 import { Route as ApiRazorpayWebhookRouteImport } from './routes/api/razorpay/webhook'
 
 const IndexRoute = IndexRouteImport.update({
@@ -203,6 +204,11 @@ const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   path: '/api/auth/$',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiLoopMediaRoute = ApiLoopMediaRouteImport.update({
+  id: '/api/loop/media',
+  path: '/api/loop/media',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiRazorpayWebhookRoute = ApiRazorpayWebhookRouteImport.update({
   id: '/api/razorpay/webhook',
   path: '/api/razorpay/webhook',
@@ -241,6 +247,7 @@ export interface FileRoutesByFullPath {
   '/title/$id': typeof TitleIdRoute
   '/api/a2a/agent-card': typeof ApiA2aAgentCardRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/loop/media': typeof ApiLoopMediaRoute
   '/api/razorpay/webhook': typeof ApiRazorpayWebhookRoute
   '/api/a2a/': typeof ApiA2aIndexRoute
 }
@@ -276,6 +283,7 @@ export interface FileRoutesByTo {
   '/title/$id': typeof TitleIdRoute
   '/api/a2a/agent-card': typeof ApiA2aAgentCardRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/loop/media': typeof ApiLoopMediaRoute
   '/api/razorpay/webhook': typeof ApiRazorpayWebhookRoute
   '/api/a2a': typeof ApiA2aIndexRoute
 }
@@ -312,6 +320,7 @@ export interface FileRoutesById {
   '/title/$id': typeof TitleIdRoute
   '/api/a2a/agent-card': typeof ApiA2aAgentCardRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/loop/media': typeof ApiLoopMediaRoute
   '/api/razorpay/webhook': typeof ApiRazorpayWebhookRoute
   '/api/a2a/': typeof ApiA2aIndexRoute
 }
@@ -349,6 +358,7 @@ export interface FileRouteTypes {
     | '/title/$id'
     | '/api/a2a/agent-card'
     | '/api/auth/$'
+    | '/api/loop/media'
     | '/api/razorpay/webhook'
     | '/api/a2a/'
   fileRoutesByTo: FileRoutesByTo
@@ -384,6 +394,7 @@ export interface FileRouteTypes {
     | '/title/$id'
     | '/api/a2a/agent-card'
     | '/api/auth/$'
+    | '/api/loop/media'
     | '/api/razorpay/webhook'
     | '/api/a2a'
   id:
@@ -419,6 +430,7 @@ export interface FileRouteTypes {
     | '/title/$id'
     | '/api/a2a/agent-card'
     | '/api/auth/$'
+    | '/api/loop/media'
     | '/api/razorpay/webhook'
     | '/api/a2a/'
   fileRoutesById: FileRoutesById
@@ -454,6 +466,7 @@ export interface RootRouteChildren {
   TitleIdRoute: typeof TitleIdRoute
   ApiA2aAgentCardRoute: typeof ApiA2aAgentCardRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
+  ApiLoopMediaRoute: typeof ApiLoopMediaRoute
   ApiRazorpayWebhookRoute: typeof ApiRazorpayWebhookRoute
   ApiA2aIndexRoute: typeof ApiA2aIndexRoute
 }
@@ -684,6 +697,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAuthSplatRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/loop/media': {
+      id: '/api/loop/media'
+      path: '/api/loop/media'
+      fullPath: '/api/loop/media'
+      preLoaderRoute: typeof ApiLoopMediaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/razorpay/webhook': {
       id: '/api/razorpay/webhook'
       path: '/api/razorpay/webhook'
@@ -735,6 +755,7 @@ const rootRouteChildren: RootRouteChildren = {
   TitleIdRoute: TitleIdRoute,
   ApiA2aAgentCardRoute: ApiA2aAgentCardRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
+  ApiLoopMediaRoute: ApiLoopMediaRoute,
   ApiRazorpayWebhookRoute: ApiRazorpayWebhookRoute,
   ApiA2aIndexRoute: ApiA2aIndexRoute,
 }

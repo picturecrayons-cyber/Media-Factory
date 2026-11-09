@@ -157,8 +157,7 @@ test("OCI copy work-request handles transient 404 propagation delay and recovers
 
   try {
     let getAttempts = 0;
-    globalThis.fetch = async (input, init) => {
-      const url = new URL(String(input));
+    globalThis.fetch = async (_input, init) => {
       const method = init?.method || "GET";
       if (method === "POST") {
         return new Response(null, { status: 202, headers: { "opc-work-request-id": "wr-transient-1" } });
@@ -314,4 +313,143 @@ test("OCI copy fails closed when copyObject returns precondition error 412", asy
     }
   }
 });
+
+test("OCI copy work-request times out deterministically when deadline is exceeded", async () => {
+  const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  const values = {
+    OCI_TENANCY_OCID: "test-tenancy",
+    OCI_USER_OCID: "test-user",
+    OCI_PRIVATE_KEY: privateKey.export({ type: "pkcs8", format: "pem" }).toString(),
+    OCI_FINGERPRINT: "test-fingerprint",
+    OCI_REGION: "ap-mumbai-1",
+    OCI_NAMESPACE: "test-namespace",
+    OCI_BUCKET_NAME: "test-bucket",
+  };
+  const saved = Object.fromEntries(Object.keys(values).map((key) => [key, process.env[key]]));
+  const originalFetch = globalThis.fetch;
+  Object.assign(process.env, values);
+
+  try {
+    globalThis.fetch = async (_input, init) => {
+      const method = init?.method || "GET";
+      if (method === "POST") {
+        return new Response(null, { status: 202, headers: { "opc-work-request-id": "wr-timeout-test" } });
+      }
+      if (method === "GET") {
+        // Return in-progress to simulate long-running work-request
+        return Response.json({ status: "IN_PROGRESS" });
+      }
+      return new Response(null, { status: 200, headers: { "content-length": "10", etag: '"sealed-etag"' } });
+    };
+
+    let caughtError: unknown;
+    try {
+      await sealVerifiedObject("src", "dst", "etag", {
+        deadlineMs: 25,
+        pollIntervalMs: 5,
+      });
+    } catch (err) {
+      caughtError = err;
+    }
+
+    assert.ok(caughtError instanceof Error);
+    assert.match(caughtError.message, /OCI object copy did not complete within 45 seconds/);
+    assert.equal((caughtError as { isTimeout?: boolean }).isTimeout, true);
+    assert.equal((caughtError as { ociStage?: string }).ociStage, "WORK_REQUEST_POLL");
+    assert.equal((caughtError as { workRequestId?: string }).workRequestId, "wr-timeout-test");
+    assert.equal((caughtError as { lastStatus?: string }).lastStatus, "IN_PROGRESS");
+  } finally {
+    globalThis.fetch = originalFetch;
+    for (const [key, value] of Object.entries(saved)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+});
+
+test("OCI object verification rejects empty object and records byte size validation stage", async () => {
+  const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  const values = {
+    OCI_TENANCY_OCID: "test-tenancy",
+    OCI_USER_OCID: "test-user",
+    OCI_PRIVATE_KEY: privateKey.export({ type: "pkcs8", format: "pem" }).toString(),
+    OCI_FINGERPRINT: "test-fingerprint",
+    OCI_REGION: "ap-mumbai-1",
+    OCI_NAMESPACE: "test-namespace",
+    OCI_BUCKET_NAME: "test-bucket",
+  };
+  const saved = Object.fromEntries(Object.keys(values).map((key) => [key, process.env[key]]));
+  const originalFetch = globalThis.fetch;
+  Object.assign(process.env, values);
+
+  try {
+    globalThis.fetch = async () =>
+      new Response(null, {
+        status: 200,
+        headers: { "content-length": "0", etag: '"etag-zero"' },
+      });
+
+    let caughtError: unknown;
+    try {
+      await verifyObject("asset-empty");
+    } catch (err) {
+      caughtError = err;
+    }
+
+    assert.ok(caughtError instanceof Error);
+    assert.equal(caughtError.message, "Uploaded object is empty");
+    assert.equal((caughtError as { ociStage?: string }).ociStage, "BYTE_SIZE_VALIDATION");
+    assert.equal((caughtError as { contentLength?: number }).contentLength, 0);
+  } finally {
+    globalThis.fetch = originalFetch;
+    for (const [key, value] of Object.entries(saved)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+});
+
+test("OCI object verification attaches request ID and HEAD_VERIFICATION stage on failure", async () => {
+  const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  const values = {
+    OCI_TENANCY_OCID: "test-tenancy",
+    OCI_USER_OCID: "test-user",
+    OCI_PRIVATE_KEY: privateKey.export({ type: "pkcs8", format: "pem" }).toString(),
+    OCI_FINGERPRINT: "test-fingerprint",
+    OCI_REGION: "ap-mumbai-1",
+    OCI_NAMESPACE: "test-namespace",
+    OCI_BUCKET_NAME: "test-bucket",
+  };
+  const saved = Object.fromEntries(Object.keys(values).map((key) => [key, process.env[key]]));
+  const originalFetch = globalThis.fetch;
+  Object.assign(process.env, values);
+
+  try {
+    globalThis.fetch = async () =>
+      new Response(null, {
+        status: 404,
+        headers: { "opc-request-id": "req-failed-head-404" },
+      });
+
+    let caughtError: unknown;
+    try {
+      await verifyObject("asset-missing");
+    } catch (err) {
+      caughtError = err;
+    }
+
+    assert.ok(caughtError instanceof Error);
+    assert.match(caughtError.message, /OCI object verification failed \(404\) \(request: req-failed-head-404\)/);
+    assert.equal((caughtError as { status?: number }).status, 404);
+    assert.equal((caughtError as { requestId?: string }).requestId, "req-failed-head-404");
+    assert.equal((caughtError as { ociStage?: string }).ociStage, "HEAD_VERIFICATION");
+  } finally {
+    globalThis.fetch = originalFetch;
+    for (const [key, value] of Object.entries(saved)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+});
+
 
