@@ -206,8 +206,8 @@ function DashboardBody() {
                     </div>
                     <p className="mt-3 text-sm leading-relaxed">{requirement.requirement_summary}</p>
                     <div className="mt-3 flex flex-wrap gap-1.5 text-xs">
-                      {[...requirement.languages, ...requirement.platforms, ...requirement.commercial_models, ...requirement.territories].map((tag) => (
-                        <span key={tag} className="rounded-sm bg-panel px-2 py-1 text-muted">{tag}</span>
+                      {[...requirement.languages, ...requirement.platforms, ...requirement.commercial_models, ...requirement.territories].map((tag, index) => (
+                        <span key={`${requirement.id}-${tag}-${index}`} className="rounded-sm bg-panel px-2 py-1 text-muted">{tag}</span>
                       ))}
                     </div>
                     {requirement.evidence.length > 0 && (
