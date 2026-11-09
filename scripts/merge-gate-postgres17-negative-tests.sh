@@ -31,7 +31,7 @@ expect_failure() {
 # Every test mutates only a disposable clone of the already-migrated CI database.
 expect_failure review_object "DROP TABLE public.bridge_title_duplicate_reviews CASCADE;" "#1"
 expect_failure review_fk "ALTER TABLE public.bridge_title_merge_audits DROP CONSTRAINT bridge_title_merge_audits_review_fk;" "#2"
-expect_failure audit_title_fk "ALTER TABLE public.bridge_title_merge_audits DROP CONSTRAINT bridge_title_merge_audits_canonical_fk;" "#3"
+expect_failure audit_title_fk "ALTER TABLE public.bridge_title_merge_audits DROP CONSTRAINT bridge_title_merge_audits_canonical_title_id_fkey;" "#3"
 expect_failure alias_fk "ALTER TABLE public.bridge_title_merge_aliases DROP CONSTRAINT bridge_title_merge_aliases_retiring_fk;" "#4"
 expect_failure alias_audit_pair "ALTER TABLE public.bridge_title_merge_aliases DROP CONSTRAINT bridge_title_merge_aliases_audit_pair_fk;" "#5"
 expect_failure no_self_merge "ALTER TABLE public.bridge_title_merge_audits DROP CONSTRAINT bridge_title_merge_audits_no_self_merge;" "#6"
