@@ -52,7 +52,10 @@ async function loadActorByBridgeUserId(userId: string): Promise<BridgeActor | nu
   if (!rows[0]) return null;
 
   const actor = mapRow(rows[0]);
-  if (actor.accountType !== "studio" || !actor.emailVerified) return actor;
+  // Resolve organization scope for Studio members and explicitly scoped internal
+  // operators. Internal roles do not receive a global delivery bypass: a missing
+  // or inactive organization membership leaves organizationId null.
+  if ((!actor.internalRole && actor.accountType !== "studio") || !actor.emailVerified) return actor;
 
   // Organization scope is an optional, server-resolved capability. If its
   // schema is absent, keep the profile available but do not grant organization
