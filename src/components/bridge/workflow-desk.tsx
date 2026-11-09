@@ -315,9 +315,11 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                           {(() => {
                             const evidence = selectedGrant.evidence?.[0];
                             const terms = evidence?.commercialTerms;
-                            const ownerShare = Number(terms?.rightsOwnerSharePct);
-                            const distributorShare = Number(terms?.distributorSharePct);
+                            const ownerShare = terms?.rightsOwnerSharePct;
+                            const distributorShare = terms?.distributorSharePct;
                             const validSplit =
+                              typeof ownerShare === "number" &&
+                              typeof distributorShare === "number" &&
                               Number.isInteger(ownerShare) &&
                               Number.isInteger(distributorShare) &&
                               ownerShare >= 0 &&
@@ -333,8 +335,8 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                             const checks = [
                               ["Ownership evidence reference recorded", Boolean(evidence?.ownershipReference?.trim())],
                               ["Agreement reference recorded", Boolean(evidence?.agreementReference?.trim())],
-                              ["NON-EXCLUSIVE rights confirmed", selectedGrant.exclusivity === "NON_EXCLUSIVE"],
-                              ["Revenue-share split totals 100%", validSplit],
+                              ["NON-EXCLUSIVE terms recorded", selectedGrant.exclusivity === "NON_EXCLUSIVE"],
+                              ["Revenue-share split recorded and totals 100%", validSplit],
                               ["Territory, language and validity window recorded", selectedGrant.territories.length > 0 && selectedGrant.languages.length > 0 && validWindow],
                               ["Independent Legal Reviewer approval completed", selectedGrant.status === "VALID"],
                             ] as const;
@@ -346,19 +348,19 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                                       <span aria-label={passed ? "Passed" : "Pending"} className={passed ? "text-emerald-600" : "text-amber-600"}>
                                         {passed ? "✓" : "○"}
                                       </span>
-                                      <span>{label} · {passed ? "Verified in record" : "Pending / not verified"}</span>
+                                      <span>{label} · {passed ? "Recorded" : "Pending / not recorded"}</span>
                                     </li>
                                   ))}
                                 </ul>
                                 <div className="grid gap-1 border-t border-line pt-2 text-xs text-muted sm:grid-cols-2">
                                   <p>Ownership ref: {evidence?.ownershipReference || "Not recorded"}</p>
                                   <p>Agreement ref: {evidence?.agreementReference || "Not recorded"}</p>
-                                  <p>Rights owner share: {Number.isInteger(ownerShare) ? `${ownerShare}%` : "Not verified"}</p>
-                                  <p>Distributor share: {Number.isInteger(distributorShare) ? `${distributorShare}%` : "Not verified"}</p>
+                                  <p>Rights owner share: {typeof ownerShare === "number" && Number.isInteger(ownerShare) ? `${ownerShare}%` : "Not recorded"}</p>
+                                  <p>Distributor share: {typeof distributorShare === "number" && Number.isInteger(distributorShare) ? `${distributorShare}%` : "Not recorded"}</p>
                                 </div>
                                 <p className="text-xs font-medium" role="status">
                                   {checks.every(([, passed]) => passed)
-                                    ? "Checklist complete. Legal approval remains governed by the separate reviewer action."
+                                    ? "All required fields are recorded. Documentary verification and Legal approval remain separate gates."
                                     : "PENDING — do not mark READY until every required item is verified and the independent Legal Reviewer approves."}
                                 </p>
                               </>
