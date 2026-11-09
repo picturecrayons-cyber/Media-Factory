@@ -77,6 +77,16 @@ jobs:
       - name: Replay canonical duplicate-review source migration
         run: psql -d bridge_scope_a -v ON_ERROR_STOP=1 -f supabase/migrations/20261006230000_duplicate_title_reconciliation.sql
 
+      - name: Replay archived review security hardening in disposable fixture
+        run: |
+          psql -d bridge_scope_a -v ON_ERROR_STOP=1 <<'SQL'
+          ALTER TABLE public.bridge_title_duplicate_reviews ENABLE ROW LEVEL SECURITY;
+          ALTER TABLE public.bridge_title_reconciliation_snapshots ENABLE ROW LEVEL SECURITY;
+          ALTER TABLE public.bridge_title_reconciliation_events ENABLE ROW LEVEL SECURITY;
+          REVOKE ALL ON FUNCTION public.bridge_duplicate_title_loop_release_allowed(text) FROM PUBLIC;
+          REVOKE ALL ON FUNCTION public.bridge_duplicate_title_loop_release_allowed(text) FROM anon, authenticated;
+          SQL
+
       - name: Replay repository migrations into disposable PostgreSQL 17
         run: npm run db:migrate
 
