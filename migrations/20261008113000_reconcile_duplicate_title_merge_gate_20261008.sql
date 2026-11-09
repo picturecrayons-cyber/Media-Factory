@@ -1,13 +1,13 @@
 -- Reconcile the live duplicate-title merge safety gate.
--- Idempotent because the schema may already have been repaired directly.
+-- Idempotent against partial schema from migrations/0020_duplicate_title_merge_gate.sql.
 -- Server-only audit/alias surfaces remain inaccessible to anon/authenticated.
 
 begin;
 
 create table if not exists public.bridge_title_merge_audits (
   merge_id uuid primary key default gen_random_uuid(),
-  canonical_title_id text not null references public.bridge_titles(id) on delete restrict,
-  retiring_title_id text not null references public.bridge_titles(id) on delete restrict,
+  canonical_title_id text not null,
+  retiring_title_id text not null,
   decision text not null check (decision in ('PREVIEW_SAFE','HOLD','BLOCK','MERGED','ROLLED_BACK')),
   decision_version text not null default 'v1',
   actor_user_id text,
@@ -17,15 +17,9 @@ create table if not exists public.bridge_title_merge_audits (
   post_merge_state jsonb not null default '{}'::jsonb,
   rollback_state jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now(),
-  completed_at timestamptz,
-  constraint bridge_title_merge_audits_no_self_merge check (canonical_title_id <> retiring_title_id),
-  constraint bridge_title_merge_audits_merged_requires_completed
-    check (decision <> 'MERGED' or completed_at is not null),
-  constraint bridge_title_merge_audits_rolled_back_requires_evidence
-    check (decision <> 'ROLLED_BACK' or (rollback_state is not null and rollback_state <> '{}'::jsonb))
+  completed_at timestamptz
 );
 
--- Idempotent column repairs for environments that already created a partial table.
 alter table public.bridge_title_merge_audits
   add column if not exists decision_version text not null default 'v1';
 alter table public.bridge_title_merge_audits
@@ -47,6 +41,29 @@ alter table public.bridge_title_merge_audits
 
 do $$
 begin
+  -- FKs (RESTRICT)
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid = 'public.bridge_title_merge_audits'::regclass
+      and contype = 'f'
+      and pg_get_constraintdef(oid) ilike '%canonical_title_id%bridge_titles%'
+  ) then
+    alter table public.bridge_title_merge_audits
+      add constraint bridge_title_merge_audits_canonical_fk
+      foreign key (canonical_title_id) references public.bridge_titles(id) on delete restrict;
+  end if;
+
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid = 'public.bridge_title_merge_audits'::regclass
+      and contype = 'f'
+      and pg_get_constraintdef(oid) ilike '%retiring_title_id%bridge_titles%'
+  ) then
+    alter table public.bridge_title_merge_audits
+      add constraint bridge_title_merge_audits_retiring_fk
+      foreign key (retiring_title_id) references public.bridge_titles(id) on delete restrict;
+  end if;
+
   if not exists (
     select 1 from pg_constraint
     where conrelid = 'public.bridge_title_merge_audits'::regclass
@@ -56,6 +73,7 @@ begin
       add constraint bridge_title_merge_audits_no_self_merge
       check (canonical_title_id <> retiring_title_id);
   end if;
+
   if not exists (
     select 1 from pg_constraint
     where conrelid = 'public.bridge_title_merge_audits'::regclass
@@ -65,6 +83,7 @@ begin
       add constraint bridge_title_merge_audits_merged_requires_completed
       check (decision <> 'MERGED' or completed_at is not null);
   end if;
+
   if not exists (
     select 1 from pg_constraint
     where conrelid = 'public.bridge_title_merge_audits'::regclass
@@ -80,20 +99,76 @@ create index if not exists bridge_title_merge_audits_titles_idx
   on public.bridge_title_merge_audits(canonical_title_id, retiring_title_id, created_at desc);
 
 create table if not exists public.bridge_title_merge_aliases (
-  retiring_title_id text primary key references public.bridge_titles(id) on delete restrict,
-  canonical_title_id text not null references public.bridge_titles(id) on delete restrict,
-  merge_id uuid not null references public.bridge_title_merge_audits(merge_id) on delete restrict,
-  merged_at timestamptz not null default now(),
-  constraint bridge_title_merge_aliases_no_self_merge check (retiring_title_id <> canonical_title_id)
+  retiring_title_id text primary key,
+  canonical_title_id text not null,
+  merge_id uuid not null,
+  merged_at timestamptz not null default now()
 );
 
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid = 'public.bridge_title_merge_aliases'::regclass
+      and contype = 'f'
+      and pg_get_constraintdef(oid) ilike '%retiring_title_id%bridge_titles%'
+  ) then
+    alter table public.bridge_title_merge_aliases
+      add constraint bridge_title_merge_aliases_retiring_fk
+      foreign key (retiring_title_id) references public.bridge_titles(id) on delete restrict;
+  end if;
+
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid = 'public.bridge_title_merge_aliases'::regclass
+      and contype = 'f'
+      and pg_get_constraintdef(oid) ilike '%canonical_title_id%bridge_titles%'
+  ) then
+    alter table public.bridge_title_merge_aliases
+      add constraint bridge_title_merge_aliases_canonical_fk
+      foreign key (canonical_title_id) references public.bridge_titles(id) on delete restrict;
+  end if;
+
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid = 'public.bridge_title_merge_aliases'::regclass
+      and contype = 'f'
+      and pg_get_constraintdef(oid) ilike '%merge_id%bridge_title_merge_audits%'
+  ) then
+    alter table public.bridge_title_merge_aliases
+      add constraint bridge_title_merge_aliases_merge_fk
+      foreign key (merge_id) references public.bridge_title_merge_audits(merge_id) on delete restrict;
+  end if;
+
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid = 'public.bridge_title_merge_aliases'::regclass
+      and conname = 'bridge_title_merge_aliases_no_self_merge'
+  ) then
+    alter table public.bridge_title_merge_aliases
+      add constraint bridge_title_merge_aliases_no_self_merge
+      check (retiring_title_id <> canonical_title_id);
+  end if;
+end $$;
+
 alter table public.bridge_titles
-  add column if not exists merged_into_title_id text references public.bridge_titles(id) on delete restrict;
+  add column if not exists merged_into_title_id text;
 alter table public.bridge_titles
   add column if not exists merged_at timestamptz;
 
 do $$
 begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid = 'public.bridge_titles'::regclass
+      and contype = 'f'
+      and pg_get_constraintdef(oid) ilike '%merged_into_title_id%'
+  ) then
+    alter table public.bridge_titles
+      add constraint bridge_titles_merged_into_fk
+      foreign key (merged_into_title_id) references public.bridge_titles(id) on delete restrict;
+  end if;
+
   if not exists (
     select 1 from pg_constraint
     where conrelid = 'public.bridge_titles'::regclass
