@@ -80,6 +80,19 @@ test("customer quote response excludes internal cost, margin, and rate internals
       costBasisPaise: 6000,
       estimatedMarginPaise: 4000,
       evidence: { reason: "missing subtitle" },
+    }, {
+      serviceCode: "INTERNAL_QC",
+      rateId: "internal-rate",
+      rateVersion: 1,
+      classification: "INTERNAL" as const,
+      pricingMethod: "FIXED",
+      unitLabel: "job",
+      quantity: 1,
+      unitPricePaise: 0,
+      lineTotalPaise: 0,
+      costBasisPaise: 1200,
+      estimatedMarginPaise: 0,
+      evidence: { internalOnly: true },
     }],
   };
   const response = toServiceQuoteResponse(quote, false);
@@ -89,6 +102,8 @@ test("customer quote response excludes internal cost, margin, and rate internals
   assert.equal("estimatedMarginPaise" in response.lines[0], false);
   assert.equal("rateId" in response.lines[0], false);
   assert.equal("evidence" in response.lines[0], false);
+  assert.equal(response.lines.length, 1);
+  assert.equal(response.lines.some((line) => line.serviceCode === "INTERNAL_QC"), false);
   assert.equal(response.totalPaise, 11800);
 });
 
@@ -118,10 +133,24 @@ test("finance-authorized quote response retains internal financial detail", () =
       costBasisPaise: 6000,
       estimatedMarginPaise: 4000,
       evidence: {},
+    }, {
+      serviceCode: "INTERNAL_QC",
+      rateId: "internal-rate",
+      rateVersion: 1,
+      classification: "INTERNAL" as const,
+      pricingMethod: "FIXED",
+      unitLabel: "job",
+      quantity: 1,
+      unitPricePaise: 0,
+      lineTotalPaise: 0,
+      costBasisPaise: 1200,
+      estimatedMarginPaise: 0,
+      evidence: { internalOnly: true },
     }],
   };
   const response = toServiceQuoteResponse(quote, true);
   assert.equal("estimatedCostPaise" in response ? response.estimatedCostPaise : null, 6000);
   assert.equal("estimatedMarginPaise" in response ? response.estimatedMarginPaise : null, 4000);
   assert.equal("costBasisPaise" in response.lines[0] ? response.lines[0].costBasisPaise : null, 6000);
+  assert.equal(response.lines.some((line) => line.serviceCode === "INTERNAL_QC"), true);
 });
