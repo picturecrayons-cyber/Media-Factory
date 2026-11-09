@@ -179,11 +179,11 @@ function DashboardBody() {
               </p>
             )}
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-              <Stat label="Buyer accounts" value={String(buyerIntelQ.data.metrics.buyers)} />
-              <Stat label="Requirements" value={String(buyerIntelQ.data.metrics.requirements)} />
-              <Stat label="Email evidence" value={String(buyerIntelQ.data.metrics.evidence)} />
-              <Stat label="Potential matches" value={String(buyerIntelQ.data.metrics.potentialMatches)} />
-              <Stat label="Rights blocked" value={String(buyerIntelQ.data.metrics.rightsBlocked)} />
+              <Stat label="Buyer accounts" value={String(buyerIntelQ.data.metrics.buyers ?? "—")} />
+              <Stat label="Requirements" value={String(buyerIntelQ.data.metrics.requirements ?? "—")} />
+              <Stat label="Email evidence" value={String(buyerIntelQ.data.metrics.evidence ?? "—")} />
+              <Stat label="Potential matches" value={String(buyerIntelQ.data.metrics.potentialMatches ?? "—")} />
+              <Stat label="Rights blocked" value={String(buyerIntelQ.data.metrics.rightsBlocked ?? "—")} />
             </div>
             {mailSyncQ.data && (
               <div className="rounded-sm border border-line p-3">
