@@ -1,17 +1,28 @@
--- Merge Gate PostgreSQL 17 contract assertions.
--- Runs only against the disposable GitHub Actions PostgreSQL service.
--- Intentionally fails closed when the migration does not satisfy the reviewed contract.
+-- Exact Merge Gate contract assertions for PostgreSQL 17.
+-- Fail closed. Run only against the disposable CI PostgreSQL service.
 DO $verify$
 DECLARE
   failures text[] := ARRAY[]::text[];
-  missing text;
-  fk_count integer;
-  has_rls boolean;
+  review_rel oid := to_regclass('public.bridge_title_duplicate_reviews');
+  ok boolean;
+  c record;
   table_name text;
   privilege_name text;
-  policy_ok boolean;
 BEGIN
-  -- Required objects and columns (merge-gate only; duplicate_reviews is a separate subsystem).
+  -- #1 Review relation and id primary key.
+  IF review_rel IS NULL THEN
+    failures := array_append(failures, '#1 missing public.bridge_title_duplicate_reviews');
+  ELSIF NOT EXISTS (
+    SELECT 1 FROM pg_constraint pk
+    WHERE pk.conrelid=review_rel AND pk.contype='p'
+      AND (SELECT array_agg(a.attname::text ORDER BY u.ord)
+           FROM unnest(pk.conkey) WITH ORDINALITY u(attnum,ord)
+           JOIN pg_attribute a ON a.attrelid=pk.conrelid AND a.attnum=u.attnum)
+          = ARRAY['id']::text[]
+  ) THEN
+    failures := array_append(failures, '#1 review id primary key missing');
+  END IF;
+
   IF to_regclass('public.bridge_title_merge_audits') IS NULL THEN
     failures := array_append(failures, 'missing public.bridge_title_merge_audits');
   END IF;
@@ -19,87 +30,156 @@ BEGIN
     failures := array_append(failures, 'missing public.bridge_title_merge_aliases');
   END IF;
 
-  SELECT string_agg(v.table_name || '.' || v.column_name, ', ')
-    INTO missing
-  FROM (VALUES
-    ('bridge_title_merge_audits','merge_id'),
-    ('bridge_title_merge_audits','canonical_title_id'),
-    ('bridge_title_merge_audits','retiring_title_id'),
-    ('bridge_title_merge_audits','decision'),
-    ('bridge_title_merge_audits','completed_at'),
-    ('bridge_title_merge_audits','rollback_state'),
-    ('bridge_title_merge_aliases','retiring_title_id'),
-    ('bridge_title_merge_aliases','canonical_title_id'),
-    ('bridge_title_merge_aliases','merge_id'),
-    ('bridge_titles','merged_into_title_id'),
-    ('bridge_titles','merged_at')
-  ) AS v(table_name,column_name)
-  LEFT JOIN information_schema.columns c
-    ON c.table_schema='public' AND c.table_name=v.table_name AND c.column_name=v.column_name
-  WHERE c.column_name IS NULL;
-  IF missing IS NOT NULL THEN failures := array_append(failures, 'missing required columns: ' || missing); END IF;
-
-  -- Required FK coverage and ON DELETE RESTRICT semantics.
-  IF to_regclass('public.bridge_title_merge_audits') IS NOT NULL THEN
-    SELECT count(*) INTO fk_count
-    FROM pg_constraint c
-    WHERE c.conrelid='public.bridge_title_merge_audits'::regclass
-      AND c.contype='f' AND c.confdeltype='r';
-    IF fk_count < 2 THEN failures := array_append(failures, 'merge audits require RESTRICT FKs to canonical title and retiring title'); END IF;
+  -- #2 Audit.review_id -> review.id, validated and ON DELETE RESTRICT.
+  IF to_regclass('public.bridge_title_merge_audits') IS NOT NULL
+     AND review_rel IS NOT NULL THEN
+    SELECT EXISTS (
+      SELECT 1 FROM pg_constraint fk
+      WHERE fk.conrelid='public.bridge_title_merge_audits'::regclass
+        AND fk.confrelid=review_rel AND fk.contype='f'
+        AND fk.confdeltype='r' AND fk.convalidated
+        AND (SELECT array_agg(a.attname::text ORDER BY u.ord)
+             FROM unnest(fk.conkey) WITH ORDINALITY u(attnum,ord)
+             JOIN pg_attribute a ON a.attrelid=fk.conrelid AND a.attnum=u.attnum)
+            = ARRAY['review_id']::text[]
+        AND (SELECT array_agg(a.attname::text ORDER BY u.ord)
+             FROM unnest(fk.confkey) WITH ORDINALITY u(attnum,ord)
+             JOIN pg_attribute a ON a.attrelid=fk.confrelid AND a.attnum=u.attnum)
+            = ARRAY['id']::text[]
+    ) INTO ok;
+    IF NOT ok THEN failures := array_append(failures, '#2 audit.review_id FK to review.id must be validated ON DELETE RESTRICT'); END IF;
+  ELSIF to_regclass('public.bridge_title_merge_audits') IS NOT NULL THEN
+    failures := array_append(failures, '#2 review target unavailable for audit.review_id FK');
   END IF;
+  IF to_regclass('public.bridge_title_merge_audits') IS NOT NULL AND NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema='public' AND table_name='bridge_title_merge_audits' AND column_name='review_id'
+  ) THEN failures := array_append(failures, '#2 audit.review_id column missing'); END IF;
+
+  -- #3 Separate exact audit -> title RESTRICT FKs.
+  IF to_regclass('public.bridge_title_merge_audits') IS NOT NULL
+     AND to_regclass('public.bridge_titles') IS NOT NULL THEN
+    FOREACH table_name IN ARRAY ARRAY['canonical_title_id','retiring_title_id'] LOOP
+      SELECT EXISTS (
+        SELECT 1 FROM pg_constraint fk
+        WHERE fk.conrelid='public.bridge_title_merge_audits'::regclass
+          AND fk.confrelid='public.bridge_titles'::regclass
+          AND fk.contype='f' AND fk.confdeltype='r' AND fk.convalidated
+          AND (SELECT array_agg(a.attname::text ORDER BY u.ord)
+               FROM unnest(fk.conkey) WITH ORDINALITY u(attnum,ord)
+               JOIN pg_attribute a ON a.attrelid=fk.conrelid AND a.attnum=u.attnum)
+              = ARRAY[table_name]::text[]
+          AND (SELECT array_agg(a.attname::text ORDER BY u.ord)
+               FROM unnest(fk.confkey) WITH ORDINALITY u(attnum,ord)
+               JOIN pg_attribute a ON a.attrelid=fk.confrelid AND a.attnum=u.attnum)
+              = ARRAY['id']::text[]
+      ) INTO ok;
+      IF NOT ok THEN failures := array_append(failures, '#3 audit.' || table_name || ' -> bridge_titles.id RESTRICT FK missing or invalid'); END IF;
+    END LOOP;
+  END IF;
+
+  -- #4 Three separate exact alias RESTRICT FKs.
   IF to_regclass('public.bridge_title_merge_aliases') IS NOT NULL THEN
-    SELECT count(*) INTO fk_count
-    FROM pg_constraint c
-    WHERE c.conrelid='public.bridge_title_merge_aliases'::regclass
-      AND c.contype='f' AND c.confdeltype='r';
-    IF fk_count < 3 THEN failures := array_append(failures, 'merge aliases require RESTRICT FKs to retiring title, canonical title and audit'); END IF;
+    FOR c IN SELECT * FROM (VALUES
+      ('retiring_title_id','bridge_titles','id'),
+      ('canonical_title_id','bridge_titles','id'),
+      ('merge_id','bridge_title_merge_audits','merge_id')
+    ) AS x(src_col,target_table,target_col)
+    LOOP
+      SELECT EXISTS (
+        SELECT 1 FROM pg_constraint fk
+        WHERE fk.conrelid='public.bridge_title_merge_aliases'::regclass
+          AND fk.confrelid=to_regclass('public.' || c.target_table)
+          AND fk.contype='f' AND fk.confdeltype='r' AND fk.convalidated
+          AND (SELECT array_agg(a.attname::text ORDER BY u.ord)
+               FROM unnest(fk.conkey) WITH ORDINALITY u(attnum,ord)
+               JOIN pg_attribute a ON a.attrelid=fk.conrelid AND a.attnum=u.attnum)
+              = ARRAY[c.src_col]::text[]
+          AND (SELECT array_agg(a.attname::text ORDER BY u.ord)
+               FROM unnest(fk.confkey) WITH ORDINALITY u(attnum,ord)
+               JOIN pg_attribute a ON a.attrelid=fk.confrelid AND a.attnum=u.attnum)
+              = ARRAY[c.target_col]::text[]
+      ) INTO ok;
+      IF NOT ok THEN failures := array_append(failures, '#4 alias.' || c.src_col || ' -> ' || c.target_table || '.' || c.target_col || ' RESTRICT FK missing or invalid'); END IF;
+    END LOOP;
   END IF;
-  IF to_regclass('public.bridge_titles') IS NOT NULL AND NOT EXISTS (
-    SELECT 1 FROM pg_constraint c
-    WHERE c.conrelid='public.bridge_titles'::regclass AND c.contype='f'
-      AND pg_get_constraintdef(c.oid) ILIKE '%merged_into_title_id%'
-      AND c.confdeltype='r'
-  ) THEN failures := array_append(failures, 'bridge_titles merged_into_title_id self-FK RESTRICT is missing'); END IF;
 
-  -- Fail-closed merge-state constraints.
-  IF to_regclass('public.bridge_title_merge_audits') IS NOT NULL THEN
-    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid='public.bridge_title_merge_audits'::regclass AND pg_get_constraintdef(oid) ILIKE '%canonical_title_id%retiring_title_id%') THEN
-      failures := array_append(failures, 'audit no-self-merge constraint is missing');
-    END IF;
-    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid='public.bridge_title_merge_audits'::regclass AND pg_get_constraintdef(oid) ILIKE '%completed_at%') THEN
-      failures := array_append(failures, 'MERGED requires completed_at constraint is missing');
-    END IF;
-    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid='public.bridge_title_merge_audits'::regclass AND pg_get_constraintdef(oid) ILIKE '%rollback_state%') THEN
-      failures := array_append(failures, 'ROLLED_BACK requires rollback evidence constraint is missing');
-    END IF;
+  -- #5 Composite FK preserves the exact merge/canonical/retiring tuple.
+  IF to_regclass('public.bridge_title_merge_aliases') IS NOT NULL
+     AND to_regclass('public.bridge_title_merge_audits') IS NOT NULL THEN
+    SELECT EXISTS (
+      SELECT 1 FROM pg_constraint fk
+      WHERE fk.conrelid='public.bridge_title_merge_aliases'::regclass
+        AND fk.confrelid='public.bridge_title_merge_audits'::regclass
+        AND fk.contype='f' AND fk.confdeltype='r' AND fk.convalidated
+        AND (SELECT array_agg(a.attname::text ORDER BY u.ord)
+             FROM unnest(fk.conkey) WITH ORDINALITY u(attnum,ord)
+             JOIN pg_attribute a ON a.attrelid=fk.conrelid AND a.attnum=u.attnum)
+            = ARRAY['merge_id','canonical_title_id','retiring_title_id']::text[]
+        AND (SELECT array_agg(a.attname::text ORDER BY u.ord)
+             FROM unnest(fk.confkey) WITH ORDINALITY u(attnum,ord)
+             JOIN pg_attribute a ON a.attrelid=fk.confrelid AND a.attnum=u.attnum)
+            = ARRAY['merge_id','canonical_title_id','retiring_title_id']::text[]
+    ) INTO ok;
+    IF NOT ok THEN failures := array_append(failures, '#5 alias merge/title tuple composite FK to matching audit tuple missing or invalid'); END IF;
   END IF;
-  IF to_regclass('public.bridge_titles') IS NOT NULL AND NOT EXISTS (
-    SELECT 1 FROM pg_constraint WHERE conrelid='public.bridge_titles'::regclass
-      AND pg_get_constraintdef(oid) ILIKE '%merged_into_title_id%'
-      AND pg_get_constraintdef(oid) ILIKE '%merged_at%'
-  ) THEN failures := array_append(failures, 'title merge pointer/timestamp paired-null constraint is missing'); END IF;
 
-  -- Required indexes.
+  -- #6 Validated no-self-merge check.
+  IF to_regclass('public.bridge_title_merge_audits') IS NOT NULL AND NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conrelid='public.bridge_title_merge_audits'::regclass
+      AND contype='c' AND convalidated
+      AND regexp_replace(lower(pg_get_expr(conbin,conrelid)), '[[:space:]()]', '', 'g')
+          = 'canonical_title_id<>retiring_title_id'
+  ) THEN failures := array_append(failures, '#6 validated audit no-self-merge check missing'); END IF;
+
+  -- #7 MERGED requires completed_at.
+  IF to_regclass('public.bridge_title_merge_audits') IS NOT NULL AND NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conrelid='public.bridge_title_merge_audits'::regclass
+      AND contype='c' AND convalidated
+      AND regexp_replace(lower(pg_get_expr(conbin,conrelid)), '[[:space:]()]', '', 'g')
+          = 'decision<>''merged''orcompleted_atisnotnull'
+  ) THEN failures := array_append(failures, '#7 validated MERGED -> completed_at check missing'); END IF;
+
+  -- #8 ROLLED_BACK requires non-empty rollback evidence.
+  IF to_regclass('public.bridge_title_merge_audits') IS NOT NULL AND NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conrelid='public.bridge_title_merge_audits'::regclass
+      AND contype='c' AND convalidated
+      AND regexp_replace(lower(pg_get_expr(conbin,conrelid)), '[[:space:]()]', '', 'g')
+          = 'decision<>''rolled_back''orrollback_stateisnotnullandrollback_state<>''{}''::jsonb'
+  ) THEN failures := array_append(failures, '#8 validated ROLLED_BACK -> non-empty rollback_state check missing'); END IF;
+
+  -- #9 Title pointer and timestamp must be paired.
+  IF to_regclass('public.bridge_titles') IS NOT NULL AND NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conrelid='public.bridge_titles'::regclass
+      AND contype='c' AND convalidated
+      AND regexp_replace(lower(pg_get_expr(conbin,conrelid)), '[[:space:]()]', '', 'g')
+          = 'merged_into_title_idisnullandmerged_atisnullormerged_into_title_idisnotnullandmerged_atisnotnull'
+  ) THEN failures := array_append(failures, '#9 validated title merge pointer/timestamp paired-null check missing'); END IF;
+
+  -- Supporting indexes.
   IF to_regclass('public.bridge_title_merge_audits_titles_idx') IS NULL THEN failures := array_append(failures, 'audit lookup index missing'); END IF;
   IF to_regclass('public.bridge_title_merge_aliases_canonical_idx') IS NULL THEN failures := array_append(failures, 'alias canonical index missing'); END IF;
   IF to_regclass('public.bridge_titles_merged_into_idx') IS NULL THEN failures := array_append(failures, 'title merged-into index missing'); END IF;
 
-  -- RLS and explicit browser-role deny policies plus direct ACL revocation.
+  -- Server-only surface: RLS, explicit deny policies and no direct browser ACLs.
   FOREACH table_name IN ARRAY ARRAY['bridge_title_merge_audits','bridge_title_merge_aliases'] LOOP
     IF to_regclass('public.' || table_name) IS NOT NULL THEN
-      SELECT relrowsecurity INTO has_rls FROM pg_class WHERE oid=('public.' || table_name)::regclass;
-      IF NOT coalesce(has_rls,false) THEN failures := array_append(failures, table_name || ' RLS is disabled'); END IF;
-      SELECT EXISTS (
+      SELECT relrowsecurity INTO ok FROM pg_class WHERE oid=to_regclass('public.' || table_name);
+      IF NOT coalesce(ok,false) THEN failures := array_append(failures, table_name || ' RLS disabled'); END IF;
+      IF NOT EXISTS (
         SELECT 1 FROM pg_policies
-        WHERE schemaname='public' AND tablename=table_name
-          AND cmd='ALL' AND roles @> ARRAY['anon','authenticated']::name[]
+        WHERE schemaname='public' AND tablename=table_name AND cmd='ALL'
+          AND roles @> ARRAY['anon','authenticated']::name[]
           AND qual='false' AND with_check='false'
-      ) INTO policy_ok;
-      IF NOT policy_ok THEN failures := array_append(failures, table_name || ' explicit anon/authenticated deny policy missing'); END IF;
+      ) THEN failures := array_append(failures, table_name || ' explicit anon/authenticated deny policy missing'); END IF;
       FOREACH privilege_name IN ARRAY ARRAY['SELECT','INSERT','UPDATE','DELETE','TRUNCATE','REFERENCES','TRIGGER'] LOOP
         IF has_table_privilege('anon','public.' || table_name,privilege_name)
-          OR has_table_privilege('authenticated','public.' || table_name,privilege_name) THEN
-          failures := array_append(failures, table_name || ' browser ACL still grants ' || privilege_name);
+           OR has_table_privilege('authenticated','public.' || table_name,privilege_name) THEN
+          failures := array_append(failures, table_name || ' browser role retains ' || privilege_name);
         END IF;
       END LOOP;
     END IF;
@@ -108,6 +188,6 @@ BEGIN
   IF cardinality(failures) > 0 THEN
     RAISE EXCEPTION 'MERGE_GATE_CONTRACT_FAIL: %', array_to_string(failures, ' | ');
   END IF;
-  RAISE NOTICE 'MERGE_GATE_CONTRACT_PASS';
+  RAISE NOTICE 'MERGE_GATE_CONTRACT_PASS: all nine assertions and supporting security checks passed';
 END
 $verify$;
