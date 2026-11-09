@@ -37,7 +37,6 @@ function customerLine(line: ServiceQuoteLine) {
     quantity: line.quantity,
     unitPricePaise: line.unitPricePaise,
     lineTotalPaise: line.lineTotalPaise,
-    evidence: line.evidence,
   };
 }
 
@@ -61,7 +60,7 @@ export function toServiceQuoteResponse(quote: ServiceQuote, includeInternalFinan
   if (!includeInternalFinancials) {
     return {
       ...common,
-      lines: quote.lines.map(customerLine),
+      lines: quote.lines.filter((line) => line.classification !== "INTERNAL").map(customerLine),
     };
   }
 
