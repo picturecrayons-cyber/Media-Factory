@@ -110,6 +110,43 @@ function Home() {
           </div>
         </section>
 
+        <section className="border-b border-line bg-surface/50 py-10 sm:py-12">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6">
+            <div className="flex flex-wrap items-end justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Business overview</p>
+                <h2 className="mt-2 font-display text-2xl font-semibold tracking-tight text-fg sm:text-3xl">Licensing at a glance</h2>
+                <p className="mt-2 text-sm text-muted">A clear view of the Bridge distribution business. Verified figures only.</p>
+              </div>
+              <span className="rounded-full border border-line bg-white px-3 py-1.5 text-xs text-muted">Private B2B platform</span>
+            </div>
+            <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              {[
+                ["Films in catalogue", "—"],
+                ["Licensed platforms", "—"],
+                ["Rights sold", "—"],
+                ["Revenue recorded", "—"],
+              ].map(([label, value]) => (
+                <article key={label} className="rounded-xl border border-line bg-white p-5">
+                  <p className="text-xs font-medium text-muted">{label}</p>
+                  <p className="mt-3 font-display text-2xl font-semibold tracking-tight text-fg">{value}</p>
+                  <p className="mt-1 text-[11px] text-muted">Verified data not connected</p>
+                </article>
+              ))}
+            </div>
+            <div className="mt-3 grid gap-3 lg:grid-cols-2">
+              <article className="rounded-xl border border-line bg-white p-5">
+                <h3 className="font-semibold text-fg">Creator earnings</h3>
+                <p className="mt-2 text-sm text-muted">Contract-based earnings and approved payouts appear in each creator’s private workspace.</p>
+              </article>
+              <article className="rounded-xl border border-line bg-white p-5">
+                <h3 className="font-semibold text-fg">Business updates</h3>
+                <p className="mt-2 text-sm text-muted">Licensing deals, deliveries and payout updates will appear here when verified records are available.</p>
+              </article>
+            </div>
+          </div>
+        </section>
+
         <section id="how-it-works" className="border-b border-line bg-surface/50 py-10 sm:py-12">
           <div className="mx-auto max-w-7xl px-4 sm:px-6">
             <div className="max-w-2xl">
@@ -248,8 +285,7 @@ function Home() {
                   From rights to audience.
                 </h3>
                 <p className="mt-2 text-sm leading-relaxed text-muted max-w-2xl">
-                  Crayons Bridge manages rights, licensing and distribution authorization. Crayons
-                  Loop is the consumer streaming experience.
+                  Crayons Bridge is the private B2B control platform for rights, licensing, monetisation and distribution. Crayons Loop receives only titles explicitly authorized by Bridge.
                 </p>
               </div>
 
