@@ -7,7 +7,7 @@ begin;
 create table if not exists public.bridge_title_merge_audits (
   merge_id uuid primary key default gen_random_uuid(),
   canonical_title_id text not null references public.bridge_titles(id) on delete restrict,
-  retiring_title_id text not null,
+  retiring_title_id text not null references public.bridge_titles(id) on delete restrict,
   decision text not null check (decision in ('PREVIEW_SAFE','HOLD','BLOCK','MERGED','ROLLED_BACK')),
   decision_version text not null default 'v1',
   actor_user_id text,
@@ -17,23 +17,96 @@ create table if not exists public.bridge_title_merge_audits (
   post_merge_state jsonb not null default '{}'::jsonb,
   rollback_state jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now(),
-  completed_at timestamptz
+  completed_at timestamptz,
+  constraint bridge_title_merge_audits_no_self_merge check (canonical_title_id <> retiring_title_id),
+  constraint bridge_title_merge_audits_merged_requires_completed
+    check (decision <> 'MERGED' or completed_at is not null),
+  constraint bridge_title_merge_audits_rolled_back_requires_evidence
+    check (decision <> 'ROLLED_BACK' or (rollback_state is not null and rollback_state <> '{}'::jsonb))
 );
+
+-- Idempotent column repairs for environments that already created a partial table.
+alter table public.bridge_title_merge_audits
+  add column if not exists decision_version text not null default 'v1';
+alter table public.bridge_title_merge_audits
+  add column if not exists actor_user_id text;
+alter table public.bridge_title_merge_audits
+  add column if not exists reason text;
+alter table public.bridge_title_merge_audits
+  add column if not exists collision_scan jsonb not null default '{}'::jsonb;
+alter table public.bridge_title_merge_audits
+  add column if not exists pre_merge_state jsonb not null default '{}'::jsonb;
+alter table public.bridge_title_merge_audits
+  add column if not exists post_merge_state jsonb not null default '{}'::jsonb;
+alter table public.bridge_title_merge_audits
+  add column if not exists rollback_state jsonb not null default '{}'::jsonb;
+alter table public.bridge_title_merge_audits
+  add column if not exists created_at timestamptz not null default now();
+alter table public.bridge_title_merge_audits
+  add column if not exists completed_at timestamptz;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid = 'public.bridge_title_merge_audits'::regclass
+      and conname = 'bridge_title_merge_audits_no_self_merge'
+  ) then
+    alter table public.bridge_title_merge_audits
+      add constraint bridge_title_merge_audits_no_self_merge
+      check (canonical_title_id <> retiring_title_id);
+  end if;
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid = 'public.bridge_title_merge_audits'::regclass
+      and conname = 'bridge_title_merge_audits_merged_requires_completed'
+  ) then
+    alter table public.bridge_title_merge_audits
+      add constraint bridge_title_merge_audits_merged_requires_completed
+      check (decision <> 'MERGED' or completed_at is not null);
+  end if;
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid = 'public.bridge_title_merge_audits'::regclass
+      and conname = 'bridge_title_merge_audits_rolled_back_requires_evidence'
+  ) then
+    alter table public.bridge_title_merge_audits
+      add constraint bridge_title_merge_audits_rolled_back_requires_evidence
+      check (decision <> 'ROLLED_BACK' or (rollback_state is not null and rollback_state <> '{}'::jsonb));
+  end if;
+end $$;
 
 create index if not exists bridge_title_merge_audits_titles_idx
   on public.bridge_title_merge_audits(canonical_title_id, retiring_title_id, created_at desc);
 
 create table if not exists public.bridge_title_merge_aliases (
-  retiring_title_id text primary key,
+  retiring_title_id text primary key references public.bridge_titles(id) on delete restrict,
   canonical_title_id text not null references public.bridge_titles(id) on delete restrict,
   merge_id uuid not null references public.bridge_title_merge_audits(merge_id) on delete restrict,
-  merged_at timestamptz not null default now()
+  merged_at timestamptz not null default now(),
+  constraint bridge_title_merge_aliases_no_self_merge check (retiring_title_id <> canonical_title_id)
 );
 
 alter table public.bridge_titles
   add column if not exists merged_into_title_id text references public.bridge_titles(id) on delete restrict;
 alter table public.bridge_titles
   add column if not exists merged_at timestamptz;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid = 'public.bridge_titles'::regclass
+      and conname = 'bridge_titles_merge_pointer_paired'
+  ) then
+    alter table public.bridge_titles
+      add constraint bridge_titles_merge_pointer_paired
+      check (
+        (merged_into_title_id is null and merged_at is null)
+        or (merged_into_title_id is not null and merged_at is not null)
+      );
+  end if;
+end $$;
 
 create index if not exists bridge_titles_merged_into_idx
   on public.bridge_titles(merged_into_title_id);
@@ -61,5 +134,8 @@ create policy bridge_title_merge_aliases_no_client_access
   to anon, authenticated
   using (false)
   with check (false);
+
+revoke all on table public.bridge_title_merge_audits from anon, authenticated;
+revoke all on table public.bridge_title_merge_aliases from anon, authenticated;
 
 commit;

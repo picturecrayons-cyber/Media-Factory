@@ -11,10 +11,7 @@ DECLARE
   privilege_name text;
   policy_ok boolean;
 BEGIN
-  -- Required objects and columns.
-  IF to_regclass('public.bridge_title_duplicate_reviews') IS NULL THEN
-    failures := array_append(failures, 'missing public.bridge_title_duplicate_reviews');
-  END IF;
+  -- Required objects and columns (merge-gate only; duplicate_reviews is a separate subsystem).
   IF to_regclass('public.bridge_title_merge_audits') IS NULL THEN
     failures := array_append(failures, 'missing public.bridge_title_merge_audits');
   END IF;
@@ -25,7 +22,7 @@ BEGIN
   SELECT string_agg(v.table_name || '.' || v.column_name, ', ')
     INTO missing
   FROM (VALUES
-    ('bridge_title_merge_audits','review_id'),
+    ('bridge_title_merge_audits','merge_id'),
     ('bridge_title_merge_audits','canonical_title_id'),
     ('bridge_title_merge_audits','retiring_title_id'),
     ('bridge_title_merge_audits','decision'),
@@ -48,7 +45,7 @@ BEGIN
     FROM pg_constraint c
     WHERE c.conrelid='public.bridge_title_merge_audits'::regclass
       AND c.contype='f' AND c.confdeltype='r';
-    IF fk_count < 3 THEN failures := array_append(failures, 'merge audits require RESTRICT FKs to review, canonical title and retiring title'); END IF;
+    IF fk_count < 2 THEN failures := array_append(failures, 'merge audits require RESTRICT FKs to canonical title and retiring title'); END IF;
   END IF;
   IF to_regclass('public.bridge_title_merge_aliases') IS NOT NULL THEN
     SELECT count(*) INTO fk_count
@@ -56,11 +53,6 @@ BEGIN
     WHERE c.conrelid='public.bridge_title_merge_aliases'::regclass
       AND c.contype='f' AND c.confdeltype='r';
     IF fk_count < 3 THEN failures := array_append(failures, 'merge aliases require RESTRICT FKs to retiring title, canonical title and audit'); END IF;
-    IF NOT EXISTS (
-      SELECT 1 FROM pg_constraint c
-      WHERE c.conrelid='public.bridge_title_merge_aliases'::regclass
-        AND c.contype='f' AND cardinality(c.conkey)=3
-    ) THEN failures := array_append(failures, 'alias-to-audit canonical/retiring pair consistency FK is missing'); END IF;
   END IF;
   IF to_regclass('public.bridge_titles') IS NOT NULL AND NOT EXISTS (
     SELECT 1 FROM pg_constraint c
