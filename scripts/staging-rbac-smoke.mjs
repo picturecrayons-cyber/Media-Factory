@@ -4,7 +4,8 @@ import { Client } from "pg";
 import { persistVerifiedAsset } from "../src/lib/bridge/asset-confirmation.ts";
 import { seedStagingRbacFixtures } from "./staging-rbac-fixtures.mjs";
 
-const REQUIRED_PROJECT_REF = "bbtrosuwisnxacuxvegt";
+// Canonical approved STAGING / TESTING DB. Never point this test at Production.
+const REQUIRED_PROJECT_REF = "jbymleftneggcgutlcqu";
 
 function requireStagingOnlyEnvironment() {
   const projectRef = process.env.BRIDGE_STAGING_PROJECT_REF;
@@ -12,13 +13,13 @@ function requireStagingOnlyEnvironment() {
   const databaseUrlText = process.env.BRIDGE_STAGING_DATABASE_URL;
 
   if (projectRef !== REQUIRED_PROJECT_REF) {
-    throw new Error(`Refusing to run: BRIDGE_STAGING_PROJECT_REF must equal ${REQUIRED_PROJECT_REF}.`);
+    throw new Error(`Refusing to run: BRIDGE_STAGING_PROJECT_REF must equal the approved STAGING project ${REQUIRED_PROJECT_REF}.`);
   }
   if (!supabaseUrl || new URL(supabaseUrl).hostname !== `${REQUIRED_PROJECT_REF}.supabase.co`) {
-    throw new Error("Refusing to run: BRIDGE_STAGING_SUPABASE_URL must point to the exact staging project.");
+    throw new Error("Refusing to run: BRIDGE_STAGING_SUPABASE_URL must point to the exact approved STAGING project.");
   }
   if (!databaseUrlText) {
-    throw new Error("Set BRIDGE_STAGING_DATABASE_URL to the staging-only Postgres connection string.");
+    throw new Error("Set BRIDGE_STAGING_DATABASE_URL to the approved STAGING-only Postgres connection string.");
   }
 
   const databaseUrl = new URL(databaseUrlText);
@@ -26,7 +27,7 @@ function requireStagingOnlyEnvironment() {
   const stagingPooler = databaseUrl.hostname.endsWith(".pooler.supabase.com") &&
     decodeURIComponent(databaseUrl.username).includes(REQUIRED_PROJECT_REF);
   if (!directStagingHost && !stagingPooler) {
-    throw new Error("Refusing to run: database host/user does not prove the exact staging project. Production and unrecognized hosts are blocked.");
+    throw new Error("Refusing to run: database host/user does not prove the exact approved STAGING project. Production and unrecognized hosts are blocked.");
   }
   return databaseUrlText;
 }
