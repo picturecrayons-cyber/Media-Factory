@@ -19,6 +19,9 @@ function Creator() {
                 <p className="mt-1 text-sm text-muted">
                   Own titles only. Upload, update drafts, and track delivery.
                 </p>
+                <Link to="/services" className="mt-3 inline-flex text-sm font-medium underline underline-offset-4">
+                  Explore Creator & Studio services
+                </Link>
               </div>
               <NewSubmissionPanel />
             </header>

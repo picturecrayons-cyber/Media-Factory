@@ -12,6 +12,7 @@ import { bridgeEnv } from "./env";
 import { paymentVerifyBody, verifyRazorpaySignature } from "./razorpay-crypto";
 import { destinationSchema, detectRequiredWork, type DetectedAsset, type RequiredWork } from "./service-pricing";
 import { calculateServiceLine, calculateRefundSplit, calculateNetProfit } from "./commercial-math";
+import { toCustomerServiceQuoteDto } from "./service-quote-dto";
 
 const quoteInputSchema = z.object({
   titleId: z.string().min(8),
@@ -261,6 +262,7 @@ export const createServiceQuote = createServerFn({ method: "POST" })
 
     const lines: Array<{
       serviceCode: string;
+      serviceName: string;
       rateId: string;
       rateVersion: number;
       classification: CatalogRow["classification"];
@@ -292,6 +294,7 @@ export const createServiceQuote = createServerFn({ method: "POST" })
       const estimatedCost = lineFinancials.costPaise;
       lines.push({
         serviceCode: work.serviceCode,
+        serviceName: catalog.name,
         rateId: rate.id,
         rateVersion: rate.version,
         classification: catalog.classification,
@@ -386,7 +389,7 @@ export const createServiceQuote = createServerFn({ method: "POST" })
       metadata: { titleId: title.id, quoteNumber, subtotal, taxPaise, total, estimatedCost },
     });
 
-    return {
+    return toCustomerServiceQuoteDto({
       quoteId: quote[0].id,
       quoteNumber,
       status: "QUOTED",
@@ -394,12 +397,8 @@ export const createServiceQuote = createServerFn({ method: "POST" })
       subtotalPaise: subtotal,
       taxPaise,
       totalPaise: total,
-      estimatedCostPaise: estimatedCost,
-      estimatedMarginPaise: estimatedMargin,
-      detectedAssets: plan.detectedAssets,
-      requiredWork: plan.requiredWork,
       lines,
-    };
+    });
   });
 
 export const acceptServiceQuote = createServerFn({ method: "POST" })
