@@ -5,6 +5,7 @@ import {
   calculateRefundSplit,
   calculateNetProfit,
 } from "./commercial-math.ts";
+import { toServiceQuoteResponse } from "./service-quote-response.ts";
 
 test("service line respects quantity and minimum", () => {
   assert.deepEqual(
@@ -50,4 +51,76 @@ test("net profit follows Bridge commercial formula", () => {
     }),
     37000,
   );
+});
+
+
+test("customer quote response excludes internal cost, margin, and rate internals", () => {
+  const quote = {
+    quoteId: "quote-1",
+    quoteNumber: "CRQ-20261109-ABCD",
+    status: "QUOTED" as const,
+    currency: "INR" as const,
+    subtotalPaise: 10000,
+    taxPaise: 1800,
+    totalPaise: 11800,
+    estimatedCostPaise: 6000,
+    estimatedMarginPaise: 4000,
+    detectedAssets: [],
+    requiredWork: [],
+    lines: [{
+      serviceCode: "SUBTITLE",
+      rateId: "rate-secret",
+      rateVersion: 7,
+      classification: "BILLABLE" as const,
+      pricingMethod: "PER_LANGUAGE",
+      unitLabel: "language",
+      quantity: 1,
+      unitPricePaise: 10000,
+      lineTotalPaise: 10000,
+      costBasisPaise: 6000,
+      estimatedMarginPaise: 4000,
+      evidence: { reason: "missing subtitle" },
+    }],
+  };
+  const response = toServiceQuoteResponse(quote, false);
+  assert.equal("estimatedCostPaise" in response, false);
+  assert.equal("estimatedMarginPaise" in response, false);
+  assert.equal("costBasisPaise" in response.lines[0], false);
+  assert.equal("estimatedMarginPaise" in response.lines[0], false);
+  assert.equal("rateId" in response.lines[0], false);
+  assert.equal(response.totalPaise, 11800);
+});
+
+test("finance-authorized quote response retains internal financial detail", () => {
+  const quote = {
+    quoteId: "quote-2",
+    quoteNumber: "CRQ-20261109-EFGH",
+    status: "QUOTED" as const,
+    currency: "INR" as const,
+    subtotalPaise: 10000,
+    taxPaise: 1800,
+    totalPaise: 11800,
+    estimatedCostPaise: 6000,
+    estimatedMarginPaise: 4000,
+    detectedAssets: [],
+    requiredWork: [],
+    lines: [{
+      serviceCode: "SUBTITLE",
+      rateId: "rate-internal",
+      rateVersion: 7,
+      classification: "BILLABLE" as const,
+      pricingMethod: "PER_LANGUAGE",
+      unitLabel: "language",
+      quantity: 1,
+      unitPricePaise: 10000,
+      lineTotalPaise: 10000,
+      costBasisPaise: 6000,
+      estimatedMarginPaise: 4000,
+      evidence: {},
+    }],
+  };
+  const response = toServiceQuoteResponse(quote, true);
+  assert.equal(response.estimatedCostPaise, 6000);
+  assert.equal(response.estimatedMarginPaise, 4000);
+  assert.equal(response.lines[0].costBasisPaise, 6000);
 });
