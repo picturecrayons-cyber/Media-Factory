@@ -99,7 +99,7 @@ function CreatorWorkspace() {
           <h2 className="mt-2 font-display text-2xl font-semibold tracking-tight sm:text-3xl">Your films. Your submissions. Your business.</h2>
           <p className="mt-2 text-sm leading-relaxed text-muted">Track your own submissions, review progress, authorized distribution and verified settlement status. Bridge teams retain QC, Legal, licensing approval and payout authorization.</p>
         </div>
-        {activeTab === "Overview" || activeTab === "Submissions" ? <NewSubmissionPanel /> : null}
+        {activeTab === "Overview" ? <NewSubmissionPanel /> : null}
       </section>
 
       <nav aria-label="Creator dashboard tabs" className="flex gap-1 overflow-x-auto border-b border-line pb-1">
