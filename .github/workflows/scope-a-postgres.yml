@@ -78,3 +78,10 @@ jobs:
 
       - name: Run real onboarding DB assertions
         run: node scripts/scope-a-onboarding-db.mjs
+
+      - name: Verify Merge Gate schema, constraints, indexes, RLS and ACL
+        run: PGPASSWORD=postgres psql -h 127.0.0.1 -U postgres -d bridge_scope_a -v ON_ERROR_STOP=1 -f scripts/merge-gate-postgres17-assertions.sql
+      - name: Report rollback limitation explicitly
+        if: always()
+        run: |
+          echo "::notice::This job verifies migration replay and the post-migration Merge Gate contract. It does not certify semantic merge rollback; no paired down migration is present in the candidate branch."
