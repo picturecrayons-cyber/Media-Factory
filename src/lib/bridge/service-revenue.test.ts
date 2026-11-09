@@ -79,7 +79,7 @@ test("customer quote response excludes internal cost, margin, and rate internals
       lineTotalPaise: 10000,
       costBasisPaise: 6000,
       estimatedMarginPaise: 4000,
-      evidence: { reason: "missing subtitle" },
+      evidence: { serviceCode: "SUBTITLE", reason: "missing subtitle", quantity: 1 },
     }, {
       serviceCode: "INTERNAL_QC",
       rateId: "internal-rate",
@@ -92,7 +92,7 @@ test("customer quote response excludes internal cost, margin, and rate internals
       lineTotalPaise: 0,
       costBasisPaise: 1200,
       estimatedMarginPaise: 0,
-      evidence: { internalOnly: true },
+      evidence: { serviceCode: "INTERNAL_QC", reason: "internal-only service line", quantity: 1 },
     }],
   };
   const response = toServiceQuoteResponse(quote, false);
@@ -132,7 +132,7 @@ test("finance-authorized quote response retains internal financial detail", () =
       lineTotalPaise: 10000,
       costBasisPaise: 6000,
       estimatedMarginPaise: 4000,
-      evidence: {},
+      evidence: { serviceCode: "SUBTITLE", reason: "reviewed", quantity: 1 },
     }, {
       serviceCode: "INTERNAL_QC",
       rateId: "internal-rate",
@@ -145,7 +145,7 @@ test("finance-authorized quote response retains internal financial detail", () =
       lineTotalPaise: 0,
       costBasisPaise: 1200,
       estimatedMarginPaise: 0,
-      evidence: { internalOnly: true },
+      evidence: { serviceCode: "INTERNAL_QC", reason: "internal-only service line", quantity: 1 },
     }],
   };
   const response = toServiceQuoteResponse(quote, true);
