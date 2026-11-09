@@ -129,7 +129,7 @@ BEGIN
     SELECT 1 FROM pg_constraint
     WHERE conrelid='public.bridge_title_merge_audits'::regclass
       AND contype='c' AND convalidated
-      AND regexp_replace(lower(pg_get_expr(conbin,conrelid)), '[[:space:]()]', '', 'g')
+      AND regexp_replace(regexp_replace(lower(pg_get_expr(conbin,conrelid)), '[[:space:]()]', '', 'g'), '::(text|jsonb)', '', 'g')
           = 'canonical_title_id<>retiring_title_id'
   ) THEN failures := array_append(failures, '#6 validated audit no-self-merge check missing'); END IF;
 
@@ -138,7 +138,7 @@ BEGIN
     SELECT 1 FROM pg_constraint
     WHERE conrelid='public.bridge_title_merge_audits'::regclass
       AND contype='c' AND convalidated
-      AND regexp_replace(lower(pg_get_expr(conbin,conrelid)), '[[:space:]()]', '', 'g')
+      AND regexp_replace(regexp_replace(lower(pg_get_expr(conbin,conrelid)), '[[:space:]()]', '', 'g'), '::(text|jsonb)', '', 'g')
           = 'decision<>''merged''orcompleted_atisnotnull'
   ) THEN failures := array_append(failures, '#7 validated MERGED -> completed_at check missing'); END IF;
 
@@ -147,7 +147,7 @@ BEGIN
     SELECT 1 FROM pg_constraint
     WHERE conrelid='public.bridge_title_merge_audits'::regclass
       AND contype='c' AND convalidated
-      AND regexp_replace(lower(pg_get_expr(conbin,conrelid)), '[[:space:]()]', '', 'g')
+      AND regexp_replace(regexp_replace(lower(pg_get_expr(conbin,conrelid)), '[[:space:]()]', '', 'g'), '::(text|jsonb)', '', 'g')
           = 'decision<>''rolled_back''orrollback_stateisnotnullandrollback_state<>''{}''::jsonb'
   ) THEN failures := array_append(failures, '#8 validated ROLLED_BACK -> non-empty rollback_state check missing'); END IF;
 
@@ -156,9 +156,32 @@ BEGIN
     SELECT 1 FROM pg_constraint
     WHERE conrelid='public.bridge_titles'::regclass
       AND contype='c' AND convalidated
-      AND regexp_replace(lower(pg_get_expr(conbin,conrelid)), '[[:space:]()]', '', 'g')
+      AND regexp_replace(regexp_replace(lower(pg_get_expr(conbin,conrelid)), '[[:space:]()]', '', 'g'), '::(text|jsonb)', '', 'g')
           = 'merged_into_title_idisnullandmerged_atisnullormerged_into_title_idisnotnullandmerged_atisnotnull'
   ) THEN failures := array_append(failures, '#9 validated title merge pointer/timestamp paired-null check missing'); END IF;
+
+  -- Archived review security hardening: RLS and direct grants remain closed.
+  FOREACH table_name IN ARRAY ARRAY[
+    'bridge_title_duplicate_reviews',
+    'bridge_title_reconciliation_snapshots',
+    'bridge_title_reconciliation_events'
+  ] LOOP
+    IF to_regclass('public.' || table_name) IS NOT NULL THEN
+      SELECT relrowsecurity INTO ok FROM pg_class WHERE oid=to_regclass('public.' || table_name);
+      IF NOT coalesce(ok,false) THEN failures := array_append(failures, table_name || ' RLS disabled'); END IF;
+      FOREACH privilege_name IN ARRAY ARRAY['SELECT','INSERT','UPDATE','DELETE','TRUNCATE','REFERENCES','TRIGGER'] LOOP
+        IF has_table_privilege('anon','public.' || table_name,privilege_name)
+           OR has_table_privilege('authenticated','public.' || table_name,privilege_name) THEN
+          failures := array_append(failures, table_name || ' browser role retains ' || privilege_name);
+        END IF;
+      END LOOP;
+    END IF;
+  END LOOP;
+  IF to_regprocedure('public.bridge_duplicate_title_loop_release_allowed(text)') IS NOT NULL
+     AND (has_function_privilege('anon','public.bridge_duplicate_title_loop_release_allowed(text)','EXECUTE')
+       OR has_function_privilege('authenticated','public.bridge_duplicate_title_loop_release_allowed(text)','EXECUTE')) THEN
+    failures := array_append(failures, 'duplicate-title Loop release function is executable by anon/authenticated');
+  END IF;
 
   -- Supporting indexes.
   IF to_regclass('public.bridge_title_merge_audits_titles_idx') IS NULL THEN failures := array_append(failures, 'audit lookup index missing'); END IF;
