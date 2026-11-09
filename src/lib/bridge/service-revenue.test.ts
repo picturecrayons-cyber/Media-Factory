@@ -88,6 +88,7 @@ test("customer quote response excludes internal cost, margin, and rate internals
   assert.equal("costBasisPaise" in response.lines[0], false);
   assert.equal("estimatedMarginPaise" in response.lines[0], false);
   assert.equal("rateId" in response.lines[0], false);
+  assert.equal("evidence" in response.lines[0], false);
   assert.equal(response.totalPaise, 11800);
 });
 
@@ -120,7 +121,7 @@ test("finance-authorized quote response retains internal financial detail", () =
     }],
   };
   const response = toServiceQuoteResponse(quote, true);
-  assert.equal(response.estimatedCostPaise, 6000);
-  assert.equal(response.estimatedMarginPaise, 4000);
-  assert.equal(response.lines[0].costBasisPaise, 6000);
+  assert.equal("estimatedCostPaise" in response ? response.estimatedCostPaise : null, 6000);
+  assert.equal("estimatedMarginPaise" in response ? response.estimatedMarginPaise : null, 4000);
+  assert.equal("costBasisPaise" in response.lines[0] ? response.lines[0].costBasisPaise : null, 6000);
 });
