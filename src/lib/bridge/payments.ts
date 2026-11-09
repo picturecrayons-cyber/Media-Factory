@@ -11,11 +11,18 @@ import { loadTitle, recordTransition } from "./titles";
 import { writeAudit } from "./audit";
 import { assertBuyerPublishable } from "./buyer-visibility";
 import { assertNotDevUser } from "./guards";
+import { assertRazorpayRuntimeIsolation } from "./razorpay-environment";
+import { assertBuyerLicenseOrderBlocked } from "./authorization-guards";
 
 function requireRazorpayKeys() {
   const keyId = bridgeEnv.razorpayKeyId();
   const keySecret = bridgeEnv.razorpayKeySecret();
   if (!keyId || !keySecret) throw new Error("Razorpay is not configured");
+  assertRazorpayRuntimeIsolation({
+    vercelEnv: typeof process === "undefined" ? undefined : process.env.VERCEL_ENV,
+    keyId,
+    supabaseUrl: bridgeEnv.supabaseUrl(),
+  });
   return { keyId, keySecret };
 }
 
@@ -47,105 +54,10 @@ export async function grantFromCapturedPayment(opts: {
   paymentId: string;
   actorUserId?: string | null;
 }) {
-  const captured = await razorpayFetch<RzPayment>(`/payments/${opts.paymentId}`);
-  if (captured.status !== "captured") {
-    throw new Error("Payment is not captured");
-  }
-  if (captured.order_id !== opts.orderId) {
-    throw new Error("Payment does not match order");
-  }
-  const sql = await getSql();
-  const rows = await sql<{
-    id: string;
-    user_id: string;
-    title_id: string | null;
-    amount_paise: number;
-    status: string;
-    currency: string;
-    provider_payment_id: string | null;
-    package_id: string | null;
-  }>`
-    select id, user_id, title_id, package_id, amount_paise, status, currency, provider_payment_id
-    from bridge_payments where provider_order_id = ${opts.orderId} limit 1
-  `;
-  const payment = rows[0];
-  if (!payment) throw new Error("Unknown order");
-  if (captured.amount !== payment.amount_paise || captured.currency !== payment.currency || payment.currency !== "INR") {
-    throw new Error("Amount or currency mismatch");
-  }
-  if (payment.provider_payment_id && payment.provider_payment_id !== opts.paymentId) {
-    throw new Error("Order already linked to another payment");
-  }
-  if (opts.actorUserId && opts.actorUserId !== payment.user_id) {
-    throw new Error("Payment does not belong to this account");
-  }
-
-  await sql`
-    update bridge_payments
-    set status = ${"captured"},
-        provider_payment_id = ${opts.paymentId},
-        verified_at = now()
-    where id = ${payment.id} and status <> 'captured'
-  `;
-
-  if (!payment.title_id) {
-    return { paymentId: payment.id, entitled: false };
-  }
-
-  if (payment.package_id) {
-    const pkg = await sql<{ id: string; title_id: string; status: string; delivery_status: string }>`
-      select id, title_id, status, delivery_status
-      from bridge_license_packages
-      where id = ${payment.package_id} and title_id = ${payment.title_id}
-      limit 1
-    `;
-    if (!pkg[0]) throw new Error("License package not found");
-    await sql`
-      insert into bridge_package_entitlements (package_id, title_id, buyer_user_id, payment_id)
-      values (${pkg[0].id}, ${payment.title_id}, ${payment.user_id}, ${payment.id})
-      on conflict (package_id, buyer_user_id) do nothing
-    `;
-    await sql`
-      update bridge_license_packages
-      set status = 'LICENSED', buyer_user_id = ${payment.user_id}, payment_id = ${payment.id}, updated_at = now()
-      where id = ${pkg[0].id}
-    `;
-    await writeAudit({
-      actorUserId: opts.actorUserId ?? payment.user_id,
-      action: "licensing.language_package_licensed",
-      entityType: "bridge_license_package",
-      entityId: pkg[0].id,
-      metadata: { titleId: payment.title_id, paymentId: payment.id },
-    });
-    return { paymentId: payment.id, entitled: true, titleId: payment.title_id, packageId: pkg[0].id };
-  }
-
-  await sql`
-    insert into bridge_entitlements (user_id, title_id, payment_id, access_type)
-    values (${payment.user_id}, ${payment.title_id}, ${payment.id}, ${"license"})
-    on conflict (user_id, title_id, access_type) do nothing
-  `;
-
-  const title = await loadTitle(payment.title_id);
-  if (title && (title.status === "LIVE_FOR_BUYERS" || title.status === "IN_NEGOTIATION")) {
-    await recordTransition({
-      titleId: title.id,
-      from: title.status,
-      to: "LICENSED",
-      actorUserId: opts.actorUserId ?? payment.user_id,
-      note: "razorpay captured",
-    });
-  }
-
-  await writeAudit({
-    actorUserId: opts.actorUserId ?? payment.user_id,
-    action: "payment.captured",
-    entityType: "bridge_payment",
-    entityId: payment.id,
-    metadata: { titleId: payment.title_id },
-  });
-
-  return { paymentId: payment.id, entitled: true, titleId: payment.title_id };
+  if (!opts.orderId || !opts.paymentId) throw new Error("Payment identifiers are required");
+  throw new Error(
+    "BRIDGE_LICENSE_FULFILLMENT_BLOCKED: canonical organization, mandate, and exact-rights authorization is not implemented",
+  );
 }
 
 export const getCheckoutConfig = createServerFn({ method: "GET" })
@@ -169,6 +81,7 @@ export const createLicenseOrder = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
+    assertBuyerLicenseOrderBlocked(actor);
     assertPermission(actor, "payment.create_order");
     const title = await loadTitle(data.titleId);
     if (!title || (!canReadTitle(actor, title) && actor.accountType !== "buyer")) throw new Error("Not found");
