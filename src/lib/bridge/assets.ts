@@ -10,6 +10,7 @@ import { loadTitle } from "./titles";
 import { writeAudit } from "./audit";
 import { assertNotDevUser } from "./guards";
 import { persistVerifiedAsset } from "./asset-confirmation";
+import { isSuperAdminActor } from "./asset-roles";
 import { downloadDecision } from "./delivery-policy";
 import { uploadUrlLifetimeSeconds } from "./upload-url-lifetime";
 import { validateOttIngestFile, type OttIngestKind } from "./ott-ingest-spec";
@@ -89,12 +90,12 @@ export const requestAssetUpload = createServerFn({ method: "POST" })
     const sql = await getSql();
     const replacing = await assertReplacementWindow(sql, title.id, data.kind);
     if (replacing) {
-      if (actor.internalRole !== "super_admin") throw new Error("Only Super Admin can replace a verified asset");
+      if (!isSuperAdminActor(actor.internalRole)) throw new Error("Only Super Admin can replace a verified asset");
       if (await hasFirstDeliveryOrPublish(sql, title.id)) throw new Error("Asset replacement is locked after first delivery or LOOP publication");
-    } else if (!UPLOADABLE.has(title.status) && actor.internalRole !== "super_admin") {
+    } else if (!UPLOADABLE.has(title.status) && !isSuperAdminActor(actor.internalRole)) {
       throw new Error("Uploads are closed for this status");
     }
-    if (actor.internalRole === "super_admin" && await hasFirstDeliveryOrPublish(sql, title.id)) {
+    if (isSuperAdminActor(actor.internalRole) && await hasFirstDeliveryOrPublish(sql, title.id)) {
       throw new Error("Asset replacement is locked after first delivery or LOOP publication");
     }
     if (!["master", "poster", "poster_vertical", "poster_horizontal", "thumbnail", "subtitle", "screener", "technical", "censor_certificate"].includes(data.kind))
@@ -155,11 +156,11 @@ async function openUploadAsset(userId: string, assetId: string) {
     throw new Error("Upload confirmation is closed for this title");
   }
   const replacing = await assertReplacementWindow(sql, title.id, asset.kind, asset.id);
-  if (replacing && actor.internalRole !== "super_admin") throw new Error("Only Super Admin can replace a verified asset");
-  if ((replacing || actor.internalRole === "super_admin") && await hasFirstDeliveryOrPublish(sql, title.id)) {
+  if (replacing && !isSuperAdminActor(actor.internalRole)) throw new Error("Only Super Admin can replace a verified asset");
+  if ((replacing || isSuperAdminActor(actor.internalRole)) && await hasFirstDeliveryOrPublish(sql, title.id)) {
     throw new Error("Asset replacement is locked after first delivery or LOOP publication");
   }
-  if (!replacing && !UPLOADABLE.has(title.status) && actor.internalRole !== "super_admin") {
+  if (!replacing && !UPLOADABLE.has(title.status) && !isSuperAdminActor(actor.internalRole)) {
     throw new Error("Upload confirmation is closed for this title");
   }
   return asset;
@@ -287,11 +288,11 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
       throw new Error("Upload confirmation is closed for this title");
     }
     const replacing = await assertReplacementWindow(sql, title.id, asset.kind, asset.id);
-    if (replacing && actor.internalRole !== "super_admin") throw new Error("Only Super Admin can replace a verified asset");
-    if ((replacing || actor.internalRole === "super_admin") && await hasFirstDeliveryOrPublish(sql, title.id)) {
+    if (replacing && !isSuperAdminActor(actor.internalRole)) throw new Error("Only Super Admin can replace a verified asset");
+    if ((replacing || isSuperAdminActor(actor.internalRole)) && await hasFirstDeliveryOrPublish(sql, title.id)) {
       throw new Error("Asset replacement is locked after first delivery or LOOP publication");
     }
-    if (!replacing && !UPLOADABLE.has(title.status) && actor.internalRole !== "super_admin") {
+    if (!replacing && !UPLOADABLE.has(title.status) && !isSuperAdminActor(actor.internalRole)) {
       throw new Error("Upload confirmation is closed for this title");
     }
     if (asset.byte_size != null)
@@ -350,7 +351,7 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
       assetId: asset.id,
       actorUserId: actor.userId,
       internalActor: Boolean(actor.internalRole),
-      superAdminActor: actor.internalRole === "super_admin",
+      superAdminActor: isSuperAdminActor(actor.internalRole),
       titleId: title.id,
       kind: asset.kind,
       byteSize: sealed.byteSize,
