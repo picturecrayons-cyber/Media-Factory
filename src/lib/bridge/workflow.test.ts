@@ -397,6 +397,35 @@ test("repeated identical rights evidence submission reuses one record and one au
   }
 });
 
+test("rights evidence submission rejects unrelated document asset versions", async () => {
+  const f = await fixture();
+  try {
+    await f.sql.query("update bridge_titles set status='RIGHTS_REVIEW' where id='title-123'");
+    const saved = (await f.sql.transaction((tx) => f.save(tx, owner, license))) as { grantId: string };
+    const assetVersionId = "00000000-0000-4000-8000-000000000022";
+    const checksum = "e".repeat(64);
+    await f.sql.query(`insert into bridge_asset_versions
+      (id,title_id,asset_group,asset_type,version,s3_key,checksum_sha256,byte_size,processing_state,created_by)
+      values ($1,'title-123','DOCUMENT','PRODUCTION_DOCUMENT',1,'sealed/unrelated-document.pdf',$2,2048,'PASSED','owner')`,
+      [assetVersionId,checksum]);
+    await f.sql.query(`insert into bridge_assets(id,title_id,kind,s3_key,byte_size,asset_version_id,verified_object_key,storage_verified_at,checksum_sha256)
+      values ('rights-evidence-unrelated','title-123','rights_document','sealed/unrelated-document.pdf',2048,$1,'sealed/unrelated-document.pdf',now(),$2)`,
+      [assetVersionId,checksum]);
+    await assert.rejects(
+      f.sql.transaction((tx) => f.submitRightsEvidence(tx, owner, {
+        titleId: "title-123",
+        grantId: saved.grantId,
+        evidenceType: "EXECUTED_AGREEMENT",
+        assetVersionId,
+      })),
+      /current, processed DOCUMENT asset with a SHA-256 checksum uploaded by the submitting owner/,
+    );
+    assert.equal((await f.sql.query("select * from bridge_rights_evidence")).length, 0);
+  } finally {
+    await f.db.close();
+  }
+});
+
 test("concurrent settlement reference submissions are idempotent and reject changed financial terms", async () => {
   const f = await fixture();
   const finance = { ...owner, userId: "finance", internalRole: "finance" as const };
