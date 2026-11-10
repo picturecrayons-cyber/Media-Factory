@@ -11,6 +11,7 @@ export function downloadDecision(opts: {
   actorIsInternal: boolean;
   accountType: string;
   hasLicenseEntitlement: boolean;
+  hasPrivateScreeningGrant?: boolean;
 }): DownloadDecision {
   if (opts.kind === "master") {
     if (!opts.actorIsOwner && !opts.actorIsInternal) {
@@ -34,8 +35,11 @@ export function downloadDecision(opts: {
     return { allow: true, reason: "Owner or internal reviewer" };
   }
   if (opts.kind === "poster") return { allow: true, reason: "Poster is readable with the title" };
-  if ((opts.kind === "screener" || opts.kind === "subtitle") && opts.hasLicenseEntitlement) {
-    return { allow: true, reason: "Entitlement covers this non-master asset" };
+  if (opts.kind === "screener" && (opts.hasLicenseEntitlement || opts.hasPrivateScreeningGrant === true)) {
+    return { allow: true, reason: opts.hasPrivateScreeningGrant ? "Active private screening grant" : "License entitlement covers screener" };
+  }
+  if (opts.kind === "subtitle" && opts.hasLicenseEntitlement) {
+    return { allow: true, reason: "License entitlement covers subtitle asset" };
   }
   return { allow: false, reason: "License entitlement required" };
 }
