@@ -35,9 +35,10 @@ export async function submitRightsEvidence(
     owner_user_id: string;
     owner_account_type: string;
     owner_organization_id: string | null;
-  }>`select owner_user_id,owner_account_type,owner_organization_id
+    status: string;
+  }>`select owner_user_id,owner_account_type,owner_organization_id,status
     from bridge_titles where id=${data.titleId} for update`;
-  if (!title || !canOperateOnTitle(
+  if (!title || title.status !== "RIGHTS_REVIEW" || !canOperateOnTitle(
     actor,
     { ownerUserId: title.owner_user_id, ownerAccountType: title.owner_account_type as "independent_creator" | "studio" | "buyer" | "investor", ownerOrganizationId: title.owner_organization_id },
     "title.update_own",
@@ -227,20 +228,23 @@ export const requestRightsEvidenceUploadFn = createServerFn({ method: "POST" })
       filename: data.filename,
     });
     const signed = await signUpload({ key, contentType: data.contentType, expiresIn: 900 });
-    await sql`insert into bridge_assets(
-        id,title_id,kind,s3_key,content_type,created_by,original_filename,
-        storage_provider,storage_bucket,storage_namespace,storage_region,storage_endpoint,source_object_key
-      )
-      values (
-        ${assetId},${title.id},'rights_document',${key},${data.contentType},${actor.userId},${data.filename},
-        'oci',${signed.bucket},${signed.namespace},${signed.region},${signed.endpoint},${key}
-      )`;
-    await writeAudit({
-      actorUserId: actor.userId,
-      action: "rights.evidence.upload_signed",
-      entityType: "bridge_title",
-      entityId: title.id,
-      metadata: { grantId: data.grantId, assetId, evidenceType: data.evidenceType, byteSize: data.byteSize },
+    await sql.transaction(async (tx) => {
+      await tx`select id from bridge_titles where id=${title.id} and status='RIGHTS_REVIEW' for update`;
+      await tx`insert into bridge_assets(
+          id,title_id,kind,s3_key,content_type,created_by,original_filename,
+          storage_provider,storage_bucket,storage_namespace,storage_region,storage_endpoint,source_object_key
+        )
+        values (
+          ${assetId},${title.id},'rights_document',${key},${data.contentType},${actor.userId},${data.filename},
+          'oci',${signed.bucket},${signed.namespace},${signed.region},${signed.endpoint},${key}
+        )`;
+      await writeAudit({
+        actorUserId: actor.userId,
+        action: "rights.evidence.upload_signed",
+        entityType: "bridge_title",
+        entityId: title.id,
+        metadata: { grantId: data.grantId, assetId, evidenceType: data.evidenceType, byteSize: data.byteSize },
+      }, tx);
     });
     return { assetId, url: signed.url, method: signed.method, key };
   });
@@ -267,7 +271,11 @@ export const confirmRightsEvidenceUploadFn = createServerFn({ method: "POST" })
       byte_size: number | null;
       asset_version_id: string | null;
       storage_bucket: string | null;
-    }>`select id,title_id,kind,s3_key,created_by,content_type,byte_size,asset_version_id,storage_bucket
+      verified_object_key: string | null;
+      storage_verified_at: string | Date | null;
+      checksum_sha256: string | null;
+    }>`select id,title_id,kind,s3_key,created_by,content_type,byte_size,asset_version_id,storage_bucket,
+        verified_object_key,storage_verified_at,checksum_sha256
       from bridge_assets where id=${data.assetId}`;
     if (!asset || asset.kind !== "rights_document" || asset.created_by !== actor.userId)
       throw new Error("Rights document upload was not found for this owner");
@@ -287,7 +295,27 @@ export const confirmRightsEvidenceUploadFn = createServerFn({ method: "POST" })
     )) throw new Error("Rights evidence confirmation is closed for this title");
 
     if (asset.byte_size != null && asset.asset_version_id) {
-      return { assetVersionId: asset.asset_version_id, byteSize: Number(asset.byte_size), checksumVerified: true as const };
+      const [version] = await sql<{
+        id: string;
+        s3_key: string;
+        checksum_sha256: string;
+        byte_size: number;
+        processing_state: string;
+      }>`select id,s3_key,checksum_sha256,byte_size,processing_state
+        from bridge_asset_versions
+        where id=${asset.asset_version_id} and title_id=${title.id} and asset_type='RIGHTS_EVIDENCE'`;
+      if (!version || version.processing_state !== "PASSED" ||
+          version.s3_key !== asset.s3_key ||
+          asset.verified_object_key !== asset.s3_key ||
+          !asset.storage_verified_at ||
+          asset.checksum_sha256?.toLowerCase() !== version.checksum_sha256.toLowerCase() ||
+          Number(asset.byte_size) !== Number(version.byte_size))
+        throw new Error("Previously confirmed evidence no longer matches its verified asset record");
+      const stored = await verifyObjectSha256(asset.s3_key, asset.content_type);
+      if (stored.byteSize !== Number(version.byte_size) ||
+          stored.checksumSha256.toLowerCase() !== version.checksum_sha256.toLowerCase())
+        throw new Error("Stored evidence checksum or size no longer matches the verified asset version");
+      return { assetVersionId: version.id, byteSize: stored.byteSize, checksumVerified: true as const };
     }
     const original = await verifyObjectSha256(asset.s3_key, asset.content_type);
     if (original.byteSize !== data.expectedByteSize) throw new Error("Uploaded evidence size does not match the selected file");
