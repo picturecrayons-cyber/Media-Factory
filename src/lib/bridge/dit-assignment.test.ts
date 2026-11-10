@@ -24,7 +24,7 @@ test("DIT assignment cannot be inherited by another user, production, title or a
   assert.equal(hasActiveDitAssignment("dit-user-a", "production-a", "title-a", "asset-proxy-a", assignments), false);
 });
 
-test("pending, suspended and revoked assignments fail closed", () => {
+test("asset-scoped assignment cannot authorize a broader production/title-level request", () => {\n  assert.equal(hasActiveDitAssignment("dit-user-a", "production-a", "title-a", null, [assignment({ assetId: "asset-master-a" })]), false);\n});\n\ntest("pending, suspended and revoked assignments fail closed", () => {
   for (const status of ["pending", "suspended", "revoked"] as const) {
     assert.equal(hasActiveDitAssignment("dit-user-a", "production-a", "title-a", "asset-master-a", [assignment({ status })]), false);
   }
