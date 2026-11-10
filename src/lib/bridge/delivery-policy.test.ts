@@ -65,4 +65,14 @@ describe("master download denial", () => {
       accountType: "investor", hasLicenseEntitlement: false, hasInvestorPreviewGrant: false,
     }).allow, false);
   });
+
+  it("allows investor screener only with an explicit active preview grant", () => {
+    assert.equal(downloadDecision({ kind: "screener", actorIsOwner: false, actorIsInternal: false, accountType: "investor", hasLicenseEntitlement: false, hasInvestorPreviewGrant: true }).allow, true);
+    assert.equal(downloadDecision({ kind: "screener", actorIsOwner: false, actorIsInternal: false, accountType: "investor", hasLicenseEntitlement: false, hasInvestorPreviewGrant: false }).allow, false);
+  });
+
+  it("does not let investor preview grant authorize subtitles or masters", () => {
+    assert.equal(downloadDecision({ kind: "subtitle", actorIsOwner: false, actorIsInternal: false, accountType: "investor", hasLicenseEntitlement: false, hasInvestorPreviewGrant: true }).allow, false);
+    assert.equal(downloadDecision({ kind: "master", actorIsOwner: false, actorIsInternal: false, accountType: "investor", hasLicenseEntitlement: false, hasInvestorPreviewGrant: true }).allow, false);
+  });
 });
