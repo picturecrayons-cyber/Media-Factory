@@ -55,11 +55,28 @@ async function main() {
     return;
   }
 
+  // Validate the database's migration bookkeeping before creating or changing
+  // any ledger. Supabase's ledger is not interchangeable with this app's
+  // basename-keyed _migrations table. If only the Supabase ledger exists,
+  // abort rather than replaying every repository migration as "pending".
   const ssl =
-    process.env.PGSSLMODE === "disable" ? false : { rejectUnauthorized: false };
+    process.env.PGSSLMODE === "disable" ? false : { rejectUnauthorized: true };
   const pool = new pg.Pool({ connectionString: databaseUrl, max: 1, ssl });
   const client = await pool.connect();
   try {
+    const ledgerState = await client.query(`
+      SELECT
+        to_regclass('public._migrations') IS NOT NULL AS app_ledger_exists,
+        to_regclass('supabase_migrations.schema_migrations') IS NOT NULL AS supabase_ledger_exists
+    `);
+    const { app_ledger_exists: appLedgerExists, supabase_ledger_exists: supabaseLedgerExists } =
+      ledgerState.rows[0] ?? {};
+    if (supabaseLedgerExists && !appLedgerExists) {
+      throw new Error(
+        "Refusing to migrate: Supabase migration history exists but the app _migrations ledger is absent. Reconcile migration histories and filenames before applying any SQL.",
+      );
+    }
+
     await client.query(
       "CREATE TABLE IF NOT EXISTS _migrations (name TEXT PRIMARY KEY, applied_at TIMESTAMPTZ NOT NULL DEFAULT now())",
     );
