@@ -52,9 +52,8 @@ export default function LogoBackgroundConverter({ createOrder, verifyPayment, pr
   const [message, setMessage] = useState("Upload a PNG, JPG or WebP logo to begin.");
   const [output, setOutput] = useState<Blob | null>(null);
   const [sample, setSample] = useState<number[][]>([]);
-  const [imageSize, setImageSize] = useState({ width: 0, height: 0 });
-  const imageRef = useRef<HTMLImageElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+    const imageRef = useRef<HTMLImageElement | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const originalRef = useRef<HTMLImageElement | null>(null);
 
   function clearUrls() {
@@ -114,7 +113,6 @@ export default function LogoBackgroundConverter({ createOrder, verifyPayment, pr
     setOutput(blob);
     if (resultUrl) URL.revokeObjectURL(resultUrl);
     setResultUrl(URL.createObjectURL(blob));
-    setImageSize({ width, height });
     setMessage("Background removed. Click the original preview to sample a different background colour if needed.");
   }
 
@@ -143,7 +141,7 @@ export default function LogoBackgroundConverter({ createOrder, verifyPayment, pr
       context.drawImage(img, 0, 0);
       const d = context.getImageData(0, 0, w, h).data;
       const points = [[0,0],[w-1,0],[0,h-1],[w-1,h-1]];
-      const colors = points.map(([x,y]) => { const i=(y*w+x)*4; return [d[i],d[i+1],d[i+2]]; });
+      const colors = points.filter(([x,y]) => d[(y*w+x)*4+3] > 0).map(([x,y]) => { const i=(y*w+x)*4; return [d[i],d[i+1],d[i+2]]; });
       setSample(colors);
       await processImage(img, colors, tolerance);
     } catch (error) {
