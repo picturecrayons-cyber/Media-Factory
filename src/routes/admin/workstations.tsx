@@ -7,6 +7,7 @@ import { BridgeShell } from "@/components/bridge/shell";
 import { StoryConceptDesk } from "@/components/bridge/story-concept-desk";
 import { listAdminWorkstations, reviewAdminTitle, setBuyerPublicationGate } from "@/lib/bridge/admin-workstations";
 import { listDuplicateReviews, openDuplicateReview, decideDuplicateReview } from "@/lib/bridge/duplicate-reconciliation";
+import { grantBuyerDeliveryAccess, listBuyerDeliveryAccess, revokeBuyerDeliveryAccess } from "@/lib/bridge/secure-delivery";
 
 export const Route = createFileRoute("/admin/workstations")({ component: AdminWorkstations });
 
@@ -88,14 +89,17 @@ function WorkstationBody() {
         <BuyerRelease titles={data.titles} qc={data.qc} legal={data.legal} gate={gate}
           onGate={(titleId, gateName) => gate.mutate({ data: { titleId, gate: gateName as "OTT", decision: "PASS" } })} />
       ) : activeTab === "Deliveries" ? (
-        <div className="space-y-6">
-          <SimpleTable title="Licensing & Delivery" description={ready.length + " titles in the commercial pipeline"}
-            rows={ready} fields={["name", "status", "language", "licensing_fee_paise", "updated_at"]} />
-          <SimpleTable title="Destination Packages" description={data.packages.length + " persisted packages"}
-            rows={data.packages} fields={["destination", "package_version", "readiness_state", "commercial_model", "authorized_at"]} />
-          <SimpleTable title="Bridge Publications" description={data.publications.length + " persisted authorization records"}
-            rows={data.publications} titleName={titleName} fields={["bridge_title_id", "authorization_status", "territories", "languages", "window_end"]} />
-        </div>
+        <>
+          <BuyerDeliveryDesk packages={data.packages} profiles={data.profiles} />
+          <div className="space-y-6">
+            <SimpleTable title="Licensing & Delivery" description={ready.length + " titles in the commercial pipeline"}
+              rows={ready} fields={["name", "status", "language", "licensing_fee_paise", "updated_at"]} />
+            <SimpleTable title="Destination Packages" description={data.packages.length + " persisted packages"}
+              rows={data.packages} fields={["destination", "package_version", "readiness_state", "commercial_model", "authorized_at"]} />
+            <SimpleTable title="Bridge Publications" description={data.publications.length + " persisted authorization records"}
+              rows={data.publications} titleName={titleName} fields={["bridge_title_id", "authorization_status", "territories", "languages", "window_end"]} />
+          </div>
+        </>
       ) : (
         <SimpleTable title="Audit History" description="Persisted operator activity. No UI-only decisions."
           rows={data.audit} fields={["action", "entity_type", "entity_id", "actor_user_id", "created_at"]} />
@@ -124,6 +128,75 @@ function TitleQueue({ titles, review }: { titles: any[]; review: any }) {
           </div>
         )) : <Empty text="No titles in the Bridge catalog." />}
       </div>
+    </section>
+  );
+}
+
+
+function BuyerDeliveryDesk({ packages, profiles }: { packages: any[]; profiles: any[] }) {
+  const qc = useQueryClient();
+  const [packageId, setPackageId] = useState("");
+  const [buyerUserId, setBuyerUserId] = useState("");
+  const [expiry, setExpiry] = useState("");
+  const grantsQ = useQuery({
+    queryKey: ["buyer-delivery-grants", packageId],
+    queryFn: () => listBuyerDeliveryAccess({ data: packageId ? { packageId } : {} }),
+    enabled: Boolean(packageId),
+  });
+  const grant = useMutation({
+    mutationFn: () => {
+      const pkg = packages.find((p) => p.id === packageId);
+      if (!pkg || !expiry) throw new Error("Select a package and expiry");
+      return grantBuyerDeliveryAccess({ data: {
+        packageId, titleId: pkg.title_id, buyerUserId,
+        expiresAt: new Date(expiry).toISOString(),
+        reason: "Authorized destination delivery to mapped Buyer",
+      } });
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["buyer-delivery-grants", packageId] });
+      setExpiry("");
+    },
+  });
+  const revoke = useMutation({
+    mutationFn: (buyerId: string) => {
+      const pkg = packages.find((p) => p.id === packageId);
+      if (!pkg) throw new Error("Package not found");
+      return revokeBuyerDeliveryAccess({ data: {
+        packageId, titleId: pkg.title_id, buyerUserId: buyerId,
+        reason: "Delivery access withdrawn by authorized Bridge operator",
+      } });
+    },
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["buyer-delivery-grants", packageId] }),
+  });
+  const buyers = profiles.filter((p) => p.account_type === "buyer" && p.email_verified);
+  const grants = grantsQ.data?.grants ?? [];
+  return (
+    <section className="space-y-3 rounded-2xl border border-line bg-surface p-5">
+      <SectionHeader title="Secure buyer delivery" description="Grant recipient-bound access only for an authorized package, active rights window and active buyer-title mapping. Access expires and can be revoked." />
+      <div className="grid gap-2 md:grid-cols-3">
+        <select aria-label="Authorized delivery package" value={packageId} onChange={(e) => setPackageId(e.target.value)} className="rounded-lg border border-line bg-transparent px-3 py-2 text-sm">
+          <option value="">Select authorized package</option>
+          {packages.filter((p) => ["AUTHORIZED", "DELIVERED"].includes(p.readiness_state) && p.authorized_at).map((p) => <option key={p.id} value={p.id}>{p.destination} · {p.title_id}</option>)}
+        </select>
+        <select aria-label="Verified buyer" value={buyerUserId} onChange={(e) => setBuyerUserId(e.target.value)} className="rounded-lg border border-line bg-transparent px-3 py-2 text-sm">
+          <option value="">Select verified Buyer</option>
+          {buyers.map((b) => <option key={b.user_id} value={b.user_id}>{b.display_name || b.email}</option>)}
+        </select>
+        <input aria-label="Required delivery expiry" type="datetime-local" value={expiry} onChange={(e) => setExpiry(e.target.value)} className="rounded-lg border border-line bg-transparent px-3 py-2 text-sm" />
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <Button size="sm" disabled={!packageId || !buyerUserId || !expiry || grant.isPending} onClick={() => grant.mutate()}>{grant.isPending ? "Granting…" : "Grant delivery access"}</Button>
+        {grantsQ.isError ? <span role="alert" className="text-sm text-muted">Could not load grants: {String(grantsQ.error)}</span> : null}
+        {grant.isError || revoke.isError ? <span role="alert" className="text-sm text-muted">Delivery access action failed: {String(grant.error ?? revoke.error)}</span> : null}
+      </div>
+      {packageId ? <div className="space-y-2">
+        {grants.map((g: any) => <div key={g.buyerUserId} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-line p-3 text-sm">
+          <span>{buyers.find((b) => b.user_id === g.buyerUserId)?.display_name || g.buyerUserId} · {g.revokedAt ? "REVOKED" : new Date(g.expiresAt) <= new Date() ? "EXPIRED" : "ACTIVE"} · {new Date(g.expiresAt).toLocaleString()}</span>
+          {!g.revokedAt ? <Button size="sm" variant="outline" disabled={revoke.isPending} onClick={() => revoke.mutate(g.buyerUserId)}>Revoke</Button> : null}
+        </div>)}
+        {!grantsQ.isLoading && !grants.length ? <p className="text-sm text-muted">No delivery grants for this package.</p> : null}
+      </div> : null}
     </section>
   );
 }
