@@ -564,8 +564,8 @@ export async function recordSettlementEvidenceTx(
     returning id`;
   if (!claim) {
     const [existing] = await tx<{
-      title_id: string;
-      invoice_reference: string;
+      title_id: string | null;
+      invoice_reference: string | null;
       statement_reference: string;
       amount_paise: number | string;
       currency: string;
