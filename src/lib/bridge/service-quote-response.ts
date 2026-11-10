@@ -67,6 +67,30 @@ function customerLine(line: ServiceQuoteLine): ServiceQuoteResponseLine {
 }
 
 /**
+ * Use explicit allowlists for nested evidence too. This prevents future internal
+ * fields added to these domain objects from leaking through a customer DTO.
+ */
+function customerDetectedAsset(asset: DetectedAsset): DetectedAsset {
+  return {
+    key: asset.key,
+    ready: asset.ready,
+    source: asset.source,
+    language: asset.language ?? null,
+    detail: asset.detail,
+  };
+}
+
+function customerRequiredWork(work: RequiredWork): RequiredWork {
+  return {
+    serviceCode: work.serviceCode,
+    reason: work.reason,
+    quantity: work.quantity,
+    ...(work.destination === undefined ? {} : { destination: work.destination }),
+    ...(work.language === undefined ? {} : { language: work.language }),
+  };
+}
+
+/**
  * External Creator/Studio quote responses expose customer pricing only.
  * Internal cost, margin, and rate internals require the explicit finance.read permission.
  */
@@ -82,13 +106,13 @@ export function toServiceQuoteResponse(
     subtotalPaise: quote.subtotalPaise,
     taxPaise: quote.taxPaise,
     totalPaise: quote.totalPaise,
-    detectedAssets: quote.detectedAssets,
-    requiredWork: quote.requiredWork,
   };
 
   if (!includeInternalFinancials) {
     return {
       ...common,
+      detectedAssets: quote.detectedAssets.map(customerDetectedAsset),
+      requiredWork: quote.requiredWork.map(customerRequiredWork),
       lines: quote.lines
         .filter((line) => line.classification !== "INTERNAL")
         .map(customerLine),
@@ -99,6 +123,8 @@ export function toServiceQuoteResponse(
     ...common,
     estimatedCostPaise: quote.estimatedCostPaise,
     estimatedMarginPaise: quote.estimatedMarginPaise,
+    detectedAssets: quote.detectedAssets,
+    requiredWork: quote.requiredWork,
     lines: quote.lines,
   };
 }
