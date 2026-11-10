@@ -100,6 +100,43 @@ async function persistVerifiedAssetScoped(
             )
         )
       returning a.id, a.title_id, a.kind, a.s3_key
+    ), replaced as (
+      select v.title_id, v.kind
+      from verified v
+      where exists (
+        select 1 from bridge_assets previous
+        where previous.title_id = v.title_id
+          and previous.kind = v.kind
+          and previous.byte_size > 0
+          and previous.id <> v.id
+      )
+    ), qc_invalidated as (
+      update bridge_qc_cases q
+      set status = 'ACTION_REQUIRED', reviewed_by = null, reviewed_at = null
+      where q.title_id in (select title_id from replaced)
+        and q.status = 'PASSED'
+      returning q.title_id
+    ), legal_invalidated as (
+      update bridge_legal_cases l
+      set status = 'ACTION_REQUIRED', reviewed_by = null, reviewed_at = null
+      where l.title_id in (select title_id from replaced)
+        and l.status = 'APPROVED'
+      returning l.title_id
+    ), gates_invalidated as (
+      update bridge_title_gate_certifications g
+      set ott_preparation_status = 'HOLD',
+          packaging_status = 'HOLD',
+          curation_status = 'HOLD',
+          delivery_status = 'HOLD',
+          updated_at = now()
+      where g.title_id in (select title_id from replaced)
+      returning g.title_id
+    ), packages_invalidated as (
+      update bridge_destination_packages p
+      set readiness_state = 'HOLD', authorized_by = null, authorized_at = null
+      where p.title_id in (select title_id from replaced)
+        and p.readiness_state in ('READY','AUTHORIZED')
+      returning p.title_id
     ), versioned as (
       insert into bridge_asset_versions (
         title_id, asset_group, asset_type, version, reference_asset_id,
