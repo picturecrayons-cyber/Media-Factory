@@ -3,6 +3,31 @@
 export const CANONICAL_SUPABASE_REF = "mlmgugivsyoxzdgwkbpu";
 export const FORBIDDEN_SUPABASE_REFS = ["tqzimuwozhipqgyerdff", "uakpqqardziifcwzvgfx"] as const;
 export const CANONICAL_SUPABASE_URL = `https://${CANONICAL_SUPABASE_REF}.supabase.co`;
+/**
+ * An explicitly isolated non-production Auth target. This is deliberately
+ * separate from the canonical infrastructure pin and is never a fallback.
+ */
+export const TEST_AUTH_SUPABASE_REF = "jbymleftneggcgutlcqu";
+export const TEST_AUTH_SUPABASE_URL = `https://${TEST_AUTH_SUPABASE_REF}.supabase.co`;
+
+export function resolveTestAuthSupabaseUrl(
+  enabled: boolean | undefined,
+  url: string | undefined,
+  publishableKey: string | undefined,
+): string {
+  if (enabled !== true) {
+    throw new Error("Test Auth configuration is disabled.");
+  }
+  const normalizedUrl = url?.trim().replace(/\/+$/, "");
+  if (normalizedUrl !== TEST_AUTH_SUPABASE_URL) {
+    throw new Error("Test Auth Supabase URL must match the dedicated test project.");
+  }
+  if (!publishableKey?.trim() || publishableKey.trim().startsWith("sb_secret_")) {
+    throw new Error("Test Auth requires a test-project publishable key, never a secret key.");
+  }
+  return TEST_AUTH_SUPABASE_URL;
+}
+
 export const PRODUCT_NAME = "Crayons Bridge";
 export const LEGAL_OWNER = "StreamVista OPC Pvt Ltd";
 export const PRODUCTION_DOMAIN = "www.crayonspictures.in";
