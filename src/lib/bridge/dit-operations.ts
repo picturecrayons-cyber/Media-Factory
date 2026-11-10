@@ -427,7 +427,7 @@ export const signoffDitCard = createServerFn({ method: "POST" })
       clipNumber: r.clip_number, originalFilename: r.original_filename, originalRelativePath: r.original_relative_path,
       byteSize: Number(r.byte_size), checksumSha256: r.checksum_sha256, hasVideo: r.has_video, hasAudio: r.has_audio,
       durationMs: Number(r.duration_ms), frameRate: r.frame_rate === null ? null : Number(r.frame_rate),
-      width: r.width, height: r.height, codec: r.codec, camera: "A", cardNo: "",
+      width: r.width, height: r.height, codec: r.codec, camera: r.camera_id, cardNo: r.card_no,
       automatedResult: r.automated_result, automatedReasons: r.automated_reasons ?? [],
       humanDisposition: r.human_disposition, humanReviewerId: r.human_reviewer_id, humanReviewedAt: r.human_reviewed_at,
     }));
