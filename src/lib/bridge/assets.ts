@@ -13,6 +13,7 @@ import { persistVerifiedAsset } from "./asset-confirmation";
 import { downloadDecision } from "./delivery-policy";
 import { uploadUrlLifetimeSeconds } from "./upload-url-lifetime";
 import { validateOttIngestFile, type OttIngestKind } from "./ott-ingest-spec";
+import { hasActiveInvestorPreviewGrant } from "./investor-preview-access";
 
 const UPLOADABLE: ReadonlySet<string> = new Set(["DRAFT", "UPLOADING", "PREPARING"]);
 
@@ -277,7 +278,10 @@ export const requestAssetDownload = createServerFn({ method: "POST" })
     const asset = rows[0];
     if (!asset) throw new Error("Not found");
     const title = await loadTitle(asset.title_id);
-    if (!title || !canReadTitle(actor, title)) throw new Error("Not found");
+    const investorPreviewAccess = actor.accountType === "investor" && asset.kind === "screener"
+      ? await hasActiveInvestorPreviewGrant(asset.title_id, actor.userId)
+      : false;
+    if (!title || (!canReadTitle(actor, title) && !investorPreviewAccess)) throw new Error("Not found");
     const entitled = await hasLicenseEntitlement(actor.userId, title.id);
     const decision = downloadDecision({
       kind: asset.kind,
@@ -285,6 +289,7 @@ export const requestAssetDownload = createServerFn({ method: "POST" })
       actorIsInternal: Boolean(actor.internalRole),
       accountType: actor.accountType,
       hasLicenseEntitlement: entitled,
+      hasInvestorPreviewGrant: investorPreviewAccess,
     });
     if (!decision.allow) {
       await writeAudit({
@@ -313,9 +318,13 @@ export const listTitleAssets = createServerFn({ method: "GET" })
   .handler(async ({ context, data }) => {
     const actor = await requireVerifiedActor(context.userId);
     const title = await loadTitle(data.titleId);
-    if (!title || !canReadTitle(actor, title)) throw new Error("Not found");
+    const investorPreviewAccess = actor.accountType === "investor" && !actor.internalRole
+      ? await hasActiveInvestorPreviewGrant(data.titleId, actor.userId)
+      : false;
+    if (!title || (!canReadTitle(actor, title) && !investorPreviewAccess)) throw new Error("Not found");
     const sql = await getSql();
     const buyer = actor.accountType === "buyer" && !actor.internalRole;
+    const investor = actor.accountType === "investor" && !actor.internalRole;
     const rows = await sql<{
       id: string;
       kind: string;
@@ -329,11 +338,11 @@ export const listTitleAssets = createServerFn({ method: "GET" })
     `;
     return {
       assets: rows
-        .filter((r) => !buyer || !["master", "technical", "censor_certificate"].includes(r.kind))
+        .filter((r) => (!buyer || !["master", "technical", "censor_certificate"].includes(r.kind)) && (!investor || r.kind === "screener"))
         .map((r) => ({
           id: r.id,
           kind: r.kind,
-          key: buyer ? null : r.s3_key,
+          key: buyer || investor ? null : r.s3_key,
           contentType: r.content_type,
           byteSize: r.byte_size,
           verified: Number(r.byte_size) > 0,

@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
-import { listTitles } from "@/lib/bridge/titles";
+import { listInvestorPreviewAccess } from "@/lib/bridge/investor-preview-access";
 import { getSql } from "@/lib/db";
 
 export const Route = createFileRoute("/investor")({ component: Investor });
@@ -25,6 +25,11 @@ function InvestorBody({ userId }: { userId: string }) {
     queryFn: () => listInvestorInvestments(userId),
   });
   const rows = investmentsQ.data?.investments ?? [];
+  const previewsQ = useQuery({
+    queryKey: ["bridge-investor-private-previews", userId],
+    queryFn: () => listInvestorPreviewAccess({ data: {} }),
+  });
+  const previews = previewsQ.data?.grants ?? [];
   const totalCapital = rows.reduce((sum, row) => sum + Number(row.investedAmountPaise ?? 0), 0);
   const totalParticipation = rows.reduce((sum, row) => sum + Number(row.participationPercent ?? 0), 0);
 
@@ -34,6 +39,19 @@ function InvestorBody({ userId }: { userId: string }) {
         <article className="rounded-sm border border-line p-4"><p className="text-xs uppercase tracking-widest text-muted">Scope</p><p className="mt-2 text-sm">Assigned titles only. Read participation. No title edits.</p></article>
         <article className="rounded-sm border border-line p-4"><p className="text-xs uppercase tracking-widest text-muted">Opportunity</p><p className="mt-2 text-sm">Capital is recorded by Bridge. You see only titles assigned to this account.</p></article>
         <article className="rounded-sm border border-line p-4"><p className="text-xs uppercase tracking-widest text-muted">Recorded capital</p><p className="mt-2 text-2xl font-semibold">₹{Math.round(totalCapital / 100).toLocaleString("en-IN")}</p></article>
+      </section>
+
+
+      <section className="rounded-3xl border border-line bg-surface p-6">
+        <div><p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">Private access</p><h3 className="mt-1 font-display text-2xl font-semibold">Investor previews</h3><p className="mt-1 text-sm text-muted">Only titles with an active, unexpired Bridge grant appear here. Access is revoked at the screener signing boundary.</p></div>
+        <div className="mt-5 divide-y divide-line">
+          {previews.map((grant) => <div key={grant.titleId} className="flex flex-wrap items-center justify-between gap-3 py-3">
+            <div><p className="font-medium">{grant.titleId}</p><p className="text-xs text-muted">{grant.expiresAt ? `Expires ${new Date(grant.expiresAt).toLocaleString("en-IN")}` : "No expiry set"} · ${grant.reason}</p></div>
+            <Link to="/title/$id" params={{id:grant.titleId}} className="rounded-full border border-line px-3 py-1.5 text-xs hover:border-line-strong">Open private preview</Link>
+          </div>)}
+          {!previewsQ.isLoading && !previews.length ? <p className="py-5 text-sm text-muted">No active private preview grants.</p> : null}
+          {previewsQ.isError ? <p role="alert" className="py-3 text-sm text-muted">Private preview access is unavailable. Retry later.</p> : null}
+        </div>
       </section>
 
       <section className="rounded-3xl border border-line bg-surface p-6">

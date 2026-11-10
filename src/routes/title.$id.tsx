@@ -111,7 +111,7 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
   const reviewQ = useQuery({
     queryKey: ["title-workflow", id],
     queryFn: () => getTitleWorkflow({ data: { titleId: id } }),
-    enabled: Boolean(actor.internalRole) || actor.accountType !== "buyer",
+    enabled: Boolean(actor.internalRole) || (actor.accountType !== "buyer" && actor.accountType !== "investor"),
   });
   const title = titleQ.data?.title;
   const assets = assetsQ.data?.assets ?? [];
