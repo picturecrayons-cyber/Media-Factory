@@ -131,7 +131,10 @@ async function persistVerifiedAssetScoped(
       where exists (
         select 1 from bridge_assets previous
         where previous.title_id = v.title_id
-          and (previous.kind = v.kind or (v.kind = 'poster_vertical' and previous.kind = 'poster'))
+          and (
+            previous.kind = v.kind
+            or (v.kind in ('poster', 'poster_vertical') and previous.kind in ('poster', 'poster_vertical'))
+          )
           and previous.byte_size > 0
           and previous.id <> v.id
       )
