@@ -77,8 +77,6 @@ const ACCOUNT_PERMISSIONS: Record<AccountType, readonly Permission[]> = {
     "asset.sign_upload",
     "asset.sign_download",
     "entitlement.read_own",
-    "delivery.read",
-    "delivery.read_finance",
   ],
   studio: [
     "title.create",
@@ -90,8 +88,6 @@ const ACCOUNT_PERMISSIONS: Record<AccountType, readonly Permission[]> = {
     "asset.sign_upload",
     "asset.sign_download",
     "entitlement.read_own",
-    "delivery.read",
-    "delivery.read_finance",
   ],
   buyer: [
     "title.read_catalog",
@@ -131,8 +127,10 @@ export function permissionsFor(actor: Actor): Set<Permission> {
   // Internal staff identities are governed by their explicit staff role.
   // Account-type powers must never silently widen a staff role (for example,
   // a viewer profile whose account_type happens to be independent_creator).
-  const staff = actor.internalRole ? INTERNAL_PERMISSIONS[actor.internalRole] : undefined;
-  if (staff) return new Set<Permission>(staff);
+  if (actor.internalRole) {
+    // Unknown or malformed staff roles must never fall back to account-type powers.
+    return new Set<Permission>(INTERNAL_PERMISSIONS[actor.internalRole] ?? []);
+  }
   return new Set<Permission>(ACCOUNT_PERMISSIONS[actor.accountType] ?? []);
 }
 
@@ -166,18 +164,12 @@ function sharesStudioOrganization(
   );
 }
 
-const ROLE_GRANTS: Record<InternalRole, readonly InternalRole[]> = {
-  viewer: [],
-  qc_reviewer: [],
-  legal_reviewer: [],
-  finance: [],
-  admin: ["viewer", "qc_reviewer", "legal_reviewer", "finance", "admin"],
-  super_admin: ["viewer", "qc_reviewer", "legal_reviewer", "finance", "admin", "super_admin"],
-};
-
-export function canGrantInternalRole(actor: Actor, role: InternalRole): boolean {
-  if (!actor.emailVerified || !actor.internalRole) return false;
-  return ROLE_GRANTS[actor.internalRole].includes(role);
+/**
+ * Single-actor internal role grants are disabled until an independent
+ * requester/approver workflow records immutable dual-control evidence.
+ */
+export function canGrantInternalRole(_actor: Actor, _role: InternalRole): boolean {
+  return false;
 }
 
 export function hasAccountPermission(actor: Actor, permission: Permission): boolean {

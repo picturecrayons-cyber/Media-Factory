@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { assertPermission, canAccessDashboard, canAccessTitleWorkspace, canGrantInternalRole, canMutateTitle, canOperateOnTitle, canReadTitle, hasPermission, hasStaffPermission, permissionForTransition, workspaceHome } from "./rbac.ts";
+import { assertPermission, canAccessDashboard, canAccessTitleWorkspace, canGrantInternalRole, canMutateTitle, canOperateOnTitle, canReadTitle, hasPermission, hasStaffPermission, permissionForTransition, permissionsFor, workspaceHome } from "./rbac.ts";
 import type { Actor } from "./rbac.ts";
 
 const actor = (
@@ -38,6 +38,10 @@ describe("PRD authorization matrix", () => {
       );
       assert.equal(hasPermission(owner, "title.qc_review"), false);
       assert.equal(hasPermission(owner, "title.license"), false);
+      assert.equal(hasPermission(owner, "delivery.read"), false);
+      assert.equal(hasPermission(owner, "delivery.read_finance"), false);
+      assert.equal(hasPermission(owner, "finance.read"), false);
+      assert.equal(hasPermission(owner, "finance.record_settlement"), false);
     }
   });
 
@@ -109,11 +113,11 @@ describe("PRD authorization matrix", () => {
     }
   });
 
-  it("ordinary admins cannot grant super admin while super admin has an explicit grant matrix", () => {
-    assert.equal(canGrantInternalRole(admin(), "viewer"), true);
-    assert.equal(canGrantInternalRole(admin(), "admin"), true);
-    assert.equal(canGrantInternalRole(admin(), "super_admin"), false);
-    assert.equal(canGrantInternalRole(superAdmin(), "super_admin"), true);
+  it("blocks every single-actor internal role grant pending independent dual control", () => {
+    for (const role of ["viewer", "qc_reviewer", "legal_reviewer", "finance", "admin", "super_admin"] as const) {
+      assert.equal(canGrantInternalRole(admin(), role), false, `admin unexpectedly granted ${role}`);
+      assert.equal(canGrantInternalRole(superAdmin(), role), false, `super admin unexpectedly granted ${role}`);
+    }
     assert.equal(canGrantInternalRole(qc, "viewer"), false);
     assert.equal(canGrantInternalRole(actor("unverified", "independent_creator", "admin", false), "viewer"), false);
   });
@@ -150,9 +154,9 @@ describe("PRD authorization matrix", () => {
     assert.equal(canAccessDashboard(legal), false);
     assert.equal(canAccessDashboard(finance), false);
     assert.equal(canAccessDashboard(viewer()), false);
-    assert.equal(canGrantInternalRole(admin(), "viewer"), true);
+    assert.equal(canGrantInternalRole(admin(), "viewer"), false);
     assert.equal(canGrantInternalRole(admin(), "super_admin"), false);
-    assert.equal(canGrantInternalRole(superAdmin(), "super_admin"), true);
+    assert.equal(canGrantInternalRole(superAdmin(), "super_admin"), false);
     assert.equal(
       canAccessDashboard(actor("super-u", "independent_creator", "super_admin", false)),
       false,
@@ -219,4 +223,15 @@ it("CMS ingest belongs only to verified super admins", () => {
   assert.equal(hasPermission(superAdmin(), "title.ingest_internal"), true);
   for (const a of [creator(), studio(), buyer(), admin(), viewer(), qc, legal, finance])
     assert.equal(hasPermission(a, "title.ingest_internal"), false);
+});
+
+
+it("unknown runtime staff roles fail closed and never inherit account-type permissions", () => {
+  const malformed = {
+    ...actor("malformed-staff", "independent_creator"),
+    internalRole: "unexpected_staff_role",
+  } as unknown as Actor;
+  assert.deepEqual([...permissionsFor(malformed)], []);
+  assert.equal(hasPermission(malformed, "title.create"), false);
+  assert.equal(hasPermission(malformed, "asset.sign_upload"), false);
 });

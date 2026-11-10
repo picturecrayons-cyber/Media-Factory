@@ -160,10 +160,13 @@ test("OCI copy work-request handles transient 404 propagation delay and recovers
     globalThis.fetch = async (input, init) => {
       const url = new URL(String(input));
       const method = init?.method || "GET";
+      assert.equal(url.hostname, "objectstorage.ap-mumbai-1.oraclecloud.com");
       if (method === "POST") {
+        assert.equal(url.pathname, "/n/test-namespace/b/test-bucket/actions/copyObject");
         return new Response(null, { status: 202, headers: { "opc-work-request-id": "wr-transient-1" } });
       }
       if (method === "GET") {
+        assert.equal(url.pathname, "/workRequests/wr-transient-1");
         getAttempts += 1;
         // First attempt returns 404 (temporary not-yet-visible during propagation window)
         if (getAttempts === 1) {
@@ -173,6 +176,7 @@ test("OCI copy work-request handles transient 404 propagation delay and recovers
         return Response.json({ status: "SUCCEEDED" });
       }
       // HEAD on destination object
+      assert.equal(url.pathname, "/n/test-namespace/b/test-bucket/o/dst");
       return new Response(null, { headers: { "content-length": "42", etag: '"sealed-etag"' } });
     };
 
