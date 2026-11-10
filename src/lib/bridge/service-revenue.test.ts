@@ -53,7 +53,6 @@ test("net profit follows Bridge commercial formula", () => {
   );
 });
 
-
 test("customer quote response excludes internal cost, margin, and rate internals", () => {
   const quote = {
     quoteId: "quote-1",
@@ -65,8 +64,28 @@ test("customer quote response excludes internal cost, margin, and rate internals
     totalPaise: 11800,
     estimatedCostPaise: 6000,
     estimatedMarginPaise: 4000,
-    detectedAssets: [],
-    requiredWork: [],
+    detectedAssets: [
+      Object.assign(
+        {
+          key: "master",
+          ready: true,
+          source: "legacy_asset" as const,
+          language: null,
+          detail: "Ready evidence found",
+        },
+        { costBasisPaise: 6000, internalNote: "finance-only" },
+      ),
+    ],
+    requiredWork: [
+      Object.assign(
+        {
+          serviceCode: "MASTER_VIDEO",
+          reason: "No accepted video master is available.",
+          quantity: 1,
+        },
+        { rateId: "private-rate", evidence: { costBasisPaise: 6000 } },
+      ),
+    ],
     lines: [{
       serviceCode: "SUBTITLE",
       rateId: "rate-secret",
@@ -102,6 +121,14 @@ test("customer quote response excludes internal cost, margin, and rate internals
   assert.equal("estimatedMarginPaise" in response.lines[0], false);
   assert.equal("rateId" in response.lines[0], false);
   assert.equal("evidence" in response.lines[0], false);
+  assert.deepEqual(
+    Object.keys(response.detectedAssets[0] ?? {}).sort(),
+    ["detail", "key", "language", "ready", "source"],
+  );
+  assert.deepEqual(
+    Object.keys(response.requiredWork[0] ?? {}).sort(),
+    ["quantity", "reason", "serviceCode"],
+  );
   assert.equal(response.lines.length, 1);
   assert.equal(response.lines.some((line) => line.serviceCode === "INTERNAL_QC"), false);
   assert.equal(response.totalPaise, 11800);
