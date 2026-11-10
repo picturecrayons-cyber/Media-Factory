@@ -36,7 +36,7 @@
 
 ### Bridge ↔ Loop identity resolver
 
-<badge>PASS — transaction-only smoke test</badge>
+**PASS — transaction-only smoke test**
 
 - Inserted a synthetic Auth user, verified Bridge profile and identity-link row inside a single transaction.
 - Set the authenticated JWT subject and called `bridge_private.current_user_id()` as `authenticated`.
@@ -48,7 +48,7 @@ This proves the database identity resolver path, not a real browser login or Pre
 
 ### Multiple active Studio memberships
 
-<badge>PASS — transaction-only smoke test</badge>
+**PASS — transaction-only smoke test**
 
 - Inserted one synthetic verified Studio profile, two synthetic active organizations and two active memberships for the same user.
 - The query returned 2 active memberships.
