@@ -2,7 +2,7 @@ import type { Sql } from "../db.ts";
 import { isMissingOrganizationSchemaError } from "./workspace-schema.ts";
 
 /** Persist a verified HeadObject result, title reference and audit event atomically. */
-export async function persistVerifiedAsset(sql: Pick<Sql, "query">, opts: {
+export async function persistVerifiedAsset(sql: Pick<Sql, "query" | "transaction">, opts: {
   assetId: string;
   actorUserId: string;
   internalActor: boolean;
@@ -16,17 +16,28 @@ export async function persistVerifiedAsset(sql: Pick<Sql, "query">, opts: {
   sealedKey: string;
 }): Promise<boolean> {
   if (!Number.isSafeInteger(opts.byteSize) || opts.byteSize <= 0) throw new Error("Uploaded object is empty");
-  // Owner and internal confirmation must not reference the optional Studio
-  // organization tables. Production can persist a verified asset before
-  // migration 0021 is applied. PostgreSQL plans the whole statement, so an
-  // unused OR branch still fails when that relation is absent.
-  if (await persistVerifiedAssetScoped(sql, opts, false)) return true;
-  try {
-    return await persistVerifiedAssetScoped(sql, opts, true);
-  } catch (error) {
-    if (isMissingOrganizationSchemaError(error)) return false;
-    throw error;
-  }
+
+  // Version allocation is a read-then-write operation. Serialize every
+  // confirmation for this title in a transaction, and acquire the lock in a
+  // separate statement so READ COMMITTED gets a fresh snapshot for the
+  // subsequent MAX(version) query after any competing confirmation commits.
+  return sql.transaction(async (tx) => {
+    await tx.query(
+      "select pg_advisory_xact_lock(hashtextextended($1::text, 0))",
+      [opts.titleId],
+    );
+
+    // Owner and internal confirmation must not reference the optional Studio
+    // organization tables. PostgreSQL plans the whole statement, so an unused
+    // OR branch still fails when that relation is absent.
+    if (await persistVerifiedAssetScoped(tx, opts, false)) return true;
+    try {
+      return await persistVerifiedAssetScoped(tx, opts, true);
+    } catch (error) {
+      if (isMissingOrganizationSchemaError(error)) return false;
+      throw error;
+    }
+  });
 }
 
 async function persistVerifiedAssetScoped(
