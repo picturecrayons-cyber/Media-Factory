@@ -18,3 +18,14 @@ test("studio organization lookup is optional and fails closed when schema is mis
   assert.match(source, /workspaceFailureCode/);
   assert.doesNotMatch(source, /organization_name.*(?:fallback|organization_id)/i);
 });
+
+
+test("Studio session resolves every active membership and treats profile organization_id as selection only", () => {
+  const source = readFileSync(new URL("./session.ts", import.meta.url), "utf8");
+  assert.match(source, /select m\.organization_id::text as organization_id/);
+  assert.match(source, /where m\.user_id = \$\{userId\}/);
+  assert.match(source, /actor\.organizationIds = memberships\.map/);
+  assert.match(source, /actor\.organizationMemberships = memberships\.map/);
+  assert.match(source, /preferredOrganizationId/);
+  assert.doesNotMatch(source, /m\.organization_id = bp\.organization_id/);
+});
