@@ -3,6 +3,10 @@ const PROJECT_URLS = {
   production: "https://mlmgugivsyoxzdgwkbpu.supabase.co",
 } as const;
 
+type DeploymentTarget = "preview" | "production" | "local" | "test";
+const isDeploymentTarget = (value: string): value is DeploymentTarget =>
+  value === "preview" || value === "production" || value === "local" || value === "test";
+
 /**
  * Prevent a deployed Bridge runtime from silently connecting to the wrong
  * Supabase project. The target must be explicit in each Vercel environment.
