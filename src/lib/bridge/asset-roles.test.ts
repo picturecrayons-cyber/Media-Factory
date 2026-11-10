@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { hasVerifiedMasterAndArtwork } from "./asset-roles";
+import { hasVerifiedMasterAndArtwork, isSuperAdminActor } from "./asset-roles";
 
 const exactVerticalArtwork = [
   { kind: "master", s3_key: "verified/master" },
@@ -46,4 +46,13 @@ test("retains compatibility with a legacy poster when its pointer matches exactl
     ),
     true,
   );
+});
+
+ 
+test("only the explicit super_admin role passes the replacement authorization predicate", () => {
+  assert.equal(isSuperAdminActor("super_admin"), true);
+  assert.equal(isSuperAdminActor("admin"), false);
+  assert.equal(isSuperAdminActor("studio_admin"), false);
+  assert.equal(isSuperAdminActor(null), false);
+  assert.equal(isSuperAdminActor(undefined), false);
 });
