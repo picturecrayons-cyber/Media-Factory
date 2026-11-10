@@ -256,6 +256,7 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
             canOperateOnTitle(actor, title, "asset.sign_upload", "title.ingest_internal") &&
             (actor.internalRole === "super_admin" || ["DRAFT", "UPLOADING", "PREPARING"].includes(title.status))
           }
+          canReplace={actor.internalRole === "super_admin"}
           titleId={id}
           assets={assets}
           onAssetsChanged={() => assetsQ.refetch()}
@@ -309,8 +310,10 @@ function FilesPanel({
   assets,
   onAssetsChanged,
   canUpload,
+  canReplace,
 }: {
   canUpload: boolean;
+  canReplace: boolean;
   titleId: string;
   assets: Array<{
     id: string;
@@ -775,6 +778,7 @@ function FilesPanel({
                     busy={uploading === kind}
                     locked={uploading !== null && uploading !== kind}
                     canUpload={canUpload}
+                    canReplace={canReplace}
                     onCommandOpen={() => {
                       setCommandKind(kind);
                       setCommandFile(null);
@@ -797,7 +801,7 @@ function FilesPanel({
           >
             <div className="flex items-start justify-between gap-4">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Super Admin · Asset Command</p>
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Asset Command</p>
                 <h3 id="asset-command-title" className="mt-1 text-lg font-semibold">
                   {verifiedFor(assets, commandKind) ? "Replace" : "Upload"} {kindLabel(commandKind)}
                 </h3>
@@ -945,8 +949,10 @@ function FileTypeCard({
   onCommandOpen,
   onDownload,
   canUpload,
+  canReplace,
 }: {
   canUpload: boolean;
+  canReplace: boolean;
   kind: SimpleAssetKind;
   label: string;
   status: string;
@@ -971,7 +977,7 @@ function FileTypeCard({
           <button
             type="button"
             onClick={onCommandOpen}
-            disabled={busy || locked || !canUpload}
+            disabled={busy || locked || !canUpload || (ready && !canReplace)}
             className={`rounded-full px-3 py-1.5 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-50 ${ready ? "border border-line bg-surface" : "bg-fg text-bg"}`}
           >
             {busy ? "Uploading…" : ready ? "Replace" : "Upload"}
