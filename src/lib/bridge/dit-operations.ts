@@ -631,6 +631,9 @@ export const completeDitConversionJob = createServerOnlyFn(async (input: z.infer
     profile: job.profile, state: "PROCESSING" as const, attempt: 1, history: [], masterOutput: null, backup1Output: null };
   const completed = completeConversion(processing, master, backup, new Date().toISOString());
   await sql.transaction(async (tx) => {
+    const current = await tx<{ state: string }>\`select state from bridge_production_conversion_jobs where id=\${job.id} for update\`;
+    if (current[0]?.state === "COMPLETE") return;
+    if (current[0]?.state !== "PROCESSING") throw new Error("Conversion job changed before completion");
     for (const item of [master, backup]) {
       await tx`insert into bridge_production_copy_verifications
         (id,clip_id,media_kind,storage_tier,object_key,expected_byte_size,expected_sha256,observed_byte_size,observed_sha256,
