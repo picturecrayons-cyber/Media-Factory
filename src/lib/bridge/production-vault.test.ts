@@ -195,7 +195,7 @@ test("warnings require an explicit human disposition before sign-off", () => {
 
 test("required copy matrix creates exactly one shared cloud backup for RAW, converted, audio and stills", () => {
   const matrix = requiredCopyMatrix([clip], 1, 2);
-  assert.equal(matrix.some((item) => item.tier === "BACKUP_2"), false);
+  assert.deepEqual([...new Set(matrix.map((item) => item.tier))].sort(), ["BACKUP_1", "MASTER"]);
   assert.equal(matrix.filter((item) => item.kind === "AUDIO").length, 2);
   assert.equal(matrix.filter((item) => item.kind === "STILLS").length, 4);
 });
@@ -207,7 +207,7 @@ test("audit append helper never mutates prior history", () => {
   assert.equal(next.length, 2);
 });
 
-test("production sign-off blocks video-only cards until audio and stills have three verified copies", () => {
+test("production sign-off blocks video-only cards until audio and stills have MASTER and BACKUP_1 verified copies", () => {
   const [entry] = buildClipLedger("A", "CARD-07", [clip]);
   const checked = runClapAssistant({ clip: entry, manifestResult: "PASS", sourceCopyResult: "PASS", audioRequired: true });
   const humanChecked = { ...checked, humanDisposition: "ACCEPTED" as const, humanReviewerId: "dit-reviewer", humanReviewedAt: "2026-11-10T10:00:00.000Z" };
