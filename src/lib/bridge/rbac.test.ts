@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { assertPermission, canAccessDashboard, canAccessTitleWorkspace, canGrantInternalRole, canMutateTitle, canOperateOnTitle, canReadTitle, hasPermission, hasStaffPermission, permissionForTransition, workspaceHome } from "./rbac.ts";
+import { assertPermission, isDesignatedSuperAdmin, canAccessDashboard, canAccessTitleWorkspace, canGrantInternalRole, canMutateTitle, canOperateOnTitle, canReadTitle, hasPermission, hasStaffPermission, permissionForTransition, workspaceHome } from "./rbac.ts";
 import type { Actor } from "./rbac.ts";
 
 const actor = (
@@ -141,6 +141,19 @@ describe("PRD authorization matrix", () => {
       "title.rights_review",
     );
     assert.equal(permissionForTransition("IN_NEGOTIATION", "LICENSED"), null);
+  });
+
+  it("reserves the full super-admin authority for the designated verified owner email", () => {
+    const designated = superAdmin();
+    const otherSuperAdmin = { ...designated, userId: "other-super", email: "other@example.com" };
+    assert.equal(isDesignatedSuperAdmin(designated), true);
+    assert.equal(isDesignatedSuperAdmin(otherSuperAdmin), false);
+    assert.equal(hasPermission(designated, "title.delete"), true);
+    assert.equal(hasPermission(designated, "users.manage"), true);
+    assert.equal(hasPermission(designated, "agreements.delete"), true);
+    assert.equal(hasPermission(otherSuperAdmin, "title.delete"), false);
+    assert.equal(canAccessDashboard(otherSuperAdmin), false);
+    assert.equal(canGrantInternalRole(otherSuperAdmin, "super_admin"), false);
   });
 
   it("reserves dashboard and super-admin grants for verified super admins", () => {
