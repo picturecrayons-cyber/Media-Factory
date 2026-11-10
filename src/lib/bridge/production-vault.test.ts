@@ -82,9 +82,9 @@ test("vault key preserves original nested RAW paths and approved tier structure"
     buildVaultObjectKey({ filmName: "Film One", productionNo: "P-01", tier: "MASTER", date: "2026-11-04", camera: "A", cardNo: "CARD-07", kind: "RAW", originalRelativePath: clip.originalRelativePath }),
     "Film_One_P-01/MASTER/2026-11-04/CAMERA_A/CARD-07/RAW/A001/VIDEO/A001_C001.mov",
   );
-  assert.match(buildVaultObjectKey({ filmName: "Film", productionNo: "P1", tier: "BACKUP_2", date: "2026-11-04", kind: "AUDIO" }), /BACKUP_2\/2026-11-04\/AUDIO/);
+  assert.match(buildVaultObjectKey({ filmName: "Film", productionNo: "P1", tier: "BACKUP_1", date: "2026-11-04", kind: "AUDIO" }), /BACKUP_1\/2026-11-04\/AUDIO/);
   assert.throws(() => buildVaultObjectKey({ filmName: "Film", productionNo: "P1", tier: "MASTER", date: "2026-11-04", camera: "A", cardNo: "C1", kind: "RAW", originalRelativePath: "../escape.mov" }), /Unsafe/);
-  assert.throws(() => buildVaultObjectKey({ filmName: "Film", productionNo: "P1", tier: "BACKUP_2", date: "2026-11-04", camera: "A", cardNo: "C1", kind: "CONVERTED" }), /outside/);
+
 });
 
 test("manifest reconciliation catches missing, unexpected, duplicate and malformed clips", () => {
@@ -143,7 +143,7 @@ test("conversion completion needs independently verified MASTER and BACKUP_1 out
   assert.equal(completeConversion(processing, master, backup, "later").state, "COMPLETE");
   assert.throws(() => completeConversion(processing, master, { ...backup, sourceSha256: "b".repeat(64) }, "later"), /lineage/);
   assert.throws(() => completeConversion(processing, master, { ...backup, qcResult: "FAIL" }, "later"), /QC must pass/);
-  assert.throws(() => completeConversion(processing, master, { ...backup, tier: "BACKUP_2" }, "later"), /Conversion destinations|MASTER and BACKUP_1/);
+  
   assert.throws(() => completeConversion(processing, master, { ...backup, failureDomainId: master.failureDomainId }, "later"), /independent failure domains/);
 });
 
@@ -193,11 +193,11 @@ test("warnings require an explicit human disposition before sign-off", () => {
   assert.equal(evaluateDitSignoff({ reviewerId: "dit", reviewedAt: "now", clipLedger: [accepted], manifestResult: "PASS", requiredCopies: completeCopies, audioCount: 0, stillsCount: 0 }).eligible, true);
 });
 
-test("required copy matrix excludes BACKUP_2 converted copies but includes audio and stills", () => {
+test("required copy matrix creates exactly one shared cloud backup for RAW, converted, audio and stills", () => {
   const matrix = requiredCopyMatrix([clip], 1, 2);
-  assert.equal(matrix.some((item) => item.tier === "BACKUP_2" && item.kind === "CONVERTED"), false);
-  assert.equal(matrix.filter((item) => item.kind === "AUDIO").length, 3);
-  assert.equal(matrix.filter((item) => item.kind === "STILLS").length, 6);
+  assert.equal(matrix.some((item) => item.tier === "BACKUP_2"), false);
+  assert.equal(matrix.filter((item) => item.kind === "AUDIO").length, 2);
+  assert.equal(matrix.filter((item) => item.kind === "STILLS").length, 4);
 });
 
 test("audit append helper never mutates prior history", () => {
