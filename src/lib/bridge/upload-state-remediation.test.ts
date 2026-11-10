@@ -107,6 +107,17 @@ test("atomic state transition: migration queue and title master/poster only adva
     await db.exec("create role anon; create role authenticated;");
     await db.exec(readFileSync(join(process.cwd(), "migrations/0004_bridge.sql"), "utf8"));
     await db.exec(readFileSync(join(process.cwd(), "migrations/0021_bridge_organizations.sql"), "utf8"));
+    await db.exec(`
+      create table if not exists bridge_loop_publications (bridge_title_id text, approved_at timestamptz);
+      create table if not exists bridge_destination_packages (title_id text, readiness_state text);
+      create table if not exists bridge_delivery_jobs (title_id text, admin_sign_off boolean, delivery_receipt_url text);
+      create table if not exists bridge_asset_versions (
+        id uuid primary key default gen_random_uuid(), title_id text not null,
+        asset_group text not null, asset_type text not null, version integer not null,
+        language text, reference_asset_id uuid, s3_key text not null,
+        checksum_sha256 text, byte_size bigint, processing_state text not null, created_by text not null
+      );
+    `);
 
     await db.exec(`
       create table if not exists loop_media_migration_queue (
@@ -139,6 +150,7 @@ test("atomic state transition: migration queue and title master/poster only adva
       assetId: "asset-pass-1",
       actorUserId: "owner-1",
       internalActor: false,
+      superAdminActor: false,
       titleId: "title-pass-test",
       kind: "screener",
       byteSize: 52428800,
@@ -193,6 +205,7 @@ test("atomic state transition: migration queue and title master/poster only adva
       assetId: "asset-pass-1",
       actorUserId: "owner-1",
       internalActor: false,
+      superAdminActor: false,
       titleId: "title-pass-test",
       kind: "screener",
       byteSize: 52428800,
