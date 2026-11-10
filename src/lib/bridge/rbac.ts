@@ -111,6 +111,8 @@ export type Actor = {
   internalRole: InternalRole | null;
   /** Server-resolved organization scope for Studio account collaboration. */
   organizationId?: string | null;
+  /** All active server-verified Studio memberships for this identity. */
+  organizationIds?: string[];
 };
 
 const TRANSITION_PERMISSION: Record<string, Permission> = {
@@ -154,15 +156,15 @@ function sharesStudioOrganization(
   actor: Actor,
   title: { ownerUserId: string; ownerAccountType?: AccountType; ownerOrganizationId?: string | null },
 ): boolean {
-  const actorOrg = actor.organizationId;
+  const actorOrgIds = actor.organizationIds?.length ? actor.organizationIds : (actor.organizationId ? [actor.organizationId] : []);
   const ownerOrg = title.ownerOrganizationId;
   return Boolean(
     !actor.internalRole &&
     actor.accountType === "studio" &&
     title.ownerAccountType === "studio" &&
-    actorOrg &&
+    actorOrgIds.length > 0 &&
     ownerOrg &&
-    actorOrg === ownerOrg
+    actorOrgIds.includes(ownerOrg)
   );
 }
 
