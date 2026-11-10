@@ -61,20 +61,15 @@ function assertDitStagingDatabase() {
 
 function replicaTargets() {
   const master = { region: bridgeEnv.ociRegion(), bucket: bridgeEnv.ociBucket() };
+  // One shared cloud-backup destination is used for every media kind.
   const backup1 = { region: bridgeEnv.ociBackup1Region(), bucket: bridgeEnv.ociBackup1Bucket() };
-  const backup2 = { region: bridgeEnv.ociBackup2Region(), bucket: bridgeEnv.ociBackup2Bucket() };
-  if (!master.region || !master.bucket || !backup1.region || !backup1.bucket || !backup2.region || !backup2.bucket) {
-    throw new Error("DIT_REPLICATION_BLOCKED: MASTER, BACKUP_1 and BACKUP_2 OCI targets must all be configured");
+  if (!master.region || !master.bucket || !backup1.region || !backup1.bucket) {
+    throw new Error("DIT_REPLICATION_BLOCKED: MASTER and the single shared CLOUD BACKUP target must be configured");
   }
-  const targets = [master, backup1, backup2];
-  for (let i = 0; i < targets.length; i++) {
-    for (let j = i + 1; j < targets.length; j++) {
-      if (targets[i].region === targets[j].region || targets[i].bucket === targets[j].bucket) {
-        throw new Error("DIT_REPLICATION_BLOCKED: every copy must use a distinct region and bucket");
-      }
-    }
+  if (master.region === backup1.region || master.bucket === backup1.bucket) {
+    throw new Error("DIT_REPLICATION_BLOCKED: shared CLOUD BACKUP must use a distinct region and bucket from MASTER");
   }
-  return { master: master as { region: string; bucket: string }, backup1: backup1 as { region: string; bucket: string }, backup2: backup2 as { region: string; bucket: string } };
+  return { master: master as { region: string; bucket: string }, backup1: backup1 as { region: string; bucket: string } };
 }
 
 
@@ -294,10 +289,10 @@ export const verifyAndReplicateDitClip = createServerFn({ method: "POST" })
     const primaryReadback = await storage.readObjectSha256AtTarget(row.source_object_key, targets.master);
     const primaryOk = primaryHead.byteSize === expectedBytes && primaryReadback.byteSize === expectedBytes &&
       primaryReadback.sha256.toLowerCase() === expectedHash;
-    const evidence: Array<{ tier: "MASTER" | "BACKUP_1" | "BACKUP_2"; key: string; target: { region: string; bucket: string }; byteSize: number | null; sha256: string | null; verified: boolean; error?: string }> = [];
+    const evidence: Array<{ tier: "MASTER" | "BACKUP_1"; key: string; target: { region: string; bucket: string }; byteSize: number | null; sha256: string | null; verified: boolean; error?: string }> = [];
     evidence.push({ tier: "MASTER", key: row.source_object_key, target: targets.master, byteSize: primaryReadback.byteSize, sha256: primaryReadback.sha256, verified: primaryOk });
     if (primaryOk) {
-      for (const [tier, target] of [["BACKUP_1", targets.backup1], ["BACKUP_2", targets.backup2]] as const) {
+      for (const [tier, target] of [["BACKUP_1", targets.backup1]] as const) {
         const key = buildVaultObjectKey({
           filmName: row.production_name, productionNo: row.production_no, tier,
           date: row.shooting_date, camera: row.camera_id, cardNo: row.card_no,
@@ -434,14 +429,14 @@ export const signoffDitCard = createServerFn({ method: "POST" })
     }));
     const copyEvidence: CopyVerification[] = copies.map((r) => ({
       copyId: r.id, clipNumber: r.clip_number, kind: r.media_kind as "RAW" | "AUDIO" | "STILLS" | "CONVERTED",
-      tier: r.storage_tier as "MASTER" | "BACKUP_1" | "BACKUP_2", expectedByteSize: Number(r.expected_byte_size),
+      tier: r.storage_tier as "MASTER" | "BACKUP_1", expectedByteSize: Number(r.expected_byte_size),
       expectedSha256: r.expected_sha256, observedByteSize: r.observed_byte_size === null ? null : Number(r.observed_byte_size),
       observedSha256: r.observed_sha256, independentlyVerified: r.independently_verified, verifiedAt: r.verified_at,
       storageLocationId: r.storage_location_id, failureDomainId: r.failure_domain_id,
     }));
-    // Fail closed until the DIT workspace records and verifies an explicit
-    // Audio and Stills inventory. Never interpret an unimplemented inventory
-    // as zero assets; each required asset must have MASTER + both backups.
+    // One MASTER plus one shared cloud BACKUP_1 is required for every
+    // recorded asset. Audio/Stills inventory remains fail-closed until real
+    // ingest records exist; missing media must never be treated as zero.
     const result = evaluateDitSignoff({
       reviewerId: actor.userId, reviewedAt: new Date().toISOString(), clipLedger: ledger,
       manifestResult: rows.length && rows.every((r) => r.manifest_result === "PASS") ? "PASS" : "FAIL",
