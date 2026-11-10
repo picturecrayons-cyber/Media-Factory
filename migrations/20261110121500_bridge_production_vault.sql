@@ -3,6 +3,10 @@
 -- and applied to the isolated STAGING DB. Never apply directly to PRODUCTION.
 begin;
 
+-- Tie a production's organization scope to the title's canonical owner scope.
+create unique index if not exists bridge_titles_id_owner_organization_id_uq
+  on bridge_titles(id, owner_organization_id);
+
 create table if not exists bridge_productions (
   id uuid primary key default gen_random_uuid(),
   title_id text not null references bridge_titles(id) on delete restrict,
@@ -19,7 +23,10 @@ create table if not exists bridge_productions (
   constraint bridge_productions_name_nonempty check (length(trim(production_name)) > 0),
   constraint bridge_productions_number_nonempty check (length(trim(production_no)) > 0),
   unique (title_id, production_no),
-  unique (id, title_id, organization_id)
+  unique (id, title_id, organization_id),
+  constraint bridge_productions_title_organization_scope_fk
+    foreign key (title_id, organization_id)
+    references bridge_titles(id, owner_organization_id) on delete restrict
 );
 
 create table if not exists bridge_production_shooting_days (
