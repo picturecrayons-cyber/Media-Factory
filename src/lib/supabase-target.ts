@@ -3,8 +3,6 @@ const PROJECT_URLS = {
   production: "https://mlmgugivsyoxzdgwkbpu.supabase.co",
 } as const;
 
-type DeploymentTarget = "preview" | "production" | "local" | "test";
-
 /**
  * Prevent a deployed Bridge runtime from silently connecting to the wrong
  * Supabase project. The target must be explicit in each Vercel environment.
@@ -14,7 +12,7 @@ export function assertSupabaseProjectTarget(
   configuredTarget: string | undefined,
   deployed: boolean,
 ): void {
-  const url = configuredUrl?.trim().replace(/\\/+$/, "");
+  const url = configuredUrl?.trim().replace(/\/+$/, "");
   const target = configuredTarget?.trim();
 
   if (!url) {
@@ -39,7 +37,7 @@ export function assertSupabaseProjectTarget(
     return;
   }
 
-  if (!/^http:\\/\\/(localhost|127\\.0\\.0\\.1)(:\\d+)?$/.test(url)) {
+  if (!/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(url)) {
     throw new Error("CONFIG_MISSING: local/test Bridge runtimes may connect only to localhost Supabase.");
   }
 }
