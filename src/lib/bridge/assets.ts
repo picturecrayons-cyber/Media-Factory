@@ -16,6 +16,48 @@ import { validateOttIngestFile, type OttIngestKind } from "./ott-ingest-spec";
 
 const UPLOADABLE: ReadonlySet<string> = new Set(["DRAFT", "UPLOADING", "PREPARING"]);
 
+async function hasFirstDeliveryOrPublish(sql: Awaited<ReturnType<typeof getSql>>, titleId: string): Promise<boolean> {
+  const rows = await sql<{ locked: boolean }>`
+    select (
+      exists (
+        select 1 from bridge_loop_publications
+        where bridge_title_id = ${titleId} and approved_at is not null
+      )
+      or exists (
+        select 1 from bridge_destination_packages
+        where title_id = ${titleId} and readiness_state = 'DELIVERED'
+      )
+      or exists (
+        select 1 from bridge_delivery_jobs
+        where title_id = ${titleId}
+          and admin_sign_off = true
+          and delivery_receipt_url is not null
+          and length(trim(delivery_receipt_url)) > 0
+      )
+    ) as locked
+  `;
+  return rows[0]?.locked === true;
+}
+
+async function assertReplacementWindow(
+  sql: Awaited<ReturnType<typeof getSql>>,
+  titleId: string,
+  kind: string,
+  assetId?: string,
+) {
+  const existing = await sql<{ id: string }>`
+    select id from bridge_assets
+    where title_id = ${titleId} and kind = ${kind}
+      and byte_size > 0 and (${assetId ?? null}::text is null or id <> ${assetId ?? null})
+    order by created_at desc limit 1
+  `;
+  if (existing[0]) {
+    // A verified asset already exists: replacement is a Super Admin-only command.
+    return true;
+  }
+  return false;
+}
+
 async function hasLicenseEntitlement(userId: string, titleId: string): Promise<boolean> {
   const sql = await getSql();
   const rows = await sql<{ n: number }>`
@@ -43,7 +85,17 @@ export const requestAssetUpload = createServerFn({ method: "POST" })
     const title = await loadTitle(data.titleId);
     if (!title) throw new Error("Not found");
     if (!canOperateOnTitle(actor, title, "asset.sign_upload", "asset.sign_upload")) throw new Error("Forbidden");
-    if (!UPLOADABLE.has(title.status)) throw new Error("Uploads are closed for this status");
+    const sql = await getSql();
+    const replacing = await assertReplacementWindow(sql, title.id, data.kind);
+    if (replacing) {
+      if (actor.internalRole !== "super_admin") throw new Error("Only Super Admin can replace a verified asset");
+      if (await hasFirstDeliveryOrPublish(sql, title.id)) throw new Error("Asset replacement is locked after first delivery or LOOP publication");
+    } else if (!UPLOADABLE.has(title.status) && actor.internalRole !== "super_admin") {
+      throw new Error("Uploads are closed for this status");
+    }
+    if (actor.internalRole === "super_admin" && await hasFirstDeliveryOrPublish(sql, title.id)) {
+      throw new Error("Asset replacement is locked after first delivery or LOOP publication");
+    }
     if (!["master", "poster", "poster_vertical", "poster_horizontal", "thumbnail", "subtitle", "screener", "technical", "censor_certificate"].includes(data.kind))
       throw new Error("This asset kind is not supported by the OTT ingest uploader");
     const ingestValidation = validateOttIngestFile({
@@ -65,7 +117,6 @@ export const requestAssetUpload = createServerFn({ method: "POST" })
       expiresIn: uploadUrlLifetimeSeconds(data.byteSize),
     });
     const id = randomBytes(16).toString("hex");
-    const sql = await getSql();
     await sql`
       insert into bridge_assets (id, title_id, kind, s3_key, content_type, created_by)
       values (${id}, ${title.id}, ${data.kind}, ${key}, ${data.contentType}, ${actor.userId})
@@ -98,7 +149,15 @@ async function openUploadAsset(userId: string, assetId: string) {
   const asset = rows[0];
   if (!asset) throw new Error("Asset not found");
   const title = await loadTitle(asset.title_id);
-  if (!title || !canOperateOnTitle(actor, title, "asset.sign_upload", "asset.sign_upload") || !UPLOADABLE.has(title.status)) {
+  if (!title || !canOperateOnTitle(actor, title, "asset.sign_upload", "asset.sign_upload")) {
+    throw new Error("Upload confirmation is closed for this title");
+  }
+  const replacing = await assertReplacementWindow(sql, title.id, (await sql<{kind:string}>\`select kind from bridge_assets where id = ${asset.id}\`)[0]?.kind ?? "", asset.id);
+  if (replacing && actor.internalRole !== "super_admin") throw new Error("Only Super Admin can replace a verified asset");
+  if ((replacing || actor.internalRole === "super_admin") && await hasFirstDeliveryOrPublish(sql, title.id)) {
+    throw new Error("Asset replacement is locked after first delivery or LOOP publication");
+  }
+  if (!replacing && !UPLOADABLE.has(title.status) && actor.internalRole !== "super_admin") {
     throw new Error("Upload confirmation is closed for this title");
   }
   return asset;
@@ -178,7 +237,15 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
     const asset = rows[0];
     if (!asset) throw new Error("Asset not found");
     const title = await loadTitle(asset.title_id);
-    if (!title || !canOperateOnTitle(actor, title, "asset.sign_upload", "asset.sign_upload") || !UPLOADABLE.has(title.status)) {
+    if (!title || !canOperateOnTitle(actor, title, "asset.sign_upload", "asset.sign_upload")) {
+      throw new Error("Upload confirmation is closed for this title");
+    }
+    const replacing = await assertReplacementWindow(sql, title.id, asset.kind, asset.id);
+    if (replacing && actor.internalRole !== "super_admin") throw new Error("Only Super Admin can replace a verified asset");
+    if ((replacing || actor.internalRole === "super_admin") && await hasFirstDeliveryOrPublish(sql, title.id)) {
+      throw new Error("Asset replacement is locked after first delivery or LOOP publication");
+    }
+    if (!replacing && !UPLOADABLE.has(title.status) && actor.internalRole !== "super_admin") {
       throw new Error("Upload confirmation is closed for this title");
     }
     if (asset.byte_size != null)
@@ -204,6 +271,7 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
       assetId: asset.id,
       actorUserId: actor.userId,
       internalActor: Boolean(actor.internalRole),
+      superAdminActor: actor.internalRole === "super_admin",
       titleId: title.id,
       kind: asset.kind,
       byteSize: sealed.byteSize,
