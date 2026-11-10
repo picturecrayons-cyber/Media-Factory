@@ -8,7 +8,7 @@
 
 export const CAMERA_IDS = ["A", "B", "C"] as const;
 export type CameraId = (typeof CAMERA_IDS)[number];
-export type StorageTier = "MASTER" | "BACKUP_1";
+export type StorageTier = "MASTER" | "BACKUP_1" | "BACKUP_2";
 export type MediaKind = "RAW" | "AUDIO" | "STILLS" | "CONVERTED";
 export type CheckResult = "PASS" | "WARNING" | "FAIL" | "NOT_CHECKED";
 
