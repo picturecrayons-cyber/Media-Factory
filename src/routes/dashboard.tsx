@@ -1,5 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
+import { Button } from "@/components/ui/button";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { listTitles } from "@/lib/bridge/titles";
@@ -35,9 +36,9 @@ const ADMIN_MODULES = [
     to: "/admin/workstations",
   },
   {
-    title: "Buyer desk & licensing",
-    description: "Buyer activity, offers and licensing workflow.",
-    to: "/buyer",
+    title: "Buyer release gates",
+    description: "Review title eligibility and buyer-publication gates. Buyer payments stay in the Buyer account workspace.",
+    to: "/admin/workstations",
   },
   {
     title: "Deliveries & services",
@@ -56,6 +57,22 @@ const ADMIN_MODULES = [
   },
 ] as const;
 
+function withTimeout<T>(request: Promise<T>, timeoutMs: number, errorCode: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(errorCode)), timeoutMs);
+    request.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error: unknown) => {
+        clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
+}
+
 const ACTION_GUIDANCE: Record<string, string> = {
   QC_REVIEW: "QC review is pending",
   RIGHTS_REVIEW: "Rights review is pending",
@@ -65,18 +82,40 @@ const ACTION_GUIDANCE: Record<string, string> = {
 function DashboardBody() {
   const dashboardQ = useQuery({
     queryKey: ["bridge-dashboard-session"],
-    queryFn: () => getDashboardSession(),
+    queryFn: () => withTimeout(getDashboardSession(), 15_000, "DASHBOARD_ACCESS_TIMEOUT"),
     retry: false,
   });
   const titlesQ = useQuery({
     queryKey: ["bridge-titles"],
-    queryFn: () => listTitles(),
+    queryFn: () => withTimeout(listTitles(), 20_000, "DASHBOARD_TITLES_TIMEOUT"),
     enabled: dashboardQ.isSuccess,
     retry: 1,
   });
 
-  if (dashboardQ.isPending) return <p className="text-sm text-muted">Checking access…</p>;
-  if (dashboardQ.isError) return <p role="alert" className="text-sm text-accent">Super admin access required.</p>;
+  if (dashboardQ.isPending) {
+    return <p role="status" aria-live="polite" className="text-sm text-muted">Checking Founder access…</p>;
+  }
+  if (dashboardQ.isError) {
+    const timedOut =
+      dashboardQ.error instanceof Error &&
+      dashboardQ.error.message === "DASHBOARD_ACCESS_TIMEOUT";
+    return (
+      <section role="alert" className="max-w-2xl space-y-3 rounded-sm border border-line p-4">
+        <p className="font-medium">
+          {timedOut
+            ? "The access check took too long."
+            : "Bridge could not verify the Founder workspace right now."}
+        </p>
+        <p className="text-sm text-muted">
+          Your sign-in session has not been cleared. Retry the access check; if it fails again, the service needs investigation.
+        </p>
+        <Button type="button" size="sm" variant="outline" disabled={dashboardQ.isFetching}
+          onClick={() => void dashboardQ.refetch()}>
+          {dashboardQ.isFetching ? "Checking…" : "Retry access check"}
+        </Button>
+      </section>
+    );
+  }
 
   const titles = titlesQ.data?.titles ?? [];
   const actionItems = titles.filter((title) => title.status in ACTION_GUIDANCE);
@@ -145,9 +184,15 @@ function DashboardBody() {
         {titlesQ.isPending ? (
           <p className="px-4 py-6 text-sm text-muted">Loading the action queue…</p>
         ) : reportingUnavailable ? (
-          <p role="alert" className="px-4 py-6 text-sm text-accent">
-            The action queue could not be loaded. Refresh to retry; no zero values are assumed.
-          </p>
+          <div role="alert" className="flex flex-wrap items-center justify-between gap-3 px-4 py-6">
+            <p className="text-sm text-accent">
+              The action queue could not be loaded. No zero values are assumed.
+            </p>
+            <Button type="button" size="sm" variant="outline" disabled={titlesQ.isFetching}
+              onClick={() => void titlesQ.refetch()}>
+              {titlesQ.isFetching ? "Retrying…" : "Retry title data"}
+            </Button>
+          </div>
         ) : actionItems.length ? (
           <ul className="divide-y divide-line">
             {actionItems.slice(0, 6).map((title) => (
@@ -236,20 +281,28 @@ function DashboardBody() {
           </p>
         </div>
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          {ADMIN_MODULES.map((module) => (
-            <Link
-              key={module.title}
-              to={module.to}
-              className="group rounded-sm border border-line p-4 transition-colors hover:border-accent"
-            >
-              <div className="flex items-center justify-between gap-3">
-                <h4 className="font-semibold">{module.title}</h4>
-                <span aria-hidden="true" className="text-accent">→</span>
-              </div>
-              <p className="mt-2 text-sm leading-relaxed text-muted">{module.description}</p>
-              <p className="mt-4 text-xs font-semibold text-accent">Open workspace</p>
-            </Link>
-          ))}
+          {ADMIN_MODULES.map((module) => {
+            const content = (
+              <>
+                <div className="flex items-center justify-between gap-3">
+                  <h4 className="font-semibold">{module.title}</h4>
+                  <span aria-hidden="true" className="text-accent">→</span>
+                </div>
+                <p className="mt-2 text-sm leading-relaxed text-muted">{module.description}</p>
+                <p className="mt-4 text-xs font-semibold text-accent">Open workspace</p>
+              </>
+            );
+            const className = "group rounded-sm border border-line p-4 transition-colors hover:border-accent";
+            return module.title === "Buyer release gates" ? (
+              <Link key={module.title} to="/admin/workstations" search={{ tab: "Buyers" }} className={className}>
+                {content}
+              </Link>
+            ) : (
+              <Link key={module.title} to={module.to} className={className}>
+                {content}
+              </Link>
+            );
+          })}
         </div>
       </section>
 
@@ -266,9 +319,13 @@ function DashboardBody() {
         {titlesQ.isPending ? (
           <p className="px-4 py-6 text-sm text-muted">Loading title records…</p>
         ) : reportingUnavailable ? (
-          <p role="alert" className="px-4 py-6 text-sm text-accent">
-            Title records could not be loaded. Refresh to retry.
-          </p>
+          <div role="alert" className="flex flex-wrap items-center justify-between gap-3 px-4 py-6">
+            <p className="text-sm text-accent">Title records could not be loaded.</p>
+            <Button type="button" size="sm" variant="outline" disabled={titlesQ.isFetching}
+              onClick={() => void titlesQ.refetch()}>
+              {titlesQ.isFetching ? "Retrying…" : "Retry title data"}
+            </Button>
+          </div>
         ) : (
           <ul className="divide-y divide-line">
             {titles.slice(0, 6).map((title) => (

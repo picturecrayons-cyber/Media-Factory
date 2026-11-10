@@ -50,15 +50,18 @@ function VendorJobs({ actor }: { actor: Actor }) {
       setError("");
       setTitleId("");
     } catch {
-      setError("Title id required. Job stays requested until a reviewer signs off.");
+      setError("Enter a title ID before creating a local draft. No vendor request is sent or saved.");
     }
   }
 
   return (
     <section className="mb-6 rounded-2xl border border-line bg-surface p-5 sm:p-6">
-      <h2 className="font-display text-xl font-semibold">Vendor jobs</h2>
+      <div className="flex flex-wrap items-center gap-2">
+        <h2 className="font-display text-xl font-semibold">Vendor job drafts</h2>
+        <span className="rounded-full border border-line px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-muted">Local only</span>
+      </div>
       <p className="mt-1 text-sm text-muted">
-        Dubbing, loudness, IMF, DCP, and human QC open as requested. No auto Dolby, IMF, or DCP master. Delivery only after sign-off.
+        Dubbing, loudness, IMF, DCP and human QC can be previewed here as local drafts only. Nothing is saved to Bridge, assigned to a vendor, quoted, billed or emailed; drafts disappear when this page reloads. A persistent vendor-request backend is not connected yet.
       </p>
       {canRequest ? (
         <div className="mt-4 flex flex-wrap gap-2">
@@ -87,7 +90,7 @@ function VendorJobs({ actor }: { actor: Actor }) {
             onChange={(e) => setTitleId(e.target.value)}
           />
           <button type="button" className="rounded-lg border border-line px-3 py-2 text-sm" onClick={onRequest}>
-            Request
+            Add local draft
           </button>
         </div>
       ) : (
@@ -101,7 +104,7 @@ function VendorJobs({ actor }: { actor: Actor }) {
             <span>{job.state}{canDeliver(job) ? " · download allowed" : " · no output"}</span>
           </li>
         ))}
-        {!jobs.length ? <li className="p-4 text-sm text-muted">No vendor jobs yet.</li> : null}
+        {!jobs.length ? <li className="p-4 text-sm text-muted">No local drafts. Any draft created here will be cleared when you reload this page.</li> : null}
       </ul>
     </section>
   );
