@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { timingSafeEqual } from "node:crypto";
-import { claimNextDitConversionJob, completeDitConversionJob, failDitConversionJob } from "@/lib/bridge/dit-operations.server";
+import { claimNextDitConversionJob, completeDitConversionJob, failDitConversionJob } from "@/lib/bridge/dit-operations";
 
 function authorized(request: Request) {
   const expected = process.env.DIT_WORKER_TOKEN;
