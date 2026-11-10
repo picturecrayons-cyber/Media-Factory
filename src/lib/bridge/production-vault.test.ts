@@ -193,11 +193,13 @@ test("warnings require an explicit human disposition before sign-off", () => {
   assert.equal(evaluateDitSignoff({ reviewerId: "dit", reviewedAt: "now", clipLedger: [accepted], manifestResult: "PASS", requiredCopies: completeCopies, audioCount: 0, stillsCount: 0 }).eligible, true);
 });
 
-test("required copy matrix creates exactly one shared cloud backup for RAW, converted, audio and stills", () => {
+test("required copy matrix enforces three verified copies for RAW, audio and stills", () => {
   const matrix = requiredCopyMatrix([clip], 1, 2);
-  assert.equal(matrix.some((item) => item.tier === "BACKUP_2"), false);
-  assert.equal(matrix.filter((item) => item.kind === "AUDIO").length, 2);
-  assert.equal(matrix.filter((item) => item.kind === "STILLS").length, 4);
+  assert.equal(matrix.filter((item) => item.kind === "RAW").length, 3);
+  assert.equal(matrix.filter((item) => item.kind === "CONVERTED").length, 2);
+  assert.equal(matrix.filter((item) => item.kind === "AUDIO").length, 3);
+  assert.equal(matrix.filter((item) => item.kind === "STILLS").length, 6);
+  assert.equal(matrix.some((item) => item.kind === "CONVERTED" && item.tier === "BACKUP_2"), false);
 });
 
 test("audit append helper never mutates prior history", () => {
