@@ -101,15 +101,6 @@ function WorkstationBody() {
           </div>
         </>
       ) : (
-        <div className="space-y-6">
-          <SimpleTable title="Licensing & Delivery" description={ready.length + " titles in the commercial pipeline"}
-            rows={ready} fields={["name", "status", "language", "licensing_fee_paise", "updated_at"]} />
-          <SimpleTable title="Destination Packages" description={data.packages.length + " persisted packages"}
-            rows={data.packages} fields={["destination", "package_version", "readiness_state", "commercial_model", "authorized_at"]} />
-          <SimpleTable title="Bridge Publications" description={data.publications.length + " persisted authorization records"}
-            rows={data.publications} titleName={titleName} fields={["bridge_title_id", "authorization_status", "territories", "languages", "window_end"]} />
-        </div>
-      ) : (
         <SimpleTable title="Audit History" description="Persisted operator activity. No UI-only decisions."
           rows={data.audit} fields={["action", "entity_type", "entity_id", "actor_user_id", "created_at"]} />
       )}
