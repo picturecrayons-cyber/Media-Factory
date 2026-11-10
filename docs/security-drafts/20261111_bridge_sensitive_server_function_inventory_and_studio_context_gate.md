@@ -286,6 +286,54 @@ These endpoints do not receive Studio organization context merely because their 
 - DIT assigned to another asset, title, production or user: deny.
 - A membership invite is not active until the actual approval/acceptance transition is persisted and audited.
 
+
+## Route/component caller map — verified source references
+
+The following caller relationships were checked at the inventory ref. This is a source import/call-site map, not a full dynamic call graph.
+
+| Caller | Server-function calls observed | Context implication |
+|---|---|---|
+| `src/routes/title.$id.tsx` | `getTitle`, `updateTitle`, `listTitleAssets`, `requestAssetUpload`, `beginAssetMultipart`, `commitAssetMultipart`, `confirmAssetUpload`, `requestAssetDownload`, `abortAssetMultipart`, `getLoopPublication` | Highest-priority Studio resource boundary. Route currently passes titleId/assetId, but no selectedOrganizationId in the observed calls. UI state must carry explicit selected org before server guard rollout. |
+| `src/components/bridge/asset-preview-gallery.tsx` | `requestAssetDownload` | Download URL issuance also occurs outside the title route; guard must be server-side and cannot rely on route-level gate. |
+| `src/components/bridge/workflow-desk.tsx` | `getTitleWorkflow`, `getTitleRevenue`, `getLoopPublication`, `reviewTitleWorkflow`, `authorizeLoopPublication`, `suspendLoopPublication`, `revokeLoopPublication`, `advanceTitle` | Rights/QC/Finance/publication mutations are called from a shared desk. Keep staff permission and Studio owner context as separate branches. |
+| `src/components/bridge/multilingual-rights-panel.tsx` | `listLanguageRights`, `listLicensePackages`, `createLanguageRight`, `createLicensePackage`, `authorizeLanguagePackage`, `createLicenseOrder`, `verifyLicensePayment` | Title-scoped rights/package calls currently pass titleId/packageId only. Payment verification remains separate from Studio membership. |
+| `src/components/bridge/story-concept-form.tsx` | `createStoryConceptSubmission` | Creation caller; explicit organization choice must be passed for Studio-owned submissions and freshly revalidated. |
+| `src/components/bridge/my-story-concepts.tsx` | `listMyStoryConcepts` | Current caller passes no selected org; avoid silently returning the union of all Studio organizations. |
+| `src/components/bridge/story-concept-desk.tsx` | `listPendingStoryConcepts`, `updateStoryConceptCuration` | Staff curation queue; enforce exact curation permission and assignment, not Studio membership. |
+| `src/components/bridge/streamvista-orders.tsx` | `createStreamVistaOrder`, `listStreamVistaOrders` | Current UI exposes user-owned service orders. Do not broaden to all Studio members without a confirmed organization-order ownership schema. |
+| `src/routes/admin/workstations.tsx` | `listAdminWorkstations`, `reviewAdminTitle`, `setBuyerPublicationGate`, duplicate review list/open/decide functions | Staff-only workstation and duplicate-review paths; exact role and title scope are mandatory. |
+| `src/routes/submit-film.tsx` | `createRightsReadySubmission` | Submission write; owner and Studio scope must be resolved server-side. |
+| `src/routes/buyer.tsx` | `listTitles`, payment/entitlement functions | Buyer route invokes listTitles without selectedOrganizationId. Preserve buyer visibility and entitlement filtering; do not force a Studio selection on Buyer. |
+| `src/routes/investor.tsx` | `listTitles` plus investor assignment query | Investor access is assignment-based; no Studio membership implied. |
+| `src/routes/deliveries.tsx` | `listTitles` | Delivery list uses the shared title list; ensure the list is constrained by exact delivery permission and selected Studio when the actor is a Studio operator. |
+| `src/routes/dashboard.tsx` | `getDashboardSession`, `listTitles` | Dashboard title list needs role-specific scope; admin dashboard access remains separate from Studio selection. |
+| `src/components/bridge/gate.tsx`, `src/lib/auth/route-guard.ts` | `getBridgeSession`, `requestEmailVerification` | Session is a UI/route gate and not a per-resource authorization decision. |
+
+### Caller gaps and non-observed functions
+
+- No route/component caller was established in this pass for every exported endpoint in the inventory. Some endpoints may be used indirectly, through other components, server-only workflows, tests, or currently unreachable UI.
+- `requestStreamVistaUpload` and `confirmStreamVistaUpload` were not observed in the inspected `streamvista-orders.tsx` caller. Their call sites remain NOT VERIFIED.
+- DIT assignment helper `dit-assignment.ts` was not observed as a direct route import in the inspected DIT-related route set. A repository-wide search of all DIT consumers and server-side enforcement points remains mandatory.
+- `getBridgeSession` returns the actor/membership collection for UI routing. It must not be used as a substitute for fresh per-request membership revalidation.
+- The same server function may have callers not listed above. Do not infer absence of use from this partial map.
+
+## Revised completeness assessment
+
+- Source tree: recursive Git tree at ref `94d3fb6359f9103e62ed764b84b2f381ee9cd309` reported 201 TypeScript/TSX files in the repository and 130 under Bridge/Loop/routes. The tree response was not truncated.
+- Focused call-site review: 10 route/component files plus 10 additional Bridge components/guards inspected.
+- Repository-wide AST scan: NOT RUN. The available code-search results do not prove full endpoint enumeration.
+- Complete import graph and indirect callers: NOT VERIFIED.
+- The earlier endpoint count is a provisional inventory count, not a certified repository-wide total. Do not use it as an exhaustive endpoint count until AST enumeration and call-site reconciliation complete.
+
+## Next safe gate
+
+1. Run a deterministic TypeScript AST scan in the repository checkout for every `createServerFn`, `createFileRoute({ server: ... })`, API route handler, exported server action and storage signer.
+2. Resolve imports and call sites for each endpoint; identify dead/unreferenced endpoints separately from reachable endpoints.
+3. For each endpoint, record method, input schema, auth middleware, trusted identity source, DB reads/writes, object-storage actions, role checks, title/asset/order parent chain, and UI callers.
+4. Only then draft a compatibility-preserving selectedOrganizationId request contract and tests. Do not wire a global mandatory Studio context into Buyer/Investor/Creator/Admin/QC/Legal/Finance or DIT paths.
+5. Keep all DB and Production gates unchanged.
+
+
 ## Certification statement
 
 The inventory and design contract are a planning artifact only. They do not prove runtime isolation, membership workflow completeness, DIT enforcement, RLS safety, or end-to-end behavior. The application remains BLOCKED — NOT CERTIFIED for this scope. Production remains HOLD / NOT CERTIFIED / NO-GO.
