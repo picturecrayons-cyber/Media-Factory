@@ -232,6 +232,15 @@ export async function reviewWorkflow(tx: Sql, actor: Actor, data: z.infer<typeof
           and lower(er.evidence_checksum_sha256)=lower(e.checksum_sha256)
         where e.rights_grant_id=${data.grantId}
           and e.title_id=${data.titleId}
+          -- Only the newest submission for an evidence class may satisfy Legal approval.
+          -- A newer PENDING or REJECTED replacement invalidates older verified evidence.
+          and not exists (
+            select 1
+            from bridge_rights_evidence newer
+            where newer.rights_grant_id=e.rights_grant_id
+              and newer.evidence_type=e.evidence_type
+              and (newer.created_at,newer.id) > (e.created_at,e.id)
+          )
           and e.status='VERIFIED'
           and e.reviewed_by is not null
           and e.reviewed_by <> ${grant.created_by}
