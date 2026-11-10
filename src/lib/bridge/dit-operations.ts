@@ -372,6 +372,7 @@ export const reviewDitClip = createServerFn({ method: "POST" })
       select m.production_id,p.title_id,t.owner_user_id,t.owner_account_type,t.owner_organization_id
       from bridge_production_clips c join bridge_production_ingest_manifests m on m.id=c.manifest_id
       join bridge_productions p on p.id=m.production_id join bridge_titles t on t.id=p.title_id
+      join bridge_production_camera_cards card on card.id=m.camera_card_id
       where c.id=${data.clipId} limit 1
     `;
     const row = rows[0];
@@ -482,10 +483,11 @@ export const queueDitConversion = createServerFn({ method: "POST" })
       frame_rate: number | null; width: number | null; height: number | null; codec: string | null;
       automated_result: "PASS" | "WARNING" | "FAIL" | "NOT_CHECKED"; automated_reasons: string[];
       human_disposition: "ACCEPTED" | "REJECTED" | null; human_reviewer_id: string | null; human_reviewed_at: string | null;
+      camera_id: "A" | "B" | "C"; card_no: string;
       source_object_key: string | null; source_copy_result: string | null;
     }>`
       select c.id,m.production_id,p.title_id,t.owner_user_id,t.owner_account_type,t.owner_organization_id,
-        c.clip_number,c.original_filename,c.original_relative_path,c.byte_size,c.checksum_sha256,c.has_video,c.has_audio,
+        card.camera_id,card.card_no,c.clip_number,c.original_filename,c.original_relative_path,c.byte_size,c.checksum_sha256,c.has_video,c.has_audio,
         c.duration_ms,c.frame_rate,c.width,c.height,c.codec,c.automated_result,c.automated_reasons,
         c.human_disposition,c.human_reviewer_id,c.human_reviewed_at,
         (select v.object_key from bridge_production_copy_verifications v where v.clip_id=c.id and v.media_kind='RAW' and v.storage_tier='MASTER' and v.verification_result='PASS' limit 1) as source_object_key,
@@ -503,7 +505,7 @@ export const queueDitConversion = createServerFn({ method: "POST" })
       clipNumber: row.clip_number, originalFilename: row.original_filename, originalRelativePath: row.original_relative_path,
       byteSize: Number(row.byte_size), checksumSha256: row.checksum_sha256, hasVideo: row.has_video, hasAudio: row.has_audio,
       durationMs: Number(row.duration_ms), frameRate: row.frame_rate === null ? null : Number(row.frame_rate),
-      width: row.width, height: row.height, codec: row.codec, camera: "A", cardNo: "",
+      width: row.width, height: row.height, codec: row.codec, camera: row.camera_id, cardNo: row.card_no,
       automatedResult: row.automated_result, automatedReasons: row.automated_reasons ?? [],
       humanDisposition: row.human_disposition, humanReviewerId: row.human_reviewer_id, humanReviewedAt: row.human_reviewed_at,
     };
