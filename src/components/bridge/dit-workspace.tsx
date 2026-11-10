@@ -209,13 +209,16 @@ export function DitWorkspace({ canReview }: DitWorkspaceProps) {
 
       <div className="border-t border-line pt-4">
         <h3 className="font-semibold">Ingest a video clip</h3>
-        <p className="mt-1 text-xs text-muted">Browser hashes the file in chunks before upload. Video metadata is read from the file; codec and frame rate must be checked against the camera report. A failed replica check quarantines the card.</p>
+        <p className="mt-1 text-xs text-muted">Browser hashes the file in chunks before upload. Video metadata is read when the browser supports it; MXF and camera RAW metadata can be entered from the camera report. Verify all fields against the original camera report before ingest. A failed replica check quarantines the card.</p>
         <div className="mt-3 grid gap-3 md:grid-cols-3">
-          <label className="space-y-1 text-sm"><span>Video file</span><input type="file" accept="video/*,.mov,.mxf,.mp4" disabled={busy} onChange={(e) => void selectFile(e.target.files?.[0] ?? null)} className="block w-full text-xs"/></label>
+          <label className="space-y-1 text-sm"><span>Video / camera original</span><input type="file" accept="video/*,.mov,.mxf,.mp4,.mkv,.avi" disabled={busy} onChange={(e) => void selectFile(e.target.files?.[0] ?? null)} className="block w-full text-xs"/></label>
           <label className="space-y-1 text-sm"><span>Clip number</span><input className="w-full rounded-lg border border-line bg-bg px-3 py-2" value={clipNumber} onChange={(e) => setClipNumber(e.target.value)}/></label>
           <label className="space-y-1 text-sm"><span>Original relative path</span><input className="w-full rounded-lg border border-line bg-bg px-3 py-2" value={relativePath} onChange={(e) => setRelativePath(e.target.value)}/></label>
           <label className="space-y-1 text-sm"><span>Codec (camera report)</span><select className="w-full rounded-lg border border-line bg-bg px-3 py-2" value={codec} onChange={(e) => setCodec(e.target.value)}><option>ProRes RAW</option><option>Apple ProRes 422 HQ</option><option>Apple ProRes 422</option><option>H.264</option><option>H.265 / HEVC</option><option>DNxHR</option></select></label>
           <label className="space-y-1 text-sm"><span>Frame rate</span><input type="number" min="1" max="240" step="0.001" className="w-full rounded-lg border border-line bg-bg px-3 py-2" value={frameRate} onChange={(e) => setFrameRate(e.target.value)}/></label>
+          <label className="space-y-1 text-sm"><span>Duration (ms)</span><input type="number" min="1" className="w-full rounded-lg border border-line bg-bg px-3 py-2" value={durationMs || ""} onChange={(e) => setDurationMs(Number(e.target.value))}/></label>
+          <label className="space-y-1 text-sm"><span>Frame width</span><input type="number" min="1" className="w-full rounded-lg border border-line bg-bg px-3 py-2" value={width || ""} onChange={(e) => setWidth(Number(e.target.value))}/></label>
+          <label className="space-y-1 text-sm"><span>Frame height</span><input type="number" min="1" className="w-full rounded-lg border border-line bg-bg px-3 py-2" value={height || ""} onChange={(e) => setHeight(Number(e.target.value))}/></label>
           <label className="flex items-center gap-2 text-sm pt-6"><input type="checkbox" checked={hasAudio} onChange={(e) => setHasAudio(e.target.checked)}/> Audio stream present</label>
         </div>
         <p className="mt-2 text-xs text-muted">{file ? `${file.name} · ${(file.size / (1024 ** 3)).toFixed(2)} GiB · ${width}×${height} · ${(durationMs / 1000).toFixed(1)} sec` : "No file selected"}</p>
