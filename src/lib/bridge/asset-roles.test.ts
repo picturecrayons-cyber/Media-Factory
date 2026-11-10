@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { hasVerifiedMasterAndArtwork, isSuperAdminActor } from "./asset-roles";
+import { hasVerifiedMasterAndArtwork, isSuperAdminActor } from "./asset-roles.ts";
 
 const exactVerticalArtwork = [
   { kind: "master", s3_key: "verified/master" },
