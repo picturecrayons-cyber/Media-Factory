@@ -277,15 +277,18 @@ export const requestAssetDownload = createServerFn({ method: "POST" })
     const asset = rows[0];
     if (!asset) throw new Error("Not found");
     const title = await loadTitle(asset.title_id);
-    if (!title || !canReadTitle(actor, title)) throw new Error("Not found");
+    const investorPreviewAccess = actor.accountType === "investor" && asset.kind === "screener"
+      ? await hasActiveInvestorPreviewGrant(asset.title_id, actor.userId)
+      : false;
+    if (!title || (!canReadTitle(actor, title) && !investorPreviewAccess)) throw new Error("Not found");
     const entitled = await hasLicenseEntitlement(actor.userId, title.id);
-    const hasInvestorPreviewGrant = investorPreviewAccess;
     const decision = downloadDecision({
       kind: asset.kind,
       actorIsOwner: title.ownerUserId === actor.userId,
       actorIsInternal: Boolean(actor.internalRole),
       accountType: actor.accountType,
       hasLicenseEntitlement: entitled,
+      hasInvestorPreviewGrant: investorPreviewAccess,
     });
     if (!decision.allow) {
       await writeAudit({
