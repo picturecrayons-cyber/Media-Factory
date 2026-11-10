@@ -254,7 +254,8 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
         <FilesPanel
           canUpload={
             canOperateOnTitle(actor, title, "asset.sign_upload", "title.ingest_internal") &&
-            ["DRAFT", "UPLOADING", "PREPARING"].includes(title.status)
+            (["DRAFT", "UPLOADING", "PREPARING"].includes(title.status) ||
+              (actor.internalRole === "super_admin" && title.status === "RIGHTS_REVIEW"))
           }
           titleId={id}
           assets={assets}
