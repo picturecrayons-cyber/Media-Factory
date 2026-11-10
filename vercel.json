@@ -4,7 +4,8 @@
   "git": {
     "deploymentEnabled": {
       "fix/publication-status-contract-20261001": false,
-      "feat/full-creator-dashboard-20261110": false
+      "feat/full-creator-dashboard-20261110": false,
+      "feat/bridge-mobile-navigation-20261110": false
     }
   }
 }
