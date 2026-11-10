@@ -6,7 +6,7 @@ begin;
 create table if not exists bridge_productions (
   id uuid primary key default gen_random_uuid(),
   title_id text not null references bridge_titles(id) on delete restrict,
-  organization_id uuid references bridge_organizations(id) on delete restrict,
+  -- Optional Studio organization scope is validated by the server against the\n  -- active membership table; no hard dependency on optional migration 0021.\n  organization_id uuid,
   production_name text not null,
   production_no text not null,
   status text not null default 'PREPARING'
