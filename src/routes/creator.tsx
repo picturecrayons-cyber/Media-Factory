@@ -4,6 +4,7 @@ import { BridgeShell } from "@/components/bridge/shell";
 import { TitleList } from "@/components/bridge/title-desk";
 import { MyStoryConcepts } from "@/components/bridge/my-story-concepts";
 import { NewSubmissionPanel } from "@/components/bridge/new-submission-panel";
+import { LogoBackgroundRemover } from "@/components/bridge/logo-background-remover";
 
 export const Route = createFileRoute("/creator")({ component: Creator });
 
@@ -22,6 +23,11 @@ function Creator() {
               </div>
               <NewSubmissionPanel />
             </header>
+
+            <section aria-labelledby="creator-tools-title" className="space-y-3">
+              <h2 id="creator-tools-title" className="text-lg font-semibold">Tools</h2>
+              <LogoBackgroundRemover />
+            </section>
 
             <MyStoryConcepts />
 
