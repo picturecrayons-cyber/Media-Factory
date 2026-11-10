@@ -206,3 +206,22 @@ test("audit append helper never mutates prior history", () => {
   assert.equal(original.length, 1);
   assert.equal(next.length, 2);
 });
+
+test("production sign-off blocks video-only cards until audio and stills have three verified copies", () => {
+  const [entry] = buildClipLedger("A", "CARD-07", [clip]);
+  const checked = runClapAssistant({ clip: entry, manifestResult: "PASS", sourceCopyResult: "PASS", audioRequired: true });
+  const humanChecked = { ...checked, humanDisposition: "ACCEPTED" as const, humanReviewerId: "dit-reviewer", humanReviewedAt: "2026-11-10T10:00:00.000Z" };
+  const videoTargets = requiredCopyMatrix([clip], 0, 0);
+  const videoCopies = videoTargets.map((target, index) => copy({
+    copyId: `video-only-${index}`, clipNumber: target.clipNumber, kind: target.kind, tier: target.tier,
+    storageLocationId: `volume-${target.tier}`, failureDomainId: `failure-domain-${target.tier}`,
+  }));
+  const result = evaluateDitSignoff({
+    reviewerId: "dit-reviewer", reviewedAt: "2026-11-10T10:00:00.000Z", clipLedger: [humanChecked],
+    manifestResult: "PASS", requiredCopies: videoCopies, audioCount: 1, stillsCount: 1,
+  });
+  assert.equal(result.eligible, false);
+  assert.equal(result.cardSafeToReuse, false);
+  assert.ok(result.blockers.some((reason) => reason.includes("AUDIO")));
+  assert.ok(result.blockers.some((reason) => reason.includes("STILLS")));
+});
