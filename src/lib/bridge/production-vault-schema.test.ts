@@ -13,7 +13,7 @@ test("Production Vault migration creates server-only relational workflow tables"
       create table bridge_profiles (user_id text primary key);
     `);
     const migration = await readFile(
-      new URL("../../../migrations/0023_bridge_production_vault.sql", import.meta.url),
+      new URL("../../../migrations/20261110121500_bridge_production_vault.sql", import.meta.url),
       "utf8",
     );
     await db.exec(migration);
@@ -65,7 +65,7 @@ test("DIT copy evidence rejects duplicate failure domains and unverified PASS cl
       insert into bridge_profiles values ('creator-1');
     `);
     const migration = await readFile(
-      new URL("../../../migrations/0023_bridge_production_vault.sql", import.meta.url),
+      new URL("../../../migrations/20261110121500_bridge_production_vault.sql", import.meta.url),
       "utf8",
     );
     await db.exec(migration);
