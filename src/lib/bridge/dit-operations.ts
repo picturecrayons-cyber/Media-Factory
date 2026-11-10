@@ -1,6 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { randomUUID } from "node:crypto";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import { requireVerifiedActor } from "./session";
@@ -21,15 +20,7 @@ import {
   type ConversionProfile,
   type ConversionCopyVerification,
 } from "./production-vault";
-import {
-  signUpload,
-  verifyObject,
-  readObjectSha256AtTarget,
-  copyObjectToReplicaTarget,
-  verifyObjectAtTarget,
-  signDownload,
-  signUploadAtTarget,
-} from "./oci-object-storage.server";
+
 
 const PROJECT_REF = "jbymleftneggcgutlcqu";
 const clipSchema = z.object({
@@ -130,8 +121,8 @@ export const createDitProduction = createServerFn({ method: "POST" })
     assertDitStagingDatabase();
     const actor = await requireVerifiedActor(context.userId);
     const sql = await getSql();
-    const id = randomUUID();
-    const dayId = randomUUID();
+    const id = globalThis.crypto.randomUUID();
+    const dayId = globalThis.crypto.randomUUID();
     return sql.transaction(async (tx) => {
       const titles = await tx<{
         owner_user_id: string; owner_account_type: string; owner_organization_id: string | null;
@@ -184,7 +175,7 @@ export const createDitCameraCard = createServerFn({ method: "POST" })
     }, "production.dit_operate", "production.dit_operate")) throw new Error("Forbidden");
     const day = await sql`select id from bridge_production_shooting_days where id=${data.shootingDayId} and production_id=${data.productionId} limit 1`;
     if (!day.length) throw new Error("Shooting day does not belong to this production");
-    const cardId = randomUUID();
+    const cardId = globalThis.crypto.randomUUID();
     await sql.transaction(async (tx) => {
       await tx`insert into bridge_production_camera_cards(id,shooting_day_id,camera_id,card_no)
         values (${cardId},${data.shootingDayId},${data.cameraId},${data.cardNo})`;
@@ -206,6 +197,7 @@ export const prepareDitClipUpload = createServerFn({ method: "POST" })
   .validator(prepareInput)
   .handler(async ({ context, data }) => {
     assertDitStagingDatabase();
+    const storage = await import("./oci-object-storage.server");
     const actor = await requireVerifiedActor(context.userId);
     const sql = await getSql();
     const rows = await sql<{
@@ -227,8 +219,8 @@ export const prepareDitClipUpload = createServerFn({ method: "POST" })
       ownerAccountType: row.owner_account_type as "independent_creator" | "studio" | "buyer" | "investor",
       ownerOrganizationId: row.owner_organization_id,
     }, "production.dit_operate", "production.dit_operate")) throw new Error("Forbidden");
-    const manifestId = randomUUID();
-    const clipId = randomUUID();
+    const manifestId = globalThis.crypto.randomUUID();
+    const clipId = globalThis.crypto.randomUUID();
     const createdAt = new Date().toISOString();
     const manifest = createIngestManifest({
       manifestId, productionId: data.productionId, shootingDayId: data.shootingDayId,
@@ -241,7 +233,7 @@ export const prepareDitClipUpload = createServerFn({ method: "POST" })
       date: row.shooting_date, camera: row.camera_id, cardNo: row.card_no,
       kind: "RAW", originalRelativePath: data.clip.originalRelativePath,
     });
-    const upload = await signUpload({ key: objectKey, contentType: "application/octet-stream", expiresIn: 12 * 60 * 60 });
+    const upload = await storage.storage.signUpload({ key: objectKey, contentType: "application/octet-stream", expiresIn: 12 * 60 * 60 });
     await sql.transaction(async (tx) => {
       await tx`insert into bridge_production_ingest_manifests
         (id,production_id,shooting_day_id,camera_card_id,expected_clip_count,discovered_clip_count,reconciliation_result,created_by,manifest_payload)
@@ -264,6 +256,7 @@ export const verifyAndReplicateDitClip = createServerFn({ method: "POST" })
   .validator(confirmInput)
   .handler(async ({ context, data }) => {
     assertDitStagingDatabase();
+    const storage = await import("./oci-object-storage.server");
     const actor = await requireVerifiedActor(context.userId);
     const sql = await getSql();
     const rows = await sql<{
@@ -297,8 +290,8 @@ export const verifyAndReplicateDitClip = createServerFn({ method: "POST" })
     const targets = replicaTargets();
     const expectedHash = row.checksum_sha256.toLowerCase();
     const expectedBytes = Number(row.byte_size);
-    const primaryHead = await verifyObject(row.source_object_key);
-    const primaryReadback = await readObjectSha256AtTarget(row.source_object_key, targets.master);
+    const primaryHead = await storage.verifyObject(row.source_object_key);
+    const primaryReadback = await storage.readObjectSha256AtTarget(row.source_object_key, targets.master);
     const primaryOk = primaryHead.byteSize === expectedBytes && primaryReadback.byteSize === expectedBytes &&
       primaryReadback.sha256.toLowerCase() === expectedHash;
     const evidence: Array<{ tier: "MASTER" | "BACKUP_1" | "BACKUP_2"; key: string; target: { region: string; bucket: string }; byteSize: number | null; sha256: string | null; verified: boolean; error?: string }> = [];
@@ -311,9 +304,9 @@ export const verifyAndReplicateDitClip = createServerFn({ method: "POST" })
           kind: "RAW", originalRelativePath: row.original_relative_path,
         });
         try {
-          await copyObjectToReplicaTarget({ sourceKey: row.source_object_key, destinationKey: key, expectedEtag: primaryHead.etag ?? "", target });
-          const head = await verifyObjectAtTarget(key, target);
-          const readback = await readObjectSha256AtTarget(key, target);
+          await storage.copyObjectToReplicaTarget({ sourceKey: row.source_object_key, destinationKey: key, expectedEtag: primaryHead.etag ?? "", target });
+          const head = await storage.verifyObjectAtTarget(key, target);
+          const readback = await storage.readObjectSha256AtTarget(key, target);
           evidence.push({ tier, key, target, byteSize: readback.byteSize, sha256: readback.sha256,
             verified: head.byteSize === expectedBytes && readback.byteSize === expectedBytes && readback.sha256.toLowerCase() === expectedHash });
         } catch (error) {
@@ -515,7 +508,7 @@ export const queueDitConversion = createServerFn({ method: "POST" })
       automatedResult: row.automated_result, automatedReasons: row.automated_reasons ?? [],
       humanDisposition: row.human_disposition, humanReviewerId: row.human_reviewer_id, humanReviewedAt: row.human_reviewed_at,
     };
-    const jobId = randomUUID();
+    const jobId = globalThis.crypto.randomUUID();
     const job = queueConversion({ jobId, clip, sourceVerified: true, resolution: data.resolution,
       outputType: data.outputType, approvedProfiles: approvedDitProfiles, at: new Date().toISOString() });
     await sql`insert into bridge_production_conversion_jobs(id,clip_id,source_sha256,profile,state,attempt,history)
@@ -534,6 +527,7 @@ type DitWorkerJob = {
 
 export async function claimNextDitConversionJob(workerId: string) {
   assertDitStagingDatabase();
+  const storage = await import("./oci-object-storage.server");
   if (!workerId.trim() || workerId.length > 120) throw new Error("Worker identity required");
   const targets = replicaTargets();
   const sql = await getSql();
@@ -555,15 +549,15 @@ export async function claimNextDitConversionJob(workerId: string) {
     `;
     const job = jobs[0];
     if (!job) return { job: null };
-    const source = await signDownload({ key: job.source_object_key, expiresIn: 6 * 60 * 60 });
+    const source = await storage.signDownload({ key: job.source_object_key, expiresIn: 6 * 60 * 60 });
     const extension = job.profile.container.toLowerCase();
     const filename = `${job.clip_number.replace(/[^a-zA-Z0-9_-]/g, "_")}-${job.profile.outputType.toLowerCase()}.${extension}`;
     const masterKey = buildVaultObjectKey({ filmName: job.production_name, productionNo: job.production_no,
       tier: "MASTER", date: job.shooting_date, camera: job.camera_id, cardNo: job.card_no, kind: "CONVERTED" }) + filename;
     const backupKey = buildVaultObjectKey({ filmName: job.production_name, productionNo: job.production_no,
       tier: "BACKUP_1", date: job.shooting_date, camera: job.camera_id, cardNo: job.card_no, kind: "CONVERTED" }) + filename;
-    const masterUpload = await signUpload({ key: masterKey, contentType: job.profile.container === "MP4" ? "video/mp4" : "video/quicktime", expiresIn: 6 * 60 * 60 });
-    const backupUpload = await signUploadAtTarget({ key: backupKey, contentType: job.profile.container === "MP4" ? "video/mp4" : "video/quicktime", target: targets.backup1, expiresIn: 6 * 60 * 60 });
+    const masterUpload = await storage.signUpload({ key: masterKey, contentType: job.profile.container === "MP4" ? "video/mp4" : "video/quicktime", expiresIn: 6 * 60 * 60 });
+    const backupUpload = await storage.signUploadAtTarget({ key: backupKey, contentType: job.profile.container === "MP4" ? "video/mp4" : "video/quicktime", target: targets.backup1, expiresIn: 6 * 60 * 60 });
     const history = [{ state: "PROCESSING", at: new Date().toISOString(), detail: `Worker ${workerId} claimed job` }];
     await tx`update bridge_production_conversion_jobs set state='PROCESSING',attempt=attempt+1,
       history=history || ${JSON.stringify(history)}::jsonb,updated_at=now() where id=${job.id}`;
@@ -580,6 +574,7 @@ const conversionCompleteInput = z.object({
 });
 export async function completeDitConversionJob(input: z.infer<typeof conversionCompleteInput>) {
   assertDitStagingDatabase();
+  const storage = await import("./oci-object-storage.server");
   const data = conversionCompleteInput.parse(input);
   const sql = await getSql();
   const rows = await sql<DitWorkerJob>`
@@ -605,10 +600,10 @@ export async function completeDitConversionJob(input: z.infer<typeof conversionC
   const backupKey = buildVaultObjectKey({ filmName: job.production_name, productionNo: job.production_no, tier: "BACKUP_1",
     date: job.shooting_date, camera: job.camera_id, cardNo: job.card_no, kind: "CONVERTED" }) + filename;
   const [masterHead, backupHead] = await Promise.all([
-    verifyObjectAtTarget(masterKey, targets.master), verifyObjectAtTarget(backupKey, targets.backup1),
+    storage.verifyObjectAtTarget(masterKey, targets.master), storage.verifyObjectAtTarget(backupKey, targets.backup1),
   ]);
   const [masterReadback, backupReadback] = await Promise.all([
-    readObjectSha256AtTarget(masterKey, targets.master), readObjectSha256AtTarget(backupKey, targets.backup1),
+    storage.readObjectSha256AtTarget(masterKey, targets.master), storage.readObjectSha256AtTarget(backupKey, targets.backup1),
   ]);
   const profileMatches = (item: typeof data.master) =>
     item.width === job.profile.width && item.height === job.profile.height &&
