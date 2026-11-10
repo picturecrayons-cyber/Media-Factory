@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { assertPermission, canAccessDashboard, canAccessTitleWorkspace, canGrantInternalRole, canMutateTitle, canOperateOnTitle, canReadTitle, hasPermission, hasStaffPermission, permissionForTransition, workspaceHome } from "./rbac.ts";
+import { assertPermission, canAccessDashboard, canAccessTitleWorkspace, canGrantInternalRole, canMutateTitle, canOperateOnTitle, canReadTitle, canUploadTitleAsset, hasPermission, hasStaffPermission, permissionForTransition, workspaceHome } from "./rbac.ts";
 import type { Actor } from "./rbac.ts";
 
 const actor = (
@@ -90,6 +90,18 @@ describe("PRD authorization matrix", () => {
     assert.equal(canOperateOnTitle(qc, foreign, "asset.sign_upload"), false);
     assert.equal(canMutateTitle(qc, foreign, "title.update_own", "title.qc_review"), true);
     assert.equal(canMutateTitle(viewer(), foreign, "title.update_own", "title.qc_review"), false);
+  });
+
+  it("only verified Super Admin can replace Malayalakkara Residency assets during RIGHTS_REVIEW", () => {
+    const target = { id: "858f0ec5a11bc9acd2e9c20266541a3a", ownerUserId: "producer-a", status: "RIGHTS_REVIEW" };
+    const otherTitle = { ...target, id: "other-title" };
+    assert.equal(canUploadTitleAsset(superAdmin(), target), true);
+    assert.equal(canUploadTitleAsset(admin(), target), false);
+    assert.equal(canUploadTitleAsset(qc, target), false);
+    assert.equal(canUploadTitleAsset(creator(), target), false);
+    assert.equal(canUploadTitleAsset(superAdmin(), otherTitle), false);
+    assert.equal(canUploadTitleAsset(superAdmin(), { ...target, status: "LICENSED" }), false);
+    assert.equal(canUploadTitleAsset(actor("unverified", "independent_creator", "super_admin", false), target), false);
   });
 
   it("super admin can create canonical Bridge titles and use explicit internal upload powers", () => {
