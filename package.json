@@ -27,7 +27,8 @@
     "check:bridge-app-url": "node scripts/check-bridge-app-url.mjs",
     "test:cra101": "node --test scripts/cra-101-auth-flow.test.mjs",
     "test:workflow": "node --experimental-strip-types --test src/lib/bridge/workflow.test.ts",
-    "test:staging-rbac": "node --experimental-strip-types scripts/staging-rbac-smoke.mjs"
+    "test:staging-rbac": "node --experimental-strip-types scripts/staging-rbac-smoke.mjs",
+    "audit:staging-schema:readonly": "node scripts/staging-schema-audit-readonly.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.864.0",
