@@ -1,0 +1,57 @@
+name: Crayons Projects test database migration verification
+
+on:
+  workflow_dispatch:
+    inputs:
+      acknowledge_test_only:
+        description: "Type TEST_ONLY to confirm this run targets the dedicated test Supabase project"
+        required: true
+        type: choice
+        options:
+          - TEST_ONLY
+
+permissions:
+  contents: read
+
+concurrency:
+  group: crayons-projects-test-db-migrations
+  cancel-in-progress: false
+
+jobs:
+  verify-target:
+    runs-on: ubuntu-latest
+    environment: crayons-projects-test
+    timeout-minutes: 10
+    steps:
+      - name: Checkout canonical repository
+        uses: actions/checkout@v4
+
+      - name: Validate isolated project reference
+        shell: bash
+        env:
+          SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+          EXPECTED_SUPABASE_PROJECT_REF: jbymleftneggcgutlcqu
+        run: |
+          set -euo pipefail
+          if [[ "${SUPABASE_PROJECT_REF:-}" != "${EXPECTED_SUPABASE_PROJECT_REF}" ]]; then
+            echo "::error::Refusing database work: crayons-projects-test SUPABASE_PROJECT_REF must exactly equal the dedicated test project ref."
+            exit 1
+          fi
+          echo "Validated isolated Supabase target ref: ${EXPECTED_SUPABASE_PROJECT_REF}"
+          echo "This workflow intentionally does not use Production credentials or write to a database."
+
+      - name: Validate source reconstruction manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const m = require('./docs/development/crayons-projects-test-migration-manifest.json');
+          const s = require('./docs/development/crayons-projects-production-migration-source-map-20261028.json');
+          if (m.project_ref !== 'jbymleftneggcgutlcqu') throw new Error('Unexpected test project ref');
+          if (m.production_project_ref !== 'mlmgugivsyoxzdgwkbpu') throw new Error('Unexpected production boundary');
+          if (m.status !== 'BLOCKED_SOURCE_RECONSTRUCTION') throw new Error('Unexpected migration status');
+          if (s.test_project_ref !== m.project_ref || s.production_project_ref !== m.production_project_ref) throw new Error('Source map project refs mismatch');
+          if (s.history.length !== 52 || s.production_ledger_count !== 52) throw new Error('Expected all 52 production migration versions');
+          if (s.history.some(x => !x.version || !x.name || !x.status)) throw new Error('Malformed source map row');
+          console.log('Validated 52-version source map. Database apply remains disabled because source reconstruction is incomplete.');
+          NODE
