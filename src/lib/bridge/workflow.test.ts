@@ -89,7 +89,7 @@ async function fixture() {
       id text,title_id text,kind text,s3_key text,byte_size bigint,
       constraint bridge_assets_kind_chk check (kind in (
         'poster','poster_vertical','poster_horizontal','thumbnail','screener','master',
-        'subtitle','technical','censor_certificate'
+        'trailer','subtitle','subtitle_extra','audio','audio_dub','audio_description','technical','censor_certificate'
       ))
     );
     alter table bridge_assets add column asset_version_id uuid;
@@ -951,7 +951,8 @@ test("migration 0021 preserves every settlement reference and quarantines incomp
     await db.exec(readFileSync(new URL("../../../migrations/0010_bridge_prd_phase1.sql", import.meta.url), "utf8")
       .replaceAll("public.", `${schema}.`));
     await db.query(`insert into bridge_titles(id,owner_user_id,status,master_key,poster_key,updated_at)
-      values ('title-legacy','owner','RIGHTS_REVIEW','sealed/master','sealed/poster',now())`);
+      values ('title-legacy','owner','RIGHTS_REVIEW','sealed/master','sealed/poster',now()),
+             ('title-other','owner','RIGHTS_REVIEW','sealed/master-2','sealed/poster-2',now())`);
 
     const sourceEvents: Array<{ reference: string; invoiceReference?: string; statementReference?: string; amountPaise?: string; currency?: string; entityType?: string; entityId?: string }> = [
       { reference: "LEGACY-COMPLETE-001", invoiceReference: "INV-LEGACY-001", statementReference: "BANK-LEGACY-001", amountPaise: "125000", currency: "INR" },
@@ -1003,6 +1004,23 @@ test("migration 0021 preserves every settlement reference and quarantines incomp
     assert.match(constraint.definition, /rights_document/);
     assert.match(constraint.definition, /poster_vertical/);
     assert.match(constraint.definition, /censor_certificate/);
+    assert.match(constraint.definition, /audio_description/);
+
+    await db.query(`insert into bridge_rights_grants(id,title_id,created_by) values
+      ('00000000-0000-4000-8000-000000000101','title-legacy','owner'),
+      ('00000000-0000-4000-8000-000000000102','title-legacy','owner'),
+      ('00000000-0000-4000-8000-000000000103','title-other','owner')`);
+    await db.query(`insert into bridge_asset_versions(id,title_id,asset_group,asset_type,version,s3_key,created_by)
+      values ('00000000-0000-4000-8000-000000000201','title-legacy','DOCUMENT','RIGHTS_EVIDENCE',1,'sealed/legacy-agreement.pdf','owner')`);
+    await db.query(`insert into bridge_rights_evidence(id,title_id,rights_grant_id,evidence_type,asset_version_id,checksum_sha256,submitted_by)
+      values ('00000000-0000-4000-8000-000000000301','title-legacy','00000000-0000-4000-8000-000000000101',
+        'EXECUTED_AGREEMENT','00000000-0000-4000-8000-000000000201',repeat('a',64),'owner')`);
+    await assert.rejects(db.query(`insert into bridge_rights_evidence(title_id,rights_grant_id,evidence_type,related_agreement_evidence_id,asset_version_id,checksum_sha256,submitted_by)
+      values ('title-legacy','00000000-0000-4000-8000-000000000102','SIGNED_ADDENDUM',
+        '00000000-0000-4000-8000-000000000301','00000000-0000-4000-8000-000000000201',repeat('b',64),'owner')`));
+    await assert.rejects(db.query(`insert into bridge_rights_evidence(title_id,rights_grant_id,evidence_type,asset_version_id,checksum_sha256,submitted_by)
+      values ('title-legacy','00000000-0000-4000-8000-000000000103','EXECUTED_AGREEMENT',
+        '00000000-0000-4000-8000-000000000201',repeat('c',64),'owner')`));
   } finally {
     await db.close();
   }
