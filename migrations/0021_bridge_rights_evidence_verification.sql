@@ -2,6 +2,10 @@
 -- Evidence must point to a processed, checksummed DOCUMENT asset version.
 -- Verification is a human legal-review attestation; this schema does not claim automated authenticity.
 
+-- Enforce that a grant and its evidence always refer to the same title.
+create unique index if not exists bridge_rights_grants_id_title_uidx
+  on public.bridge_rights_grants(id, title_id);
+
 create table if not exists public.bridge_rights_evidence (
   id uuid primary key default gen_random_uuid(),
   title_id text not null references public.bridge_titles(id) on delete restrict,
@@ -27,6 +31,9 @@ create table if not exists public.bridge_rights_evidence (
     (evidence_type not in ('SIGNED_AMENDMENT','SIGNED_ADDENDUM','RIGHTS_SCHEDULE') and related_agreement_evidence_id is null)
   ),
   unique (rights_grant_id, evidence_type, asset_version_id),
+  -- A grant cannot be paired with evidence for another title.
+  foreign key (rights_grant_id, title_id)
+    references public.bridge_rights_grants(id, title_id) on delete restrict,
   -- The referenced agreement must belong to this exact title and grant.
   unique (id, title_id, rights_grant_id),
   foreign key (related_agreement_evidence_id, title_id, rights_grant_id)
