@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - fix/super-admin-pre-delivery-asset-replace-20261110
+      - fix/asset-publication-concurrency-lock-20261111
     paths:
       - ".github/workflows/scope-a-postgres.yml"
       - "migrations/**"
