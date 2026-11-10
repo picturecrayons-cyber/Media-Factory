@@ -9,10 +9,17 @@ import { integrationStatus } from "./env";
 import { assertNotDevUser } from "./guards";
 import { isMissingOrganizationSchemaError, workspaceFailureCode } from "./workspace-schema";
 
+export type BridgeOrganizationMembership = {
+  organizationId: string;
+  organizationName: string;
+  membershipRole: string;
+};
+
 export type BridgeActor = Actor & {
   email: string;
   displayName: string;
   organizationName: string | null;
+  organizationMemberships: BridgeOrganizationMembership[];
 };
 
 type BridgeProfileRow = {
@@ -33,7 +40,9 @@ function mapRow(r: BridgeProfileRow): BridgeActor {
     displayName: r.display_name,
     accountType: r.account_type as AccountType,
     organizationName: r.organization_name,
-    organizationId: r.organization_id,
+    organizationId: null,
+    organizationIds: [],
+    organizationMemberships: [],
     internalRole: (r.internal_role as InternalRole | null) ?? null,
     emailVerified: !!r.email_verified,
   };
@@ -58,24 +67,58 @@ async function loadActorByBridgeUserId(userId: string): Promise<BridgeActor | nu
   // schema is absent, keep the profile available but do not grant organization
   // scope. Never infer an ID from organization_name or use another environment's ID.
   try {
-    const memberships = await sql<{ organization_id: string }>`
-      select bp.organization_id
-      from bridge_profiles bp
-      join bridge_organization_memberships m
-        on m.organization_id = bp.organization_id
-       and m.user_id = bp.user_id
-       and m.status = 'active'
+    // A profile's organization_id is the selected Studio context, not a
+    // one-membership constraint. Resolve every active membership separately.
+    let preferredOrganizationId: string | null = null;
+    try {
+      const preferred = await sql<{ organization_id: string | null }>`
+        select organization_id::text as organization_id
+        from bridge_profiles
+        where user_id = ${userId}
+        limit 1
+      `;
+      preferredOrganizationId = preferred[0]?.organization_id ?? null;
+    } catch (error) {
+      if (!isMissingOrganizationSchemaError(error)) throw error;
+    }
+
+    const memberships = await sql<{
+      organization_id: string;
+      organization_name: string;
+      membership_role: string;
+    }>`
+      select m.organization_id::text as organization_id,
+        o.legal_name as organization_name,
+        m.membership_role
+      from bridge_organization_memberships m
       join bridge_organizations o
         on o.id = m.organization_id
        and o.status = 'active'
-      where bp.user_id = ${userId}
-        and bp.organization_id is not null
-      limit 1
+      where m.user_id = ${userId}
+        and m.status = 'active'
+      order by
+        case when m.organization_id = ${preferredOrganizationId}::uuid then 0 else 1 end,
+        o.legal_name
     `;
-    actor.organizationId = memberships[0]?.organization_id ?? null;
+
+    actor.organizationMemberships = memberships.map((membership) => ({
+      organizationId: membership.organization_id,
+      organizationName: membership.organization_name,
+      membershipRole: membership.membership_role,
+    }));
+    actor.organizationIds = memberships.map((membership) => membership.organization_id);
+
+    const selected = memberships.find((membership) =>
+      membership.organization_id === preferredOrganizationId
+    ) ?? (memberships.length === 1 ? memberships[0] : null);
+    actor.organizationId = selected?.organization_id ?? null;
+    actor.organizationName = selected?.organization_name ?? null;
   } catch (error) {
     if (!isMissingOrganizationSchemaError(error)) throw error;
     actor.organizationId = null;
+    actor.organizationIds = [];
+    actor.organizationMemberships = [];
+    actor.organizationName = null;
     console.warn("[bridge-session] optional organization schema unavailable; profile loaded without organization scope", {
       code: workspaceFailureCode(error),
     });

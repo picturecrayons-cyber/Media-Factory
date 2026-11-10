@@ -113,6 +113,9 @@ export const createStoryConceptSubmission = createServerFn({ method: "POST" })
     const actor = await requireVerifiedActor(context.userId);
     assertPermission(actor, actor.internalRole ? "title.ingest_internal" : "title.create");
 
+    if (actor.accountType === "studio" && !actor.organizationId) {
+      throw new Error("Select an active Studio organization before creating a story concept.");
+    }
     const titleId = randomBytes(16).toString("hex");
     const slug = slugify(data.titleName, titleId);
     const sql = await getSql();
@@ -188,19 +191,33 @@ export const listMyStoryConcepts = createServerFn({ method: "GET" })
     const sql = await getSql();
 
     try {
-      const rows = await sql<ConceptRow & { title_name: string }>`
-        select c.*, t.name as title_name
-        from bridge_story_concept_submissions c
-        join bridge_titles t on t.id = c.title_id
-        where t.owner_user_id = ${actor.userId}
-           or (
-             t.owner_account_type = 'studio'
-             and t.owner_organization_id is not null
-             and t.owner_organization_id = ${actor.organizationId ?? null}
-           )
-        order by c.created_at desc
-        limit 100
-      `;
+      const rows = actor.organizationIds?.length
+        ? await sql<ConceptRow & { title_name: string }>`
+            select c.*, t.name as title_name
+            from bridge_story_concept_submissions c
+            join bridge_titles t on t.id = c.title_id
+            where t.owner_user_id = ${actor.userId}
+               or (
+                 t.owner_account_type = 'studio'
+                 and t.owner_organization_id = any(${actor.organizationIds}::uuid[])
+                 and exists (
+                   select 1 from bridge_organization_memberships m
+                   where m.organization_id = t.owner_organization_id
+                     and m.user_id = ${actor.userId}
+                     and m.status = 'active'
+                 )
+               )
+            order by c.created_at desc
+            limit 100
+          `
+        : await sql<ConceptRow & { title_name: string }>`
+            select c.*, t.name as title_name
+            from bridge_story_concept_submissions c
+            join bridge_titles t on t.id = c.title_id
+            where t.owner_user_id = ${actor.userId}
+            order by c.created_at desc
+            limit 100
+          `;
 
       return {
         concepts: rows.map((r) => ({

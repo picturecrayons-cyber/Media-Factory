@@ -7,6 +7,7 @@ import { BridgeShell } from "@/components/bridge/shell";
 import { StatusChip } from "@/components/bridge/status-rail";
 import { Button } from "@/components/ui/button";
 import { inviteInternalRole } from "@/lib/bridge/profiles";
+import { StudioMembershipManager } from "@/components/bridge/studio-membership-manager";
 import { listAuditLogs, listTitles } from "@/lib/bridge/titles";
 import {
   authorizeLoopPublication,
@@ -33,6 +34,7 @@ function Internal() {
             canInvite={hasPermission(actor, "users.invite_internal")}
             canPublish={hasPermission(actor, "loop.publish")}
             canRevoke={hasPermission(actor, "loop.revoke")}
+            canManageStudioMemberships={actor.internalRole === "super_admin"}
           />
         </BridgeShell>
       )}
@@ -44,10 +46,12 @@ function InternalBody({
   canInvite,
   canPublish,
   canRevoke,
+  canManageStudioMemberships,
 }: {
   canInvite: boolean;
   canPublish: boolean;
   canRevoke: boolean;
+  canManageStudioMemberships: boolean;
 }) {
   const titlesQ = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles() });
   const logsQ = useQuery({ queryKey: ["bridge-audit"], queryFn: () => listAuditLogs() });
@@ -62,6 +66,7 @@ function InternalBody({
 
       {/* 2. Team Invitation Module */}
       {canInvite ? <InviteForm /> : null}
+      {canManageStudioMemberships ? <StudioMembershipManager /> : null}
 
       {/* 3. Catalog Queue */}
       <section className="space-y-4">

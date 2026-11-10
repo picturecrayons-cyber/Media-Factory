@@ -1,0 +1,1 @@
+drop policy if exists bridge_titles_owner_update on public.bridge_titles;

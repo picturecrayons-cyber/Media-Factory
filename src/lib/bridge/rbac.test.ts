@@ -203,6 +203,32 @@ describe("PRD authorization matrix", () => {
     assert.equal(canReadTitle(member, creatorOwnedSameName), false);
   });
 
+  it("supports one Studio identity with multiple independently verified active memberships", () => {
+    const member: Actor = {
+      ...actor("studio-member", "studio"),
+      organizationId: "11111111-1111-4111-8111-111111111111",
+      organizationIds: [
+        "11111111-1111-4111-8111-111111111111",
+        "22222222-2222-4222-8222-222222222222",
+      ],
+    };
+    const titleInSecondStudio = {
+      ownerUserId: "second-studio-owner",
+      ownerAccountType: "studio" as const,
+      ownerOrganizationId: "22222222-2222-4222-8222-222222222222",
+      status: "DRAFT" as const,
+    };
+    const titleOutsideMemberships = {
+      ...titleInSecondStudio,
+      ownerOrganizationId: "33333333-3333-4333-8333-333333333333",
+    };
+    assert.equal(canReadTitle(member, titleInSecondStudio), true);
+    assert.equal(canMutateTitle(member, titleInSecondStudio, "title.update_own", "title.license"), true);
+    assert.equal(canOperateOnTitle(member, titleInSecondStudio, "asset.sign_upload"), true);
+    assert.equal(canReadTitle(member, titleOutsideMemberships), false);
+    assert.equal(canMutateTitle(member, titleOutsideMemberships, "title.update_own", "title.license"), false);
+  });
+
   it("routes operators away from the super-admin dashboard", () => {
     assert.equal(workspaceHome(creator()), "/creator");
     assert.equal(workspaceHome(studio()), "/studio");

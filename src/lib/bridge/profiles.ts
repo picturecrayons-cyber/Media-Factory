@@ -426,3 +426,163 @@ export const inviteInternalRole = createServerFn({ method: "POST" })
     });
     return { sent: true };
   });
+
+
+/**
+ * Select the active Studio organization for new title/story creation.
+ * This updates only the profile's selected-context pointer; it does not create
+ * or alter memberships. Membership authorization is checked on every call.
+ */
+export const setActiveStudioOrganization = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({ organizationId: z.string().uuid() }))
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    if (actor.internalRole || actor.accountType !== "studio") {
+      throw new Error("Studio account required");
+    }
+
+    const sql = await getSql();
+    const membership = await sql<{ organization_id: string; organization_name: string }>`
+      select m.organization_id::text as organization_id, o.legal_name as organization_name
+      from bridge_organization_memberships m
+      join bridge_organizations o
+        on o.id = m.organization_id
+       and o.status = 'active'
+      where m.user_id = ${actor.userId}
+        and m.organization_id = ${data.organizationId}::uuid
+        and m.status = 'active'
+      limit 1
+    `;
+    if (!membership[0]) throw new Error("Active Studio membership required");
+
+    await sql`
+      update bridge_profiles
+      set organization_id = ${data.organizationId}::uuid, updated_at = now()
+      where user_id = ${actor.userId}
+        and account_type = 'studio'
+    `;
+
+    const updated = await loadActor(context.userId);
+    if (!updated || updated.organizationId !== data.organizationId) {
+      throw new Error("Studio organization selection could not be verified");
+    }
+
+    await writeAudit({
+      actorUserId: actor.userId,
+      action: "studio.organization_selected",
+      entityType: "bridge_organization",
+      entityId: data.organizationId,
+      metadata: { organizationName: membership[0].organization_name },
+    });
+
+    return { profile: updated };
+  });
+
+
+/** Super-admin-only directory for assigning verified Studio identities to organizations. */
+export const getStudioMembershipDirectory = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    if (actor.internalRole !== "super_admin") throw new Error("Super admin access required");
+
+    const sql = await getSql();
+    const [organizations, studioUsers, memberships] = await Promise.all([
+      sql<{ id: string; legal_name: string }>`
+        select id::text as id, legal_name
+        from bridge_organizations
+        where status = 'active'
+        order by legal_name
+        limit 250
+      `,
+      sql<{ user_id: string; display_name: string; email: string; selected_organization_id: string | null }>`
+        select user_id, display_name, email, organization_id::text as selected_organization_id
+        from bridge_profiles
+        where account_type = 'studio' and email_verified = true
+        order by display_name
+        limit 500
+      `,
+      sql<{ user_id: string; organization_id: string; membership_role: string; status: string }>`
+        select user_id, organization_id::text as organization_id, membership_role, status
+        from bridge_organization_memberships
+        where status = 'active'
+        order by user_id, organization_id
+      `,
+    ]);
+
+    return {
+      organizations,
+      studioUsers: studioUsers.map((studioUser) => ({
+        ...studioUser,
+        memberships: memberships
+          .filter((membership) => membership.user_id === studioUser.user_id)
+          .map((membership) => ({
+            organizationId: membership.organization_id,
+            membershipRole: membership.membership_role,
+          })),
+      })),
+    };
+  });
+
+/** Add or reactivate a verified Studio membership; never transfers ownership. */
+export const grantStudioMembership = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({
+    userId: z.string().min(1).max(255),
+    organizationId: z.string().uuid(),
+    membershipRole: z.enum(["admin", "member"]),
+  }))
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    if (actor.internalRole !== "super_admin") throw new Error("Super admin access required");
+
+    const sql = await getSql();
+    const target = await sql<{ user_id: string }>`
+      select user_id
+      from bridge_profiles
+      where user_id = ${data.userId}
+        and account_type = 'studio'
+        and email_verified = true
+      limit 1
+    `;
+    if (!target[0]) throw new Error("Verified Studio profile required");
+
+    const organization = await sql<{ id: string }>`
+      select id::text as id
+      from bridge_organizations
+      where id = ${data.organizationId}::uuid
+        and status = 'active'
+      limit 1
+    `;
+    if (!organization[0]) throw new Error("Active Studio organization required");
+
+    await sql`
+      insert into bridge_organization_memberships (
+        organization_id, user_id, membership_role, status, created_by
+      ) values (
+        ${data.organizationId}::uuid, ${data.userId}, ${data.membershipRole}, 'active', ${actor.userId}
+      )
+      on conflict (organization_id, user_id) do update
+        set membership_role = case
+              when bridge_organization_memberships.membership_role = 'owner' then 'owner'
+              else excluded.membership_role
+            end,
+            status = 'active',
+            updated_at = now(),
+            created_by = excluded.created_by
+    `;
+
+    await writeAudit({
+      actorUserId: actor.userId,
+      action: "studio.membership_granted",
+      entityType: "bridge_organization_membership",
+      entityId: `${data.organizationId}:${data.userId}`,
+      metadata: { membershipRole: data.membershipRole },
+    });
+
+    return { success: true, userId: data.userId, organizationId: data.organizationId };
+  });
