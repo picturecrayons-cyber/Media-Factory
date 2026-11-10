@@ -14,6 +14,7 @@ import {
   beginAssetMultipart,
   commitAssetMultipart,
   confirmAssetUpload,
+  inspectAssetUpload,
   listTitleAssets,
   requestAssetDownload,
   requestAssetUpload,
@@ -284,6 +285,17 @@ type UploadProgress = {
   total: number;
 };
 
+type PendingAssetInspection = {
+  assetId: string;
+  kind: SimpleAssetKind;
+  fileName: string;
+  byteSize: number;
+  contentType: string | null;
+  etag: string;
+  checksumSha256: string;
+  checksumAlgorithm: string;
+};
+
 function formatEta(seconds: number | null): string {
   if (seconds == null || !Number.isFinite(seconds)) return "Calculating time remaining…";
   if (seconds <= 0) return "Almost done";
@@ -327,6 +339,7 @@ function FilesPanel({
   const [uploading, setUploading] = useState<SimpleAssetKind | null>(null);
   const [commandKind, setCommandKind] = useState<SimpleAssetKind | null>(null);
   const [commandFile, setCommandFile] = useState<File | null>(null);
+  const [pendingInspection, setPendingInspection] = useState<PendingAssetInspection | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [messageKind, setMessageKind] = useState<"status" | "success" | "error">("status");
   const [notificationPermission, setNotificationPermission] = useState<"default" | "granted" | "denied" | "unsupported">(() =>
@@ -389,6 +402,7 @@ function FilesPanel({
       const startedAt = Date.now();
       xhr.open(method, url, true);
       xhr.setRequestHeader("content-type", contentType);
+      xhr.setRequestHeader("opc-checksum-algorithm", "SHA256");
       xhr.timeout = 0;
       xhr.upload.onprogress = (event) => {
         const total = event.lengthComputable ? event.total : file.size;
@@ -412,7 +426,7 @@ function FilesPanel({
       };
       xhr.onerror = () => {
         uploadXhrRef.current = null;
-        reject(new TypeError("The browser could not reach OCI storage. Check the OCI bucket CORS rule for this Preview origin, PUT method and Content-Type header."));
+        reject(new TypeError("The browser could not reach OCI storage. Check the OCI bucket CORS rule for this Preview origin, PUT method, Content-Type and opc-checksum-algorithm headers."));
       };
       xhr.ontimeout = () => {
         uploadXhrRef.current = null;
@@ -439,6 +453,7 @@ function FilesPanel({
       };
       xhr.open("PUT", url, true);
       xhr.setRequestHeader("content-type", contentType);
+      xhr.setRequestHeader("opc-checksum-algorithm", "SHA256");
       xhr.timeout = 0;
       xhr.upload.onprogress = (event) => {
         bump();
@@ -602,23 +617,29 @@ function FilesPanel({
       }
 
       setProgress({ kind, phase: "verifying", percent: null, etaSeconds: null, loaded: file.size, total: file.size });
-      announce(`File received. Verifying ${kindLabel(kind)} before it can show Ready…`);
+      announce(`Upload complete. Inspecting stored ${kindLabel(kind)} and calculating SHA-256. It is not active yet…`);
       assertAttemptActive();
-      await withTimeout(
-        confirmAssetUpload({ data: { assetId, expectedByteSize: file.size } }),
-        55_000,
-        "Stored-object verification",
+      const inspected = await withTimeout(
+        inspectAssetUpload({ data: { assetId, expectedByteSize: file.size } }),
+        240_000,
+        "Stored-object inspection",
       );
       assertAttemptActive();
-
-      setProgress({ kind, phase: "refreshing", percent: null, etaSeconds: null, loaded: file.size, total: file.size });
-      announce("Storage verified. Refreshing the asset list…");
-      await withTimeout(Promise.resolve(onAssetsChanged()), 15_000, "Asset refresh");
-      assertAttemptActive();
-      clearUploadSession(titleId, kind);
-      activeMultipart.current = null;
+      if (!inspected.etag || !inspected.checksumSha256 || !inspected.checksumAlgorithm) {
+        throw new Error("Storage inspection did not return a verified OCI checksum and ETag");
+      }
+      setPendingInspection({
+        assetId,
+        kind,
+        fileName: file.name,
+        byteSize: inspected.byteSize,
+        contentType: inspected.contentType,
+        etag: inspected.etag,
+        checksumSha256: inspected.checksumSha256,
+        checksumAlgorithm: inspected.checksumAlgorithm,
+      });
       setProgress(null);
-      announce(`${kindLabel(kind)} is ready.`, "success", true);
+      announce(`${kindLabel(kind)} uploaded and inspected. Review the checksum, then explicitly confirm activation.`, "status");
     } catch (error) {
       // A cancelled/superseded attempt must not overwrite the status of a newer upload.
       if (uploadAttemptRef.current !== attemptId) return;
@@ -630,7 +651,7 @@ function FilesPanel({
         detail = "Storage service is currently unavailable. Check the isolated Preview configuration, then select the file again to retry.";
       } else if (error instanceof TypeError) {
         detail = "The browser could not reach OCI storage. Check the OCI bucket CORS rule for this Preview origin, PUT method and Content-Type header, then select the file again to retry.";
-      } else if (raw.includes("Stored-object verification timed out")) {
+      } else if (raw.includes("Stored-object inspection timed out")) {
         // A browser timeout cannot cancel server-side verification. Avoid claiming
         // the asset is unverified or encouraging a blind retry while that request runs.
         detail = `${raw} The server may still be finishing verification. Refresh the asset list and check its status before retrying.`;
@@ -644,6 +665,50 @@ function FilesPanel({
         cancelRequestedRef.current = false;
         setUploading(null);
       }
+    }
+  }
+
+  async function activateInspectedAsset() {
+    const pending = pendingInspection;
+    if (!pending || uploading) return;
+    setUploading(pending.kind);
+    setProgress({
+      kind: pending.kind,
+      phase: "verifying",
+      percent: null,
+      etaSeconds: null,
+      loaded: pending.byteSize,
+      total: pending.byteSize,
+    });
+    announce("Rechecking the inspected object and activating the immutable version…");
+    try {
+      await withTimeout(
+        confirmAssetUpload({
+          data: {
+            assetId: pending.assetId,
+            expectedByteSize: pending.byteSize,
+            expectedEtag: pending.etag,
+            expectedChecksumSha256: pending.checksumSha256,
+            expectedChecksumAlgorithm: pending.checksumAlgorithm,
+          },
+        }),
+        55_000,
+        "Explicit asset activation",
+      );
+      setProgress({ kind: pending.kind, phase: "refreshing", percent: null, etaSeconds: null, loaded: pending.byteSize, total: pending.byteSize });
+      await withTimeout(Promise.resolve(onAssetsChanged()), 15_000, "Asset refresh");
+      clearUploadSession(titleId, pending.kind);
+      activeMultipart.current = null;
+      setPendingInspection(null);
+      setCommandKind(null);
+      setCommandFile(null);
+      setProgress(null);
+      announce(`${kindLabel(pending.kind)} is verified and active. The previous version is retained.`, "success", true);
+    } catch (error) {
+      setProgress(null);
+      announce(error instanceof Error ? error.message : "Asset activation failed. Refresh the asset list before retrying.", "error", true);
+    } finally {
+      setUploading(null);
     }
   }
 
@@ -782,6 +847,7 @@ function FilesPanel({
                     onCommandOpen={() => {
                       setCommandKind(kind);
                       setCommandFile(null);
+                      setPendingInspection(null);
                     }}
                     onDownload={verified ? () => void download(verified.id) : undefined}
                   />
@@ -806,10 +872,10 @@ function FilesPanel({
                   {verifiedFor(assets, commandKind) ? "Replace" : "Upload"} {kindLabel(commandKind)}
                 </h3>
                 <p className="mt-1 text-sm text-muted">
-                  Select the new file. Bridge verifies the OCI object before making this version active.
+                  Select the new file. After upload, review the storage checksum and explicitly confirm activation.
                 </p>
               </div>
-              <button type="button" onClick={() => { setCommandKind(null); setCommandFile(null); }} className="rounded-full border border-line px-3 py-1 text-xs font-semibold">
+              <button type="button" disabled={uploading !== null || pendingInspection !== null} onClick={() => { setCommandKind(null); setCommandFile(null); }} className="rounded-full border border-line px-3 py-1 text-xs font-semibold disabled:opacity-40">
                 Close
               </button>
             </div>
@@ -822,32 +888,56 @@ function FilesPanel({
                 className="sr-only"
                 type="file"
                 accept={getOttIngestAccept(commandKind)}
-                disabled={uploading !== null}
+                disabled={uploading !== null || pendingInspection !== null}
                 onChange={(event) => setCommandFile(event.currentTarget.files?.[0] ?? null)}
               />
             </label>
             <p className="mt-3 text-xs leading-5 text-muted">
-              New version → OCI storage verification → checksum and size check → activate. The previous verified object is retained.
+              Upload → OCI verification → checksum and size review → explicit activation. The previous verified object is retained.
             </p>
+            {pendingInspection ? (
+              <div className="mt-4 rounded-xl border border-line bg-elevated/50 p-4" aria-live="polite">
+                <p className="text-sm font-semibold">Storage inspection complete — not active yet</p>
+                <p className="mt-2 text-xs text-muted">{pendingInspection.fileName}</p>
+                <p className="mt-1 text-sm tabular-nums">{(pendingInspection.byteSize / (1024 * 1024)).toFixed(2)} MB · {pendingInspection.byteSize.toLocaleString()} bytes</p>
+                <p className="mt-3 text-xs font-semibold text-muted">{pendingInspection.checksumAlgorithm}</p>
+                <p className="mt-1 break-all font-mono text-xs">{pendingInspection.checksumSha256}</p>
+              </div>
+            ) : null}
             <div className="mt-5 flex justify-end gap-2">
-              <button type="button" onClick={() => { setCommandKind(null); setCommandFile(null); }} className="rounded-full border border-line px-4 py-2 text-sm font-semibold">
-                Cancel
-              </button>
               <button
                 type="button"
-                disabled={!commandFile || uploading !== null}
+                disabled={uploading !== null || pendingInspection !== null}
                 onClick={() => {
-                  if (!commandKind || !commandFile) return;
-                  const kind = commandKind;
-                  const file = commandFile;
                   setCommandKind(null);
                   setCommandFile(null);
-                  void uploadFile(kind, file);
                 }}
-                className="rounded-full bg-fg px-4 py-2 text-sm font-semibold text-bg disabled:cursor-not-allowed disabled:opacity-40"
+                className="rounded-full border border-line px-4 py-2 text-sm font-semibold disabled:opacity-40"
               >
-                Verify &amp; {verifiedFor(assets, commandKind) ? "Replace" : "Upload"}
+                Close
               </button>
+              {pendingInspection ? (
+                <button
+                  type="button"
+                  disabled={uploading !== null}
+                  onClick={() => void activateInspectedAsset()}
+                  className="rounded-full bg-fg px-4 py-2 text-sm font-semibold text-bg disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Verify &amp; {verifiedFor(assets, commandKind) ? "Replace" : "Upload"}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  disabled={!commandFile || uploading !== null}
+                  onClick={() => {
+                    if (!commandKind || !commandFile) return;
+                    void uploadFile(commandKind, commandFile);
+                  }}
+                  className="rounded-full bg-fg px-4 py-2 text-sm font-semibold text-bg disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Upload &amp; Inspect
+                </button>
+              )}
             </div>
           </section>
         </div>

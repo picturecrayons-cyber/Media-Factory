@@ -134,6 +134,7 @@ async function signedFetch(opts: {
   method: "GET" | "HEAD" | "POST" | "DELETE";
   path: string;
   body?: unknown;
+  timeoutMs?: number;
 }) {
   const url = new URL(opts.path, endpoint(opts.cfg.region));
   const body = opts.body === undefined ? undefined : JSON.stringify(opts.body);
@@ -153,7 +154,7 @@ async function signedFetch(opts: {
     method: opts.method,
     headers: safeHeaders,
     body,
-    signal: AbortSignal.timeout(15_000),
+    signal: AbortSignal.timeout(opts.timeoutMs ?? 15_000),
   });
 }
 
@@ -210,7 +211,7 @@ export async function beginMultipartUpload(opts: { key: string; contentType: str
   });
   const res = await fetch(signed.url, {
     method: "PUT",
-    headers: { "opc-multipart": "true", "content-type": opts.contentType },
+    headers: { "opc-multipart": "true", "opc-checksum-algorithm": "SHA256", "content-type": opts.contentType },
     redirect: "error",
     signal: AbortSignal.timeout(20_000),
   });
@@ -263,10 +264,85 @@ export async function verifyObject(key: string, expectedContentType?: string | n
     throw new Error(`OCI object content type mismatch: expected ${expectedContentType}, received ${contentType || "missing"}`);
   }
   if (!Number.isSafeInteger(contentLength) || contentLength <= 0) throw new Error("Uploaded object is empty");
+  const multipartSha256 = res.headers.get("opc-multipart-sha256");
+  const contentSha256 = res.headers.get("opc-content-sha256");
+  const checksumSha256 = multipartSha256
+    ? `oci-multipart-sha256:${multipartSha256}`
+    : contentSha256
+      ? Buffer.from(contentSha256, "base64").toString("hex")
+      : null;
+  const checksumAlgorithm = multipartSha256
+    ? "OCI multipart SHA-256 composite"
+    : contentSha256
+      ? "SHA-256"
+      : null;
   return {
     byteSize: contentLength,
     contentType,
     etag: res.headers.get("etag")?.replaceAll('"', "") ?? null,
+    checksumSha256,
+    checksumAlgorithm,
+  };
+}
+
+/**
+ * Inspect the stored object using OCI-computed SHA-256 metadata when available.
+ * Older objects without checksum metadata fall back to a bounded streamed GET.
+ * OCI ETags are concurrency tokens, not content hashes.
+ */
+export async function inspectObject(key: string, expectedContentType?: string | null) {
+  const before = await verifyObject(key, expectedContentType);
+  if (!before.etag) throw new Error("OCI object ETag is required for stable inspection");
+  // Prefer OCI's server-computed checksum. This avoids proxying multi-gigabyte
+  // masters through a serverless function. Multipart SHA-256 is OCI's documented
+  // composite digest, and is explicitly labelled as such in the UI and audit log.
+  if (before.checksumSha256 && before.checksumAlgorithm) {
+    const after = await verifyObject(key, expectedContentType);
+    if (
+      after.byteSize !== before.byteSize ||
+      after.etag !== before.etag ||
+      after.checksumSha256 !== before.checksumSha256
+    ) {
+      throw new Error("OCI object changed during checksum inspection; retry verification");
+    }
+    return { ...after, checksumSha256: before.checksumSha256, checksumAlgorithm: before.checksumAlgorithm };
+  }
+  const cfg = config();
+  const namespace = await resolveNamespace(cfg);
+  const path = `/n/${encodeURIComponent(namespace)}/b/${encodeURIComponent(cfg.bucket)}/o/${encodedObjectName(key)}`;
+  const res = await signedFetch({ cfg, method: "GET", path, timeoutMs: 240_000 });
+  if (!res.ok) throw new Error(`OCI object checksum read failed (${res.status})`);
+  if (!res.body) throw new Error("OCI object checksum stream is unavailable");
+  const getEtag = res.headers.get("etag")?.replaceAll('"', "") ?? null;
+  if (getEtag !== before.etag) {
+    throw new Error("OCI object ETag changed between HEAD and GET; retry inspection");
+  }
+
+  const hash = createHash("sha256");
+  const reader = res.body.getReader();
+  let streamedBytes = 0;
+  try {
+    while (true) {
+      const chunk = await reader.read();
+      if (chunk.done) break;
+      streamedBytes += chunk.value.byteLength;
+      hash.update(chunk.value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  if (streamedBytes !== before.byteSize) {
+    throw new Error("OCI object changed or returned an incomplete byte stream during checksum inspection");
+  }
+
+  const after = await verifyObject(key, expectedContentType);
+  if (after.byteSize !== before.byteSize || after.etag !== before.etag) {
+    throw new Error("OCI object changed during checksum inspection; retry verification");
+  }
+  return {
+    ...after,
+    checksumSha256: hash.digest("hex"),
+    checksumAlgorithm: "SHA-256 (streamed)",
   };
 }
 

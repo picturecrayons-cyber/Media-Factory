@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { generateKeyPairSync, verify } from "node:crypto";
-import { sealVerifiedObject, verifyObject } from "./oci-object-storage.server.ts";
+import { createHash, generateKeyPairSync, verify } from "node:crypto";
+import { inspectObject, sealVerifiedObject, verifyObject } from "./oci-object-storage.server.ts";
 
 test("OCI private key normalization accepts escaped and quoted PEM secrets", async () => {
   const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
@@ -115,6 +115,109 @@ test("OCI copy polling uses Object Storage and only verifies successful copies",
   }
 });
 
+
+test("OCI native SHA-256 response is preferred without downloading the object body", async (t) => {
+  const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  const values = {
+    OCI_TENANCY_OCID: "test-tenancy", OCI_USER_OCID: "test-user",
+    OCI_PRIVATE_KEY: privateKey.export({ type: "pkcs8", format: "pem" }).toString(),
+    OCI_FINGERPRINT: "test-fingerprint", OCI_REGION: "ap-mumbai-1",
+    OCI_NAMESPACE: "test-namespace", OCI_BUCKET_NAME: "test-bucket",
+  };
+  const saved = Object.fromEntries(Object.keys(values).map((key) => [key, process.env[key]]));
+  const originalFetch = globalThis.fetch;
+  Object.assign(process.env, values);
+  try {
+    await t.test("single PUT full-object SHA-256", async () => {
+      const digest = createHash("sha256").update("small object").digest();
+      const methods: string[] = [];
+      globalThis.fetch = async (_input, init) => {
+        methods.push(init?.method || "GET");
+        return new Response(null, {
+          status: 200,
+          headers: {
+            "content-length": "12",
+            "content-type": "video/mp4",
+            etag: '"single-etag"',
+            "opc-content-sha256": digest.toString("base64"),
+          },
+        });
+      };
+      const inspected = await inspectObject("single-key", "video/mp4");
+      assert.equal(inspected.checksumSha256, digest.toString("hex"));
+      assert.equal(inspected.checksumAlgorithm, "SHA-256");
+      assert.deepEqual(methods, ["HEAD", "HEAD"]);
+    });
+
+    await t.test("multipart OCI composite SHA-256", async () => {
+      const composite = Buffer.from("multipart-digest").toString("base64") + "-4";
+      const methods: string[] = [];
+      globalThis.fetch = async (_input, init) => {
+        methods.push(init?.method || "GET");
+        return new Response(null, {
+          status: 200,
+          headers: {
+            "content-length": "2048",
+            "content-type": "video/mp4",
+            etag: '"multipart-etag"',
+            "opc-multipart-sha256": composite,
+          },
+        });
+      };
+      const inspected = await inspectObject("multipart-key", "video/mp4");
+      assert.equal(inspected.checksumSha256, `oci-multipart-sha256:${composite}`);
+      assert.equal(inspected.checksumAlgorithm, "OCI multipart SHA-256 composite");
+      assert.deepEqual(methods, ["HEAD", "HEAD"]);
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+    for (const [key, value] of Object.entries(saved)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+});
+
+test("OCI inspection streams stored bytes and returns a real SHA-256 digest", async () => {
+  const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  const values = {
+    OCI_TENANCY_OCID: "test-tenancy", OCI_USER_OCID: "test-user",
+    OCI_PRIVATE_KEY: privateKey.export({ type: "pkcs8", format: "pem" }).toString(),
+    OCI_FINGERPRINT: "test-fingerprint", OCI_REGION: "ap-mumbai-1",
+    OCI_NAMESPACE: "test-namespace", OCI_BUCKET_NAME: "test-bucket",
+  };
+  const saved = Object.fromEntries(Object.keys(values).map((key) => [key, process.env[key]]));
+  const originalFetch = globalThis.fetch;
+  Object.assign(process.env, values);
+  let headCount = 0;
+  const bytes = Buffer.from("streamed OCI asset bytes");
+  globalThis.fetch = async (_input, init) => {
+    const method = init?.method || "GET";
+    if (method === "HEAD") {
+      headCount += 1;
+      return new Response(null, {
+        status: 200,
+        headers: { "content-length": String(bytes.length), "content-type": "video/mp4", etag: '"stable-etag"' },
+      });
+    }
+    assert.equal(method, "GET");
+    assert.equal((init?.signal as AbortSignal | undefined)?.aborted, false);
+    return new Response(bytes, { status: 200, headers: { etag: '"stable-etag"' } });
+  };
+  try {
+    const inspected = await inspectObject("asset-key", "video/mp4");
+    assert.equal(inspected.byteSize, bytes.length);
+    assert.equal(inspected.etag, "stable-etag");
+    assert.equal(inspected.checksumSha256, createHash("sha256").update(bytes).digest("hex"));
+    assert.equal(headCount, 2);
+  } finally {
+    globalThis.fetch = originalFetch;
+    for (const [key, value] of Object.entries(saved)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+});
 
 test("OCI object verification rejects an unexpected content type", async () => {
   const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });

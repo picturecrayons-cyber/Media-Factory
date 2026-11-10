@@ -211,12 +211,56 @@ export const abortAssetMultipart = createServerFn({ method: "POST" })
     return { aborted: true };
   });
 
+export const inspectAssetUpload = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({
+    assetId: z.string().min(8),
+    expectedByteSize: z.number().int().positive().optional(),
+  }))
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    const asset = await openUploadAsset(context.userId, data.assetId);
+    if (asset.byte_size != null) throw new Error("Asset is already active; refresh the asset list");
+    const { inspectObject } = await import("./oci-object-storage.server");
+    const inspected = await inspectObject(asset.s3_key, asset.content_type);
+    if (data.expectedByteSize != null && inspected.byteSize !== data.expectedByteSize) {
+      throw new Error("Uploaded object size does not match the file that was sent");
+    }
+    await writeAudit({
+      actorUserId: actor.userId,
+      action: "asset.upload_inspected",
+      entityType: "bridge_asset",
+      entityId: asset.id,
+      metadata: {
+        titleId: asset.title_id,
+        kind: asset.kind,
+        byteSize: inspected.byteSize,
+        etag: inspected.etag,
+        checksumSha256: inspected.checksumSha256,
+        checksumAlgorithm: inspected.checksumAlgorithm,
+      },
+    });
+    return {
+      assetId: asset.id,
+      byteSize: inspected.byteSize,
+      contentType: inspected.contentType,
+      etag: inspected.etag,
+      checksumSha256: inspected.checksumSha256,
+      checksumAlgorithm: inspected.checksumAlgorithm,
+      inspected: true as const,
+    };
+  });
+
 export const confirmAssetUpload = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(
     z.object({
       assetId: z.string().min(8),
-      expectedByteSize: z.number().int().positive().optional(),
+      expectedByteSize: z.number().int().positive(),
+      expectedEtag: z.string().min(1).max(256),
+      expectedChecksumSha256: z.string().regex(/^(?:[a-f0-9]{64}|oci-multipart-sha256:[A-Za-z0-9+/]+={0,2}(?:-\d+)?)$/i),
+      expectedChecksumAlgorithm: z.string().min(1).max(64),
     }),
   )
   .handler(async ({ context, data }) => {
@@ -253,19 +297,52 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
     if (asset.byte_size != null)
       return { assetId: asset.id, byteSize: Number(asset.byte_size), verified: true };
 
+    // The client cannot author its own checksum evidence. Require a successful
+    // server-side inspection audit created by this same actor for this exact asset.
+    const inspectionRows = await sql<{ metadata: Record<string, unknown> | string }>`
+      select metadata
+      from bridge_audit_logs
+      where actor_user_id = ${actor.userId}
+        and action = 'asset.upload_inspected'
+        and entity_type = 'bridge_asset'
+        and entity_id = ${asset.id}
+      order by created_at desc
+      limit 1
+    `;
+    const rawInspection = inspectionRows[0]?.metadata;
+    const inspection = typeof rawInspection === "string"
+      ? JSON.parse(rawInspection) as Record<string, unknown>
+      : rawInspection;
+    if (
+      !inspection ||
+      inspection.titleId !== title.id ||
+      inspection.kind !== asset.kind ||
+      Number(inspection.byteSize) !== data.expectedByteSize ||
+      inspection.etag !== data.expectedEtag ||
+      inspection.checksumAlgorithm !== data.expectedChecksumAlgorithm ||
+      String(inspection.checksumSha256 ?? "").toLowerCase() !== data.expectedChecksumSha256.toLowerCase()
+    ) {
+      throw new Error("No matching server-side storage inspection exists. Inspect the uploaded file again before activation.");
+    }
+
     const { verifyObject, sealVerifiedObject } = await import("./oci-object-storage.server");
     const object = await verifyObject(asset.s3_key, asset.content_type);
-    if (data.expectedByteSize != null && object.byteSize !== data.expectedByteSize) {
-      throw new Error("Uploaded object size does not match the file that was sent");
+    if (object.byteSize !== data.expectedByteSize || object.etag !== data.expectedEtag) {
+      throw new Error("The uploaded object changed after inspection. Inspect it again before activation.");
     }
     if (!object.etag) throw new Error("Object ETag is required for immutable verification");
-    // Use the immutable asset row ID, not a per-request UUID. If a browser timeout
-    // leads to a duplicate confirmation while the first server call is still running,
-    // both attempts target the same sealed object instead of creating orphan copies.
+    // OCI ETag is used only as a source-object concurrency token. The SHA-256
+    // evidence was computed by OCI or by the streamed fallback during inspection.
     const sealedKey = `${asset.s3_key}.verified/${asset.id}`;
     const sealed = await sealVerifiedObject(asset.s3_key, sealedKey, object.etag);
     if (sealed.byteSize !== object.byteSize || !sealed.etag) {
       throw new Error("Verified copy differs from the uploaded object");
+    }
+    // CopyObject is conditional on the inspected source ETag. OCI confirms the
+    // completed destination by HEAD; the inspected source checksum remains bound
+    // to the exact bytes copied without downloading a second full film.
+    if (sealed.byteSize !== data.expectedByteSize) {
+      throw new Error("The immutable copy byte size does not match the inspected upload");
     }
     // Persist asset/title/audit state first. Do not advance the migration queue
     // if persistence fails: its prior state remains the truthful state.
@@ -278,7 +355,7 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
       kind: asset.kind,
       byteSize: sealed.byteSize,
       contentType: sealed.contentType,
-      checksum: sealed.etag,
+      checksum: data.expectedChecksumSha256.toLowerCase(),
       sourceKey: asset.s3_key,
       sealedKey,
     });
@@ -324,7 +401,7 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
       }
       throw new Error("Asset confirmation changed; retry after refreshing the title");
     }
-    return { assetId: asset.id, byteSize: sealed.byteSize, verified: true };
+    return { assetId: asset.id, byteSize: sealed.byteSize, checksumSha256: data.expectedChecksumSha256.toLowerCase(), verified: true };
   });
 
 export const requestAssetDownload = createServerFn({ method: "POST" })
