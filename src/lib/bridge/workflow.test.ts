@@ -384,8 +384,8 @@ test("repeated identical rights evidence submission reuses one record and one au
       assetVersionId,
     };
     const [first, second] = await Promise.all([
-      f.sql.transaction((tx) => f.submitRightsEvidence(tx, owner, input)),
-      f.sql.transaction((tx) => f.submitRightsEvidence(tx, owner, input)),
+      f.sql.transaction(async (tx) => f.submitRightsEvidence(tx, owner, input)),
+      f.sql.transaction(async (tx) => f.submitRightsEvidence(tx, owner, input)),
     ]);
     assert.deepEqual(second, first);
     assert.equal((await f.sql.query("select * from bridge_rights_evidence")).length, 1);
