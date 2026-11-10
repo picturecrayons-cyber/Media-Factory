@@ -1,9 +1,9 @@
-import { useRef, useState } from "react";
+import { useRef, useState, type CSSProperties, type ChangeEvent, type MouseEvent } from "react";
 
 type OrderResult = { orderId: string; amountPaise: number; currency: "INR"; keyId: string };
 type VerifyResult = { verified: boolean; receiptId: string };
 type Props = {
-  createOrder: (idempotencyKey: string) => Promise<OrderResult>;
+  createOrder: (idempotencyKey: string, email?: string) => Promise<OrderResult>;
   verifyPayment: (payload: { orderId: string; paymentId: string; signature: string }) => Promise<VerifyResult>;
   productName?: string;
 };
@@ -14,7 +14,7 @@ declare global {
   }
 }
 
-const styles: Record<string, React.CSSProperties> = {
+const styles: Record<string, CSSProperties> = {
   panel: { border: "1px solid rgba(148,163,184,.25)", borderRadius: 18, padding: 20, background: "rgba(15,23,42,.55)", color: "inherit" },
   button: { border: 0, borderRadius: 10, padding: "12px 18px", fontWeight: 700, cursor: "pointer", background: "linear-gradient(100deg,#8b5cf6,#4f46e5)", color: "white" },
   secondary: { border: "1px solid rgba(148,163,184,.35)", borderRadius: 10, padding: "10px 14px", background: "transparent", color: "inherit", cursor: "pointer" },
@@ -47,6 +47,7 @@ export default function LogoBackgroundConverter({ createOrder, verifyPayment, pr
   const [resultUrl, setResultUrl] = useState("");
   const [fileName, setFileName] = useState("logo-transparent.png");
   const [tolerance, setTolerance] = useState(36);
+  const [email, setEmail] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("Upload a PNG, JPG or WebP logo to begin.");
   const [output, setOutput] = useState<Blob | null>(null);
@@ -117,7 +118,7 @@ export default function LogoBackgroundConverter({ createOrder, verifyPayment, pr
     setMessage("Background removed. Click the original preview to sample a different background colour if needed.");
   }
 
-  async function onFile(event: React.ChangeEvent<HTMLInputElement>) {
+  async function onFile(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     if (!file) return;
     if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) { setMessage("Please choose a PNG, JPG or WebP image."); return; }
@@ -150,7 +151,7 @@ export default function LogoBackgroundConverter({ createOrder, verifyPayment, pr
     } finally { setBusy(false); }
   }
 
-  async function resample(event: React.MouseEvent<HTMLImageElement>) {
+  async function resample(event: MouseEvent<HTMLImageElement>) {
     const img = originalRef.current;
     if (!img || !imageRef.current) return;
     const rect = event.currentTarget.getBoundingClientRect();
@@ -178,7 +179,7 @@ export default function LogoBackgroundConverter({ createOrder, verifyPayment, pr
     setMessage("Preparing secure ₹1 payment…");
     try {
       await loadCheckout();
-      const order = await createOrder(randomKey());
+      const order = await createOrder(randomKey(), email.trim() || undefined);
       if (!window.Razorpay) throw new Error("Secure checkout is unavailable.");
       const checkout = new window.Razorpay({
         key: order.keyId, amount: order.amountPaise, currency: order.currency,
@@ -219,6 +220,9 @@ export default function LogoBackgroundConverter({ createOrder, verifyPayment, pr
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))", gap: 16, marginTop: 18 }}>
         <div><p style={styles.muted}>Original · click background to sample</p>{sourceUrl ? <img ref={imageRef} src={sourceUrl} onClick={resample} alt="Original logo" style={{ ...styles.preview, cursor: "crosshair" }} /> : <div style={{ ...styles.preview, minHeight: 160, display: "grid", placeItems: "center", padding: 20, boxSizing: "border-box" }}>Original preview</div>}</div>
         <div><p style={styles.muted}>Transparent PNG preview</p>{resultUrl ? <img src={resultUrl} alt="Transparent logo preview" style={styles.preview} /> : <div style={{ ...styles.preview, minHeight: 160, display: "grid", placeItems: "center", padding: 20, boxSizing: "border-box" }}>PNG preview</div>}</div>
+      </div>
+      <div style={{ marginTop: 18 }}>
+        <label style={{ display: "block", fontSize: 13 }}>Receipt email (optional)<input type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" style={{ display: "block", width: "100%", marginTop: 6, padding: 10, borderRadius: 8, border: "1px solid rgba(148,163,184,.35)", background: "transparent", color: "inherit" }} /></label>
       </div>
       <div style={{ marginTop: 18 }}>
         <label style={{ display: "flex", justifyContent: "space-between", gap: 12, fontSize: 13 }}><span>Background tolerance</span><strong>{tolerance}</strong></label>
