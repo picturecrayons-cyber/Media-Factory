@@ -68,7 +68,7 @@ Inventory ref: e9e1f40ad42c8c02475394e6935f053d18be8f6a
 
 ## Server-function inventory
 
-The list below records exported Bridge `createServerFn` endpoints found in the reviewed modules. “Studio context” means required when the target record is Studio-owned; non-Studio and staff branches retain their separately authorized paths.
+The list below records exported Bridge `createServerFn` endpoints and the adjacent Loop consumer endpoints found by the inspected GitHub code search and tree review. “Studio context” means required when the target record is Studio-owned; non-Studio and staff branches retain their separately authorized paths. This is broader than the first pass, but repository-wide AST enumeration and call-site reconciliation remain open.
 
 ### Titles — src/lib/bridge/titles.ts
 
@@ -185,6 +185,60 @@ The list below records exported Bridge `createServerFn` endpoints found in the r
 | session.ts — getDashboardSession | GET | Admin dashboard read | Existing verified super-admin gate; keep separate from Studio membership |
 | session.ts — getBridgePublicStatus | GET | Public status read | Public read only |
 
+
+### Duplicate title merge — src/lib/bridge/duplicate-title-merge.ts
+
+| Function | Method | Class | Studio context / control |
+|---|---:|---|---|
+| previewDuplicateTitleMerge | POST | Sensitive title/rights preview | Require staff review permission; when either title is Studio-owned, validate both tenant scopes and prevent cross-Studio merges |
+| mergeDuplicateTitle | POST | High-impact title merge write | Strong merge permission, transactional re-check, same-tenant/rights/buyer/asset/delivery invariants and immutable audit; no merge based only on caller-provided IDs |
+| rollbackDuplicateTitleMerge | POST | High-impact rollback write | Strong rollback permission; load merge audit and both titles, verify tenant and pre-merge state before rollback |
+
+### Service revenue — src/lib/bridge/service-revenue.ts
+
+| Function | Method | Class | Studio context / control |
+|---|---:|---|---|
+| createServiceQuote | POST | Quote creation | Require service.quote_create plus title-level permission; selected org and fresh membership for Studio title |
+| acceptServiceQuote | POST | Order creation | Revalidate quote owner, title and selected org for Studio title inside transaction |
+| createServicePaymentOrderFn | POST | Payment order | Revalidate authenticated order owner and title/org scope before creating provider order |
+| verifyServicePayment | POST | Payment verification | Verify provider signature and order-to-actor binding; payment proof does not establish Studio membership |
+| recordServiceActualCost | POST | Finance write | Finance permission plus order/title scope; selected org for Studio title and idempotent audit |
+| getCommercialFinancialSummary | GET | Global financial read | Finance permission; aggregate ledger is cross-tenant sensitive and must remain restricted to explicitly authorized finance roles |
+
+## Loop consumer server functions — separate from Studio context
+
+These endpoints do not receive Studio organization context merely because their catalog title originated in Bridge. They require consumer identity, profile ownership, publication authorization and payment/entitlement checks appropriate to the action.
+
+### Loop profiles and watch activity — src/lib/loop/profile.ts
+
+| Function | Method | Class | Required control |
+|---|---:|---|---|
+| getConsumerProfiles | GET | Consumer profile read | Authenticated user owns all returned profiles; automatic primary profile creation is a write side effect and needs idempotency |
+| setActiveConsumerProfile | POST | Profile state write | Verify profileId belongs to authenticated user before changing active flags; current two-step updates should be atomic |
+| createConsumerProfile | POST | Profile create | Bind new profile to authenticated user; review default PIN and avatar validation/security |
+| saveWatchProgress | POST | Playback progress write | Authenticated user scope; validate loop title and sane position/duration bounds |
+| getWatchProgress | GET | Playback progress read | Restrict to authenticated user's row |
+| toggleWatchlist | POST | Watchlist write | Restrict mutation to authenticated user's watchlist and published/eligible title |
+| isTitleInWatchlist | GET | Watchlist read | Restrict to authenticated user's watchlist |
+| getConsumerWatchlist | GET | Watchlist read | Restrict list to authenticated user's rows and currently available titles |
+
+### Loop subscriptions and TVOD — src/lib/loop/subscriptions.ts
+
+| Function | Method | Class | Required control |
+|---|---:|---|---|
+| getConsumerSubscription | GET | Subscription read | Authenticated user's active subscription only |
+| subscribeToLoopPass | POST | Paid entitlement write | Must be gated by verified payment capture/provider evidence; current source inserts an active subscription directly and requires a separate payment-flow review before certification |
+| rentTvodMovie | POST | TVOD entitlement write | Must be gated by successful payment and idempotent order/entitlement mapping; current source inserts a 48-hour entitlement directly and requires a separate payment-flow review before certification |
+
+### Loop catalog and playback entitlement — src/lib/loop/catalog.ts
+
+| Function | Method | Class | Required control |
+|---|---:|---|---|
+| getLoopCatalog | GET | Public catalog read | Return only published titles with authorized Bridge publication and active distribution window; no private asset keys |
+| getLoopTitleDetails | GET | Public title read | Same publication, published and approved status checks; ensure publication window is currently active |
+| checkPlaybackEntitlement | GET | Consumer entitlement read | Authenticated user subscription/TVOD entitlement; validate active publication and title availability before returning canPlay |
+
+
 ## Current source findings that affect the design
 
 1. `session.ts` loads active memberships and active organizations from the database, but currently exposes the collection as `organizationIds`. It sets legacy `organizationId` only when exactly one membership exists. This is safer than choosing the first membership, but it is not an explicit per-request selected-organization contract.
@@ -195,6 +249,9 @@ The list below records exported Bridge `createServerFn` endpoints found in the r
 6. `profiles.ts` bootstraps an initial Studio owner membership as active. The reviewed endpoint list does not establish a distinct invited-member approval/suspension/revocation workflow. Do not invent one or mark it implemented.
 7. `dit-assignment.ts` is a separate helper/test area, not a substitute for a server-side assignment check in every DIT operation. The exact assignment must bind user + production + title + asset and be revalidated at the operation boundary.
 8. Existing helper `organization-context.ts` is pure and tested at source level, but is not wired into request handlers. It does not itself enforce runtime authorization.
+9. `duplicate-title-merge.ts` exposes three high-impact merge/rollback endpoints; both canonical and retiring title tenant ownership must be revalidated transactionally.
+10. `service-revenue.ts` exposes six finance/service endpoints. The aggregate financial summary is cross-tenant sensitive and must remain restricted to explicit finance roles; Studio quote/order operations need title organization scope.
+11. Loop consumer endpoints are a separate security boundary. In particular, `subscribeToLoopPass` and `rentTvodMovie` currently write active subscription/TVOD entitlements in their server handlers without an evident provider payment verification in those handlers. Treat this as a distinct payment-gate finding; do not certify paid access until the full payment flow is reconciled.
 
 ## Required implementation sequence — all remain gated
 
