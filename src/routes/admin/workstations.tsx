@@ -192,7 +192,7 @@ function RightsEvidenceQueue({ evidence, titleName, mutation }: { evidence: any[
               onClick={() => mutation.mutate({ data: { evidenceId: item.id, decision: "REJECTED", note: notes[item.id] } })}>Reject document</Button>
           </div>
         </article>
-      )) : <Empty text="No pending evidence documents. A legal reviewer cannot approve a license until both required evidence classes are independently verified." />}
+      )) : <Empty text="No pending evidence documents. A legal reviewer cannot approve a license until all five mandatory evidence classes are independently verified." />}
     </section>
   );
 }
