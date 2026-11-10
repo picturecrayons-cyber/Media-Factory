@@ -1,0 +1,2 @@
+create index if not exists buyer_requirements_account_idx on bridge_private.buyer_requirements (buyer_account_id);
+create index if not exists buyer_title_matches_title_idx on bridge_private.buyer_title_matches (title_id);
