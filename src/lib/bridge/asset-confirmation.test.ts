@@ -474,6 +474,87 @@ test("Super Admin can replace a verified asset through RIGHTS_REVIEW before firs
   }
 });
 
+
+test("Super Admin replacing a legacy poster with a vertical poster invalidates QC, legal and delivery gates", async () => {
+  const db = new PGlite();
+  try {
+    await db.waitReady;
+    await db.exec("create role anon; create role authenticated;");
+    await db.exec(readFileSync(join(process.cwd(), "migrations/0004_bridge.sql"), "utf8"));
+    await db.exec(`
+      create table bridge_loop_publications (bridge_title_id text, approved_at timestamptz);
+      create table bridge_destination_packages (title_id text, readiness_state text, authorized_by text, authorized_at timestamptz);
+      create table bridge_delivery_jobs (title_id text, admin_sign_off boolean, delivery_receipt_url text);
+      create table bridge_qc_cases (title_id text, status text, reviewed_by text, reviewed_at timestamptz);
+      create table bridge_legal_cases (title_id text, status text, reviewed_by text, reviewed_at timestamptz);
+      create table bridge_title_gate_certifications (
+        title_id text, ott_preparation_status text, packaging_status text,
+        curation_status text, delivery_status text, updated_at timestamptz
+      );
+      create table bridge_asset_versions (
+        id uuid primary key default gen_random_uuid(), title_id text not null,
+        asset_group text not null, asset_type text not null, version integer not null,
+        language text, reference_asset_id uuid, s3_key text not null,
+        checksum_sha256 text, byte_size bigint, processing_state text not null, created_by text not null
+      );
+      insert into bridge_titles (id,slug,name,owner_user_id,owner_account_type,status,poster_key)
+      values ('poster-replace-title','poster-replace','Poster Replace','owner','independent_creator','RIGHTS_REVIEW','old/poster.verified/old');
+      insert into bridge_assets (id,title_id,kind,s3_key,content_type,byte_size,created_by)
+      values
+        ('old-legacy-poster','poster-replace-title','poster','old/poster.verified/old','image/jpeg',100,'owner'),
+        ('new-vertical-poster','poster-replace-title','poster_vertical','new/vertical','image/jpeg',null,'super-admin');
+      insert into bridge_qc_cases (title_id,status,reviewed_by,reviewed_at)
+      values ('poster-replace-title','PASSED','qc-user',now());
+      insert into bridge_legal_cases (title_id,status,reviewed_by,reviewed_at)
+      values ('poster-replace-title','APPROVED','legal-user',now());
+      insert into bridge_title_gate_certifications
+        (title_id,ott_preparation_status,packaging_status,curation_status,delivery_status,updated_at)
+      values ('poster-replace-title','READY','COMPLETE','APPROVED','READY',now());
+      insert into bridge_destination_packages (title_id,readiness_state,authorized_by,authorized_at)
+      values ('poster-replace-title','AUTHORIZED','admin-user',now());
+    `);
+    const result = await persistVerifiedAsset(createTestSql(db), {
+      assetId: "new-vertical-poster",
+      actorUserId: "super-admin",
+      internalActor: true,
+      superAdminActor: true,
+      titleId: "poster-replace-title",
+      kind: "poster_vertical",
+      byteSize: 200,
+      contentType: "image/jpeg",
+      checksum: "new-poster-checksum",
+      sourceKey: "new/vertical",
+      sealedKey: "new/vertical.verified/new-vertical-poster",
+    });
+    assert.equal(result, true);
+    const assets = await db.query<{ id: string; byte_size: number | null }>(
+      "select id, byte_size from bridge_assets where id in ('old-legacy-poster','new-vertical-poster') order by id",
+    );
+    assert.deepEqual(assets.rows, [
+      { id: "new-vertical-poster", byte_size: 200 },
+      { id: "old-legacy-poster", byte_size: 100 },
+    ]);
+    const qc = await db.query<{ status: string }>("select status from bridge_qc_cases where title_id='poster-replace-title'");
+    const legal = await db.query<{ status: string }>("select status from bridge_legal_cases where title_id='poster-replace-title'");
+    const packageState = await db.query<{ readiness_state: string; authorized_at: string | null }>("select readiness_state, authorized_at from bridge_destination_packages where title_id='poster-replace-title'");
+    const gates = await db.query<{ ott_preparation_status: string; packaging_status: string; curation_status: string; delivery_status: string }>(
+      "select ott_preparation_status, packaging_status, curation_status, delivery_status from bridge_title_gate_certifications where title_id='poster-replace-title'",
+    );
+    assert.equal(qc.rows[0]?.status, "ACTION_REQUIRED");
+    assert.equal(legal.rows[0]?.status, "ACTION_REQUIRED");
+    assert.equal(packageState.rows[0]?.readiness_state, "HOLD");
+    assert.equal(packageState.rows[0]?.authorized_at, null);
+    assert.deepEqual(gates.rows[0], {
+      ott_preparation_status: "HOLD",
+      packaging_status: "HOLD",
+      curation_status: "HOLD",
+      delivery_status: "HOLD",
+    });
+  } finally {
+    await db.close();
+  }
+});
+
 test("first LOOP publication permanently locks Super Admin replacement", async () => {
   const db = new PGlite();
   try {
