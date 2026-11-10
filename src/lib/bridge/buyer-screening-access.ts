@@ -12,15 +12,7 @@ export type BuyerScreeningGrant = {
   grantedAt: string; expiresAt: string | null; revokedAt: string | null;
 };
 
-export function isBuyerScreeningGrantActive(
-  grant: Pick<BuyerScreeningGrant, "expiresAt" | "revokedAt">,
-  now = Date.now(),
-): boolean {
-  if (grant.revokedAt) return false;
-  if (!grant.expiresAt) return true;
-  const expiry = Date.parse(grant.expiresAt);
-  return Number.isFinite(expiry) && expiry > now;
-}
+export { isBuyerScreeningGrantActive } from "./buyer-screening-policy";
 
 const grantInput = z.object({
   titleId: z.string().min(1).max(160),
