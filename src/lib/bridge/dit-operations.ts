@@ -632,7 +632,7 @@ export const completeDitConversionJob = createServerOnlyFn(async (input: z.infer
     profile: job.profile, state: "PROCESSING" as const, attempt: 1, history: [], masterOutput: null, backup1Output: null };
   const completed = completeConversion(processing, master, backup, new Date().toISOString());
   await sql.transaction(async (tx) => {
-    const current = await tx<{ state: string }>\`select state from bridge_production_conversion_jobs where id=\${job.id} for update\`;
+    const current = await tx<{ state: string }>`select state from bridge_production_conversion_jobs where id=\${job.id} for update`;
     if (current[0]?.state === "COMPLETE") return;
     if (current[0]?.state !== "PROCESSING") throw new Error("Conversion job changed before completion");
     for (const item of [master, backup]) {
@@ -665,13 +665,13 @@ export const failDitConversionJob = createServerOnlyFn(async (jobId: string, rea
   const sql = await getSql();
   const safeReason = reason.trim().slice(0, 500) || "Worker failed";
   return sql.transaction(async (tx) => {
-    const rows = await tx<{ attempt: number; state: string }>\`select attempt,state from bridge_production_conversion_jobs where id=\${jobId} for update\`;
+    const rows = await tx<{ attempt: number; state: string }>`select attempt,state from bridge_production_conversion_jobs where id=\${jobId} for update`;
     const job = rows[0];
     if (!job || job.state !== "PROCESSING") throw new Error("Conversion job is not processing");
     const next = job.attempt < 3 ? "RETRY_REQUIRED" : "FAILED";
-    await tx\`update bridge_production_conversion_jobs set state=\${next},
+    await tx`update bridge_production_conversion_jobs set state=\${next},
       history=history || \${JSON.stringify([{ state: next, at: new Date().toISOString(), detail: safeReason }])}::jsonb,
-      updated_at=now() where id=\${jobId}\`;
+      updated_at=now() where id=\${jobId}`;
     return { state: next };
   });
 });
