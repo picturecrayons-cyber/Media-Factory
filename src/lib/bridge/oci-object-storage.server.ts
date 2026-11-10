@@ -134,6 +134,7 @@ async function signedFetch(opts: {
   method: "GET" | "HEAD" | "POST" | "DELETE";
   path: string;
   body?: unknown;
+  timeoutMs?: number;
 }) {
   const url = new URL(opts.path, endpoint(opts.cfg.region));
   const body = opts.body === undefined ? undefined : JSON.stringify(opts.body);
@@ -153,7 +154,7 @@ async function signedFetch(opts: {
     method: opts.method,
     headers: safeHeaders,
     body,
-    signal: AbortSignal.timeout(15_000),
+    signal: AbortSignal.timeout(opts.timeoutMs ?? 15_000),
   });
 }
 
@@ -294,7 +295,7 @@ export async function readObjectSha256AtTarget(
   const cfg = config(target);
   const namespace = await resolveNamespace(cfg);
   const path = `/n/${encodeURIComponent(namespace)}/b/${encodeURIComponent(cfg.bucket)}/o/${encodedObjectName(key)}`;
-  const res = await signedFetch({ cfg, method: "GET", path });
+  const res = await signedFetch({ cfg, method: "GET", path, timeoutMs: 4 * 60 * 60 * 1000 });
   if (!res.ok || !res.body) throw new Error(`OCI replica checksum read-back failed (${res.status})`);
   const hash = createHash("sha256");
   let byteSize = 0;
