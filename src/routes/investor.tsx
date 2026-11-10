@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { listTitles } from "@/lib/bridge/titles";
-import { getSql } from "@/lib/db";
+import { getOwnInvestorInvestments } from "@/lib/bridge/investor";
 
 export const Route = createFileRoute("/investor")({ component: Investor });
 
@@ -22,7 +22,7 @@ function Investor() {
 function InvestorBody({ userId }: { userId: string }) {
   const investmentsQ = useQuery({
     queryKey: ["bridge-investor-investments", userId],
-    queryFn: () => listInvestorInvestments(userId),
+    queryFn: () => getOwnInvestorInvestments(),
   });
   const rows = investmentsQ.data?.investments ?? [];
   const totalCapital = rows.reduce((sum, row) => sum + Number(row.investedAmountPaise ?? 0), 0);
@@ -54,32 +54,3 @@ function InvestorBody({ userId }: { userId: string }) {
   );
 }
 
-async function listInvestorInvestments(investorUserId: string) {
-  const sql = await getSql();
-  const rows = await sql<{
-    id: string;
-    title_id: string;
-    title_name: string;
-    investment_reference: string | null;
-    invested_amount_paise: number | string | null;
-    participation_percent: number | string | null;
-    created_at: string | Date;
-  }>`
-    select i.id, i.title_id, t.name as title_name, i.investment_reference,
-           i.invested_amount_paise, i.participation_percent, i.created_at
-    from bridge_title_investors i
-    join bridge_titles t on t.id = i.title_id
-    where i.investor_user_id = ${investorUserId}
-    order by i.created_at desc
-    limit 200
-  `;
-  return { investments: rows.map((row) => ({
-    id: row.id,
-    titleId: row.title_id,
-    titleName: row.title_name,
-    investmentReference: row.investment_reference,
-    investedAmountPaise: row.invested_amount_paise,
-    participationPercent: row.participation_percent,
-    createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : String(row.created_at),
-  })) };
-}
