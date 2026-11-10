@@ -6,6 +6,7 @@ type Props = {
   createOrder: (idempotencyKey: string, email?: string) => Promise<OrderResult>;
   verifyPayment: (payload: { orderId: string; paymentId: string; signature: string }) => Promise<VerifyResult>;
   productName?: string;
+  receiptEmailEnabled?: boolean;
 };
 
 declare global {
@@ -42,7 +43,7 @@ function randomKey() {
   return typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `logo-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
-export default function LogoBackgroundConverter({ createOrder, verifyPayment, productName = "Logo Background Converter" }: Props) {
+export default function LogoBackgroundConverter({ createOrder, verifyPayment, productName = "Logo Background Converter", receiptEmailEnabled = false }: Props) {
   const [sourceUrl, setSourceUrl] = useState("");
   const [resultUrl, setResultUrl] = useState("");
   const [fileName, setFileName] = useState("logo-transparent.png");
@@ -219,9 +220,9 @@ export default function LogoBackgroundConverter({ createOrder, verifyPayment, pr
         <div><p style={styles.muted}>Original · click background to sample</p>{sourceUrl ? <img ref={imageRef} src={sourceUrl} onClick={resample} alt="Original logo" style={{ ...styles.preview, cursor: "crosshair" }} /> : <div style={{ ...styles.preview, minHeight: 160, display: "grid", placeItems: "center", padding: 20, boxSizing: "border-box" }}>Original preview</div>}</div>
         <div><p style={styles.muted}>Transparent PNG preview</p>{resultUrl ? <img src={resultUrl} alt="Transparent logo preview" style={styles.preview} /> : <div style={{ ...styles.preview, minHeight: 160, display: "grid", placeItems: "center", padding: 20, boxSizing: "border-box" }}>PNG preview</div>}</div>
       </div>
-      <div style={{ marginTop: 18 }}>
+      {receiptEmailEnabled && <div style={{ marginTop: 18 }}>
         <label style={{ display: "block", fontSize: 13 }}>Receipt email (optional)<input type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" style={{ display: "block", width: "100%", marginTop: 6, padding: 10, borderRadius: 8, border: "1px solid rgba(148,163,184,.35)", background: "transparent", color: "inherit" }} /></label>
-      </div>
+      </div>}
       <div style={{ marginTop: 18 }}>
         <label style={{ display: "flex", justifyContent: "space-between", gap: 12, fontSize: 13 }}><span>Background tolerance</span><strong>{tolerance}</strong></label>
         <input type="range" min="0" max="100" value={tolerance} onChange={(e) => void changeTolerance(Number(e.target.value))} style={{ width: "100%", marginTop: 8 }} />
