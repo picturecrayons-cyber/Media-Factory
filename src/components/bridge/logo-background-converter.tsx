@@ -1,4 +1,5 @@
 import { useRef, useState, type CSSProperties, type ChangeEvent, type MouseEvent } from "react";
+import { removeConnectedBackground } from "@/lib/bridge/logo-background-removal";
 
 type OrderResult = { orderId: string; amountPaise: number; currency: "INR"; keyId: string };
 type VerifyResult = { verified: boolean; receiptId: string };
@@ -78,37 +79,7 @@ export default function LogoBackgroundConverter({ createOrder, verifyPayment, pr
     ctx.clearRect(0, 0, width, height);
     ctx.drawImage(img, 0, 0);
     const frame = ctx.getImageData(0, 0, width, height);
-    const pixels = frame.data;
-    const count = width * height;
-    const visited = new Uint8Array(count);
-    const queue = new Int32Array(count);
-    let head = 0;
-    let tail = 0;
-    const limit = threshold * threshold * 3;
-    const matches = (index: number) => {
-      const offset = index * 4;
-      if (pixels[offset + 3] === 0) return true;
-      return colors.some(([r, g, b]) => {
-        const dr = pixels[offset] - r, dg = pixels[offset + 1] - g, db = pixels[offset + 2] - b;
-        return dr * dr + dg * dg + db * db <= limit;
-      });
-    };
-    const add = (index: number) => {
-      if (index < 0 || index >= count || visited[index] || !matches(index)) return;
-      visited[index] = 1;
-      queue[tail++] = index;
-    };
-    for (let x = 0; x < width; x++) { add(x); add((height - 1) * width + x); }
-    for (let y = 1; y < height - 1; y++) { add(y * width); add(y * width + width - 1); }
-    while (head < tail) {
-      const index = queue[head++];
-      const x = index % width;
-      if (x > 0) add(index - 1);
-      if (x + 1 < width) add(index + 1);
-      if (index >= width) add(index - width);
-      if (index + width < count) add(index + width);
-    }
-    for (let i = 0; i < count; i++) if (visited[i]) pixels[i * 4 + 3] = 0;
+    frame.data.set(removeConnectedBackground(frame.data, width, height, colors, threshold));
     ctx.putImageData(frame, 0, 0);
     const blob = await new Promise<Blob>((resolve, reject) => canvas.toBlob((value) => value ? resolve(value) : reject(new Error("Could not export transparent PNG.")), "image/png"));
     setOutput(blob);
