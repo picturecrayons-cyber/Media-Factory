@@ -85,30 +85,6 @@ function replicaTargets() {
   return { master: master as { region: string; bucket: string }, backup1: backup1 as { region: string; bucket: string }, backup2: backup2 as { region: string; bucket: string } };
 }
 
-async function requireProductionAccess(sql: Awaited<ReturnType<typeof getSql>>, actor: Actor, productionId: string) {
-  const rows = await sql<{
-    id: string; title_id: string; production_name: string; production_no: string;
-    shooting_date: string; camera_card_id: string | null; owner_user_id: string;
-    owner_account_type: string; owner_organization_id: string | null;
-  }>`
-    select p.id, p.title_id, p.production_name, p.production_no,
-      d.shooting_date::text as shooting_date, c.id as camera_card_id,
-      t.owner_user_id, t.owner_account_type, t.owner_organization_id
-    from bridge_productions p
-    join bridge_titles t on t.id = p.title_id
-    left join bridge_production_shooting_days d on d.production_id = p.id
-    left join bridge_production_camera_cards c on c.shooting_day_id = d.id
-    where p.id = ${productionId}
-    limit 1
-  `;
-  const row = rows[0];
-  if (!row || !canOperateOnTitle(actor, {
-    ownerUserId: row.owner_user_id,
-    ownerAccountType: row.owner_account_type as "independent_creator" | "studio" | "buyer" | "investor",
-    ownerOrganizationId: row.owner_organization_id,
-  }, "production.dit_operate", "production.dit_operate")) throw new Error("Forbidden");
-  return row;
-}
 
 const listInput = z.object({ titleId: z.string().min(1).optional() });
 export const listDitOperations = createServerFn({ method: "GET" })
@@ -117,7 +93,7 @@ export const listDitOperations = createServerFn({ method: "GET" })
   .handler(async ({ context, data }) => {
     const actor = await requireVerifiedActor(context.userId);
     const sql = await getSql();
-    if (!actor.internalRole && actor.accountType !== "studio") throw new Error("Forbidden");
+    if ((!actor.internalRole || !["admin", "super_admin"].includes(actor.internalRole)) && actor.accountType !== "studio") throw new Error("Forbidden");
     const rows = await sql`
       select p.id, p.title_id as "titleId", t.name as "titleName", p.production_name as "productionName",
         p.production_no as "productionNo", p.status, p.created_at as "createdAt",
@@ -129,7 +105,7 @@ export const listDitOperations = createServerFn({ method: "GET" })
       join bridge_titles t on t.id=p.title_id
       left join bridge_production_shooting_days d on d.production_id=p.id
       left join bridge_production_camera_cards c on c.shooting_day_id=d.id
-      where (${Boolean(actor.internalRole)} or t.owner_user_id=${actor.userId}
+      where (${Boolean(actor.internalRole && ["admin", "super_admin"].includes(actor.internalRole))} or t.owner_user_id=${actor.userId}
         or (t.owner_account_type='studio' and t.owner_organization_id=${actor.organizationId ?? null}))
         and (${data.titleId ?? null}::text is null or p.title_id=${data.titleId ?? null})
       order by p.created_at desc, d.day_number, c.camera_id, c.card_no
