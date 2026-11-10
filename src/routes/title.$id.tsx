@@ -38,6 +38,7 @@ import {
   sessionStorageKey,
 } from "@/lib/bridge/multipart-upload";
 import { AssetPosterSlot, AssetPreviewGallery } from "@/components/bridge/asset-preview-gallery";
+import { FinishedFilmMetadataEditor } from "@/components/bridge/finished-film-metadata-editor";
 
 export const Route = createFileRoute("/title/$id")({
   head: () => ({ meta: [{ name: "robots", content: "noindex, nofollow" }] }),
@@ -142,6 +143,8 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
   const distributionReady = Boolean(
     pub && publicationIsActive(pub.authorizationStatus, pub.windowStart, pub.windowEnd),
   );
+  const canEditMetadata = canMutateTitle(actor, title, "title.update_own", "title.license") &&
+    (Boolean(actor.internalRole) || ["DRAFT", "UPLOADING", "PREPARING"].includes(title.status));
 
   return (
     <div className="space-y-5">
@@ -241,6 +244,9 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
             <Metric label="Director" value={title.credits?.filter((c) => c.role === "Director").map((c) => c.name).join(", ") || "—"} />
             <Metric label="Producer" value={title.credits?.filter((c) => c.role === "Producer").map((c) => c.name).join(", ") || "—"} />
           </div>
+          {(title.submissionType ?? "finished_film") === "finished_film" ? (
+            <FinishedFilmMetadataEditor title={title} editable={canEditMetadata} />
+          ) : null}
           <LaneStore key={title.contentType} titleId={title.id} stored={loopStageType(title.contentType)} locked={!actor.internalRole && !["DRAFT", "UPLOADING", "PREPARING"].includes(title.status)} />
           {title.synopsis ? <p className="mt-4 text-sm leading-6 text-muted">{title.synopsis}</p> : null}
           <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
