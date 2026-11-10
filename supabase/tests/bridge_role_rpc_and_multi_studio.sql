@@ -1,6 +1,6 @@
 begin;
 
-select plan(4);
+select plan(5);
 
 select ok(
   to_regprocedure('public.bridge_current_internal_role()') is not null,
@@ -20,6 +20,11 @@ select ok(
 select ok(
   to_regclass('public.bridge_organization_memberships_one_active_org_per_user') is null,
   'legacy one-active-organization index is absent'
+);
+
+select ok(
+  to_regclass('public.bridge_organization_memberships_user_status_org_idx') is not null,
+  'multi-Studio membership lookup index exists'
 );
 
 select * from finish();
