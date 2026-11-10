@@ -220,3 +220,15 @@ it("CMS ingest belongs only to verified super admins", () => {
   for (const a of [creator(), studio(), buyer(), admin(), viewer(), qc, legal, finance])
     assert.equal(hasPermission(a, "title.ingest_internal"), false);
 });
+
+
+it("grants DIT operations only to Admin, Super Admin and Studio accounts", () => {
+  assert.equal(hasPermission(admin(), "production.dit_operate"), true);
+  assert.equal(hasPermission(superAdmin(), "production.dit_operate"), true);
+  assert.equal(hasPermission(studio(), "production.dit_operate"), true);
+  for (const a of [creator(), buyer(), investor(), viewer(), qc, legal, finance]) {
+    assert.equal(hasPermission(a, "production.dit_operate"), false);
+  }
+  assert.equal(hasPermission(admin(), "title.ingest_internal"), false);
+  assert.equal(hasPermission(admin(), "title.advance_upload"), false);
+});
