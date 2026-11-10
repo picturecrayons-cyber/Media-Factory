@@ -16,6 +16,10 @@ import {
   type ClipRecord,
   type ClipLedgerEntry,
   type CopyVerification,
+  queueConversion,
+  completeConversion,
+  type ConversionProfile,
+  type ConversionCopyVerification,
 } from "./production-vault";
 import {
   signUpload,
@@ -23,6 +27,8 @@ import {
   readObjectSha256AtTarget,
   copyObjectToReplicaTarget,
   verifyObjectAtTarget,
+  signDownload,
+  signUploadAtTarget,
 } from "./oci-object-storage.server";
 
 const PROJECT_REF = "jbymleftneggcgutlcqu";
@@ -478,3 +484,214 @@ export const signoffDitCard = createServerFn({ method: "POST" })
     });
     return result;
   });
+
+const approvedDitProfiles: ConversionProfile[] = [
+  { resolution: "720p", outputType: "Proxy", codec: "H.264 High", container: "MP4", width: 1280, height: 720 },
+  { resolution: "1080p", outputType: "Proxy", codec: "H.264 High", container: "MP4", width: 1920, height: 1080 },
+  { resolution: "720p", outputType: "ProRes", codec: "Apple ProRes 422 LT", container: "MOV", width: 1280, height: 720 },
+  { resolution: "1080p", outputType: "ProRes", codec: "Apple ProRes 422 HQ", container: "MOV", width: 1920, height: 1080 },
+];
+
+const queueConversionInput = z.object({
+  clipId: z.string().uuid(),
+  resolution: z.enum(["720p", "1080p"]),
+  outputType: z.enum(["Proxy", "ProRes"]),
+});
+export const queueDitConversion = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(queueConversionInput)
+  .handler(async ({ context, data }) => {
+    assertDitStagingDatabase();
+    const actor = await requireVerifiedActor(context.userId);
+    const sql = await getSql();
+    const rows = await sql<{
+      id: string; production_id: string; title_id: string; owner_user_id: string; owner_account_type: string;
+      owner_organization_id: string | null; clip_number: string; original_filename: string; original_relative_path: string;
+      byte_size: number; checksum_sha256: string; has_video: boolean; has_audio: boolean; duration_ms: number;
+      frame_rate: number | null; width: number | null; height: number | null; codec: string | null;
+      automated_result: "PASS" | "WARNING" | "FAIL" | "NOT_CHECKED"; automated_reasons: string[];
+      human_disposition: "ACCEPTED" | "REJECTED" | null; human_reviewer_id: string | null; human_reviewed_at: string | null;
+      source_object_key: string | null; source_copy_result: string | null;
+    }>`
+      select c.id,m.production_id,p.title_id,t.owner_user_id,t.owner_account_type,t.owner_organization_id,
+        c.clip_number,c.original_filename,c.original_relative_path,c.byte_size,c.checksum_sha256,c.has_video,c.has_audio,
+        c.duration_ms,c.frame_rate,c.width,c.height,c.codec,c.automated_result,c.automated_reasons,
+        c.human_disposition,c.human_reviewer_id,c.human_reviewed_at,
+        (select v.object_key from bridge_production_copy_verifications v where v.clip_id=c.id and v.media_kind='RAW' and v.storage_tier='MASTER' and v.verification_result='PASS' limit 1) as source_object_key,
+        (select v.verification_result from bridge_production_copy_verifications v where v.clip_id=c.id and v.media_kind='RAW' and v.storage_tier='MASTER' limit 1) as source_copy_result
+      from bridge_production_clips c join bridge_production_ingest_manifests m on m.id=c.manifest_id
+      join bridge_productions p on p.id=m.production_id join bridge_titles t on t.id=p.title_id
+      where c.id=${data.clipId} limit 1
+    `;
+    const row = rows[0];
+    if (!row || !canOperateOnTitle(actor, { ownerUserId: row.owner_user_id,
+      ownerAccountType: row.owner_account_type as "independent_creator" | "studio" | "buyer" | "investor",
+      ownerOrganizationId: row.owner_organization_id }, "title.advance_upload", "title.advance_upload")) throw new Error("Forbidden");
+    if (!row.source_object_key || row.source_copy_result !== "PASS") throw new Error("Verified MASTER RAW source copy is required");
+    const clip: ClipLedgerEntry = {
+      clipNumber: row.clip_number, originalFilename: row.original_filename, originalRelativePath: row.original_relative_path,
+      byteSize: Number(row.byte_size), checksumSha256: row.checksum_sha256, hasVideo: row.has_video, hasAudio: row.has_audio,
+      durationMs: Number(row.duration_ms), frameRate: row.frame_rate === null ? null : Number(row.frame_rate),
+      width: row.width, height: row.height, codec: row.codec, camera: "A", cardNo: "",
+      automatedResult: row.automated_result, automatedReasons: row.automated_reasons ?? [],
+      humanDisposition: row.human_disposition, humanReviewerId: row.human_reviewer_id, humanReviewedAt: row.human_reviewed_at,
+    };
+    const jobId = randomUUID();
+    const job = queueConversion({ jobId, clip, sourceVerified: true, resolution: data.resolution,
+      outputType: data.outputType, approvedProfiles: approvedDitProfiles, at: new Date().toISOString() });
+    await sql`insert into bridge_production_conversion_jobs(id,clip_id,source_sha256,profile,state,attempt,history)
+      values (${jobId},${data.clipId},${job.sourceSha256},${JSON.stringify(job.profile)}::jsonb,'QUEUED',0,${JSON.stringify(job.history)}::jsonb)`;
+    await sql`insert into bridge_production_audit_events(production_id,actor_user_id,action,entity_type,entity_id,metadata)
+      values (${row.production_id},${actor.userId},'conversion.queued','conversion_job',${jobId},${JSON.stringify({ clipId: data.clipId, profile: job.profile })}::jsonb)`;
+    return { jobId, state: "QUEUED" as const, profile: job.profile };
+  });
+
+type DitWorkerJob = {
+  id: string; clip_id: string; source_sha256: string; profile: ConversionProfile;
+  source_object_key: string; production_name: string; production_no: string; shooting_date: string;
+  camera_id: "A" | "B" | "C"; card_no: string; original_relative_path: string; clip_number: string;
+};
+
+export async function claimNextDitConversionJob(workerId: string) {
+  assertDitStagingDatabase();
+  if (!workerId.trim() || workerId.length > 120) throw new Error("Worker identity required");
+  const targets = replicaTargets();
+  const sql = await getSql();
+  return sql.transaction(async (tx) => {
+    const jobs = await tx<DitWorkerJob>`
+      select j.id,j.clip_id,j.source_sha256,j.profile,
+        v.object_key as source_object_key,p.production_name,p.production_no,d.shooting_date::text,
+        c.camera_id,c.card_no,cl.original_relative_path,cl.clip_number
+      from bridge_production_conversion_jobs j
+      join bridge_production_clips cl on cl.id=j.clip_id
+      join bridge_production_ingest_manifests m on m.id=cl.manifest_id
+      join bridge_productions p on p.id=m.production_id
+      join bridge_production_shooting_days d on d.id=m.shooting_day_id
+      join bridge_production_camera_cards c on c.id=m.camera_card_id
+      join bridge_production_copy_verifications v on v.clip_id=cl.id and v.media_kind='RAW' and v.storage_tier='MASTER' and v.verification_result='PASS'
+      where j.state in ('QUEUED','RETRY_REQUIRED')
+      order by j.created_at
+      for update of j skip locked limit 1
+    `;
+    const job = jobs[0];
+    if (!job) return { job: null };
+    const source = await signDownload({ key: job.source_object_key, expiresIn: 900 });
+    const extension = job.profile.container.toLowerCase();
+    const filename = `${job.clip_number.replace(/[^a-zA-Z0-9_-]/g, "_")}-${job.profile.outputType.toLowerCase()}.${extension}`;
+    const masterKey = buildVaultObjectKey({ filmName: job.production_name, productionNo: job.production_no,
+      tier: "MASTER", date: job.shooting_date, camera: job.camera_id, cardNo: job.card_no, kind: "CONVERTED" }) + filename;
+    const backupKey = buildVaultObjectKey({ filmName: job.production_name, productionNo: job.production_no,
+      tier: "BACKUP_1", date: job.shooting_date, camera: job.camera_id, cardNo: job.card_no, kind: "CONVERTED" }) + filename;
+    const masterUpload = await signUpload({ key: masterKey, contentType: job.profile.container === "MP4" ? "video/mp4" : "video/quicktime", expiresIn: 900 });
+    const backupUpload = await signUploadAtTarget({ key: backupKey, contentType: job.profile.container === "MP4" ? "video/mp4" : "video/quicktime", target: targets.backup1, expiresIn: 900 });
+    const history = [{ state: "PROCESSING", at: new Date().toISOString(), detail: `Worker ${workerId} claimed job` }];
+    await tx`update bridge_production_conversion_jobs set state='PROCESSING',attempt=attempt+1,
+      history=history || ${JSON.stringify(history)}::jsonb,updated_at=now() where id=${job.id}`;
+    return { job: { jobId: job.id, sourceUrl: source.url, sourceSha256: job.source_sha256,
+      masterUploadUrl: masterUpload.url, backupUploadUrl: backupUpload.url,
+      masterKey, backupKey, profile: job.profile, workerId } };
+  });
+}
+
+const conversionCompleteInput = z.object({
+  jobId: z.string().uuid(),
+  master: z.object({ byteSize: z.number().int().positive(), sha256: z.string().regex(/^[a-fA-F0-9]{64}$/), width: z.number().int().positive(), height: z.number().int().positive(), codec: z.string().min(1).max(100) }),
+  backup1: z.object({ byteSize: z.number().int().positive(), sha256: z.string().regex(/^[a-fA-F0-9]{64}$/), width: z.number().int().positive(), height: z.number().int().positive(), codec: z.string().min(1).max(100) }),
+});
+export async function completeDitConversionJob(input: z.infer<typeof conversionCompleteInput>) {
+  assertDitStagingDatabase();
+  const data = conversionCompleteInput.parse(input);
+  const sql = await getSql();
+  const rows = await sql<DitWorkerJob>`
+    select j.id,j.clip_id,j.source_sha256,j.profile,
+      v.object_key as source_object_key,p.production_name,p.production_no,d.shooting_date::text,
+      c.camera_id,c.card_no,cl.original_relative_path,cl.clip_number
+    from bridge_production_conversion_jobs j
+    join bridge_production_clips cl on cl.id=j.clip_id
+    join bridge_production_ingest_manifests m on m.id=cl.manifest_id
+    join bridge_productions p on p.id=m.production_id
+    join bridge_production_shooting_days d on d.id=m.shooting_day_id
+    join bridge_production_camera_cards c on c.id=m.camera_card_id
+    join bridge_production_copy_verifications v on v.clip_id=cl.id and v.media_kind='RAW' and v.storage_tier='MASTER' and v.verification_result='PASS'
+    where j.id=${data.jobId} and j.state='PROCESSING' limit 1
+  `;
+  const job = rows[0];
+  if (!job) throw new Error("Conversion job is not processing");
+  const targets = replicaTargets();
+  const extension = job.profile.container.toLowerCase();
+  const filename = `${job.clip_number.replace(/[^a-zA-Z0-9_-]/g, "_")}-${job.profile.outputType.toLowerCase()}.${extension}`;
+  const masterKey = buildVaultObjectKey({ filmName: job.production_name, productionNo: job.production_no, tier: "MASTER",
+    date: job.shooting_date, camera: job.camera_id, cardNo: job.card_no, kind: "CONVERTED" }) + filename;
+  const backupKey = buildVaultObjectKey({ filmName: job.production_name, productionNo: job.production_no, tier: "BACKUP_1",
+    date: job.shooting_date, camera: job.camera_id, cardNo: job.card_no, kind: "CONVERTED" }) + filename;
+  const [masterHead, backupHead] = await Promise.all([
+    verifyObjectAtTarget(masterKey, targets.master), verifyObjectAtTarget(backupKey, targets.backup1),
+  ]);
+  const [masterReadback, backupReadback] = await Promise.all([
+    readObjectSha256AtTarget(masterKey, targets.master), readObjectSha256AtTarget(backupKey, targets.backup1),
+  ]);
+  const profileMatches = (item: typeof data.master) =>
+    item.width === job.profile.width && item.height === job.profile.height &&
+    item.codec.toLowerCase().includes(job.profile.codec === "H.264 High" ? "h264" : "prores");
+  const masterOk = masterHead.byteSize === data.master.byteSize && masterReadback.byteSize === data.master.byteSize &&
+    masterReadback.sha256.toLowerCase() === data.master.sha256.toLowerCase() && profileMatches(data.master);
+  const backupOk = backupHead.byteSize === data.backup1.byteSize && backupReadback.byteSize === data.backup1.byteSize &&
+    backupReadback.sha256.toLowerCase() === data.backup1.sha256.toLowerCase() && profileMatches(data.backup1);
+  if (!masterOk || !backupOk) {
+    await sql`update bridge_production_conversion_jobs set state='RETRY_REQUIRED',
+      history=history || ${JSON.stringify([{ state: "RETRY_REQUIRED", at: new Date().toISOString(), detail: "Output read-back or profile verification failed" }])}::jsonb,
+      updated_at=now() where id=${data.jobId}`;
+    throw new Error("Conversion output read-back or profile verification failed");
+  }
+  const makeOutput = (id: string, tier: "MASTER" | "BACKUP_1", key: string, target: { region: string; bucket: string }, evidence: typeof data.master, readback: { byteSize: number; sha256: string }): ConversionCopyVerification => ({
+    copyId: id, clipNumber: job.clip_number, kind: "CONVERTED", tier,
+    expectedByteSize: evidence.byteSize, expectedSha256: evidence.sha256,
+    observedByteSize: readback.byteSize, observedSha256: readback.sha256, independentlyVerified: true,
+    verifiedAt: new Date().toISOString(), storageLocationId: `oci:${target.region}:${target.bucket}`,
+    failureDomainId: `oci:${target.region}:${target.bucket}`,
+    sourceSha256: job.source_sha256, probePassed: true, metadataMatchesProfile: true, qcResult: "PASS",
+  });
+  const master = makeOutput(`ditconv:${job.id}:MASTER`, "MASTER", masterKey, targets.master, data.master, masterReadback);
+  const backup = makeOutput(`ditconv:${job.id}:BACKUP_1`, "BACKUP_1", backupKey, targets.backup1, data.backup1, backupReadback);
+  const processing = { jobId: job.id, clipNumber: job.clip_number, sourceSha256: job.source_sha256,
+    profile: job.profile, state: "PROCESSING" as const, attempt: 1, history: [], masterOutput: null, backup1Output: null };
+  const completed = completeConversion(processing, master, backup, new Date().toISOString());
+  await sql.transaction(async (tx) => {
+    for (const item of [master, backup]) {
+      await tx`insert into bridge_production_copy_verifications
+        (id,clip_id,media_kind,storage_tier,object_key,expected_byte_size,expected_sha256,observed_byte_size,observed_sha256,
+          independently_verified,verified_at,storage_location_id,failure_domain_id,verification_result)
+        values (${item.copyId},${job.clip_id},'CONVERTED',${item.tier},${item.tier === "MASTER" ? masterKey : backupKey},
+          ${item.expectedByteSize},${item.expectedSha256},${item.observedByteSize},${item.observedSha256},true,${item.verifiedAt},
+          ${item.storageLocationId},${item.failureDomainId},'PASS')
+        on conflict (clip_id,media_kind,storage_tier) do update set
+          object_key=excluded.object_key,expected_byte_size=excluded.expected_byte_size,expected_sha256=excluded.expected_sha256,
+          observed_byte_size=excluded.observed_byte_size,observed_sha256=excluded.observed_sha256,
+          independently_verified=true,verified_at=excluded.verified_at,storage_location_id=excluded.storage_location_id,
+          failure_domain_id=excluded.failure_domain_id,verification_result='PASS'
+        where bridge_production_copy_verifications.verification_result <> 'PASS'`;
+    }
+    await tx`update bridge_production_conversion_jobs set state='COMPLETE',master_output_copy_id=${master.copyId},
+      backup1_output_copy_id=${backup.copyId},completed_at=now(),history=history || ${JSON.stringify(completed.history)}::jsonb,
+      updated_at=now() where id=${job.id}`;
+    await tx`insert into bridge_production_audit_events(production_id,actor_user_id,action,entity_type,entity_id,metadata)
+      select m.production_id,'dit-worker','conversion.completed','conversion_job',${job.id},
+        ${JSON.stringify({ masterKey, backupKey, profile: job.profile })}::jsonb
+      from bridge_production_ingest_manifests m where m.id=(select manifest_id from bridge_production_clips where id=${job.clip_id})`;
+  });
+  return { ok: true, state: "COMPLETE" as const, jobId: job.id };
+}
+
+export async function failDitConversionJob(jobId: string, reason: string) {
+  assertDitStagingDatabase();
+  const sql = await getSql();
+  const safeReason = reason.trim().slice(0, 500) || "Worker failed";
+  const rows = await sql<{ attempt: number; state: string }>`select attempt,state from bridge_production_conversion_jobs where id=${jobId} for update`;
+  const job = rows[0];
+  if (!job || job.state !== "PROCESSING") throw new Error("Conversion job is not processing");
+  const next = job.attempt < 3 ? "RETRY_REQUIRED" : "FAILED";
+  await sql`update bridge_production_conversion_jobs set state=${next},
+    history=history || ${JSON.stringify([{ state: next, at: new Date().toISOString(), detail: safeReason }])}::jsonb,
+    updated_at=now() where id=${jobId}`;
+  return { state: next };
+}
