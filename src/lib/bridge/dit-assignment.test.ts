@@ -13,7 +13,7 @@ const assignment = (overrides: Partial<DitAssignment> = {}): DitAssignment => ({
 
 test("DIT access requires an exact active user, production, title and asset assignment", () => {
   assert.equal(hasActiveDitAssignment("dit-user-a", "production-a", "title-a", "asset-master-a", [assignment()]), true);
-  assert.equal(hasActiveDitAssignment("dit-user-a", "production-a", "title-a", null, [assignment()]), true);
+  assert.equal(hasActiveDitAssignment("dit-user-a", "production-a", "title-a", null, [assignment({ assetId: null })]), true);
 });
 
 test("DIT assignment cannot be inherited by another user, production, title or asset", () => {
