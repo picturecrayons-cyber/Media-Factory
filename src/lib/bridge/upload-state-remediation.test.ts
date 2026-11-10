@@ -107,6 +107,7 @@ test("atomic state transition: migration queue and title master/poster only adva
     await db.exec("create role anon; create role authenticated;");
     await db.exec(readFileSync(join(process.cwd(), "migrations/0004_bridge.sql"), "utf8"));
     await db.exec(readFileSync(join(process.cwd(), "migrations/0021_bridge_organizations.sql"), "utf8"));
+    await db.exec(readFileSync(join(process.cwd(), "supabase/migrations/20261004_bridge_assets_add_censor_certificate.sql"), "utf8"));
 
     await db.exec(`
       create table if not exists loop_media_migration_queue (
@@ -215,6 +216,7 @@ test("verified vertical artwork is durably mapped to the canonical title poster 
     await db.exec("create role anon; create role authenticated;");
     await db.exec(readFileSync(join(process.cwd(), "migrations/0004_bridge.sql"), "utf8"));
     await db.exec(readFileSync(join(process.cwd(), "migrations/0021_bridge_organizations.sql"), "utf8"));
+    await db.exec(readFileSync(join(process.cwd(), "supabase/migrations/20261004_bridge_assets_add_censor_certificate.sql"), "utf8"));
     await db.exec(`
       insert into bridge_titles (id, slug, name, owner_user_id, owner_account_type, status)
       values ('title-artwork-test', 'title-artwork-test', 'Artwork Mapping Test', 'owner-art', 'independent_creator', 'PREPARING');
