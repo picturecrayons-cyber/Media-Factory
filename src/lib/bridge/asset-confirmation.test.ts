@@ -323,9 +323,6 @@ test("Super Admin can replace a verified asset through RIGHTS_REVIEW before firs
       );
     `);
     await db.exec(`
-      create table bridge_loop_publications (bridge_title_id text, approved_at timestamptz);
-      create table bridge_destination_packages (title_id text, readiness_state text);
-      create table bridge_delivery_jobs (title_id text, admin_sign_off boolean, delivery_receipt_url text);
       insert into bridge_titles (id,slug,name,owner_user_id,owner_account_type,status,master_key)
       values ('replace-title','replace-title','Replace Title','owner','independent_creator','RIGHTS_REVIEW','old/master.verified/old');
       insert into bridge_assets (id,title_id,kind,s3_key,content_type,byte_size,created_by)
@@ -420,9 +417,6 @@ test("first LOOP publication permanently locks Super Admin replacement", async (
       );
     `);
     await db.exec(`
-      create table bridge_loop_publications (bridge_title_id text, approved_at timestamptz);
-      create table bridge_destination_packages (title_id text, readiness_state text);
-      create table bridge_delivery_jobs (title_id text, admin_sign_off boolean, delivery_receipt_url text);
       insert into bridge_titles (id,slug,name,owner_user_id,owner_account_type,status)
       values ('locked-title','locked-title','Locked Title','owner','independent_creator','RIGHTS_REVIEW');
       insert into bridge_assets (id,title_id,kind,s3_key,content_type,created_by)
