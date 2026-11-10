@@ -105,6 +105,20 @@ async function persistVerifiedAssetScoped(
               or (not $10 and t.status in ('DRAFT','UPLOADING','PREPARING'))
             )
             and (
+              $10
+              or not exists (
+                select 1
+                from bridge_assets previous
+                where previous.title_id = t.id
+                  and (
+                    previous.kind = a.kind
+                    or (a.kind = 'poster_vertical' and previous.kind = 'poster')
+                  )
+                  and previous.byte_size > 0
+                  and previous.id <> a.id
+              )
+            )
+            and (
               $5
               or t.owner_user_id = $4
               ${studioPredicate}
