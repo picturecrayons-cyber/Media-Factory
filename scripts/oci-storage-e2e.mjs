@@ -92,6 +92,7 @@ try {
     assetId: asset.id,
     actorUserId: asset.created_by,
     internalActor: false,
+    superAdminActor: false,
     titleId: asset.title_id,
     kind: asset.kind,
     byteSize: sealed.byteSize,
