@@ -19,7 +19,7 @@ function Creator() {
   )}</RequireBridge>;
 }
 
-function CreatorDashboard({ actor }: { actor: { userId: string; organizationId: string | null } }) {
+function CreatorDashboard({ actor }: { actor: { userId: string; organizationId?: string | null } }) {
   const titlesQ = useQuery({ queryKey: ["bridge-titles", actor.userId, actor.organizationId], queryFn: () => listTitles(), retry: 1 });
   const titles = titlesQ.data?.titles ?? [];
   const live = titles.filter((t) => LIVE.has(t.status));
