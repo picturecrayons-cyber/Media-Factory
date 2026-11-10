@@ -54,4 +54,22 @@ describe("master download denial", () => {
       hasLicenseEntitlement: false,
     }).allow, false);
   });
+
+  it("allows a screener only with an explicit private screening grant", () => {
+    assert.equal(downloadDecision({
+      kind: "screener", actorIsOwner: false, actorIsInternal: false,
+      accountType: "buyer", hasLicenseEntitlement: false, hasPrivateScreeningGrant: true,
+    }).allow, true);
+    assert.equal(downloadDecision({
+      kind: "screener", actorIsOwner: false, actorIsInternal: false,
+      accountType: "buyer", hasLicenseEntitlement: false, hasPrivateScreeningGrant: false,
+    }).allow, false);
+  });
+
+  it("does not let a private screening grant authorize subtitle downloads", () => {
+    assert.equal(downloadDecision({
+      kind: "subtitle", actorIsOwner: false, actorIsInternal: false,
+      accountType: "buyer", hasLicenseEntitlement: false, hasPrivateScreeningGrant: true,
+    }).allow, false);
+  });
 });

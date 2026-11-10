@@ -7,6 +7,7 @@ import { BridgeShell } from "@/components/bridge/shell";
 import { StoryConceptDesk } from "@/components/bridge/story-concept-desk";
 import { listAdminWorkstations, reviewAdminTitle, setBuyerPublicationGate } from "@/lib/bridge/admin-workstations";
 import { listDuplicateReviews, openDuplicateReview, decideDuplicateReview } from "@/lib/bridge/duplicate-reconciliation";
+import { grantBuyerScreeningAccess, listBuyerScreeningAccess, revokeBuyerScreeningAccess } from "@/lib/bridge/buyer-screening-access";
 
 export const Route = createFileRoute("/admin/workstations")({ component: AdminWorkstations });
 
@@ -85,8 +86,11 @@ function WorkstationBody() {
         <SimpleTable title="Assets" description={data.assets.length + " base assets · " + data.assetVersions.length + " versioned assets"}
           rows={data.assets} fields={["kind", "s3_key", "content_type", "byte_size"]} />
       ) : activeTab === "Buyers" ? (
-        <BuyerRelease titles={data.titles} qc={data.qc} legal={data.legal} gate={gate}
-          onGate={(titleId, gateName) => gate.mutate({ data: { titleId, gate: gateName as "OTT", decision: "PASS" } })} />
+        <>
+          <BuyerRelease titles={data.titles} qc={data.qc} legal={data.legal} gate={gate}
+            onGate={(titleId, gateName) => gate.mutate({ data: { titleId, gate: gateName as "OTT", decision: "PASS" } })} />
+          <BuyerScreeningDesk titles={data.titles} profiles={data.profiles} />
+        </>
       ) : activeTab === "Deliveries" ? (
         <div className="space-y-6">
           <SimpleTable title="Licensing & Delivery" description={ready.length + " titles in the commercial pipeline"}
@@ -124,6 +128,66 @@ function TitleQueue({ titles, review }: { titles: any[]; review: any }) {
           </div>
         )) : <Empty text="No titles in the Bridge catalog." />}
       </div>
+    </section>
+  );
+}
+
+
+function BuyerScreeningDesk({ titles, profiles }: { titles: any[]; profiles: any[] }) {
+  const qc = useQueryClient();
+  const [titleId, setTitleId] = useState("");
+  const [buyerUserId, setBuyerUserId] = useState("");
+  const [expiry, setExpiry] = useState("");
+  const grantsQ = useQuery({
+    queryKey: ["buyer-screening-grants", titleId],
+    queryFn: () => listBuyerScreeningAccess({ data: titleId ? { titleId } : {} }),
+    enabled: Boolean(titleId),
+  });
+  const grant = useMutation({
+    mutationFn: () => grantBuyerScreeningAccess({ data: {
+      titleId, buyerUserId, expiresAt: expiry ? new Date(expiry).toISOString() : null,
+    } }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["buyer-screening-grants", titleId] });
+      setExpiry("");
+    },
+  });
+  const revoke = useMutation({
+    mutationFn: (buyerId: string) => revokeBuyerScreeningAccess({ data: {
+      titleId, buyerUserId: buyerId, reason: "Access withdrawn by authorized Bridge operator",
+    } }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["buyer-screening-grants", titleId] }),
+  });
+  const buyers = profiles.filter((p) => p.account_type === "buyer" && p.email_verified);
+  const grants = grantsQ.data?.grants ?? [];
+  return (
+    <section className="space-y-3 rounded-2xl border border-line bg-surface p-5">
+      <SectionHeader title="Private buyer screening" description="Grant time-limited screener access only after QC, Legal, OTT, packaging, curation and delivery gates pass. Revocation is immediate at the signing boundary." />
+      <div className="grid gap-2 md:grid-cols-3">
+        <select aria-label="Title" value={titleId} onChange={(e) => setTitleId(e.target.value)} className="rounded-lg border border-line bg-transparent px-3 py-2 text-sm">
+          <option value="">Select title</option>
+          {titles.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+        </select>
+        <select aria-label="Verified buyer" value={buyerUserId} onChange={(e) => setBuyerUserId(e.target.value)} className="rounded-lg border border-line bg-transparent px-3 py-2 text-sm">
+          <option value="">Select verified Buyer</option>
+          {buyers.map((b) => <option key={b.user_id} value={b.user_id}>{b.display_name || b.email}</option>)}
+        </select>
+        <input aria-label="Optional expiry" type="datetime-local" value={expiry} onChange={(e) => setExpiry(e.target.value)} className="rounded-lg border border-line bg-transparent px-3 py-2 text-sm" />
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <Button size="sm" disabled={!titleId || !buyerUserId || grant.isPending} onClick={() => grant.mutate()}>
+          {grant.isPending ? "Granting…" : "Grant private screening"}
+        </Button>
+        {grantsQ.isError ? <span role="alert" className="text-sm text-muted">Could not load grants: {String(grantsQ.error)}</span> : null}
+        {grant.isError || revoke.isError ? <span role="alert" className="text-sm text-muted">Access action failed: {String(grant.error ?? revoke.error)}</span> : null}
+      </div>
+      {titleId ? <div className="space-y-2">
+        {grants.map((g: any) => <div key={g.buyerUserId} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-line p-3 text-sm">
+          <span>{buyers.find((b) => b.user_id === g.buyerUserId)?.display_name || g.buyerUserId} · {g.revokedAt ? "REVOKED" : g.expiresAt && new Date(g.expiresAt) <= new Date() ? "EXPIRED" : "ACTIVE"} · {g.expiresAt ? new Date(g.expiresAt).toLocaleString() : "No expiry"}</span>
+          {!g.revokedAt ? <Button size="sm" variant="outline" disabled={revoke.isPending} onClick={() => revoke.mutate(g.buyerUserId)}>Revoke</Button> : null}
+        </div>)}
+        {!grantsQ.isLoading && !grants.length ? <p className="text-sm text-muted">No screening grants for this title.</p> : null}
+      </div> : null}
     </section>
   );
 }
