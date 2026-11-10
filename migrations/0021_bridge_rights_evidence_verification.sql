@@ -96,11 +96,11 @@ with raw_events as (
     count(distinct statement_ref)::int statement_n,count(statement_ref)::int statement_present,min(statement_ref) statement_ref,
     count(distinct amount_num)::int amount_n,count(amount_num)::int amount_present,min(amount_num) amount_num,
     count(distinct currency)::int currency_n,count(*) filter(where currency='INR')::int inr_n,
-    min(actor_user_id) actor,min(created_at) created_at
+    'legacy_backfill'::text actor,min(created_at) created_at
   from events group by ref_norm
 )
 insert into public.bridge_settlement_reference_claims(reference_normalized,reference,title_id,invoice_reference,statement_reference,amount_paise,currency,claim_state,created_by,created_at)
-select ref_norm,ref,
+select ref_norm,ref_norm,
   case when entity_type_n=1 and entity_type='bridge_title' and title_n=1 and title_present=n
     and exists(select 1 from public.bridge_titles t where t.id=stats.title_id) then stats.title_id end,
   case when invoice_n=1 and invoice_present=n then invoice_ref end,
