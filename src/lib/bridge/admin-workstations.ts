@@ -47,7 +47,7 @@ export const reviewAdminTitle = createServerFn({ method: "POST" })
     const actor = await actorFor(context.userId);
     if (!actor.internalRole) throw new Error("Forbidden");
     const sql = await getSql();
-    const rows = await sql<{ id: string; status: string }>`select id, status from bridge_titles where id = ${data.titleId} limit 1`;
+    const rows = await sql<{ id: string; status: string; master_key: string | null; poster_key: string | null }>`select id, status, master_key, poster_key from bridge_titles where id = ${data.titleId} limit 1`;
     const title = rows[0];
     if (!title) throw new Error("Title not found");
     let next: string | null = null;
@@ -55,6 +55,19 @@ export const reviewAdminTitle = createServerFn({ method: "POST" })
     if (data.decision === "ACCEPT") {
       assertPermission(actor, "title.advance_upload");
       if (title.status !== "PREPARING") throw new Error("Submission is not awaiting acceptance");
+      const verifiedAssets = await sql<{ kind: string; s3_key: string }>`
+        select kind, s3_key from bridge_assets
+        where title_id = ${title.id} and byte_size > 0
+      `;
+      const masterReady = Boolean(title.master_key) && verifiedAssets.some(
+        (asset) => asset.kind === "master" && asset.s3_key === title.master_key,
+      );
+      const artworkReady = Boolean(title.poster_key) && verifiedAssets.some(
+        (asset) => (asset.kind === "poster" || asset.kind === "poster_vertical") && asset.s3_key === title.poster_key,
+      );
+      if (!masterReady || !artworkReady) {
+        throw new Error("Submission cannot enter QC until its verified main film and mapped artwork are saved");
+      }
       next = "QC_REVIEW"; action = "submission.accept";
     } else if (data.decision === "PASS") {
       assertPermission(actor, "title.qc_review");

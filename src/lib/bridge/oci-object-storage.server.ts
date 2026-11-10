@@ -57,7 +57,7 @@ function derivedFingerprint(privateKey: string) {
     .join(":");
 }
 
-function config(): OciConfig {
+function config(target?: { region?: string; bucket?: string }): OciConfig {
   const tenancy = bridgeEnv.ociTenancyOcid();
   const user = bridgeEnv.ociUserOcid();
   const privateKey = bridgeEnv.ociPrivateKey();
@@ -71,8 +71,8 @@ function config(): OciConfig {
     user,
     privateKey: normalizePrivateKey(privateKey),
     fingerprint: bridgeEnv.ociFingerprint() || derivedFingerprint(privateKey),
-    region,
-    bucket,
+    region: target?.region ?? region,
+    bucket: target?.bucket ?? bucket,
     namespace: bridgeEnv.ociNamespace(),
   };
 }
@@ -134,6 +134,7 @@ async function signedFetch(opts: {
   method: "GET" | "HEAD" | "POST" | "DELETE";
   path: string;
   body?: unknown;
+  timeoutMs?: number;
 }) {
   const url = new URL(opts.path, endpoint(opts.cfg.region));
   const body = opts.body === undefined ? undefined : JSON.stringify(opts.body);
@@ -153,7 +154,7 @@ async function signedFetch(opts: {
     method: opts.method,
     headers: safeHeaders,
     body,
-    signal: AbortSignal.timeout(15_000),
+    signal: AbortSignal.timeout(opts.timeoutMs ?? 15_000),
   });
 }
 
@@ -170,8 +171,9 @@ async function createPar(opts: {
   key: string;
   accessType: "ObjectWrite" | "ObjectRead";
   expiresIn: number;
+  target?: { region: string; bucket: string };
 }) {
-  const cfg = config();
+  const cfg = config(opts.target);
   const namespace = await resolveNamespace(cfg);
   const timeExpires = new Date(Date.now() + opts.expiresIn * 1000).toISOString();
   const body = {
@@ -197,6 +199,21 @@ export async function signUpload(opts: { key: string; contentType: string; expir
     key: opts.key,
     accessType: "ObjectWrite",
     expiresIn: opts.expiresIn ?? 900,
+  });
+  return { url: signed.url, key: opts.key, bucket: signed.bucket, method: "PUT" as const };
+}
+
+export async function signUploadAtTarget(opts: {
+  key: string;
+  contentType: string;
+  target: { region: string; bucket: string };
+  expiresIn?: number;
+}) {
+  const signed = await createPar({
+    key: opts.key,
+    accessType: "ObjectWrite",
+    expiresIn: opts.expiresIn ?? 900,
+    target: opts.target,
   });
   return { url: signed.url, key: opts.key, bucket: signed.bucket, method: "PUT" as const };
 }
@@ -251,6 +268,88 @@ export async function signDownload(opts: { key: string; expiresIn?: number }) {
   return { url: signed.url, key: opts.key, bucket: signed.bucket, method: "GET" as const };
 }
 
+export async function verifyObjectAtTarget(
+  key: string,
+  target: { region: string; bucket: string },
+) {
+  if (!target.region.trim() || !target.bucket.trim()) throw new Error("OCI replica target is incomplete");
+  const cfg = config(target);
+  const namespace = await resolveNamespace(cfg);
+  const path = `/n/${encodeURIComponent(namespace)}/b/${encodeURIComponent(cfg.bucket)}/o/${encodedObjectName(key)}`;
+  const res = await signedFetch({ cfg, method: "HEAD", path });
+  if (!res.ok) throw new Error(`OCI replica read-back failed (${res.status})`);
+  const byteSize = Number(res.headers.get("content-length") || 0);
+  if (!Number.isSafeInteger(byteSize) || byteSize <= 0) throw new Error("OCI replica is empty");
+  return {
+    byteSize,
+    etag: res.headers.get("etag")?.replaceAll('"', "") ?? null,
+    contentType: res.headers.get("content-type"),
+  };
+}
+
+/** Stream the complete object back and calculate SHA-256 without buffering a master in memory. */
+export async function readObjectSha256AtTarget(
+  key: string,
+  target: { region: string; bucket: string },
+) {
+  const cfg = config(target);
+  const namespace = await resolveNamespace(cfg);
+  const path = `/n/${encodeURIComponent(namespace)}/b/${encodeURIComponent(cfg.bucket)}/o/${encodedObjectName(key)}`;
+  const res = await signedFetch({ cfg, method: "GET", path, timeoutMs: 4 * 60 * 60 * 1000 });
+  if (!res.ok || !res.body) throw new Error(`OCI replica checksum read-back failed (${res.status})`);
+  const hash = createHash("sha256");
+  let byteSize = 0;
+  const reader = res.body.getReader();
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      byteSize += value.byteLength;
+      hash.update(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  if (!Number.isSafeInteger(byteSize) || byteSize <= 0) throw new Error("OCI replica checksum read-back was empty");
+  return { byteSize, sha256: hash.digest("hex") };
+}
+
+/** Cross-region copy from the configured MASTER bucket into a separately configured replica bucket. */
+export async function copyObjectToReplicaTarget(input: {
+  sourceKey: string;
+  destinationKey: string;
+  expectedEtag: string;
+  target: { region: string; bucket: string };
+}) {
+  const source = config();
+  const destination = config(input.target);
+  if (!input.expectedEtag || /[\r\n"]/.test(input.expectedEtag)) throw new Error("A trusted source ETag is required");
+  if (source.region === destination.region || source.bucket === destination.bucket) {
+    throw new Error("Replica target must use a different region and bucket from MASTER");
+  }
+  if (input.sourceKey === input.destinationKey) throw new Error("Replica object key must differ from MASTER");
+  const namespace = await resolveNamespace(source);
+  const path = `/n/${encodeURIComponent(namespace)}/b/${encodeURIComponent(source.bucket)}/actions/copyObject`;
+  const response = await signedFetch({
+    cfg: source,
+    method: "POST",
+    path,
+    body: {
+      sourceObjectName: input.sourceKey,
+      sourceObjectIfMatch: input.expectedEtag,
+      destinationRegion: destination.region,
+      destinationNamespace: await resolveNamespace(destination),
+      destinationBucket: destination.bucket,
+      destinationObjectName: input.destinationKey,
+    },
+  });
+  if (response.status !== 202 && !response.ok) throw new Error(`OCI cross-region replica copy failed (${response.status})`);
+  const workRequestId = response.headers.get("opc-work-request-id");
+  if (workRequestId) await pollWorkRequest(source, workRequestId, { deadlineMs: 4 * 60 * 60 * 1000, pollIntervalMs: 5_000 });
+  const head = await verifyObjectAtTarget(input.destinationKey, input.target);
+  return { ...head, region: destination.region, bucket: destination.bucket };
+}
+
 export async function verifyObject(key: string, expectedContentType?: string | null) {
   const cfg = config();
   const namespace = await resolveNamespace(cfg);
@@ -273,11 +372,11 @@ export async function verifyObject(key: string, expectedContentType?: string | n
 async function pollWorkRequest(
   cfg: OciConfig,
   workRequestId: string,
-  opts?: { propagationGracePeriodMs?: number; pollIntervalMs?: number },
+  opts?: { propagationGracePeriodMs?: number; pollIntervalMs?: number; deadlineMs?: number },
 ) {
   const url = new URL(`/workRequests/${encodeURIComponent(workRequestId)}`, endpoint(cfg.region));
   const startTime = Date.now();
-  const deadline = startTime + 45_000;
+  const deadline = startTime + (opts?.deadlineMs ?? 45_000);
   const propagationGraceMs = opts?.propagationGracePeriodMs ?? 10_000;
   const pollIntervalMs = opts?.pollIntervalMs ?? 1_000;
   let lastStatus = "unknown";

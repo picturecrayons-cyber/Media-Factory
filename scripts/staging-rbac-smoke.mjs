@@ -4,7 +4,8 @@ import { Client } from "pg";
 import { persistVerifiedAsset } from "../src/lib/bridge/asset-confirmation.ts";
 import { seedStagingRbacFixtures } from "./staging-rbac-fixtures.mjs";
 
-const REQUIRED_PROJECT_REF = "bbtrosuwisnxacuxvegt";
+// User-approved Bridge/Loop Testing DB. Production project ref is never accepted.
+const REQUIRED_PROJECT_REF = "jbymleftneggcgutlcqu";
 
 function requireStagingOnlyEnvironment() {
   const projectRef = process.env.BRIDGE_STAGING_PROJECT_REF;

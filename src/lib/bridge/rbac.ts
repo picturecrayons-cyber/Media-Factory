@@ -18,6 +18,7 @@ const INTERNAL_PERMISSIONS: Record<InternalRole, readonly Permission[]> = {
   ],
   admin: [
     "title.read_catalog",
+    "production.dit_operate",
     "service.quote_create",
     "service.order_create",
     "service.fulfill",
@@ -42,6 +43,7 @@ const INTERNAL_PERMISSIONS: Record<InternalRole, readonly Permission[]> = {
     "loop.certify_playback",
   ],
   super_admin: [
+    "production.dit_operate",
     "title.ingest_internal",
     "title.create",
     "title.read_catalog",
@@ -81,6 +83,7 @@ const ACCOUNT_PERMISSIONS: Record<AccountType, readonly Permission[]> = {
     "delivery.read_finance",
   ],
   studio: [
+    "production.dit_operate",
     "title.create",
     "title.read_own",
     "title.update_own",

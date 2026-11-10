@@ -19,6 +19,8 @@ export const bridgeEnv = {
   ociRegion: () => read("OCI_REGION"),
   ociNamespace: () => read("OCI_NAMESPACE"),
   ociBucket: () => read("OCI_BUCKET_NAME"),
+  ociBackup1Region: () => read("OCI_BACKUP_1_REGION"),
+  ociBackup1Bucket: () => read("OCI_BACKUP_1_BUCKET"),
   // Legacy AWS/S3 compatibility adapter only; never used by production readiness.
   awsRegion: () => read("AWS_REGION"),
   awsBucket: () => read("AWS_S3_MEDIA_BUCKET") || read("S3_MEDIA_BUCKET") || read("AWS_S3_BUCKET"),
@@ -47,6 +49,9 @@ export function integrationStatus() {
         bridgeEnv.ociPrivateKey() &&
         bridgeEnv.ociRegion() &&
         bridgeEnv.ociBucket(),
+    ),
+    ociDitReplicaTargets: Boolean(
+      bridgeEnv.ociBackup1Region() && bridgeEnv.ociBackup1Bucket(),
     ),
     mail: Boolean(bridgeEnv.smtpHost() && bridgeEnv.smtpUser() && bridgeEnv.smtpPass()),
   };
