@@ -71,7 +71,7 @@ async function loadActorByBridgeUserId(userId: string): Promise<BridgeActor | nu
     actor.organizationIds = memberships.map((membership) => membership.organization_id);
     // Keep the singular field temporarily for legacy callers; authorization
     // predicates must use organizationIds when available.
-    actor.organizationId = actor.organizationIds[0] ?? null;
+    actor.organizationId = actor.organizationIds.length === 1 ? actor.organizationIds[0] : null;
   } catch (error) {
     if (!isMissingOrganizationSchemaError(error)) throw error;
     actor.organizationId = null;
