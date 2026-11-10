@@ -1,4 +1,6 @@
 import { createHash } from "node:crypto";
+import { readdir, readFile } from "node:fs/promises";
+import { join, relative, sep } from "node:path";
 
 /** Normalize only platform line endings and the terminal newline. SQL content,
  * comments, and internal whitespace remain part of the digest. */
@@ -69,7 +71,7 @@ export function reconcileMigrationHistory({ repositoryMigrations, supabaseMigrat
   }
 
   const appNames = [...new Set(appMigrationNames.map(String))].sort();
-  const expectedNames = [...mappedNames].sort();
+  const expectedNames = [...new Set(repositoryMigrations.filter((migration) => migration.ledgerName && usedNames.has(migration.name)).map((migration) => migration.ledgerName))].sort();
   if (appNames.length !== appMigrationNames.length) {
     blockers.push("App _migrations ledger contains duplicate migration names.");
   }
@@ -78,4 +80,29 @@ export function reconcileMigrationHistory({ repositoryMigrations, supabaseMigrat
   }
 
   return { compatible: blockers.length === 0, blockers, mappedNames: expectedNames };
+}
+
+/** Read every SQL file under both migration roots for reconciliation only. */
+export async function collectRepositoryMigrationInventory(repositoryRoot) {
+  const roots = ["migrations", "supabase/migrations"];
+  const inventory = [];
+  async function walk(root, directory) {
+    let entries;
+    try { entries = await readdir(directory, { withFileTypes: true }); }
+    catch (error) { if (error?.code === "ENOENT") return; throw error; }
+    entries.sort((a, b) => a.name.localeCompare(b.name));
+    for (const entry of entries) {
+      const absolutePath = join(directory, entry.name);
+      if (entry.isDirectory()) await walk(root, absolutePath);
+      else if (entry.isFile() && entry.name.toLowerCase().endsWith(".sql")) {
+        const repositoryPath = relative(repositoryRoot, absolutePath).split(sep).join("/");
+        const rootRelativePath = relative(join(repositoryRoot, root), absolutePath).split(sep).join("/");
+        const ledgerName = root === "migrations" && !rootRelativePath.includes("/") ? entry.name : undefined;
+        inventory.push({ name: repositoryPath, ...(ledgerName ? { ledgerName } : {}), content: await readFile(absolutePath, "utf8") });
+      }
+    }
+  }
+  for (const root of roots) await walk(root, join(repositoryRoot, root));
+  inventory.sort((a, b) => a.name.localeCompare(b.name));
+  return inventory;
 }
