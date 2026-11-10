@@ -1,0 +1,1 @@
+drop index if exists public.bridge_organization_memberships_user_status_org_idx;
