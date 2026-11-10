@@ -113,8 +113,6 @@ export type Actor = {
   organizationId?: string | null;
   /** All explicitly approved active Studio memberships for this Bridge user. */
   organizationIds?: readonly string[];
-  /** One organization selected and revalidated by the current server request. */
-  selectedOrganizationId?: string | null;
 };
 
 const TRANSITION_PERMISSION: Record<string, Permission> = {
@@ -158,14 +156,14 @@ function sharesStudioOrganization(
   actor: Actor,
   title: { ownerUserId: string; ownerAccountType?: AccountType; ownerOrganizationId?: string | null },
 ): boolean {
-  const selectedOrg = actor.selectedOrganizationId;
+  const actorOrg = actor.organizationId;
   const ownerOrg = title.ownerOrganizationId;
   return Boolean(
     !actor.internalRole &&
     actor.accountType === "studio" &&
     title.ownerAccountType === "studio" &&
     ownerOrg &&
-    Boolean(selectedOrg && selectedOrg === ownerOrg && (actor.organizationIds?.includes(selectedOrg) ?? actor.organizationId === selectedOrg))
+    (actor.organizationIds?.includes(ownerOrg) ?? actorOrg === ownerOrg)
   );
 }
 
