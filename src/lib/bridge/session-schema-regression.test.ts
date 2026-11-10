@@ -15,6 +15,11 @@ test("studio organization lookup is optional and fails closed when schema is mis
   assert.match(source, /if \(actor\.accountType !== "studio" \|\| !actor\.emailVerified\) return actor/);
   assert.match(source, /catch \(error\) \{\s*if \(!isMissingOrganizationSchemaError\(error\)\) throw error/);
   assert.match(source, /actor\.organizationId = null/);
+  assert.match(source, /select m\.organization_id::text as organization_id/);
+  assert.match(source, /where m\.user_id = \$\{userId\}[\s\S]*m\.status = 'active'/);
+  assert.match(source, /actor\.organizationIds = memberships\.map/);
+  assert.match(source, /actor\.organizationIds\.length === 1/);
+  assert.doesNotMatch(source, /select bp\.organization_id/);
   assert.match(source, /workspaceFailureCode/);
   assert.doesNotMatch(source, /organization_name.*(?:fallback|organization_id)/i);
 });
