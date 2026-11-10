@@ -69,7 +69,8 @@ Bridge code now loads all active memberships, lists titles/story concepts across
 
 ## GitHub evidence
 
-- Bridge PR #547: Draft. Build, typecheck, ESLint, npm tests, secret scan and PostgreSQL workflow all PASS on the verified commit.
+- Bridge PR #547: Draft. Code commit `feddc8caa61243f16fc6220aeae53f6ca559a6f1`; GitHub Actions runs `42879453709` and `42879453628` passed build, typecheck, ESLint, npm tests, secret scan and PostgreSQL workflow. Later PR-head commits changed evidence/rollback documentation only.
+- Current Bridge PR head `bead685a91f1121d858b74e4696dcc097991fe14`: Vercel status `failure` due build-rate-limit; no Preview deployment.
 - Loop PR #180: Draft. Latest GitHub Actions run on the current implementation passed npm install, typecheck, lint, 224 tests, secret scan and build.
 - No PR was merged.
 
