@@ -47,7 +47,8 @@ async function assertReplacementWindow(
 ) {
   const existing = await sql<{ id: string }>`
     select id from bridge_assets
-    where title_id = ${titleId} and kind = ${kind}
+    where title_id = ${titleId}
+      and (kind = ${kind} or (${kind} = 'poster_vertical' and kind = 'poster'))
       and byte_size > 0 and (${assetId ?? null}::text is null or id <> ${assetId ?? null})
     order by created_at desc limit 1
   `;
