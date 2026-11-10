@@ -37,11 +37,11 @@ test("Production Vault migration creates server-only relational workflow tables"
         and grantee in ('anon', 'authenticated', 'PUBLIC')
     `);
     assert.equal(browserPrivileges.rows.length, 0, "browser roles must have no vault table grants");
-    const copyConstraints = await db.query<{ constraint_name: string }>(`
-      select constraint_name from information_schema.table_constraints
+    const copyConstraints = await db.query<{ constraint_type: string }>(`
+      select constraint_type from information_schema.table_constraints
       where table_schema = 'public' and table_name = 'bridge_production_copy_verifications'
     `);
-    assert.ok(copyConstraints.rows.some((row) => row.constraint_name.includes("unique")));
+    assert.ok(copyConstraints.rows.some((row) => row.constraint_type === "UNIQUE"));
   } finally {
     await db.close();
   }
