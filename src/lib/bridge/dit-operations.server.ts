@@ -100,7 +100,10 @@ export const listDitOperations = createServerFn({ method: "GET" })
         d.id as "shootingDayId", d.day_number as "dayNumber", d.shooting_date as "shootingDate",
         c.id as "cameraCardId", c.camera_id as "cameraId", c.card_no as "cardNo", c.state as "cardState",
         (select count(*)::int from bridge_production_ingest_manifests m where m.production_id=p.id) as "manifestCount",
-        (select count(*)::int from bridge_production_clips cl join bridge_production_ingest_manifests m on m.id=cl.manifest_id where m.production_id=p.id) as "clipCount"
+        (select count(*)::int from bridge_production_clips cl join bridge_production_ingest_manifests m on m.id=cl.manifest_id where m.production_id=p.id) as "clipCount",
+        coalesce((select json_agg(json_build_object('id',cl.id,'clipNumber',cl.clip_number,'automatedResult',cl.automated_result,'humanDisposition',cl.human_disposition) order by cl.clip_number)
+          from bridge_production_ingest_manifests m join bridge_production_clips cl on cl.manifest_id=m.id
+          where m.camera_card_id=c.id),'[]'::json) as clips
       from bridge_productions p
       join bridge_titles t on t.id=p.title_id
       left join bridge_production_shooting_days d on d.production_id=p.id
