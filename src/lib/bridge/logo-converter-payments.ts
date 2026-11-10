@@ -98,8 +98,8 @@ export const verifyLogoConversionPayment = createServerFn({ method: "POST" })
       throw new Error("Invalid payment signature");
     }
     const sql = await getSql();
-    const rows = await sql<{ id: string; amount_paise: number; currency: string; status: string }>`
-      select id, amount_paise, currency, status
+    const rows = await sql<{ id: string; amount_paise: number; currency: string; status: string; provider_payment_id: string | null }>`
+      select id, amount_paise, currency, status, provider_payment_id
       from bridge_payments
       where user_id = ${actor.userId} and purpose = ${PURPOSE} and provider_order_id = ${data.orderId}
       limit 1
@@ -107,6 +107,9 @@ export const verifyLogoConversionPayment = createServerFn({ method: "POST" })
     const record = rows[0];
     if (!record || record.amount_paise !== AMOUNT_PAISE || record.currency !== "INR") {
       throw new Error("Payment order not found or amount mismatch");
+    }
+    if (record.status === "captured" && record.provider_payment_id !== data.paymentId) {
+      throw new Error("Order is already linked to another payment");
     }
     const payment = await razorpayFetch<{
       id: string; order_id: string; amount: number; currency: string; status: string;
