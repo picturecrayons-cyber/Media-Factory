@@ -16,7 +16,7 @@ export function removeLogoBackground(
 
   const tolerance = Math.max(0, Math.min(255, Math.round(options.tolerance)));
   const pixelCount = width * height;
-  const output = new ImageData(new Uint8ClampedArray(data), width, height);
+  const output = { data: new Uint8ClampedArray(data), width, height } as ImageData;
   const pixels = output.data;
   const visited = new Uint8Array(pixelCount);
   const queue = new Int32Array(pixelCount);
