@@ -69,7 +69,7 @@ export default function LogoBackgroundConverter({ createOrder, verifyPayment, pr
   async function processImage(img: HTMLImageElement, colors: number[][], threshold: number) {
     const width = img.naturalWidth;
     const height = img.naturalHeight;
-    if (!width || !height || width * height > 24_000_000) throw new Error("Image is too large. Please use an image under 24 megapixels.");
+    if (!width || !height || width * height > 12_000_000) throw new Error("Image is too large. Please use an image under 12 megapixels.");
     const canvas = canvasRef.current;
     if (!canvas) throw new Error("Image processor is not ready.");
     canvas.width = width;
