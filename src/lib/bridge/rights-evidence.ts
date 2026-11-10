@@ -146,6 +146,7 @@ export async function reviewRightsEvidence(
       av.s3_key as version_key,a.s3_key as asset_key,a.verified_object_key,a.storage_verified_at,a.checksum_sha256 as stored_checksum
     from bridge_rights_evidence e
     join bridge_rights_grants g on g.id=e.rights_grant_id and g.status='DRAFT'
+    join bridge_titles t on t.id=e.title_id and t.status='RIGHTS_REVIEW'
     join bridge_asset_versions av on av.id=e.asset_version_id and av.title_id=e.title_id
       and av.asset_group='DOCUMENT' and av.asset_type='RIGHTS_EVIDENCE'
     join bridge_assets a on a.asset_version_id=av.id and a.kind='rights_document'
