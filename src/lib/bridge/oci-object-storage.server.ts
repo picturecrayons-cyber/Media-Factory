@@ -345,7 +345,7 @@ export async function copyObjectToReplicaTarget(input: {
   });
   if (response.status !== 202 && !response.ok) throw new Error(`OCI cross-region replica copy failed (${response.status})`);
   const workRequestId = response.headers.get("opc-work-request-id");
-  if (workRequestId) await pollWorkRequest(source, workRequestId);
+  if (workRequestId) await pollWorkRequest(source, workRequestId, { deadlineMs: 4 * 60 * 60 * 1000, pollIntervalMs: 5_000 });
   const head = await verifyObjectAtTarget(input.destinationKey, input.target);
   return { ...head, region: destination.region, bucket: destination.bucket };
 }
@@ -372,11 +372,11 @@ export async function verifyObject(key: string, expectedContentType?: string | n
 async function pollWorkRequest(
   cfg: OciConfig,
   workRequestId: string,
-  opts?: { propagationGracePeriodMs?: number; pollIntervalMs?: number },
+  opts?: { propagationGracePeriodMs?: number; pollIntervalMs?: number; deadlineMs?: number },
 ) {
   const url = new URL(`/workRequests/${encodeURIComponent(workRequestId)}`, endpoint(cfg.region));
   const startTime = Date.now();
-  const deadline = startTime + 45_000;
+  const deadline = startTime + (opts?.deadlineMs ?? 45_000);
   const propagationGraceMs = opts?.propagationGracePeriodMs ?? 10_000;
   const pollIntervalMs = opts?.pollIntervalMs ?? 1_000;
   let lastStatus = "unknown";
