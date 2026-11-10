@@ -85,13 +85,19 @@ async function fixture() {
       poster_key text,
       updated_at timestamptz
     );
-    create table bridge_assets(id text,title_id text,kind text,s3_key text,byte_size bigint);
+    create table bridge_assets(
+      id text,title_id text,kind text,s3_key text,byte_size bigint,
+      constraint bridge_assets_kind_chk check (kind in (
+        'poster','poster_vertical','poster_horizontal','thumbnail','screener','master',
+        'subtitle','technical','censor_certificate'
+      ))
+    );
     alter table bridge_assets add column asset_version_id uuid;
     alter table bridge_assets add column verified_object_key text;
     alter table bridge_assets add column storage_verified_at timestamptz;
     alter table bridge_assets add column checksum_sha256 text;
     create table bridge_title_events(title_id text,from_status text,to_status text,actor_user_id text,note text);
-    create table bridge_audit_logs(id bigserial primary key,actor_user_id text,action text,entity_type text,entity_id text,metadata text,created_at timestamptz not null default now());`);
+    create table bridge_audit_logs(id serial primary key,actor_user_id text,action text,entity_type text,entity_id text,metadata text,created_at timestamptz not null default now());`);
     await db.exec(
       readFileSync(
         new URL("../../../migrations/0010_bridge_prd_phase1.sql", import.meta.url),
@@ -915,5 +921,89 @@ test("a newer pending or rejected submission blocks older verified evidence for 
         await f.db.close();
       }
     }
+  }
+});
+
+
+test("migration 0021 preserves every settlement reference and quarantines incomplete, conflicting and overflowing history", async () => {
+  const { db, schema } = await testDatabase();
+  try {
+    await db.exec(`create table bridge_titles(
+      id text primary key,
+      owner_user_id text,
+      owner_account_type text not null default 'independent_creator',
+      owner_organization_id uuid,
+      status text,
+      master_key text,
+      poster_key text,
+      updated_at timestamptz
+    );
+    create table bridge_assets(
+      id text,title_id text,kind text,s3_key text,byte_size bigint,
+      constraint bridge_assets_kind_chk check (kind in (
+        'poster','poster_vertical','poster_horizontal','thumbnail','screener','master',
+        'subtitle','technical','censor_certificate'
+      ))
+    );
+    create table bridge_title_events(title_id text,from_status text,to_status text,actor_user_id text,note text);
+    create table bridge_audit_logs(id serial primary key,actor_user_id text not null,action text not null,
+      entity_type text not null,entity_id text,metadata text not null default '{}',created_at timestamptz not null default now());`);
+    await db.exec(readFileSync(new URL("../../../migrations/0010_bridge_prd_phase1.sql", import.meta.url), "utf8")
+      .replaceAll("public.", `${schema}.`));
+    await db.query(`insert into bridge_titles(id,owner_user_id,status,master_key,poster_key,updated_at)
+      values ('title-legacy','owner','RIGHTS_REVIEW','sealed/master','sealed/poster',now())`);
+
+    const sourceEvents = [
+      { reference: "LEGACY-COMPLETE-001", invoiceReference: "INV-LEGACY-001", statementReference: "BANK-LEGACY-001", amountPaise: "125000", currency: "INR" },
+      { reference: "LEGACY-COMPLETE-001", invoiceReference: "INV-LEGACY-001", statementReference: "BANK-LEGACY-001", amountPaise: "125000", currency: "INR" },
+      { reference: "LEGACY-INCOMPLETE-001" },
+      { reference: "LEGACY-OVERFLOW-001", invoiceReference: "INV-OVERFLOW-001", statementReference: "BANK-OVERFLOW-001", amountPaise: "9223372036854775808", currency: "INR" },
+      { reference: "LEGACY-CONFLICT-001", invoiceReference: "INV-CONFLICT-001", statementReference: "BANK-CONFLICT-001", amountPaise: "500", currency: "INR" },
+      { reference: "LEGACY-CONFLICT-001", invoiceReference: "INV-CONFLICT-001", statementReference: "BANK-CONFLICT-001", amountPaise: "501", currency: "INR" },
+      { reference: "LEGACY-WRONG-ENTITY-001", invoiceReference: "INV-WRONG-001", statementReference: "BANK-WRONG-001", amountPaise: "600", currency: "INR", entityType: "bridge_rights_grant" },
+      { reference: "LEGACY-MISSING-TITLE-001", invoiceReference: "INV-MISSING-001", statementReference: "BANK-MISSING-001", amountPaise: "700", currency: "INR", entityId: "missing-title" },
+    ];
+    for (const event of sourceEvents) {
+      await db.query(`insert into bridge_audit_logs(actor_user_id,action,entity_type,entity_id,metadata)
+        values ('finance','finance.settlement_evidence',$1,$2,$3)`,
+        [event.entityType ?? "bridge_title", event.entityId ?? "title-legacy", JSON.stringify(event)]);
+    }
+
+    await db.exec(readFileSync(new URL("../../../migrations/0021_bridge_rights_evidence_verification.sql", import.meta.url), "utf8")
+      .replaceAll("public.", `${schema}.`));
+
+    const claims = (await db.query<{
+      reference_normalized: string; claim_state: string; title_id: string | null;
+      invoice_reference: string | null; amount_paise: string | null;
+    }>("select reference_normalized,claim_state,title_id,invoice_reference,amount_paise from bridge_settlement_reference_claims")).rows;
+    const byReference = new Map(claims.map((claim) => [claim.reference_normalized, claim]));
+    assert.equal(claims.length, 6);
+    assert.equal(byReference.get("LEGACY-COMPLETE-001")?.claim_state, "ACTIVE");
+    assert.equal(byReference.get("LEGACY-INCOMPLETE-001")?.claim_state, "REVIEW_REQUIRED");
+    assert.equal(byReference.get("LEGACY-INCOMPLETE-001")?.invoice_reference, null);
+    assert.equal(byReference.get("LEGACY-OVERFLOW-001")?.claim_state, "REVIEW_REQUIRED");
+    assert.equal(byReference.get("LEGACY-OVERFLOW-001")?.amount_paise, null);
+    assert.equal(byReference.get("LEGACY-CONFLICT-001")?.claim_state, "REVIEW_REQUIRED");
+    assert.equal(byReference.get("LEGACY-CONFLICT-001")?.amount_paise, null);
+    assert.equal(byReference.get("LEGACY-WRONG-ENTITY-001")?.claim_state, "REVIEW_REQUIRED");
+    assert.equal(byReference.get("LEGACY-WRONG-ENTITY-001")?.title_id, null);
+    assert.equal(byReference.get("LEGACY-MISSING-TITLE-001")?.claim_state, "REVIEW_REQUIRED");
+    assert.equal(byReference.get("LEGACY-MISSING-TITLE-001")?.title_id, null);
+
+    const sourceRows = (await db.query<{ count: string }>("select count(*)::text as count from bridge_settlement_reference_claim_events")).rows;
+    assert.equal(Number(sourceRows[0].count), sourceEvents.length);
+    const duplicateEvents = (await db.query<{ count: string }>(`select count(*)::text as count
+      from bridge_settlement_reference_claim_events e
+      join bridge_settlement_reference_claims c on c.id=e.claim_id
+      where c.reference_normalized='LEGACY-COMPLETE-001'`)).rows;
+    assert.equal(Number(duplicateEvents[0].count), 2);
+
+    const constraint = (await db.query<{ definition: string }>(`select pg_get_constraintdef(oid) as definition
+      from pg_constraint where conrelid='bridge_assets'::regclass and conname='bridge_assets_kind_chk'`)).rows[0];
+    assert.match(constraint.definition, /rights_document/);
+    assert.match(constraint.definition, /poster_vertical/);
+    assert.match(constraint.definition, /censor_certificate/);
+  } finally {
+    await db.close();
   }
 });
