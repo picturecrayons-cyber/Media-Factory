@@ -71,7 +71,9 @@ test("shared title workspace has an explicit role gate and Studio list scope", (
   assert.match(gate, /allow === "workspace" && !canAccessTitleWorkspace\(profile\)/);
   assert.match(rbac, /export function canAccessTitleWorkspace\(actor: Actor\)/);
   assert.match(titles, /bridge_organization_memberships/);
-  assert.match(titles, /owner_organization_id = \$\{orgId\}/);
+  assert.match(titles, /owner_organization_id = any\(\$\{orgIds\}::uuid\[\]\)/);
+  assert.match(titles, /m\.user_id = \$\{userId\}/);
+  assert.match(titles, /m\.status = 'active'/);
   assert.doesNotMatch(titles, /lower\(trim\(organization_name\)\)/);
   const assets = read("./assets.ts");
   const workflow = read("./workflow.ts");
@@ -85,4 +87,10 @@ test("shared title workspace has an explicit role gate and Studio list scope", (
   assert.match(migration, /revoke all privileges on table bridge_organization_memberships from (?:public,\s*)?anon, authenticated/i);
   const profiles = read("./profiles.ts");
   assert.match(profiles, /insert into bridge_organization_memberships/);
+  assert.match(profiles, /setActiveStudioOrganization/);
+  assert.match(profiles, /grantStudioMembership/);
+  assert.match(profiles, /actor\.internalRole !== "super_admin"/);
+  const multiStudioMigration = read("../../../migrations/0022_multi_studio_memberships.sql");
+  assert.match(multiStudioMigration, /drop index if exists public\.bridge_organization_memberships_one_active_org_per_user/i);
+  assert.match(multiStudioMigration, /create index if not exists bridge_organization_memberships_user_status_org_idx/i);
 });
