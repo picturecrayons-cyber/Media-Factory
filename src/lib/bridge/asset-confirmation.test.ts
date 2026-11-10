@@ -696,3 +696,70 @@ test("signed delivery receipt permanently locks Super Admin replacement", async 
     await db.close();
   }
 });
+
+test("DELIVERED destination package permanently locks Super Admin replacement", async () => {
+  const db = new PGlite();
+  try {
+    await db.waitReady;
+    await db.exec("create role anon; create role authenticated;");
+    await db.exec(readFileSync(join(process.cwd(), "migrations/0004_bridge.sql"), "utf8"));
+    await db.exec(`
+      create table bridge_loop_publications (bridge_title_id text, approved_at timestamptz);
+      create table bridge_destination_packages (title_id text, readiness_state text, authorized_by text, authorized_at timestamptz);
+      create table bridge_delivery_jobs (title_id text, admin_sign_off boolean, delivery_receipt_url text);
+      create table bridge_qc_cases (title_id text, status text, reviewed_by text, reviewed_at timestamptz);
+      create table bridge_legal_cases (title_id text, status text, reviewed_by text, reviewed_at timestamptz);
+      create table bridge_title_gate_certifications (
+        title_id text, ott_preparation_status text, packaging_status text,
+        curation_status text, delivery_status text, updated_at timestamptz
+      );
+      create table bridge_asset_versions (
+        id uuid primary key default gen_random_uuid(),
+        title_id text not null,
+        asset_group text not null,
+        asset_type text not null,
+        version integer not null,
+        language text,
+        reference_asset_id uuid,
+        s3_key text not null,
+        checksum_sha256 text,
+        byte_size bigint,
+        processing_state text not null,
+        created_by text not null
+      );
+      insert into bridge_titles (id,slug,name,owner_user_id,owner_account_type,status)
+      values ('package-locked-title','package-locked-title','Package Locked Title','owner','independent_creator','RIGHTS_REVIEW');
+      insert into bridge_assets (id,title_id,kind,s3_key,content_type,byte_size,created_by)
+      values
+        ('package-old-master','package-locked-title','master','old/master.verified/old','video/mp4',100,'owner'),
+        ('package-new-master','package-locked-title','master','new/master','video/mp4',null,'super-admin');
+      insert into bridge_destination_packages (title_id,readiness_state,authorized_by,authorized_at)
+      values ('package-locked-title','DELIVERED','super-admin',now());
+    `);
+    const sql = createTestSql(db);
+    const result = await persistVerifiedAsset(sql, {
+      assetId: "package-new-master",
+      actorUserId: "super-admin",
+      internalActor: true,
+      superAdminActor: true,
+      titleId: "package-locked-title",
+      kind: "master",
+      byteSize: 120,
+      contentType: "video/mp4",
+      checksum: "sha256-package-test",
+      sourceKey: "new/master",
+      sealedKey: "new/master.verified/package-new-master",
+    });
+    assert.equal(result, false);
+    const asset = await db.query<{ byte_size: number | null; s3_key: string }>(
+      "select byte_size, s3_key from bridge_assets where id='package-new-master'",
+    );
+    assert.deepEqual(asset.rows[0], { byte_size: null, s3_key: "new/master" });
+    const versions = await db.query<{ count: number }>(
+      "select count(*)::int as count from bridge_asset_versions where title_id='package-locked-title'",
+    );
+    assert.equal(versions.rows[0]?.count, 0);
+  } finally {
+    await db.close();
+  }
+});
