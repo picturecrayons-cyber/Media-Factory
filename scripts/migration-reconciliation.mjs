@@ -71,7 +71,10 @@ export function reconcileMigrationHistory({ repositoryMigrations, supabaseMigrat
   }
 
   const appNames = [...new Set(appMigrationNames.map(String))].sort();
-  const expectedNames = [...new Set(repositoryMigrations.filter((migration) => migration.ledgerName && usedNames.has(migration.name)).map((migration) => migration.ledgerName))].sort();
+  const expectedNames = [...new Set(repositoryMigrations
+    .filter((migration) => usedNames.has(migration.name))
+    .map((migration) => migration.ledgerName ?? (migration.name.includes("/") ? undefined : migration.name))
+    .filter(Boolean))].sort();
   if (appNames.length !== appMigrationNames.length) {
     blockers.push("App _migrations ledger contains duplicate migration names.");
   }
