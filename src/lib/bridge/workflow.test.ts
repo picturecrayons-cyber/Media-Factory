@@ -788,3 +788,99 @@ test("all five independently verified legal evidence classes permit Legal approv
     await f.db.close();
   }
 });
+
+
+test("a newer pending or rejected submission blocks older verified evidence for every mandatory class", async () => {
+  const mandatoryTypes = [
+    "EXECUTED_AGREEMENT",
+    "OWNERSHIP_CHAIN",
+    "SIGNATORY_AUTHORITY",
+    "MASTER_DISTRIBUTOR_AUTHORITY",
+    "SUBLICENSING_AUTHORITY",
+  ];
+  for (const replacedType of mandatoryTypes) {
+    for (const replacementStatus of ["PENDING", "REJECTED"] as const) {
+      const f = await fixture();
+      try {
+        const saved = (await f.sql.transaction((tx) => f.save(tx, owner, license))) as { grantId: string };
+        await f.sql.transaction((tx) => f.review(tx, qc, {
+          titleId: "title-123", stage: "QC", decision: "APPROVE", note: "Playback and codec checked",
+        }));
+
+        const checksums = mandatoryTypes.map((type) => type.charCodeAt(0).toString(16).padStart(2, "0").repeat(32));
+        const originalEvidenceIds: string[] = [];
+        for (let i = 0; i < mandatoryTypes.length; i++) {
+          const versionId = randomUUID();
+          const evidenceId = randomUUID();
+          const assetId = randomUUID();
+          originalEvidenceIds.push(evidenceId);
+          const key = `sealed/original-${i}.pdf`;
+          await f.sql.query(`insert into bridge_asset_versions
+            (id,title_id,asset_group,asset_type,version,s3_key,checksum_sha256,byte_size,processing_state,created_by)
+            values ($1,'title-123','DOCUMENT','RIGHTS_EVIDENCE',1,$2,$3,1024,'PASSED','owner')`,
+            [versionId, key, checksums[i]]);
+          await f.sql.query(`insert into bridge_assets
+            (id,title_id,kind,s3_key,byte_size,asset_version_id,verified_object_key,storage_verified_at,checksum_sha256)
+            values ($1,'title-123','rights_document',$2,1024,$3,$2,now(),$4)`,
+            [assetId, key, versionId, checksums[i]]);
+          await f.sql.query(`insert into bridge_rights_evidence
+            (id,title_id,rights_grant_id,evidence_type,asset_version_id,checksum_sha256,submitted_by,status,reviewed_by,reviewed_at,review_note)
+            values ($1,'title-123',$2,$3,$4,$5,'owner','VERIFIED','legal',now(),'Original independently verified evidence')`,
+            [evidenceId, saved.grantId, mandatoryTypes[i], versionId, checksums[i]]);
+          await f.sql.query(`insert into bridge_rights_evidence_reviews
+            (evidence_id,decision,reviewer_user_id,evidence_checksum_sha256,note)
+            values ($1,'VERIFIED','legal',$2,'Original independently verified evidence')`,
+            [evidenceId, checksums[i]]);
+        }
+
+        const replacedIndex = mandatoryTypes.indexOf(replacedType);
+        const replacementVersionId = randomUUID();
+        const replacementEvidenceId = randomUUID();
+        const replacementAssetId = randomUUID();
+        const replacementChecksum = "f".repeat(64);
+        const replacementKey = "sealed/replacement.pdf";
+        await f.sql.query(`insert into bridge_asset_versions
+          (id,title_id,asset_group,asset_type,version,s3_key,checksum_sha256,byte_size,processing_state,created_by)
+          values ($1,'title-123','DOCUMENT','RIGHTS_EVIDENCE',2,$2,$3,1024,'PASSED','owner')`,
+          [replacementVersionId, replacementKey, replacementChecksum]);
+        await f.sql.query(`insert into bridge_assets
+          (id,title_id,kind,s3_key,byte_size,asset_version_id,verified_object_key,storage_verified_at,checksum_sha256)
+          values ($1,'title-123','rights_document',$2,1024,$3,$2,now(),$4)`,
+          [replacementAssetId, replacementKey, replacementVersionId, replacementChecksum]);
+        await f.sql.query(`insert into bridge_rights_evidence
+          (id,title_id,rights_grant_id,evidence_type,asset_version_id,checksum_sha256,submitted_by,status,reviewed_by,reviewed_at,review_note,created_at)
+          values ($1,'title-123',$2,$3,$4,$5,'owner',$6,$7,$8,$9,now() + interval '1 second')`,
+          [
+            replacementEvidenceId,
+            saved.grantId,
+            replacedType,
+            replacementVersionId,
+            replacementChecksum,
+            replacementStatus,
+            replacementStatus === "REJECTED" ? "legal" : null,
+            replacementStatus === "REJECTED" ? new Date().toISOString() : null,
+            replacementStatus === "REJECTED" ? "Replacement rejected" : null,
+          ]);
+        if (replacementStatus === "REJECTED") {
+          await f.sql.query(`insert into bridge_rights_evidence_reviews
+            (evidence_id,decision,reviewer_user_id,evidence_checksum_sha256,note)
+            values ($1,'REJECTED','legal',$2,'Replacement rejected')`,
+            [replacementEvidenceId, replacementChecksum]);
+        }
+
+        await assert.rejects(
+          f.sql.transaction((tx) => f.review(tx, legal, {
+            titleId: "title-123", stage: "LEGAL", decision: "APPROVE",
+            note: "Latest evidence replacement must be resolved", grantId: saved.grantId,
+          })),
+          /Legal approval requires independently verified executed agreement, ownership chain, signatory authority, Master Distributor authority, and sublicensing authority evidence/,
+          `${replacedType} with newer ${replacementStatus} submission must block approval`,
+        );
+        assert.equal((await f.sql.query<{status:string}>("select status from bridge_rights_grants"))[0].status, "DRAFT");
+        assert.equal((await f.sql.query("select * from bridge_legal_cases")).length, 0);
+      } finally {
+        await f.db.close();
+      }
+    }
+  }
+});
