@@ -1,0 +1,234 @@
+# Bridge Sensitive Server-Function Inventory and Explicit Studio Context Gate
+
+Date: 2026-11-11
+Repository: picturecrayons-cyber/Media-Factory
+Branch: chore/staging-readonly-schema-audit-20261110
+Inventory ref: e9e1f40ad42c8c02475394e6935f053d18be8f6a
+
+## Status and change boundary
+
+- Status: DESIGN / SOURCE-REVIEW ONLY — NOT CERTIFIED.
+- This document does not implement or enable a runtime guard.
+- No database, migration, RLS, grant, storage, production, deployment, or merge operation is authorized or performed.
+- Existing RBAC and session behavior remains unchanged.
+- The source inventory below covers the Bridge server-function modules found in the inspected repository tree and GitHub search results at the inventory ref. It is a reviewed inventory, not proof that every server function elsewhere in the monorepo has been enumerated. A repository-wide AST scan and call-site reconciliation remain required before implementation.
+
+## Environment and access ledger
+
+| Environment | Action | Access | Risk | Result |
+|---|---|---|---|---|
+| GitHub Draft branch | Read source and add this design document only | WRITE — GitHub branch | Low; documentation only | Draft change |
+| STAGING DB: Crayons Projects - Testing DB, project jbymleftneggcgutlcqu | No operation | NO ACCESS / no DB WRITE | None introduced | Unchanged |
+| PRODUCTION DB: project mlmgugivsyoxzdgwkbpu | No operation | NO ACCESS / NO WRITE | None introduced | HOLD |
+| Merge / deployment / promotion | No operation | NO ACTION | None introduced | HOLD |
+
+## Authorization contract
+
+### A. Request identity and selected Studio context
+
+1. Derive the authenticated user exclusively from trusted server middleware/session context. Never accept userId from request payload as identity.
+2. For a Studio-owned operation, require an explicit, validated `selectedOrganizationId` in the server-function input (or in a server-established request context with an equally explicit contract).
+3. On every request, load current membership and organization status from the authoritative database. Require:
+   - membership.user_id = authenticated Bridge user;
+   - membership.organization_id = selectedOrganizationId;
+   - membership.status = 'active';
+   - organization.status = 'active'.
+4. Bind the resource to the selected organization: for a Studio title, require title.owner_account_type = 'studio' and title.owner_organization_id = selectedOrganizationId. Do not use a cached session organization list as final authorization proof.
+5. Do not infer an organization from organization_name, email domain, profile.organization_id, first membership, title owner, or client state.
+6. If the caller is a Studio member with multiple active memberships, no default organization is selected. Missing, blank, unknown, foreign, invited, suspended, removed, or closed-organization context fails closed.
+7. Non-Studio personal ownership, Buyer/Investor entitlements, and internal staff access use their own authorization predicates. Do not require Studio context for those paths. If a request attempts to provide a Studio organization context for a non-Studio actor, reject it unless an explicitly reviewed cross-role workflow defines otherwise.
+8. Internal Admin/QC/Legal/Finance permissions do not automatically grant Studio membership. Staff access remains governed by the specific staff permission and title/workflow scope.
+9. Every operation must re-check current membership, organization status, resource ownership, and role/permission immediately before sensitive side effects. A check at login or page load is insufficient.
+
+### B. Resource-class rules
+
+| Resource class | Required authorization |
+|---|---|
+| Studio title read | Explicit selected organization + fresh active membership + title.owner_organization_id equality + role/read permission |
+| Studio title write / workflow transition | Same as read plus title-specific mutation permission, lifecycle transition and state preconditions |
+| Studio asset list/read | Selected organization + fresh membership + parent title organization equality + asset/title relationship |
+| Upload URL / multipart start, commit, abort / confirmation | Revalidate selected organization and parent title/asset relationship on every call; use server-loaded asset key and owner fields; never trust client object key as authorization |
+| Download / signed download | Revalidate parent title organization and current membership, then apply asset-kind policy and Buyer/Investor license entitlement where applicable |
+| Loop publication / licensing | Revalidate title organization for Studio owner actions; keep Bridge rights authority and Loop publication gates distinct; no publication solely from a client-supplied organization |
+| Buyer / Investor | Existing buyer visibility, assignment and entitlement predicates; no Studio membership implied |
+| Creator personal title | Authenticated owner and title-level permission; no Studio organization inferred |
+| QC / Legal / Finance / Admin | Exact staff permission plus title/workflow authorization; no implicit Studio membership |
+| DIT | Separate exact assignment predicate for authenticated user + production + title + asset; generic staff role or Studio membership alone is insufficient |
+| Public site content | Public read path remains public; mutation requires its explicit administrative permission |
+| Identity / onboarding | Identity link and onboarding rules remain separate from organization membership authorization |
+
+### C. Signed URL and multipart invariants
+
+- A signed URL is a bearer capability. Do not issue it until all identity, membership, organization, title, asset-kind, state and permission checks pass.
+- The object key must be derived from a trusted database row or server-side key builder, never from a client-provided arbitrary key.
+- Keep URL lifetime bounded by the existing policy. Do not lengthen it as part of this work.
+- Multipart commit/abort must resolve the upload by server-owned asset ID and stored key. A client-supplied part URL must be validated against the expected storage origin/path and upload session; do not blindly fetch arbitrary URLs (SSRF risk).
+- Revalidate membership and resource scope for begin, commit, abort, confirm and download, not only for the initial upload request.
+- Revocation after a URL has already been issued cannot retroactively revoke a bearer URL. Record this residual risk and keep expiry short; consider a proxy/indirection design only as a separately reviewed future change.
+
+## Server-function inventory
+
+The list below records exported Bridge `createServerFn` endpoints found in the reviewed modules. “Studio context” means required when the target record is Studio-owned; non-Studio and staff branches retain their separately authorized paths.
+
+### Titles — src/lib/bridge/titles.ts
+
+| Function | Method | Class | Studio context / control |
+|---|---:|---|---|
+| createTitle | POST | Create | Require explicit organization for Studio creation; fresh active membership; persist owner_organization_id from verified selection |
+| listTitles | GET | Read/list | Studio list must be filtered to selected org and revalidated membership; no union of all memberships as implicit selection |
+| getTitle | GET | Read | Require selected org for Studio-owned title; retain separate Buyer visibility and Investor assignment checks |
+| updateTitle | POST | Write | Revalidate selected org, title owner org, role permission and editable lifecycle state |
+| advanceTitle | POST | Workflow write | Same scope plus transition permission and lifecycle checks |
+| listAuditLogs | GET | Sensitive read | Staff audit permission; if scoped to Studio/title, constrain to selected org and title scope; avoid unrestricted cross-tenant audit exposure |
+
+### Assets — src/lib/bridge/assets.ts
+
+| Function | Method | Class | Studio context / control |
+|---|---:|---|---|
+| requestAssetUpload | POST | Signed upload URL | Require selected org, active membership, title owner-org equality, upload permission and uploadable title state before signing |
+| beginAssetMultipart | POST | Multipart capability | Resolve asset → title → organization; revalidate current membership and upload permission before creating multipart session |
+| commitAssetMultipart | POST | Multipart write | Revalidate asset/title/org and upload session; use stored server-side key; validate supplied part URL against expected storage session/origin |
+| abortAssetMultipart | POST | Multipart write | Same revalidation and trusted stored key; abort only the caller-authorized asset upload |
+| confirmAssetUpload | POST | Storage verification + DB write | Revalidate asset/title/org, creator/assignment and state before object verification and persistence |
+| requestAssetDownload | POST | Signed download URL | Revalidate selected org and title/asset scope; then apply downloadDecision and applicable Buyer entitlement |
+| listTitleAssets | GET | Asset read | Require title read permission and selected org for Studio title; do not expose private storage keys to Buyer |
+
+### Workflow — src/lib/bridge/workflow.ts
+
+| Function | Method | Class | Studio context / control |
+|---|---:|---|---|
+| submitLoopLicense | POST | Rights/licensing write | For Studio-owned title require selected org + active membership + title-org equality; validate rights payload |
+| reviewTitleWorkflow | POST | QC/Legal write | Staff permission and title workflow scope; Studio membership is not a substitute for QC/Legal permission |
+| getTitleWorkflow | GET | Rights/QC/Legal read | Studio owner read requires selected org; buyer/internal branches remain separately constrained |
+| getTitleRevenue | GET | Finance-sensitive read | Require title finance permission and selected org for Studio owner; preserve finance staff scope |
+| recordSettlementEvidence | POST | Finance write | Finance permission + title scope; selected org for Studio title; evidence remains unverified until independently reconciled |
+
+### Loop publication — src/lib/bridge/loop-publication.ts
+
+| Function | Method | Class | Studio context / control |
+|---|---:|---|---|
+| listLoopPublicationReadiness | GET | Publication read | Studio title must be in selected org; otherwise require exact staff/rights permission |
+| authorizeLoopPublication | POST | Publication authorization | Require title-org context for Studio owner and all existing rights/QC/finance publication gates |
+| suspendLoopPublication | POST | Publication control | Revalidate selected org or exact staff permission; verify target publication belongs to authorized title |
+| revokeLoopPublication | POST | Rights/publication revoke | Same scope; fail closed on missing/expired/revoked rights evidence |
+| extendDistributionWindow | POST | Rights write | Require title-org context and explicit rights authority; validate dates/territories |
+| getLoopPublication | GET | Publication read | Resolve publication to title and enforce selected org or applicable staff/Buyer visibility |
+
+### Multilingual rights — src/lib/bridge/multilingual-rights.ts
+
+| Function | Method | Class | Studio context / control |
+|---|---:|---|---|
+| listLanguageRights | GET | Rights read | Require selected org for Studio-owned title and title read permission |
+| createLanguageRight | POST | Rights write | Require selected org, active membership, title-org equality and rights permission |
+| createLicensePackage | POST | Licensing write | Resolve all included rights to the same authorized title/org; reject mixed-tenant IDs |
+| listLicensePackages | GET | Licensing read | Scope packages through their title and selected organization |
+| authorizeLanguagePackage | POST | Delivery/license write | Revalidate package, title, every referenced right and selected org before authorization |
+
+### Story / Concept — src/lib/bridge/story-concept-api.ts
+
+| Function | Method | Class | Studio context / control |
+|---|---:|---|---|
+| createStoryConceptSubmission | POST | Create | Current code accepts organizationId and checks membership from session-derived IDs; change target is explicit request selection plus fresh DB revalidation |
+| listMyStoryConcepts | GET | Read/list | Scope Studio concepts to one selected org; do not silently union all active memberships |
+| listPendingStoryConcepts | GET | Staff queue read | Require curation staff permission; apply queue/assignment rules; do not treat Studio membership as staff access |
+| updateStoryConceptCuration | POST | Curation write | Require curation permission and validate record/title/assignment; selected org if operation is intentionally Studio-scoped |
+
+### StreamVista — src/lib/bridge/streamvista.ts
+
+| Function | Method | Class | Studio context / control |
+|---|---:|---|---|
+| createStreamVistaOrder | POST | Create order | Current model is owner_user_id scoped; if a Studio order is supported, add explicit organization binding only after the order schema and product contract are verified |
+| listStreamVistaOrders | GET | Read/list | Currently user-owned order list; no cross-Studio access. Studio-wide visibility requires a separately approved organization ownership model |
+| requestStreamVistaUpload | POST | Signed upload URL | Current check is order owner_user_id. If Studio orders are enabled, require explicit selected org and revalidate order/title relationship before signing |
+| confirmStreamVistaUpload | POST | Storage verify + DB write | Revalidate order ownership, upload key prefix/session and any future Studio org binding |
+| handoffStreamVistaOrder | POST | Workflow write | Revalidate order owner and job/state; any Studio operation must bind to selected org and exact title assignment |
+
+### Payments — src/lib/bridge/payments.ts
+
+| Function | Method | Class | Studio context / control |
+|---|---:|---|---|
+| getCheckoutConfig | GET | Payment config read | Buyer/user context; no Studio membership inference |
+| createLicenseOrder | POST | Payment order create | Validate title visibility, buyer identity, price and entitlement; Studio title owner org remains a separate title-scope check |
+| verifyLicensePayment | POST | Payment verification | Verify provider signature/order linkage and immutable title/payment mapping; never trust selected org as proof of payment |
+| listOwnEntitlements | GET | Entitlement read | Restrict to authenticated user’s entitlements; no Studio cross-tenant listing |
+
+### Profiles and identity — src/lib/bridge/profiles.ts
+
+| Function | Method | Class | Studio context / control |
+|---|---:|---|---|
+| syncSupabaseSessionUser | POST | Identity link | Bind authenticated Supabase identity to Bridge identity; no client-supplied organization authorization |
+| completeOnboarding | POST | Profile/org creation | Existing Studio bootstrap creates initial owner membership; this is not a multi-member approval workflow and must not be repurposed as one |
+| requestEmailVerification | POST | Identity verification | User identity only |
+| confirmEmailVerification | POST | Identity verification | Verify token/user binding; no organization authorization |
+| listAdminProfiles | GET | Admin-sensitive read | Explicit admin permission; protect organization and personal data |
+| inviteInternalRole | POST | Staff role mutation | Explicit admin permission, role allowlist and audit; not a Studio membership invite/approval API |
+
+### Admin and operations
+
+| Module / function | Method | Class | Studio context / control |
+|---|---:|---|---|
+| admin-workstations.ts — listAdminWorkstations | GET | Staff workstation read | Staff permission and assigned work scope; DIT assignment is a separate exact predicate |
+| admin-workstations.ts — reviewAdminTitle | POST | Staff workflow write | Exact QC/Legal/Admin permission plus title scope; no implied Studio membership |
+| admin-workstations.ts — setBuyerPublicationGate | POST | Buyer visibility write | Explicit publication-gate permission and title/rights validation |
+| commercial-admin.ts — configureServiceRate | POST | Commercial configuration write | Admin permission; global commercial configuration, not Studio tenant mutation |
+| commercial-admin.ts — configureTaxRate | POST | Commercial configuration write | Admin permission; global commercial configuration |
+| commercial-admin.ts — configureSettlementRule | POST | Finance/admin configuration write | Explicit finance/admin permission and audit |
+| duplicate-reconciliation.ts — listDuplicateReviews | GET | Sensitive review read | Staff review permission; title-level tenant scope required for any Studio-origin record |
+| duplicate-reconciliation.ts — openDuplicateReview | POST | Review write | Staff permission and exact candidate/canonical title checks |
+| duplicate-reconciliation.ts — decideDuplicateReview | POST | High-impact title merge decision | Strong staff permission, immutable audit, same-tenant validation for Studio titles; require separate review before execution |
+| deliveries.ts — listDeliveryTraces | GET | Delivery trace read | Delivery permission; trace-to-title/asset scope must be enforced, selected org for Studio title |
+| dmca.ts — registerDmcaAccount | POST | Rights-holder identity write | Authenticated claimant identity and ownership/evidence checks; not a Studio membership grant |
+| site-content.ts — getPublicSiteContent | GET | Public read | Public path; no Studio context |
+| site-content.ts — updateHomepageContent | POST | Admin content write | Explicit site-content admin permission; no Studio context unless a future tenant-specific content model is approved |
+| submissions.ts — createRightsReadySubmission | POST | Submission write | Require title owner or explicit Studio context for Studio title; validate all submitted rights evidence |
+| session.ts — getBridgeSession | GET | Session/profile read | Returns server-resolved identity and memberships; must not be treated as selected-org authorization proof |
+| session.ts — getDashboardSession | GET | Admin dashboard read | Existing verified super-admin gate; keep separate from Studio membership |
+| session.ts — getBridgePublicStatus | GET | Public status read | Public read only |
+
+## Current source findings that affect the design
+
+1. `session.ts` loads active memberships and active organizations from the database, but currently exposes the collection as `organizationIds`. It sets legacy `organizationId` only when exactly one membership exists. This is safer than choosing the first membership, but it is not an explicit per-request selected-organization contract.
+2. `titles.ts` list logic currently accepts an array of actor organization IDs for Studio title listing. That can expose a union across memberships rather than a user-selected organization workspace. Replace only after UI/request context and every consumer are traced.
+3. `story-concept-api.ts` creation accepts `organizationId` and checks it against session-loaded `organizationIds`; listMyStoryConcepts unions all actor organization IDs. This needs fresh database validation and selected-org scoping.
+4. `assets.ts` upload/download paths call title-level RBAC, but no explicit selected organization is carried through these endpoints. Multipart helpers re-open the asset and title; their context contract must be updated consistently.
+5. `streamvista.ts` uses user-owned orders. Do not silently broaden order visibility to all members of a Studio; the schema and intended Studio order ownership model must be confirmed first.
+6. `profiles.ts` bootstraps an initial Studio owner membership as active. The reviewed endpoint list does not establish a distinct invited-member approval/suspension/revocation workflow. Do not invent one or mark it implemented.
+7. `dit-assignment.ts` is a separate helper/test area, not a substitute for a server-side assignment check in every DIT operation. The exact assignment must bind user + production + title + asset and be revalidated at the operation boundary.
+8. Existing helper `organization-context.ts` is pure and tested at source level, but is not wired into request handlers. It does not itself enforce runtime authorization.
+
+## Required implementation sequence — all remain gated
+
+| Gate | Required evidence | Status |
+|---|---|---|
+| 1. Repository-wide endpoint inventory | AST scan of all `createServerFn` and server action exports, imports/call sites, route loaders/actions, storage URL issuers | BLOCKED / PARTIAL |
+| 2. Ownership model | Confirm schema fields and invariants for Studio titles, assets, orders, productions, memberships, staff assignments | NOT VERIFIED |
+| 3. Request contract | Define selectedOrganizationId input/context and validate it server-side; no client cache as authority | NOT IMPLEMENTED |
+| 4. Per-operation guard | Revalidate membership + organization + resource parent relationship before each read/write/storage capability | NOT IMPLEMENTED |
+| 5. Negative tests | Studio A cannot read/write/list/sign/commit/download Studio B resources; stale membership denied | NOT VERIFIED |
+| 6. Membership lifecycle | Approved invite, pending invite, accept/approve, suspend, revoke, rejoin and audit paths tied to actual persistence model | NOT VERIFIED |
+| 7. DIT | Exact user + production + title + asset assignment positive/negative tests | NOT VERIFIED |
+| 8. Role matrix | Creator, Studio, Buyer, Investor, Admin, QC, Legal, Finance and DIT non-escalation tests | NOT VERIFIED |
+| 9. Exact-head CI | Full test, typecheck, lint, build, PostgreSQL checks on the exact Draft HEAD | NOT VERIFIED |
+| 10. STAGING DB verification | Only after separately authorized; table-specific policy/grant plan, no blanket changes | NOT AUTHORIZED |
+| 11. Production | Separate approval and independent certification required | HOLD / NO-GO |
+
+## Mandatory negative test matrix
+
+- Studio A member requests Studio B title with selectedOrganizationId=A: deny.
+- Studio A member requests Studio B title with selectedOrganizationId=B but no active B membership: deny.
+- User has active A and B memberships, omits selectedOrganizationId: deny for Studio-scoped operation; never choose first.
+- User's membership changes to invited/suspended/removed between page load and mutation: deny.
+- Organization changes to suspended/closed between page load and mutation: deny.
+- Studio A asset ID paired with Studio B title ID, or vice versa: deny.
+- Client supplies an arbitrary object key, foreign part URL, upload ID, download key or storage path: deny.
+- Signed upload URL request followed by membership revocation: subsequent multipart/confirm operation denied; previously issued URL expires within existing bounded lifetime.
+- Buyer cannot read master/technical/censor-only assets absent explicit entitlement/policy.
+- Investor cannot access a title without exact investor assignment.
+- Creator cannot mutate a Studio title solely by knowing its ID.
+- Admin/QC/Legal/Finance role cannot impersonate a Studio member or gain DIT assignment from generic staff role.
+- DIT assigned to another asset, title, production or user: deny.
+- A membership invite is not active until the actual approval/acceptance transition is persisted and audited.
+
+## Certification statement
+
+The inventory and design contract are a planning artifact only. They do not prove runtime isolation, membership workflow completeness, DIT enforcement, RLS safety, or end-to-end behavior. The application remains BLOCKED — NOT CERTIFIED for this scope. Production remains HOLD / NOT CERTIFIED / NO-GO.
