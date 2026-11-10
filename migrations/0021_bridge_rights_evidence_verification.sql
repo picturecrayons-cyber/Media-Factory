@@ -52,7 +52,7 @@ create index if not exists bridge_rights_evidence_reviews_evidence_idx
   on public.bridge_rights_evidence_reviews(evidence_id, created_at);
 
 -- A unique, case-insensitive claim protects external settlement references.
--- Historical audit events remain untouched; the first valid reference claim is backfilled.
+-- Historical audit events remain untouched; every non-empty reference is preserved and reconciled.
 create table if not exists public.bridge_settlement_reference_claims (
   id uuid primary key default gen_random_uuid(),
   reference_normalized text not null unique check (reference_normalized <> ''),
