@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { listInvestorInvestments } from "./investor.ts";
+import { listInvestorInvestments } from "./investor-query.ts";
 
 test("investor portfolio query is parameterized and scoped to the authenticated investor id", async () => {
   let capturedSql = "";
