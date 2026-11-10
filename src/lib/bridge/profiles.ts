@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
+import type { Sql } from "../db.ts";
 import { ACCOUNT_TYPES, INTERNAL_ROLES } from "./types";
 import { writeAudit } from "./audit";
 import { loadActor, requireVerifiedActor } from "./session";
