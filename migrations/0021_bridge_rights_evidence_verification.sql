@@ -70,7 +70,8 @@ create table if not exists public.bridge_settlement_reference_claims (
 create table if not exists public.bridge_settlement_reference_claim_events (
   id bigserial primary key,
   claim_id uuid not null references public.bridge_settlement_reference_claims(id) on delete restrict,
-  source_audit_event_id integer not null unique references public.bridge_audit_logs(id) on delete restrict,
+  -- Keep the source ID as immutable provenance without coupling audit-log retention to this ledger.
+  source_audit_event_id integer not null unique,
   reference_normalized text not null, source_entity_type text not null, source_entity_id text,
   source_metadata text not null, actor_user_id text not null,
   event_state text not null check (event_state in ('VALID','REVIEW_REQUIRED')),
