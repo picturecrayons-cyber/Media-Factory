@@ -526,6 +526,7 @@ type DitWorkerJob = {
   id: string; clip_id: string; source_sha256: string; profile: ConversionProfile;
   source_object_key: string; production_name: string; production_no: string; shooting_date: string;
   camera_id: "A" | "B" | "C"; card_no: string; original_relative_path: string; clip_number: string;
+  created_by: string; production_id: string;
 };
 
 export async function claimNextDitConversionJob(workerId: string) {
@@ -537,7 +538,7 @@ export async function claimNextDitConversionJob(workerId: string) {
     const jobs = await tx<DitWorkerJob>`
       select j.id,j.clip_id,j.source_sha256,j.profile,
         v.object_key as source_object_key,p.production_name,p.production_no,d.shooting_date::text,
-        c.camera_id,c.card_no,cl.original_relative_path,cl.clip_number
+        c.camera_id,c.card_no,cl.original_relative_path,cl.clip_number,m.created_by,m.production_id
       from bridge_production_conversion_jobs j
       join bridge_production_clips cl on cl.id=j.clip_id
       join bridge_production_ingest_manifests m on m.id=cl.manifest_id
@@ -581,7 +582,7 @@ export async function completeDitConversionJob(input: z.infer<typeof conversionC
   const rows = await sql<DitWorkerJob>`
     select j.id,j.clip_id,j.source_sha256,j.profile,
       v.object_key as source_object_key,p.production_name,p.production_no,d.shooting_date::text,
-      c.camera_id,c.card_no,cl.original_relative_path,cl.clip_number
+      c.camera_id,c.card_no,cl.original_relative_path,cl.clip_number,m.created_by,m.production_id
     from bridge_production_conversion_jobs j
     join bridge_production_clips cl on cl.id=j.clip_id
     join bridge_production_ingest_manifests m on m.id=cl.manifest_id
@@ -651,7 +652,7 @@ export async function completeDitConversionJob(input: z.infer<typeof conversionC
       backup1_output_copy_id=${backup.copyId},completed_at=now(),history=history || ${JSON.stringify(completed.history)}::jsonb,
       updated_at=now() where id=${job.id}`;
     await tx`insert into bridge_production_audit_events(production_id,actor_user_id,action,entity_type,entity_id,metadata)
-      select m.production_id,'dit-worker','conversion.completed','conversion_job',${job.id},
+      select m.production_id,${job.created_by},'conversion.completed','conversion_job',${job.id},
         ${JSON.stringify({ masterKey, backupKey, profile: job.profile })}::jsonb
       from bridge_production_ingest_manifests m where m.id=(select manifest_id from bridge_production_clips where id=${job.clip_id})`;
   });
