@@ -8,10 +8,17 @@ import { StoryConceptDesk } from "@/components/bridge/story-concept-desk";
 import { listAdminWorkstations, reviewAdminTitle, setBuyerPublicationGate } from "@/lib/bridge/admin-workstations";
 import { listDuplicateReviews, openDuplicateReview, decideDuplicateReview } from "@/lib/bridge/duplicate-reconciliation";
 
-export const Route = createFileRoute("/admin/workstations")({ component: AdminWorkstations });
-
 const TABS = ["Titles", "Concepts", "QC", "Rights", "Assets", "Buyers", "Deliveries", "Audit"] as const;
 type Tab = (typeof TABS)[number];
+
+export const Route = createFileRoute("/admin/workstations")({
+  validateSearch: (search: Record<string, unknown>): { tab?: Tab } => ({
+    tab: typeof search.tab === "string" && TABS.includes(search.tab as Tab)
+      ? (search.tab as Tab)
+      : undefined,
+  }),
+  component: AdminWorkstations,
+});
 
 const STATUS_LABELS: Record<string, string> = {
   DRAFT: "Draft", UPLOADING: "Uploading", PREPARING: "Preparing", QC_REVIEW: "QC Review",
@@ -38,7 +45,8 @@ function WorkstationBody() {
     mutationFn: setBuyerPublicationGate,
     onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-workstations"] }),
   });
-  const [activeTab, setActiveTab] = useState<Tab>("Titles");
+  const search = Route.useSearch();
+  const [activeTab, setActiveTab] = useState<Tab>(search.tab ?? "Titles");
 
   const data = query.data;
   if (query.isLoading) return <div className="p-8 text-sm text-muted">Loading Admin…</div>;
