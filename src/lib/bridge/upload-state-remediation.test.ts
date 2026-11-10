@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { PGlite } from "@electric-sql/pglite";
+import type { Sql } from "../db.ts";
 import { ASSET_KINDS, type AssetKind } from "./types.ts";
 import { persistVerifiedAsset } from "./asset-confirmation.ts";
 import { validateOttIngestFile } from "./ott-ingest-spec.ts";
@@ -148,7 +149,15 @@ test("atomic state transition: migration queue and title master/poster only adva
       values ('title-pass-test', 'TRAILER', 'PENDING_REUPLOAD');
     `);
 
-    const sql = { query: async <T>(query: string, params: unknown[]) => (await db.query<T>(query, params)).rows };
+    const sql = {
+      query: async <T>(query: string, params: unknown[] = []) => (await db.query<T>(query, params)).rows,
+      transaction: async <T>(callback: (tx: Sql) => Promise<T>) =>
+        db.transaction(async (tx) =>
+          callback({
+            query: async <R>(query: string, params: unknown[] = []) => (await tx.query<R>(query, params)).rows,
+          } as Sql),
+        ),
+    };
     const sealedKey = "bridge/owner-1/title-pass-test/screener/raw.mp4.verified/sealed-uuid";
     // Call persistence before advancing the queue. A false result must leave the
     // migration queue at its original state.
