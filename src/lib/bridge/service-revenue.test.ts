@@ -5,6 +5,7 @@ import {
   calculateRefundSplit,
   calculateNetProfit,
 } from "./commercial-math.ts";
+import { toServiceQuoteResponse } from "./service-quote-response.ts";
 
 test("service line respects quantity and minimum", () => {
   assert.deepEqual(
@@ -50,4 +51,133 @@ test("net profit follows Bridge commercial formula", () => {
     }),
     37000,
   );
+});
+
+test("customer quote response excludes internal cost, margin, and rate internals", () => {
+  const quote = {
+    quoteId: "quote-1",
+    quoteNumber: "CRQ-20261109-ABCD",
+    status: "QUOTED" as const,
+    currency: "INR" as const,
+    subtotalPaise: 10000,
+    taxPaise: 1800,
+    totalPaise: 11800,
+    estimatedCostPaise: 6000,
+    estimatedMarginPaise: 4000,
+    detectedAssets: [
+      Object.assign(
+        {
+          key: "master",
+          ready: true,
+          source: "legacy_asset" as const,
+          language: null,
+          detail: "Ready evidence found",
+        },
+        { costBasisPaise: 6000, internalNote: "finance-only" },
+      ),
+    ],
+    requiredWork: [
+      Object.assign(
+        {
+          serviceCode: "MASTER_VIDEO",
+          reason: "No accepted video master is available.",
+          quantity: 1,
+        },
+        { rateId: "private-rate", evidence: { costBasisPaise: 6000 } },
+      ),
+    ],
+    lines: [{
+      serviceCode: "SUBTITLE",
+      rateId: "rate-secret",
+      rateVersion: 7,
+      classification: "BILLABLE" as const,
+      pricingMethod: "PER_LANGUAGE",
+      unitLabel: "language",
+      quantity: 1,
+      unitPricePaise: 10000,
+      lineTotalPaise: 10000,
+      costBasisPaise: 6000,
+      estimatedMarginPaise: 4000,
+      evidence: { serviceCode: "SUBTITLE", reason: "missing subtitle", quantity: 1 },
+    }, {
+      serviceCode: "INTERNAL_QC",
+      rateId: "internal-rate",
+      rateVersion: 1,
+      classification: "INTERNAL" as const,
+      pricingMethod: "FIXED",
+      unitLabel: "job",
+      quantity: 1,
+      unitPricePaise: 0,
+      lineTotalPaise: 0,
+      costBasisPaise: 1200,
+      estimatedMarginPaise: 0,
+      evidence: { serviceCode: "INTERNAL_QC", reason: "internal-only service line", quantity: 1 },
+    }],
+  };
+  const response = toServiceQuoteResponse(quote, false);
+  assert.equal("estimatedCostPaise" in response, false);
+  assert.equal("estimatedMarginPaise" in response, false);
+  assert.equal("costBasisPaise" in response.lines[0], false);
+  assert.equal("estimatedMarginPaise" in response.lines[0], false);
+  assert.equal("rateId" in response.lines[0], false);
+  assert.equal("evidence" in response.lines[0], false);
+  assert.deepEqual(
+    Object.keys(response.detectedAssets[0] ?? {}).sort(),
+    ["detail", "key", "language", "ready", "source"],
+  );
+  assert.deepEqual(
+    Object.keys(response.requiredWork[0] ?? {}).sort(),
+    ["quantity", "reason", "serviceCode"],
+  );
+  assert.equal(response.lines.length, 1);
+  assert.equal(response.lines.some((line) => line.serviceCode === "INTERNAL_QC"), false);
+  assert.equal(response.totalPaise, 11800);
+});
+
+test("finance-authorized quote response retains internal financial detail", () => {
+  const quote = {
+    quoteId: "quote-2",
+    quoteNumber: "CRQ-20261109-EFGH",
+    status: "QUOTED" as const,
+    currency: "INR" as const,
+    subtotalPaise: 10000,
+    taxPaise: 1800,
+    totalPaise: 11800,
+    estimatedCostPaise: 6000,
+    estimatedMarginPaise: 4000,
+    detectedAssets: [],
+    requiredWork: [],
+    lines: [{
+      serviceCode: "SUBTITLE",
+      rateId: "rate-internal",
+      rateVersion: 7,
+      classification: "BILLABLE" as const,
+      pricingMethod: "PER_LANGUAGE",
+      unitLabel: "language",
+      quantity: 1,
+      unitPricePaise: 10000,
+      lineTotalPaise: 10000,
+      costBasisPaise: 6000,
+      estimatedMarginPaise: 4000,
+      evidence: { serviceCode: "SUBTITLE", reason: "reviewed", quantity: 1 },
+    }, {
+      serviceCode: "INTERNAL_QC",
+      rateId: "internal-rate",
+      rateVersion: 1,
+      classification: "INTERNAL" as const,
+      pricingMethod: "FIXED",
+      unitLabel: "job",
+      quantity: 1,
+      unitPricePaise: 0,
+      lineTotalPaise: 0,
+      costBasisPaise: 1200,
+      estimatedMarginPaise: 0,
+      evidence: { serviceCode: "INTERNAL_QC", reason: "internal-only service line", quantity: 1 },
+    }],
+  };
+  const response = toServiceQuoteResponse(quote, true);
+  assert.equal("estimatedCostPaise" in response ? response.estimatedCostPaise : null, 6000);
+  assert.equal("estimatedMarginPaise" in response ? response.estimatedMarginPaise : null, 4000);
+  assert.equal("costBasisPaise" in response.lines[0] ? response.lines[0].costBasisPaise : null, 6000);
+  assert.equal(response.lines.some((line) => line.serviceCode === "INTERNAL_QC"), true);
 });
