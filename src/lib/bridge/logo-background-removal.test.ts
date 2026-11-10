@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { removeConnectedBackground } from "./logoBackgroundRemoval.ts";
+import { removeConnectedBackground } from "./logo-background-removal.ts";
 
 function grid(width: number, height: number, color: [number, number, number, number]) {
   const pixels = new Uint8ClampedArray(width * height * 4);
