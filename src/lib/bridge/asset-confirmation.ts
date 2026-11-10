@@ -112,7 +112,7 @@ async function persistVerifiedAssetScoped(
                 where previous.title_id = t.id
                   and (
                     previous.kind = a.kind
-                    or (a.kind = 'poster_vertical' and previous.kind = 'poster')
+                    or (a.kind in ('poster', 'poster_vertical') and previous.kind in ('poster', 'poster_vertical'))
                   )
                   and previous.byte_size > 0
                   and previous.id <> a.id
