@@ -6,8 +6,6 @@ begin;
 create table if not exists bridge_productions (
   id uuid primary key default gen_random_uuid(),
   title_id text not null references bridge_titles(id) on delete restrict,
-  -- Optional Studio organization scope is validated by the server against the
-  -- active membership table; no hard dependency on optional migration 0021.
   organization_id uuid,
   production_name text not null,
   production_no text not null,
@@ -94,21 +92,32 @@ create table if not exists bridge_production_copy_verifications (
   clip_id uuid not null references bridge_production_clips(id) on delete restrict,
   media_kind text not null check (media_kind in ('RAW','AUDIO','STILLS','CONVERTED')),
   storage_tier text not null check (storage_tier in ('MASTER','BACKUP_1','BACKUP_2')),
-  object_key text not null,
+  object_key text not null check (length(trim(object_key)) > 0),
   expected_byte_size bigint not null check (expected_byte_size > 0),
   expected_sha256 text not null check (expected_sha256 ~ '^[a-fA-F0-9]{64}$'),
   observed_byte_size bigint,
   observed_sha256 text,
   independently_verified boolean not null default false,
   verified_at timestamptz,
-  storage_location_id text not null,
-  failure_domain_id text not null,
+  storage_location_id text not null check (length(trim(storage_location_id)) > 0),
+  failure_domain_id text not null check (length(trim(failure_domain_id)) > 0),
   verification_result text not null default 'NOT_CHECKED'
     check (verification_result in ('PASS','FAIL','NOT_CHECKED')),
   created_at timestamptz not null default now(),
   constraint bridge_production_copy_observed_bytes_positive check (observed_byte_size is null or observed_byte_size > 0),
   constraint bridge_production_copy_observed_hash_valid check (observed_sha256 is null or observed_sha256 ~ '^[a-fA-F0-9]{64}$'),
-  unique (clip_id, media_kind, storage_tier)
+  constraint bridge_production_copy_pass_requires_exact_independent_readback check (
+    verification_result <> 'PASS'
+    or (
+      independently_verified = true
+      and verified_at is not null
+      and observed_byte_size = expected_byte_size
+      and lower(observed_sha256) = lower(expected_sha256)
+    )
+  ),
+  unique (clip_id, media_kind, storage_tier),
+  -- A clip cannot claim multiple replicas in the same failure domain.
+  unique (clip_id, media_kind, failure_domain_id)
 );
 
 create table if not exists bridge_production_conversion_jobs (
