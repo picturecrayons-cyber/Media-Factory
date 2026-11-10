@@ -382,10 +382,10 @@ export const getTitle = createServerFn({ method: "GET" })
     const sql = await getSql();
     if (actor.accountType === "investor" && !actor.internalRole) {
       const assigned = await sql<{ id: string }>`
-        select id from bridge_title_investors
+        select id::text as id from bridge_title_investors
         where title_id = ${title.id} and investor_user_id = ${actor.userId}
         union all
-        select title_id as id from bridge_investor_preview_access
+        select title_id::text as id from bridge_investor_preview_access
         where title_id = ${title.id} and investor_user_id = ${actor.userId}
           and revoked_at is null and (expires_at is null or expires_at > now())
         limit 1
