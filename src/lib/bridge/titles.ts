@@ -6,12 +6,12 @@ import { getSql, type Sql } from "@/lib/db";
 import type { AccountType, TitleStatus } from "./types";
 import { TITLE_STATUSES, type BridgeTitle } from "./types";
 import { assertTransition, nextStatus } from "./lifecycle";
-import { assertPermission, canMutateTitle, canReadTitle, hasPermission, hasStaffPermission, permissionForTransition } from "./rbac";
+import { assertPermission, canMutateTitle, canReadTitle, hasPermission, permissionForTransition } from "./rbac";
 import { requireVerifiedActor } from "./session";
 import { writeAudit } from "./audit";
 import { assertNotDevUser } from "./guards";
 import { loopStageType } from "./loop-lanes";
-import { assertBuyerPublishable, getBuyerGateStatus } from "./buyer-visibility";
+import { assertBuyerPublishable } from "./buyer-visibility";
 import { submitTitleForQc } from "./title-submission";
 
 type TitleRow = {
@@ -464,110 +464,6 @@ export const updateTitle = createServerFn({ method: "POST" })
     const next = await loadTitle(title.id);
     return { title: next };
   });
-
-async function assertLicensingReady(titleId: string) {
-  const sql = await getSql();
-  const rows = await sql<{
-    metadata_ok: boolean;
-    rights_ok: boolean;
-    rights_evidence_ok: boolean;
-    legal_ok: boolean;
-    legal_evidence_ok: boolean;
-    qc_ok: boolean;
-    screener_ok: boolean;
-    master_ok: boolean;
-    poster_ok: boolean;
-    package_ok: boolean;
-  }>`
-    select
-      (
-        nullif(trim(t.name), '') is not null
-        and nullif(trim(t.synopsis), '') is not null
-        and nullif(trim(t.language), '') is not null
-        and t.content_type is not null
-      ) as metadata_ok,
-      exists (
-        select 1 from bridge_rights_grants r
-        where r.title_id = t.id
-          and r.status = 'VALID'
-          and jsonb_array_length(r.territories) > 0
-          and jsonb_array_length(r.languages) > 0
-          and jsonb_array_length(r.media) > 0
-          and r.window_start is not null
-          and r.window_end is not null
-          and r.window_end > now()
-      ) as rights_ok,
-      exists (
-        select 1 from bridge_rights_grants r
-        where r.title_id = t.id
-          and r.status = 'VALID'
-          and exists (
-            select 1 from jsonb_array_elements(r.evidence) e
-            where coalesce(e->>'type', '') not in ('RIGHTS_BASIS', 'AUTHORIZATION_ATTESTATION')
-          )
-      ) as rights_evidence_ok,
-      exists (
-        select 1 from bridge_legal_cases l
-        where l.title_id = t.id and l.status = 'APPROVED'
-      ) as legal_ok,
-      exists (
-        select 1 from bridge_legal_cases l
-        where l.title_id = t.id
-          and l.status = 'APPROVED'
-          and exists (
-            select 1 from jsonb_array_elements(l.evidence) e
-            where coalesce(e->>'type', '') not in ('AUTHORIZATION_ATTESTATION', 'RIGHTS_BASIS')
-          )
-      ) as legal_evidence_ok,
-      exists (
-        select 1 from bridge_qc_cases q
-        where q.title_id = t.id and q.status = 'PASSED'
-      ) as qc_ok,
-      exists (
-        select 1 from bridge_assets a
-        where a.title_id = t.id and a.kind = 'screener' and coalesce(a.byte_size, 0) > 0
-      ) as screener_ok,
-      exists (
-        select 1 from bridge_assets a
-        where a.title_id = t.id and a.kind = 'master' and coalesce(a.byte_size, 0) > 0
-          and t.master_key is not null and a.s3_key = t.master_key
-      ) as master_ok,
-      exists (
-        select 1 from bridge_assets a
-        where a.title_id = t.id and a.kind in ('poster', 'poster_vertical') and coalesce(a.byte_size, 0) > 0
-          and t.poster_key is not null and a.s3_key = t.poster_key
-      ) as poster_ok,
-      exists (
-        select 1 from bridge_destination_packages p
-        where p.title_id = t.id and p.readiness_state in ('HOLD', 'READY')
-      ) as package_ok
-    from bridge_titles t
-    where t.id = ${titleId}
-    limit 1
-  `;
-  const row = rows[0];
-  if (!row) throw new Error("Title not found");
-  const missing = [
-    ["metadata", row.metadata_ok],
-    ["rights grant", row.rights_ok],
-    ["rights evidence", row.rights_evidence_ok],
-    ["legal approval", row.legal_ok],
-    ["legal evidence", row.legal_evidence_ok],
-    ["QC pass", row.qc_ok],
-    ["private screener", row.screener_ok],
-    ["verified master", row.master_ok],
-    ["required artwork", row.poster_ok],
-    ["destination package", row.package_ok],
-  ].filter(([, ok]) => !ok).map(([name]) => name);
-  if (missing.length) {
-    throw new Error(`LICENSING_READY blocked: ${missing.join(", ")}`);
-  }
-  await sql`
-    update bridge_titles
-    set rights_submission_status = 'READY', updated_at = now()
-    where id = ${titleId}
-  `;
-}
 
 export const advanceTitle = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
