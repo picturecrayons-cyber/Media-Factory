@@ -164,6 +164,13 @@ test("card reuse is blocked until every clip, required copy and human sign-off p
   const checked = runClapAssistant({ clip: entry, manifestResult: "PASS", sourceCopyResult: "PASS", audioRequired: true });
   const targets = requiredCopyMatrix([clip], 0, 0);
   const copies = targets.map((target, index) => copy({ copyId: `copy-${index}`, clipNumber: target.clipNumber, kind: target.kind, tier: target.tier, storageLocationId: `volume-${target.tier}`, failureDomainId: `failure-domain-${target.tier}` }));
+  const missingMediaInventory = evaluateDitSignoff({
+    reviewerId: "dit-reviewer-1", reviewedAt: "now", clipLedger: [checked],
+    manifestResult: "PASS", requiredCopies: copies, audioCount: 1, stillsCount: 1,
+  });
+  assert.equal(missingMediaInventory.cardSafeToReuse, false);
+  assert.ok(missingMediaInventory.blockers.some((item) => item.includes("AUDIO_1")));
+  assert.ok(missingMediaInventory.blockers.some((item) => item.includes("STILL_1")));
   const pending = evaluateDitSignoff({ reviewerId: "", reviewedAt: "", clipLedger: [checked], manifestResult: "PASS", requiredCopies: copies, audioCount: 0, stillsCount: 0 });
   assert.equal(pending.cardSafeToReuse, false);
   const humanChecked = { ...checked, humanDisposition: "ACCEPTED" as const, humanReviewerId: "dit-reviewer-1", humanReviewedAt: "2026-11-04T11:00:00.000Z" };
