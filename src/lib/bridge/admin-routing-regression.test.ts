@@ -71,7 +71,8 @@ test("shared title workspace has an explicit role gate and Studio list scope", (
   assert.match(gate, /allow === "workspace" && !canAccessTitleWorkspace\(profile\)/);
   assert.match(rbac, /export function canAccessTitleWorkspace\(actor: Actor\)/);
   assert.match(titles, /bridge_organization_memberships/);
-  assert.match(titles, /owner_organization_id = \$\{orgId\}/);
+  assert.match(titles, /owner_organization_id = any\(\$\{orgIds\}::uuid\[\]\)/);
+  assert.match(titles, /m\.status = 'active'/);
   assert.doesNotMatch(titles, /lower\(trim\(organization_name\)\)/);
   const assets = read("./assets.ts");
   const workflow = read("./workflow.ts");
