@@ -84,6 +84,7 @@ async function main() {
     };
     const common = {
       internalActor: false,
+      superAdminActor: false,
       kind: "master",
       byteSize: 1234,
       contentType: "video/mp4",
