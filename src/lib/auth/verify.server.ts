@@ -1,5 +1,6 @@
 import { resolveCanonicalSupabaseUrl } from "../supabase-url.ts";
 import { assertSupabaseProjectTarget } from "../supabase-target.ts";
+import { assertSupabaseProjectTarget } from "../supabase-target.ts";
 
 function trimKey(value: string | undefined): string | undefined {
   const trimmed = value?.trim();
@@ -12,6 +13,8 @@ const supabaseUrl = resolveCanonicalSupabaseUrl(
   process.env.VITE_SUPABASE_URL,
   process.env.NEXT_PUBLIC_SUPABASE_URL,
 );
+
+assertSupabaseProjectTarget(supabaseUrl, process.env.VITE_SUPABASE_TARGET, Boolean(process.env.VERCEL));
 
 assertSupabaseProjectTarget(supabaseUrl, process.env.VITE_SUPABASE_TARGET, Boolean(process.env.VERCEL));
 
