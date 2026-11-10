@@ -14,12 +14,12 @@ const LIVE_STAGES = new Set(["LIVE_FOR_BUYERS", "IN_NEGOTIATION", "LICENSED", "D
 
 function Studio() {
   return <RequireBridge allow="studio">{(actor) => (
-    <BridgeShell actor={actor} title="Studio dashboard"><StudioDashboard /></BridgeShell>
+    <BridgeShell actor={actor} title="Studio dashboard"><StudioDashboard actor={actor} /></BridgeShell>
   )}</RequireBridge>;
 }
 
-function StudioDashboard() {
-  const titlesQ = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles(), retry: 1 });
+function StudioDashboard({ actor }: { actor: { userId: string; organizationId: string | null } }) {
+  const titlesQ = useQuery({ queryKey: ["bridge-titles", actor.userId, actor.organizationId], queryFn: () => listTitles(), retry: 1 });
   const titles = titlesQ.data?.titles ?? [];
   const active = titles.filter((title) => ACTIVE_STAGES.has(title.status));
   const live = titles.filter((title) => LIVE_STAGES.has(title.status));
