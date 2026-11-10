@@ -66,7 +66,9 @@ export async function submitRightsEvidence(
     join bridge_assets a on a.asset_version_id=av.id and a.kind='rights_document'
       and a.verified_object_key=av.s3_key and a.storage_verified_at is not null
       and lower(a.checksum_sha256)=lower(av.checksum_sha256)
-    where av.id=${data.assetVersionId} for update of av,a`;
+    where av.id=${data.assetVersionId}
+      and av.asset_type='RIGHTS_EVIDENCE'
+    for update of av,a`;
   if (
     !asset ||
     asset.title_id !== data.titleId ||
