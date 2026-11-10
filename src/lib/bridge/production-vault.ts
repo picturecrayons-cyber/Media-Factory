@@ -8,7 +8,7 @@
 
 export const CAMERA_IDS = ["A", "B", "C"] as const;
 export type CameraId = (typeof CAMERA_IDS)[number];
-export type StorageTier = "MASTER" | "BACKUP_1" | "BACKUP_2";
+export type StorageTier = "MASTER" | "BACKUP_1";
 export type MediaKind = "RAW" | "AUDIO" | "STILLS" | "CONVERTED";
 export type CheckResult = "PASS" | "WARNING" | "FAIL" | "NOT_CHECKED";
 
@@ -137,9 +137,6 @@ export function buildVaultObjectKey(input: {
   }
   if (!input.camera || !input.cardNo) throw new Error("Camera and physical Card No. are required");
   const cardRoot = `${root}/CAMERA_${input.camera}/${safe(input.cardNo)}`;
-  if (input.kind === "CONVERTED" && input.tier === "BACKUP_2") {
-    throw new Error("BACKUP_2 converted media is outside the approved initial copy policy");
-  }
   if (input.kind === "CONVERTED") return `${cardRoot}/CONVERTED/`;
   if (input.originalRelativePath && !validateRelativeSourcePath(input.originalRelativePath)) {
     throw new Error("Unsafe original relative path");
@@ -439,16 +436,16 @@ export function evaluateDitSignoff(input: DitSignoff): {
   return { eligible, cardSafeToReuse: eligible, blockers };
 }
 
-/** Build the approved initial backup matrix; BACKUP_2 does not receive CONVERTED. */
+/** One primary MASTER plus one shared cloud BACKUP_1 for every media kind. */
 export function requiredCopyMatrix(clips: ClipRecord[], audioCount: number, stillsCount: number) {
   const targets: Array<{ clipNumber: string; kind: MediaKind; tier: StorageTier }> = [];
   for (const clip of clips) {
-    for (const tier of ["MASTER", "BACKUP_1", "BACKUP_2"] as const) targets.push({ clipNumber: clip.clipNumber, kind: "RAW", tier });
+    for (const tier of ["MASTER", "BACKUP_1"] as const) targets.push({ clipNumber: clip.clipNumber, kind: "RAW", tier });
     targets.push({ clipNumber: clip.clipNumber, kind: "CONVERTED", tier: "MASTER" });
     targets.push({ clipNumber: clip.clipNumber, kind: "CONVERTED", tier: "BACKUP_1" });
   }
-  for (let i = 0; i < audioCount; i++) for (const tier of ["MASTER", "BACKUP_1", "BACKUP_2"] as const) targets.push({ clipNumber: `AUDIO_${i + 1}`, kind: "AUDIO", tier });
-  for (let i = 0; i < stillsCount; i++) for (const tier of ["MASTER", "BACKUP_1", "BACKUP_2"] as const) targets.push({ clipNumber: `STILL_${i + 1}`, kind: "STILLS", tier });
+  for (let i = 0; i < audioCount; i++) for (const tier of ["MASTER", "BACKUP_1"] as const) targets.push({ clipNumber: `AUDIO_${i + 1}`, kind: "AUDIO", tier });
+  for (let i = 0; i < stillsCount; i++) for (const tier of ["MASTER", "BACKUP_1"] as const) targets.push({ clipNumber: `STILL_${i + 1}`, kind: "STILLS", tier });
   return targets;
 }
 
