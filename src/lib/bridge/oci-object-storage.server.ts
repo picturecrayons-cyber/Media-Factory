@@ -3,6 +3,7 @@ import {
   createPrivateKey,
   createPublicKey,
   createSign,
+  randomBytes,
 } from "node:crypto";
 import { bridgeEnv } from "./env.ts";
 import { toLatin1 } from "./latin1.ts";
@@ -402,5 +403,5 @@ export async function deleteObject(key: string) {
 
 export function titleAssetKey(opts: { ownerUserId: string; titleId: string; kind: string; filename: string }) {
   const safe = opts.filename.replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 80);
-  return `bridge/${opts.ownerUserId}/${opts.titleId}/${opts.kind}/${Date.now()}-${safe}`;
+  return `bridge/${opts.ownerUserId}/${opts.titleId}/${opts.kind}/${Date.now()}-${randomBytes(16).toString("hex")}-${safe}`;
 }
