@@ -4,6 +4,7 @@ import { BridgeShell } from "@/components/bridge/shell";
 import { TitleList } from "@/components/bridge/title-desk";
 import { MyStoryConcepts } from "@/components/bridge/my-story-concepts";
 import { NewSubmissionPanel } from "@/components/bridge/new-submission-panel";
+import { DitWorkspace } from "@/components/bridge/dit-workspace";
 
 export const Route = createFileRoute("/studio")({ component: Studio });
 
@@ -24,6 +25,8 @@ function Studio() {
               <h2 className="mb-3 text-lg font-semibold">Finished films</h2>
               <TitleList empty="No finished films yet. Start with a new submission." />
             </section>
+
+            <DitWorkspace canReview={false} />
 
             <MyStoryConcepts />
           </div>
