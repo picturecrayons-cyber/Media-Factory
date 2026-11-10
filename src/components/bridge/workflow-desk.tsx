@@ -399,7 +399,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                   hasPermission(actor, "title.rights_review") ? (
                     <div className="space-y-2">
                       <p className="text-xs text-muted-foreground">
-                        Approval is blocked until executed-agreement and ownership evidence receive independent, recorded verification.
+                        Approval is blocked until all five mandatory evidence classes receive independent, recorded verification.
                       </p>
                       {button("Reject", () =>
                         reviewTitleWorkflow({
