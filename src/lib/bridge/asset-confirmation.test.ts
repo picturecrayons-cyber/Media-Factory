@@ -696,3 +696,39 @@ test("signed delivery receipt permanently locks Super Admin replacement", async 
     await db.close();
   }
 });
+
+
+test("asset confirmation takes the publication title-row lock before checking and persisting the asset", async () => {
+  const statements: Array<{ query: string; params: unknown[] }> = [];
+  const sql = {
+    query: async () => [],
+    transaction: async <T>(callback: (tx: Sql) => Promise<T>) =>
+      callback({
+        query: async <R>(query: string, params: unknown[] = []) => {
+          statements.push({ query, params });
+          return [];
+        },
+      } as unknown as Sql),
+  } as unknown as Pick<Sql, "query" | "transaction">;
+
+  const result = await persistVerifiedAsset(sql, {
+    assetId: "race-asset",
+    actorUserId: "super-admin",
+    internalActor: true,
+    superAdminActor: true,
+    titleId: "publication-race-title",
+    kind: "master",
+    byteSize: 200,
+    contentType: "video/mp4",
+    checksum: "race-checksum",
+    sourceKey: "race/master",
+    sealedKey: "race/master.verified/race-asset",
+  });
+
+  assert.equal(result, false);
+  assert.match(statements[0]?.query ?? "", /select id from bridge_titles where id = \$1 for update/i);
+  assert.deepEqual(statements[0]?.params, ["publication-race-title"]);
+  assert.match(statements[1]?.query ?? "", /pg_advisory_xact_lock/i);
+  assert.deepEqual(statements[1]?.params, ["publication-race-title"]);
+  assert.match(statements[2]?.query ?? "", /with verified as/i);
+});
