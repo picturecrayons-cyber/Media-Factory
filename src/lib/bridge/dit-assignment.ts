@@ -26,6 +26,6 @@ export function hasActiveDitAssignment(
     assignment.productionId === productionId &&
     assignment.titleId === titleId &&
     assignment.status === "active" &&
-    (assetId === null || assignment.assetId === assetId)
+    (assetId === null ? assignment.assetId === null : assignment.assetId === assetId)
   );
 }
