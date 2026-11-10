@@ -426,3 +426,56 @@ export const inviteInternalRole = createServerFn({ method: "POST" })
     });
     return { sent: true };
   });
+
+
+/**
+ * Select the active Studio organization for new title/story creation.
+ * This updates only the profile's selected-context pointer; it does not create
+ * or alter memberships. Membership authorization is checked on every call.
+ */
+export const setActiveStudioOrganization = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({ organizationId: z.string().uuid() }))
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    if (actor.internalRole || actor.accountType !== "studio") {
+      throw new Error("Studio account required");
+    }
+
+    const sql = await getSql();
+    const membership = await sql<{ organization_id: string; organization_name: string }>`
+      select m.organization_id::text as organization_id, o.legal_name as organization_name
+      from bridge_organization_memberships m
+      join bridge_organizations o
+        on o.id = m.organization_id
+       and o.status = 'active'
+      where m.user_id = ${actor.userId}
+        and m.organization_id = ${data.organizationId}::uuid
+        and m.status = 'active'
+      limit 1
+    `;
+    if (!membership[0]) throw new Error("Active Studio membership required");
+
+    await sql`
+      update bridge_profiles
+      set organization_id = ${data.organizationId}::uuid, updated_at = now()
+      where user_id = ${actor.userId}
+        and account_type = 'studio'
+    `;
+
+    const updated = await loadActor(context.userId);
+    if (!updated || updated.organizationId !== data.organizationId) {
+      throw new Error("Studio organization selection could not be verified");
+    }
+
+    await writeAudit({
+      actorUserId: actor.userId,
+      action: "studio.organization_selected",
+      entityType: "bridge_organization",
+      entityId: data.organizationId,
+      metadata: { organizationName: membership[0].organization_name },
+    });
+
+    return { profile: updated };
+  });
