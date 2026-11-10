@@ -18,8 +18,7 @@ const INTERNAL_PERMISSIONS: Record<InternalRole, readonly Permission[]> = {
   ],
   admin: [
     "title.read_catalog",
-    "title.advance_upload",
-    "title.ingest_internal",
+    "production.dit_operate",
     "service.quote_create",
     "service.order_create",
     "service.fulfill",
@@ -83,6 +82,7 @@ const ACCOUNT_PERMISSIONS: Record<AccountType, readonly Permission[]> = {
     "delivery.read_finance",
   ],
   studio: [
+    "production.dit_operate",
     "title.create",
     "title.read_own",
     "title.update_own",
