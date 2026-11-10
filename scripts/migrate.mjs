@@ -10,6 +10,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import pg from "pg";
 import { pendingMigrations } from "./migration-plan.mjs";
+import { reconcileMigrationHistory } from "./migration-reconciliation.mjs";
 
 const readEnv = (key) => {
   const value = process.env[key]?.trim();
@@ -77,10 +78,39 @@ async function main() {
       );
     }
 
-    await client.query(
-      "CREATE TABLE IF NOT EXISTS _migrations (name TEXT PRIMARY KEY, applied_at TIMESTAMPTZ NOT NULL DEFAULT now())",
-    );
-    const applied = (await client.query("SELECT name FROM _migrations")).rows.map(
+    if (supabaseLedgerExists && appLedgerExists) {
+      const [supabaseRows, appRows] = await Promise.all([
+        client.query(
+          "SELECT version, name, statements FROM supabase_migrations.schema_migrations ORDER BY version",
+        ),
+        client.query("SELECT name FROM public._migrations ORDER BY name"),
+      ]);
+      const repositoryMigrations = await Promise.all(
+        entries
+          .filter((name) => name.endsWith(".sql"))
+          .map(async (name) => ({
+            name,
+            content: await readFile(join(migrationsDir, name), "utf8"),
+          })),
+      );
+      const reconciliation = reconcileMigrationHistory({
+        repositoryMigrations,
+        supabaseMigrations: supabaseRows.rows,
+        appMigrationNames: appRows.rows.map((row) => row.name),
+      });
+      if (!reconciliation.compatible) {
+        throw new Error(
+          `Refusing to migrate: migration histories are not reconciled. ${reconciliation.blockers.join(" ")} No migration SQL was applied.`,
+        );
+      }
+    }
+
+    if (!appLedgerExists) {
+      await client.query(
+        "CREATE TABLE IF NOT EXISTS public._migrations (name TEXT PRIMARY KEY, applied_at TIMESTAMPTZ NOT NULL DEFAULT now())",
+      );
+    }
+    const applied = (await client.query("SELECT name FROM public._migrations")).rows.map(
       (r) => r.name,
     );
 
