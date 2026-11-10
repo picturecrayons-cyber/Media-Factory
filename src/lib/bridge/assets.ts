@@ -279,9 +279,7 @@ export const requestAssetDownload = createServerFn({ method: "POST" })
     const title = await loadTitle(asset.title_id);
     if (!title || !canReadTitle(actor, title)) throw new Error("Not found");
     const entitled = await hasLicenseEntitlement(actor.userId, title.id);
-    const hasInvestorPreviewGrant = actor.accountType === "investor" && asset.kind === "screener"
-      ? await hasActiveInvestorPreviewGrant(title.id, actor.userId)
-      : false;
+    const hasInvestorPreviewGrant = investorPreviewAccess;
     const decision = downloadDecision({
       kind: asset.kind,
       actorIsOwner: title.ownerUserId === actor.userId,
@@ -316,9 +314,13 @@ export const listTitleAssets = createServerFn({ method: "GET" })
   .handler(async ({ context, data }) => {
     const actor = await requireVerifiedActor(context.userId);
     const title = await loadTitle(data.titleId);
-    if (!title || !canReadTitle(actor, title)) throw new Error("Not found");
+    const investorPreviewAccess = actor.accountType === "investor" && !actor.internalRole
+      ? await hasActiveInvestorPreviewGrant(data.titleId, actor.userId)
+      : false;
+    if (!title || (!canReadTitle(actor, title) && !investorPreviewAccess)) throw new Error("Not found");
     const sql = await getSql();
     const buyer = actor.accountType === "buyer" && !actor.internalRole;
+    const investor = actor.accountType === "investor" && !actor.internalRole;
     const rows = await sql<{
       id: string;
       kind: string;
@@ -332,11 +334,11 @@ export const listTitleAssets = createServerFn({ method: "GET" })
     `;
     return {
       assets: rows
-        .filter((r) => !buyer || !["master", "technical", "censor_certificate"].includes(r.kind))
+        .filter((r) => (!buyer || !["master", "technical", "censor_certificate"].includes(r.kind)) && (!investor || r.kind === "screener"))
         .map((r) => ({
           id: r.id,
           kind: r.kind,
-          key: buyer ? null : r.s3_key,
+          key: buyer || investor ? null : r.s3_key,
           contentType: r.content_type,
           byteSize: r.byte_size,
           verified: Number(r.byte_size) > 0,
