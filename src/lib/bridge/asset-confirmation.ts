@@ -22,6 +22,19 @@ export async function persistVerifiedAsset(sql: Pick<Sql, "query" | "transaction
   // separate statement so READ COMMITTED gets a fresh snapshot for the
   // subsequent MAX(version) query after any competing confirmation commits.
   return sql.transaction(async (tx) => {
+    // Publication authorization takes this same title-row lock before its
+    // preflight. Acquiring it first makes replacement and publication
+    // mutually exclusive: whichever commits first is observed by the other.
+    // Keep this as a separate statement so READ COMMITTED uses a fresh
+    // snapshot for the subsequent first-delivery/publication guard.
+    await tx.query(
+      "select id from bridge_titles where id = $1 for update",
+      [opts.titleId],
+    );
+
+    // Version allocation is a read-then-write operation. Serialize every
+    // confirmation for this title as well, and acquire the advisory lock in a
+    // separate statement so the subsequent MAX(version) query sees commits.
     await tx.query(
       "select pg_advisory_xact_lock(hashtextextended($1::text, 0))",
       [opts.titleId],
