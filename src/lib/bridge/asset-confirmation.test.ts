@@ -4,6 +4,25 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { PGlite } from "@electric-sql/pglite";
 import { persistVerifiedAsset } from "./asset-confirmation.ts";
+ 
+function createTestSql(db: PGlite) {
+  return {
+    query: async <T>(query: string, params: unknown[] = []) =>
+      (await db.query<T>(query, params)).rows,
+    transaction: async <T>(
+      callback: (tx: {
+        query: <R>(query: string, params?: unknown[]) => Promise<R[]>;
+      }) => Promise<T>,
+    ) =>
+      db.transaction(async (tx) =>
+        callback({
+          query: async <R>(query: string, params: unknown[] = []) =>
+            (await tx.query<R>(query, params)).rows,
+        }),
+      ),
+  };
+}
+
 
 test("only a verified upload sets the master reference, once, with an audit event", async () => {
   const db = new PGlite();
@@ -66,7 +85,7 @@ test("only a verified upload sets the master reference, once, with an audit even
       values ('title1234','title','Title','creator','independent_creator');
       insert into bridge_assets (id,title_id,kind,s3_key,content_type,created_by)
       values ('asset1234','title1234','master','bridge/creator/title1234/master/video.mp4','video/mp4','creator');`);
-    const sql = { query: async <T>(query: string, params: unknown[]) => (await db.query<T>(query, params)).rows };
+    const sql = createTestSql(db);
     const args = {
       assetId: "asset1234",
       actorUserId: "creator",
@@ -104,6 +123,50 @@ test("only a verified upload sets the master reference, once, with an audit even
     assert.equal(metadata.checksum, "etag-1");
     assert.equal(metadata.titleId, "title1234");
     assert.equal(metadata.kind, "master");
+
+    // The persistence boundary must reject owner-level replacement even if a
+    // caller bypasses the server-function Super Admin guard.
+    await db.exec(`
+      insert into bridge_assets (id,title_id,kind,s3_key,content_type,created_by)
+      values ('owner-replacement','title1234','master','replacement/master','video/mp4','creator');
+    `);
+    assert.equal(await persistVerifiedAsset(sql, {
+      ...args,
+      assetId: "owner-replacement",
+      sourceKey: "replacement/master",
+      sealedKey: "replacement/master.verified/owner-replacement",
+    }), false);
+    const denied = await db.query<{ byte_size: number | null }>(
+      "select byte_size from bridge_assets where id='owner-replacement'",
+    );
+    assert.equal(denied.rows[0]?.byte_size, null);
+
+    // Concurrent Super Admin confirmations for one title must allocate
+    // distinct sequential versions under the per-title transaction lock.
+    await db.exec(`
+      insert into bridge_assets (id,title_id,kind,s3_key,content_type,created_by)
+      values
+        ('parallel-one','title1234','master','parallel/one','video/mp4','super-admin'),
+        ('parallel-two','title1234','master','parallel/two','video/mp4','super-admin');
+    `);
+    const parallelArgs = (assetId: string, sourceKey: string) => ({
+      ...args,
+      assetId,
+      actorUserId: "super-admin",
+      internalActor: true,
+      superAdminActor: true,
+      sourceKey,
+      sealedKey: `${sourceKey}.verified/${assetId}`,
+    });
+    const parallelResults = await Promise.all([
+      persistVerifiedAsset(sql, parallelArgs("parallel-one", "parallel/one")),
+      persistVerifiedAsset(sql, parallelArgs("parallel-two", "parallel/two")),
+    ]);
+    assert.deepEqual(parallelResults, [true, true]);
+    const allocated = await db.query<{ version: number }>(
+      "select version from bridge_asset_versions where title_id='title1234' and asset_type='MASTER' order by version",
+    );
+    assert.deepEqual(allocated.rows.map((row) => row.version), [1, 2, 3]);
   } finally {
     await db.close();
   }
@@ -195,7 +258,7 @@ test("same-organization verified Studio member can confirm upload, other organiz
         ('asset-same-org','title-same-org','master','source/same.mp4','video/mp4','studio-member'),
         ('asset-other-org','title-other-org','master','source/other.mp4','video/mp4','studio-other');
     `);
-    const sql = { query: async <T>(query: string, params: unknown[]) => (await db.query<T>(query, params)).rows };
+    const sql = createTestSql(db);
     const common = {
       internalActor: false,
       superAdminActor: false,
@@ -267,7 +330,7 @@ test("title owner can confirm an upload when organization tables are absent", as
       values ('title1234','title','Title','creator','independent_creator','PREPARING');
       insert into bridge_assets (id,title_id,kind,s3_key,content_type,created_by)
       values ('asset1234','title1234','screener','bridge/creator/title1234/screener/video.mp4','video/mp4','creator');`);
-    const sql = { query: async <T>(query: string, params: unknown[]) => (await db.query<T>(query, params)).rows };
+    const sql = createTestSql(db);
     assert.equal(await persistVerifiedAsset(sql, {
       assetId: "asset1234",
       actorUserId: "creator",
@@ -339,7 +402,7 @@ test("Super Admin can replace a verified asset through RIGHTS_REVIEW before firs
       insert into bridge_destination_packages (title_id,readiness_state,authorized_by,authorized_at)
       values ('replace-title','AUTHORIZED','admin-user',now());
     `);
-    const sql = { query: async <T>(query: string, params: unknown[]) => (await db.query<T>(query, params)).rows };
+    const sql = createTestSql(db);
     const result = await persistVerifiedAsset(sql, {
       assetId: "new-master",
       actorUserId: "super-admin",
@@ -424,7 +487,7 @@ test("first LOOP publication permanently locks Super Admin replacement", async (
       insert into bridge_loop_publications (bridge_title_id,approved_at)
       values ('locked-title',now());
     `);
-    const sql = { query: async <T>(query: string, params: unknown[]) => (await db.query<T>(query, params)).rows };
+    const sql = createTestSql(db);
     const result = await persistVerifiedAsset(sql, {
       assetId: "locked-asset",
       actorUserId: "super-admin",
@@ -476,7 +539,7 @@ test("signed delivery receipt permanently locks Super Admin replacement", async 
       insert into bridge_delivery_jobs (title_id,admin_sign_off,delivery_receipt_url)
       values ('delivered-title',true,'https://receipt.example.test/delivery/1');
     `);
-    const sql = { query: async <T>(query: string, params: unknown[]) => (await db.query<T>(query, params)).rows };
+    const sql = createTestSql(db);
     const result = await persistVerifiedAsset(sql, {
       assetId: "delivered-asset",
       actorUserId: "super-admin",
