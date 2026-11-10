@@ -12,7 +12,7 @@ type Props = {
 
 declare global {
   interface Window {
-    Razorpay?: new (options: Record<string, unknown>) => { open: () => void };
+    Razorpay?: new (options: Record<string, unknown>) => { open: () => void; on: (eventName: string, handler: (response: { error?: { description?: string } }) => void) => void };
   }
 }
 
@@ -50,6 +50,8 @@ export default function LogoBackgroundConverter({ createOrder, verifyPayment, pr
   const [fileName, setFileName] = useState("logo-transparent.png");
   const [tolerance, setTolerance] = useState(36);
   const [email, setEmail] = useState("");
+  const [idempotencyKey, setIdempotencyKey] = useState(() => randomKey());
+  const [pendingPayment, setPendingPayment] = useState<{ orderId: string; paymentId: string; signature: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("Upload a PNG, JPG or WebP logo to begin.");
   const [output, setOutput] = useState<Blob | null>(null);
@@ -93,7 +95,9 @@ export default function LogoBackgroundConverter({ createOrder, verifyPayment, pr
     if (!file) return;
     if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) { setMessage("Please choose a PNG, JPG or WebP image."); return; }
     if (file.size > 12 * 1024 * 1024) { setMessage("Please choose an image smaller than 12 MB."); return; }
+    if (pendingPayment) { setMessage("Verify the previous payment before starting another conversion."); return; }
     clearUrls();
+    setIdempotencyKey(randomKey());
     setBusy(true);
     setMessage("Processing locally in your browser…");
     const url = URL.createObjectURL(file);
@@ -143,32 +147,59 @@ export default function LogoBackgroundConverter({ createOrder, verifyPayment, pr
     try { await processImage(originalRef.current, sample, value); } catch (error) { setMessage(error instanceof Error ? error.message : "Could not process this image."); } finally { setBusy(false); }
   }
 
+  function downloadVerified(receiptId: string) {
+    if (!output) throw new Error("The processed image is no longer available. Keep this page open until the download completes.");
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(output);
+    link.download = fileName;
+    document.body.appendChild(link); link.click(); link.remove();
+    setMessage(`Payment verified. Your transparent PNG has downloaded. Receipt: ${receiptId}`);
+    setPendingPayment(null);
+    setIdempotencyKey(randomKey());
+  }
+
+  async function retryVerification() {
+    if (!pendingPayment || !output || busy) return;
+    setBusy(true);
+    setMessage("Retrying secure payment verification…");
+    try {
+      const verified = await verifyPayment({ orderId: pendingPayment.orderId, paymentId: pendingPayment.paymentId, signature: pendingPayment.signature });
+      if (!verified.verified) throw new Error("Payment verification was not confirmed.");
+      downloadVerified(verified.receiptId);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Verification is still pending. Do not pay again; contact support if this continues.");
+    } finally { setBusy(false); }
+  }
+
   async function payAndDownload() {
-    if (!output || busy) return;
+    if (!output || busy || pendingPayment) return;
     setBusy(true);
     setMessage("Preparing secure ₹1 payment…");
     try {
       await loadCheckout();
-      const order = await createOrder(randomKey(), email.trim() || undefined);
+      const order = await createOrder(idempotencyKey, email.trim() || undefined);
       if (!window.Razorpay) throw new Error("Secure checkout is unavailable.");
       const checkout = new window.Razorpay({
         key: order.keyId, amount: order.amountPaise, currency: order.currency,
         name: "StreamVista", description: productName, order_id: order.orderId,
         theme: { color: "#7c3aed" },
         handler: async (response: { razorpay_order_id: string; razorpay_payment_id: string; razorpay_signature: string }) => {
+          const payment = { orderId: response.razorpay_order_id, paymentId: response.razorpay_payment_id, signature: response.razorpay_signature };
+          setPendingPayment(payment);
           try {
             setMessage("Verifying payment securely…");
-            const verified = await verifyPayment({ orderId: response.razorpay_order_id, paymentId: response.razorpay_payment_id, signature: response.razorpay_signature });
+            const verified = await verifyPayment(payment);
             if (!verified.verified) throw new Error("Payment verification was not confirmed.");
-            const link = document.createElement("a");
-            link.href = URL.createObjectURL(output);
-            link.download = fileName;
-            document.body.appendChild(link); link.click(); link.remove();
-            setMessage(`Payment verified. Your transparent PNG has downloaded. Receipt: ${verified.receiptId}`);
-          } catch (error) { setMessage(error instanceof Error ? error.message : "Payment verification failed. Contact support before retrying."); }
-          finally { setBusy(false); }
+            downloadVerified(verified.receiptId);
+          } catch (error) {
+            setMessage(error instanceof Error ? `${error.message} Use “Retry verification”; do not pay again.` : "Payment verification is pending. Do not pay again; retry verification.");
+          } finally { setBusy(false); }
         },
         modal: { ondismiss: () => { setBusy(false); setMessage("Payment was cancelled. Your image remains ready; no download was started."); } },
+      });
+      checkout.on("payment.failed", (response) => {
+        setBusy(false);
+        setMessage(response.error?.description || "Payment failed. No PNG download was released. You can retry the same order.");
       });
       checkout.open();
     } catch (error) {
@@ -184,8 +215,8 @@ export default function LogoBackgroundConverter({ createOrder, verifyPayment, pr
         <span style={{ border: "1px solid rgba(167,139,250,.5)", borderRadius: 999, padding: "6px 10px", fontSize: 12 }}>₹1 per download</span>
       </div>
       <div style={{ marginTop: 18, display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center" }}>
-        <label style={styles.button}>Choose logo<input type="file" accept="image/png,image/jpeg,image/webp" onChange={onFile} style={{ display: "none" }} /></label>
-        <button type="button" style={styles.secondary} onClick={() => { clearUrls(); originalRef.current = null; setMessage("Upload a PNG, JPG or WebP logo to begin."); }}>Reset</button>
+        <label style={{ ...styles.button, opacity: busy || !!pendingPayment ? .55 : 1 }}>Choose logo<input type="file" accept="image/png,image/jpeg,image/webp" onChange={onFile} disabled={busy || !!pendingPayment} style={{ display: "none" }} /></label>
+        <button type="button" style={styles.secondary} disabled={busy || !!pendingPayment} onClick={() => { clearUrls(); originalRef.current = null; setIdempotencyKey(randomKey()); setMessage("Upload a PNG, JPG or WebP logo to begin."); }}>Reset</button>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))", gap: 16, marginTop: 18 }}>
         <div><p style={styles.muted}>Original · click background to sample</p>{sourceUrl ? <img ref={imageRef} src={sourceUrl} onClick={resample} alt="Original logo" style={{ ...styles.preview, cursor: "crosshair" }} /> : <div style={{ ...styles.preview, minHeight: 160, display: "grid", placeItems: "center", padding: 20, boxSizing: "border-box" }}>Original preview</div>}</div>
@@ -201,7 +232,8 @@ export default function LogoBackgroundConverter({ createOrder, verifyPayment, pr
       </div>
       <canvas ref={canvasRef} style={{ display: "none" }} />
       <div style={{ marginTop: 18, display: "flex", flexWrap: "wrap", alignItems: "center", gap: 12 }}>
-        <button type="button" style={{ ...styles.button, opacity: !output || busy ? .55 : 1 }} disabled={!output || busy} onClick={() => void payAndDownload()}>{busy ? "Please wait…" : "Pay ₹1 & download PNG"}</button>
+        <button type="button" style={{ ...styles.button, opacity: !output || busy || !!pendingPayment ? .55 : 1 }} disabled={!output || busy || !!pendingPayment} onClick={() => void payAndDownload()}>{busy ? "Please wait…" : "Pay ₹1 & download PNG"}</button>
+        {pendingPayment && <button type="button" style={styles.secondary} disabled={busy} onClick={() => void retryVerification()}>Retry verification</button>}
         <span role="status" aria-live="polite" style={styles.muted}>{message}</span>
       </div>
       <p style={{ ...styles.muted, marginTop: 14 }}>Images are processed in your browser and are not uploaded to our servers. Payment is verified server-side before the PNG download is released. Maximum file size 12 MB.</p>
