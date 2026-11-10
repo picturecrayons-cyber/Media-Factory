@@ -19,3 +19,9 @@ export function hasVerifiedMasterAndArtwork(
   );
   return masterReady && artworkReady;
 }
+
+ 
+/** Only the explicit Super Admin role may replace a previously verified asset. */
+export function isSuperAdminActor(internalRole: string | null | undefined): boolean {
+  return internalRole === "super_admin";
+}
