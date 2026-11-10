@@ -87,6 +87,7 @@ export const PERMISSIONS = [
   "title.license",
   "title.negotiate",
   "title.deliver",
+  "production.dit_operate",
   "asset.sign_upload",
   "asset.sign_download",
   "payment.create_order",
