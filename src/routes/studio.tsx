@@ -18,7 +18,7 @@ function Studio() {
   )}</RequireBridge>;
 }
 
-function StudioDashboard({ actor }: { actor: { userId: string; organizationId: string | null } }) {
+function StudioDashboard({ actor }: { actor: { userId: string; organizationId?: string | null } }) {
   const titlesQ = useQuery({ queryKey: ["bridge-titles", actor.userId, actor.organizationId], queryFn: () => listTitles(), retry: 1 });
   const titles = titlesQ.data?.titles ?? [];
   const active = titles.filter((title) => ACTIVE_STAGES.has(title.status));
