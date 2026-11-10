@@ -181,8 +181,24 @@ export const createDitCameraCard = createServerFn({ method: "POST" })
     assertDitStagingDatabase();
     const actor = await requireVerifiedActor(context.userId);
     const sql = await getSql();
-    const production = await requireProductionAccess(sql, actor, data.productionId);
-    if (!production.shootingDate) throw new Error("Shooting day not found");
+    const productionRows = await sql<{
+      id: string; title_id: string; production_name: string; production_no: string;
+      shooting_date: string; owner_user_id: string; owner_account_type: string; owner_organization_id: string | null;
+    }>`
+      select p.id,p.title_id,p.production_name,p.production_no,d.shooting_date::text,
+        t.owner_user_id,t.owner_account_type,t.owner_organization_id
+      from bridge_productions p
+      join bridge_titles t on t.id=p.title_id
+      where p.id=${data.productionId} limit 1
+    `;
+    const production = productionRows[0];
+    if (!production || !canOperateOnTitle(actor, {
+      ownerUserId: production.owner_user_id,
+      ownerAccountType: production.owner_account_type as "independent_creator" | "studio" | "buyer" | "investor",
+      ownerOrganizationId: production.owner_organization_id,
+    }, "title.advance_upload", "title.advance_upload")) throw new Error("Forbidden");
+    const day = await sql`select id from bridge_production_shooting_days where id=${data.shootingDayId} and production_id=${data.productionId} limit 1`;
+    if (!day.length) throw new Error("Shooting day does not belong to this production");
     const cardId = randomUUID();
     await sql.transaction(async (tx) => {
       await tx`insert into bridge_production_camera_cards(id,shooting_day_id,camera_id,card_no)
