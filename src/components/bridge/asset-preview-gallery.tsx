@@ -31,6 +31,9 @@ export function AssetPosterSlot({ assets }: { assets: PreviewAsset[] }) {
   const poster = assets.find((asset) =>
     asset.verified && ["poster_vertical", "poster"].includes(asset.kind) && isImage(asset)
   );
+  const posterId = poster?.id;
+  const posterKind = poster?.kind;
+  const posterContentType = poster?.contentType;
   const [url, setUrl] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
 
@@ -38,15 +41,15 @@ export function AssetPosterSlot({ assets }: { assets: PreviewAsset[] }) {
     let active = true;
     setUrl(null);
     setFailed(false);
-    if (!poster) return () => { active = false; };
-    void requestAssetDownload({ data: { assetId: poster.id } })
+    if (!posterId || !posterKind) return () => { active = false; };
+    void requestAssetDownload({ data: { assetId: posterId } })
       .then((signed) => {
-        if (active && signed?.url) setUrl(previewUrlFor(signed.url, poster.kind, poster.contentType));
+        if (active && signed?.url) setUrl(previewUrlFor(signed.url, posterKind, posterContentType ?? null));
         else if (active) setFailed(true);
       })
       .catch(() => { if (active) setFailed(true); });
     return () => { active = false; };
-  }, [poster?.id]);
+  }, [posterId, posterKind, posterContentType]);
 
   return (
     <div className="aspect-[2/3] overflow-hidden rounded-xl border border-line bg-elevated">
