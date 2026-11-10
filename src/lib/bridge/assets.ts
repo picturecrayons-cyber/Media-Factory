@@ -279,6 +279,9 @@ export const requestAssetDownload = createServerFn({ method: "POST" })
     const title = await loadTitle(asset.title_id);
     if (!title || !canReadTitle(actor, title)) throw new Error("Not found");
     const entitled = await hasLicenseEntitlement(actor.userId, title.id);
+    const hasInvestorPreviewGrant = actor.accountType === "investor" && asset.kind === "screener"
+      ? await hasActiveInvestorPreviewGrant(title.id, actor.userId)
+      : false;
     const decision = downloadDecision({
       kind: asset.kind,
       actorIsOwner: title.ownerUserId === actor.userId,
