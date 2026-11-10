@@ -23,7 +23,7 @@ test("Production Vault migration creates server-only relational workflow tables"
       from pg_class c
       join pg_namespace n on n.oid = c.relnamespace
       where n.nspname = 'public'
-        and c.relname like 'bridge_production_%'
+        and c.relname like 'bridge_production%'
         and c.relkind = 'r'
       order by c.relname
     `);
@@ -33,7 +33,7 @@ test("Production Vault migration creates server-only relational workflow tables"
       select table_name, grantee
       from information_schema.role_table_grants
       where table_schema = 'public'
-        and table_name like 'bridge_production_%'
+        and table_name like 'bridge_production%'
         and grantee in ('anon', 'authenticated', 'PUBLIC')
     `);
     assert.equal(browserPrivileges.rows.length, 0, "browser roles must have no vault table grants");
