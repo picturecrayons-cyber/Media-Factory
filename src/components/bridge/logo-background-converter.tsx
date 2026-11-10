@@ -2,7 +2,7 @@ import { useRef, useState, type CSSProperties, type ChangeEvent, type MouseEvent
 import { removeConnectedBackground } from "@/lib/bridge/logo-background-removal";
 
 type OrderResult = { orderId: string; amountPaise: number; currency: "INR"; keyId: string };
-type VerifyResult = { verified: boolean; receiptId: string };
+type VerifyResult = { verified: boolean; receiptId: string; receiptEmailStatus?: "not_requested" | "pending" | "sent" | "failed" };
 type Props = {
   createOrder: (idempotencyKey: string, email?: string) => Promise<OrderResult>;
   verifyPayment: (payload: { orderId: string; paymentId: string; signature: string }) => Promise<VerifyResult>;
@@ -147,13 +147,14 @@ export default function LogoBackgroundConverter({ createOrder, verifyPayment, pr
     try { await processImage(originalRef.current, sample, value); } catch (error) { setMessage(error instanceof Error ? error.message : "Could not process this image."); } finally { setBusy(false); }
   }
 
-  function downloadVerified(receiptId: string) {
+  function downloadVerified(receiptId: string, receiptEmailStatus?: VerifyResult["receiptEmailStatus"]) {
     if (!output) throw new Error("The processed image is no longer available. Keep this page open until the download completes.");
     const link = document.createElement("a");
     link.href = URL.createObjectURL(output);
     link.download = fileName;
     document.body.appendChild(link); link.click(); link.remove();
-    setMessage(`Payment verified. Your transparent PNG has downloaded. Receipt: ${receiptId}`);
+    const emailNote = receiptEmailStatus === "sent" ? " Receipt emailed." : receiptEmailStatus === "failed" ? " Email receipt could not be sent; keep this receipt ID." : receiptEmailStatus === "pending" ? " Email receipt is pending." : "";
+    setMessage(`Payment verified. Your transparent PNG has downloaded. Receipt: ${receiptId}.${emailNote}`);
     setPendingPayment(null);
     setIdempotencyKey(randomKey());
   }
@@ -165,7 +166,7 @@ export default function LogoBackgroundConverter({ createOrder, verifyPayment, pr
     try {
       const verified = await verifyPayment({ orderId: pendingPayment.orderId, paymentId: pendingPayment.paymentId, signature: pendingPayment.signature });
       if (!verified.verified) throw new Error("Payment verification was not confirmed.");
-      downloadVerified(verified.receiptId);
+      downloadVerified(verified.receiptId, verified.receiptEmailStatus);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Verification is still pending. Do not pay again; contact support if this continues.");
     } finally { setBusy(false); }
