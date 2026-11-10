@@ -139,11 +139,12 @@ async function openUploadAsset(userId: string, assetId: string) {
   const rows = await sql<{
     id: string;
     title_id: string;
+    kind: string;
     s3_key: string;
     content_type: string | null;
     byte_size: number | null;
   }>`
-    select id, title_id, s3_key, content_type, byte_size
+    select id, title_id, kind, s3_key, content_type, byte_size
     from bridge_assets where id = ${assetId} limit 1
   `;
   const asset = rows[0];
@@ -152,7 +153,7 @@ async function openUploadAsset(userId: string, assetId: string) {
   if (!title || !canOperateOnTitle(actor, title, "asset.sign_upload", "asset.sign_upload")) {
     throw new Error("Upload confirmation is closed for this title");
   }
-  const replacing = await assertReplacementWindow(sql, title.id, (await sql<{kind:string}>\`select kind from bridge_assets where id = ${asset.id}\`)[0]?.kind ?? "", asset.id);
+  const replacing = await assertReplacementWindow(sql, title.id, asset.kind, asset.id);
   if (replacing && actor.internalRole !== "super_admin") throw new Error("Only Super Admin can replace a verified asset");
   if ((replacing || actor.internalRole === "super_admin") && await hasFirstDeliveryOrPublish(sql, title.id)) {
     throw new Error("Asset replacement is locked after first delivery or LOOP publication");
