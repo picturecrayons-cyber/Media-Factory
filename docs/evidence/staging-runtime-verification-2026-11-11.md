@@ -70,7 +70,7 @@ Bridge code now loads all active memberships, lists titles/story concepts across
 ## GitHub evidence
 
 - Bridge PR #547: Draft. Code commit `feddc8caa61243f16fc6220aeae53f6ca559a6f1`; GitHub Actions runs `42879453709` and `42879453628` passed build, typecheck, ESLint, npm tests, secret scan and PostgreSQL workflow. Later PR-head commits changed evidence/rollback documentation only.
-- Vercel status for Bridge PR branch at review: `failure` due build-rate-limit; no Preview deployment.
+- Vercel status for Bridge PR branch at review: `failure` due build-rate-limit; no Preview deployment. Environment-variable metadata inspection returned HTTP 403; no secret values were read and OCI runtime configuration remains unverified.
 - Loop PR #180: Draft. Latest GitHub Actions run on the current implementation passed npm install, typecheck, lint, 224 tests, secret scan and build.
 - No PR was merged.
 
