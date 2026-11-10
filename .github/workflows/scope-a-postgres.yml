@@ -1,6 +1,17 @@
 name: Scope A PostgreSQL Onboarding Verification
 
 on:
+  push:
+    branches:
+      - fix/super-admin-pre-delivery-asset-replace-20261110
+    paths:
+      - ".github/workflows/scope-a-postgres.yml"
+      - "migrations/**"
+      - "src/lib/bridge/**"
+      - "src/lib/db.ts"
+      - "package.json"
+      - "package-lock.json"
+
   pull_request:
     branches: ["main"]
     paths:
@@ -72,6 +83,15 @@ jobs:
 
       - name: Replay repository migrations into disposable PostgreSQL
         run: npm run db:migrate
+
+      - name: Run asset replacement regression tests
+        run: node --experimental-strip-types --test src/lib/bridge/asset-confirmation.test.ts src/lib/bridge/asset-roles.test.ts
+
+      - name: Run asset replacement TypeScript checks
+        run: npm run typecheck
+
+      - name: Lint asset replacement files
+        run: npx eslint src/lib/bridge/assets.ts src/lib/bridge/asset-confirmation.ts src/lib/bridge/asset-confirmation.test.ts src/lib/bridge/asset-roles.ts src/lib/bridge/asset-roles.test.ts
 
       - name: Run onboarding static regression tests
         run: node --experimental-strip-types --test src/lib/bridge/onboarding-atomicity.test.ts
