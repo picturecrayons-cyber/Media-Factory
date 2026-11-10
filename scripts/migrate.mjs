@@ -41,6 +41,34 @@ if (!databaseUrl) {
   process.exit(0);
 }
 
+/**
+ * Remote migration writes are allowed only against the explicitly approved
+ * Bridge Testing DB. Production and unknown remote targets fail closed.
+ * Disposable localhost PostgreSQL is permitted only inside GitHub Actions.
+ */
+function assertMigrationTarget(value) {
+  let url;
+  try { url = new URL(value); } catch { throw new Error("Refusing to migrate: database URL is invalid."); }
+  const localCi = readEnv("CI") === "true" &&
+    ["localhost", "127.0.0.1", "::1"].includes(url.hostname);
+  if (localCi) return;
+  const projectRef = "jbymleftneggcgutlcqu";
+  const target = readEnv("BRIDGE_DB_TARGET")?.toUpperCase();
+  const configuredRef = readEnv("BRIDGE_STAGING_PROJECT_REF");
+  const supabaseUrl = readEnv("BRIDGE_STAGING_SUPABASE_URL") ??
+    readEnv("SUPABASE_URL") ?? readEnv("VITE_SUPABASE_URL");
+  const hostMatches = url.hostname === `db.${projectRef}.supabase.co`;
+  const poolerMatches = url.hostname.endsWith(".pooler.supabase.com") &&
+    decodeURIComponent(url.username).includes(projectRef);
+  let apiMatches = false;
+  try { apiMatches = new URL(supabaseUrl).hostname === `${projectRef}.supabase.co`; } catch {}
+  if (target !== "STAGING" || configuredRef !== projectRef ||
+      (!hostMatches && !poolerMatches) || !apiMatches) {
+    throw new Error("Refusing remote migration: explicit STAGING target, exact approved project ref, matching Supabase API URL and project-bound database host are required. Production and unknown targets are blocked.");
+  }
+}
+assertMigrationTarget(databaseUrl);
+
 const migrationsDir = join(dirname(fileURLToPath(import.meta.url)), "..", "migrations");
 
 async function main() {
