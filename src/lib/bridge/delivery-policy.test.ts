@@ -54,4 +54,15 @@ describe("master download denial", () => {
       hasLicenseEntitlement: false,
     }).allow, false);
   });
+
+  it("allows screener only with an active investor preview grant", () => {
+    assert.equal(downloadDecision({
+      kind: "screener", actorIsOwner: false, actorIsInternal: false,
+      accountType: "investor", hasLicenseEntitlement: false, hasInvestorPreviewGrant: true,
+    }).allow, true);
+    assert.equal(downloadDecision({
+      kind: "screener", actorIsOwner: false, actorIsInternal: false,
+      accountType: "investor", hasLicenseEntitlement: false, hasInvestorPreviewGrant: false,
+    }).allow, false);
+  });
 });
