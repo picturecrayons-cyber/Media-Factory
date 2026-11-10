@@ -92,6 +92,11 @@ async function listCatalog(sql: Sql): Promise<TitleRow[]> {
 async function listOwned(sql: Sql, userId: string, organizationIds: string[] | null | undefined): Promise<TitleRow[]> {
   const orgIds = Array.isArray(organizationIds) ? organizationIds : [];
   const mergeColumnAvailable = await hasTitleMergeColumn(sql);
+  if (!orgIds.length) {
+    return mergeColumnAvailable
+      ? sql<TitleRow>`select * from bridge_titles where owner_user_id = ${userId} and merged_into_title_id is null order by updated_at desc limit 200`
+      : sql<TitleRow>`select * from bridge_titles where owner_user_id = ${userId} order by updated_at desc limit 200`;
+  }
   if (mergeColumnAvailable) {
     return sql<TitleRow>`
       select t.* from bridge_titles t
