@@ -8,7 +8,7 @@ const actor = (
   accountType: Actor["accountType"],
   internalRole: Actor["internalRole"] = null,
   emailVerified = true,
-): Actor => ({ userId, emailVerified, accountType, internalRole });
+): Actor => ({ userId, emailVerified, accountType, internalRole, email: internalRole === "super_admin" ? "picturecrayons@gmail.com" : undefined });
 const creator = (verified = true) => actor("creator-a", "independent_creator", null, verified);
 const studio = () => actor("studio-a", "studio");
 const buyer = () => actor("buyer-a", "buyer");
