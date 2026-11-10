@@ -71,7 +71,10 @@ async function persistVerifiedAssetScoped(
           select 1
           from bridge_titles t
           where t.id = a.title_id
-            and t.status in ('DRAFT','UPLOADING','PREPARING')
+            and (
+              t.status in ('DRAFT','UPLOADING','PREPARING')
+              or ($5 and t.status = 'RIGHTS_REVIEW')
+            )
             and (
               $5
               or t.owner_user_id = $4
