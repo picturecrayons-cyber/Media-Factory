@@ -170,8 +170,9 @@ async function createPar(opts: {
   key: string;
   accessType: "ObjectWrite" | "ObjectRead";
   expiresIn: number;
+  target?: { region: string; bucket: string };
 }) {
-  const cfg = config();
+  const cfg = config(opts.target);
   const namespace = await resolveNamespace(cfg);
   const timeExpires = new Date(Date.now() + opts.expiresIn * 1000).toISOString();
   const body = {
@@ -197,6 +198,21 @@ export async function signUpload(opts: { key: string; contentType: string; expir
     key: opts.key,
     accessType: "ObjectWrite",
     expiresIn: opts.expiresIn ?? 900,
+  });
+  return { url: signed.url, key: opts.key, bucket: signed.bucket, method: "PUT" as const };
+}
+
+export async function signUploadAtTarget(opts: {
+  key: string;
+  contentType: string;
+  target: { region: string; bucket: string };
+  expiresIn?: number;
+}) {
+  const signed = await createPar({
+    key: opts.key,
+    accessType: "ObjectWrite",
+    expiresIn: opts.expiresIn ?? 900,
+    target: opts.target,
   });
   return { url: signed.url, key: opts.key, bucket: signed.bucket, method: "PUT" as const };
 }
