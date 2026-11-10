@@ -102,7 +102,7 @@ with raw_events as (
 insert into public.bridge_settlement_reference_claims(reference_normalized,reference,title_id,invoice_reference,statement_reference,amount_paise,currency,claim_state,created_by,created_at)
 select ref_norm,ref,
   case when entity_type_n=1 and entity_type='bridge_title' and title_n=1 and title_present=n
-    and exists(select 1 from public.bridge_titles t where t.id=stats.title_id) then title_id end,
+    and exists(select 1 from public.bridge_titles t where t.id=stats.title_id) then stats.title_id end,
   case when invoice_n=1 and invoice_present=n then invoice_ref end,
   case when statement_n=1 and statement_present=n then statement_ref end,
   case when amount_n=1 and amount_present=n and amount_num between 1 and 9223372036854775807::numeric then amount_num::bigint end,
