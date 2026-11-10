@@ -337,3 +337,81 @@ The following caller relationships were checked at the inventory ref. This is a 
 ## Certification statement
 
 The inventory and design contract are a planning artifact only. They do not prove runtime isolation, membership workflow completeness, DIT enforcement, RLS safety, or end-to-end behavior. The application remains BLOCKED — NOT CERTIFIED for this scope. Production remains HOLD / NOT CERTIFIED / NO-GO.
+
+
+## Follow-up gate evidence — endpoint patterns, lifecycle, DIT and payment
+
+Inspection ref: `20e0bae4fe00b57361130582c59d7195ed6a43d0`. This section records source observations from focused file reads and GitHub code-search results. It is not a substitute for a local TypeScript compiler/AST traversal.
+
+### Server-entrypoint search results (discovery only)
+
+| Search expression | Returned matches | Interpretation |
+|---|---:|---|
+| `createServerFn` | 28 matching files/results | Includes implementation files, tests and server-only helpers; not an endpoint count |
+| `createFileRoute` | 34 matching files/results | Includes UI routes and API route files |
+| `server: {` | 5 matching files/results | Includes Vite config and API route handlers |
+| `createServerAction` | 0 | No exact match surfaced |
+| `createAPIFileRoute` | 0 | No exact match surfaced |
+| `export async function` | 66 matching files/results | Includes ordinary helpers, route handlers and server functions; not all are public endpoints |
+
+GitHub code search is a discovery aid and has result limits/indexing semantics. It does not provide a complete parsed syntax tree, import graph or proof that every endpoint was found. The repository-wide AST gate therefore remains BLOCKED until a full repository checkout or archive can be scanned deterministically.
+
+### Focused endpoint/input/identity/permission/DB/storage matrix
+
+| Endpoint group / source | Input contract observed | Identity / permission observed | DB and storage effects | Gate result |
+|---|---|---|---|---|
+| `titles.ts`: create/list/get/update/advance | Zod schemas; create accepts optional `organizationId`; get/update use title ID | `authMiddleware`; create checks session organizationIds; list uses actor account type and role branches | Reads/writes `bridge_titles`, events, rights-related rows; title ownership includes `owner_organization_id` | Explicit selected organization is not consistently present; listing can union all active organization IDs |
+| `assets.ts`: upload/multipart/confirm/download/list | Zod schemas; assetId/titleId, partBaseUrl, expected size | `authMiddleware`; title-level `canOperateOnTitle` checks | Reads/writes `bridge_assets` and title/upload state; OCI signed upload/download, multipart, object verification/sealing | Studio selected-org binding not carried through all observed calls; signed URL revalidation required |
+| `workflow.ts`: submit/review/get/revenue/settlement | Zod titleId/review/evidence schemas | `authMiddleware`; workflow role/permission checks | Title workflow, rights, revenue/payment-event reads and settlement evidence writes | Separate Studio owner context and internal staff permission required |
+| `loop-publication.ts`: readiness/authorize/suspend/revoke/window/get | Zod bridgeTitleId and publication inputs | `authMiddleware`; publication/rights preflight | Reads rights/title; writes publication and authorization state | Studio title ownership and exact selected organization must be rechecked for Studio-origin operations |
+| `payments.ts`: checkout/order/verify/entitlements/webhook | Zod order/payment inputs; webhook raw body + signature | Auth middleware for buyer functions; payment signature and provider fetch; webhook signature | Writes payment/webhook/entitlement/title state | Bridge payment path includes provider verification; keep distinct from Loop subscription path |
+| `profiles.ts`: onboarding, verification, admin profiles, internal invite | Onboarding Zod fields; email/role invite schema | Auth middleware on most operations; confirmation token is separate | Creates/updates profile and Studio organization/membership; audit writes | No Studio member invite/accept/suspend/revoke lifecycle API was established in this module |
+| `streamvista.ts`: orders/upload/confirm/handoff | Zod service/lane/order/key/title inputs | Auth middleware; order lookup binds `owner_user_id` to actor; handoff checks approved order and same-owner title | Writes orders/jobs; OCI signed upload and object verification | Preserve user-owned scope; do not silently broaden to Studio-wide |
+| `loop/subscriptions.ts`: subscription/rent | Plan enum; Loop title ID | Auth middleware; user identity from context | Inserts active subscription and TVOD entitlement records | Provider-payment verification is not visible in these handlers before active entitlement insert; BLOCKED pending complete payment-flow reconciliation |
+| `loop/catalog.ts`, `loop/profile.ts` | Server-function validators and profile/catalog inputs | Auth middleware on inspected consumer operations | Catalog/profile DB reads/writes | Full publication/entitlement/storage relationship mapping still required |
+| `api/razorpay/webhook.ts` | HTTP request body + `x-razorpay-signature` | Delegates signature validation and event ingestion to payments module | Webhook event/payment/entitlement persistence | API route must be included in AST inventory, not just createServerFn exports |
+
+The table is deliberately grouped. It does not claim to enumerate every function in every module.
+
+### Membership lifecycle — source-backed result
+
+- `profiles.ts` exports `syncSupabaseSessionUser`, `completeOnboarding`, `requestEmailVerification`, `confirmEmailVerification`, `listAdminProfiles`, and `inviteInternalRole`.
+- `completeOnboarding` creates a Studio organization and an `owner` membership with `status='active'` for a new Studio identity. On conflict, it restores the same membership to active.
+- `inviteInternalRole` is an internal staff-role invitation; it is not evidence of a Studio member invitation/acceptance workflow.
+- No inspected server endpoint implemented the full Studio member lifecycle: invite → accept → approve → suspend → revoke → rejoin, with actor authorization and audit history.
+- `session.ts` re-reads active membership and active organization for session construction. That is useful for navigation, but it does not establish the required fresh selected-organization check in every resource handler.
+- Migration `0021_bridge_organizations.sql` defines membership statuses `invited`, `active`, `suspended`, `removed`, and organization statuses `active`, `suspended`, `closed`. It also creates `bridge_organization_memberships_one_active_org_per_user`, a partial unique index on `user_id` for active rows.
+- **Compatibility blocker:** that unique index limits a user to one active Studio organization. This conflicts with the desired multi-Studio membership model unless the product requirement is changed. Do not silently change or apply this migration; reconcile schema design and existing STAGING drift first.
+
+### DIT exact assignment — source-backed result
+
+- `dit-assignment.ts` is a pure helper. It checks exact `assignedUserId + productionId + titleId + assetId` and requires `status='active'`.
+- Existing `dit-assignment.test.ts` covers wrong user, production, title, asset, broad-scope escalation, pending/suspended/revoked status and missing identity/scope.
+- This is useful unit-test evidence only. The helper was not shown wired into all sensitive server handlers, and no authoritative persisted assignment table / CRUD lifecycle was established in the inspected sources.
+- DIT negative tests therefore remain **PARTIAL**: helper logic PASS; persisted server authorization NOT VERIFIED.
+
+### Studio A/B and membership revocation tests — evidence boundary
+
+- Existing `organization-context.test.ts` covers explicit A/B selection, missing/blank selection, foreign user, invited/suspended/removed membership, inactive organization, and invalidation after suspension/removal/closure.
+- These tests operate on supplied in-memory membership records. They do not prove that handlers re-read the database on every request, that Studio A cannot fetch Studio B's title/asset by guessed IDs, or that an already issued signed URL is revoked.
+- No database-backed negative test was found in the inspected test files for cross-tenant read/write, stale session after revocation, multipart continuation after revocation, or signed URL issuance after revocation.
+- Therefore: helper unit tests PASS; end-to-end authorization tests NOT VERIFIED.
+
+### Payment path separation — critical review item
+
+- Bridge `payments.ts` contains provider payment retrieval/signature verification and webhook signature processing before captured-payment entitlement logic.
+- Loop `subscriptions.ts` directly inserts active subscription and TVOD entitlement rows in the inspected handlers. No Razorpay provider order/payment/signature verification is visible in those functions.
+- Do not conclude paid Loop access is secure based only on Bridge payment verification. Reconcile Loop checkout creation, provider callbacks/webhooks, payment-event tables and entitlement creation as one end-to-end flow before certifying TVOD/SVOD.
+
+### Runtime guard decision
+
+**DO NOT IMPLEMENT YET.** The following blockers are open:
+1. Deterministic repository-wide AST scan and complete import/caller graph unavailable from current code-search-only inspection.
+2. Multi-Studio requirement conflicts with migration 0021's one-active-organization-per-user index.
+3. Studio membership lifecycle persistence and authorization endpoints are not established.
+4. DIT helper is not proven to be wired into all DIT server operations or backed by persisted assignment records.
+5. Studio A/B and revocation tests are helper-only, not DB-backed negative tests.
+6. Loop payment-to-entitlement chain is not reconciled.
+7. Exact-head CI and database-backed STAGING tests are not verified.
+
+No runtime code, database schema, policies, grants, migration history, secrets, deployment, merge or Production state was changed by this review.
