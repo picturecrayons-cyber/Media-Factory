@@ -183,9 +183,9 @@ export const createDitCameraCard = createServerFn({ method: "POST" })
     const sql = await getSql();
     const productionRows = await sql<{
       id: string; title_id: string; production_name: string; production_no: string;
-      shooting_date: string; owner_user_id: string; owner_account_type: string; owner_organization_id: string | null;
+      owner_user_id: string; owner_account_type: string; owner_organization_id: string | null;
     }>`
-      select p.id,p.title_id,p.production_name,p.production_no,d.shooting_date::text,
+      select p.id,p.title_id,p.production_name,p.production_no,
         t.owner_user_id,t.owner_account_type,t.owner_organization_id
       from bridge_productions p
       join bridge_titles t on t.id=p.title_id
