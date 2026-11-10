@@ -63,14 +63,15 @@ export const revokeBuyerDeliveryAccess=createServerFn({method:"POST"}).middlewar
   });
   return {ok:true,revoked:true};
 });
+type BuyerDeliveryGrantView = { packageId: string; titleId: string; titleName: string; destination: string; buyerUserId: string; grantedAt: string; expiresAt: string; revokedAt: string | null };
 export const listBuyerDeliveryAccess=createServerFn({method:"GET"}).middleware([authMiddleware])
 .validator(z.object({packageId:z.string().uuid().optional()}))
 .handler(async({context,data})=>{
   const actor=await requireVerifiedActor(context.userId);const sql=await getSql();
   if(actor.accountType==="buyer"&&!actor.internalRole){
-    const grants=await sql`
-      select g.package_id as "packageId",g.title_id as "titleId",t.name as "titleName",
-        dp.destination, g.granted_at::text as "grantedAt",g.expires_at::text as "expiresAt"
+    const grants=await sql<BuyerDeliveryGrantView>`
+      select g.package_id::text as "packageId",g.title_id as "titleId",t.name as "titleName",
+        dp.destination,g.buyer_user_id as "buyerUserId",g.granted_at::text as "grantedAt",g.expires_at::text as "expiresAt",g.revoked_at::text as "revokedAt"
       from bridge_delivery_access_grants g join bridge_titles t on t.id=g.title_id
       join bridge_destination_packages dp on dp.id=g.package_id and dp.title_id=g.title_id
       where g.buyer_user_id=${actor.userId} and g.revoked_at is null and g.expires_at>now()
@@ -79,8 +80,8 @@ export const listBuyerDeliveryAccess=createServerFn({method:"GET"}).middleware([
     `;return {grants};
   }
   assertDeliveryOperator(actor);
-  const grants=await sql`
-    select g.package_id as "packageId",g.title_id as "titleId",t.name as "titleName",g.buyer_user_id as "buyerUserId",
+  const grants=await sql<BuyerDeliveryGrantView>`
+    select g.package_id::text as "packageId",g.title_id as "titleId",t.name as "titleName",g.buyer_user_id as "buyerUserId",
       dp.destination,g.granted_at::text as "grantedAt",g.expires_at::text as "expiresAt",g.revoked_at::text as "revokedAt"
     from bridge_delivery_access_grants g join bridge_titles t on t.id=g.title_id
     join bridge_destination_packages dp on dp.id=g.package_id and dp.title_id=g.title_id
