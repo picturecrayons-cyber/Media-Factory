@@ -42,6 +42,8 @@ async function testDatabase(): Promise<{ db: TestDb; schema: string }> {
     transaction: async <T>(fn: (tx: Pick<TestDb, "query">) => Promise<T>) => {
       const client = await pool.connect();
       try {
+        // Explicitly scope every checked-out client to this isolated test schema.
+        await client.query(`SET search_path TO ${schema}, public`);
         await client.query("BEGIN");
         const tx: TestDb = {
           ...db,
@@ -235,7 +237,7 @@ test("QC may pass but legal approval fails closed until agreement and ownership 
           grantId: saved.grantId,
         }),
       ),
-      /independently reviewed executed-agreement and ownership-chain documents with matching SHA-256 checksums/,
+      /Legal approval requires independently verified executed agreement, ownership chain, signatory authority, Master Distributor authority, and sublicensing authority evidence/,
     );
     assert.equal(
       (await f.sql.query<{ status: string }>("select status from bridge_titles"))[0].status,
@@ -513,7 +515,7 @@ test("legal approval remains blocked when only one required evidence class is ve
         titleId: "title-123", stage: "LEGAL", decision: "APPROVE",
         note: "Attempt without ownership chain", grantId: saved.grantId,
       })),
-      /requires independently verified executed agreement, ownership chain, signatory authority, and Master Distributor \/ sublicensing authority evidence/,
+      /Legal approval requires independently verified executed agreement, ownership chain, signatory authority, Master Distributor authority, and sublicensing authority evidence/,
     );
     assert.equal((await f.sql.query<{status:string}>("select status from bridge_rights_grants"))[0].status, "DRAFT");
     assert.equal((await f.sql.query("select * from bridge_legal_cases")).length, 0);
@@ -596,14 +598,16 @@ test("overlapping exclusive and non-exclusive grants are rejected", async () => 
 test("license author cannot approve their own agreement", async () => {
   const f = await fixture();
   try {
-    const admin = { ...owner, userId: "admin", internalRole: "admin" as const };
-    const saved = (await f.sql.transaction((tx) => f.save(tx, admin, license))) as {
+    const saved = (await f.sql.transaction((tx) => f.save(tx, owner, license))) as {
       grantId: string;
     };
+    // Exercise the self-review guard after role authorization: a Legal reviewer
+    // may not review a grant they created, even when they hold the correct role.
+    await f.sql.query("update bridge_rights_grants set created_by='legal' where id=$1", [saved.grantId]);
     await f.sql.query("update bridge_titles set status='RIGHTS_REVIEW'");
     await assert.rejects(
       f.sql.transaction((tx) =>
-        f.review(tx, admin, {
+        f.review(tx, legal, {
           titleId: "title-123",
           stage: "LEGAL",
           decision: "APPROVE",
