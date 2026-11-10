@@ -6,7 +6,7 @@ begin;
 create table if not exists bridge_productions (
   id uuid primary key default gen_random_uuid(),
   title_id text not null references bridge_titles(id) on delete restrict,
-  organization_id uuid,
+  organization_id uuid references bridge_organizations(id) on delete restrict,
   production_name text not null,
   production_no text not null,
   status text not null default 'PREPARING'
@@ -16,7 +16,8 @@ create table if not exists bridge_productions (
   updated_at timestamptz not null default now(),
   constraint bridge_productions_name_nonempty check (length(trim(production_name)) > 0),
   constraint bridge_productions_number_nonempty check (length(trim(production_no)) > 0),
-  unique (title_id, production_no)
+  unique (title_id, production_no),
+  unique (id, title_id, organization_id)
 );
 
 create table if not exists bridge_production_shooting_days (
@@ -26,7 +27,8 @@ create table if not exists bridge_production_shooting_days (
   shooting_date date not null,
   created_at timestamptz not null default now(),
   unique (production_id, day_number),
-  unique (production_id, shooting_date)
+  unique (production_id, shooting_date),
+  unique (id, production_id)
 );
 
 create table if not exists bridge_production_camera_cards (
@@ -38,14 +40,15 @@ create table if not exists bridge_production_camera_cards (
     check (state in ('INGEST_PENDING','INGESTING','VERIFICATION_PENDING','SAFE_TO_REUSE','QUARANTINED')),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  unique (shooting_day_id, camera_id, card_no)
+  unique (shooting_day_id, camera_id, card_no),
+  unique (id, shooting_day_id)
 );
 
 create table if not exists bridge_production_ingest_manifests (
   id text primary key,
   production_id uuid not null references bridge_productions(id) on delete restrict,
   shooting_day_id uuid not null references bridge_production_shooting_days(id) on delete restrict,
-  camera_card_id uuid not null references bridge_production_camera_cards(id) on delete restrict,
+  camera_card_id uuid not null,
   expected_clip_count integer not null check (expected_clip_count >= 0),
   discovered_clip_count integer not null default 0 check (discovered_clip_count >= 0),
   reconciliation_result text not null default 'NOT_CHECKED'
@@ -53,7 +56,9 @@ create table if not exists bridge_production_ingest_manifests (
   created_by text not null references bridge_profiles(user_id) on delete restrict,
   created_at timestamptz not null default now(),
   reconciled_at timestamptz,
-  manifest_payload jsonb not null default '{}'::jsonb
+  manifest_payload jsonb not null default '{}'::jsonb,
+  constraint bridge_production_manifest_day_scope_fk foreign key (shooting_day_id, production_id) references bridge_production_shooting_days(id, production_id) on delete restrict,
+  constraint bridge_production_manifest_card_scope_fk foreign key (camera_card_id, shooting_day_id) references bridge_production_camera_cards(id, shooting_day_id) on delete restrict
 );
 
 create table if not exists bridge_production_clips (
@@ -143,7 +148,7 @@ create table if not exists bridge_production_conversion_jobs (
 create table if not exists bridge_production_dit_signoffs (
   id uuid primary key default gen_random_uuid(),
   production_id uuid not null references bridge_productions(id) on delete restrict,
-  shooting_day_id uuid not null references bridge_production_shooting_days(id) on delete restrict,
+  shooting_day_id uuid not null,
   reviewer_id text not null references bridge_profiles(user_id) on delete restrict,
   reviewed_at timestamptz not null default now(),
   eligible boolean not null,
@@ -151,7 +156,8 @@ create table if not exists bridge_production_dit_signoffs (
   blockers jsonb not null default '[]'::jsonb,
   evidence_snapshot jsonb not null,
   created_at timestamptz not null default now(),
-  check (card_safe_to_reuse = false or eligible = true)
+  check (card_safe_to_reuse = false or eligible = true),
+  constraint bridge_production_signoff_day_scope_fk foreign key (shooting_day_id, production_id) references bridge_production_shooting_days(id, production_id) on delete restrict
 );
 
 create table if not exists bridge_production_audit_events (
