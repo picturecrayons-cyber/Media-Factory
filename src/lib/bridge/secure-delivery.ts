@@ -156,11 +156,22 @@ export const acceptBuyerDelivery=createServerFn({method:"POST"}).middleware([aut
   const computed=createHash("sha256").update(canonical).digest("hex");
   if(computed!==data.manifestSha256) throw new Error("Delivery manifest checksum does not match");
   await sql.transaction(async(tx)=>{
-    await tx`
+    const inserted=await tx<{id:string}>`
       insert into bridge_delivery_receipts(package_id,title_id,buyer_user_id,manifest_sha256,accepted_asset_count,acceptance_note)
       values(${data.packageId}::uuid,${data.titleId},${actor.userId},${computed},${assets.length},${data.note??null})
       on conflict(package_id,buyer_user_id) do nothing
+      returning id
     `;
+    if(!inserted[0]){
+      const existing=await tx<{manifest_sha256:string;accepted_asset_count:number}>`
+        select manifest_sha256,accepted_asset_count from bridge_delivery_receipts
+        where package_id=${data.packageId}::uuid and buyer_user_id=${actor.userId}
+        limit 1
+      `;
+      if(existing[0]?.manifest_sha256!==computed||Number(existing[0]?.accepted_asset_count)!==assets.length)
+        throw new Error("A different delivery manifest was already accepted for this package");
+      return;
+    }
     await writeAudit({actorUserId:actor.userId,action:"delivery.accepted",entityType:"bridge_delivery_receipt",entityId:data.packageId,metadata:{titleId:data.titleId,manifestSha256:computed,assetCount:assets.length}},tx);
   });
   return {ok:true,manifestSha256:computed,acceptedAssetCount:assets.length};
