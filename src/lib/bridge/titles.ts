@@ -121,7 +121,7 @@ async function listOwned(sql: Sql, userId: string, organizationIds: readonly str
         where t.owner_user_id = ${userId}
           or (
             t.owner_account_type = 'studio'
-            and t.owner_organization_id = ${orgId}
+            and t.owner_organization_id = any(${orgIds}::uuid[])
             and exists (
               select 1 from bridge_organization_memberships m
               where m.organization_id = t.owner_organization_id
