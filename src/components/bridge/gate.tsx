@@ -27,7 +27,7 @@ export function RequireBridge({
   allow,
 }: {
   children: (actor: BridgeActor) => ReactNode;
-  allow?: "creator" | "studio" | "buyer" | "investor" | "internal" | "super_admin" | "workspace";
+  allow?: "creator" | "studio" | "creator_studio" | "buyer" | "investor" | "internal" | "super_admin" | "workspace";
 }) {
   const qc = useQueryClient();
   const [retrying, setRetrying] = useState(false);
@@ -112,10 +112,29 @@ export function RequireBridge({
   // by the explicit "internal"/"super_admin" allow checks above.
   if (allow === "super_admin" && profile.internalRole !== "super_admin") return <Navigate to={sessionQ.data?.home ?? "/"} />;
   if (allow === "internal" && !profile.internalRole) return <Navigate to={sessionQ.data?.home ?? "/"} />;
-  if (allow && allow !== "internal" && allow !== "super_admin" && (profile.internalRole || profile.accountType !== (
-    allow === "creator" ? "independent_creator" : allow
-  ))) {
+  if (
+    allow &&
+    allow !== "internal" &&
+    allow !== "super_admin" &&
+    (
+      profile.internalRole ||
+      !(allow === "creator_studio"
+        ? ["independent_creator", "studio"].includes(profile.accountType)
+        : profile.accountType === (allow === "creator" ? "independent_creator" : allow))
+    )
+  ) {
     return <Navigate to={sessionQ.data?.home ?? "/"} />;
+  }
+
+  // A Studio account without a server-resolved active organization membership
+  // must not enter the Studio workspace by typing its URL directly.
+  if (
+    (allow === "studio" || allow === "creator_studio") &&
+    !profile.internalRole &&
+    profile.accountType === "studio" &&
+    !profile.organizationId
+  ) {
+    return <Navigate to="/onboarding" />;
   }
 
   if (!profile.emailVerified) {

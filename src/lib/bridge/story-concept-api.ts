@@ -94,7 +94,7 @@ const createPayloadSchema = z.object({
   logline: z.string().min(10).max(500),
   synopsis: z.string().min(40).max(8000),
   genre: z.array(z.string().min(1).max(40)).max(12).default([]),
-  estimatedBudgetRange: z.string().max(80).optional(),
+  estimatedBudgetRange: z.enum(["Under 25 Lakhs", "25–50 Lakhs", "50 Lakhs – 1 Cr", "1–3 Cr", "3–10 Cr", "10+ Cr"]).optional(),
   targetPlatforms: z.array(z.string().min(1).max(40)).max(12).default([]),
   treatmentUrl: z.string().url().max(500).optional().or(z.literal("")),
   screenplayUrl: z.string().url().max(500).optional().or(z.literal("")),
@@ -111,7 +111,13 @@ export const createStoryConceptSubmission = createServerFn({ method: "POST" })
     }
 
     const actor = await requireVerifiedActor(context.userId);
-    assertPermission(actor, actor.internalRole ? "title.ingest_internal" : "title.create");
+    if (actor.internalRole || !["independent_creator", "studio"].includes(actor.accountType)) {
+      throw new Error("Only creator and studio accounts can submit story concepts");
+    }
+    if (actor.accountType === "studio" && !actor.organizationId) {
+      throw new Error("An active Studio organization membership is required");
+    }
+    assertPermission(actor, "title.create");
 
     const titleId = randomBytes(16).toString("hex");
     const slug = slugify(data.titleName, titleId);
@@ -185,6 +191,12 @@ export const listMyStoryConcepts = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
+    if (actor.internalRole || !["independent_creator", "studio"].includes(actor.accountType)) {
+      throw new Error("Creator or studio account required");
+    }
+    if (actor.accountType === "studio" && !actor.organizationId) {
+      throw new Error("An active Studio organization membership is required");
+    }
     const sql = await getSql();
 
     try {
@@ -194,9 +206,17 @@ export const listMyStoryConcepts = createServerFn({ method: "GET" })
         join bridge_titles t on t.id = c.title_id
         where t.owner_user_id = ${actor.userId}
            or (
-             t.owner_account_type = 'studio'
+             ${actor.accountType === "studio"}
+             and t.owner_account_type = 'studio'
              and t.owner_organization_id is not null
              and t.owner_organization_id = ${actor.organizationId ?? null}
+             and exists (
+               select 1
+               from bridge_organization_memberships m
+               where m.organization_id = t.owner_organization_id
+                 and m.user_id = ${actor.userId}
+                 and m.status = 'active'
+             )
            )
         order by c.created_at desc
         limit 100

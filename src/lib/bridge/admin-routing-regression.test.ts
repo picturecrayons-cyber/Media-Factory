@@ -14,8 +14,8 @@ test("missing Bridge profiles fall back to onboarding without granting access", 
 test("authenticated profiles route through the server-resolved workspace home", () => {
   const session = read("./session.ts");
   const onboarding = read("../../routes/onboarding.tsx");
-  assert.match(session, /profile: actor, home: workspaceHome\(actor\)/);
-  assert.match(onboarding, /const home = sessionQ\.data\?\.profile \? sessionQ\.data\.home : null/);
+  assert.match(session, /profile: actor, home: await resolveWorkspaceHome\(actor\)/);
+  assert.match(onboarding, /const home = sessionQ\.data\?\.home && sessionQ\.data\.home !== "\/onboarding" \? sessionQ\.data\.home : null/);
   assert.match(onboarding, /if \(home\) goHome\(home, navigate\)/);
 });
 
@@ -60,6 +60,20 @@ test("investor CTA requests reviewed access instead of silently signing up as Cr
   assert.match(home, /to="\/contact"/);
   assert.match(home, /Request Investor Access/);
   assert.doesNotMatch(home, /search=\{\{ role: "investor" \}\}/);
+});
+
+
+test("investor portfolio reads use an authenticated server function and server-resolved ownership", () => {
+  const route = read("../../routes/investor.tsx");
+  const investor = read("./investor.ts");
+  assert.match(route, /from "@\/lib\/bridge\/investor"/);
+  assert.doesNotMatch(route, /from "@\/lib\/db"|getSql\(/);
+  assert.match(investor, /createServerFn\(\{ method: "GET" \}\)/);
+  assert.match(investor, /\.middleware\(\[authMiddleware\]\)/);
+  assert.match(investor, /requireVerifiedActor\(context\.userId\)/);
+  assert.match(investor, /actor\.accountType !== "investor"/);
+  assert.match(investor, /where i\.investor_user_id = \$\{actor\.userId\}/);
+  assert.doesNotMatch(investor, /data\.userId|investorUserId/);
 });
 
 test("shared title workspace has an explicit role gate and Studio list scope", () => {

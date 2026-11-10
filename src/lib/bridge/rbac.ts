@@ -251,7 +251,7 @@ export function workspaceHome(actor: Actor): string {
   if (canAccessDashboard(actor)) return "/dashboard";
   if (actor.internalRole === "qc_reviewer") return "/internal?desk=qc";
   if (actor.internalRole) return "/internal";
-  if (actor.accountType === "independent_creator") return "/creator";
+  if (actor.accountType === "independent_creator") return "/studio";
   if (actor.accountType === "studio") return "/studio";
   if (actor.accountType === "buyer") return "/buyer";
   if (actor.accountType === "investor") return "/investor";

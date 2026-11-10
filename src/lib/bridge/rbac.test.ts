@@ -204,7 +204,7 @@ describe("PRD authorization matrix", () => {
   });
 
   it("routes operators away from the super-admin dashboard", () => {
-    assert.equal(workspaceHome(creator()), "/creator");
+    assert.equal(workspaceHome(creator()), "/studio");
     assert.equal(workspaceHome(studio()), "/studio");
     assert.equal(workspaceHome(buyer()), "/buyer");
     assert.equal(workspaceHome(investor()), "/investor");
