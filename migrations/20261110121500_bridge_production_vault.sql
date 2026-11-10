@@ -169,6 +169,10 @@ create index if not exists bridge_productions_title_idx on bridge_productions(ti
 create index if not exists bridge_production_days_production_idx on bridge_production_shooting_days(production_id, day_number);
 create index if not exists bridge_production_cards_day_idx on bridge_production_camera_cards(shooting_day_id, state);
 create index if not exists bridge_production_manifests_production_idx on bridge_production_ingest_manifests(production_id, created_at desc);
+-- A physical camera card cannot submit the same clip number through a second manifest.
+create unique index if not exists bridge_production_manifest_card_clip_unique
+  on bridge_production_ingest_manifests(camera_card_id, (manifest_payload->'clip'->>'clipNumber'))
+  where manifest_payload ? 'clip';
 create index if not exists bridge_production_clips_manifest_idx on bridge_production_clips(manifest_id, clip_number);
 create index if not exists bridge_production_copies_clip_idx on bridge_production_copy_verifications(clip_id, media_kind, storage_tier);
 create index if not exists bridge_production_jobs_state_idx on bridge_production_conversion_jobs(state, updated_at);
