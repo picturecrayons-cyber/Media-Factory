@@ -303,7 +303,7 @@ alter table public.bridge_assets
     raise exception 'Unsupported bridge_assets kind constraint definition: %', v_definition;
   end if;
 
-  select array_agg(distinct m[1] order by m[1])
+  select array_agg(distinct match[1] order by match[1])
     into v_kinds
   from regexp_matches(v_definition, '''([^'']*)''', 'g') as rm(match);
 
