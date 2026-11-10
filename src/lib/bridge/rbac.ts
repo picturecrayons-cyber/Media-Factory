@@ -43,6 +43,12 @@ const INTERNAL_PERMISSIONS: Record<InternalRole, readonly Permission[]> = {
   ],
   super_admin: [
     "title.ingest_internal",
+    "title.delete",
+    "users.manage",
+    "agreements.manage",
+    "agreements.delete",
+    "license.delete",
+    "finance.configure",
     "title.create",
     "title.read_catalog",
     "title.advance_upload",
@@ -106,6 +112,8 @@ const ACCOUNT_PERMISSIONS: Record<AccountType, readonly Permission[]> = {
 
 export type Actor = {
   userId: string;
+  /** Server-resolved verified Bridge profile email; never sourced from client input. */
+  email?: string;
   emailVerified: boolean;
   accountType: AccountType;
   internalRole: InternalRole | null;
@@ -127,8 +135,17 @@ export function permissionForTransition(from: TitleStatus, to: TitleStatus): Per
   return TRANSITION_PERMISSION[`${from}->${to}`] ?? null;
 }
 
+export function isDesignatedSuperAdmin(actor: Actor): boolean {
+  return actor.emailVerified && actor.internalRole === "super_admin" &&
+    actor.email?.trim().toLowerCase() === "picturecrayons@gmail.com";
+}
+
 export function permissionsFor(actor: Actor): Set<Permission> {
   // Internal staff identities are governed by their explicit staff role.
+  // The designated owner account is the only identity that receives the super-admin matrix.
+  if (actor.internalRole === "super_admin" && !isDesignatedSuperAdmin(actor)) {
+    return new Set<Permission>(["title.read_catalog", "audit.read"]);
+  }
   // Account-type powers must never silently widen a staff role (for example,
   // a viewer profile whose account_type happens to be independent_creator).
   const staff = actor.internalRole ? INTERNAL_PERMISSIONS[actor.internalRole] : undefined;
@@ -137,7 +154,7 @@ export function permissionsFor(actor: Actor): Set<Permission> {
 }
 
 export function canAccessDashboard(actor: Actor): boolean {
-  return actor.emailVerified && actor.internalRole === "super_admin";
+  return isDesignatedSuperAdmin(actor);
 }
 
 /** Title workspace is for Creator/Studio accounts and internal staff with catalog-read access. */
@@ -177,6 +194,7 @@ const ROLE_GRANTS: Record<InternalRole, readonly InternalRole[]> = {
 
 export function canGrantInternalRole(actor: Actor, role: InternalRole): boolean {
   if (!actor.emailVerified || !actor.internalRole) return false;
+  if (actor.internalRole === "super_admin" && !isDesignatedSuperAdmin(actor)) return false;
   return ROLE_GRANTS[actor.internalRole].includes(role);
 }
 
@@ -185,8 +203,8 @@ export function hasAccountPermission(actor: Actor, permission: Permission): bool
 }
 
 export function hasStaffPermission(actor: Actor, permission: Permission): boolean {
-  const staff = actor.internalRole ? INTERNAL_PERMISSIONS[actor.internalRole] : undefined;
-  return actor.emailVerified && Boolean(staff) && staff!.includes(permission);
+  const staff = actor.internalRole ? permissionsFor(actor) : undefined;
+  return actor.emailVerified && Boolean(staff) && staff!.has(permission);
 }
 
 export function hasPermission(actor: Actor, permission: Permission): boolean {
