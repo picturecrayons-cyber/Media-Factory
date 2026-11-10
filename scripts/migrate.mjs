@@ -10,7 +10,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import pg from "pg";
 import { pendingMigrations } from "./migration-plan.mjs";
-import { reconcileMigrationHistory } from "./migration-reconciliation.mjs";
+import { collectRepositoryMigrationInventory, reconcileMigrationHistory } from "./migration-reconciliation.mjs";
 
 const readEnv = (key) => {
   const value = process.env[key]?.trim();
@@ -85,14 +85,10 @@ async function main() {
         ),
         client.query("SELECT name FROM public._migrations ORDER BY name"),
       ]);
-      const repositoryMigrations = await Promise.all(
-        entries
-          .filter((name) => name.endsWith(".sql"))
-          .map(async (name) => ({
-            name,
-            content: await readFile(join(migrationsDir, name), "utf8"),
-          })),
-      );
+      const repositoryRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
+      // Reconciliation inventories both roots; pendingMigrations above still
+      // applies only the original top-level migrations/ entries.
+      const repositoryMigrations = await collectRepositoryMigrationInventory(repositoryRoot);
       const reconciliation = reconcileMigrationHistory({
         repositoryMigrations,
         supabaseMigrations: supabaseRows.rows,
