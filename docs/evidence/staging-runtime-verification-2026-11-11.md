@@ -15,7 +15,7 @@
 - STAGING migration history: 36 records; original 31 preserved.
 - Original 31 migration statements reconciled: 10 byte-exact source matches, 1 SQL match after removing only the final newline, and 20 exact applied-SQL audit snapshots. See `staging-migration-reconciliation-2026-11-11.md`.
 - No historical migration was replayed, rewritten, or deleted.
-- All 36 migration history records have zero rollback statements recorded in Supabase. Guarded down scripts for new migrations are present in the repositories but have not been executed.
+- All 36 migration history records have zero rollback statements recorded in Supabase. Guarded down scripts for the new migrations were dry-run inside explicit BEGIN/ROLLBACK transactions; all completed, then rolled back. Post-check: 61 tables, 71 policies, six Loop runtime tables and Bridge RPC ACL remained intact.
 - Six Loop runtime tables now exist and remain empty: `loop_plans`, `loop_subscriptions`, `loop_user_tvod_entitlements`, `loop_payment_events`, `loop_watch_progress`, `loop_media_migration_queue`.
 - Loop title foreign keys use TEXT to match `loop_titles.id`; no UUID conversion or legacy Loop baseline replay was performed.
 
