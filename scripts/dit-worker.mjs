@@ -38,18 +38,19 @@ async function api(payload) {
 }
 
 async function download(url, destination) {
-  const response = await fetch(url, { signal: AbortSignal.timeout(60_000) });
+  const response = await fetch(url, { signal: AbortSignal.timeout(4 * 60 * 60 * 1000) });
   if (!response.ok || !response.body) throw new Error(`Source download failed (${response.status})`);
   await pipeline(Readable.fromWeb(response.body), createWriteStream(destination));
 }
 
 async function upload(url, filename, contentType) {
+  const file = await stat(filename);
   const response = await fetch(url, {
     method: "PUT",
-    headers: { "content-type": contentType },
+    headers: { "content-type": contentType, "content-length": String(file.size) },
     body: createReadStream(filename),
     duplex: "half",
-    signal: AbortSignal.timeout(120_000),
+    signal: AbortSignal.timeout(4 * 60 * 60 * 1000),
   });
   if (!response.ok) throw new Error(`Converted asset upload failed (${response.status})`);
 }
@@ -82,6 +83,10 @@ async function processJob(job) {
   const output = join(directory, `converted.${job.profile.container.toLowerCase()}`);
   try {
     await download(job.sourceUrl, source);
+    const sourceEvidence = await sha256(source);
+    if (sourceEvidence.sha256.toLowerCase() !== String(job.sourceSha256).toLowerCase()) {
+      throw new Error("Downloaded RAW source SHA-256 does not match the verified Bridge manifest");
+    }
     const { width, height, codec, container, outputType } = job.profile;
     const filter = `scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2`;
     const args = ["-y", "-i", source, "-map", "0:v:0", "-map", "0:a?", "-vf", filter];
