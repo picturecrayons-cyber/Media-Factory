@@ -77,3 +77,4 @@ The worker downloads a signed RAW object, recomputes SHA-256 against the verifie
 - FFmpeg worker output metadata and read-back evidence.
 - Negative role/tenant tests and independent DIT review.
 - No writes to Production and no regression to existing app workflows.
+
