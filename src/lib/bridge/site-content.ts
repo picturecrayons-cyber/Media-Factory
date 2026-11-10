@@ -4,7 +4,6 @@ import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import { requireVerifiedActor } from "./session";
 import { writeAudit } from "./audit";
-import { assertPermission } from "./rbac";
 import { assertNotDevUser } from "./guards";
 
 export const DEFAULT_BRIDGE_SITE_CONTENT = {
@@ -59,6 +58,7 @@ export const updateHomepageContent = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(contentSchema)
   .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
     if (actor.internalRole !== "admin" && actor.internalRole !== "super_admin") {
       throw new Error("Admin access required");
