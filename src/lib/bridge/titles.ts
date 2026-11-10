@@ -131,6 +131,7 @@ async function listOwned(sql: Sql, userId: string, organizationId: string | null
                 and m.status = 'active'
             )
           )
+          )
         order by t.updated_at desc limit 200
       `;
 }
