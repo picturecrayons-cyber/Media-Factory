@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { StoryConceptDesk } from "@/components/bridge/story-concept-desk";
-import { listAdminWorkstations, reviewAdminTitle, setBuyerPublicationGate } from "@/lib/bridge/admin-workstations";
+import { listAdminWorkstations, reviewAdminTitle } from "@/lib/bridge/admin-workstations";
 import { listDuplicateReviews, openDuplicateReview, decideDuplicateReview } from "@/lib/bridge/duplicate-reconciliation";
 
 const TABS = ["Titles", "Concepts", "QC", "Rights", "Assets", "Buyers", "Deliveries", "Audit"] as const;
@@ -39,10 +39,6 @@ function WorkstationBody() {
   const query = useQuery({ queryKey: ["admin-workstations"], queryFn: () => listAdminWorkstations() });
   const review = useMutation({
     mutationFn: reviewAdminTitle,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-workstations"] }),
-  });
-  const gate = useMutation({
-    mutationFn: setBuyerPublicationGate,
     onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-workstations"] }),
   });
   const search = Route.useSearch();
@@ -93,8 +89,7 @@ function WorkstationBody() {
         <SimpleTable title="Assets" description={data.assets.length + " base assets · " + data.assetVersions.length + " versioned assets"}
           rows={data.assets} fields={["kind", "s3_key", "content_type", "byte_size"]} />
       ) : activeTab === "Buyers" ? (
-        <BuyerRelease titles={data.titles} qc={data.qc} legal={data.legal} gate={gate}
-          onGate={(titleId, gateName) => gate.mutate({ data: { titleId, gate: gateName as "OTT", decision: "PASS" } })} />
+        <BuyerRelease titles={data.titles} />
       ) : activeTab === "Deliveries" ? (
         <div className="space-y-6">
           <SimpleTable title="Licensing & Delivery" description={ready.length + " titles in the commercial pipeline"}
@@ -109,7 +104,7 @@ function WorkstationBody() {
           rows={data.audit} fields={["action", "entity_type", "entity_id", "actor_user_id", "created_at"]} />
       )}
 
-      {review.isError || gate.isError ? <p className="rounded-xl border border-line p-4 text-sm">Action failed: {String(review.error ?? gate.error)}</p> : null}
+      {review.isError ? <p role="alert" className="rounded-xl border border-line p-4 text-sm">Action failed: {String(review.error)}</p> : null}
     </div>
   );
 }
@@ -171,6 +166,25 @@ function ReviewQueue({ title, description, titles, actions, mutation }: { title:
 function SimpleTable({ title, description, rows, fields, titleName }: { title: string; description: string; rows: any[]; fields: string[]; titleName?: Map<any, any> }) {
   return <section className="space-y-3"><SectionHeader title={title} description={description} /><RecordTable rows={rows} fields={fields} titleName={titleName ?? new Map()} /></section>;
 }
-function BuyerRelease({ titles, onGate }: { titles: any[]; qc?: any; legal?: any; gate?: any; onGate: (titleId: string, gateName: string) => void }) {
-  return <section className="space-y-3"><SectionHeader title="Buyer release" description="Pass a gate only after the required check." />{titles.map((t) => <div key={t.id} className="flex items-center justify-between rounded-2xl border border-line p-4"><span>{t.name}</span><ActionButton label="Pass gate" onClick={() => onGate(t.id, "buyer")} /></div>)}</section>;
+function BuyerRelease({ titles }: { titles: any[] }) {
+  return (
+    <section className="space-y-3">
+      <SectionHeader
+        title="Buyer release"
+        description="Read the title-specific QC, rights, licensing and publication evidence before any release decision. This summary does not certify a gate."
+      />
+      {titles.length ? titles.map((title) => (
+        <div key={title.id} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-line p-4">
+          <span>{title.name}</span>
+          <Link
+            to="/title/$id"
+            params={{ id: title.id }}
+            className="text-sm font-semibold text-accent hover:underline"
+          >
+            Open release checks →
+          </Link>
+        </div>
+      )) : <Empty text="No titles are available for release review." />}
+    </section>
+  );
 }
