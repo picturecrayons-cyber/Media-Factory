@@ -70,7 +70,7 @@ Bridge code now loads all active memberships, lists titles/story concepts across
 ## GitHub evidence
 
 - Bridge PR #547: Draft. Build, typecheck, ESLint, npm tests, secret scan and PostgreSQL workflow all PASS on the verified commit.
-- Loop PR #180: Draft. A previous CI run exposed test fixture failures; those fixtures were corrected and a newer CI run is in progress. Do not treat Loop CI as PASS until that run completes.
+- Loop PR #180: Draft. Latest GitHub Actions run on the current implementation passed npm install, typecheck, lint, 224 tests, secret scan and build.
 - No PR was merged.
 
 ## Remaining release gates
@@ -82,7 +82,7 @@ Bridge code now loads all active memberships, lists titles/story concepts across
 | Table grants | PASS | Browser access limited to own watch progress |
 | Bridge identity resolver | PASS (DB transaction) | Real browser/Preview login still NOT VERIFIED |
 | Multi-Studio DB model | PASS (DB transaction) | Real user session and invitation workflow E2E still NOT VERIFIED |
-| Loop app tests | BLOCKED | Latest GitHub Actions run pending |
+| Loop app tests | PASS | Latest GitHub Actions run passed typecheck, lint, tests, secret scan and build |
 | Bridge + Loop Preview | NOT VERIFIED | No Preview deployment performed |
 | Razorpay test-mode E2E | NOT VERIFIED | No payment order or payment initiated |
 | Media playback with verified asset | NOT VERIFIED | STAGING has no verified Bridge asset/title fixtures |
