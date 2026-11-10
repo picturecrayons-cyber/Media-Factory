@@ -233,7 +233,7 @@ export const prepareDitClipUpload = createServerFn({ method: "POST" })
       date: row.shooting_date, camera: row.camera_id, cardNo: row.card_no,
       kind: "RAW", originalRelativePath: data.clip.originalRelativePath,
     });
-    const upload = await storage.storage.signUpload({ key: objectKey, contentType: "application/octet-stream", expiresIn: 12 * 60 * 60 });
+    const upload = await storage.signUpload({ key: objectKey, contentType: "application/octet-stream", expiresIn: 12 * 60 * 60 });
     await sql.transaction(async (tx) => {
       await tx`insert into bridge_production_ingest_manifests
         (id,production_id,shooting_day_id,camera_card_id,expected_clip_count,discovered_clip_count,reconciliation_result,created_by,manifest_payload)
