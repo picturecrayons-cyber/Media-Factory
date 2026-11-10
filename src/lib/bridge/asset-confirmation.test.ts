@@ -29,6 +29,7 @@ test("only a verified upload sets the master reference, once, with an audit even
     await db.waitReady;
     await db.exec("create role anon; create role authenticated;");
     await db.exec(readFileSync(join(process.cwd(), "migrations/0004_bridge.sql"), "utf8"));
+    await db.exec(readFileSync(join(process.cwd(), "supabase/migrations/20261004_bridge_assets_add_censor_certificate.sql"), "utf8"));
     await db.exec(`
       create table if not exists bridge_loop_publications (bridge_title_id text, approved_at timestamptz);
       create table if not exists bridge_destination_packages (title_id text, readiness_state text, authorized_by text, authorized_at timestamptz);
