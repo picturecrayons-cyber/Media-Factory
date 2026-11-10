@@ -11,14 +11,7 @@ export type InvestorPreviewGrant = {
   titleId:string; investorUserId:string; grantedBy:string; grantedAt:string;
   expiresAt:string|null; revokedAt:string|null; reason:string;
 };
-export function isInvestorPreviewGrantActive(
-  grant:Pick<InvestorPreviewGrant,"expiresAt"|"revokedAt">, now=Date.now(),
-):boolean{
-  if(grant.revokedAt) return false;
-  if(!grant.expiresAt) return true;
-  const expiry=Date.parse(grant.expiresAt);
-  return Number.isFinite(expiry)&&expiry>now;
-}
+export { isInvestorPreviewGrantActive } from "./investor-preview-policy";
 function assertPreviewOperator(actor:Awaited<ReturnType<typeof requireVerifiedActor>>){
   if(!actor.internalRole||!["admin","super_admin"].includes(actor.internalRole)) throw new Error("Admin or Super Admin access required");
   assertPermission(actor,"title.license");
