@@ -196,6 +196,8 @@ test("warnings require an explicit human disposition before sign-off", () => {
 test("required copy matrix creates exactly one shared cloud backup for RAW, converted, audio and stills", () => {
   const matrix = requiredCopyMatrix([clip], 1, 2);
   assert.deepEqual([...new Set(matrix.map((item) => item.tier))].sort(), ["BACKUP_1", "MASTER"]);
+  assert.equal(matrix.filter((item) => item.kind === "RAW").length, 2);
+  assert.equal(matrix.filter((item) => item.kind === "CONVERTED").length, 2);
   assert.equal(matrix.filter((item) => item.kind === "AUDIO").length, 2);
   assert.equal(matrix.filter((item) => item.kind === "STILLS").length, 4);
 });
