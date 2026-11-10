@@ -12,6 +12,11 @@ test("only a verified upload sets the master reference, once, with an audit even
     await db.exec("create role anon; create role authenticated;");
     await db.exec(readFileSync(join(process.cwd(), "migrations/0004_bridge.sql"), "utf8"));
     await db.exec(readFileSync(join(process.cwd(), "migrations/0021_bridge_organizations.sql"), "utf8"));
+    await db.exec(`
+      create table if not exists bridge_loop_publications (bridge_title_id text, approved_at timestamptz);
+      create table if not exists bridge_destination_packages (title_id text, readiness_state text);
+      create table if not exists bridge_delivery_jobs (title_id text, admin_sign_off boolean, delivery_receipt_url text);
+    `);
     await db.exec(`insert into bridge_titles (id,slug,name,owner_user_id,owner_account_type)
       values ('title1234','title','Title','creator','independent_creator');
       insert into bridge_assets (id,title_id,kind,s3_key,content_type,created_by)
@@ -21,6 +26,7 @@ test("only a verified upload sets the master reference, once, with an audit even
       assetId: "asset1234",
       actorUserId: "creator",
       internalActor: false,
+      superAdminActor: false,
       titleId: "title1234",
       kind: "master",
       byteSize: 120,
@@ -63,6 +69,11 @@ test("same-organization verified Studio member can confirm upload, other organiz
     await db.exec(readFileSync(join(process.cwd(), "migrations/0004_bridge.sql"), "utf8"));
     await db.exec(readFileSync(join(process.cwd(), "migrations/0021_bridge_organizations.sql"), "utf8"));
     await db.exec(`
+      create table if not exists bridge_loop_publications (bridge_title_id text, approved_at timestamptz);
+      create table if not exists bridge_destination_packages (title_id text, readiness_state text);
+      create table if not exists bridge_delivery_jobs (title_id text, admin_sign_off boolean, delivery_receipt_url text);
+    `);
+    await db.exec(`
       insert into bridge_profiles (user_id,email,display_name,account_type,email_verified)
       values
         ('studio-owner','owner@example.test','Owner','studio',true),
@@ -93,6 +104,7 @@ test("same-organization verified Studio member can confirm upload, other organiz
     const sql = { query: async <T>(query: string, params: unknown[]) => (await db.query<T>(query, params)).rows };
     const common = {
       internalActor: false,
+      superAdminActor: false,
       kind: "master",
       byteSize: 120,
       contentType: "video/mp4",
@@ -141,6 +153,7 @@ test("title owner can confirm an upload when organization tables are absent", as
       assetId: "asset1234",
       actorUserId: "creator",
       internalActor: false,
+      superAdminActor: false,
       titleId: "title1234",
       kind: "screener",
       byteSize: 170,
@@ -153,6 +166,95 @@ test("title owner can confirm an upload when organization tables are absent", as
       "select byte_size from bridge_assets where id='asset1234'",
     )).rows[0];
     assert.equal(row?.byte_size, 170);
+  } finally {
+    await db.close();
+  }
+});
+
+
+test("Super Admin can replace a verified asset through RIGHTS_REVIEW before first delivery or publish", async () => {
+  const db = new PGlite();
+  try {
+    await db.waitReady;
+    await db.exec("create role anon; create role authenticated;");
+    await db.exec(readFileSync(join(process.cwd(), "migrations/0004_bridge.sql"), "utf8"));
+    await db.exec(`
+      create table bridge_loop_publications (bridge_title_id text, approved_at timestamptz);
+      create table bridge_destination_packages (title_id text, readiness_state text);
+      create table bridge_delivery_jobs (title_id text, admin_sign_off boolean, delivery_receipt_url text);
+      insert into bridge_titles (id,slug,name,owner_user_id,owner_account_type,status,master_key)
+      values ('replace-title','replace-title','Replace Title','owner','independent_creator','RIGHTS_REVIEW','old/master.verified/old');
+      insert into bridge_assets (id,title_id,kind,s3_key,content_type,byte_size,created_by)
+      values
+        ('old-master','replace-title','master','old/master.verified/old','video/mp4',100,'owner'),
+        ('new-master','replace-title','master','new/master','video/mp4',null,'super-admin');
+    `);
+    const sql = { query: async <T>(query: string, params: unknown[]) => (await db.query<T>(query, params)).rows };
+    const result = await persistVerifiedAsset(sql, {
+      assetId: "new-master",
+      actorUserId: "super-admin",
+      internalActor: true,
+      superAdminActor: true,
+      titleId: "replace-title",
+      kind: "master",
+      byteSize: 200,
+      contentType: "video/mp4",
+      checksum: "new-etag",
+      sourceKey: "new/master",
+      sealedKey: "new/master.verified/new-master",
+    });
+    assert.equal(result, true);
+    const state = await db.query<{ master_key: string; old_size: number; new_size: number }>(`
+      select t.master_key, old.byte_size as old_size, fresh.byte_size as new_size
+      from bridge_titles t
+      join bridge_assets old on old.id='old-master'
+      join bridge_assets fresh on fresh.id='new-master'
+      where t.id='replace-title'
+    `);
+    assert.deepEqual(state.rows[0], {
+      master_key: "new/master.verified/new-master",
+      old_size: 100,
+      new_size: 200,
+    });
+  } finally {
+    await db.close();
+  }
+});
+
+test("first LOOP publication permanently locks Super Admin replacement", async () => {
+  const db = new PGlite();
+  try {
+    await db.waitReady;
+    await db.exec("create role anon; create role authenticated;");
+    await db.exec(readFileSync(join(process.cwd(), "migrations/0004_bridge.sql"), "utf8"));
+    await db.exec(`
+      create table bridge_loop_publications (bridge_title_id text, approved_at timestamptz);
+      create table bridge_destination_packages (title_id text, readiness_state text);
+      create table bridge_delivery_jobs (title_id text, admin_sign_off boolean, delivery_receipt_url text);
+      insert into bridge_titles (id,slug,name,owner_user_id,owner_account_type,status)
+      values ('locked-title','locked-title','Locked Title','owner','independent_creator','RIGHTS_REVIEW');
+      insert into bridge_assets (id,title_id,kind,s3_key,content_type,created_by)
+      values ('locked-asset','locked-title','master','locked/master','video/mp4','super-admin');
+      insert into bridge_loop_publications (bridge_title_id,approved_at)
+      values ('locked-title',now());
+    `);
+    const sql = { query: async <T>(query: string, params: unknown[]) => (await db.query<T>(query, params)).rows };
+    const result = await persistVerifiedAsset(sql, {
+      assetId: "locked-asset",
+      actorUserId: "super-admin",
+      internalActor: true,
+      superAdminActor: true,
+      titleId: "locked-title",
+      kind: "master",
+      byteSize: 200,
+      contentType: "video/mp4",
+      checksum: "blocked-etag",
+      sourceKey: "locked/master",
+      sealedKey: "locked/master.verified/locked-asset",
+    });
+    assert.equal(result, false);
+    const row = await db.query<{ byte_size: number | null }>("select byte_size from bridge_assets where id='locked-asset'");
+    assert.equal(row.rows[0]?.byte_size, null);
   } finally {
     await db.close();
   }
