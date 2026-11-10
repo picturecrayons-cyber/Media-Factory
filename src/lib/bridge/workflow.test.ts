@@ -418,12 +418,12 @@ test("rights evidence submission rejects unrelated document asset versions", asy
       values ('rights-evidence-unrelated','title-123','rights_document','sealed/unrelated-document.pdf',2048,$1,'sealed/unrelated-document.pdf',now(),$2)`,
       [assetVersionId,checksum]);
     await assert.rejects(
-      Promise.resolve(f.sql.transaction((tx) => f.submitRightsEvidence(tx, owner, {
+      f.sql.transaction(async (tx) => f.submitRightsEvidence(tx, owner, {
         titleId: "title-123",
         grantId: saved.grantId,
         evidenceType: "EXECUTED_AGREEMENT",
         assetVersionId,
-      }))),
+      })),
       /current, processed DOCUMENT asset with a SHA-256 checksum uploaded by the submitting owner/,
     );
     assert.equal((await f.sql.query("select * from bridge_rights_evidence")).length, 0);
