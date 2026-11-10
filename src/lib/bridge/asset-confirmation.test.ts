@@ -13,8 +13,14 @@ test("only a verified upload sets the master reference, once, with an audit even
     await db.exec(readFileSync(join(process.cwd(), "migrations/0004_bridge.sql"), "utf8"));
     await db.exec(`
       create table if not exists bridge_loop_publications (bridge_title_id text, approved_at timestamptz);
-      create table if not exists bridge_destination_packages (title_id text, readiness_state text);
+      create table if not exists bridge_destination_packages (title_id text, readiness_state text, authorized_by text, authorized_at timestamptz);
       create table if not exists bridge_delivery_jobs (title_id text, admin_sign_off boolean, delivery_receipt_url text);
+      create table if not exists bridge_qc_cases (title_id text, status text, reviewed_by text, reviewed_at timestamptz);
+      create table if not exists bridge_legal_cases (title_id text, status text, reviewed_by text, reviewed_at timestamptz);
+      create table if not exists bridge_title_gate_certifications (
+        title_id text, ott_preparation_status text, packaging_status text,
+        curation_status text, delivery_status text, updated_at timestamptz
+      );
       create table if not exists bridge_asset_versions (
         id uuid primary key default gen_random_uuid(),
         title_id text not null,
@@ -33,8 +39,14 @@ test("only a verified upload sets the master reference, once, with an audit even
     await db.exec(readFileSync(join(process.cwd(), "migrations/0021_bridge_organizations.sql"), "utf8"));
     await db.exec(`
       create table if not exists bridge_loop_publications (bridge_title_id text, approved_at timestamptz);
-      create table if not exists bridge_destination_packages (title_id text, readiness_state text);
+      create table if not exists bridge_destination_packages (title_id text, readiness_state text, authorized_by text, authorized_at timestamptz);
       create table if not exists bridge_delivery_jobs (title_id text, admin_sign_off boolean, delivery_receipt_url text);
+      create table if not exists bridge_qc_cases (title_id text, status text, reviewed_by text, reviewed_at timestamptz);
+      create table if not exists bridge_legal_cases (title_id text, status text, reviewed_by text, reviewed_at timestamptz);
+      create table if not exists bridge_title_gate_certifications (
+        title_id text, ott_preparation_status text, packaging_status text,
+        curation_status text, delivery_status text, updated_at timestamptz
+      );
       create table if not exists bridge_asset_versions (
         id uuid primary key default gen_random_uuid(),
         title_id text not null,
@@ -106,8 +118,14 @@ test("same-organization verified Studio member can confirm upload, other organiz
     await db.exec(readFileSync(join(process.cwd(), "migrations/0004_bridge.sql"), "utf8"));
     await db.exec(`
       create table if not exists bridge_loop_publications (bridge_title_id text, approved_at timestamptz);
-      create table if not exists bridge_destination_packages (title_id text, readiness_state text);
+      create table if not exists bridge_destination_packages (title_id text, readiness_state text, authorized_by text, authorized_at timestamptz);
       create table if not exists bridge_delivery_jobs (title_id text, admin_sign_off boolean, delivery_receipt_url text);
+      create table if not exists bridge_qc_cases (title_id text, status text, reviewed_by text, reviewed_at timestamptz);
+      create table if not exists bridge_legal_cases (title_id text, status text, reviewed_by text, reviewed_at timestamptz);
+      create table if not exists bridge_title_gate_certifications (
+        title_id text, ott_preparation_status text, packaging_status text,
+        curation_status text, delivery_status text, updated_at timestamptz
+      );
       create table if not exists bridge_asset_versions (
         id uuid primary key default gen_random_uuid(),
         title_id text not null,
@@ -126,8 +144,14 @@ test("same-organization verified Studio member can confirm upload, other organiz
     await db.exec(readFileSync(join(process.cwd(), "migrations/0021_bridge_organizations.sql"), "utf8"));
     await db.exec(`
       create table if not exists bridge_loop_publications (bridge_title_id text, approved_at timestamptz);
-      create table if not exists bridge_destination_packages (title_id text, readiness_state text);
+      create table if not exists bridge_destination_packages (title_id text, readiness_state text, authorized_by text, authorized_at timestamptz);
       create table if not exists bridge_delivery_jobs (title_id text, admin_sign_off boolean, delivery_receipt_url text);
+      create table if not exists bridge_qc_cases (title_id text, status text, reviewed_by text, reviewed_at timestamptz);
+      create table if not exists bridge_legal_cases (title_id text, status text, reviewed_by text, reviewed_at timestamptz);
+      create table if not exists bridge_title_gate_certifications (
+        title_id text, ott_preparation_status text, packaging_status text,
+        curation_status text, delivery_status text, updated_at timestamptz
+      );
       create table if not exists bridge_asset_versions (
         id uuid primary key default gen_random_uuid(),
         title_id text not null,
@@ -216,8 +240,14 @@ test("title owner can confirm an upload when organization tables are absent", as
     await db.exec(readFileSync(join(process.cwd(), "migrations/0004_bridge.sql"), "utf8"));
     await db.exec(`
       create table if not exists bridge_loop_publications (bridge_title_id text, approved_at timestamptz);
-      create table if not exists bridge_destination_packages (title_id text, readiness_state text);
+      create table if not exists bridge_destination_packages (title_id text, readiness_state text, authorized_by text, authorized_at timestamptz);
       create table if not exists bridge_delivery_jobs (title_id text, admin_sign_off boolean, delivery_receipt_url text);
+      create table if not exists bridge_qc_cases (title_id text, status text, reviewed_by text, reviewed_at timestamptz);
+      create table if not exists bridge_legal_cases (title_id text, status text, reviewed_by text, reviewed_at timestamptz);
+      create table if not exists bridge_title_gate_certifications (
+        title_id text, ott_preparation_status text, packaging_status text,
+        curation_status text, delivery_status text, updated_at timestamptz
+      );
       create table if not exists bridge_asset_versions (
         id uuid primary key default gen_random_uuid(),
         title_id text not null,
@@ -269,8 +299,14 @@ test("Super Admin can replace a verified asset through RIGHTS_REVIEW before firs
     await db.exec(readFileSync(join(process.cwd(), "migrations/0004_bridge.sql"), "utf8"));
     await db.exec(`
       create table if not exists bridge_loop_publications (bridge_title_id text, approved_at timestamptz);
-      create table if not exists bridge_destination_packages (title_id text, readiness_state text);
+      create table if not exists bridge_destination_packages (title_id text, readiness_state text, authorized_by text, authorized_at timestamptz);
       create table if not exists bridge_delivery_jobs (title_id text, admin_sign_off boolean, delivery_receipt_url text);
+      create table if not exists bridge_qc_cases (title_id text, status text, reviewed_by text, reviewed_at timestamptz);
+      create table if not exists bridge_legal_cases (title_id text, status text, reviewed_by text, reviewed_at timestamptz);
+      create table if not exists bridge_title_gate_certifications (
+        title_id text, ott_preparation_status text, packaging_status text,
+        curation_status text, delivery_status text, updated_at timestamptz
+      );
       create table if not exists bridge_asset_versions (
         id uuid primary key default gen_random_uuid(),
         title_id text not null,
@@ -296,6 +332,15 @@ test("Super Admin can replace a verified asset through RIGHTS_REVIEW before firs
       values
         ('old-master','replace-title','master','old/master.verified/old','video/mp4',100,'owner'),
         ('new-master','replace-title','master','new/master','video/mp4',null,'super-admin');
+      insert into bridge_qc_cases (title_id,status,reviewed_by,reviewed_at)
+      values ('replace-title','PASSED','qc-user',now());
+      insert into bridge_legal_cases (title_id,status,reviewed_by,reviewed_at)
+      values ('replace-title','APPROVED','legal-user',now());
+      insert into bridge_title_gate_certifications
+        (title_id,ott_preparation_status,packaging_status,curation_status,delivery_status,updated_at)
+      values ('replace-title','READY','COMPLETE','APPROVED','READY',now());
+      insert into bridge_destination_packages (title_id,readiness_state,authorized_by,authorized_at)
+      values ('replace-title','AUTHORIZED','admin-user',now());
     `);
     const sql = { query: async <T>(query: string, params: unknown[]) => (await db.query<T>(query, params)).rows };
     const result = await persistVerifiedAsset(sql, {
@@ -324,6 +369,20 @@ test("Super Admin can replace a verified asset through RIGHTS_REVIEW before firs
       old_size: 100,
       new_size: 200,
     });
+    const gates = await db.query<{ status: string }>("select status from bridge_qc_cases where title_id='replace-title'");
+    const legal = await db.query<{ status: string }>("select status from bridge_legal_cases where title_id='replace-title'");
+    const packageState = await db.query<{ readiness_state: string; authorized_at: string | null }>("select readiness_state, authorized_at from bridge_destination_packages where title_id='replace-title'");
+    const gateState = await db.query<{ ott_preparation_status: string; packaging_status: string; curation_status: string; delivery_status: string }>("select ott_preparation_status, packaging_status, curation_status, delivery_status from bridge_title_gate_certifications where title_id='replace-title'");
+    assert.equal(gates.rows[0]?.status, "ACTION_REQUIRED");
+    assert.equal(legal.rows[0]?.status, "ACTION_REQUIRED");
+    assert.equal(packageState.rows[0]?.readiness_state, "HOLD");
+    assert.equal(packageState.rows[0]?.authorized_at, null);
+    assert.deepEqual(gateState.rows[0], {
+      ott_preparation_status: "HOLD",
+      packaging_status: "HOLD",
+      curation_status: "HOLD",
+      delivery_status: "HOLD",
+    });
   } finally {
     await db.close();
   }
@@ -337,8 +396,14 @@ test("first LOOP publication permanently locks Super Admin replacement", async (
     await db.exec(readFileSync(join(process.cwd(), "migrations/0004_bridge.sql"), "utf8"));
     await db.exec(`
       create table if not exists bridge_loop_publications (bridge_title_id text, approved_at timestamptz);
-      create table if not exists bridge_destination_packages (title_id text, readiness_state text);
+      create table if not exists bridge_destination_packages (title_id text, readiness_state text, authorized_by text, authorized_at timestamptz);
       create table if not exists bridge_delivery_jobs (title_id text, admin_sign_off boolean, delivery_receipt_url text);
+      create table if not exists bridge_qc_cases (title_id text, status text, reviewed_by text, reviewed_at timestamptz);
+      create table if not exists bridge_legal_cases (title_id text, status text, reviewed_by text, reviewed_at timestamptz);
+      create table if not exists bridge_title_gate_certifications (
+        title_id text, ott_preparation_status text, packaging_status text,
+        curation_status text, delivery_status text, updated_at timestamptz
+      );
       create table if not exists bridge_asset_versions (
         id uuid primary key default gen_random_uuid(),
         title_id text not null,
