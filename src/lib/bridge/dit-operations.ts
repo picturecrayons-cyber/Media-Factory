@@ -439,10 +439,13 @@ export const signoffDitCard = createServerFn({ method: "POST" })
       observedSha256: r.observed_sha256, independentlyVerified: r.independently_verified, verifiedAt: r.verified_at,
       storageLocationId: r.storage_location_id, failureDomainId: r.failure_domain_id,
     }));
+    // Fail closed until the DIT workspace records and verifies an explicit
+    // Audio and Stills inventory. Never interpret an unimplemented inventory
+    // as zero assets; each required asset must have MASTER + both backups.
     const result = evaluateDitSignoff({
       reviewerId: actor.userId, reviewedAt: new Date().toISOString(), clipLedger: ledger,
       manifestResult: rows.length && rows.every((r) => r.manifest_result === "PASS") ? "PASS" : "FAIL",
-      requiredCopies: copyEvidence, audioCount: 0, stillsCount: 0,
+      requiredCopies: copyEvidence, audioCount: 1, stillsCount: 1,
     });
     await sql.transaction(async (tx) => {
       await tx`insert into bridge_production_dit_signoffs(production_id,shooting_day_id,reviewer_id,eligible,card_safe_to_reuse,blockers,evidence_snapshot)
