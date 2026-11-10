@@ -953,7 +953,7 @@ test("migration 0021 preserves every settlement reference and quarantines incomp
     await db.query(`insert into bridge_titles(id,owner_user_id,status,master_key,poster_key,updated_at)
       values ('title-legacy','owner','RIGHTS_REVIEW','sealed/master','sealed/poster',now())`);
 
-    const sourceEvents = [
+    const sourceEvents: Array<{ reference: string; invoiceReference?: string; statementReference?: string; amountPaise?: string; currency?: string; entityType?: string; entityId?: string }> = [
       { reference: "LEGACY-COMPLETE-001", invoiceReference: "INV-LEGACY-001", statementReference: "BANK-LEGACY-001", amountPaise: "125000", currency: "INR" },
       { reference: "LEGACY-COMPLETE-001", invoiceReference: "INV-LEGACY-001", statementReference: "BANK-LEGACY-001", amountPaise: "125000", currency: "INR" },
       { reference: "LEGACY-INCOMPLETE-001" },
