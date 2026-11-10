@@ -100,22 +100,89 @@ async function persistVerifiedAssetScoped(
             )
         )
       returning a.id, a.title_id, a.kind, a.s3_key
+    ), versioned as (
+      insert into bridge_asset_versions (
+        title_id, asset_group, asset_type, version, reference_asset_id,
+        s3_key, checksum_sha256, byte_size, processing_state, created_by
+      )
+      select
+        v.title_id,
+        case
+          when v.kind = 'master' then 'VIDEO'
+          when v.kind = 'screener' then 'PROMO'
+          when v.kind = 'subtitle' then 'SUBTITLE'
+          when v.kind in ('poster','poster_vertical','poster_horizontal','thumbnail') then 'ARTWORK'
+          else 'DOCUMENT'
+        end,
+        case
+          when v.kind = 'master' then 'MASTER'
+          when v.kind = 'screener' then 'TRAILER'
+          when v.kind = 'subtitle' then 'SUBTITLE'
+          when v.kind = 'poster' then 'POSTER'
+          when v.kind = 'poster_vertical' then 'POSTER_VERTICAL'
+          when v.kind = 'poster_horizontal' then 'POSTER_HORIZONTAL'
+          when v.kind = 'thumbnail' then 'THUMBNAIL'
+          when v.kind = 'censor_certificate' then 'CENSOR_CERTIFICATE'
+          else upper(v.kind)
+        end,
+        coalesce((
+          select max(previous.version) + 1
+          from bridge_asset_versions previous
+          where previous.title_id = v.title_id
+            and previous.asset_type = case
+              when v.kind = 'master' then 'MASTER'
+              when v.kind = 'screener' then 'TRAILER'
+              when v.kind = 'subtitle' then 'SUBTITLE'
+              when v.kind = 'poster' then 'POSTER'
+              when v.kind = 'poster_vertical' then 'POSTER_VERTICAL'
+              when v.kind = 'poster_horizontal' then 'POSTER_HORIZONTAL'
+              when v.kind = 'thumbnail' then 'THUMBNAIL'
+              when v.kind = 'censor_certificate' then 'CENSOR_CERTIFICATE'
+              else upper(v.kind)
+            end
+            and previous.language is null
+        ), 1),
+        (
+          select previous.id
+          from bridge_asset_versions previous
+          where previous.title_id = v.title_id
+            and previous.asset_type = case
+              when v.kind = 'master' then 'MASTER'
+              when v.kind = 'screener' then 'TRAILER'
+              when v.kind = 'subtitle' then 'SUBTITLE'
+              when v.kind = 'poster' then 'POSTER'
+              when v.kind = 'poster_vertical' then 'POSTER_VERTICAL'
+              when v.kind = 'poster_horizontal' then 'POSTER_HORIZONTAL'
+              when v.kind = 'thumbnail' then 'THUMBNAIL'
+              when v.kind = 'censor_certificate' then 'CENSOR_CERTIFICATE'
+              else upper(v.kind)
+            end
+            and previous.language is null
+          order by previous.version desc limit 1
+        ),
+        v.s3_key, $9::text, $1, 'PROCESSING', $4
+      from verified v
+      returning id, title_id, asset_type, version, s3_key
     ), title_set as (
       update bridge_titles t set
-        poster_key = case when v.kind in ('poster', 'poster_vertical') then v.s3_key else t.poster_key end,
-        master_key = case when v.kind = 'master' then v.s3_key else t.master_key end,
+        poster_key = case when v.asset_type in ('POSTER', 'POSTER_VERTICAL') then v.s3_key else t.poster_key end,
+        master_key = case when v.asset_type = 'MASTER' then v.s3_key else t.master_key end,
         updated_at = now()
-      from verified v where t.id = v.title_id returning t.id
+      from versioned v where t.id = v.title_id returning t.id
     )
     insert into bridge_audit_logs (actor_user_id, action, entity_type, entity_id, metadata)
-    select $4, 'asset.upload_verified', 'bridge_asset', v.id,
+    select $4, 'asset.upload_verified', 'bridge_asset', a.id,
       jsonb_build_object(
-        'titleId', v.title_id,
-        'kind', v.kind,
+        'titleId', a.title_id,
+        'kind', a.kind,
         'byteSize', $1,
-        'checksum', $9::text
+        'checksum', $9::text,
+        'assetVersionId', ver.id,
+        'assetVersion', ver.version
       )
-    from verified v join title_set t on t.id = v.title_id
+    from verified a
+    join versioned ver on ver.title_id = a.title_id and ver.s3_key = a.s3_key
+    join title_set t on t.id = a.title_id
     returning entity_id
   `, [
     opts.byteSize,
