@@ -23,10 +23,12 @@ type TitleRow = {
   owner_account_type: string;
   owner_organization_id?: string | null;
   status: string;
+  submission_type?: string | null;
   synopsis: string;
   language: string;
   year: number | null;
   runtime_minutes: number | null;
+  genres?: string[];
   licensing_fee_paise: number;
   poster_key: string | null;
   master_key: string | null;
@@ -53,10 +55,12 @@ export function mapTitle(r: TitleRow): BridgeTitle {
     ownerAccountType: r.owner_account_type as AccountType,
     ownerOrganizationId: r.owner_organization_id ?? null,
     status: r.status as TitleStatus,
+    submissionType: r.submission_type ?? "finished_film",
     synopsis: r.synopsis,
     language: r.language,
     year: r.year,
     runtimeMinutes: r.runtime_minutes,
+    genres: Array.isArray(r.genres) ? r.genres : [],
     licensingFeePaise: Number(r.licensing_fee_paise ?? 0),
     posterKey: r.poster_key,
     masterKey: r.master_key,
@@ -427,6 +431,9 @@ export const updateTitle = createServerFn({ method: "POST" })
       language: z.string().min(2).max(40).optional(),
       year: z.number().int().min(1895).max(2100).nullable().optional(),
       runtimeMinutes: z.number().int().min(1).max(600).nullable().optional(),
+      genres: z.array(z.string().min(1).max(40)).max(12).optional(),
+      director: z.string().max(160).optional(),
+      cast: z.array(z.string().min(1).max(160)).max(100).optional(),
       licensingFeePaise: z.number().int().min(0).max(2_000_000_000).optional(),
       contentType: z.string().min(1).max(80).optional(),
     }),
@@ -447,6 +454,19 @@ export const updateTitle = createServerFn({ method: "POST" })
     ) {
       throw new Error("Title is locked after prepare");
     }
+    const currentCredits = title.credits ?? [];
+    const directorCredits = currentCredits.filter((credit) => credit.role.trim().toUpperCase() === "DIRECTOR");
+    const castCredits = currentCredits.filter((credit) => ["CAST", "ACTOR", "ACTRESS"].includes(credit.role.trim().toUpperCase()));
+    const otherCredits = currentCredits.filter((credit) => !["DIRECTOR", "CAST", "ACTOR", "ACTRESS"].includes(credit.role.trim().toUpperCase()));
+    const nextCredits = [
+      ...otherCredits,
+      ...(data.director === undefined
+        ? directorCredits
+        : data.director.trim() ? [{ role: "Director", name: data.director.trim() }] : []),
+      ...(data.cast === undefined
+        ? castCredits
+        : data.cast.map((name) => ({ role: "Cast", name: name.trim() })).filter((credit) => credit.name)),
+    ];
     const sql = await getSql();
     await sql`
       update bridge_titles set
@@ -456,6 +476,8 @@ export const updateTitle = createServerFn({ method: "POST" })
         language = ${data.language ?? title.language},
         year = ${data.year === undefined ? title.year : data.year},
         runtime_minutes = ${data.runtimeMinutes === undefined ? title.runtimeMinutes : data.runtimeMinutes},
+        genres = ${JSON.stringify(data.genres ?? title.genres ?? [])}::jsonb,
+        credits = ${JSON.stringify(nextCredits)}::jsonb,
         licensing_fee_paise = ${data.licensingFeePaise ?? title.licensingFeePaise},
         content_type = ${data.contentType ? loopStageType(data.contentType) : title.contentType},
         updated_at = now()
