@@ -556,6 +556,33 @@ test("signed delivery receipt permanently locks Super Admin replacement", async 
     assert.equal(result, false);
     const row = await db.query<{ byte_size: number | null }>("select byte_size from bridge_assets where id='delivered-asset'");
     assert.equal(row.rows[0]?.byte_size, null);
+
+    await db.exec(`
+      insert into bridge_titles (id,slug,name,owner_user_id,owner_account_type,status)
+      values ('package-delivered-title','package-delivered-title','Package Delivered','owner','independent_creator','RIGHTS_REVIEW');
+      insert into bridge_assets (id,title_id,kind,s3_key,content_type,created_by)
+      values ('package-delivered-asset','package-delivered-title','master','package/master','video/mp4','super-admin');
+      insert into bridge_destination_packages (title_id,readiness_state)
+      values ('package-delivered-title','DELIVERED');
+    `);
+    const packageLocked = await persistVerifiedAsset(sql, {
+      assetId: "package-delivered-asset",
+      actorUserId: "super-admin",
+      internalActor: true,
+      superAdminActor: true,
+      titleId: "package-delivered-title",
+      kind: "master",
+      byteSize: 200,
+      contentType: "video/mp4",
+      checksum: "blocked-package-etag",
+      sourceKey: "package/master",
+      sealedKey: "package/master.verified/package-delivered-asset",
+    });
+    assert.equal(packageLocked, false);
+    const packageAsset = await db.query<{ byte_size: number | null }>(
+      "select byte_size from bridge_assets where id='package-delivered-asset'",
+    );
+    assert.equal(packageAsset.rows[0]?.byte_size, null);
   } finally {
     await db.close();
   }
