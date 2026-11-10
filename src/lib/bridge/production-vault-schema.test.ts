@@ -41,7 +41,13 @@ test("Production Vault migration creates server-only relational workflow tables"
       where table_schema = 'public' and table_name = 'bridge_production_copy_verifications'
     `);
     assert.ok(copyConstraints.rows.some((row) => row.constraint_name === "bridge_production_copy_pass_requires_exact_independent_readback"));
-    assert.ok(copyConstraints.rows.some((row) => row.constraint_name === "bridge_production_copy_verifications_clip_id_media_kind_failure_domain_id_key"));
+    const copyIndexes = await db.query<{ indexdef: string }>(`
+      select indexdef from pg_indexes
+      where schemaname = 'public' and tablename = 'bridge_production_copy_verifications'
+    `);
+    assert.ok(copyIndexes.rows.some((row) =>
+      /unique.*clip_id.*media_kind.*failure_domain_id/i.test(row.indexdef),
+    ), "each asset must use a distinct storage failure domain for each replica");
   } finally {
     await db.close();
   }
