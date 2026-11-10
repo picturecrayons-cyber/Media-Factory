@@ -8,8 +8,10 @@ create table if not exists public.bridge_delivery_access_grants (
   expires_at timestamptz not null,
   revoked_at timestamptz,
   primary key (package_id, buyer_user_id),
-  foreign key (package_id, title_id)
-    references public.bridge_destination_packages(id, title_id) on delete cascade,
+  foreign key (package_id)
+    references public.bridge_destination_packages(id) on delete cascade,
+  foreign key (title_id)
+    references public.bridge_titles(id) on delete cascade,
   constraint bridge_delivery_access_expiry_check check (expires_at > granted_at)
 );
 create index if not exists bridge_delivery_access_buyer_idx
@@ -26,8 +28,10 @@ create table if not exists public.bridge_delivery_receipts (
   acceptance_note text,
   accepted_at timestamptz not null default now(),
   unique (package_id, buyer_user_id),
-  foreign key (package_id, title_id)
-    references public.bridge_destination_packages(id, title_id) on delete restrict
+  foreign key (package_id)
+    references public.bridge_destination_packages(id) on delete restrict,
+  foreign key (title_id)
+    references public.bridge_titles(id) on delete restrict
 );
 alter table public.bridge_delivery_access_grants enable row level security;
 alter table public.bridge_delivery_receipts enable row level security;
