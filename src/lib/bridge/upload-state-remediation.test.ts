@@ -109,8 +109,14 @@ test("atomic state transition: migration queue and title master/poster only adva
     await db.exec(readFileSync(join(process.cwd(), "migrations/0021_bridge_organizations.sql"), "utf8"));
     await db.exec(`
       create table if not exists bridge_loop_publications (bridge_title_id text, approved_at timestamptz);
-      create table if not exists bridge_destination_packages (title_id text, readiness_state text);
+      create table if not exists bridge_destination_packages (title_id text, readiness_state text, authorized_by text, authorized_at timestamptz);
       create table if not exists bridge_delivery_jobs (title_id text, admin_sign_off boolean, delivery_receipt_url text);
+      create table if not exists bridge_qc_cases (title_id text, status text, reviewed_by text, reviewed_at timestamptz);
+      create table if not exists bridge_legal_cases (title_id text, status text, reviewed_by text, reviewed_at timestamptz);
+      create table if not exists bridge_title_gate_certifications (
+        title_id text, ott_preparation_status text, packaging_status text,
+        curation_status text, delivery_status text, updated_at timestamptz
+      );
       create table if not exists bridge_asset_versions (
         id uuid primary key default gen_random_uuid(), title_id text not null,
         asset_group text not null, asset_type text not null, version integer not null,
