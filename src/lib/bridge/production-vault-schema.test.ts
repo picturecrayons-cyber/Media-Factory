@@ -9,7 +9,7 @@ test("Production Vault migration creates server-only relational workflow tables"
     await db.exec(`
       create role anon;
       create role authenticated;
-      create table bridge_titles (id text primary key);
+      create table bridge_titles (id text primary key, owner_organization_id uuid);
       create table bridge_profiles (user_id text primary key);
     `);
     const migration = await readFile(
@@ -59,7 +59,7 @@ test("DIT copy evidence rejects duplicate failure domains and unverified PASS cl
     await db.exec(`
       create role anon;
       create role authenticated;
-      create table bridge_titles (id text primary key);
+      create table bridge_titles (id text primary key, owner_organization_id uuid);
       create table bridge_profiles (user_id text primary key);
       insert into bridge_titles values ('title-1');
       insert into bridge_profiles values ('creator-1');
