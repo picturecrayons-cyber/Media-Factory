@@ -254,7 +254,7 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
         <FilesPanel
           canUpload={
             canOperateOnTitle(actor, title, "asset.sign_upload", "title.ingest_internal") &&
-            ["DRAFT", "UPLOADING", "PREPARING"].includes(title.status)
+            (actor.internalRole === "super_admin" || ["DRAFT", "UPLOADING", "PREPARING"].includes(title.status))
           }
           titleId={id}
           assets={assets}
@@ -322,6 +322,8 @@ function FilesPanel({
   onAssetsChanged: () => Promise<unknown> | unknown;
 }) {
   const [uploading, setUploading] = useState<SimpleAssetKind | null>(null);
+  const [commandKind, setCommandKind] = useState<SimpleAssetKind | null>(null);
+  const [commandFile, setCommandFile] = useState<File | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [messageKind, setMessageKind] = useState<"status" | "success" | "error">("status");
   const [notificationPermission, setNotificationPermission] = useState<"default" | "granted" | "denied" | "unsupported">(() =>
@@ -773,7 +775,10 @@ function FilesPanel({
                     busy={uploading === kind}
                     locked={uploading !== null && uploading !== kind}
                     canUpload={canUpload}
-                    onFile={(file) => void uploadFile(kind, file)}
+                    onCommandOpen={() => {
+                      setCommandKind(kind);
+                      setCommandFile(null);
+                    }}
                     onDownload={verified ? () => void download(verified.id) : undefined}
                   />
                 );
@@ -782,6 +787,67 @@ function FilesPanel({
           </div>
         ))}
       </div>
+      {commandKind ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" role="presentation">
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="asset-command-title"
+            className="w-full max-w-lg rounded-2xl border border-line bg-surface p-5 shadow-2xl"
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Super Admin · Asset Command</p>
+                <h3 id="asset-command-title" className="mt-1 text-lg font-semibold">
+                  {verifiedFor(assets, commandKind) ? "Replace" : "Upload"} {kindLabel(commandKind)}
+                </h3>
+                <p className="mt-1 text-sm text-muted">
+                  Select the new file. Bridge verifies the OCI object before making this version active.
+                </p>
+              </div>
+              <button type="button" onClick={() => { setCommandKind(null); setCommandFile(null); }} className="rounded-full border border-line px-3 py-1 text-xs font-semibold">
+                Close
+              </button>
+            </div>
+            <label className="mt-5 flex cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-line-strong bg-elevated/40 p-6 text-center">
+              <span className="text-sm font-semibold">{commandFile ? commandFile.name : "Choose replacement file"}</span>
+              <span className="mt-1 text-xs text-muted">
+                {commandFile ? `${(commandFile.size / (1024 * 1024)).toFixed(1)} MB · Ready to verify` : OTT_INGEST_SPEC[commandKind].extensions.map((ext) => ext.replace(".", "").toUpperCase()).join(", ")}
+              </span>
+              <input
+                className="sr-only"
+                type="file"
+                accept={getOttIngestAccept(commandKind)}
+                disabled={uploading !== null}
+                onChange={(event) => setCommandFile(event.currentTarget.files?.[0] ?? null)}
+              />
+            </label>
+            <p className="mt-3 text-xs leading-5 text-muted">
+              New version → OCI storage verification → checksum and size check → activate. The previous verified object is retained.
+            </p>
+            <div className="mt-5 flex justify-end gap-2">
+              <button type="button" onClick={() => { setCommandKind(null); setCommandFile(null); }} className="rounded-full border border-line px-4 py-2 text-sm font-semibold">
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={!commandFile || uploading !== null}
+                onClick={() => {
+                  if (!commandKind || !commandFile) return;
+                  const kind = commandKind;
+                  const file = commandFile;
+                  setCommandKind(null);
+                  setCommandFile(null);
+                  void uploadFile(kind, file);
+                }}
+                className="rounded-full bg-fg px-4 py-2 text-sm font-semibold text-bg disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Verify &amp; {verifiedFor(assets, commandKind) ? "Replace" : "Upload"}
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
       {message ? (
         <p
           className={`mt-4 rounded-lg border px-3 py-2 text-sm ${messageKind === "error" ? "border-red-300 bg-red-50 text-red-700" : messageKind === "success" ? "border-green-300 bg-green-50 text-green-800" : "border-line bg-elevated text-fg"}`}
@@ -876,7 +942,7 @@ function FileTypeCard({
   status,
   busy,
   locked,
-  onFile,
+  onCommandOpen,
   onDownload,
   canUpload,
 }: {
@@ -886,7 +952,7 @@ function FileTypeCard({
   status: string;
   busy: boolean;
   locked: boolean;
-  onFile: (file: File) => void;
+  onCommandOpen: () => void;
   onDownload?: () => void;
 }) {
   const spec = OTT_INGEST_SPEC[kind];
@@ -902,20 +968,14 @@ function FileTypeCard({
           </p>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-2">
-          <label className={`cursor-pointer rounded-full px-3 py-1.5 text-xs font-semibold ${ready ? "border border-line bg-surface" : "bg-fg text-bg"} ${busy || locked || !canUpload ? "pointer-events-none opacity-50" : ""}`}>
+          <button
+            type="button"
+            onClick={onCommandOpen}
+            disabled={busy || locked || !canUpload}
+            className={`rounded-full px-3 py-1.5 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-50 ${ready ? "border border-line bg-surface" : "bg-fg text-bg"}`}
+          >
             {busy ? "Uploading…" : ready ? "Replace" : "Upload"}
-            <input
-              className="sr-only"
-              type="file"
-              accept={getOttIngestAccept(kind)}
-              disabled={busy || locked || !canUpload}
-              onChange={(e) => {
-                const file = e.currentTarget.files?.[0];
-                if (file) onFile(file);
-                e.currentTarget.value = "";
-              }}
-            />
-          </label>
+          </button>
           {onDownload ? (
             <button type="button" onClick={onDownload} className="rounded-full border border-line bg-surface px-3 py-1.5 text-xs font-semibold">
               Download
