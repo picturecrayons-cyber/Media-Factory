@@ -451,3 +451,55 @@ test("first LOOP publication permanently locks Super Admin replacement", async (
     await db.close();
   }
 });
+
+
+test("signed delivery receipt permanently locks Super Admin replacement", async () => {
+  const db = new PGlite();
+  try {
+    await db.waitReady;
+    await db.exec("create role anon; create role authenticated;");
+    await db.exec(readFileSync(join(process.cwd(), "migrations/0004_bridge.sql"), "utf8"));
+    await db.exec(`
+      create table bridge_loop_publications (bridge_title_id text, approved_at timestamptz);
+      create table bridge_destination_packages (title_id text, readiness_state text, authorized_by text, authorized_at timestamptz);
+      create table bridge_delivery_jobs (title_id text, admin_sign_off boolean, delivery_receipt_url text);
+      create table bridge_qc_cases (title_id text, status text, reviewed_by text, reviewed_at timestamptz);
+      create table bridge_legal_cases (title_id text, status text, reviewed_by text, reviewed_at timestamptz);
+      create table bridge_title_gate_certifications (
+        title_id text, ott_preparation_status text, packaging_status text,
+        curation_status text, delivery_status text, updated_at timestamptz
+      );
+      create table bridge_asset_versions (
+        id uuid primary key default gen_random_uuid(), title_id text not null,
+        asset_group text not null, asset_type text not null, version integer not null,
+        language text, reference_asset_id uuid, s3_key text not null,
+        checksum_sha256 text, byte_size bigint, processing_state text not null, created_by text not null
+      );
+      insert into bridge_titles (id,slug,name,owner_user_id,owner_account_type,status)
+      values ('delivered-title','delivered-title','Delivered Title','owner','independent_creator','RIGHTS_REVIEW');
+      insert into bridge_assets (id,title_id,kind,s3_key,content_type,created_by)
+      values ('delivered-asset','delivered-title','master','delivered/master','video/mp4','super-admin');
+      insert into bridge_delivery_jobs (title_id,admin_sign_off,delivery_receipt_url)
+      values ('delivered-title',true,'https://receipt.example.test/delivery/1');
+    `);
+    const sql = { query: async <T>(query: string, params: unknown[]) => (await db.query<T>(query, params)).rows };
+    const result = await persistVerifiedAsset(sql, {
+      assetId: "delivered-asset",
+      actorUserId: "super-admin",
+      internalActor: true,
+      superAdminActor: true,
+      titleId: "delivered-title",
+      kind: "master",
+      byteSize: 200,
+      contentType: "video/mp4",
+      checksum: "blocked-delivery-etag",
+      sourceKey: "delivered/master",
+      sealedKey: "delivered/master.verified/delivered-asset",
+    });
+    assert.equal(result, false);
+    const row = await db.query<{ byte_size: number | null }>("select byte_size from bridge_assets where id='delivered-asset'");
+    assert.equal(row.rows[0]?.byte_size, null);
+  } finally {
+    await db.close();
+  }
+});
