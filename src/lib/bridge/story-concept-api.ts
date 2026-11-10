@@ -99,6 +99,7 @@ const createPayloadSchema = z.object({
   treatmentUrl: z.string().url().max(500).optional().or(z.literal("")),
   screenplayUrl: z.string().url().max(500).optional().or(z.literal("")),
   language: z.string().min(2).max(40).default("Malayalam"),
+  organizationId: z.string().uuid().optional(),
 });
 
 export const createStoryConceptSubmission = createServerFn({ method: "POST" })
@@ -115,6 +116,22 @@ export const createStoryConceptSubmission = createServerFn({ method: "POST" })
 
     const titleId = randomBytes(16).toString("hex");
     const slug = slugify(data.titleName, titleId);
+    let studioOrganizationId: string | null = null;
+    if (actor.accountType === "studio") {
+      const memberships = actor.organizationIds ?? [];
+      if (data.organizationId) {
+        if (!memberships.includes(data.organizationId)) throw new Error("Studio membership is not active for the selected organization.");
+        studioOrganizationId = data.organizationId;
+      } else if (memberships.length === 1) {
+        studioOrganizationId = memberships[0];
+      } else if (memberships.length > 1) {
+        throw new Error("Select the Studio organization for this story concept.");
+      } else {
+        throw new Error("An active Studio membership is required to create a Studio story concept.");
+      }
+    } else if (data.organizationId) {
+      throw new Error("Only Studio accounts may select a Studio organization.");
+    }
     const sql = await getSql();
 
     try {
@@ -132,7 +149,7 @@ export const createStoryConceptSubmission = createServerFn({ method: "POST" })
           ${data.synopsis},
           ${data.language},
           ${"OTHER"},
-          ${actor.accountType === "studio" ? actor.organizationId ?? null : null},
+          ${studioOrganizationId},
           ${"story_concept"}
         )
       `;
@@ -195,8 +212,14 @@ export const listMyStoryConcepts = createServerFn({ method: "GET" })
         where t.owner_user_id = ${actor.userId}
            or (
              t.owner_account_type = 'studio'
-             and t.owner_organization_id is not null
-             and t.owner_organization_id = ${actor.organizationId ?? null}
+             and t.owner_organization_id = any(${actor.organizationIds ?? []}::uuid[])
+             and exists (
+               select 1 from bridge_organization_memberships m
+               join bridge_organizations o on o.id = m.organization_id and o.status = 'active'
+               where m.organization_id = t.owner_organization_id
+                 and m.user_id = ${actor.userId}
+                 and m.status = 'active'
+             )
            )
         order by c.created_at desc
         limit 100

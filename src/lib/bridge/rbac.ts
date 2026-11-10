@@ -111,6 +111,8 @@ export type Actor = {
   internalRole: InternalRole | null;
   /** Server-resolved organization scope for Studio account collaboration. */
   organizationId?: string | null;
+  /** All explicitly approved active Studio memberships for this Bridge user. */
+  organizationIds?: readonly string[];
 };
 
 const TRANSITION_PERMISSION: Record<string, Permission> = {
@@ -160,9 +162,8 @@ function sharesStudioOrganization(
     !actor.internalRole &&
     actor.accountType === "studio" &&
     title.ownerAccountType === "studio" &&
-    actorOrg &&
     ownerOrg &&
-    actorOrg === ownerOrg
+    (actor.organizationIds?.includes(ownerOrg) ?? actorOrg === ownerOrg)
   );
 }
 

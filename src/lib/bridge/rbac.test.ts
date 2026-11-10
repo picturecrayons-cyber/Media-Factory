@@ -191,6 +191,16 @@ describe("PRD authorization matrix", () => {
       ...sameOrgTitle,
       ownerAccountType: "independent_creator" as const,
     };
+    const memberOfTwoStudios: Actor = {
+      ...member,
+      organizationId: "11111111-1111-4111-8111-111111111111",
+      organizationIds: [
+        "11111111-1111-4111-8111-111111111111",
+        "22222222-2222-4222-8222-222222222222",
+      ],
+    };
+    assert.equal(canReadTitle(memberOfTwoStudios, sameOrgTitle), true);
+    assert.equal(canReadTitle(memberOfTwoStudios, otherOrgTitle), true);
     assert.equal(canReadTitle(member, sameOrgTitle), true);
     assert.equal(canMutateTitle(member, sameOrgTitle, "title.update_own", "title.license"), true);
     assert.equal(canOperateOnTitle(member, sameOrgTitle, "asset.sign_upload"), true);

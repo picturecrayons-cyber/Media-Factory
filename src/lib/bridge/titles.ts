@@ -89,10 +89,10 @@ async function listCatalog(sql: Sql): Promise<TitleRow[]> {
   return sql<TitleRow>`select * from bridge_titles where merged_into_title_id is null order by updated_at desc limit 200`;
 }
 
-async function listOwned(sql: Sql, userId: string, organizationId: string | null | undefined): Promise<TitleRow[]> {
-  const orgId = organizationId || null;
+async function listOwned(sql: Sql, userId: string, organizationIds: readonly string[] = []): Promise<TitleRow[]> {
+  const orgIds = [...new Set(organizationIds)].filter(Boolean);
   const mergeColumnAvailable = await hasTitleMergeColumn(sql);
-  if (!orgId) {
+  if (orgIds.length === 0) {
     return mergeColumnAvailable
       ? sql<TitleRow>`select * from bridge_titles where owner_user_id = ${userId} and merged_into_title_id is null order by updated_at desc limit 200`
       : sql<TitleRow>`select * from bridge_titles where owner_user_id = ${userId} order by updated_at desc limit 200`;
@@ -105,10 +105,10 @@ async function listOwned(sql: Sql, userId: string, organizationId: string | null
             t.owner_user_id = ${userId}
             or (
               t.owner_account_type = 'studio'
-              and t.owner_organization_id = ${orgId}
+              and t.owner_organization_id = any(${orgIds}::uuid[])
               and exists (
                 select 1 from bridge_organization_memberships m
-                where m.organization_id = ${orgId}
+                where m.organization_id = t.owner_organization_id
                   and m.user_id = ${userId}
                   and m.status = 'active'
               )
@@ -121,10 +121,10 @@ async function listOwned(sql: Sql, userId: string, organizationId: string | null
         where t.owner_user_id = ${userId}
           or (
             t.owner_account_type = 'studio'
-            and t.owner_organization_id = ${orgId}
+            and t.owner_organization_id = any(${orgIds}::uuid[])
             and exists (
               select 1 from bridge_organization_memberships m
-              where m.organization_id = ${orgId}
+              where m.organization_id = t.owner_organization_id
                 and m.user_id = ${userId}
                 and m.status = 'active'
             )
@@ -206,6 +206,7 @@ export const createTitle = createServerFn({ method: "POST" })
       publicSubmission: z.boolean().optional(),
       screenerAccess: z.enum(["BRIDGE_PRIVATE_SCREENER", "SCREENER_PENDING"]).optional(),
       intendedDestinations: z.array(z.string().min(2).max(80)).min(1).max(20).optional(),
+      organizationId: z.string().uuid().optional(),
     }),
   )
   .handler(async ({ context, data }) => {
@@ -216,6 +217,22 @@ export const createTitle = createServerFn({ method: "POST" })
     const slug = slugify(data.name, id);
     const sql = await getSql();
     const isPublicSubmission = data.publicSubmission === true;
+    let studioOrganizationId: string | null = null;
+    if (actor.accountType === "studio") {
+      const memberships = actor.organizationIds ?? [];
+      if (data.organizationId) {
+        if (!memberships.includes(data.organizationId)) throw new Error("Studio membership is not active for the selected organization.");
+        studioOrganizationId = data.organizationId;
+      } else if (memberships.length === 1) {
+        studioOrganizationId = memberships[0];
+      } else if (memberships.length > 1) {
+        throw new Error("Select the Studio organization for this title.");
+      } else {
+        throw new Error("An active Studio membership is required to create a Studio title.");
+      }
+    } else if (data.organizationId) {
+      throw new Error("Only Studio accounts may select a Studio organization.");
+    }
 
     if (isPublicSubmission) {
       if (
@@ -270,7 +287,7 @@ export const createTitle = createServerFn({ method: "POST" })
             ...(data.director ? [{ role: "Director", name: data.director }] : []),
             ...(data.producer ? [{ role: "Producer", name: data.producer }] : []),
             ...(data.cast ?? []).map((name) => ({ role: "Cast", name })),
-          ])}::jsonb, ${actor.accountType === "studio" ? actor.organizationId ?? null : null}
+          ])}::jsonb, ${studioOrganizationId}
         )
       `;
 
@@ -359,7 +376,7 @@ export const listTitles = createServerFn({ method: "GET" })
       }
     } else {
       assertPermission(actor, "title.read_own");
-      rows = await listOwned(sql, actor.userId, actor.accountType === "studio" ? actor.organizationId : null);
+      rows = await listOwned(sql, actor.userId, actor.accountType === "studio" ? actor.organizationIds ?? [] : []);
     }
     return { titles: rows.flatMap((row) => {
       try {
