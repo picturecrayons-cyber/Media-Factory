@@ -4,6 +4,11 @@ import { BridgeShell } from "@/components/bridge/shell";
 import { TitleList } from "@/components/bridge/title-desk";
 import { MyStoryConcepts } from "@/components/bridge/my-story-concepts";
 import { NewSubmissionPanel } from "@/components/bridge/new-submission-panel";
+import LogoBackgroundConverter from "@/components/bridge/logo-background-converter";
+import {
+  createLogoConversionOrder,
+  verifyLogoConversionPayment,
+} from "@/lib/bridge/logo-converter-payments";
 
 export const Route = createFileRoute("/creator")({ component: Creator });
 
@@ -22,6 +27,19 @@ function Creator() {
               </div>
               <NewSubmissionPanel />
             </header>
+
+            <section className="space-y-3">
+              <div>
+                <h2 className="text-lg font-semibold">Tools</h2>
+                <p className="mt-1 text-sm text-muted">
+                  Practical creator utilities for preparing your artwork and assets.
+                </p>
+              </div>
+              <LogoBackgroundConverter
+                createOrder={(idempotencyKey) => createLogoConversionOrder({ data: { idempotencyKey } })}
+                verifyPayment={(payload) => verifyLogoConversionPayment({ data: payload })}
+              />
+            </section>
 
             <MyStoryConcepts />
 
