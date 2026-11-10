@@ -275,6 +275,7 @@ select
     when e.entity_type<>'bridge_title'
       or not exists (select 1 from public.bridge_titles t where t.id=e.entity_id)
       or e.invoice_reference is null or e.statement_reference is null
+      or e.amount_numeric is null
       or e.amount_numeric not between 1 and 9223372036854775807::numeric
       or e.currency<>'INR'
     then 'REVIEW_REQUIRED' else 'VALID'
@@ -304,7 +305,7 @@ alter table public.bridge_assets
 
   select array_agg(distinct m[1] order by m[1])
     into v_kinds
-  from regexp_matches(v_definition, '''([^'']*)''', 'g') as m;
+  from regexp_matches(v_definition, '''([^'']*)''', 'g') as rm(match);
 
   if coalesce(cardinality(v_kinds),0)=0 then
     raise exception 'Could not read allowed kinds from bridge_assets constraint: %', v_definition;
@@ -314,8 +315,8 @@ alter table public.bridge_assets
     v_kinds := array_append(v_kinds,'rights_document');
   end if;
 
-  select string_agg(quote_literal(k),', ' order by k) into v_values
-  from unnest(v_kinds) as k;
+  select string_agg(quote_literal(kind_value),', ' order by kind_value) into v_values
+  from unnest(v_kinds) as u(kind_value);
 
   execute format('alter table public.bridge_assets drop constraint %I',v_constraint_name);
   execute format('alter table public.bridge_assets add constraint bridge_assets_kind_chk check (kind in (%s))',v_values);
