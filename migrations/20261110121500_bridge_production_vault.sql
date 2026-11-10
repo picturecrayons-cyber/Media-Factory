@@ -6,7 +6,9 @@ begin;
 create table if not exists bridge_productions (
   id uuid primary key default gen_random_uuid(),
   title_id text not null references bridge_titles(id) on delete restrict,
-  organization_id uuid references bridge_organizations(id) on delete restrict,
+  -- Organization membership is validated by the server against the existing identity model.
+  -- Do not FK to bridge_organizations: that table is not present in the approved Testing DB schema.
+  organization_id uuid,
   production_name text not null,
   production_no text not null,
   status text not null default 'PREPARING'
