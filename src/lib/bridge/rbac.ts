@@ -245,6 +245,21 @@ export function canOperateOnTitle(
   );
 }
 
+const SUPER_ADMIN_REPLACE_TITLE_ID = "858f0ec5a11bc9acd2e9c20266541a3a";
+const STANDARD_UPLOAD_STATUSES: ReadonlySet<string> = new Set(["DRAFT", "UPLOADING", "PREPARING"]);
+
+/** Normal owner uploads plus a narrowly scoped Super Admin replacement window for this title in RIGHTS_REVIEW. */
+export function canUploadTitleAsset(
+  actor: Actor,
+  title: { id: string; ownerUserId: string; status: string; ownerAccountType?: AccountType; ownerOrganizationId?: string | null },
+): boolean {
+  if (!canOperateOnTitle(actor, title, "asset.sign_upload", "asset.sign_upload")) return false;
+  if (STANDARD_UPLOAD_STATUSES.has(title.status)) return true;
+  return actor.internalRole === "super_admin" &&
+    title.id === SUPER_ADMIN_REPLACE_TITLE_ID &&
+    title.status === "RIGHTS_REVIEW";
+}
+
 export function workspaceHome(actor: Actor): string {
   // Resolve the post-auth destination from the server-backed Bridge profile.
   // Signup query parameters are intent only and never grant privileges.

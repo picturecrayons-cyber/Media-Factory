@@ -4,7 +4,7 @@ import { randomBytes } from "node:crypto";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import { ASSET_KINDS } from "./types";
-import { assertPermission, canOperateOnTitle, canReadTitle, hasStaffPermission } from "./rbac";
+import { assertPermission, canOperateOnTitle, canReadTitle, canUploadTitleAsset, hasStaffPermission } from "./rbac";
 import { requireVerifiedActor } from "./session";
 import { loadTitle } from "./titles";
 import { writeAudit } from "./audit";
@@ -13,8 +13,6 @@ import { persistVerifiedAsset } from "./asset-confirmation";
 import { downloadDecision } from "./delivery-policy";
 import { uploadUrlLifetimeSeconds } from "./upload-url-lifetime";
 import { validateOttIngestFile, type OttIngestKind } from "./ott-ingest-spec";
-
-const UPLOADABLE: ReadonlySet<string> = new Set(["DRAFT", "UPLOADING", "PREPARING"]);
 
 async function hasLicenseEntitlement(userId: string, titleId: string): Promise<boolean> {
   const sql = await getSql();
@@ -43,7 +41,7 @@ export const requestAssetUpload = createServerFn({ method: "POST" })
     const title = await loadTitle(data.titleId);
     if (!title) throw new Error("Not found");
     if (!canOperateOnTitle(actor, title, "asset.sign_upload", "asset.sign_upload")) throw new Error("Forbidden");
-    if (!UPLOADABLE.has(title.status)) throw new Error("Uploads are closed for this status");
+    if (!canUploadTitleAsset(actor, title)) throw new Error("Uploads are closed for this status");
     if (!["master", "poster", "poster_vertical", "poster_horizontal", "thumbnail", "subtitle", "screener", "technical", "censor_certificate"].includes(data.kind))
       throw new Error("This asset kind is not supported by the OTT ingest uploader");
     const ingestValidation = validateOttIngestFile({
@@ -98,7 +96,7 @@ async function openUploadAsset(userId: string, assetId: string) {
   const asset = rows[0];
   if (!asset) throw new Error("Asset not found");
   const title = await loadTitle(asset.title_id);
-  if (!title || !canOperateOnTitle(actor, title, "asset.sign_upload", "asset.sign_upload") || !UPLOADABLE.has(title.status)) {
+  if (!title || !canUploadTitleAsset(actor, title)) {
     throw new Error("Upload confirmation is closed for this title");
   }
   return asset;
@@ -178,7 +176,7 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
     const asset = rows[0];
     if (!asset) throw new Error("Asset not found");
     const title = await loadTitle(asset.title_id);
-    if (!title || !canOperateOnTitle(actor, title, "asset.sign_upload", "asset.sign_upload") || !UPLOADABLE.has(title.status)) {
+    if (!title || !canUploadTitleAsset(actor, title)) {
       throw new Error("Upload confirmation is closed for this title");
     }
     if (asset.byte_size != null)

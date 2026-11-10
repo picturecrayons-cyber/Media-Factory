@@ -1,4 +1,4 @@
-import { canOperateOnTitle } from "@/lib/bridge/rbac";
+import { canOperateOnTitle, canUploadTitleAsset } from "@/lib/bridge/rbac";
 import { getTitleWorkflow } from "@/lib/bridge/workflow";
 import { WorkflowDesk } from "@/components/bridge/workflow-desk";
 import { publicationIsActive } from "@/lib/bridge/workflow-policy";
@@ -254,7 +254,7 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
         <FilesPanel
           canUpload={
             canOperateOnTitle(actor, title, "asset.sign_upload", "title.ingest_internal") &&
-            ["DRAFT", "UPLOADING", "PREPARING"].includes(title.status)
+            canUploadTitleAsset(actor, title)
           }
           titleId={id}
           assets={assets}
