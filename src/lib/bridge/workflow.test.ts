@@ -942,7 +942,7 @@ test("migration 0021 preserves every settlement reference and quarantines incomp
       id text,title_id text,kind text,s3_key text,byte_size bigint,
       constraint bridge_assets_kind_chk check (kind in (
         'poster','poster_vertical','poster_horizontal','thumbnail','screener','master',
-        'subtitle','technical','censor_certificate'
+        'trailer','subtitle','subtitle_extra','audio','audio_dub','audio_description','technical','censor_certificate'
       ))
     );
     create table bridge_title_events(title_id text,from_status text,to_status text,actor_user_id text,note text);
