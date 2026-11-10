@@ -4,7 +4,7 @@ import { listTitles } from "@/lib/bridge/titles";
 import {
   listDitOperations, createDitProduction, createDitCameraCard, prepareDitClipUpload,
   verifyAndReplicateDitClip, queueDitConversion, reviewDitClip, signoffDitCard,
-} from "@/lib/bridge/dit-operations.server";
+} from "@/lib/bridge/dit-operations";
 import { hashFileSha256 } from "@/lib/bridge/sha256-stream";
 
 type DitWorkspaceProps = { canReview: boolean };
