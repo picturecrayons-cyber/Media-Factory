@@ -241,7 +241,7 @@ export const prepareDitClipUpload = createServerFn({ method: "POST" })
       date: row.shooting_date, camera: row.camera_id, cardNo: row.card_no,
       kind: "RAW", originalRelativePath: data.clip.originalRelativePath,
     });
-    const upload = await signUpload({ key: objectKey, contentType: "application/octet-stream", expiresIn: 900 });
+    const upload = await signUpload({ key: objectKey, contentType: "application/octet-stream", expiresIn: 12 * 60 * 60 });
     await sql.transaction(async (tx) => {
       await tx`insert into bridge_production_ingest_manifests
         (id,production_id,shooting_day_id,camera_card_id,expected_clip_count,discovered_clip_count,reconciliation_result,created_by,manifest_payload)
@@ -555,15 +555,15 @@ export async function claimNextDitConversionJob(workerId: string) {
     `;
     const job = jobs[0];
     if (!job) return { job: null };
-    const source = await signDownload({ key: job.source_object_key, expiresIn: 900 });
+    const source = await signDownload({ key: job.source_object_key, expiresIn: 6 * 60 * 60 });
     const extension = job.profile.container.toLowerCase();
     const filename = `${job.clip_number.replace(/[^a-zA-Z0-9_-]/g, "_")}-${job.profile.outputType.toLowerCase()}.${extension}`;
     const masterKey = buildVaultObjectKey({ filmName: job.production_name, productionNo: job.production_no,
       tier: "MASTER", date: job.shooting_date, camera: job.camera_id, cardNo: job.card_no, kind: "CONVERTED" }) + filename;
     const backupKey = buildVaultObjectKey({ filmName: job.production_name, productionNo: job.production_no,
       tier: "BACKUP_1", date: job.shooting_date, camera: job.camera_id, cardNo: job.card_no, kind: "CONVERTED" }) + filename;
-    const masterUpload = await signUpload({ key: masterKey, contentType: job.profile.container === "MP4" ? "video/mp4" : "video/quicktime", expiresIn: 900 });
-    const backupUpload = await signUploadAtTarget({ key: backupKey, contentType: job.profile.container === "MP4" ? "video/mp4" : "video/quicktime", target: targets.backup1, expiresIn: 900 });
+    const masterUpload = await signUpload({ key: masterKey, contentType: job.profile.container === "MP4" ? "video/mp4" : "video/quicktime", expiresIn: 6 * 60 * 60 });
+    const backupUpload = await signUploadAtTarget({ key: backupKey, contentType: job.profile.container === "MP4" ? "video/mp4" : "video/quicktime", target: targets.backup1, expiresIn: 6 * 60 * 60 });
     const history = [{ state: "PROCESSING", at: new Date().toISOString(), detail: `Worker ${workerId} claimed job` }];
     await tx`update bridge_production_conversion_jobs set state='PROCESSING',attempt=attempt+1,
       history=history || ${JSON.stringify(history)}::jsonb,updated_at=now() where id=${job.id}`;
