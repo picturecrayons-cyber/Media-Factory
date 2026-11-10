@@ -11,6 +11,11 @@ test("only a verified upload sets the master reference, once, with an audit even
     await db.waitReady;
     await db.exec("create role anon; create role authenticated;");
     await db.exec(readFileSync(join(process.cwd(), "migrations/0004_bridge.sql"), "utf8"));
+    await db.exec(`
+      create table if not exists bridge_loop_publications (bridge_title_id text, approved_at timestamptz);
+      create table if not exists bridge_destination_packages (title_id text, readiness_state text);
+      create table if not exists bridge_delivery_jobs (title_id text, admin_sign_off boolean, delivery_receipt_url text);
+    `);
     await db.exec(readFileSync(join(process.cwd(), "migrations/0021_bridge_organizations.sql"), "utf8"));
     await db.exec(`
       create table if not exists bridge_loop_publications (bridge_title_id text, approved_at timestamptz);
@@ -67,6 +72,11 @@ test("same-organization verified Studio member can confirm upload, other organiz
     await db.waitReady;
     await db.exec("create role anon; create role authenticated;");
     await db.exec(readFileSync(join(process.cwd(), "migrations/0004_bridge.sql"), "utf8"));
+    await db.exec(`
+      create table if not exists bridge_loop_publications (bridge_title_id text, approved_at timestamptz);
+      create table if not exists bridge_destination_packages (title_id text, readiness_state text);
+      create table if not exists bridge_delivery_jobs (title_id text, admin_sign_off boolean, delivery_receipt_url text);
+    `);
     await db.exec(readFileSync(join(process.cwd(), "migrations/0021_bridge_organizations.sql"), "utf8"));
     await db.exec(`
       create table if not exists bridge_loop_publications (bridge_title_id text, approved_at timestamptz);
@@ -144,6 +154,11 @@ test("title owner can confirm an upload when organization tables are absent", as
     await db.waitReady;
     await db.exec("create role anon; create role authenticated;");
     await db.exec(readFileSync(join(process.cwd(), "migrations/0004_bridge.sql"), "utf8"));
+    await db.exec(`
+      create table if not exists bridge_loop_publications (bridge_title_id text, approved_at timestamptz);
+      create table if not exists bridge_destination_packages (title_id text, readiness_state text);
+      create table if not exists bridge_delivery_jobs (title_id text, admin_sign_off boolean, delivery_receipt_url text);
+    `);
     await db.exec(`insert into bridge_titles (id,slug,name,owner_user_id,owner_account_type,status)
       values ('title1234','title','Title','creator','independent_creator','PREPARING');
       insert into bridge_assets (id,title_id,kind,s3_key,content_type,created_by)
@@ -178,6 +193,11 @@ test("Super Admin can replace a verified asset through RIGHTS_REVIEW before firs
     await db.waitReady;
     await db.exec("create role anon; create role authenticated;");
     await db.exec(readFileSync(join(process.cwd(), "migrations/0004_bridge.sql"), "utf8"));
+    await db.exec(`
+      create table if not exists bridge_loop_publications (bridge_title_id text, approved_at timestamptz);
+      create table if not exists bridge_destination_packages (title_id text, readiness_state text);
+      create table if not exists bridge_delivery_jobs (title_id text, admin_sign_off boolean, delivery_receipt_url text);
+    `);
     await db.exec(`
       create table bridge_loop_publications (bridge_title_id text, approved_at timestamptz);
       create table bridge_destination_packages (title_id text, readiness_state text);
@@ -227,6 +247,11 @@ test("first LOOP publication permanently locks Super Admin replacement", async (
     await db.waitReady;
     await db.exec("create role anon; create role authenticated;");
     await db.exec(readFileSync(join(process.cwd(), "migrations/0004_bridge.sql"), "utf8"));
+    await db.exec(`
+      create table if not exists bridge_loop_publications (bridge_title_id text, approved_at timestamptz);
+      create table if not exists bridge_destination_packages (title_id text, readiness_state text);
+      create table if not exists bridge_delivery_jobs (title_id text, admin_sign_off boolean, delivery_receipt_url text);
+    `);
     await db.exec(`
       create table bridge_loop_publications (bridge_title_id text, approved_at timestamptz);
       create table bridge_destination_packages (title_id text, readiness_state text);
