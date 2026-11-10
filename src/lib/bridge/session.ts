@@ -3,7 +3,7 @@ import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import type { AccountType, InternalRole, Permission } from "./types";
 import type { Actor } from "./rbac";
-import { assertPermission, canAccessDashboard, workspaceHome } from "./rbac";
+import { assertPermission, canAccessDashboard, canAccessDitWorkspace, workspaceHome } from "./rbac";
 import { PRODUCT_NAME, LEGAL_OWNER, PRODUCTION_DOMAIN } from "./canonical";
 import { integrationStatus } from "./env";
 import { assertNotDevUser } from "./guards";
@@ -130,6 +130,16 @@ export async function requireVerifiedActor(userId: string): Promise<BridgeActor>
   return actor;
 }
 
+/**
+ * Server-side DIT authorization gate. Call this from every DIT data/action
+ * handler; a client-side visibility check is never an authorization boundary.
+ */
+export async function requireDitWorkspaceActor(userId: string): Promise<BridgeActor> {
+  const actor = await requireVerifiedActor(userId);
+  if (!canAccessDitWorkspace(actor)) throw new Error("DIT workspace access required");
+  return actor;
+}
+
 export function requireActorPermission(actor: Actor, permission: Permission) {
   assertPermission(actor, permission);
 }
@@ -170,6 +180,22 @@ export const getDashboardSession = createServerFn({ method: "GET" })
     const actor = await requireVerifiedActor(context.userId);
     if (!canAccessDashboard(actor)) throw new Error("Super admin access required");
     return { profile: actor };
+  });
+
+/** Authenticated, server-resolved capability check used by the Studio DIT UI. */
+export const getDitWorkspaceAccess = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }) => {
+    assertNotDevUser(context.userId);
+    try {
+      await requireDitWorkspaceActor(context.userId);
+      return { allowed: true as const };
+    } catch (error) {
+      if (error instanceof Error && error.message === "DIT workspace access required") {
+        return { allowed: false as const };
+      }
+      throw error;
+    }
   });
 
 export const getBridgePublicStatus = createServerFn({ method: "GET" }).handler(async () => {
