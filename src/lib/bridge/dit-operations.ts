@@ -83,6 +83,7 @@ export const listDitOperations = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .validator(listInput)
   .handler(async ({ context, data }) => {
+    assertDitStagingDatabase();
     const actor = await requireVerifiedActor(context.userId);
     const sql = await getSql();
     if ((!actor.internalRole || !["admin", "super_admin"].includes(actor.internalRole)) && actor.accountType !== "studio") throw new Error("Forbidden");
