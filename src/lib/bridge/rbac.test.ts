@@ -176,8 +176,6 @@ describe("PRD authorization matrix", () => {
     const member: Actor = {
       ...actor("studio-member", "studio"),
       organizationId: "11111111-1111-4111-8111-111111111111",
-      organizationIds: ["11111111-1111-4111-8111-111111111111"],
-      selectedOrganizationId: "11111111-1111-4111-8111-111111111111",
     };
     const sameOrgTitle = {
       ownerUserId: "studio-owner",
@@ -200,25 +198,16 @@ describe("PRD authorization matrix", () => {
         "11111111-1111-4111-8111-111111111111",
         "22222222-2222-4222-8222-222222222222",
       ],
-      selectedOrganizationId: "11111111-1111-4111-8111-111111111111",
     };
     assert.equal(canReadTitle(memberOfTwoStudios, sameOrgTitle), true);
-    assert.equal(canReadTitle(memberOfTwoStudios, otherOrgTitle), false);
-    assert.equal(
-      canReadTitle(
-        { ...memberOfTwoStudios, selectedOrganizationId: "22222222-2222-4222-8222-222222222222" },
-        otherOrgTitle,
-      ),
-      true,
-    );
+    assert.equal(canReadTitle(memberOfTwoStudios, otherOrgTitle), true);
     assert.equal(canReadTitle(member, sameOrgTitle), true);
     assert.equal(canMutateTitle(member, sameOrgTitle, "title.update_own", "title.license"), true);
     assert.equal(canOperateOnTitle(member, sameOrgTitle, "asset.sign_upload"), true);
     assert.equal(canReadTitle(member, otherOrgTitle), false);
     assert.equal(canMutateTitle(member, otherOrgTitle, "title.update_own", "title.license"), false);
     assert.equal(canOperateOnTitle(member, otherOrgTitle, "asset.sign_upload"), false);
-    assert.equal(canReadTitle({ ...member, organizationId: null, selectedOrganizationId: null }, sameOrgTitle), false);
-    assert.equal(canReadTitle({ ...member, selectedOrganizationId: null }, sameOrgTitle), false);
+    assert.equal(canReadTitle({ ...member, organizationId: null }, sameOrgTitle), false);
     assert.equal(canReadTitle({ ...member, emailVerified: false }, sameOrgTitle), false);
     assert.equal(canReadTitle({ ...member, accountType: "buyer" }, sameOrgTitle), false);
     assert.equal(canReadTitle(member, creatorOwnedSameName), false);
