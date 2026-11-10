@@ -6,6 +6,7 @@ export async function persistVerifiedAsset(sql: Pick<Sql, "query">, opts: {
   assetId: string;
   actorUserId: string;
   internalActor: boolean;
+  superAdminActor: boolean;
   titleId: string;
   kind: string;
   byteSize: number;
@@ -71,7 +72,26 @@ async function persistVerifiedAssetScoped(
           select 1
           from bridge_titles t
           where t.id = a.title_id
-            and t.status in ('DRAFT','UPLOADING','PREPARING')
+            and (
+              t.status in ('DRAFT','UPLOADING','PREPARING')
+              or (
+                $10
+                and not exists (
+                  select 1 from bridge_loop_publications p
+                  where p.bridge_title_id = t.id and p.approved_at is not null
+                )
+                and not exists (
+                  select 1 from bridge_destination_packages dp
+                  where dp.title_id = t.id and dp.readiness_state = 'DELIVERED'
+                )
+                and not exists (
+                  select 1 from bridge_delivery_jobs dj
+                  where dj.title_id = t.id and dj.admin_sign_off = true
+                    and dj.delivery_receipt_url is not null
+                    and length(trim(dj.delivery_receipt_url)) > 0
+                )
+              )
+            )
             and (
               $5
               or t.owner_user_id = $4
@@ -106,6 +126,7 @@ async function persistVerifiedAssetScoped(
     opts.sourceKey,
     opts.titleId,
     opts.checksum,
+    opts.superAdminActor,
   ]);
   return Boolean(rows[0]);
 }
