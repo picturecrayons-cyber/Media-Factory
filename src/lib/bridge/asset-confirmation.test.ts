@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { PGlite } from "@electric-sql/pglite";
+import type { Sql } from "../db.ts";
 import { persistVerifiedAsset } from "./asset-confirmation.ts";
  
 function createTestSql(db: PGlite) {
@@ -10,15 +11,13 @@ function createTestSql(db: PGlite) {
     query: async <T>(query: string, params: unknown[] = []) =>
       (await db.query<T>(query, params)).rows,
     transaction: async <T>(
-      callback: (tx: {
-        query: <R>(query: string, params?: unknown[]) => Promise<R[]>;
-      }) => Promise<T>,
+      callback: (tx: Sql) => Promise<T>,
     ) =>
       db.transaction(async (tx) =>
         callback({
           query: async <R>(query: string, params: unknown[] = []) =>
             (await tx.query<R>(query, params)).rows,
-        }),
+        } as Sql),
       ),
   };
 }
