@@ -663,12 +663,14 @@ export const failDitConversionJob = createServerOnlyFn(async (jobId: string, rea
   assertDitStagingDatabase();
   const sql = await getSql();
   const safeReason = reason.trim().slice(0, 500) || "Worker failed";
-  const rows = await sql<{ attempt: number; state: string }>`select attempt,state from bridge_production_conversion_jobs where id=${jobId} for update`;
-  const job = rows[0];
-  if (!job || job.state !== "PROCESSING") throw new Error("Conversion job is not processing");
-  const next = job.attempt < 3 ? "RETRY_REQUIRED" : "FAILED";
-  await sql`update bridge_production_conversion_jobs set state=${next},
-    history=history || ${JSON.stringify([{ state: next, at: new Date().toISOString(), detail: safeReason }])}::jsonb,
-    updated_at=now() where id=${jobId}`;
-  return { state: next };
+  return sql.transaction(async (tx) => {
+    const rows = await tx<{ attempt: number; state: string }>\`select attempt,state from bridge_production_conversion_jobs where id=\${jobId} for update\`;
+    const job = rows[0];
+    if (!job || job.state !== "PROCESSING") throw new Error("Conversion job is not processing");
+    const next = job.attempt < 3 ? "RETRY_REQUIRED" : "FAILED";
+    await tx\`update bridge_production_conversion_jobs set state=\${next},
+      history=history || \${JSON.stringify([{ state: next, at: new Date().toISOString(), detail: safeReason }])}::jsonb,
+      updated_at=now() where id=\${jobId}\`;
+    return { state: next };
+  });
 });
