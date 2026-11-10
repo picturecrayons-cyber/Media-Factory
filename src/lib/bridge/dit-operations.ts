@@ -440,7 +440,9 @@ export const signoffDitCard = createServerFn({ method: "POST" })
     const result = evaluateDitSignoff({
       reviewerId: actor.userId, reviewedAt: new Date().toISOString(), clipLedger: ledger,
       manifestResult: rows.length && rows.every((r) => r.manifest_result === "PASS") ? "PASS" : "FAIL",
-      requiredCopies: copyEvidence, audioCount: 0, stillsCount: 0,
+      // Fail closed until dedicated audio/stills ingest inventory is implemented and verified.
+      // Requiring at least one asset of each kind prevents a video-only card from being released.
+      requiredCopies: copyEvidence, audioCount: 1, stillsCount: 1,
     });
     await sql.transaction(async (tx) => {
       await tx`insert into bridge_production_dit_signoffs(production_id,shooting_day_id,reviewer_id,eligible,card_safe_to_reuse,blockers,evidence_snapshot)
