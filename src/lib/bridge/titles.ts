@@ -89,50 +89,48 @@ async function listCatalog(sql: Sql): Promise<TitleRow[]> {
   return sql<TitleRow>`select * from bridge_titles where merged_into_title_id is null order by updated_at desc limit 200`;
 }
 
-async function listOwned(sql: Sql, userId: string, organizationId: string | null | undefined): Promise<TitleRow[]> {
-  const orgId = organizationId || null;
+async function listOwned(sql: Sql, userId: string, organizationIds: string[] | null | undefined): Promise<TitleRow[]> {
+  const orgIds = Array.isArray(organizationIds) ? organizationIds : [];
   const mergeColumnAvailable = await hasTitleMergeColumn(sql);
-  if (!orgId) {
-    return mergeColumnAvailable
-      ? sql<TitleRow>`select * from bridge_titles where owner_user_id = ${userId} and merged_into_title_id is null order by updated_at desc limit 200`
-      : sql<TitleRow>`select * from bridge_titles where owner_user_id = ${userId} order by updated_at desc limit 200`;
-  }
-  return mergeColumnAvailable
-    ? sql<TitleRow>`
-        select t.* from bridge_titles t
-        where t.merged_into_title_id is null
-          and (
-            t.owner_user_id = ${userId}
-            or (
-              t.owner_account_type = 'studio'
-              and t.owner_organization_id = ${orgId}
-              and exists (
-                select 1 from bridge_organization_memberships m
-                where m.organization_id = ${orgId}
-                  and m.user_id = ${userId}
-                  and m.status = 'active'
-              )
-            )
-          )
-        order by t.updated_at desc limit 200
-      `
-    : sql<TitleRow>`
-        select t.* from bridge_titles t
-        where t.owner_user_id = ${userId}
+  if (mergeColumnAvailable) {
+    return sql<TitleRow>`
+      select t.* from bridge_titles t
+      where t.merged_into_title_id is null
+        and (
+          t.owner_user_id = ${userId}
           or (
             t.owner_account_type = 'studio'
-            and t.owner_organization_id = ${orgId}
+            and t.owner_organization_id = any(${orgIds}::uuid[])
             and exists (
               select 1 from bridge_organization_memberships m
-              where m.organization_id = ${orgId}
+              where m.organization_id = t.owner_organization_id
                 and m.user_id = ${userId}
                 and m.status = 'active'
             )
           )
-        order by t.updated_at desc limit 200
-      `;
+        )
+      order by t.updated_at desc limit 200
+    `;
+  }
+  if (!orgIds.length) {
+    return sql<TitleRow>`select * from bridge_titles where owner_user_id = ${userId} order by updated_at desc limit 200`;
+  }
+  return sql<TitleRow>`
+    select t.* from bridge_titles t
+    where t.owner_user_id = ${userId}
+      or (
+        t.owner_account_type = 'studio'
+        and t.owner_organization_id = any(${orgIds}::uuid[])
+        and exists (
+          select 1 from bridge_organization_memberships m
+          where m.organization_id = t.owner_organization_id
+            and m.user_id = ${userId}
+            and m.status = 'active'
+        )
+      )
+    order by t.updated_at desc limit 200
+  `;
 }
-
 function slugify(name: string, id: string): string {
   const base = name
     .toLowerCase()
@@ -212,6 +210,9 @@ export const createTitle = createServerFn({ method: "POST" })
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
     assertPermission(actor, actor.internalRole ? "title.ingest_internal" : "title.create");
+    if (actor.accountType === "studio" && !actor.organizationId) {
+      throw new Error("Select an active Studio organization before creating a title.");
+    }
     const id = randomBytes(16).toString("hex");
     const slug = slugify(data.name, id);
     const sql = await getSql();
@@ -359,7 +360,7 @@ export const listTitles = createServerFn({ method: "GET" })
       }
     } else {
       assertPermission(actor, "title.read_own");
-      rows = await listOwned(sql, actor.userId, actor.accountType === "studio" ? actor.organizationId : null);
+      rows = await listOwned(sql, actor.userId, actor.accountType === "studio" ? actor.organizationIds : []);
     }
     return { titles: rows.flatMap((row) => {
       try {
