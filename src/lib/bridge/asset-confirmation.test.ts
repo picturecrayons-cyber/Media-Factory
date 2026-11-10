@@ -140,6 +140,33 @@ test("only a verified upload sets the master reference, once, with an audit even
     );
     assert.equal(denied.rows[0]?.byte_size, null);
 
+    // Legacy poster and vertical poster are one protected replacement slot
+    // in both directions; a creator cannot replace a verified vertical poster
+    // by uploading a legacy poster and bypassing the server-function guard.
+    await db.exec(`
+      insert into bridge_assets (id,title_id,kind,s3_key,content_type,byte_size,created_by)
+      values
+        ('verified-vertical','title1234','poster_vertical','art/vertical.verified','image/jpeg',100,'creator'),
+        ('owner-poster-replacement','title1234','poster','art/legacy-new','image/jpeg',null,'creator');
+    `);
+    assert.equal(await persistVerifiedAsset(sql, {
+      assetId: "owner-poster-replacement",
+      actorUserId: "creator",
+      internalActor: false,
+      superAdminActor: false,
+      titleId: "title1234",
+      kind: "poster",
+      byteSize: 80,
+      contentType: "image/jpeg",
+      checksum: "poster-checksum",
+      sourceKey: "art/legacy-new",
+      sealedKey: "art/legacy-new.verified/owner-poster-replacement",
+    }), false);
+    const deniedPoster = await db.query<{ byte_size: number | null }>(
+      "select byte_size from bridge_assets where id='owner-poster-replacement'",
+    );
+    assert.equal(deniedPoster.rows[0]?.byte_size, null);
+
     // Concurrent Super Admin confirmations for one title must allocate
     // distinct sequential versions under the per-title transaction lock.
     await db.exec(`
