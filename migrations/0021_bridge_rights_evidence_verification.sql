@@ -2,9 +2,7 @@
 -- Evidence must point to a processed, checksummed DOCUMENT asset version.
 -- Verification is a human legal-review attestation; this schema does not claim automated authenticity.
 
--- Enforce that a grant and its evidence always refer to the same title.
-create unique index if not exists bridge_rights_grants_id_title_uidx
-  on public.bridge_rights_grants(id, title_id);
+create unique index if not exists bridge_rights_grants_id_title_uidx on public.bridge_rights_grants(id,title_id);
 
 create table if not exists public.bridge_rights_evidence (
   id uuid primary key default gen_random_uuid(),
@@ -31,14 +29,10 @@ create table if not exists public.bridge_rights_evidence (
     (evidence_type not in ('SIGNED_AMENDMENT','SIGNED_ADDENDUM','RIGHTS_SCHEDULE') and related_agreement_evidence_id is null)
   ),
   unique (rights_grant_id, evidence_type, asset_version_id),
-  -- A grant cannot be paired with evidence for another title.
-  foreign key (rights_grant_id, title_id)
-    references public.bridge_rights_grants(id, title_id) on delete restrict,
-  -- The referenced agreement must belong to this exact title and grant.
-  unique (id, title_id, rights_grant_id),
-  foreign key (related_agreement_evidence_id, title_id, rights_grant_id)
-    references public.bridge_rights_evidence(id, title_id, rights_grant_id)
-    on delete restrict
+  foreign key (rights_grant_id,title_id) references public.bridge_rights_grants(id,title_id) on delete restrict,
+  unique (id,title_id,rights_grant_id),
+  foreign key (related_agreement_evidence_id,title_id,rights_grant_id)
+    references public.bridge_rights_evidence(id,title_id,rights_grant_id) on delete restrict
 );
 
 create index if not exists bridge_rights_evidence_grant_status_idx
@@ -63,8 +57,6 @@ create table if not exists public.bridge_settlement_reference_claims (
   id uuid primary key default gen_random_uuid(),
   reference_normalized text not null unique check (reference_normalized <> ''),
   reference text not null,
-  -- Nullable only for legacy references whose title/terms are incomplete or conflicting.
-  -- Such claims are always REVIEW_REQUIRED and cannot be reused by the application.
   title_id text references public.bridge_titles(id) on delete restrict,
   invoice_reference text,
   statement_reference text,
@@ -75,408 +67,98 @@ create table if not exists public.bridge_settlement_reference_claims (
   created_at timestamptz not null default now()
 );
 
--- Preserve every source audit event, including incomplete and conflicting records.
--- The original metadata is retained verbatim; the parent claim is only a deduplication guard.
 create table if not exists public.bridge_settlement_reference_claim_events (
   id bigserial primary key,
   claim_id uuid not null references public.bridge_settlement_reference_claims(id) on delete restrict,
   source_audit_event_id integer not null unique references public.bridge_audit_logs(id) on delete restrict,
-  reference_normalized text not null,
-  source_entity_type text not null,
-  source_entity_id text,
-  source_metadata text not null,
-  actor_user_id text not null,
+  reference_normalized text not null, source_entity_type text not null, source_entity_id text,
+  source_metadata text not null, actor_user_id text not null,
   event_state text not null check (event_state in ('VALID','REVIEW_REQUIRED')),
   created_at timestamptz not null
 );
-
 create index if not exists bridge_settlement_reference_claim_events_claim_idx
-  on public.bridge_settlement_reference_claim_events(claim_id, created_at, source_audit_event_id);
+  on public.bridge_settlement_reference_claim_events(claim_id,created_at,source_audit_event_id);
 
--- Do not discard references merely because invoice, statement, amount, title or entity type is
--- incomplete. Parse amounts as bounded numeric values before any bigint conversion.
 with raw_events as (
-  select
-    id,
-    metadata::jsonb as metadata_json,
-    entity_type,
-    entity_id,
-    actor_user_id,
-    created_at,
-    metadata as source_metadata
-  from public.bridge_audit_logs
-  where action='finance.settlement_evidence'
-    and jsonb_typeof(metadata::jsonb)='object'
-),
-events as (
-  select
-    id,
-    upper(btrim(metadata_json->>'reference')) as reference_normalized,
-    btrim(metadata_json->>'reference') as reference,
-    entity_type,
-    entity_id,
-    nullif(btrim(metadata_json->>'invoiceReference'),'') as invoice_reference,
-    nullif(btrim(metadata_json->>'statementReference'),'') as statement_reference,
-    case
-      when coalesce(metadata_json->>'amountPaise','') ~ '^[1-9][0-9]{0,18}
+  select id,metadata::jsonb as j,entity_type,entity_id,actor_user_id,created_at,metadata as raw
+  from public.bridge_audit_logs where action='finance.settlement_evidence' and jsonb_typeof(metadata::jsonb)='object'
+), events as (
+  select id,upper(btrim(j->>'reference')) as ref_norm,btrim(j->>'reference') as ref,entity_type,entity_id,
+    nullif(btrim(j->>'invoiceReference'),'') as invoice_ref,nullif(btrim(j->>'statementReference'),'') as statement_ref,
+    case when coalesce(j->>'amountPaise','') ~ '^[1-9][0-9]{0,18}$' then (j->>'amountPaise')::numeric end as amount_num,
+    coalesce(nullif(btrim(j->>'currency'),''),'INR') as currency,actor_user_id,created_at,raw
+  from raw_events where nullif(btrim(j->>'reference'),'') is not null
+), stats as (
+  select ref_norm,min(ref) ref,count(*)::int n,
+    count(distinct entity_type)::int entity_type_n,min(entity_type) entity_type,
+    count(distinct entity_id)::int title_n,count(entity_id)::int title_present,min(entity_id) title_id,
+    count(distinct invoice_ref)::int invoice_n,count(invoice_ref)::int invoice_present,min(invoice_ref) invoice_ref,
+    count(distinct statement_ref)::int statement_n,count(statement_ref)::int statement_present,min(statement_ref) statement_ref,
+    count(distinct amount_num)::int amount_n,count(amount_num)::int amount_present,min(amount_num) amount_num,
+    count(distinct currency)::int currency_n,count(*) filter(where currency='INR')::int inr_n,
+    min(actor_user_id) actor,min(created_at) created_at
+  from events group by ref_norm
+)
+insert into public.bridge_settlement_reference_claims(reference_normalized,reference,title_id,invoice_reference,statement_reference,amount_paise,currency,claim_state,created_by,created_at)
+select ref_norm,ref,
+  case when entity_type_n=1 and entity_type='bridge_title' and title_n=1 and title_present=n
+    and exists(select 1 from public.bridge_titles t where t.id=stats.title_id) then title_id end,
+  case when invoice_n=1 and invoice_present=n then invoice_ref end,
+  case when statement_n=1 and statement_present=n then statement_ref end,
+  case when amount_n=1 and amount_present=n and amount_num between 1 and 9223372036854775807::numeric then amount_num::bigint end,
+  'INR',
+  case when ref_norm ~ '^(NOT[[:space:]]+(EXCECUTED|EXECUTED)|TBD|PENDING|UNEXECUTED)([[:space:]]|$)'
+    or entity_type_n<>1 or entity_type<>'bridge_title' or title_n<>1 or title_present<>n
+    or not exists(select 1 from public.bridge_titles t where t.id=stats.title_id)
+    or invoice_n<>1 or invoice_present<>n or statement_n<>1 or statement_present<>n
+    or amount_n<>1 or amount_present<>n or amount_num is null or amount_num not between 1 and 9223372036854775807::numeric
+    or currency_n<>1 or inr_n<>n then 'REVIEW_REQUIRED' else 'ACTIVE' end,
+  actor,created_at from stats on conflict(reference_normalized) do nothing;
+
+with raw_events as (
+  select id,metadata::jsonb as j,entity_type,entity_id,actor_user_id,created_at,metadata as raw
+  from public.bridge_audit_logs where action='finance.settlement_evidence' and jsonb_typeof(metadata::jsonb)='object'
+), events as (
+  select id,upper(btrim(j->>'reference')) ref_norm,entity_type,entity_id,
+    nullif(btrim(j->>'invoiceReference'),'') invoice_ref,nullif(btrim(j->>'statementReference'),'') statement_ref,
+    case when coalesce(j->>'amountPaise','') ~ '^[1-9][0-9]{0,18}$' then (j->>'amountPaise')::numeric end amount_num,
+    coalesce(nullif(btrim(j->>'currency'),''),'INR') currency,actor_user_id,created_at,raw
+  from raw_events where nullif(btrim(j->>'reference'),'') is not null
+)
+insert into public.bridge_settlement_reference_claim_events(claim_id,source_audit_event_id,reference_normalized,source_entity_type,source_entity_id,source_metadata,actor_user_id,event_state,created_at)
+select c.id,e.id,e.ref_norm,e.entity_type,e.entity_id,e.raw,e.actor_user_id,
+  case when e.entity_type<>'bridge_title' or not exists(select 1 from public.bridge_titles t where t.id=e.entity_id)
+    or e.invoice_ref is null or e.statement_ref is null or e.amount_num is null
+    or e.amount_num not between 1 and 9223372036854775807::numeric or e.currency<>'INR'
+    then 'REVIEW_REQUIRED' else 'VALID' end,e.created_at
+from events e join public.bridge_settlement_reference_claims c on c.reference_normalized=e.ref_norm
+on conflict(source_audit_event_id) do nothing;
 
 alter table public.bridge_rights_evidence enable row level security;
 alter table public.bridge_rights_evidence_reviews enable row level security;
 alter table public.bridge_settlement_reference_claims enable row level security;
 alter table public.bridge_settlement_reference_claim_events enable row level security;
 
--- Replace only a single, simple kind-membership check after inspecting its live definition.
--- Preserve every currently allowed kind. Abort the migration (transaction rolls back) if the
--- constraint is missing, duplicated, or has an expression we cannot safely extend.
-do $
-declare
-  v_constraint_count integer;
-  v_constraint_name text;
-  v_definition text;
-  v_kinds text[];
-  v_values text;
+-- Inspect the existing check, preserve all existing allowed kinds, and fail closed if its shape is unexpected.
+do $$
+declare v_count integer; v_name text; v_def text; v_kinds text[]; v_values text;
 begin
-  select count(*) into v_constraint_count
-  from pg_constraint
-  where conrelid='public.bridge_assets'::regclass
-    and contype='c'
-    and pg_get_constraintdef(oid) ilike '%kind%';
-
-  if v_constraint_count <> 1 then
-    raise exception 'Expected exactly one bridge_assets kind check constraint; found %', v_constraint_count;
+  select count(*) into v_count from pg_constraint where conrelid='public.bridge_assets'::regclass
+    and contype='c' and pg_get_constraintdef(oid) ilike '%kind%';
+  if v_count<>1 then raise exception 'Expected one bridge_assets kind check; found %',v_count; end if;
+  select conname,pg_get_constraintdef(oid) into v_name,v_def from pg_constraint
+    where conrelid='public.bridge_assets'::regclass and contype='c' and pg_get_constraintdef(oid) ilike '%kind%';
+  if v_def !~* '^CHECK \(\(kind = ANY \(ARRAY\[.*\]\)\)\)$' then
+    raise exception 'Unsupported bridge_assets kind constraint: %',v_def;
   end if;
-
-  select conname, pg_get_constraintdef(oid)
-    into v_constraint_name, v_definition
-  from pg_constraint
-  where conrelid='public.bridge_assets'::regclass
-    and contype='c'
-    and pg_get_constraintdef(oid) ilike '%kind%';
-
-  if v_definition !~* '^CHECK ((kind = ANY (ARRAY[.*])))
-
--- No anon/authenticated grants or policies are added. Mutations remain server-side only.
-
-        then (metadata_json->>'amountPaise')::numeric
-      else null
-    end as amount_numeric,
-    coalesce(nullif(btrim(metadata_json->>'currency'),''),'INR') as currency,
-    actor_user_id,
-    created_at,
-    source_metadata
-  from raw_events
-  where nullif(btrim(metadata_json->>'reference'),'') is not null
-),
-reference_stats as (
-  select
-    reference_normalized,
-    min(reference) as reference,
-    count(*)::integer as event_count,
-    count(distinct entity_type)::integer as entity_type_count,
-    min(entity_type) as entity_type,
-    count(distinct entity_id)::integer as entity_id_count,
-    count(entity_id)::integer as entity_id_present_count,
-    min(entity_id) as entity_id,
-    count(distinct invoice_reference)::integer as invoice_count,
-    count(invoice_reference)::integer as invoice_present_count,
-    min(invoice_reference) as invoice_reference,
-    count(distinct statement_reference)::integer as statement_count,
-    count(statement_reference)::integer as statement_present_count,
-    min(statement_reference) as statement_reference,
-    count(distinct amount_numeric)::integer as amount_count,
-    count(amount_numeric)::integer as amount_present_count,
-    min(amount_numeric) as amount_numeric,
-    count(distinct currency)::integer as currency_count,
-    count(*) filter (where currency = 'INR')::integer as inr_count,
-    min(actor_user_id) as created_by,
-    min(created_at) as created_at
-  from events
-  group by reference_normalized
-)
-insert into public.bridge_settlement_reference_claims(
-  reference_normalized,reference,title_id,invoice_reference,statement_reference,
-  amount_paise,currency,claim_state,created_by,created_at
-)
-select
-  s.reference_normalized,
-  s.reference,
-  case
-    when s.entity_type_count=1 and s.entity_type='bridge_title'
-      and s.entity_id_count=1 and s.entity_id_present_count=s.event_count
-      and exists (select 1 from public.bridge_titles t where t.id=s.entity_id)
-    then s.entity_id else null
-  end,
-  case when s.invoice_count=1 and s.invoice_present_count=s.event_count then s.invoice_reference else null end,
-  case when s.statement_count=1 and s.statement_present_count=s.event_count then s.statement_reference else null end,
-  case
-    when s.amount_count=1 and s.amount_present_count=s.event_count
-      and s.amount_numeric between 1 and 9223372036854775807::numeric
-    then s.amount_numeric::bigint else null
-  end,
-  'INR',
-  case
-    when s.reference_normalized ~ '^(NOT[[:space:]]+(EXCECUTED|EXECUTED)|TBD|PENDING|UNEXECUTED)([[:space:]]|$)'
-      or s.entity_type_count<>1 or s.entity_type<>'bridge_title'
-      or s.entity_id_count<>1 or s.entity_id_present_count<>s.event_count
-      or not exists (select 1 from public.bridge_titles t where t.id=s.entity_id)
-      or s.invoice_count<>1 or s.invoice_present_count<>s.event_count
-      or s.statement_count<>1 or s.statement_present_count<>s.event_count
-      or s.amount_count<>1 or s.amount_present_count<>s.event_count
-      or s.amount_numeric not between 1 and 9223372036854775807::numeric
-      or s.currency_count<>1 or s.inr_count<>s.event_count
-    then 'REVIEW_REQUIRED'
-    else 'ACTIVE'
-  end,
-  s.created_by,
-  s.created_at
-from reference_stats s
-on conflict (reference_normalized) do nothing;
-
--- Attach every non-empty historical reference event to its grouped claim.
-with raw_events as (
-  select id,metadata::jsonb as metadata_json,entity_type,entity_id,actor_user_id,created_at,metadata as source_metadata
-  from public.bridge_audit_logs
-  where action='finance.settlement_evidence'
-    and jsonb_typeof(metadata::jsonb)='object'
-),
-events as (
-  select
-    id,
-    upper(btrim(metadata_json->>'reference')) as reference_normalized,
-    entity_type,
-    entity_id,
-    nullif(btrim(metadata_json->>'invoiceReference'),'') as invoice_reference,
-    nullif(btrim(metadata_json->>'statementReference'),'') as statement_reference,
-    case when coalesce(metadata_json->>'amountPaise','') ~ '^[1-9][0-9]{0,18}
-
-alter table public.bridge_rights_evidence enable row level security;
-alter table public.bridge_rights_evidence_reviews enable row level security;
-alter table public.bridge_settlement_reference_claims enable row level security;
-
--- Add a private rights-document upload kind without changing existing asset rows.
-alter table public.bridge_assets drop constraint if exists bridge_assets_kind_chk;
-alter table public.bridge_assets
-  add constraint bridge_assets_kind_chk
-  check (kind in (
-    'poster','poster_vertical','poster_horizontal','thumbnail','screener','master',
-    'subtitle','technical','censor_certificate','rights_document'
-  ));
-
--- No anon/authenticated grants or policies are added. Mutations remain server-side only.
-
-      then (metadata_json->>'amountPaise')::numeric else null end as amount_numeric,
-    coalesce(nullif(btrim(metadata_json->>'currency'),''),'INR') as currency,
-    actor_user_id,
-    created_at,
-    source_metadata
-  from raw_events
-  where nullif(btrim(metadata_json->>'reference'),'') is not null
-)
-insert into public.bridge_settlement_reference_claim_events(
-  claim_id,source_audit_event_id,reference_normalized,source_entity_type,
-  source_entity_id,source_metadata,actor_user_id,event_state,created_at
-)
-select
-  c.id,e.id,e.reference_normalized,e.entity_type,e.entity_id,e.source_metadata,e.actor_user_id,
-  case
-    when e.entity_type<>'bridge_title'
-      or not exists (select 1 from public.bridge_titles t where t.id=e.entity_id)
-      or e.invoice_reference is null or e.statement_reference is null
-      or e.amount_numeric is null
-      or e.amount_numeric not between 1 and 9223372036854775807::numeric
-      or e.currency<>'INR'
-    then 'REVIEW_REQUIRED' else 'VALID'
-  end,
-  e.created_at
-from events e
-join public.bridge_settlement_reference_claims c using(reference_normalized)
-on conflict (source_audit_event_id) do nothing;
-
-alter table public.bridge_rights_evidence enable row level security;
-alter table public.bridge_rights_evidence_reviews enable row level security;
-alter table public.bridge_settlement_reference_claims enable row level security;
-
--- Add a private rights-document upload kind without changing existing asset rows.
-alter table public.bridge_assets drop constraint if exists bridge_assets_kind_chk;
-alter table public.bridge_assets
-  add constraint bridge_assets_kind_chk
-  check (kind in (
-    'poster','poster_vertical','poster_horizontal','thumbnail','screener','master',
-    'subtitle','technical','censor_certificate','rights_document'
-  ));
-
--- No anon/authenticated grants or policies are added. Mutations remain server-side only.
- then
-    raise exception 'Unsupported bridge_assets kind constraint definition: %', v_definition;
-  end if;
-
-  select array_agg(distinct match[1] order by match[1])
-    into v_kinds
-  from regexp_matches(v_definition, '''([^'']*)''', 'g') as rm(match);
-
-  if coalesce(cardinality(v_kinds),0)=0 then
-    raise exception 'Could not read allowed kinds from bridge_assets constraint: %', v_definition;
-  end if;
-
-  if not ('rights_document'=any(v_kinds)) then
-    v_kinds := array_append(v_kinds,'rights_document');
-  end if;
-
-  select string_agg(quote_literal(kind_value),', ' order by kind_value) into v_values
-  from unnest(v_kinds) as u(kind_value);
-
-  execute format('alter table public.bridge_assets drop constraint %I',v_constraint_name);
+  select array_agg(distinct match[1] order by match[1]) into v_kinds
+    from regexp_matches(v_def, '''([^'']*)''', 'g') as rm(match);
+  if coalesce(cardinality(v_kinds),0)=0 then raise exception 'Cannot parse existing asset kinds: %',v_def; end if;
+  if not ('rights_document'=any(v_kinds)) then v_kinds:=array_append(v_kinds,'rights_document'); end if;
+  select string_agg(quote_literal(kind_value),', ' order by kind_value) into v_values from unnest(v_kinds) as u(kind_value);
+  execute format('alter table public.bridge_assets drop constraint %I',v_name);
   execute format('alter table public.bridge_assets add constraint bridge_assets_kind_chk check (kind in (%s))',v_values);
 end
-$;
-
--- No anon/authenticated grants or policies are added. Mutations remain server-side only.
-
-        then (metadata_json->>'amountPaise')::numeric
-      else null
-    end as amount_numeric,
-    coalesce(nullif(btrim(metadata_json->>'currency'),''),'INR') as currency,
-    actor_user_id,
-    created_at,
-    source_metadata
-  from raw_events
-  where nullif(btrim(metadata_json->>'reference'),'') is not null
-),
-reference_stats as (
-  select
-    reference_normalized,
-    min(reference) as reference,
-    count(*)::integer as event_count,
-    count(distinct entity_type)::integer as entity_type_count,
-    min(entity_type) as entity_type,
-    count(distinct entity_id)::integer as entity_id_count,
-    count(entity_id)::integer as entity_id_present_count,
-    min(entity_id) as entity_id,
-    count(distinct invoice_reference)::integer as invoice_count,
-    count(invoice_reference)::integer as invoice_present_count,
-    min(invoice_reference) as invoice_reference,
-    count(distinct statement_reference)::integer as statement_count,
-    count(statement_reference)::integer as statement_present_count,
-    min(statement_reference) as statement_reference,
-    count(distinct amount_numeric)::integer as amount_count,
-    count(amount_numeric)::integer as amount_present_count,
-    min(amount_numeric) as amount_numeric,
-    count(distinct currency)::integer as currency_count,
-    count(*) filter (where currency = 'INR')::integer as inr_count,
-    min(actor_user_id) as created_by,
-    min(created_at) as created_at
-  from events
-  group by reference_normalized
-)
-insert into public.bridge_settlement_reference_claims(
-  reference_normalized,reference,title_id,invoice_reference,statement_reference,
-  amount_paise,currency,claim_state,created_by,created_at
-)
-select
-  s.reference_normalized,
-  s.reference,
-  case
-    when s.entity_type_count=1 and s.entity_type='bridge_title'
-      and s.entity_id_count=1 and s.entity_id_present_count=s.event_count
-      and exists (select 1 from public.bridge_titles t where t.id=s.entity_id)
-    then s.entity_id else null
-  end,
-  case when s.invoice_count=1 and s.invoice_present_count=s.event_count then s.invoice_reference else null end,
-  case when s.statement_count=1 and s.statement_present_count=s.event_count then s.statement_reference else null end,
-  case
-    when s.amount_count=1 and s.amount_present_count=s.event_count
-      and s.amount_numeric between 1 and 9223372036854775807::numeric
-    then s.amount_numeric::bigint else null
-  end,
-  'INR',
-  case
-    when s.reference_normalized ~ '^(NOT[[:space:]]+(EXCECUTED|EXECUTED)|TBD|PENDING|UNEXECUTED)([[:space:]]|$)'
-      or s.entity_type_count<>1 or s.entity_type<>'bridge_title'
-      or s.entity_id_count<>1 or s.entity_id_present_count<>s.event_count
-      or not exists (select 1 from public.bridge_titles t where t.id=s.entity_id)
-      or s.invoice_count<>1 or s.invoice_present_count<>s.event_count
-      or s.statement_count<>1 or s.statement_present_count<>s.event_count
-      or s.amount_count<>1 or s.amount_present_count<>s.event_count
-      or s.amount_numeric not between 1 and 9223372036854775807::numeric
-      or s.currency_count<>1 or s.inr_count<>s.event_count
-    then 'REVIEW_REQUIRED'
-    else 'ACTIVE'
-  end,
-  s.created_by,
-  s.created_at
-from reference_stats s
-on conflict (reference_normalized) do nothing;
-
--- Attach every non-empty historical reference event to its grouped claim.
-with raw_events as (
-  select id,metadata::jsonb as metadata_json,entity_type,entity_id,actor_user_id,created_at,metadata as source_metadata
-  from public.bridge_audit_logs
-  where action='finance.settlement_evidence'
-    and jsonb_typeof(metadata::jsonb)='object'
-),
-events as (
-  select
-    id,
-    upper(btrim(metadata_json->>'reference')) as reference_normalized,
-    entity_type,
-    entity_id,
-    nullif(btrim(metadata_json->>'invoiceReference'),'') as invoice_reference,
-    nullif(btrim(metadata_json->>'statementReference'),'') as statement_reference,
-    case when coalesce(metadata_json->>'amountPaise','') ~ '^[1-9][0-9]{0,18}
-
-alter table public.bridge_rights_evidence enable row level security;
-alter table public.bridge_rights_evidence_reviews enable row level security;
-alter table public.bridge_settlement_reference_claims enable row level security;
-
--- Add a private rights-document upload kind without changing existing asset rows.
-alter table public.bridge_assets drop constraint if exists bridge_assets_kind_chk;
-alter table public.bridge_assets
-  add constraint bridge_assets_kind_chk
-  check (kind in (
-    'poster','poster_vertical','poster_horizontal','thumbnail','screener','master',
-    'subtitle','technical','censor_certificate','rights_document'
-  ));
-
--- No anon/authenticated grants or policies are added. Mutations remain server-side only.
-
-      then (metadata_json->>'amountPaise')::numeric else null end as amount_numeric,
-    coalesce(nullif(btrim(metadata_json->>'currency'),''),'INR') as currency,
-    actor_user_id,
-    created_at,
-    source_metadata
-  from raw_events
-  where nullif(btrim(metadata_json->>'reference'),'') is not null
-)
-insert into public.bridge_settlement_reference_claim_events(
-  claim_id,source_audit_event_id,reference_normalized,source_entity_type,
-  source_entity_id,source_metadata,actor_user_id,event_state,created_at
-)
-select
-  c.id,e.id,e.reference_normalized,e.entity_type,e.entity_id,e.source_metadata,e.actor_user_id,
-  case
-    when e.entity_type<>'bridge_title'
-      or not exists (select 1 from public.bridge_titles t where t.id=e.entity_id)
-      or e.invoice_reference is null or e.statement_reference is null
-      or e.amount_numeric not between 1 and 9223372036854775807::numeric
-      or e.currency<>'INR'
-    then 'REVIEW_REQUIRED' else 'VALID'
-  end,
-  e.created_at
-from events e
-join public.bridge_settlement_reference_claims c using(reference_normalized)
-on conflict (source_audit_event_id) do nothing;
-
-alter table public.bridge_rights_evidence enable row level security;
-alter table public.bridge_rights_evidence_reviews enable row level security;
-alter table public.bridge_settlement_reference_claims enable row level security;
-
--- Add a private rights-document upload kind without changing existing asset rows.
-alter table public.bridge_assets drop constraint if exists bridge_assets_kind_chk;
-alter table public.bridge_assets
-  add constraint bridge_assets_kind_chk
-  check (kind in (
-    'poster','poster_vertical','poster_horizontal','thumbnail','screener','master',
-    'subtitle','technical','censor_certificate','rights_document'
-  ));
+$$;
 
 -- No anon/authenticated grants or policies are added. Mutations remain server-side only.
