@@ -23,10 +23,12 @@ type TitleRow = {
   owner_account_type: string;
   owner_organization_id?: string | null;
   status: string;
+  submission_type?: string | null;
   synopsis: string;
   language: string;
   year: number | null;
   runtime_minutes: number | null;
+  genres?: string[];
   licensing_fee_paise: number;
   poster_key: string | null;
   master_key: string | null;
@@ -53,10 +55,12 @@ export function mapTitle(r: TitleRow): BridgeTitle {
     ownerAccountType: r.owner_account_type as AccountType,
     ownerOrganizationId: r.owner_organization_id ?? null,
     status: r.status as TitleStatus,
+    submissionType: r.submission_type ?? "finished_film",
     synopsis: r.synopsis,
     language: r.language,
     year: r.year,
     runtimeMinutes: r.runtime_minutes,
+    genres: Array.isArray(r.genres) ? r.genres : [],
     licensingFeePaise: Number(r.licensing_fee_paise ?? 0),
     posterKey: r.poster_key,
     masterKey: r.master_key,
@@ -84,9 +88,9 @@ async function hasTitleMergeColumn(sql: Sql): Promise<boolean> {
 
 async function listCatalog(sql: Sql): Promise<TitleRow[]> {
   if (!(await hasTitleMergeColumn(sql))) {
-    return sql<TitleRow>`select * from bridge_titles order by updated_at desc limit 200`;
+    return sql<TitleRow>`select * from bridge_titles where coalesce(submission_type, 'finished_film') = 'finished_film' order by updated_at desc limit 200`;
   }
-  return sql<TitleRow>`select * from bridge_titles where merged_into_title_id is null order by updated_at desc limit 200`;
+  return sql<TitleRow>`select * from bridge_titles where coalesce(submission_type, 'finished_film') = 'finished_film' and merged_into_title_id is null order by updated_at desc limit 200`;
 }
 
 async function listOwned(sql: Sql, userId: string, organizationId: string | null | undefined): Promise<TitleRow[]> {
@@ -94,13 +98,14 @@ async function listOwned(sql: Sql, userId: string, organizationId: string | null
   const mergeColumnAvailable = await hasTitleMergeColumn(sql);
   if (!orgId) {
     return mergeColumnAvailable
-      ? sql<TitleRow>`select * from bridge_titles where owner_user_id = ${userId} and merged_into_title_id is null order by updated_at desc limit 200`
-      : sql<TitleRow>`select * from bridge_titles where owner_user_id = ${userId} order by updated_at desc limit 200`;
+      ? sql<TitleRow>`select * from bridge_titles where owner_user_id = ${userId} and coalesce(submission_type, 'finished_film') = 'finished_film' and merged_into_title_id is null order by updated_at desc limit 200`
+      : sql<TitleRow>`select * from bridge_titles where owner_user_id = ${userId} and coalesce(submission_type, 'finished_film') = 'finished_film' order by updated_at desc limit 200`;
   }
   return mergeColumnAvailable
     ? sql<TitleRow>`
         select t.* from bridge_titles t
         where t.merged_into_title_id is null
+          and coalesce(t.submission_type, 'finished_film') = 'finished_film'
           and (
             t.owner_user_id = ${userId}
             or (
@@ -118,7 +123,8 @@ async function listOwned(sql: Sql, userId: string, organizationId: string | null
       `
     : sql<TitleRow>`
         select t.* from bridge_titles t
-        where t.owner_user_id = ${userId}
+        where coalesce(t.submission_type, 'finished_film') = 'finished_film'
+          and (t.owner_user_id = ${userId}
           or (
             t.owner_account_type = 'studio'
             and t.owner_organization_id = ${orgId}
@@ -128,6 +134,7 @@ async function listOwned(sql: Sql, userId: string, organizationId: string | null
                 and m.user_id = ${userId}
                 and m.status = 'active'
             )
+          )
           )
         order by t.updated_at desc limit 200
       `;
@@ -184,6 +191,7 @@ export const createTitle = createServerFn({ method: "POST" })
       additionalLanguages: z.array(z.string().min(2).max(40)).max(20).optional(),
       year: z.number().int().min(1895).max(2100).optional(),
       runtimeMinutes: z.number().int().min(1).max(600).optional(),
+      genres: z.array(z.string().min(1).max(40)).min(1).max(12).optional(),
       licensingFeePaise: z.number().int().min(0).max(2_000_000_000).optional(),
       contentType: z.string().min(1).max(80).optional(),
       countryOfOrigin: z.string().max(80).optional(),
@@ -260,13 +268,13 @@ export const createTitle = createServerFn({ method: "POST" })
         insert into bridge_titles (
           id, slug, name, name_ml, owner_user_id, owner_account_type, status,
           synopsis, language, year, runtime_minutes, licensing_fee_paise,
-          content_type, country_of_origin, release_date, credits, owner_organization_id
+          content_type, country_of_origin, release_date, genres, credits, owner_organization_id
         ) values (
           ${id}, ${slug}, ${data.name}, ${data.nameMl ?? null}, ${actor.userId}, ${actor.accountType},
           ${"DRAFT"}, ${data.synopsis ?? ""}, ${data.language ?? "Malayalam"},
           ${data.year ?? null}, ${data.runtimeMinutes ?? null}, ${data.licensingFeePaise ?? 0},
           ${loopStageType(data.contentType)}, ${data.countryOfOrigin ?? null},
-          ${data.releaseDate ?? null}, ${JSON.stringify([
+          ${data.releaseDate ?? null}, ${JSON.stringify(data.genres ?? [])}::jsonb, ${JSON.stringify([
             ...(data.director ? [{ role: "Director", name: data.director }] : []),
             ...(data.producer ? [{ role: "Producer", name: data.producer }] : []),
             ...(data.cast ?? []).map((name) => ({ role: "Cast", name })),
@@ -345,6 +353,7 @@ export const listTitles = createServerFn({ method: "GET" })
         rows = await sql<TitleRow>`
           select t.* from bridge_titles t
           where t.merged_into_title_id is null
+            and coalesce(t.submission_type, 'finished_film') = 'finished_film'
             and t.status in ('LIVE_FOR_BUYERS','IN_NEGOTIATION','LICENSED','DELIVERED')
             and public.bridge_title_buyer_visibility(t.id)
           order by t.updated_at desc limit 200
@@ -352,7 +361,8 @@ export const listTitles = createServerFn({ method: "GET" })
       } else {
         rows = await sql<TitleRow>`
           select t.* from bridge_titles t
-          where t.status in ('LIVE_FOR_BUYERS','IN_NEGOTIATION','LICENSED','DELIVERED')
+          where coalesce(t.submission_type, 'finished_film') = 'finished_film'
+            and t.status in ('LIVE_FOR_BUYERS','IN_NEGOTIATION','LICENSED','DELIVERED')
             and public.bridge_title_buyer_visibility(t.id)
           order by t.updated_at desc limit 200
         `;
@@ -421,6 +431,9 @@ export const updateTitle = createServerFn({ method: "POST" })
       language: z.string().min(2).max(40).optional(),
       year: z.number().int().min(1895).max(2100).nullable().optional(),
       runtimeMinutes: z.number().int().min(1).max(600).nullable().optional(),
+      genres: z.array(z.string().min(1).max(40)).max(12).optional(),
+      director: z.string().max(160).optional(),
+      cast: z.array(z.string().min(1).max(160)).max(100).optional(),
       licensingFeePaise: z.number().int().min(0).max(2_000_000_000).optional(),
       contentType: z.string().min(1).max(80).optional(),
     }),
@@ -441,6 +454,19 @@ export const updateTitle = createServerFn({ method: "POST" })
     ) {
       throw new Error("Title is locked after prepare");
     }
+    const currentCredits = title.credits ?? [];
+    const directorCredits = currentCredits.filter((credit) => credit.role.trim().toUpperCase() === "DIRECTOR");
+    const castCredits = currentCredits.filter((credit) => ["CAST", "ACTOR", "ACTRESS"].includes(credit.role.trim().toUpperCase()));
+    const otherCredits = currentCredits.filter((credit) => !["DIRECTOR", "CAST", "ACTOR", "ACTRESS"].includes(credit.role.trim().toUpperCase()));
+    const nextCredits = [
+      ...otherCredits,
+      ...(data.director === undefined
+        ? directorCredits
+        : data.director.trim() ? [{ role: "Director", name: data.director.trim() }] : []),
+      ...(data.cast === undefined
+        ? castCredits
+        : data.cast.map((name) => ({ role: "Cast", name: name.trim() })).filter((credit) => credit.name)),
+    ];
     const sql = await getSql();
     await sql`
       update bridge_titles set
@@ -450,6 +476,8 @@ export const updateTitle = createServerFn({ method: "POST" })
         language = ${data.language ?? title.language},
         year = ${data.year === undefined ? title.year : data.year},
         runtime_minutes = ${data.runtimeMinutes === undefined ? title.runtimeMinutes : data.runtimeMinutes},
+        genres = ${JSON.stringify(data.genres ?? title.genres ?? [])}::jsonb,
+        credits = ${JSON.stringify(nextCredits)}::jsonb,
         licensing_fee_paise = ${data.licensingFeePaise ?? title.licensingFeePaise},
         content_type = ${data.contentType ? loopStageType(data.contentType) : title.contentType},
         updated_at = now()

@@ -10,7 +10,7 @@ import { z } from "zod";
 import * as policy from "./workflow-policy.ts";
 import * as rbac from "./rbac.ts";
 import * as assetRoles from "./asset-roles.ts";
-import { submitTitleForQc } from "./title-submission.ts";
+import { missingFinishedFilmMetadata, submitTitleForQc } from "./title-submission.ts";
 import type { Sql } from "../db";
 
 type TestDb = {
@@ -79,6 +79,11 @@ async function fixture() {
       owner_account_type text not null default 'independent_creator',
       owner_organization_id uuid,
       status text,
+      submission_type text default 'finished_film',
+      language text default 'Malayalam',
+      runtime_minutes integer default 100,
+      genres jsonb not null default '["Drama"]'::jsonb,
+      credits jsonb not null default '[{"role":"Director","name":"Test Director"},{"role":"Cast","name":"Test Cast"}]'::jsonb,
       master_key text,
       poster_key text,
       updated_at timestamptz
@@ -375,6 +380,96 @@ test("Submit for QC advances PREPARING with the referenced vertical poster and w
       (await f.sql.query(
         "select * from bridge_qc_cases where title_id='qc-submit-title'",
       )).length,
+      0,
+    );
+  } finally {
+    await f.db.close();
+  }
+});
+
+
+test("finished-film metadata validator requires language, runtime, genre, director and cast", () => {
+  const complete = {
+    submission_type: "finished_film",
+    language: "Malayalam",
+    runtime_minutes: 120,
+    genres: ["Drama"],
+    credits: [
+      { role: "Director", name: "Director One" },
+      { role: "Cast", name: "Actor One" },
+    ],
+  };
+  assert.deepEqual(missingFinishedFilmMetadata(complete), []);
+  const cases = [
+    [{ ...complete, language: "  " }, "Language"],
+    [{ ...complete, runtime_minutes: null }, "Runtime"],
+    [{ ...complete, genres: [] }, "Genre"],
+    [{ ...complete, credits: [{ role: "Cast", name: "Actor One" }] }, "Director"],
+    [{ ...complete, credits: [{ role: "Director", name: "Director One" }] }, "Cast"],
+    [{ ...complete, submission_type: "story_concept" }, "Finished Film submission type"],
+  ] as const;
+  for (const [candidate, expected] of cases) {
+    assert.ok(missingFinishedFilmMetadata(candidate).includes(expected), `expected ${expected} to be required`);
+  }
+});
+
+test("Submit for QC rejects Story Concepts and leaves lifecycle unchanged", async () => {
+  const f = await fixture();
+  try {
+    await f.sql.query(`
+      insert into bridge_titles(id,owner_user_id,status,submission_type,master_key,poster_key,updated_at)
+      values ('qc-story-concept','owner','PREPARING','story_concept','sealed/story-master','sealed/story-poster',now())
+    `);
+    await f.sql.query(`
+      insert into bridge_assets values
+        ('story-master','qc-story-concept','master','sealed/story-master',4096),
+        ('story-poster','qc-story-concept','poster_vertical','sealed/story-poster',1024)
+    `);
+    await assert.rejects(
+      submitTitleForQc(f.sql, {
+        id: "qc-story-concept",
+        status: "PREPARING",
+        masterKey: "sealed/story-master",
+        posterKey: "sealed/story-poster",
+      }, "owner"),
+      /Finished Film submission type/,
+    );
+    assert.equal(
+      (await f.sql.query<{ status: string }>("select status from bridge_titles where id='qc-story-concept'"))[0].status,
+      "PREPARING",
+    );
+  } finally {
+    await f.db.close();
+  }
+});
+
+test("Submit for QC rejects incomplete metadata before lifecycle writes", async () => {
+  const f = await fixture();
+  try {
+    await f.sql.query(`
+      insert into bridge_titles(id,owner_user_id,status,master_key,poster_key,updated_at,genres)
+      values ('qc-missing-genre','owner','PREPARING','sealed/genre-master','sealed/genre-poster',now(),'[]'::jsonb)
+    `);
+    await f.sql.query(`
+      insert into bridge_assets values
+        ('genre-master','qc-missing-genre','master','sealed/genre-master',4096),
+        ('genre-poster','qc-missing-genre','poster_vertical','sealed/genre-poster',1024)
+    `);
+    await assert.rejects(
+      submitTitleForQc(f.sql, {
+        id: "qc-missing-genre",
+        status: "PREPARING",
+        masterKey: "sealed/genre-master",
+        posterKey: "sealed/genre-poster",
+      }, "owner"),
+      /Genre/,
+    );
+    assert.equal(
+      (await f.sql.query<{ status: string }>("select status from bridge_titles where id='qc-missing-genre'"))[0].status,
+      "PREPARING",
+    );
+    assert.equal(
+      (await f.sql.query("select * from bridge_title_events where title_id='qc-missing-genre'")).length,
       0,
     );
   } finally {
