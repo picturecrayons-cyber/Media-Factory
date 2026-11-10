@@ -25,7 +25,7 @@ export function assertSupabaseProjectTarget(
     return;
   }
 
-  if (!["preview", "production", "local", "test"].includes(target)) {
+  if (!isDeploymentTarget(target)) {
     throw new Error("CONFIG_MISSING: unsupported VITE_SUPABASE_TARGET.");
   }
 
