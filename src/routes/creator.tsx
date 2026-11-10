@@ -15,12 +15,12 @@ const IN_PROGRESS = new Set(["UPLOADING", "PREPARING", "QC_REVIEW", "RIGHTS_REVI
 
 function Creator() {
   return <RequireBridge allow="creator">{(actor) => (
-    <BridgeShell actor={actor} title="Creator dashboard"><CreatorDashboard /></BridgeShell>
+    <BridgeShell actor={actor} title="Creator dashboard"><CreatorDashboard actor={actor} /></BridgeShell>
   )}</RequireBridge>;
 }
 
-function CreatorDashboard() {
-  const titlesQ = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles(), retry: 1 });
+function CreatorDashboard({ actor }: { actor: { userId: string; organizationId: string | null } }) {
+  const titlesQ = useQuery({ queryKey: ["bridge-titles", actor.userId, actor.organizationId], queryFn: () => listTitles(), retry: 1 });
   const titles = titlesQ.data?.titles ?? [];
   const live = titles.filter((t) => LIVE.has(t.status));
   const progress = titles.filter((t) => IN_PROGRESS.has(t.status));
