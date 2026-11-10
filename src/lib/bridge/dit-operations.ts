@@ -1,4 +1,5 @@
-import { createServerFn } from "@tanstack/react-start";
+import { createServerFn, createServerOnlyFn } from "@tanstack/react-start";
+import * as storage from "./oci-object-storage.server";
 import { z } from "zod";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
@@ -197,7 +198,6 @@ export const prepareDitClipUpload = createServerFn({ method: "POST" })
   .validator(prepareInput)
   .handler(async ({ context, data }) => {
     assertDitStagingDatabase();
-    const storage = await import("./oci-object-storage.server");
     const actor = await requireVerifiedActor(context.userId);
     const sql = await getSql();
     const rows = await sql<{
@@ -256,7 +256,6 @@ export const verifyAndReplicateDitClip = createServerFn({ method: "POST" })
   .validator(confirmInput)
   .handler(async ({ context, data }) => {
     assertDitStagingDatabase();
-    const storage = await import("./oci-object-storage.server");
     const actor = await requireVerifiedActor(context.userId);
     const sql = await getSql();
     const rows = await sql<{
@@ -525,9 +524,8 @@ type DitWorkerJob = {
   created_by: string; production_id: string;
 };
 
-export async function claimNextDitConversionJob(workerId: string) {
+export const claimNextDitConversionJob = createServerOnlyFn(async (workerId: string) => {
   assertDitStagingDatabase();
-  const storage = await import("./oci-object-storage.server");
   if (!workerId.trim() || workerId.length > 120) throw new Error("Worker identity required");
   const targets = replicaTargets();
   const sql = await getSql();
@@ -565,16 +563,15 @@ export async function claimNextDitConversionJob(workerId: string) {
       masterUploadUrl: masterUpload.url, backupUploadUrl: backupUpload.url,
       masterKey, backupKey, profile: job.profile, workerId } };
   });
-}
+});
 
 const conversionCompleteInput = z.object({
   jobId: z.string().uuid(),
   master: z.object({ byteSize: z.number().int().positive(), sha256: z.string().regex(/^[a-fA-F0-9]{64}$/), width: z.number().int().positive(), height: z.number().int().positive(), codec: z.string().min(1).max(100) }),
   backup1: z.object({ byteSize: z.number().int().positive(), sha256: z.string().regex(/^[a-fA-F0-9]{64}$/), width: z.number().int().positive(), height: z.number().int().positive(), codec: z.string().min(1).max(100) }),
 });
-export async function completeDitConversionJob(input: z.infer<typeof conversionCompleteInput>) {
+export const completeDitConversionJob = createServerOnlyFn(async (input: z.infer<typeof conversionCompleteInput>) => {
   assertDitStagingDatabase();
-  const storage = await import("./oci-object-storage.server");
   const data = conversionCompleteInput.parse(input);
   const sql = await getSql();
   const rows = await sql<DitWorkerJob>`
@@ -655,9 +652,9 @@ export async function completeDitConversionJob(input: z.infer<typeof conversionC
       from bridge_production_ingest_manifests m where m.id=(select manifest_id from bridge_production_clips where id=${job.clip_id})`;
   });
   return { ok: true, state: "COMPLETE" as const, jobId: job.id };
-}
+});
 
-export async function failDitConversionJob(jobId: string, reason: string) {
+export const failDitConversionJob = createServerOnlyFn(async (jobId: string, reason: string) => {
   assertDitStagingDatabase();
   const sql = await getSql();
   const safeReason = reason.trim().slice(0, 500) || "Worker failed";
@@ -669,4 +666,4 @@ export async function failDitConversionJob(jobId: string, reason: string) {
     history=history || ${JSON.stringify([{ state: next, at: new Date().toISOString(), detail: safeReason }])}::jsonb,
     updated_at=now() where id=${jobId}`;
   return { state: next };
-}
+});
