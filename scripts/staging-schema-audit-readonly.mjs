@@ -130,9 +130,9 @@ const queries = {
       from pg_proc p
       join pg_namespace n on n.oid = p.pronamespace
       left join pg_roles r on r.rolname in ('anon','authenticated','service_role','postgres')
-     where n.nspname = 'public'
+     where n.nspname in ('public', 'bridge_private')
      group by n.nspname, p.proname, p.oid, p.prokind, p.prosecdef, p.proconfig, p.proowner
-     order by p.proname, identity_arguments
+     order by n.nspname, p.proname, identity_arguments
   `,
   roleMemberships: `
     select parent.rolname as granted_role, member.rolname as member_role,
