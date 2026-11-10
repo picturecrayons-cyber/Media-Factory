@@ -106,7 +106,7 @@ async function requireProductionAccess(sql: Awaited<ReturnType<typeof getSql>>, 
     ownerUserId: row.owner_user_id,
     ownerAccountType: row.owner_account_type as "independent_creator" | "studio" | "buyer" | "investor",
     ownerOrganizationId: row.owner_organization_id,
-  }, "title.advance_upload", "title.advance_upload")) throw new Error("Forbidden");
+  }, "production.dit_operate", "production.dit_operate")) throw new Error("Forbidden");
   return row;
 }
 
@@ -162,7 +162,7 @@ export const createDitProduction = createServerFn({ method: "POST" })
         ownerUserId: title.owner_user_id,
         ownerAccountType: title.owner_account_type as "independent_creator" | "studio" | "buyer" | "investor",
         ownerOrganizationId: title.owner_organization_id,
-      }, "title.advance_upload", "title.advance_upload")) throw new Error("Forbidden");
+      }, "production.dit_operate", "production.dit_operate")) throw new Error("Forbidden");
       await tx`insert into bridge_productions(id,title_id,organization_id,production_name,production_no,created_by)
         values (${id},${data.titleId},${actor.organizationId ?? null},${data.productionName},${data.productionNo},${actor.userId})`;
       await tx`insert into bridge_production_shooting_days(id,production_id,day_number,shooting_date)
@@ -202,7 +202,7 @@ export const createDitCameraCard = createServerFn({ method: "POST" })
       ownerUserId: production.owner_user_id,
       ownerAccountType: production.owner_account_type as "independent_creator" | "studio" | "buyer" | "investor",
       ownerOrganizationId: production.owner_organization_id,
-    }, "title.advance_upload", "title.advance_upload")) throw new Error("Forbidden");
+    }, "production.dit_operate", "production.dit_operate")) throw new Error("Forbidden");
     const day = await sql`select id from bridge_production_shooting_days where id=${data.shootingDayId} and production_id=${data.productionId} limit 1`;
     if (!day.length) throw new Error("Shooting day does not belong to this production");
     const cardId = randomUUID();
@@ -247,7 +247,7 @@ export const prepareDitClipUpload = createServerFn({ method: "POST" })
       ownerUserId: row.owner_user_id,
       ownerAccountType: row.owner_account_type as "independent_creator" | "studio" | "buyer" | "investor",
       ownerOrganizationId: row.owner_organization_id,
-    }, "title.advance_upload", "title.advance_upload")) throw new Error("Forbidden");
+    }, "production.dit_operate", "production.dit_operate")) throw new Error("Forbidden");
     const manifestId = randomUUID();
     const clipId = randomUUID();
     const createdAt = new Date().toISOString();
@@ -314,7 +314,7 @@ export const verifyAndReplicateDitClip = createServerFn({ method: "POST" })
       ownerUserId: row.owner_user_id,
       ownerAccountType: row.owner_account_type as "independent_creator" | "studio" | "buyer" | "investor",
       ownerOrganizationId: row.owner_organization_id,
-    }, "title.advance_upload", "title.advance_upload")) throw new Error("Forbidden");
+    }, "production.dit_operate", "production.dit_operate")) throw new Error("Forbidden");
     const targets = replicaTargets();
     const expectedHash = row.checksum_sha256.toLowerCase();
     const expectedBytes = Number(row.byte_size);
@@ -526,7 +526,7 @@ export const queueDitConversion = createServerFn({ method: "POST" })
     const row = rows[0];
     if (!row || !canOperateOnTitle(actor, { ownerUserId: row.owner_user_id,
       ownerAccountType: row.owner_account_type as "independent_creator" | "studio" | "buyer" | "investor",
-      ownerOrganizationId: row.owner_organization_id }, "title.advance_upload", "title.advance_upload")) throw new Error("Forbidden");
+      ownerOrganizationId: row.owner_organization_id }, "production.dit_operate", "production.dit_operate")) throw new Error("Forbidden");
     if (!row.source_object_key || row.source_copy_result !== "PASS") throw new Error("Verified MASTER RAW source copy is required");
     const clip: ClipLedgerEntry = {
       clipNumber: row.clip_number, originalFilename: row.original_filename, originalRelativePath: row.original_relative_path,
