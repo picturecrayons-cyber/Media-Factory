@@ -440,12 +440,12 @@ export function evaluateDitSignoff(input: DitSignoff): {
 export function requiredCopyMatrix(clips: ClipRecord[], audioCount: number, stillsCount: number) {
   const targets: Array<{ clipNumber: string; kind: MediaKind; tier: StorageTier }> = [];
   for (const clip of clips) {
-    for (const tier of ["MASTER", "BACKUP_1"] as const) targets.push({ clipNumber: clip.clipNumber, kind: "RAW", tier });
+    for (const tier of ["MASTER", "BACKUP_1", "BACKUP_2"] as const) targets.push({ clipNumber: clip.clipNumber, kind: "RAW", tier });
     targets.push({ clipNumber: clip.clipNumber, kind: "CONVERTED", tier: "MASTER" });
     targets.push({ clipNumber: clip.clipNumber, kind: "CONVERTED", tier: "BACKUP_1" });
   }
-  for (let i = 0; i < audioCount; i++) for (const tier of ["MASTER", "BACKUP_1"] as const) targets.push({ clipNumber: `AUDIO_${i + 1}`, kind: "AUDIO", tier });
-  for (let i = 0; i < stillsCount; i++) for (const tier of ["MASTER", "BACKUP_1"] as const) targets.push({ clipNumber: `STILL_${i + 1}`, kind: "STILLS", tier });
+  for (let i = 0; i < audioCount; i++) for (const tier of ["MASTER", "BACKUP_1", "BACKUP_2"] as const) targets.push({ clipNumber: `AUDIO_${i + 1}`, kind: "AUDIO", tier });
+  for (let i = 0; i < stillsCount; i++) for (const tier of ["MASTER", "BACKUP_1", "BACKUP_2"] as const) targets.push({ clipNumber: `STILL_${i + 1}`, kind: "STILLS", tier });
   return targets;
 }
 
