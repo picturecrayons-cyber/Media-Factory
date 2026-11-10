@@ -13,6 +13,7 @@ import { persistVerifiedAsset } from "./asset-confirmation";
 import { downloadDecision } from "./delivery-policy";
 import { uploadUrlLifetimeSeconds } from "./upload-url-lifetime";
 import { validateOttIngestFile, type OttIngestKind } from "./ott-ingest-spec";
+import { hasActiveInvestorPreviewGrant } from "./investor-preview-access";
 
 const UPLOADABLE: ReadonlySet<string> = new Set(["DRAFT", "UPLOADING", "PREPARING"]);
 
