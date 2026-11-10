@@ -105,7 +105,7 @@ create table if not exists bridge_production_copy_verifications (
   id text primary key,
   clip_id uuid not null references bridge_production_clips(id) on delete restrict,
   media_kind text not null check (media_kind in ('RAW','AUDIO','STILLS','CONVERTED')),
-  storage_tier text not null check (storage_tier in ('MASTER','BACKUP_1','BACKUP_2')),
+  storage_tier text not null check (storage_tier in ('MASTER','BACKUP_1')),
   object_key text not null check (length(trim(object_key)) > 0),
   expected_byte_size bigint not null check (expected_byte_size > 0),
   expected_sha256 text not null check (expected_sha256 ~ '^[a-fA-F0-9]{64}$'),
