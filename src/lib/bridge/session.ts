@@ -59,20 +59,19 @@ async function loadActorByBridgeUserId(userId: string): Promise<BridgeActor | nu
   // scope. Never infer an ID from organization_name or use another environment's ID.
   try {
     const memberships = await sql<{ organization_id: string }>`
-      select bp.organization_id
-      from bridge_profiles bp
-      join bridge_organization_memberships m
-        on m.organization_id = bp.organization_id
-       and m.user_id = bp.user_id
-       and m.status = 'active'
+      select m.organization_id::text as organization_id
+      from bridge_organization_memberships m
       join bridge_organizations o
         on o.id = m.organization_id
        and o.status = 'active'
-      where bp.user_id = ${userId}
-        and bp.organization_id is not null
-      limit 1
+      where m.user_id = ${userId}
+        and m.status = 'active'
+      order by m.organization_id
     `;
-    actor.organizationId = memberships[0]?.organization_id ?? null;
+    actor.organizationIds = memberships.map((membership) => membership.organization_id);
+    // Keep the singular field temporarily for legacy callers; authorization
+    // predicates must use organizationIds when available.
+    actor.organizationId = actor.organizationIds[0] ?? null;
   } catch (error) {
     if (!isMissingOrganizationSchemaError(error)) throw error;
     actor.organizationId = null;
