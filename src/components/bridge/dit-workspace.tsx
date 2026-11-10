@@ -9,7 +9,7 @@ import { hashFileSha256 } from "@/lib/bridge/sha256-stream";
 
 type DitWorkspaceProps = { canReview: boolean };
 type DitCard = {
-  id: string; title_id: string; titleName: string; productionName: string; productionNo: string;
+  id: string; titleId: string; titleName: string; productionName: string; productionNo: string; dayNumber: number;
   shootingDayId: string; shootingDate: string; cameraCardId: string; cameraId: string; cardNo: string;
   cardState: string; clipCount: number; clips?: Array<{ id: string; clipNumber: string; automatedResult: string; humanDisposition: string | null }>;
 };
@@ -61,7 +61,6 @@ export function DitWorkspace({ canReview }: DitWorkspaceProps) {
   const titles = titlesQuery.data?.titles ?? [];
   const cards = (ditQuery.data ?? []) as DitCard[];
   const selectedTitle = titles.find((item: any) => item.id === titleId);
-  const selectedProduction = cards.find((item) => item.id === productionId);
   const refresh = async () => {
     await Promise.all([
       qc.invalidateQueries({ queryKey: ["dit-operations"] }),
@@ -235,7 +234,7 @@ export function DitWorkspace({ canReview }: DitWorkspaceProps) {
         {ditQuery.isLoading ? <p className="mt-3 text-sm text-muted">Loading DIT records…</p> : ditQuery.isError ? <p className="mt-3 text-sm text-red-500">DIT schema or STAGING binding is unavailable. No data is fabricated.</p> : !cards.length ? <p className="mt-3 text-sm text-muted">No DIT production records yet.</p> : <div className="mt-3 space-y-3">{cards.map((card) => (
           <div key={card.cameraCardId} className="rounded-xl border border-line p-3">
             <div className="flex flex-wrap items-center justify-between gap-2"><div><p className="font-medium">{card.titleName} · {card.productionNo}</p><p className="text-xs text-muted">Day {card.dayNumber} · Camera {card.cameraId} · {card.cardNo} · {card.cardState}</p></div>
-              {canReview ? <button type="button" onClick={() => void signoff(card)} className="rounded-full border border-line px-3 py-1.5 text-xs">Evaluate DIT sign-off</button> : null}
+              {canReview && card.cameraCardId ? <button type="button" onClick={() => void signoff(card)} className="rounded-full border border-line px-3 py-1.5 text-xs">Evaluate DIT sign-off</button> : null}
             </div>
             {card.clips?.map((clip) => <div key={clip.id} className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t border-line pt-2 text-xs">
               <span>{clip.clipNumber} · QC {clip.automatedResult} · Human {clip.humanDisposition ?? "PENDING"}</span>
