@@ -13,6 +13,7 @@ import { persistVerifiedAsset } from "./asset-confirmation";
 import { downloadDecision } from "./delivery-policy";
 import { uploadUrlLifetimeSeconds } from "./upload-url-lifetime";
 import { validateOttIngestFile, type OttIngestKind } from "./ott-ingest-spec";
+import { assertBuyerHasActiveScreeningGrant } from "./buyer-screening-access";
 
 const UPLOADABLE: ReadonlySet<string> = new Set(["DRAFT", "UPLOADING", "PREPARING"]);
 
@@ -279,12 +280,16 @@ export const requestAssetDownload = createServerFn({ method: "POST" })
     const title = await loadTitle(asset.title_id);
     if (!title || !canReadTitle(actor, title)) throw new Error("Not found");
     const entitled = await hasLicenseEntitlement(actor.userId, title.id);
+    const hasPrivateScreeningGrant = actor.accountType === "buyer" && asset.kind === "screener"
+      ? await assertBuyerHasActiveScreeningGrant(title.id, actor.userId).then(() => true).catch(() => false)
+      : false;
     const decision = downloadDecision({
       kind: asset.kind,
       actorIsOwner: title.ownerUserId === actor.userId,
       actorIsInternal: Boolean(actor.internalRole),
       accountType: actor.accountType,
       hasLicenseEntitlement: entitled,
+      hasPrivateScreeningGrant,
     });
     if (!decision.allow) {
       await writeAudit({
