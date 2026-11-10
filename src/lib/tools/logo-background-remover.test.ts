@@ -3,7 +3,7 @@ import testCase from "node:test";
 import { removeLogoBackground } from "./logo-background-remover.ts";
 
 testCase("removes a flat edge-connected background and preserves a different centre pixel", () => {
-  const image = new ImageData(3, 3);
+  const image = { width: 3, height: 3, data: new Uint8ClampedArray(3 * 3 * 4) } as ImageData;
   for (let i = 0; i < 9; i++) {
     image.data.set([240, 240, 240, 255], i * 4);
   }
@@ -14,7 +14,7 @@ testCase("removes a flat edge-connected background and preserves a different cen
 });
 
 testCase("removes both checkerboard colours connected to the image edge", () => {
-  const image = new ImageData(4, 4);
+  const image = { width: 4, height: 4, data: new Uint8ClampedArray(4 * 4 * 4) } as ImageData;
   for (let y = 0; y < 4; y++) {
     for (let x = 0; x < 4; x++) {
       const offset = (y * 4 + x) * 4;
