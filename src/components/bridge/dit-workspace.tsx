@@ -199,7 +199,7 @@ export function DitWorkspace({ canReview }: DitWorkspaceProps) {
       <div className="grid gap-3 border-t border-line pt-4 md:grid-cols-4">
         <label className="space-y-1 text-sm md:col-span-2"><span>Production / shooting day</span>
           <select className="w-full rounded-lg border border-line bg-bg px-3 py-2" value={productionId} onChange={(e) => { const item = cards.find((c) => c.id === e.target.value); setProductionId(e.target.value); setShootingDayId(item?.shootingDayId ?? ""); setCameraCardId(""); }}>
-            <option value="">Choose production…</option>{Array.from(new Map(cards.map((c) => [c.id, c])).values()).map((c) => <option key={c.id} value={c.id}>{c.titleName} · {c.productionNo} · Day {c.dayNumber}</option>)}
+            <option value="">Choose production…</option>{Array.from(new Map(cards.map((c) => [c.id, c])).values()).map((c) => <option key={c.id} value={c.id}>{c.titleName} · {c.productionNo} · Day {(c as any).dayNumber ?? "—"}</option>)}
           </select>
         </label>
         <label className="space-y-1 text-sm"><span>Camera</span><select className="w-full rounded-lg border border-line bg-bg px-3 py-2" value={cameraId} onChange={(e) => setCameraId(e.target.value as "A" | "B" | "C")}><option>A</option><option>B</option><option>C</option></select></label>
@@ -233,7 +233,7 @@ export function DitWorkspace({ canReview }: DitWorkspaceProps) {
         <div className="flex items-center justify-between"><h3 className="font-semibold">Production cards and clip ledger</h3><button type="button" onClick={() => void refresh()} className="text-xs text-accent">Refresh</button></div>
         {ditQuery.isLoading ? <p className="mt-3 text-sm text-muted">Loading DIT records…</p> : ditQuery.isError ? <p className="mt-3 text-sm text-red-500">DIT schema or STAGING binding is unavailable. No data is fabricated.</p> : !cards.length ? <p className="mt-3 text-sm text-muted">No DIT production records yet.</p> : <div className="mt-3 space-y-3">{cards.map((card) => (
           <div key={card.cameraCardId} className="rounded-xl border border-line p-3">
-            <div className="flex flex-wrap items-center justify-between gap-2"><div><p className="font-medium">{card.titleName} · {card.productionNo}</p><p className="text-xs text-muted">Day {card.dayNumber} · Camera {card.cameraId} · {card.cardNo} · {card.cardState}</p></div>
+            <div className="flex flex-wrap items-center justify-between gap-2"><div><p className="font-medium">{card.titleName} · {card.productionNo}</p><p className="text-xs text-muted">Day {(card as any).dayNumber ?? "—"} · Camera {card.cameraId} · {card.cardNo} · {card.cardState}</p></div>
               {canReview && card.cameraCardId ? <button type="button" onClick={() => void signoff(card)} className="rounded-full border border-line px-3 py-1.5 text-xs">Evaluate DIT sign-off</button> : null}
             </div>
             {card.clips?.map((clip) => <div key={clip.id} className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t border-line pt-2 text-xs">
