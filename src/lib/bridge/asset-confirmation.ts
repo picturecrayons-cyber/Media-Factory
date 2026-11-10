@@ -35,6 +35,7 @@ async function persistVerifiedAssetScoped(
     assetId: string;
     actorUserId: string;
     internalActor: boolean;
+    superAdminActor: boolean;
     titleId: string;
     kind: string;
     byteSize: number;
@@ -73,8 +74,7 @@ async function persistVerifiedAssetScoped(
           from bridge_titles t
           where t.id = a.title_id
             and (
-              t.status in ('DRAFT','UPLOADING','PREPARING')
-              or (
+              (
                 $10
                 and not exists (
                   select 1 from bridge_loop_publications p
@@ -91,6 +91,7 @@ async function persistVerifiedAssetScoped(
                     and length(trim(dj.delivery_receipt_url)) > 0
                 )
               )
+              or (not $10 and t.status in ('DRAFT','UPLOADING','PREPARING'))
             )
             and (
               $5
