@@ -15,12 +15,40 @@ test("only a verified upload sets the master reference, once, with an audit even
       create table if not exists bridge_loop_publications (bridge_title_id text, approved_at timestamptz);
       create table if not exists bridge_destination_packages (title_id text, readiness_state text);
       create table if not exists bridge_delivery_jobs (title_id text, admin_sign_off boolean, delivery_receipt_url text);
+      create table if not exists bridge_asset_versions (
+        id uuid primary key default gen_random_uuid(),
+        title_id text not null,
+        asset_group text not null,
+        asset_type text not null,
+        version integer not null,
+        language text,
+        reference_asset_id uuid,
+        s3_key text not null,
+        checksum_sha256 text,
+        byte_size bigint,
+        processing_state text not null,
+        created_by text not null
+      );
     `);
     await db.exec(readFileSync(join(process.cwd(), "migrations/0021_bridge_organizations.sql"), "utf8"));
     await db.exec(`
       create table if not exists bridge_loop_publications (bridge_title_id text, approved_at timestamptz);
       create table if not exists bridge_destination_packages (title_id text, readiness_state text);
       create table if not exists bridge_delivery_jobs (title_id text, admin_sign_off boolean, delivery_receipt_url text);
+      create table if not exists bridge_asset_versions (
+        id uuid primary key default gen_random_uuid(),
+        title_id text not null,
+        asset_group text not null,
+        asset_type text not null,
+        version integer not null,
+        language text,
+        reference_asset_id uuid,
+        s3_key text not null,
+        checksum_sha256 text,
+        byte_size bigint,
+        processing_state text not null,
+        created_by text not null
+      );
     `);
     await db.exec(`insert into bridge_titles (id,slug,name,owner_user_id,owner_account_type)
       values ('title1234','title','Title','creator','independent_creator');
@@ -48,6 +76,10 @@ test("only a verified upload sets the master reference, once, with an audit even
     assert.deepEqual(await state(), { master_key: null, byte_size: null });
     assert.equal(await persistVerifiedAsset(sql, args), true);
     assert.deepEqual(await state(), { master_key: "bridge/creator/title1234/master/video.mp4.verified/uuid-1", byte_size: 120 });
+    const versions = await db.query<{ asset_type: string; version: number; checksum_sha256: string }>(
+      "select asset_type, version, checksum_sha256 from bridge_asset_versions where title_id='title1234'",
+    );
+    assert.deepEqual(versions.rows, [{ asset_type: "MASTER", version: 1, checksum_sha256: "etag-1" }]);
     assert.equal(await persistVerifiedAsset(sql, args), false);
     assert.equal(await persistVerifiedAsset(sql, { ...args, assetId: "asset1234", sourceKey: "wrong" }), false);
     // A caller cannot verify an asset while supplying a different title ID.
@@ -76,12 +108,40 @@ test("same-organization verified Studio member can confirm upload, other organiz
       create table if not exists bridge_loop_publications (bridge_title_id text, approved_at timestamptz);
       create table if not exists bridge_destination_packages (title_id text, readiness_state text);
       create table if not exists bridge_delivery_jobs (title_id text, admin_sign_off boolean, delivery_receipt_url text);
+      create table if not exists bridge_asset_versions (
+        id uuid primary key default gen_random_uuid(),
+        title_id text not null,
+        asset_group text not null,
+        asset_type text not null,
+        version integer not null,
+        language text,
+        reference_asset_id uuid,
+        s3_key text not null,
+        checksum_sha256 text,
+        byte_size bigint,
+        processing_state text not null,
+        created_by text not null
+      );
     `);
     await db.exec(readFileSync(join(process.cwd(), "migrations/0021_bridge_organizations.sql"), "utf8"));
     await db.exec(`
       create table if not exists bridge_loop_publications (bridge_title_id text, approved_at timestamptz);
       create table if not exists bridge_destination_packages (title_id text, readiness_state text);
       create table if not exists bridge_delivery_jobs (title_id text, admin_sign_off boolean, delivery_receipt_url text);
+      create table if not exists bridge_asset_versions (
+        id uuid primary key default gen_random_uuid(),
+        title_id text not null,
+        asset_group text not null,
+        asset_type text not null,
+        version integer not null,
+        language text,
+        reference_asset_id uuid,
+        s3_key text not null,
+        checksum_sha256 text,
+        byte_size bigint,
+        processing_state text not null,
+        created_by text not null
+      );
     `);
     await db.exec(`
       insert into bridge_profiles (user_id,email,display_name,account_type,email_verified)
@@ -158,6 +218,20 @@ test("title owner can confirm an upload when organization tables are absent", as
       create table if not exists bridge_loop_publications (bridge_title_id text, approved_at timestamptz);
       create table if not exists bridge_destination_packages (title_id text, readiness_state text);
       create table if not exists bridge_delivery_jobs (title_id text, admin_sign_off boolean, delivery_receipt_url text);
+      create table if not exists bridge_asset_versions (
+        id uuid primary key default gen_random_uuid(),
+        title_id text not null,
+        asset_group text not null,
+        asset_type text not null,
+        version integer not null,
+        language text,
+        reference_asset_id uuid,
+        s3_key text not null,
+        checksum_sha256 text,
+        byte_size bigint,
+        processing_state text not null,
+        created_by text not null
+      );
     `);
     await db.exec(`insert into bridge_titles (id,slug,name,owner_user_id,owner_account_type,status)
       values ('title1234','title','Title','creator','independent_creator','PREPARING');
@@ -197,6 +271,20 @@ test("Super Admin can replace a verified asset through RIGHTS_REVIEW before firs
       create table if not exists bridge_loop_publications (bridge_title_id text, approved_at timestamptz);
       create table if not exists bridge_destination_packages (title_id text, readiness_state text);
       create table if not exists bridge_delivery_jobs (title_id text, admin_sign_off boolean, delivery_receipt_url text);
+      create table if not exists bridge_asset_versions (
+        id uuid primary key default gen_random_uuid(),
+        title_id text not null,
+        asset_group text not null,
+        asset_type text not null,
+        version integer not null,
+        language text,
+        reference_asset_id uuid,
+        s3_key text not null,
+        checksum_sha256 text,
+        byte_size bigint,
+        processing_state text not null,
+        created_by text not null
+      );
     `);
     await db.exec(`
       create table bridge_loop_publications (bridge_title_id text, approved_at timestamptz);
@@ -251,6 +339,20 @@ test("first LOOP publication permanently locks Super Admin replacement", async (
       create table if not exists bridge_loop_publications (bridge_title_id text, approved_at timestamptz);
       create table if not exists bridge_destination_packages (title_id text, readiness_state text);
       create table if not exists bridge_delivery_jobs (title_id text, admin_sign_off boolean, delivery_receipt_url text);
+      create table if not exists bridge_asset_versions (
+        id uuid primary key default gen_random_uuid(),
+        title_id text not null,
+        asset_group text not null,
+        asset_type text not null,
+        version integer not null,
+        language text,
+        reference_asset_id uuid,
+        s3_key text not null,
+        checksum_sha256 text,
+        byte_size bigint,
+        processing_state text not null,
+        created_by text not null
+      );
     `);
     await db.exec(`
       create table bridge_loop_publications (bridge_title_id text, approved_at timestamptz);
