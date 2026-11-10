@@ -29,7 +29,7 @@
 - Payment, subscription, entitlement, payment-event, and media-migration-queue tables remain server-only.
 - Six new Loop runtime tables grant CRUD only to `service_role`.
 - Public wrapper `public.bridge_current_internal_role()`: authenticated EXECUTE=true; anon EXECUTE=false.
-- The only function ACL entry inherited by browser roles outside the approved wrapper is a trigger-returning `bridge_private.prevent_verified_asset_pointer_mutation()`; it is not an RPC-callable function and the `bridge_private` schema is not exposed by the Data API.
+- The only function ACL entry inherited by browser roles outside the approved wrapper is a trigger-returning `bridge_private.prevent_verified_asset_pointer_mutation()`; it returns `trigger`, so it cannot be invoked as a normal PostgREST RPC. The Data API schema-exposure setting was not independently verified.
 - Supabase Auth advisor still reports leaked-password protection disabled. This is an Auth project setting; it was not changed in this authorized DB migration scope.
 
 ## Identity and multi-Studio transaction tests
