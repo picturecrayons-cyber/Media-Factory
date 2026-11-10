@@ -7,6 +7,7 @@ import { assertPermission, canReadTitle, canOperateOnTitle, type Actor } from ".
 import { loadTitle } from "./titles";
 import { loopLicenseInput, producerSharePaise } from "./workflow-policy";
 import { bridgeEnv } from "./env";
+import { hasVerifiedMasterAndArtwork } from "./asset-roles";
 
 async function audit(tx: Sql, user: string, title: string, action: string, metadata: object) {
   await tx`insert into bridge_audit_logs(actor_user_id,action,entity_type,entity_id,metadata)
@@ -89,8 +90,7 @@ export async function reviewWorkflow(tx: Sql, actor: Actor, data: z.infer<typeof
     }>`select kind,s3_key from bridge_assets where title_id=${data.titleId} and byte_size>0`;
     if (
       data.decision === "APPROVE" &&
-      (!assets.some((a) => a.kind === "master" && a.s3_key === title.master_key) ||
-        !assets.some((a) => a.kind === "poster" && a.s3_key === title.poster_key))
+      !hasVerifiedMasterAndArtwork(assets, title.master_key, title.poster_key)
     )
       throw new Error("Verified current master and artwork are required");
     await tx`insert into bridge_qc_cases(title_id,status,reviewer_findings,reviewed_by,reviewed_at)

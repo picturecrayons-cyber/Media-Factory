@@ -12,6 +12,7 @@ import { writeAudit } from "./audit";
 import { assertNotDevUser } from "./guards";
 import { loopStageType } from "./loop-lanes";
 import { assertBuyerPublishable, getBuyerGateStatus } from "./buyer-visibility";
+import { submitTitleForQc } from "./title-submission";
 
 type TitleRow = {
   id: string;
@@ -529,10 +530,12 @@ async function assertLicensingReady(titleId: string) {
       exists (
         select 1 from bridge_assets a
         where a.title_id = t.id and a.kind = 'master' and coalesce(a.byte_size, 0) > 0
+          and t.master_key is not null and a.s3_key = t.master_key
       ) as master_ok,
       exists (
         select 1 from bridge_assets a
-        where a.title_id = t.id and a.kind = 'poster' and coalesce(a.byte_size, 0) > 0
+        where a.title_id = t.id and a.kind in ('poster', 'poster_vertical') and coalesce(a.byte_size, 0) > 0
+          and t.poster_key is not null and a.s3_key = t.poster_key
       ) as poster_ok,
       exists (
         select 1 from bridge_destination_packages p
@@ -585,17 +588,6 @@ export const advanceTitle = createServerFn({ method: "POST" })
     }
     if (["RIGHTS_REVIEW", "LICENSING_READY"].includes(data.to))
       throw new Error("Use the recorded QC or legal review action");
-    if (data.to === "QC_REVIEW") {
-      const verified = await (await getSql())<{
-        kind: string;
-        s3_key: string;
-      }>`select kind,s3_key from bridge_assets where title_id=${title.id} and byte_size>0`;
-      if (
-        !verified.some((a) => a.kind === "master" && a.s3_key === title.masterKey) ||
-        !verified.some((a) => (a.kind === "poster" || a.kind === "poster_vertical") && a.s3_key === title.posterKey)
-      )
-        throw new Error("Verified master and artwork required before QC");
-    }
     assertTransition(title.status, data.to);
     const perm = permissionForTransition(title.status, data.to);
     if (!perm) throw new Error("Transition is not available");
@@ -609,7 +601,11 @@ export const advanceTitle = createServerFn({ method: "POST" })
     }
     const expected = nextStatus(title.status);
     if (expected !== data.to) throw new Error("Illegal title transition");
-    return (await getSql()).transaction(async (tx) => {
+    const sql = await getSql();
+    if (data.to === "QC_REVIEW") {
+      return submitTitleForQc(sql, title, actor.userId, data.note);
+    }
+    return sql.transaction(async (tx) => {
       const [locked] = await tx<{
         status: string;
       }>`select status from bridge_titles where id=${title.id} for update`;
