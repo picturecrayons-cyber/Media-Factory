@@ -4,7 +4,7 @@ export function removeConnectedBackground(
   source: Uint8ClampedArray,
   width: number,
   height: number,
-  samples: readonly BackgroundSample[],
+  samples: readonly number[][],
   tolerance: number,
 ): Uint8ClampedArray {
   if (!Number.isInteger(width) || !Number.isInteger(height) || width < 1 || height < 1 ||
