@@ -100,19 +100,13 @@ async function main() {
     `);
     const { app_ledger_exists: appLedgerExists, supabase_ledger_exists: supabaseLedgerExists } =
       ledgerState.rows[0] ?? {};
-    if (supabaseLedgerExists && !appLedgerExists) {
-      throw new Error(
-        "Refusing to migrate: Supabase migration history exists but the app _migrations ledger is absent. Reconcile migration histories and filenames before applying any SQL.",
+    if (supabaseLedgerExists) {
+      const supabaseRows = await client.query(
+        "SELECT version, name, statements FROM supabase_migrations.schema_migrations ORDER BY version",
       );
-    }
-
-    if (supabaseLedgerExists && appLedgerExists) {
-      const [supabaseRows, appRows] = await Promise.all([
-        client.query(
-          "SELECT version, name, statements FROM supabase_migrations.schema_migrations ORDER BY version",
-        ),
-        client.query("SELECT name FROM public._migrations ORDER BY name"),
-      ]);
+      const appRows = appLedgerExists
+        ? await client.query("SELECT name FROM public._migrations ORDER BY name")
+        : { rows: [] };
       const repositoryRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
       // Reconciliation inventories both roots; pendingMigrations above still
       // applies only the original top-level migrations/ entries.
@@ -122,13 +116,21 @@ async function main() {
         supabaseMigrations: supabaseRows.rows,
         appMigrationNames: appRows.rows.map((row) => row.name),
       });
-      if (!reconciliation.compatible) {
-        throw new Error(
-          `Refusing to migrate: migration histories are not reconciled. ${reconciliation.blockers.join(" ")} No migration SQL was applied.`,
+      console.log(
+        "[migrate] provenance audit: " + reconciliation.mappedNames.length + "/" + supabaseRows.rows.length +
+        " exact SQL matches; " + reconciliation.blockers.length + " blocker(s).",
+      );
+      if (!appLedgerExists) {
+        reconciliation.blockers.unshift(
+          "Supabase migration history exists but the app _migrations ledger is absent; no ledger will be synthesized from a partial crosswalk.",
         );
+        reconciliation.compatible = false;
+      }
+      if (!reconciliation.compatible) {
+        for (const blocker of reconciliation.blockers) console.error("[migrate] BLOCKED: " + blocker);
+        throw new Error("Migration provenance is incomplete. No migration SQL was applied.");
       }
     }
-
     if (!appLedgerExists) {
       await client.query(
         "CREATE TABLE IF NOT EXISTS public._migrations (name TEXT PRIMARY KEY, applied_at TIMESTAMPTZ NOT NULL DEFAULT now())",
