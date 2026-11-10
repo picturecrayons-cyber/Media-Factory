@@ -208,6 +208,51 @@ test("atomic state transition: migration queue and title master/poster only adva
 });
 
 
+test("verified vertical artwork is durably mapped to the canonical title poster key", async () => {
+  const db = new PGlite();
+  try {
+    await db.waitReady;
+    await db.exec("create role anon; create role authenticated;");
+    await db.exec(readFileSync(join(process.cwd(), "migrations/0004_bridge.sql"), "utf8"));
+    await db.exec(readFileSync(join(process.cwd(), "migrations/0021_bridge_organizations.sql"), "utf8"));
+    await db.exec(`
+      insert into bridge_titles (id, slug, name, owner_user_id, owner_account_type, status)
+      values ('title-artwork-test', 'title-artwork-test', 'Artwork Mapping Test', 'owner-art', 'independent_creator', 'PREPARING');
+      insert into bridge_assets (id, title_id, kind, s3_key, content_type, created_by)
+      values ('asset-artwork-test', 'title-artwork-test', 'poster_vertical',
+        'bridge/owner-art/title-artwork-test/poster_vertical/source.jpg', 'image/jpeg', 'owner-art');
+    `);
+    const sql = { query: async <T>(query: string, params: unknown[]) => (await db.query<T>(query, params)).rows };
+    const sourceKey = 'bridge/owner-art/title-artwork-test/poster_vertical/source.jpg';
+    const sealedKey = sourceKey + '.verified/asset-artwork-test';
+    const confirmed = await persistVerifiedAsset(sql, {
+      assetId: 'asset-artwork-test',
+      actorUserId: 'owner-art',
+      internalActor: false,
+      titleId: 'title-artwork-test',
+      kind: 'poster_vertical',
+      byteSize: 1024,
+      contentType: 'image/jpeg',
+      checksum: 'etag-artwork-test',
+      sourceKey,
+      sealedKey,
+    });
+    assert.equal(confirmed, true);
+    const titleRows = (await db.query<{ poster_key: string | null; master_key: string | null }>(
+      "select poster_key, master_key from bridge_titles where id = 'title-artwork-test'",
+    )).rows;
+    assert.equal(titleRows[0]?.poster_key, sealedKey);
+    assert.equal(titleRows[0]?.master_key, null);
+    const assetRows = (await db.query<{ byte_size: number | null; s3_key: string }>(
+      "select byte_size, s3_key from bridge_assets where id = 'asset-artwork-test'",
+    )).rows;
+    assert.equal(assetRows[0]?.byte_size, 1024);
+    assert.equal(assetRows[0]?.s3_key, sealedKey);
+  } finally {
+    await db.close();
+  }
+});
+
 test("duplicate upload confirmations derive the same sealed key from the asset row ID", () => {
   const assets = readFileSync(join(process.cwd(), "src/lib/bridge/assets.ts"), "utf8");
   assert.ok(assets.includes('const sealedKey = `${asset.s3_key}.verified/${asset.id}`;'));
