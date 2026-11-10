@@ -143,7 +143,7 @@ test("conversion completion needs independently verified MASTER and BACKUP_1 out
   assert.equal(completeConversion(processing, master, backup, "later").state, "COMPLETE");
   assert.throws(() => completeConversion(processing, master, { ...backup, sourceSha256: "b".repeat(64) }, "later"), /lineage/);
   assert.throws(() => completeConversion(processing, master, { ...backup, qcResult: "FAIL" }, "later"), /QC must pass/);
-  assert.throws(() => completeConversion(processing, master, { ...backup, tier: "BACKUP_2" }, "later"), /MASTER and BACKUP_1/);
+  assert.throws(() => completeConversion(processing, master, { ...backup, tier: "BACKUP_2" }, "later"), /Conversion destinations|MASTER and BACKUP_1/);
   assert.throws(() => completeConversion(processing, master, { ...backup, failureDomainId: master.failureDomainId }, "later"), /independent failure domains/);
 });
 
