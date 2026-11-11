@@ -76,6 +76,48 @@ function iso(v: string | Date | null) {
   return v instanceof Date ? v.toISOString() : String(v);
 }
 
+/**
+ * Loop publication is a write to the consumer catalogue. It is deliberately
+ * unavailable on Production and on any Preview not explicitly bound to the
+ * approved Bridge Testing DB project.
+ */
+function isLoopGatewayEnabled() {
+  if (
+    process.env.VERCEL_ENV !== "preview" ||
+    process.env.BRIDGE_LOOP_GATEWAY_ENABLED !== "true" ||
+    process.env.BRIDGE_DATABASE_TARGET !== "staging"
+  ) return false;
+
+  const expectedProject = "jbymleftneggcgutlcqu";
+  const supabaseUrl = process.env.SUPABASE_URL;
+  const databaseUrl =
+    process.env.DATABASE_URL ??
+    process.env.POSTGRES_URL ??
+    process.env.SUPABASE_DB_URL ??
+    process.env.SUPABASE_DATABASE_URL;
+  if (!supabaseUrl || !databaseUrl) return false;
+
+  try {
+    const supabaseHost = new URL(supabaseUrl).hostname;
+    const database = new URL(databaseUrl);
+    const databaseUser = decodeURIComponent(database.username);
+    return (
+      supabaseHost === `${expectedProject}.supabase.co` &&
+      (database.hostname.includes(expectedProject) || databaseUser.includes(expectedProject))
+    );
+  } catch {
+    return false;
+  }
+}
+
+function assertLoopGatewayEnabled() {
+  if (!isLoopGatewayEnabled()) {
+    throw new Error(
+      "Loop Publishing Gateway is locked. It requires an isolated Vercel Preview connected to the approved Bridge Testing DB. Production publishing is disabled.",
+    );
+  }
+}
+
 /** Pre-flight verification checking rights, assets, QC and operator authority */
 export async function verifyDistributionPreflight(
   sql: Sql,
@@ -204,21 +246,8 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
     assertPermission(actor, "title.read_catalog");
     const sql = await getSql();
 
-    // Auto-reevaluate any expired distribution windows
-    await sql`
-      update bridge_loop_publications
-      set authorization_status = 'expired', updated_at = now()
-      where window_end is not null and window_end < now() and authorization_status in ('authorized', 'live')
-    `.catch(() => {});
-
-    await sql`
-      update loop_titles
-      set status = 'expired', published = false, listed = false, updated_at = now()
-      where bridge_title_id in (
-        select bridge_title_id from bridge_loop_publications where authorization_status = 'expired'
-      ) and published = true
-    `.catch(() => {});
-
+    // This is a READ-ONLY query. Expiry is derived for display; state changes
+    // must happen through an explicitly authorized write workflow.
     const rows = await sql<{
       id: string;
       slug: string;
@@ -260,6 +289,7 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
     `;
 
     return {
+      gatewayEnabled: isLoopGatewayEnabled(),
       titles: rows.map((r) => {
         const coveringGrant = r.loop_title_id
           ? findCoveringRightsGrant(
@@ -317,8 +347,13 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
             ? {
                 destination: "CRAYONS_LOOP" as const,
                 loopTitleId: r.loop_title_id,
-                authorizationStatus: (r.authorization_status?.toUpperCase() ||
-                  "PENDING") as DistributionAuthorizationStatus,
+                authorizationStatus: (
+                  r.window_end &&
+                  new Date(r.window_end).getTime() < Date.now() &&
+                  ["AUTHORIZED", "LIVE"].includes(r.authorization_status?.toUpperCase() || "")
+                    ? "EXPIRED"
+                    : r.authorization_status?.toUpperCase() || "PENDING"
+                ) as DistributionAuthorizationStatus,
                 territories: r.territories || ["IN"],
                 languages: r.languages || [r.language],
                 exploitationModels: r.exploitation_models || ["SVOD"],
@@ -342,6 +377,7 @@ export const authorizeLoopPublication = createServerFn({ method: "POST" })
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
     assertPermission(actor, "loop.publish");
+    assertLoopGatewayEnabled();
 
     if (
       data.windowStart &&
@@ -460,6 +496,7 @@ export const suspendLoopPublication = createServerFn({ method: "POST" })
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
     assertPermission(actor, "loop.revoke");
+    assertLoopGatewayEnabled();
     return (await getSql()).transaction(async (sql) => {
       const pubs = await sql<{ loop_title_id: string }>`
       select loop_title_id from bridge_loop_publications where bridge_title_id = ${data.bridgeTitleId} limit 1
@@ -500,6 +537,7 @@ export const revokeLoopPublication = createServerFn({ method: "POST" })
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
     assertPermission(actor, "loop.revoke");
+    assertLoopGatewayEnabled();
     return (await getSql()).transaction(async (sql) => {
       const pubs = await sql<{ loop_title_id: string }>`
       select loop_title_id from bridge_loop_publications where bridge_title_id = ${data.bridgeTitleId} limit 1
@@ -544,6 +582,7 @@ export const extendDistributionWindow = createServerFn({ method: "POST" })
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
     assertPermission(actor, "loop.publish");
+    assertLoopGatewayEnabled();
     return (await getSql()).transaction(async (sql) => {
       const pubs = await sql<{
         loop_title_id: string;
