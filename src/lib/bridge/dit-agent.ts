@@ -414,3 +414,24 @@ export const getDitJobFiles = createServerFn({ method: "GET" })
     return { files, logs };
   });
 
+
+export const markDitFileFailed = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({ jobId: z.string().uuid(), fileId: z.string().uuid(), reason: z.string().trim().min(1).max(1000) }))
+  .handler(async ({ context, data }) => {
+    const actor = await requireVerifiedActor(context.userId);
+    requireDitOperator(actor);
+    await ownedDitJob(actor.userId, data.jobId);
+    const sql = await getSql();
+    await sql`
+      update bridge_dit_job_files set status = 'FAILED', updated_at = now()
+      where id = ${data.fileId}::uuid and job_id = ${data.jobId}::uuid
+    `;
+    await sql`
+      insert into bridge_dit_job_logs (job_id, file_id, level, event, details)
+      values (${data.jobId}::uuid, ${data.fileId}::uuid, 'FAIL', 'FILE_INGEST_FAILED',
+        jsonb_build_object('reason', ${data.reason}))
+    `;
+    return { fileId: data.fileId, status: "FAILED" as const };
+  });
+
