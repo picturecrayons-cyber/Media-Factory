@@ -478,3 +478,27 @@ export const confirmBuyerEvidenceUpload = createServerFn({ method: "POST" })
     await writeAudit({ actorUserId: actor.userId, action: "buyer.compliance.evidence_uploaded", entityType: "buyer_organization", entityId: org.organization_id, metadata: { target: data.target, evidenceKind: data.evidenceKind, byteSize: sealed.byteSize } });
     return { ok: true, byteSize: sealed.byteSize };
   });
+
+
+export const getBuyerEvidenceReviewUrl = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({ target: z.enum(["organization", "mandate"]), evidenceId: z.string().uuid() }))
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    requireLegalReviewer(actor);
+    const sql = await getSql();
+    let key: string | null = null;
+    if (data.target === "organization") {
+      const rows = await sql<{ storage_object_path: string }>`select storage_object_path from bridge_private.buyer_organization_verification_evidence where id=${data.evidenceId} and review_status in ('pending','accepted','rejected') limit 1`;
+      key = rows[0]?.storage_object_path ?? null;
+    } else {
+      const rows = await sql<{ storage_object_path: string }>`select storage_object_path from bridge_private.buyer_acquisition_mandate_evidence where id=${data.evidenceId} and review_status in ('pending','accepted','rejected') limit 1`;
+      key = rows[0]?.storage_object_path ?? null;
+    }
+    if (!key || !key.includes(".verified/")) throw new Error("Sealed legal evidence object not found");
+    const { signDownload } = await import("./oci-object-storage.server");
+    const signed = await signDownload({ key, expiresIn: 300 });
+    await writeAudit({ actorUserId: actor.userId, action: "buyer.compliance.evidence_download_signed", entityType: "buyer_compliance_evidence", entityId: data.evidenceId, metadata: { target: data.target, expiresInSeconds: 300 } });
+    return { url: signed.url, expiresInSeconds: 300 };
+  });
