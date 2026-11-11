@@ -100,8 +100,13 @@ export function evaluateAmazonPublishingEligibility(
     }
     if (!rights.evidenceReference.trim()) reasons.push("RIGHTS_EVIDENCE_REFERENCE_MISSING");
     else evidenceReferences.push(rights.evidenceReference);
-    if (rights.holdbackEndsAt && validDate(rights.holdbackEndsAt) &&
-        nowMs < Date.parse(rights.holdbackEndsAt)) reasons.push("RIGHTS_HOLDBACK_ACTIVE");
+    if (rights.holdbackEndsAt) {
+      if (!validDate(rights.holdbackEndsAt)) {
+        reasons.push("RIGHTS_HOLDBACK_DATE_INVALID");
+      } else if (nowMs < Date.parse(rights.holdbackEndsAt)) {
+        reasons.push("RIGHTS_HOLDBACK_ACTIVE");
+      }
+    }
   }
 
   const pack = input.localizedPackage;
@@ -132,7 +137,7 @@ export function mapAmazonProviderStatus(providerStatus: string): AmazonSubmissio
     case "delivered": return "delivered";
     case "published":
     case "live": return "published";
-    default: return "handed_off";
+    default: return "blocked";
   }
 }
 
