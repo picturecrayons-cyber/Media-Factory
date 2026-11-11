@@ -27,18 +27,22 @@ export const Route = createFileRoute("/internal")({
 });
 
 function Internal() {
+  const { desk } = Route.useSearch();
   return (
     <RequireBridge allow="internal">
       {(actor) => (
-        <BridgeShell actor={actor} title="Distribution & Operations Desk">
+        <BridgeShell actor={actor} title={desk === "gateway" ? "Loop Publishing Gateway" : "People & Operations"}>
           <p className="mb-6 text-xs text-muted">
             {actor.internalRole?.replaceAll("_", " ")} · {actor.email}
           </p>
-          <InternalBody
-            canInvite={hasPermission(actor, "users.invite_internal")}
-            canPublish={hasPermission(actor, "loop.publish")}
-            canRevoke={hasPermission(actor, "loop.revoke")}
-          />
+          {desk === "gateway" ? (
+            <DistributionDesk
+              canPublish={hasPermission(actor, "loop.publish")}
+              canRevoke={hasPermission(actor, "loop.revoke")}
+            />
+          ) : (
+            <InternalBody canInvite={hasPermission(actor, "users.invite_internal")} />
+          )}
         </BridgeShell>
       )}
     </RequireBridge>
