@@ -273,7 +273,7 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
             Master Control Plane
           </p>
           <h2 className="font-display text-3xl font-semibold tracking-tight text-fg">
-            Distribution Desk
+            Bridge → Loop Publishing Gateway
           </h2>
           <p className="mt-1 text-xs text-muted">
             Crayons Loop is Bridge's internal consumer destination. Bridge remains the master catalogue and rights authority; Loop receives only titles explicitly authorized here.
@@ -317,8 +317,8 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
           <div className="rounded-2xl border border-line bg-surface p-6 space-y-3">
             <div className="flex items-center justify-between">
               <span className="font-display text-lg font-semibold text-fg">Crayons Loop</span>
-              <span className="rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-400">
-                ACTIVE DESTINATION
+              <span className="rounded-full border border-line px-2.5 py-0.5 text-[11px] font-semibold text-muted">
+                {gatewayEnabled ? "PREVIEW GATE ENABLED" : "LOCKED — STAGING ONLY"}
               </span>
             </div>
             <p className="text-xs text-muted leading-relaxed">
@@ -641,6 +641,7 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
                     <Button
                       type="button"
                       variant="outline"
+                      disabled={!gatewayEnabled}
                       onClick={() => {
                         setExtendTitleId(t.id);
                         setNewExtendEnd(
