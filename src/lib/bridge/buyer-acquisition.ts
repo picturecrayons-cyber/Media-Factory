@@ -222,6 +222,10 @@ export const addBuyerComplianceEvidence = createServerFn({ method: "POST" })
       throw new Error("Evidence must reference this organization's private storage prefix");
     }
     const sql = org.sql;
+    const organizationKinds = ["company_registration", "tax_registration", "board_resolution", "authorized_signatory", "platform_ownership", "other"];
+    const mandateKinds = ["signed_agreement", "board_authorization", "power_of_attorney", "channel_ownership", "territory_schedule", "rights_schedule", "other"];
+    if (data.target === "organization" && !organizationKinds.includes(data.evidenceKind)) throw new Error("Evidence kind is not valid for organization verification");
+    if (data.target === "mandate" && !mandateKinds.includes(data.evidenceKind)) throw new Error("Evidence kind is not valid for acquisition mandates");
     if (data.target === "organization") {
       await sql`
         insert into bridge_private.buyer_organization_verification_evidence
@@ -271,6 +275,9 @@ export const submitBuyerOrganizationVerification = createServerFn({ method: "POS
       returning organization_id
     `;
     if (!rows.length) throw new Error("Verified buyer organization cannot be silently resubmitted");
+    await org.sql`update bridge_private.buyer_organization_verification_evidence
+      set review_status='pending',reviewed_by=null,reviewed_at=null,review_notes=null
+      where organization_id=${org.organization_id}`;
     await writeAudit({ actorUserId: actor.userId, action: "buyer.organization_verification.submitted", entityType: "buyer_organization", entityId: org.organization_id, metadata: { buyerKind: data.buyerKind } });
     return { ok: true, status: "pending_review" as const };
   });
@@ -399,9 +406,10 @@ export const reviewBuyerComplianceEvidence = createServerFn({ method: "POST" })
         where id=${data.evidenceId} limit 1
       `;
       if (!rows[0] || rows[0].uploaded_by === actor.userId) throw new Error("Independent evidence reviewer required");
-      await sql`update bridge_private.buyer_organization_verification_evidence
+      const updated = await sql<{ id: string }>`update bridge_private.buyer_organization_verification_evidence
         set review_status=${reviewStatus},reviewed_by=${actor.userId},reviewed_at=now(),review_notes=${data.notes}
-        where id=${data.evidenceId}`;
+        where id=${data.evidenceId} and review_status='pending' returning id`;
+      if (!updated[0]) throw new Error("Evidence has already been reviewed");
       await writeAudit({ actorUserId: actor.userId, action: `buyer.organization_evidence.${data.decision}`, entityType: "buyer_organization", entityId: rows[0].organization_id, metadata: { evidenceId: data.evidenceId, notes: data.notes } });
     } else {
       const rows = await sql<{ uploaded_by: string; mandate_id: string }>`
@@ -409,9 +417,10 @@ export const reviewBuyerComplianceEvidence = createServerFn({ method: "POST" })
         where id=${data.evidenceId} limit 1
       `;
       if (!rows[0] || rows[0].uploaded_by === actor.userId) throw new Error("Independent evidence reviewer required");
-      await sql`update bridge_private.buyer_acquisition_mandate_evidence
+      const updated = await sql<{ id: string }>`update bridge_private.buyer_acquisition_mandate_evidence
         set review_status=${reviewStatus},reviewed_by=${actor.userId},reviewed_at=now(),review_notes=${data.notes}
-        where id=${data.evidenceId}`;
+        where id=${data.evidenceId} and review_status='pending' returning id`;
+      if (!updated[0]) throw new Error("Evidence has already been reviewed");
       await writeAudit({ actorUserId: actor.userId, action: `buyer.mandate_evidence.${data.decision}`, entityType: "buyer_acquisition_mandate", entityId: rows[0].mandate_id, metadata: { evidenceId: data.evidenceId, notes: data.notes } });
     }
     return { ok: true, reviewStatus };
