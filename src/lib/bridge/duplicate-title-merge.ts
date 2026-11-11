@@ -250,7 +250,7 @@ export const mergeDuplicateTitle = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
-    assertPermission(actor, "title.update_own");
+    assertPermission(actor, "title.approve");
     if (data.canonicalTitleId === data.retiringTitleId) throw new Error("A title cannot merge into itself.");
 
     const sql = await getSql();
@@ -355,7 +355,7 @@ export const rollbackDuplicateTitleMerge = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
-    assertPermission(actor, "title.merge_duplicate");
+    assertPermission(actor, "title.approve");
     const sql = await getSql();
 
     return sql.transaction(async (tx) => {
