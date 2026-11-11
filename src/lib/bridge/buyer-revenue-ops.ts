@@ -104,7 +104,9 @@ export function assessBuyerRevenueReadiness(
   if (record.paymentStatus === "INVOICED" && contractEffective) {
     revenueClassification = "INVOICED";
   }
-  if (paymentSettled && payeeVerified) revenueClassification = "CASH_RECEIVED";
+  if (contractEffective && paymentSettled && payeeVerified) {
+    revenueClassification = "CASH_RECEIVED";
+  }
 
   return {
     accountVerified,
