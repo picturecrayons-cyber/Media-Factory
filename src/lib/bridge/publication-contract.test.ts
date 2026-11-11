@@ -12,7 +12,10 @@ function harness(
   grants: unknown[],
   allowed = true,
   existing = false,
-  commercialTerms = { rightsOwnerSharePct: 65, distributorSharePct: 35 },
+  commercialTerms: { rightsOwnerSharePct?: number; distributorSharePct?: number } = {
+    rightsOwnerSharePct: 65,
+    distributorSharePct: 35,
+  },
 ) {
   const writes: { query: string; values: unknown[] }[] = [];
   const title = {
