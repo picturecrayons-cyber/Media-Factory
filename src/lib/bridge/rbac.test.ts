@@ -19,6 +19,7 @@ const viewer = () => actor("viewer-a", "independent_creator", "viewer");
 const qc = actor("qc1", "independent_creator", "qc_reviewer");
 const legal = actor("legal1", "independent_creator", "legal_reviewer");
 const finance = actor("finance1", "independent_creator", "finance");
+const ditOperator = actor("dit-operator1", "independent_creator", "dit_operator");
 
 describe("PRD authorization matrix", () => {
   it("fails closed until email is verified", () => {
@@ -109,11 +110,25 @@ describe("PRD authorization matrix", () => {
     }
   });
 
+  it("DIT operators receive only DIT workspace, asset intake and audit permissions", () => {
+    assert.equal(hasPermission(ditOperator, "dit.workspace_read"), true);
+    assert.equal(hasPermission(ditOperator, "dit.signoff"), true);
+    assert.equal(hasPermission(ditOperator, "asset.sign_upload"), true);
+    assert.equal(hasPermission(ditOperator, "title.read_catalog"), true);
+    for (const permission of ["title.qc_review", "title.rights_review", "title.license", "title.deliver", "loop.publish", "users.invite_internal"] as const) {
+      assert.equal(hasPermission(ditOperator, permission), false);
+    }
+    assert.equal(workspaceHome(ditOperator), "/dit");
+    assert.equal(canAccessDashboard(ditOperator), false);
+  });
+
   it("ordinary admins cannot grant super admin while super admin has an explicit grant matrix", () => {
     assert.equal(canGrantInternalRole(admin(), "viewer"), true);
     assert.equal(canGrantInternalRole(admin(), "admin"), true);
+    assert.equal(canGrantInternalRole(admin(), "dit_operator"), true);
     assert.equal(canGrantInternalRole(admin(), "super_admin"), false);
     assert.equal(canGrantInternalRole(superAdmin(), "super_admin"), true);
+    assert.equal(canGrantInternalRole(superAdmin(), "dit_operator"), true);
     assert.equal(canGrantInternalRole(qc, "viewer"), false);
     assert.equal(canGrantInternalRole(actor("unverified", "independent_creator", "admin", false), "viewer"), false);
   });
