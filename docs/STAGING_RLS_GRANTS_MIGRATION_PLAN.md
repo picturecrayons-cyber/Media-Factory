@@ -1,41 +1,44 @@
-# STAGING RLS / grants migration plan — NOT EXECUTED
+# STAGING RLS / grants migration decision — NO WRITE REQUIRED ON CURRENT EVIDENCE
 
 Target: **STAGING DB only** — Supabase project `jbymleftneggcgutlcqu`, Crayons Projects - Testing DB, ap-south-1.
 
-Action: READ-ONLY discovery and migration design.
-Access: READ-ONLY now. A future reviewed migration will be WRITE and must be separately approved.
-Risk: HIGH until row ownership, identity joins and role semantics are verified.
+Action: READ-ONLY verification.
+Access: READ-ONLY.
+Risk: Sensitive rights and settlement data; preserve fail-closed behavior.
 
-## Scope
+## Tables reviewed
 
-RLS is enabled but no policies were found on:
 - `public.bridge_rights_evidence`
 - `public.bridge_rights_evidence_reviews`
 - `public.bridge_settlement_reference_claims`
 - `public.bridge_settlement_reference_claim_events`
 
-## Required evidence before SQL is authored
+## Live STAGING evidence (2026-11-11)
 
-- Full column definitions, primary/foreign keys, constraints, indexes, triggers and dependent views.
-- All application queries and mutation paths for the four tables.
-- Verified mapping from authenticated Supabase user to Bridge profile and organization membership.
-- Explicit per-table/per-operation matrix for Creator, Studio, legal reviewer, finance, admin and super-admin.
-- Current grants for anon/authenticated and function execute privileges.
+- RLS is enabled on all four tables.
+- No RLS policies exist on these four tables.
+- `anon` and `authenticated` have no table grants on any of these four tables.
+- `service_role` and `postgres` have the table privileges required by server-side operations.
+- Constraints bind rights evidence to Bridge title, rights grant and asset-version records; review rows bind to evidence; settlement events bind to claim and source audit event.
+- The Bridge application database access uses the server-only `getSql()` Postgres connection. It does not query these tables directly from browser Supabase Data API in the inspected path.
 
-## Policy design constraints
+## Decision
 
-- No generic blanket `TO authenticated USING (true)` policy.
-- No reliance on user-editable `user_metadata` for authorization.
-- Creator/Studio access must be row-scoped to verified ownership/organization.
-- Legal review and settlement evidence must be restricted to authorized internal roles.
-- UPDATE requires both SELECT visibility and UPDATE `USING` + `WITH CHECK`.
-- Revoke unnecessary grants and add only required privileges.
-- Preserve auditability; do not allow a submitter to approve their own rights or settlement evidence.
+**Do not add blanket authenticated RLS policies. Do not grant anon/authenticated access. Do not apply a migration for these four tables on the evidence currently available.**
 
-## Test matrix
+RLS enabled + no policies + no anon/authenticated grants is a fail-closed, server-only access posture. The Supabase `rls_enabled_no_policy` advisor finding is informational for these four tables, not a reason to expose rows. The advisor's leaked-password protection warning is a separate Auth configuration issue and is not modified in this migration plan.
 
-Test unauthenticated anon, unrelated authenticated account, owner Creator, same-org Studio member, other-org Studio member, legal reviewer, finance reviewer, admin and super-admin. Verify SELECT, INSERT, UPDATE, DELETE independently, including cross-row reassignment attempts.
+## Verification required after any future schema or app change
+
+Run READ-ONLY checks confirming:
+1. `relrowsecurity = true` for all four tables.
+2. No `anon` or `authenticated` SELECT/INSERT/UPDATE/DELETE/TRUNCATE/REFERENCES/TRIGGER grants.
+3. No unexpected policies or public RPC functions grant access.
+4. The server-side Postgres connection still has the intended access.
+5. Application-level tests cover Creator, Studio, legal reviewer and finance reviewer flows without direct browser table access.
+
+If the product later requires a direct Data API surface, design a separate per-operation policy from verified identity and ownership semantics; that is a new security design and requires explicit review.
 
 ## Execution boundary
 
-No migration SQL is included because the correct ownership columns and identity joins must first be proven from the live STAGING schema and application access paths. Do not execute speculative policies. PRODUCTION project `mlmgugivsyoxzdgwkbpu` is excluded and remains HOLD / NOT CERTIFIED / NO-GO.
+No SQL migration has been applied. No STAGING writes have occurred. PRODUCTION project `mlmgugivsyoxzdgwkbpu` is excluded and remains HOLD / NOT CERTIFIED / NO-GO.

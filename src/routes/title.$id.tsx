@@ -198,7 +198,7 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
                 onClick={() => setChosenTab("Files")}
                 className="rounded-full bg-fg px-5 py-2.5 text-sm font-semibold text-bg"
               >
-                Submit Files
+                Upload Files
               </button>
             </div>
           </div>
@@ -297,7 +297,7 @@ function notifyUpload(message: string) {
   // when the user has already granted permission; never prompt unexpectedly.
   if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
     try {
-      new Notification("Crayons Bridge · File submission", { body: message });
+      new Notification("Crayons Bridge · Upload", { body: message });
     } catch {
       // The accessible in-page status remains available if desktop notifications fail.
     }
@@ -369,7 +369,7 @@ function FilesPanel({
       return await Promise.race([
         operation,
         new Promise<T>((_, reject) => {
-          timer = setTimeout(() => reject(new Error(`${phase} timed out. Please retry file submission.`)), timeoutMs);
+          timer = setTimeout(() => reject(new Error(`${phase} timed out. Please retry the upload.`)), timeoutMs);
         }),
       ]);
     } finally {
@@ -403,7 +403,7 @@ function FilesPanel({
       xhr.onload = () => {
         uploadXhrRef.current = null;
         if (xhr.status >= 200 && xhr.status < 300) resolve();
-        else reject(new Error(`File submission failed (${xhr.status}). No Ready status was set; please retry.`));
+        else reject(new Error(`Upload failed (${xhr.status}). No Ready status was set; please retry.`));
       };
       xhr.onerror = () => {
         uploadXhrRef.current = null;
@@ -416,7 +416,7 @@ function FilesPanel({
       xhr.onabort = () => {
         uploadXhrRef.current = null;
         reject(new Error(cancelRequestedRef.current
-          ? "File submission cancelled. The asset was not marked Ready; select the file again to retry."
+          ? "Upload cancelled. The asset was not marked Ready; select the file again to retry."
           : "File transfer was interrupted. The asset was not marked Ready; select the file again to retry."));
       };
       xhr.send(file);
@@ -443,7 +443,7 @@ function FilesPanel({
         if (stall) clearTimeout(stall);
         uploadXhrRef.current = null;
         if (xhr.status >= 200 && xhr.status < 300) resolve();
-        else reject(new Error(`File transfer part failed (${xhr.status}). Completed parts were kept. Choose the same file to continue.`));
+        else reject(new Error(`Part upload failed (${xhr.status}). Completed parts were kept. Choose the same file to continue.`));
       };
       xhr.onerror = () => {
         if (stall) clearTimeout(stall);
@@ -508,7 +508,7 @@ function FilesPanel({
         loaded: loadedBytes(session.completedParts, session.fileSize, session.partSize),
         total: session.fileSize,
       });
-      announce(`Submitting ${kindLabel(kind)} in parts. A connection drop keeps the completed parts.`);
+      announce(`Uploading ${kindLabel(kind)} in parts. A connection drop keeps the completed parts.`);
       for (let part = nextPart(session.completedParts, total); part !== null; part = nextPart(session.completedParts, total)) {
         assertAttemptActive();
         const { start, end } = partSlice(session.fileSize, part, session.partSize);
@@ -531,7 +531,7 @@ function FilesPanel({
             sent = true;
           } catch (error) {
             const raw = error instanceof Error ? error.message : "";
-            if (raw === "cancelled") throw new Error("File submission cancelled. The asset was not marked Ready.");
+            if (raw === "cancelled") throw new Error("Upload cancelled. The asset was not marked Ready.");
             if (attempt === 4) {
               throw new Error("Connection dropped. Choose the same file to continue. Completed parts were kept.");
             }
@@ -569,7 +569,7 @@ function FilesPanel({
     const attemptId = ++uploadAttemptRef.current;
     const assertAttemptActive = () => {
       if (cancelRequestedRef.current || uploadAttemptRef.current !== attemptId) {
-        throw new Error("File submission cancelled. No further transfer or confirmation will be started by this attempt.");
+        throw new Error("Upload cancelled. No further transfer or confirmation will be started by this attempt.");
       }
     };
     setUploading(kind);
@@ -590,7 +590,7 @@ function FilesPanel({
       assertAttemptActive();
       // Use the OCI pre-authenticated URL verbatim; rewriting its encoded path can invalidate it.
       setProgress({ kind, phase: "transferring", percent: 0, etaSeconds: null, loaded: 0, total: file.size });
-      announce(`Submitting ${kindLabel(kind)}…`);
+      announce(`Uploading ${kindLabel(kind)}…`);
       await transferWithProgress(kind, signed.url, signed.method, file, contentType);
       assertAttemptActive();
       assetId = signed.assetId;
@@ -617,7 +617,7 @@ function FilesPanel({
     } catch (error) {
       // A cancelled/superseded attempt must not overwrite the status of a newer upload.
       if (uploadAttemptRef.current !== attemptId) return;
-      const raw = error instanceof Error ? error.message : "File submission failed";
+      const raw = error instanceof Error ? error.message : "Upload failed";
       setProgress(null);
       const cancelled = cancelRequestedRef.current;
       let detail = raw;
@@ -688,22 +688,22 @@ function FilesPanel({
     <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">File Submission</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Upload</p>
           <h2 className="mt-1 font-display text-xl font-semibold">Package in three steps</h2>
           <p className="mt-1 text-sm text-muted">{readyCount} of 7 files ready. A file is Ready only after storage verification.</p>
         </div>
       </div>
 
       {progress ? (
-        <div className="mt-5 rounded-2xl border border-accent/30 bg-accent-soft p-4" aria-label="File submission progress">
+        <div className="mt-5 rounded-2xl border border-accent/30 bg-accent-soft p-4" aria-label="Upload progress">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <p className="text-base font-semibold">{kindLabel(progress.kind)}</p>
               <p className="mt-1 text-sm text-muted">
                 {progress.phase === "transferring" && progress.percent !== null
                   ? `${progress.percent}% · ${(progress.loaded / (1024 * 1024)).toFixed(1)} of ${(progress.total / (1024 * 1024)).toFixed(1)} MB · ${formatEta(progress.etaSeconds)}`
-                  : progress.phase === "preparing" ? "Preparing a secure file transfer…"
-                  : progress.phase === "verifying" ? "Checking the submitted file. Do not submit it again yet."
+                  : progress.phase === "preparing" ? "Getting a secure upload link…"
+                  : progress.phase === "verifying" ? "Checking the stored file. Do not upload it again yet."
                   : "Updating the file list…"}
               </p>
             </div>
@@ -720,7 +720,7 @@ function FilesPanel({
                   void abortAssetMultipart({ data: { assetId: session.assetId, partBaseUrl: session.partBaseUrl } }).catch(() => undefined);
                 }
                 setProgress(null);
-                announce("File submission cancelled. Completed parts from this attempt were discarded.", "error", true);
+                announce("Upload cancelled. Completed parts from this attempt were discarded.", "error", true);
                 if (!uploadXhrRef.current) setUploading(null);
               }}
               className="rounded-full border border-line bg-surface px-3 py-1.5 text-xs font-semibold"
@@ -741,7 +741,7 @@ function FilesPanel({
           <div
             className="mt-3 h-3 overflow-hidden rounded-full bg-white"
             role="progressbar"
-            aria-label="File transfer progress"
+            aria-label="Upload transfer progress"
             aria-valuemin={0}
             aria-valuemax={100}
             aria-valuenow={progress.phase === "transferring" ? progress.percent ?? 0 : undefined}
@@ -813,7 +813,7 @@ function FilesPanel({
       </div>
       {assets.some((asset) => !asset.verified) ? (
         <p className="mt-4 text-sm text-muted">
-          Still processing: {assets.filter((asset) => !asset.verified).map((asset) => displayKind(asset.kind)).join(", ")}. For a large film, choose the same file to continue. Do not submit it again from the start.
+          Still processing: {assets.filter((asset) => !asset.verified).map((asset) => displayKind(asset.kind)).join(", ")}. For a large film, choose the same file to continue. Do not upload it again from the start.
         </p>
       ) : null}
       <AssetPreviewGallery assets={assets} />
@@ -903,7 +903,7 @@ function FileTypeCard({
         </div>
         <div className="flex shrink-0 flex-col items-end gap-2">
           <label className={`cursor-pointer rounded-full px-3 py-1.5 text-xs font-semibold ${ready ? "border border-line bg-surface" : "bg-fg text-bg"} ${busy || locked || !canUpload ? "pointer-events-none opacity-50" : ""}`}>
-            {busy ? "Submitting…" : ready ? "Replace" : "Submit"}
+            {busy ? "Uploading…" : ready ? "Replace" : "Upload"}
             <input
               className="sr-only"
               type="file"
