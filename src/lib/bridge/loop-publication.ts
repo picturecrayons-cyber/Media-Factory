@@ -376,6 +376,7 @@ export const authorizeLoopPublication = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
+    if (actor.internalRole !== "super_admin") throw new Error("Super Admin access required");
     assertPermission(actor, "loop.publish");
     assertLoopGatewayEnabled();
 
@@ -495,6 +496,7 @@ export const suspendLoopPublication = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
+    if (actor.internalRole !== "super_admin") throw new Error("Super Admin access required");
     assertPermission(actor, "loop.revoke");
     assertLoopGatewayEnabled();
     return (await getSql()).transaction(async (sql) => {
@@ -581,6 +583,7 @@ export const extendDistributionWindow = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
+    if (actor.internalRole !== "super_admin") throw new Error("Super Admin access required");
     assertPermission(actor, "loop.publish");
     assertLoopGatewayEnabled();
     return (await getSql()).transaction(async (sql) => {
