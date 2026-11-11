@@ -8,6 +8,7 @@ type HandoffRequest = {
   bridgeTitleId?: string;
   loopTitleId?: string;
   mediaType?: "video" | "poster" | "trailer";
+  objectKey?: string;
 };
 
 function jsonError(error: string, code: string, status: number) {
@@ -40,9 +41,12 @@ export const Route = createFileRoute("/api/loop/playback/authorize")({
 
         const bridgeTitleId = typeof input.bridgeTitleId === "string" ? input.bridgeTitleId.trim() : "";
         const loopTitleId = typeof input.loopTitleId === "string" ? input.loopTitleId.trim() : "";
+        const objectKey = typeof input.objectKey === "string" ? input.objectKey.trim().replace(/^\\//, "") : "";
         const mediaType = input.mediaType || "video";
-        if (!bridgeTitleId || !loopTitleId || !["video", "poster", "trailer"].includes(mediaType)) {
-          return jsonError("Bridge title, Loop title and supported media type are required", "INVALID_REQUEST", 400);
+        if (!["video", "poster", "trailer"].includes(mediaType) ||
+            (mediaType === "video" && (!bridgeTitleId || !loopTitleId)) ||
+            (mediaType !== "video" && !((bridgeTitleId && loopTitleId) || objectKey))) {
+          return jsonError("Valid title identity or a canonical public asset key is required", "INVALID_REQUEST", 400);
         }
 
         try {
@@ -69,8 +73,20 @@ export const Route = createFileRoute("/api/loop/playback/authorize")({
                    b.status as title_status, b.language, b.master_key, b.poster_key
             from bridge_loop_publications p
             join bridge_titles b on b.id = p.bridge_title_id
-            where p.bridge_title_id = ${bridgeTitleId}
-              and p.loop_title_id = ${loopTitleId}
+            where (${bridgeTitleId || null}::text is null or p.bridge_title_id = ${bridgeTitleId || null})
+              and (${loopTitleId || null}::text is null or p.loop_title_id = ${loopTitleId || null})
+              and (
+                ${mediaType === "poster" && objectKey ? objectKey : null}::text is null
+                or b.poster_key = ${mediaType === "poster" && objectKey ? objectKey : null}
+              )
+              and (
+                ${mediaType === "trailer" && objectKey ? objectKey : null}::text is null
+                or exists (
+                  select 1 from bridge_assets a
+                  where a.title_id = b.id and a.kind = 'trailer' and a.s3_key = ${mediaType === "trailer" && objectKey ? objectKey : null}
+                    and coalesce(a.byte_size, 0) > 0
+                )
+              )
             limit 1
           `;
           const publication = rows[0];
@@ -104,13 +120,14 @@ export const Route = createFileRoute("/api/loop/playback/authorize")({
             }
             objectKey = preflight.title.master_key;
           } else if (mediaType === "poster") {
-            objectKey = publication.poster_key;
+            objectKey = publication.poster_key && (!objectKey || objectKey === publication.poster_key) ? publication.poster_key : null;
             expiresIn = 3_600;
           } else {
             const assets = await sql<{ s3_key: string }>`
               select s3_key from bridge_assets
-              where title_id = ${bridgeTitleId} and kind = 'trailer'
+              where title_id = ${publication.bridge_title_id} and kind = 'trailer'
                 and coalesce(byte_size, 0) > 0
+                and (${objectKey || null}::text is null or s3_key = ${objectKey || null})
               limit 1
             `;
             objectKey = assets[0]?.s3_key || null;
