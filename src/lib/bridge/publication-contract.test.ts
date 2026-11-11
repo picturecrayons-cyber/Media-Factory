@@ -157,6 +157,6 @@ test("publication readiness GET performs no expiry writes", () => {
   const end = source.indexOf("export const authorizeLoopPublication", start);
   assert.ok(start >= 0 && end > start, "readiness handler boundaries must exist");
   const handler = source.slice(start, end);
-  assert.doesNotMatch(handler, /update\\s+bridge_loop_publications/i);
-  assert.doesNotMatch(handler, /update\\s+loop_titles/i);
+  assert.doesNotMatch(handler, /update\s+bridge_loop_publications/i);
+  assert.doesNotMatch(handler, /update\s+loop_titles/i);
 });
