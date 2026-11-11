@@ -37,9 +37,6 @@ const INTERNAL_PERMISSIONS: Record<InternalRole, readonly Permission[]> = {
     "finance.record_settlement",
     "users.invite_internal",
     "audit.read",
-    "loop.publish",
-    "loop.revoke",
-    "loop.certify_playback",
   ],
   super_admin: [
     "title.ingest_internal",
@@ -49,6 +46,7 @@ const INTERNAL_PERMISSIONS: Record<InternalRole, readonly Permission[]> = {
     "title.qc_review",
     "title.rights_review",
     "title.license",
+    "title.approve",
     "title.negotiate",
     "title.deliver",
     "delivery.read",
