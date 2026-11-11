@@ -150,3 +150,9 @@ test("TVOD publication cannot proceed without a positive customer rental price",
   await assert.rejects(h.authorize({ context, data: withoutPrice }));
   assert.equal(h.writes.length, 0);
 });
+
+test("TVOD publication cannot diverge from the canonical ₹99 Loop checkout price", async () => {
+  const h = harness([grant]);
+  await assert.rejects(h.authorize({ context, data: { ...data, consumerPricePaise: 5000 } }));
+  assert.equal(h.writes.length, 0);
+});
