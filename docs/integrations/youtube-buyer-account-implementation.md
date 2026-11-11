@@ -54,3 +54,10 @@
 - This SQL is a proposal artifact only, not an executable migration. Do not move it into the migration runner until gates are cleared.
 - No live YouTube OAuth credentials, channel linking, Content ID operations, payment, email, merge or deployment.
 - No paid upgrades. Preserve current Creator, Studio and Buyer workflows — App-inu pani kittaruthu.
+
+## Implemented source-only milestone (2026-11-11)
+
+- Added `src/lib/bridge/buyer-mandate-policy.ts`: pure fail-closed policy for verified platform-buyer organization, verified mandate, exact channel/territory/language/media/exploitation scope, exclusivity, sublicensing, onward delegation and mandate-term checks.
+- Added `src/lib/bridge/buyer-mandate-policy.test.ts` with positive and negative cases; included it in the standard `npm test` command.
+- This policy is not yet wired into live Buyer server functions. It must not be treated as active enforcement until the DB schema is reconciled, server-side organization/membership/mandate resolution is implemented, and all buyer endpoints are guarded. Existing Buyer checkout remains unchanged in this milestone.
+- Tests have not been executed in this environment; CI evidence is pending.
