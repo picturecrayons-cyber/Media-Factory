@@ -8,7 +8,7 @@ import * as rights from "./rights-coverage.ts";
 
 // Execute the real server handler with isolated transport/database dependencies.
 // No database or AWS requests are made by this harness.
-function harness(grants: unknown[], allowed = true, existing = false) {
+function harness(grants: unknown[], allowed = true, existing = false, currentSchema = false) {
   const writes: { query: string; values: unknown[] }[] = [];
   const title = {
     id: "title-1",
@@ -21,6 +21,7 @@ function harness(grants: unknown[], allowed = true, existing = false) {
   };
   const sql = async (strings: TemplateStringsArray, ...values: unknown[]) => {
     const query = strings.join("?");
+    if (query.includes("information_schema.columns")) return [{ current_schema: currentSchema }];
     if (query.includes("from bridge_titles")) return [title];
     if (query.includes("select evidence from bridge_rights_grants"))
       return [
@@ -126,4 +127,26 @@ test("status alignment never bypasses operator, rights or commercial coverage", 
     await assert.rejects(h.authorize({ context, data: scenario.data }));
     assert.equal(h.writes.length, 0);
   }
+});
+
+test("current Loop schema uses uppercase publication state and explicit TVOD price", async () => {
+  const h = harness([grant], true, false, true);
+  const result = await h.authorize({ context, data });
+  assert.equal((result as { status: string }).status, "AUTHORIZED");
+  const titleWrite = h.writes.find((write) => write.query.includes("insert into loop_titles"));
+  assert.ok(titleWrite);
+  assert.match(titleWrite.query, /is_listed/);
+  assert.match(titleWrite.query, /is_published/);
+  assert.match(titleWrite.query, /price_paise/);
+  assert.ok(titleWrite.values.includes(9900));
+  const publication = h.writes.find((write) => write.query.includes("insert into bridge_loop_publications"));
+  assert.ok(publication);
+  assert.equal(publication.values[3], "AUTHORIZED");
+});
+
+test("TVOD publication cannot proceed without a positive customer rental price", async () => {
+  const h = harness([grant]);
+  const { consumerPricePaise: _price, ...withoutPrice } = data;
+  await assert.rejects(h.authorize({ context, data: withoutPrice }));
+  assert.equal(h.writes.length, 0);
 });
