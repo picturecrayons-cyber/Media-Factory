@@ -22,6 +22,7 @@ export function DitAgentPanel() {
 
   if (workspace.isLoading) return <section className="rounded-2xl border border-line p-5 text-sm text-muted">Loading DIT Agent…</section>;
   if (workspace.isError) return <section className="rounded-2xl border border-line p-5 text-sm text-muted">DIT Agent service unavailable. Check Production database migration and server configuration before enabling.</section>;
+  if (!workspace.data) return <section className="rounded-2xl border border-line p-5 text-sm text-muted">DIT Agent workspace returned no data. Refresh and retry.</section>;
   const enabled = workspace.data.enabled;
   return (
     <section className="space-y-5 rounded-2xl border border-line bg-surface p-5" aria-labelledby="dit-agent-heading">
