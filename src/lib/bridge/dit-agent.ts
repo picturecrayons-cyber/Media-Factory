@@ -34,9 +34,9 @@ export const verifyDitFileCopies = createServerFn({ method: "POST" })
         f.master_object_key, f.backup_1_object_key, f.backup_2_object_key
       from bridge_dit_job_files f
       join bridge_dit_jobs j on j.id = f.job_id
-      where f.id = \${data.fileId}::uuid
-        and f.job_id = \${data.jobId}::uuid
-        and j.created_by = \${actor.userId}
+      where f.id = ${data.fileId}::uuid
+        and f.job_id = ${data.jobId}::uuid
+        and j.created_by = ${actor.userId}
       limit 1
     `;
     const file = rows[0];
@@ -59,15 +59,15 @@ export const verifyDitFileCopies = createServerFn({ method: "POST" })
     const byCopy = Object.fromEntries(verified.map(({ copy, result }) => [copy, result]));
     await sql`
       update bridge_dit_job_files
-      set master_sha256 = \${byCopy.MASTER.sha256},
-          backup_1_sha256 = \${byCopy.BACKUP_1.sha256},
-          backup_2_sha256 = \${byCopy.BACKUP_2.sha256},
+      set master_sha256 = ${byCopy.MASTER.sha256},
+          backup_1_sha256 = ${byCopy.BACKUP_1.sha256},
+          backup_2_sha256 = ${byCopy.BACKUP_2.sha256},
           master_verified_at = now(),
           backup_1_verified_at = now(),
           backup_2_verified_at = now(),
           status = 'VERIFIED',
           updated_at = now()
-      where id = \${data.fileId}::uuid and job_id = \${data.jobId}::uuid
+      where id = ${data.fileId}::uuid and job_id = ${data.jobId}::uuid
     `;
     await writeAudit({
       actorUserId: actor.userId,
@@ -99,7 +99,7 @@ export const signOffDitJob = createServerFn({ method: "POST" })
     const sql = await getSql();
     const jobs = await sql<{ id: string; title_id: string }>`
       select id, title_id from bridge_dit_jobs
-      where id = \${data.jobId}::uuid and created_by = \${actor.userId}
+      where id = ${data.jobId}::uuid and created_by = ${actor.userId}
       limit 1
     `;
     if (!jobs[0]) throw new Error("DIT job not found or access denied");
@@ -116,19 +116,19 @@ export const signOffDitJob = createServerFn({ method: "POST" })
             or backup_2_verified_at is null
         )::int as not_verified
       from bridge_dit_job_files
-      where job_id = \${data.jobId}::uuid
+      where job_id = ${data.jobId}::uuid
     `;
     if (!counts[0] || counts[0].total < 1 || counts[0].not_verified !== 0) {
       throw new Error("Card-safe gate blocked: every discovered file must pass source SHA-256 and all three independent OCI copy checks");
     }
     await sql`
       insert into bridge_dit_signoffs (job_id, signed_by, statement, checklist)
-      values (\${data.jobId}::uuid, \${actor.userId}, \${data.statement}, \${JSON.stringify(data.checklist)}::jsonb)
+      values (${data.jobId}::uuid, ${actor.userId}, ${data.statement}, ${JSON.stringify(data.checklist)}::jsonb)
     `;
     await sql`
       update bridge_dit_jobs
       set card_safe = true, status = 'COMPLETED', updated_at = now()
-      where id = \${data.jobId}::uuid and created_by = \${actor.userId}
+      where id = ${data.jobId}::uuid and created_by = ${actor.userId}
     `;
     await writeAudit({
       actorUserId: actor.userId,
@@ -239,64 +239,4 @@ export const createDitIntakeJob = createServerFn({ method: "POST" })
       order by created_at desc limit 50
     `;
     return { enabled: settings[0]?.enabled ?? false, jobs };
-  });
-
-export const setDitAgentEnabled = createServerFn({ method: "POST" })
-  .middleware([authMiddleware])
-  .validator(z.object({ enabled: z.boolean() }))
-  .handler(async ({ context, data }) => {
-    const actor = await requireVerifiedActor(context.userId);
-    requireDitOperator(actor);
-    const sql = await getSql();
-    await sql`
-      insert into bridge_dit_agent_settings (user_id, enabled, updated_at)
-      values (${actor.userId}, ${data.enabled}, now())
-      on conflict (user_id) do update set enabled = excluded.enabled, updated_at = now()
-    `;
-    await writeAudit({
-      actorUserId: actor.userId,
-      action: data.enabled ? "dit.agent_enabled" : "dit.agent_disabled",
-      entityType: "bridge_dit_agent_settings",
-      entityId: actor.userId,
-    });
-    return { enabled: data.enabled };
-  });
-
-export const createDitIntakeJob = createServerFn({ method: "POST" })
-  .middleware([authMiddleware])
-  .validator(z.object({
-    titleId: z.string().min(8).max(120),
-    sourceLabel: z.string().trim().min(1).max(160),
-    sourceType: z.enum(["CAMERA_CARD", "EXTERNAL_DRIVE", "FOLDER"]),
-    studioLabel: z.string().trim().max(160).optional(),
-  }))
-  .handler(async ({ context, data }) => {
-    const actor = await requireVerifiedActor(context.userId);
-    requireDitOperator(actor);
-    const sql = await getSql();
-    const enabled = await sql<{ enabled: boolean }>`
-      select enabled from bridge_dit_agent_settings where user_id = ${actor.userId} limit 1
-    `;
-    if (!enabled[0]?.enabled) throw new Error("Enable DIT Agent before creating an intake job");
-    const title = await loadTitle(data.titleId);
-    if (!title || !canOperateOnTitle(actor, title, "title.advance_upload", "title.ingest_internal")) {
-      throw new Error("You cannot operate DIT intake for this title");
-    }
-    const id = randomUUID();
-    await sql`
-      insert into bridge_dit_jobs
-        (id, title_id, created_by, studio_label, source_label, source_type, status, card_safe, metadata)
-      values
-        (${id}::uuid, ${title.id}, ${actor.userId}, ${data.studioLabel ?? null},
-         ${data.sourceLabel}, ${data.sourceType}, 'CREATED', false,
-         jsonb_build_object('ingestStatus', 'NOT_CONNECTED', 'storageStatus', 'NOT_STARTED'))
-    `;
-    await writeAudit({
-      actorUserId: actor.userId,
-      action: "dit.intake_job_created",
-      entityType: "bridge_dit_job",
-      entityId: id,
-      metadata: { titleId: title.id, sourceType: data.sourceType },
-    });
-    return { jobId: id, status: "CREATED" as const, cardSafe: false as const };
   });
