@@ -233,3 +233,18 @@ it("CMS ingest belongs only to verified super admins", () => {
   for (const a of [creator(), studio(), buyer(), admin(), viewer(), qc, legal, finance])
     assert.equal(hasPermission(a, "title.ingest_internal"), false);
 });
+
+it("only the designated Super Admin can perform approval and authorization decisions", () => {
+  const privileged = superAdmin();
+  for (const staff of [admin(), qc, legal, finance, viewer()]) {
+    for (const permission of ["title.qc_review", "title.rights_review", "title.license", "loop.publish", "loop.revoke", "loop.certify_playback"] as const) {
+      assert.equal(hasPermission(staff, permission), false, `${staff.internalRole} unexpectedly received ${permission}`);
+    }
+  }
+  for (const permission of ["title.qc_review", "title.rights_review", "title.license", "loop.publish", "loop.revoke", "loop.certify_playback"] as const) {
+    assert.equal(hasPermission(privileged, permission), true);
+  }
+  const spoofed = { ...privileged, email: "other@example.com" };
+  assert.equal(hasPermission(spoofed, "title.qc_review"), false);
+  assert.equal(hasPermission(spoofed, "title.rights_review"), false);
+});
