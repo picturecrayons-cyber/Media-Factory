@@ -8,6 +8,7 @@ export const INTERNAL_ROLES = [
   "legal_reviewer",
   "finance",
   "viewer",
+  "dit_operator",
 ] as const;
 export type InternalRole = (typeof INTERNAL_ROLES)[number];
 
@@ -104,5 +105,7 @@ export const PERMISSIONS = [
   "loop.publish",
   "loop.revoke",
   "loop.certify_playback",
+  "dit.workspace_read",
+  "dit.signoff",
 ] as const;
 export type Permission = (typeof PERMISSIONS)[number];
