@@ -25,9 +25,9 @@ function Dashboard() {
 const ADMIN_MODULES = [
   {
     title: "Loop Publishing Gateway",
-    description: "Review rights, QC, legal and delivery gates before Bridge authorizes Loop publication.",
-    to: "/cms",
-    search: { tab: "publishing" },
+    description: "Authorize Bridge-cleared titles for Crayons Loop through the protected publishing workflow.",
+    to: "/internal",
+    search: { desk: "gateway" },
     primary: true,
   },
   {
@@ -49,6 +49,11 @@ const ADMIN_MODULES = [
     title: "People & access",
     description: "Manage internal invitations and access profiles.",
     to: "/internal",
+  },
+  {
+    title: "Ingest & CMS",
+    description: "Create canonical titles and review licensing and publication status.",
+    to: "/cms",
   },
 ] as const;
 
@@ -105,15 +110,15 @@ function DashboardBody() {
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">
             Crayons Bridge · Super Admin
           </p>
-          <h2 className="font-display text-3xl font-semibold">Founder control centre</h2>
+          <h2 className="font-display text-3xl font-semibold">Super Admin control centre</h2>
           <p className="mt-1 max-w-2xl text-sm text-muted">
             A clear overview of Bridge operations and the controlled route from Bridge authorization to Loop publication.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Link
-            to="/cms"
-            search={{ tab: "publishing" }}
+            to="/internal"
+            search={{ desk: "gateway" }}
             className="rounded-sm bg-accent px-4 py-2 text-sm font-semibold text-[#041018]"
           >
             Open Loop Gateway
