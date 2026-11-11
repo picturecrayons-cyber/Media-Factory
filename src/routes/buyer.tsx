@@ -25,6 +25,7 @@ type RzCtor = new (opts: {
     razorpay_payment_id: string;
     razorpay_signature: string;
   }) => void;
+  modal?: { ondismiss: () => void };
 }) => { open: () => void };
 
 function loadRazorpay(): Promise<RzCtor> {
@@ -54,21 +55,43 @@ function Buyer() {
           <p className="mb-6 max-w-2xl text-sm leading-relaxed text-muted">
             Discover licensing-ready titles, open a listing, then license only after captured payment.
           </p>
-          <BuyerBody />
+          <BuyerBody userId={actor.userId} />
         </BridgeShell>
       )}
     </RequireBridge>
   );
 }
 
-function BuyerBody() {
+async function withTimeout<T>(operation: Promise<T>, label: string, timeoutMs = 15_000): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      operation,
+      new Promise<T>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`${label} timed out. Retry to check the service again.`)), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
+}
+
+function BuyerBody({ userId }: { userId: string }) {
   const qc = useQueryClient();
   const [tab, setTab] = useState<"discover" | "listing" | "licenses">("discover");
   const [query, setQuery] = useState("");
-  const titlesQ = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles() });
+  // Buyer-sensitive responses must never share a React Query cache entry across accounts.
+  const titlesKey = ["bridge-buyer-titles", userId] as const;
+  const entitlementsKey = ["bridge-buyer-entitlements", userId] as const;
+  const titlesQ = useQuery({
+    queryKey: titlesKey,
+    queryFn: () => withTimeout(listTitles(), "Buyer catalogue"),
+    retry: 1,
+  });
   const entQ = useQuery({
-    queryKey: ["bridge-entitlements"],
-    queryFn: () => listOwnEntitlements(),
+    queryKey: entitlementsKey,
+    queryFn: () => withTimeout(listOwnEntitlements(), "Buyer licenses"),
+    retry: 1,
   });
   const entitled = new Set(entQ.data?.entitlements.map((e) => e.titleId));
   const order = useMutation({
@@ -83,6 +106,9 @@ function BuyerBody() {
           amount: created.amountPaise,
           currency: created.currency,
           order_id: created.orderId,
+          modal: {
+            ondismiss: () => reject(new Error("Checkout closed before payment verification. No license was granted.")),
+          },
           handler: (res) => {
             void verifyLicensePayment({
               data: {
@@ -100,8 +126,8 @@ function BuyerBody() {
     },
     onSuccess: () => {
       toast("Payment captured — entitlement recorded");
-      void qc.invalidateQueries({ queryKey: ["bridge-titles"] });
-      void qc.invalidateQueries({ queryKey: ["bridge-entitlements"] });
+      void qc.invalidateQueries({ queryKey: titlesKey });
+      void qc.invalidateQueries({ queryKey: entitlementsKey });
       setTab("licenses");
     },
     onError: (err) => toast(err instanceof Error ? err.message : "Payment did not complete"),
@@ -111,14 +137,25 @@ function BuyerBody() {
   const needle = query.trim().toLowerCase();
   const visible = titles.filter((t) => !needle || `${t.name} ${t.language}`.toLowerCase().includes(needle));
   const licensed = visible.filter((t) => entitled.has(t.id));
-  if (titlesQ.isPending || entQ.isPending) return <p>Loading buyer dashboard…</p>;
-  if (titlesQ.isError)
+  if (titlesQ.isPending || entQ.isPending) {
+    return <p role="status" aria-live="polite">Loading your Buyer catalogue and licenses…</p>;
+  }
+  if (titlesQ.isError || entQ.isError) {
     return (
-      <p role="alert">
-        No licensing-ready titles are on the desk yet.{" "}
-        <button type="button" className="underline" onClick={() => void titlesQ.refetch()}>Refresh</button>
-      </p>
+      <section role="alert" className="space-y-3 rounded-sm border border-line p-4">
+        <p className="font-medium">Buyer data could not be loaded.</p>
+        {titlesQ.isError ? <p className="text-sm text-muted">Catalogue: {titlesQ.error.message}</p> : null}
+        {entQ.isError ? <p className="text-sm text-muted">Licenses: {entQ.error.message}</p> : null}
+        <button
+          type="button"
+          className="underline"
+          onClick={() => void Promise.all([titlesQ.refetch(), entQ.refetch()])}
+        >
+          Retry both checks
+        </button>
+      </section>
     );
+  }
 
   return (
     <div className="space-y-5">
