@@ -236,6 +236,7 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
   });
 
   const allTitles = q.data?.titles ?? [];
+  const gatewayEnabled = q.data?.gatewayEnabled === true;
   if (q.isPending) return <p>Loading distribution readiness…</p>;
   if (q.isError)
     return <p role="alert">Distribution readiness is unavailable. Refresh to retry.</p>;
@@ -277,10 +278,18 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
             Distribution Desk
           </h2>
           <p className="mt-1 text-xs text-muted">
-            Bridge authorizes master titles for consumer destinations and external distribution
-            licenses.
+            Crayons Loop is Bridge's internal consumer destination. Bridge remains the master catalogue and rights authority; Loop receives only titles explicitly authorized here.
           </p>
         </div>
+      </div>
+
+      <div className="rounded-xl border border-line bg-elevated/40 p-4 text-sm">
+        <p className="font-semibold">{gatewayEnabled ? "Preview gateway enabled" : "Gateway locked — no publication writes allowed"}</p>
+        <p className="mt-1 text-xs text-muted">
+          {gatewayEnabled
+            ? "This Preview is bound to the approved Bridge Testing DB. Production publishing remains disabled."
+            : "Publishing, suspension, revocation and window changes are disabled until an isolated Vercel Preview is proven to use the approved Bridge Testing DB. Production is always blocked."}
+        </p>
       </div>
 
       {/* Tabs */}
@@ -321,6 +330,9 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
             <div className="text-xs text-muted space-y-1">
               <div>
                 Destination URL: <strong className="text-fg">https://crayonsloop.in/</strong>
+              </div>
+              <div>
+                Role: <strong className="text-fg">Bridge internal buyer / consumer destination</strong>
               </div>
               <div>
                 Supported Model: <strong className="text-fg">TVOD rental only</strong>
@@ -453,7 +465,7 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
           <div className="flex items-center gap-3 pt-2">
             <Button
               type="button"
-              disabled={publishMut.isPending}
+              disabled={!gatewayEnabled || publishMut.isPending}
               onClick={() => publishMut.mutate(selectedTitleId)}
               className="rounded-full px-5 text-xs font-semibold"
             >
@@ -489,7 +501,7 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
             />
             <Button
               type="button"
-              disabled={!newExtendEnd || extendMut.isPending}
+              disabled={!gatewayEnabled || !newExtendEnd || extendMut.isPending}
               onClick={() =>
                 extendMut.mutate({ bridgeTitleId: extendTitleId, newWindowEnd: newExtendEnd })
               }
@@ -598,7 +610,7 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
                   pub.authorizationStatus === "DRAFT") ? (
                   <Button
                     type="button"
-                    disabled={!t.ready}
+                    disabled={!gatewayEnabled || !t.ready}
                     onClick={() => setSelectedTitleId(t.id)}
                     className="rounded-full text-xs font-semibold px-4 h-9"
                   >
@@ -613,7 +625,7 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
                     <Button
                       type="button"
                       variant="outline"
-                      disabled={suspendMut.isPending}
+                      disabled={!gatewayEnabled || suspendMut.isPending}
                       onClick={() => suspendMut.mutate(t.id)}
                       className="rounded-full border-line text-xs font-semibold h-9 hover:border-amber-500/40 hover:text-amber-400"
                     >
@@ -622,7 +634,7 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
                     <Button
                       type="button"
                       variant="outline"
-                      disabled={revokeMut.isPending}
+                      disabled={!gatewayEnabled || revokeMut.isPending}
                       onClick={() => revokeMut.mutate(t.id)}
                       className="rounded-full border-line text-xs font-semibold h-9 hover:border-red-500/40 hover:text-red-400"
                     >
