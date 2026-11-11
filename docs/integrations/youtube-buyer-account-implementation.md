@@ -45,10 +45,10 @@ Migration source files are committed to the integration branch under `supabase/m
   - Resolves buyer organization from authenticated `bridge_profiles.organization_id` + active membership + active organization; client-supplied organization IDs are not trusted.
   - Requires verified buyer organization plus accepted company/tax registration and signatory/board evidence.
   - Creates buyer organization verification and YouTube acquisition-mandate submissions.
-  - Uploads legal evidence through the existing server-only OCI object-storage provider, verifies the object before recording it, and limits legal evidence to 20 MB PDF/JPEG/PNG.
+  - Uploads legal evidence through the existing server-only OCI object-storage provider, verifies the object, seals an immutable copy before recording it, and limits legal evidence to 20 MB PDF/JPEG/PNG.
   - Provides independent evidence review, organization review and mandate review endpoints. The submitter cannot review their own evidence or application.
   - Enforces one unambiguous active approved YouTube mandate, accepted signed agreement/channel ownership/territory/rights evidence, YouTube buyer-channel declaration, and exact title-rights grant scope.
-- Added an Admin/Legal review queue to `/internal` for organization evidence and mandate evidence, with accept/reject and approve/reject/suspend actions.
+- Added Buyer legal onboarding and evidence-upload UI to `/buyer` plus an Admin/Legal review queue to `/internal` for organization evidence and mandate evidence, with accept/reject and approve/reject/suspend actions.
 - `createLicenseOrder` now requires the verified buyer organization and active mandate before contacting Razorpay.
 - `grantFromCapturedPayment` re-resolves the buyer and revalidates the mandate before changing payment state or granting an entitlement, including webhook processing.
 - Buyer title catalogue, title detail, asset listing and asset-download paths now include legal-organization / mandate gates as appropriate.
