@@ -183,7 +183,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                       }),
                   )
                 : null}
-              {title.status === "QC_REVIEW" && hasPermission(actor, "title.qc_review") ? (
+              {title.status === "QC_REVIEW" && hasPermission(actor, "title.approve") ? (
                 <>
                   {input(
                     "Technical review findings (include playback/codec checks)",
@@ -371,7 +371,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                         </div>
                         {selectedGrant.status === "DRAFT" &&
                         title.status === "RIGHTS_REVIEW" &&
-                        hasPermission(actor, "title.rights_review") ? (
+                        hasPermission(actor, "title.approve") ? (
                           <div className="flex flex-wrap gap-2 border-t border-line pt-3">
                             {button(
                               isDesignatedSuperAdmin(actor) ? "Approve rights / license (Super Admin override)" : "Approve rights / license",
