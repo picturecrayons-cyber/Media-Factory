@@ -150,3 +150,13 @@ test("Loop publication enforces the locked 65/35 Content Owner / Bridge split", 
   );
   assert.equal(missingSplit.writes.length, 0);
 });
+
+test("publication readiness GET performs no expiry writes", () => {
+  const source = readFileSync(new URL("./loop-publication.ts", import.meta.url), "utf8");
+  const start = source.indexOf("export const listLoopPublicationReadiness");
+  const end = source.indexOf("export const authorizeLoopPublication", start);
+  assert.ok(start >= 0 && end > start, "readiness handler boundaries must exist");
+  const handler = source.slice(start, end);
+  assert.doesNotMatch(handler, /update\\s+bridge_loop_publications/i);
+  assert.doesNotMatch(handler, /update\\s+loop_titles/i);
+});

@@ -166,7 +166,7 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
                 </p>
               </div>
               <span className="rounded-full border border-line bg-elevated px-3 py-1.5 text-xs font-semibold">
-                {title.status === "UPLOADING" ? "SUBMITTED" : title.status}
+                {title.status}
               </span>
             </div>
             {title.synopsis ? (
@@ -463,14 +463,14 @@ function FilesPanel({
   async function runMultipart(kind: SimpleAssetKind, file: File, contentType: string, assertAttemptActive: () => void) {
     const existing = readUploadSession(titleId, kind);
     if (existing && !sameUploadFile(existing, file)) {
-      throw new Error(`A paused ${kindLabel(kind)} file submission is waiting for ${existing.fileName}. Choose that file to continue, or cancel it first.`);
+      throw new Error(`A paused ${kindLabel(kind)} upload is waiting for ${existing.fileName}. Choose that file to continue, or cancel it first.`);
     }
     let session = existing;
     if (!session) {
       const signed = await withTimeout(
         requestAssetUpload({ data: { titleId, kind, filename: asciiUploadName(file.name), contentType, byteSize: file.size } }),
         20_000,
-        "File submission URL preparation",
+        "Upload URL preparation",
       );
       assertAttemptActive();
       const started = await withTimeout(
