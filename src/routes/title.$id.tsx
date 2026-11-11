@@ -515,6 +515,7 @@ function FilesPanel({
         total: session.fileSize,
       });
       announce(`Uploading ${kindLabel(kind)} in parts. A connection drop keeps the completed parts.`);
+      const transferStartedAt = Date.now();
       for (let part = nextPart(session.completedParts, total); part !== null; part = nextPart(session.completedParts, total)) {
         assertAttemptActive();
         const { start, end } = partSlice(session.fileSize, part, session.partSize);
@@ -525,11 +526,14 @@ function FilesPanel({
           try {
             await putPart(session.partBaseUrl + String(part), file.slice(start, end), contentType, (loaded) => {
               const transferred = Math.min(session!.fileSize, baseLoaded + loaded);
+              const elapsedSeconds = Math.max((Date.now() - transferStartedAt) / 1000, 0.5);
+              const bytesPerSecond = transferred / elapsedSeconds;
+              const etaSeconds = bytesPerSecond > 0 ? (session!.fileSize - transferred) / bytesPerSecond : null;
               setProgress({
                 kind,
                 phase: "transferring",
                 percent: Math.floor((transferred / session!.fileSize) * 100),
-                etaSeconds: null,
+                etaSeconds,
                 loaded: transferred,
                 total: session!.fileSize,
               });
