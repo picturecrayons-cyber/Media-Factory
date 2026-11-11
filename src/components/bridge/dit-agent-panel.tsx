@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
-import { createDitIntakeJob, finalizeDitFileUpload, getDitJobFiles, getDitWorkspace, registerDitFile, setDitAgentEnabled, signOffDitJob, markDitFileFailed } from "@/lib/bridge/dit-agent";
+import { createDitIntakeJob, finalizeDitFileUpload, getDitJobFiles, getDitWorkspace, registerDitFile, setDitAgentEnabled, signOffDitJob, markDitFileFailed, createDitEditorHandoff, archiveDitJob } from "@/lib/bridge/dit-agent";
 
 export function DitAgentPanel() {
   const qc = useQueryClient();
@@ -27,7 +27,9 @@ export function DitAgentPanel() {
   });
 
   const activeJobId = create.data?.jobId;
-  const signoff = useMutation({ mutationFn: () => signOffDitJob({ data: { jobId: activeJobId!, statement: signoffStatement, checklist: { sourceReconciled: true, noMissingClips: true, noDuplicateClips: true, checksumsVerified: true, allThreeCopiesVerified: true, sourceCardSafeToReuse: true } } }), onSuccess: () => { void qc.invalidateQueries({ queryKey: ["studio-dit-workspace"] }); } });
+  const signoff = useMutation({ mutationFn: () => signOffDitJob({ data: { jobId: activeJobId!, statement: signoffStatement, checklist: { sourceReconciled: true, noMissingClips: true, noDuplicateClips: true, checksumsVerified: true, allThreeCopiesVerified: true, sourceCardSafeToReuse: true } } }), onSuccess: () => { void qc.invalidateQueries({ queryKey: ["studio-dit-workspace"] }); } });  const handoff = useMutation({ mutationFn: () => createDitEditorHandoff({ data: { jobId: activeJobId! } }) });
+  const archive = useMutation({ mutationFn: () => archiveDitJob({ data: { jobId: activeJobId! } }) });
+
   const jobFiles = useQuery({
     queryKey: ["studio-dit-files", activeJobId],
     queryFn: () => getDitJobFiles({ data: { jobId: activeJobId! } }),
@@ -141,7 +143,14 @@ export function DitAgentPanel() {
             {signoff.isError ? <p role="alert" className="text-xs text-accent">{String(signoff.error)}</p> : null}
             {signoff.isSuccess ? <p className="text-xs font-semibold">Sign-off saved · Card Safe PASS</p> : null}
           </div>
-          <p className="text-xs text-muted">Codec probing, resumable multipart, pause/resume, proxy generation and editor handoff are not yet connected. Format labels are extension-based, not codec certification.</p>
+          <div className="flex flex-wrap gap-2 border-t border-line pt-3">
+            <button type="button" disabled={handoff.isPending} onClick={() => handoff.mutate()} className="rounded-full border border-line px-4 py-2 text-xs disabled:opacity-40">{handoff.isPending ? "Preparing…" : "Create editor handoff report"}</button>
+            <button type="button" disabled={archive.isPending} onClick={() => archive.mutate()} className="rounded-full border border-line px-4 py-2 text-xs disabled:opacity-40">{archive.isPending ? "Archiving…" : "Create verified archive copies"}</button>
+          </div>
+          {handoff.isSuccess ? <p className="text-xs">Editor handoff saved · {handoff.data.fileCount} verified files · {handoff.data.handoffId}</p> : null}
+          {archive.isSuccess ? <p className="text-xs">Archive verified · {archive.data.archivedFiles} files</p> : null}
+          {handoff.isError || archive.isError ? <p role="alert" className="text-xs text-accent">{String(handoff.error ?? archive.error)}</p> : null}
+          <p className="text-xs text-muted">Codec probing, resumable multipart, pause/resume and proxy/transcode worker are not yet connected. Format labels are extension-based, not codec certification.</p>
         </div>
       ) : null}
       {toggle.isError || create.isError ? <p role="alert" className="text-sm text-accent">{String(toggle.error ?? create.error)}</p> : null}
