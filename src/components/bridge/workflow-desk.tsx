@@ -190,15 +190,21 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                     note,
                     setNote,
                   )}
-                  {button("Approve QC", () =>
-                    reviewTitleWorkflow({
-                      data: { titleId: title.id, stage: "QC", decision: "APPROVE", note },
-                    }),
-                  )}
-                  {button("Return for correction", () =>
-                    reviewTitleWorkflow({
-                      data: { titleId: title.id, stage: "QC", decision: "REJECT", note },
-                    }),
+                  {hasPermission(actor, "title.approve") ? (
+                    <>
+                      {button("Approve QC", () =>
+                        reviewTitleWorkflow({
+                          data: { titleId: title.id, stage: "QC", decision: "APPROVE", note },
+                        }),
+                      )}
+                      {button("Return for correction", () =>
+                        reviewTitleWorkflow({
+                          data: { titleId: title.id, stage: "QC", decision: "REJECT", note },
+                        }),
+                      )}
+                    </>
+                  ) : (
+                    <p className="text-xs text-muted">QC findings may be prepared here. Final decision is reserved to Super Admin.</p>
                   )}
                 </>
               ) : null}
@@ -369,7 +375,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                         </div>
                         {selectedGrant.status === "DRAFT" &&
                         title.status === "RIGHTS_REVIEW" &&
-                        hasPermission(actor, "title.rights_review") ? (
+                        hasPermission(actor, "title.approve") ? (
                           <div className="flex flex-wrap gap-2 border-t border-line pt-3">
                             {button(
                               "Approve rights / license",
