@@ -87,6 +87,7 @@ export const PERMISSIONS = [
   "title.license",
   "title.negotiate",
   "title.deliver",
+  "title.approve",
   "title.delete",
   "users.manage",
   "agreements.manage",
