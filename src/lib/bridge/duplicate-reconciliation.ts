@@ -224,7 +224,7 @@ export const decideDuplicateReview = createServerFn({ method: "POST" })
   .validator(decisionInput)
   .handler(async ({ context, data }) => {
     const actor = await actorFor(context.userId);
-    assertPermission(actor, "title.license");
+    assertPermission(actor, "title.approve");
     const sql = await getSql();
 
     const rows = await sql<ReviewRow>`

@@ -14,7 +14,7 @@ import {
   revokeLoopPublication,
   suspendLoopPublication,
 } from "@/lib/bridge/loop-publication";
-import { hasPermission, canOperateOnTitle } from "@/lib/bridge/rbac";
+import { hasPermission, canOperateOnTitle, isDesignatedSuperAdmin } from "@/lib/bridge/rbac";
 import { publicationIsActive } from "@/lib/bridge/workflow-policy";
 import type { BridgeActor } from "@/lib/bridge/session";
 import type { BridgeTitle } from "@/lib/bridge/types";
@@ -183,7 +183,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                       }),
                   )
                 : null}
-              {title.status === "QC_REVIEW" && hasPermission(actor, "title.qc_review") ? (
+              {title.status === "QC_REVIEW" && hasPermission(actor, "title.approve") ? (
                 <>
                   {input(
                     "Technical review findings (include playback/codec checks)",
@@ -338,7 +338,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                               ["NON-EXCLUSIVE terms recorded", selectedGrant.exclusivity === "NON_EXCLUSIVE"],
                               ["Revenue-share split recorded and totals 100%", validSplit],
                               ["Territory, language and validity window recorded", selectedGrant.territories.length > 0 && selectedGrant.languages.length > 0 && validWindow],
-                              ["Independent Legal Reviewer approval completed", selectedGrant.status === "VALID"],
+                              [isDesignatedSuperAdmin(actor) ? "Super Admin Legal approval completed" : "Independent Legal Reviewer approval completed", selectedGrant.status === "VALID"],
                             ] as const;
                             return (
                               <>
@@ -361,7 +361,9 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                                 <p className="text-xs font-medium" role="status">
                                   {checks.every(([, passed]) => passed)
                                     ? "All required fields are recorded. Documentary verification and Legal approval remain separate gates."
-                                    : "PENDING — do not mark READY until every required item is verified and the independent Legal Reviewer approves."}
+                                    : isDesignatedSuperAdmin(actor)
+                                      ? "PENDING — Super Admin may approve with a documented reason after verifying all required evidence."
+                                      : "PENDING — do not mark READY until every required item is verified and the authorized Legal Reviewer approves."}
                                 </p>
                               </>
                             );
@@ -369,10 +371,10 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                         </div>
                         {selectedGrant.status === "DRAFT" &&
                         title.status === "RIGHTS_REVIEW" &&
-                        hasPermission(actor, "title.rights_review") ? (
+                        hasPermission(actor, "title.approve") ? (
                           <div className="flex flex-wrap gap-2 border-t border-line pt-3">
                             {button(
-                              "Approve rights / license",
+                              isDesignatedSuperAdmin(actor) ? "Approve rights / license (Super Admin override)" : "Approve rights / license",
                               () =>
                                 reviewTitleWorkflow({
                                   data: {

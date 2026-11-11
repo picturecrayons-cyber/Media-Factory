@@ -3,7 +3,7 @@ import { z } from "zod";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql, type Sql } from "@/lib/db";
 import { requireVerifiedActor } from "./session";
-import { assertPermission, canReadTitle, canOperateOnTitle, type Actor } from "./rbac";
+import { assertPermission, canReadTitle, canOperateOnTitle, isDesignatedSuperAdmin, type Actor } from "./rbac";
 import { loadTitle } from "./titles";
 import { loopLicenseInput, producerSharePaise } from "./workflow-policy";
 import { bridgeEnv } from "./env";
@@ -74,7 +74,7 @@ const reviewInput = z.object({
 
 export async function reviewWorkflow(tx: Sql, actor: Actor, data: z.infer<typeof reviewInput>) {
   data = reviewInput.parse(data);
-  assertPermission(actor, data.stage === "QC" ? "title.qc_review" : "title.rights_review");
+  assertPermission(actor, "title.approve");
   const [title] = await tx<{
     status: string;
     master_key: string | null;
@@ -104,7 +104,8 @@ export async function reviewWorkflow(tx: Sql, actor: Actor, data: z.infer<typeof
       created_by: string;
     }>`select status,window_end,created_by from bridge_rights_grants where id=${data.grantId} and title_id=${data.titleId} for update`;
     if (!grant || grant.status !== "DRAFT") throw new Error("License draft is unavailable");
-    if (grant.created_by === actor.userId)
+    const ownerOverride = data.stage === "LEGAL" && isDesignatedSuperAdmin(actor);
+    if (grant.created_by === actor.userId && !ownerOverride)
       throw new Error("Another legal reviewer must approve this license");
     if (data.decision === "APPROVE" && new Date(grant.window_end) <= new Date())
       throw new Error("License has expired");
@@ -126,7 +127,7 @@ export async function reviewWorkflow(tx: Sql, actor: Actor, data: z.infer<typeof
     actor.userId,
     data.titleId,
     `workflow.${data.stage.toLowerCase()}.${data.decision.toLowerCase()}`,
-    { grantId: data.grantId ?? null },
+    { grantId: data.grantId ?? null, superAdminSelfApprovalOverride: data.stage === "LEGAL" && isDesignatedSuperAdmin(actor), overrideReason: data.stage === "LEGAL" && isDesignatedSuperAdmin(actor) ? data.note : null },
   );
   return { status: next };
 }

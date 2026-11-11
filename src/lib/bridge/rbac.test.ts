@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { assertPermission, canAccessDashboard, canAccessTitleWorkspace, canGrantInternalRole, canMutateTitle, canOperateOnTitle, canReadTitle, hasPermission, hasStaffPermission, permissionForTransition, workspaceHome } from "./rbac.ts";
+import { assertPermission, isDesignatedSuperAdmin, canAccessDashboard, canAccessTitleWorkspace, canGrantInternalRole, canMutateTitle, canOperateOnTitle, canReadTitle, hasPermission, hasStaffPermission, permissionForTransition, workspaceHome } from "./rbac.ts";
 import type { Actor } from "./rbac.ts";
 
 const actor = (
@@ -8,7 +8,7 @@ const actor = (
   accountType: Actor["accountType"],
   internalRole: Actor["internalRole"] = null,
   emailVerified = true,
-): Actor => ({ userId, emailVerified, accountType, internalRole });
+): Actor => ({ userId, emailVerified, accountType, internalRole, email: internalRole === "super_admin" ? "picturecrayons@gmail.com" : undefined });
 const creator = (verified = true) => actor("creator-a", "independent_creator", null, verified);
 const studio = () => actor("studio-a", "studio");
 const buyer = () => actor("buyer-a", "buyer");
@@ -143,6 +143,19 @@ describe("PRD authorization matrix", () => {
     assert.equal(permissionForTransition("IN_NEGOTIATION", "LICENSED"), null);
   });
 
+  it("reserves the full super-admin authority for the designated verified owner email", () => {
+    const designated = superAdmin();
+    const otherSuperAdmin = { ...designated, userId: "other-super", email: "other@example.com" };
+    assert.equal(isDesignatedSuperAdmin(designated), true);
+    assert.equal(isDesignatedSuperAdmin(otherSuperAdmin), false);
+    assert.equal(hasPermission(designated, "title.delete"), true);
+    assert.equal(hasPermission(designated, "users.manage"), true);
+    assert.equal(hasPermission(designated, "agreements.delete"), true);
+    assert.equal(hasPermission(otherSuperAdmin, "title.delete"), false);
+    assert.equal(canAccessDashboard(otherSuperAdmin), false);
+    assert.equal(canGrantInternalRole(otherSuperAdmin, "super_admin"), false);
+  });
+
   it("reserves dashboard and super-admin grants for verified super admins", () => {
     assert.equal(canAccessDashboard(superAdmin()), true);
     assert.equal(canAccessDashboard(admin()), false);
@@ -219,4 +232,20 @@ it("CMS ingest belongs only to verified super admins", () => {
   assert.equal(hasPermission(superAdmin(), "title.ingest_internal"), true);
   for (const a of [creator(), studio(), buyer(), admin(), viewer(), qc, legal, finance])
     assert.equal(hasPermission(a, "title.ingest_internal"), false);
+});
+
+it("only the designated Super Admin can perform approval and authorization decisions", () => {
+  const privileged = superAdmin();
+  for (const staff of [admin(), qc, legal, finance, viewer()]) {
+    assert.equal(hasPermission(staff, "title.approve"), false, `${staff.internalRole} unexpectedly received title.approve`);
+    for (const permission of ["loop.publish", "loop.revoke", "loop.certify_playback"] as const) {
+      assert.equal(hasPermission(staff, permission), false, `${staff.internalRole} unexpectedly received ${permission}`);
+    }
+  }
+  for (const permission of ["title.approve", "loop.publish", "loop.revoke", "loop.certify_playback"] as const) {
+    assert.equal(hasPermission(privileged, permission), true);
+  }
+  const spoofed = { ...privileged, email: "other@example.com" };
+  assert.equal(hasPermission(spoofed, "title.qc_review"), false);
+  assert.equal(hasPermission(spoofed, "title.rights_review"), false);
 });

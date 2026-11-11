@@ -155,6 +155,7 @@ const owner = {
 };
 const qc = { ...owner, userId: "qc", internalRole: "qc_reviewer" as const };
 const legal = { ...owner, userId: "legal", internalRole: "legal_reviewer" as const };
+const superAdmin = { ...owner, userId: "super-admin", email: "picturecrayons@gmail.com", internalRole: "super_admin" as const };
 const license = {
   titleId: "title-123",
   territories: ["WORLDWIDE"],
@@ -168,14 +169,14 @@ const license = {
   distributorSharePct: 20,
 };
 
-test("real SQL services persist QC, independently approved license, lifecycle and audit", async () => {
+test("real SQL services persist QC and Super Admin-approved license, lifecycle and audit", async () => {
   const f = await fixture();
   try {
     const saved = (await f.sql.transaction((tx) => f.save(tx, owner, license))) as {
       grantId: string;
     };
     await f.sql.transaction((tx) =>
-      f.review(tx, qc, {
+      f.review(tx, superAdmin, {
         titleId: "title-123",
         stage: "QC",
         decision: "APPROVE",
@@ -183,7 +184,7 @@ test("real SQL services persist QC, independently approved license, lifecycle an
       }),
     );
     await f.sql.transaction((tx) =>
-      f.review(tx, legal, {
+      f.review(tx, superAdmin, {
         titleId: "title-123",
         stage: "LEGAL",
         decision: "APPROVE",
@@ -219,7 +220,7 @@ test("unauthorized review and unverified current assets cannot clear QC", async 
     );
     await f.sql.query("update bridge_assets set byte_size=null where kind='master'");
     await assert.rejects(
-      f.sql.transaction((tx) => f.review(tx, qc, data)),
+      f.sql.transaction((tx) => f.review(tx, superAdmin, data)),
       /Verified/,
     );
     assert.equal((await f.sql.query("select * from bridge_qc_cases")).length, 0);
@@ -233,7 +234,7 @@ test("a stale artwork pointer cannot clear QC even when a verified vertical post
     await f.sql.query("update bridge_titles set poster_key='old/sealed/poster'");
     await assert.rejects(
       f.sql.transaction((tx) =>
-        f.review(tx, qc, {
+        f.review(tx, superAdmin, {
           titleId: "title-123",
           stage: "QC",
           decision: "APPROVE",
@@ -254,7 +255,7 @@ test("an audit failure rolls back review records and lifecycle", async () => {
     await f.sql.query("drop table bridge_audit_logs");
     await assert.rejects(
       f.sql.transaction((tx) =>
-        f.review(tx, qc, {
+        f.review(tx, superAdmin, {
           titleId: "title-123",
           stage: "QC",
           decision: "APPROVE",
@@ -293,8 +294,8 @@ test("concurrent reviewer calls cannot approve the same lifecycle twice", async 
       note: "Verified playback review",
     };
     const results = await Promise.allSettled([
-      f.sql.transaction((tx) => f.review(tx, qc, data)),
-      f.sql.transaction((tx) => f.review(tx, qc, data)),
+      f.sql.transaction((tx) => f.review(tx, superAdmin, data)),
+      f.sql.transaction((tx) => f.review(tx, superAdmin, data)),
     ]);
     assert.equal(results.filter((r) => r.status === "fulfilled").length, 1);
     assert.equal((await f.sql.query("select * from bridge_qc_cases")).length, 1);
@@ -302,30 +303,60 @@ test("concurrent reviewer calls cannot approve the same lifecycle twice", async 
     await f.db.close();
   }
 });
-test("license author cannot approve their own agreement", async () => {
+
+test("QC and Legal reviewers cannot approve through the server workflow", async () => {
   const f = await fixture();
   try {
-    const admin = { ...owner, userId: "admin", internalRole: "admin" as const };
-    const saved = (await f.sql.transaction((tx) => f.save(tx, admin, license))) as {
+    const saved = (await f.sql.transaction((tx) => f.save(tx, owner, license))) as { grantId: string };
+    await assert.rejects(
+      f.sql.transaction((tx) => f.review(tx, qc, {
+        titleId: "title-123", stage: "QC", decision: "APPROVE", note: "QC evidence reviewed",
+      })),
+      /Forbidden/,
+    );
+    await f.sql.query("update bridge_titles set status='RIGHTS_REVIEW'");
+    await assert.rejects(
+      f.sql.transaction((tx) => f.review(tx, legal, {
+        titleId: "title-123", stage: "LEGAL", decision: "APPROVE",
+        note: "Legal evidence reviewed", grantId: saved.grantId,
+      })),
+      /Forbidden/,
+    );
+    assert.equal((await f.sql.query("select * from bridge_qc_cases")).length, 0);
+    assert.equal((await f.sql.query("select * from bridge_legal_cases")).length, 0);
+    assert.equal((await f.sql.query<{status:string}>("select status from bridge_rights_grants"))[0].status, "DRAFT");
+  } finally {
+    await f.db.close();
+  }
+});
+
+test("designated Super Admin can self-approve a license with a recorded override reason", async () => {
+  const f = await fixture();
+  try {
+    const saved = (await f.sql.transaction((tx) => f.save(tx, superAdmin, license))) as {
       grantId: string;
     };
     await f.sql.query("update bridge_titles set status='RIGHTS_REVIEW'");
-    await assert.rejects(
-      f.sql.transaction((tx) =>
-        f.review(tx, admin, {
-          titleId: "title-123",
-          stage: "LEGAL",
-          decision: "APPROVE",
-          note: "Agreement checked",
-          grantId: saved.grantId,
-        }),
-      ),
-      /Another legal reviewer/,
+    await f.sql.transaction((tx) =>
+      f.review(tx, superAdmin, {
+        titleId: "title-123",
+        stage: "LEGAL",
+        decision: "APPROVE",
+        note: "Super Admin verified the agreement and ownership evidence",
+        grantId: saved.grantId,
+      }),
     );
     assert.equal(
       (await f.sql.query<{ status: string }>("select status from bridge_rights_grants"))[0].status,
-      "DRAFT",
+      "VALID",
     );
+    const legalCase = (await f.sql.query<{ evidence: unknown }>("select evidence from bridge_legal_cases"))[0];
+    const evidence = JSON.stringify(legalCase.evidence);
+    assert.match(evidence, /Super Admin verified the agreement/);
+    assert.match(evidence, new RegExp(saved.grantId));
+    const audit = (await f.sql.query<{ metadata: string }>("select metadata from bridge_audit_logs where action='workflow.legal.approve'"))[0];
+    assert.match(audit.metadata, /superAdminSelfApprovalOverride/);
+    assert.match(audit.metadata, /Super Admin verified the agreement/);
   } finally {
     await f.db.close();
   }
