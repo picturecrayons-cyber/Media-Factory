@@ -8,7 +8,15 @@ import * as rights from "./rights-coverage.ts";
 
 // Execute the real server handler with isolated transport/database dependencies.
 // No database or AWS requests are made by this harness.
-function harness(grants: unknown[], allowed = true, existing = false) {
+function harness(
+  grants: unknown[],
+  allowed = true,
+  existing = false,
+  commercialTerms: { rightsOwnerSharePct?: number; distributorSharePct?: number } = {
+    rightsOwnerSharePct: 65,
+    distributorSharePct: 35,
+  },
+) {
   const writes: { query: string; values: unknown[] }[] = [];
   const title = {
     id: "title-1",
@@ -24,7 +32,7 @@ function harness(grants: unknown[], allowed = true, existing = false) {
     if (query.includes("from bridge_titles")) return [title];
     if (query.includes("select evidence from bridge_rights_grants"))
       return [
-        { evidence: [{ commercialTerms: { rightsOwnerSharePct: 80, distributorSharePct: 20 } }] },
+        { evidence: [{ commercialTerms }] },
       ];
     if (query.includes("from bridge_rights_grants")) return grants;
     if (query.includes("as qc_ok")) return [{ qc_ok: true, legal_ok: true }];
@@ -125,4 +133,33 @@ test("status alignment never bypasses operator, rights or commercial coverage", 
     await assert.rejects(h.authorize({ context, data: scenario.data }));
     assert.equal(h.writes.length, 0);
   }
+});
+
+test("Loop publication enforces the locked 65/35 Content Owner / Bridge split", async () => {
+  const wrongSplit = harness([grant], true, false, {
+    rightsOwnerSharePct: 80,
+    distributorSharePct: 20,
+  });
+  await assert.rejects(
+    wrongSplit.authorize({ context, data }),
+    /exactly 65% Content Owner \/ 35% Bridge/,
+  );
+  assert.equal(wrongSplit.writes.length, 0);
+
+  const missingSplit = harness([grant], true, false, {});
+  await assert.rejects(
+    missingSplit.authorize({ context, data }),
+    /exactly 65% Content Owner \/ 35% Bridge/,
+  );
+  assert.equal(missingSplit.writes.length, 0);
+});
+
+test("publication readiness GET performs no expiry writes", () => {
+  const source = readFileSync(new URL("./loop-publication.ts", import.meta.url), "utf8");
+  const start = source.indexOf("export const listLoopPublicationReadiness");
+  const end = source.indexOf("export const authorizeLoopPublication", start);
+  assert.ok(start >= 0 && end > start, "readiness handler boundaries must exist");
+  const handler = source.slice(start, end);
+  assert.doesNotMatch(handler, /update\s+bridge_loop_publications/i);
+  assert.doesNotMatch(handler, /update\s+loop_titles/i);
 });
