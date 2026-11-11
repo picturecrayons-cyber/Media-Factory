@@ -84,7 +84,7 @@ function TitlePage() {
   return (
     <RequireBridge>
       {(actor) => (
-        <BridgeShell actor={actor} title="Title Workspace">
+        <BridgeShell actor={actor} title={actor.accountType === "buyer" && !actor.internalRole ? "Buyer listing" : "Title Workspace"}>
           <TitleBody id={id} actor={actor} />
         </BridgeShell>
       )}
@@ -94,31 +94,36 @@ function TitlePage() {
 
 function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
   const [chosenTab, setChosenTab] = useState<WorkspaceTab | null>(null);
+  const buyerView = actor.accountType === "buyer" && !actor.internalRole;
 
   const titleQ = useQuery({
-    queryKey: ["bridge-title", id],
+    // The same title has a redacted Buyer DTO and a full internal DTO.
+    queryKey: ["bridge-title", id, actor.userId, actor.internalRole ?? actor.accountType],
     queryFn: () => getTitle({ data: { id } }),
   });
   const assetsQ = useQuery({
-    queryKey: ["bridge-assets", id],
+    queryKey: ["bridge-assets", id, actor.userId],
     queryFn: () => listTitleAssets({ data: { titleId: id } }),
+    enabled: !buyerView,
   });
   const pubQ = useQuery({
-    queryKey: ["loop-pub", id],
+    queryKey: ["loop-pub", id, actor.userId],
     queryFn: () => getLoopPublication({ data: { bridgeTitleId: id } }),
+    enabled: !buyerView,
   });
 
   const reviewQ = useQuery({
-    queryKey: ["title-workflow", id],
+    queryKey: ["title-workflow", id, actor.userId, actor.internalRole ?? actor.accountType],
     queryFn: () => getTitleWorkflow({ data: { titleId: id } }),
-    enabled: Boolean(actor.internalRole) || actor.accountType !== "buyer",
+    enabled: !buyerView,
   });
   const title = titleQ.data?.title;
   const assets = assetsQ.data?.assets ?? [];
   const pub = pubQ.data?.publication;
-  const activeTab: WorkspaceTab =
-    chosenTab ??
-    (title && ["DRAFT", "UPLOADING", "PREPARING"].includes(title.status) ? "Files" : "Overview");
+  const activeTab: WorkspaceTab = buyerView
+    ? "Overview"
+    : chosenTab ?? (title && ["DRAFT", "UPLOADING", "PREPARING"].includes(title.status) ? "Files" : "Overview");
+  const visibleTabs = buyerView ? (["Overview"] as const) : WORKSPACE_TABS;
 
   if (titleQ.isPending) return <p className="text-sm text-muted">Loading title workspace…</p>;
   if (titleQ.isError)
@@ -192,15 +197,17 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
                 </span>
               ) : null}
             </div>
-            <div className="mt-5">
-              <button
-                type="button"
-                onClick={() => setChosenTab("Files")}
-                className="rounded-full bg-fg px-5 py-2.5 text-sm font-semibold text-bg"
-              >
-                Upload Files
-              </button>
-            </div>
+            {!buyerView ? (
+              <div className="mt-5">
+                <button
+                  type="button"
+                  onClick={() => setChosenTab("Files")}
+                  className="rounded-full bg-fg px-5 py-2.5 text-sm font-semibold text-bg"
+                >
+                  Upload Files
+                </button>
+              </div>
+            ) : null}
           </div>
         </div>
       </section>
@@ -209,7 +216,7 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
         aria-label="Title Workspace Sections"
         className="flex gap-1 overflow-x-auto border-b border-line pb-3"
       >
-        {WORKSPACE_TABS.map((tab) => (
+        {visibleTabs.map((tab) => (
           <button
             key={tab}
             type="button"
@@ -241,16 +248,20 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
             <Metric label="Director" value={title.credits?.filter((c) => c.role === "Director").map((c) => c.name).join(", ") || "—"} />
             <Metric label="Producer" value={title.credits?.filter((c) => c.role === "Producer").map((c) => c.name).join(", ") || "—"} />
           </div>
-          <LaneStore key={title.contentType} titleId={title.id} stored={loopStageType(title.contentType)} locked={!actor.internalRole && !["DRAFT", "UPLOADING", "PREPARING"].includes(title.status)} />
-          {title.synopsis ? <p className="mt-4 text-sm leading-6 text-muted">{title.synopsis}</p> : null}
-          <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <Metric label="QC" value={qcReady ? "READY" : "PENDING"} />
-            <Metric label="Rights" value={rightsReady ? "READY" : "PENDING"} />
-            <Metric label="Licensing" value={legalReady ? "READY" : "PENDING"} />
-            <Metric label="Publish" value={distributionReady ? "LIVE" : packageReady ? "READY" : "PENDING"} />
-          </div>
+          {!buyerView ? (
+            <>
+              <LaneStore key={title.contentType} titleId={title.id} stored={loopStageType(title.contentType)} locked={!actor.internalRole && !["DRAFT", "UPLOADING", "PREPARING"].includes(title.status)} />
+              {title.synopsis ? <p className="mt-4 text-sm leading-6 text-muted">{title.synopsis}</p> : null}
+              <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <Metric label="QC" value={qcReady ? "READY" : "PENDING"} />
+                <Metric label="Rights" value={rightsReady ? "READY" : "PENDING"} />
+                <Metric label="Licensing" value={legalReady ? "READY" : "PENDING"} />
+                <Metric label="Publish" value={distributionReady ? "LIVE" : packageReady ? "READY" : "PENDING"} />
+              </div>
+            </>
+          ) : null}
         </section>
-      ) : activeTab === "Files" ? (
+      ) : activeTab === "Files" && !buyerView ? (
         <FilesPanel
           canUpload={
             canOperateOnTitle(actor, title, "asset.sign_upload", "title.ingest_internal") &&
