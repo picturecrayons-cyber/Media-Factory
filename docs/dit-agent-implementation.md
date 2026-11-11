@@ -4,7 +4,7 @@
 A Bridge-native Digital Imaging Technician (DIT) workflow for camera/media intake, integrity evidence, three-copy backup verification, QC readiness and human DIT sign-off.
 
 ## Included in this draft
-- A dedicated read-only A2A agent card at `/api/a2a/dit-agent-card`.
+- A dedicated read-only A2A agent card at `/api/a2a/agent-card?agent=dit`.
 - A pure server-side DIT evidence core with SHA-256 helpers, fail-closed readiness evaluation, and human sign-off authorization policy.
 - Unit tests for checksum comparison, three distinct backup failure domains, byte-size parity, QC gates, RBAC and human-only sign-off.
 - No new external AI provider, paid service, database, or storage bucket.
