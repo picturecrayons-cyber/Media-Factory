@@ -29,7 +29,7 @@ export const verifyDitFileCopies = createServerFn({ method: "POST" })
       id: string; job_id: string; title_id: string; source_sha256: string | null;
       byte_size: number | null; master_object_key: string | null;
       backup_1_object_key: string | null; backup_2_object_key: string | null;
-    }>\`
+    }>`
       select f.id, f.job_id, j.title_id, f.source_sha256, f.byte_size,
         f.master_object_key, f.backup_1_object_key, f.backup_2_object_key
       from bridge_dit_job_files f
@@ -38,7 +38,7 @@ export const verifyDitFileCopies = createServerFn({ method: "POST" })
         and f.job_id = \${data.jobId}::uuid
         and j.created_by = \${actor.userId}
       limit 1
-    \`;
+    `;
     const file = rows[0];
     if (!file) throw new Error("DIT file not found or access denied");
     if (!file.source_sha256 || !file.byte_size || file.byte_size <= 0) {
@@ -57,7 +57,7 @@ export const verifyDitFileCopies = createServerFn({ method: "POST" })
       result: await verifyObjectSha256(key!, file.source_sha256!, Number(file.byte_size)),
     })));
     const byCopy = Object.fromEntries(verified.map(({ copy, result }) => [copy, result]));
-    await sql\`
+    await sql`
       update bridge_dit_job_files
       set master_sha256 = \${byCopy.MASTER.sha256},
           backup_1_sha256 = \${byCopy.BACKUP_1.sha256},
@@ -68,7 +68,7 @@ export const verifyDitFileCopies = createServerFn({ method: "POST" })
           status = 'VERIFIED',
           updated_at = now()
       where id = \${data.fileId}::uuid and job_id = \${data.jobId}::uuid
-    \`;
+    `;
     await writeAudit({
       actorUserId: actor.userId,
       action: "dit.file_three_copy_sha256_verified",
@@ -97,13 +97,13 @@ export const signOffDitJob = createServerFn({ method: "POST" })
     const actor = await requireVerifiedActor(context.userId);
     requireDitOperator(actor);
     const sql = await getSql();
-    const jobs = await sql<{ id: string; title_id: string }>\`
+    const jobs = await sql<{ id: string; title_id: string }>`
       select id, title_id from bridge_dit_jobs
       where id = \${data.jobId}::uuid and created_by = \${actor.userId}
       limit 1
-    \`;
+    `;
     if (!jobs[0]) throw new Error("DIT job not found or access denied");
-    const counts = await sql<{ total: number; not_verified: number }>\`
+    const counts = await sql<{ total: number; not_verified: number }>`
       select count(*)::int as total,
         count(*) filter (
           where status <> 'VERIFIED'
@@ -117,19 +117,19 @@ export const signOffDitJob = createServerFn({ method: "POST" })
         )::int as not_verified
       from bridge_dit_job_files
       where job_id = \${data.jobId}::uuid
-    \`;
+    `;
     if (!counts[0] || counts[0].total < 1 || counts[0].not_verified !== 0) {
       throw new Error("Card-safe gate blocked: every discovered file must pass source SHA-256 and all three independent OCI copy checks");
     }
-    await sql\`
+    await sql`
       insert into bridge_dit_signoffs (job_id, signed_by, statement, checklist)
       values (\${data.jobId}::uuid, \${actor.userId}, \${data.statement}, \${JSON.stringify(data.checklist)}::jsonb)
-    \`;
-    await sql\`
+    `;
+    await sql`
       update bridge_dit_jobs
       set card_safe = true, status = 'COMPLETED', updated_at = now()
       where id = \${data.jobId}::uuid and created_by = \${actor.userId}
-    \`;
+    `;
     await writeAudit({
       actorUserId: actor.userId,
       action: "dit.job_signed_off_card_safe",
