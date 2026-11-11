@@ -21,6 +21,7 @@ function harness(
   allowed = true,
   existing = false,
   env: Record<string, string> = previewStagingEnv,
+  internalRole = "super_admin",
 ) {
   const writes: { query: string; values: unknown[] }[] = [];
   const title = {
@@ -64,7 +65,7 @@ function harness(
     "@/lib/auth/middleware": { authMiddleware: {} },
     "@/lib/db": { getSql: async () => sql },
     "./rbac": { assertPermission: () => { if (!allowed) throw new Error("Forbidden"); } },
-    "./session": { requireVerifiedActor: async () => ({ userId: "operator", emailVerified: true }) },
+    "./session": { requireVerifiedActor: async () => ({ userId: "operator", emailVerified: true, internalRole }) },
     "./guards": { assertNotDevUser: () => {} },
     "./audit": { writeAudit: async () => {} },
     "./rights-coverage": rights,
@@ -168,4 +169,11 @@ test("Preview with a Production or unknown database binding remains locked", asy
   });
   await assert.rejects(wrongDatabase.authorize({ context, data }), /Gateway is locked/);
   assert.equal(wrongDatabase.writes.length, 0);
+});
+
+
+test("non-Super-Admin staff cannot call the Loop publication writer", async () => {
+  const admin = harness([grant], true, false, previewStagingEnv, "admin");
+  await assert.rejects(admin.authorize({ context, data }), /Super Admin access required/);
+  assert.equal(admin.writes.length, 0);
 });
