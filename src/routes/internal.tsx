@@ -19,7 +19,12 @@ import {
 import { INTERNAL_ROLES } from "@/lib/bridge/types";
 import { hasPermission } from "@/lib/bridge/rbac";
 
-export const Route = createFileRoute("/internal")({ component: Internal });
+export const Route = createFileRoute("/internal")({
+  validateSearch: (search: Record<string, unknown>) => ({
+    desk: search.desk === "gateway" ? "gateway" as const : "operations" as const,
+  }),
+  component: Internal,
+});
 
 function Internal() {
   return (
@@ -57,10 +62,7 @@ function InternalBody({
 
   return (
     <div className="grid gap-12">
-      {/* 1. Master Distribution Desk */}
-      <DistributionDesk canPublish={canPublish} canRevoke={canRevoke} />
-
-      {/* 2. Team Invitation Module */}
+      {/* Team Invitation Module */}
       {canInvite ? <InviteForm /> : null}
 
       {/* 3. Catalog Queue */}
