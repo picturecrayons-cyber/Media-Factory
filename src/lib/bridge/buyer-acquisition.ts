@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
+import { randomBytes } from "node:crypto";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import { requireVerifiedActor } from "./session";
@@ -442,4 +443,78 @@ export const getBuyerComplianceStatus = createServerFn({ method: "GET" })
       ? await org.sql`select e.id,e.mandate_id,e.evidence_kind,e.storage_object_path,e.sha256_hex,e.review_status,e.reviewed_at,e.review_notes from bridge_private.buyer_acquisition_mandate_evidence e join bridge_private.buyer_acquisition_mandates m on m.id=e.mandate_id where m.buyer_organization_id=${org.organization_id} order by e.uploaded_at desc limit 200`
       : [];
     return { organization: { id: org.organization_id, legalName: org.legal_name }, verification: verification[0] ?? null, mandates, organizationEvidence, mandateEvidence };
+  });
+
+
+const legalUploadInput = z.object({
+  target: z.enum(["organization", "mandate"]),
+  evidenceKind: z.enum(["company_registration", "tax_registration", "board_resolution", "authorized_signatory", "platform_ownership", "signed_agreement", "channel_ownership", "territory_schedule", "rights_schedule", "other"]),
+  mandateId: z.string().uuid().optional(),
+  filename: z.string().trim().min(1).max(120),
+  contentType: z.enum(["application/pdf", "image/jpeg", "image/png"]),
+});
+
+export const requestBuyerEvidenceUpload = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(legalUploadInput)
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    const org = await buyerOrganizationFor(actor);
+    const orgKinds = ["company_registration", "tax_registration", "board_resolution", "authorized_signatory", "platform_ownership", "other"];
+    const mandateKinds = ["signed_agreement", "board_authorization", "power_of_attorney", "channel_ownership", "territory_schedule", "rights_schedule", "other"];
+    if (data.target === "organization" && !orgKinds.includes(data.evidenceKind)) throw new Error("Evidence kind is not valid for organization verification");
+    if (data.target === "mandate" && !mandateKinds.includes(data.evidenceKind)) throw new Error("Evidence kind is not valid for acquisition mandates");
+    if (data.target === "mandate") {
+      if (!data.mandateId) throw new Error("Mandate ID is required");
+      const owned = await org.sql`select id from bridge_private.buyer_acquisition_mandates where id=${data.mandateId} and buyer_organization_id=${org.organization_id} limit 1`;
+      if (!owned[0]) throw new Error("Mandate not found");
+    } else {
+      const verification = await org.sql`select organization_id from bridge_private.buyer_organization_verifications where organization_id=${org.organization_id} limit 1`;
+      if (!verification[0]) throw new Error("Submit organization verification before uploading evidence");
+    }
+    const safeName = data.filename.replace(/[^a-zA-Z0-9._-]+/g, "_").slice(-80);
+    const key = `buyer-legal/${org.organization_id}/${data.target}/${randomBytes(16).toString("hex")}-${safeName}`;
+    const { signUpload } = await import("./oci-object-storage.server");
+    const signed = await signUpload({ key, contentType: data.contentType, expiresIn: 900 });
+    return { key, ...signed };
+  });
+
+export const confirmBuyerEvidenceUpload = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({
+    target: z.enum(["organization", "mandate"]),
+    evidenceKind: legalUploadInput.shape.evidenceKind,
+    mandateId: z.string().uuid().optional(),
+    key: z.string().trim().min(8).max(1000),
+    contentType: legalUploadInput.shape.contentType,
+  }))
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    const org = await buyerOrganizationFor(actor);
+    if (!data.key.startsWith(`buyer-legal/${org.organization_id}/${data.target}/`)) throw new Error("Evidence object is outside this organization's private storage prefix");
+    const orgKinds = ["company_registration", "tax_registration", "board_resolution", "authorized_signatory", "platform_ownership", "other"];
+    const mandateKinds = ["signed_agreement", "board_authorization", "power_of_attorney", "channel_ownership", "territory_schedule", "rights_schedule", "other"];
+    if (data.target === "organization" && !orgKinds.includes(data.evidenceKind)) throw new Error("Evidence kind is not valid for organization verification");
+    if (data.target === "mandate" && !mandateKinds.includes(data.evidenceKind)) throw new Error("Evidence kind is not valid for acquisition mandates");
+    const { verifyObject } = await import("./oci-object-storage.server");
+    const object = await verifyObject(data.key, data.contentType);
+    if (!Number.isSafeInteger(object.byteSize) || object.byteSize <= 0 || object.byteSize > 20 * 1024 * 1024) throw new Error("Legal evidence must be a verified non-empty file no larger than 20 MB");
+    if (data.target === "organization") {
+      const verification = await org.sql`select organization_id from bridge_private.buyer_organization_verifications where organization_id=${org.organization_id} limit 1`;
+      if (!verification[0]) throw new Error("Submit organization verification before confirming evidence");
+      await org.sql`insert into bridge_private.buyer_organization_verification_evidence
+        (organization_id,evidence_kind,storage_object_path,uploaded_by)
+        values (${org.organization_id},${data.evidenceKind},${data.key},${actor.userId})`;
+    } else {
+      if (!data.mandateId) throw new Error("Mandate ID is required");
+      const owned = await org.sql`select id from bridge_private.buyer_acquisition_mandates where id=${data.mandateId} and buyer_organization_id=${org.organization_id} limit 1`;
+      if (!owned[0]) throw new Error("Mandate not found");
+      await org.sql`insert into bridge_private.buyer_acquisition_mandate_evidence
+        (mandate_id,evidence_kind,storage_object_path,uploaded_by)
+        values (${data.mandateId},${data.evidenceKind},${data.key},${actor.userId})`;
+    }
+    await writeAudit({ actorUserId: actor.userId, action: "buyer.compliance.evidence_uploaded", entityType: "buyer_organization", entityId: org.organization_id, metadata: { target: data.target, evidenceKind: data.evidenceKind, byteSize: object.byteSize } });
+    return { ok: true, byteSize: object.byteSize };
   });
