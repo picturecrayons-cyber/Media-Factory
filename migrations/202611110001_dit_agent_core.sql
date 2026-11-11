@@ -72,3 +72,25 @@ revoke all on public.bridge_dit_agent_settings from anon, authenticated;
 revoke all on public.bridge_dit_jobs from anon, authenticated;
 revoke all on public.bridge_dit_job_files from anon, authenticated;
 revoke all on public.bridge_dit_signoffs from anon, authenticated;
+
+
+-- DIT ingest manifest and append-only operational event trail.
+alter table public.bridge_dit_job_files
+  add column if not exists source_object_key text,
+  add column if not exists content_type text;
+
+create table if not exists public.bridge_dit_job_logs (
+  id bigserial primary key,
+  job_id uuid not null references public.bridge_dit_jobs(id) on delete cascade,
+  file_id uuid references public.bridge_dit_job_files(id) on delete cascade,
+  level text not null check (level in ('INFO','WARNING','FAIL','PASS')),
+  event text not null,
+  details jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now()
+);
+create index if not exists bridge_dit_job_logs_job_created_idx
+  on public.bridge_dit_job_logs(job_id, created_at desc);
+create index if not exists bridge_dit_job_logs_file_created_idx
+  on public.bridge_dit_job_logs(file_id, created_at desc);
+alter table public.bridge_dit_job_logs enable row level security;
+revoke all on public.bridge_dit_job_logs from anon, authenticated;
