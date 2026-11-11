@@ -435,3 +435,99 @@ export const markDitFileFailed = createServerFn({ method: "POST" })
     return { fileId: data.fileId, status: "FAILED" as const };
   });
 
+
+export const createDitEditorHandoff = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({ jobId: z.string().uuid() }))
+  .handler(async ({ context, data }) => {
+    const actor = await requireVerifiedActor(context.userId);
+    requireDitOperator(actor);
+    const job = await ownedDitJob(actor.userId, data.jobId);
+    const sql = await getSql();
+    const signoffs = await sql<{ id: string; signed_at: string }>`
+      select id, signed_at from bridge_dit_signoffs where job_id = ${data.jobId}::uuid order by signed_at desc limit 1
+    `;
+    if (!signoffs[0]) throw new Error("Editor handoff is blocked until DIT sign-off is persisted");
+    const files = await sql<{
+      relative_path: string; file_name: string; detected_format: string | null; codec: string | null;
+      byte_size: number; source_sha256: string; master_object_key: string; master_sha256: string;
+      backup_1_sha256: string; backup_2_sha256: string;
+    }>`
+      select relative_path, file_name, detected_format, codec, byte_size, source_sha256,
+        master_object_key, master_sha256, backup_1_sha256, backup_2_sha256
+      from bridge_dit_job_files where job_id = ${data.jobId}::uuid and status = 'VERIFIED'
+      order by relative_path
+    `;
+    if (!files.length) throw new Error("No verified DIT files available for editor handoff");
+    const report = {
+      jobId: data.jobId, titleId: job.title_id, createdAt: new Date().toISOString(),
+      signedOffAt: signoffs[0].signed_at,
+      files: files.map((file) => ({
+        path: file.relative_path, fileName: file.file_name, format: file.detected_format,
+        codec: file.codec, byteSize: Number(file.byte_size), sha256: file.source_sha256,
+        masterObjectKey: file.master_object_key,
+        copies: { master: file.master_sha256, backup1: file.backup_1_sha256, backup2: file.backup_2_sha256 },
+      })),
+    };
+    const inserted = await sql<{ id: string }>`
+      insert into bridge_dit_handoffs (job_id, created_by, report)
+      values (${data.jobId}::uuid, ${actor.userId}, ${JSON.stringify(report)}::jsonb)
+      returning id
+    `;
+    await sql`
+      insert into bridge_dit_job_logs (job_id, level, event, details)
+      values (${data.jobId}::uuid, 'PASS', 'EDITOR_HANDOFF_REPORT_CREATED',
+        jsonb_build_object('handoffId', ${inserted[0].id}, 'fileCount', ${files.length}))
+    `;
+    await writeAudit({ actorUserId: actor.userId, action: "dit.editor_handoff_created", entityType: "bridge_dit_handoff", entityId: inserted[0].id, metadata: { jobId: data.jobId, fileCount: files.length } });
+    return { handoffId: inserted[0].id, fileCount: files.length, report };
+  });
+
+export const archiveDitJob = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({ jobId: z.string().uuid() }))
+  .handler(async ({ context, data }) => {
+    const actor = await requireVerifiedActor(context.userId);
+    requireDitOperator(actor);
+    await ownedDitJob(actor.userId, data.jobId);
+    const sql = await getSql();
+    const signoffs = await sql<{ id: string }>`
+      select id from bridge_dit_signoffs where job_id = ${data.jobId}::uuid limit 1
+    `;
+    if (!signoffs[0]) throw new Error("Archive is blocked until DIT sign-off is persisted");
+    const files = await sql<{
+      id: string; file_name: string; byte_size: number; source_sha256: string;
+      master_object_key: string; status: string;
+    }>`
+      select id, file_name, byte_size, source_sha256, master_object_key, status
+      from bridge_dit_job_files where job_id = ${data.jobId}::uuid order by relative_path
+    `;
+    if (!files.length || files.some((file) => file.status !== "VERIFIED" || !file.source_sha256)) {
+      throw new Error("Archive requires every discovered file to pass three-copy verification");
+    }
+    let archived = 0;
+    for (const file of files) {
+      const prior = await sql<{ id: string }>`
+        select id from bridge_dit_archives where file_id = ${file.id}::uuid limit 1
+      `;
+      if (prior[0]) { archived += 1; continue; }
+      const source = await verifyObject(file.master_object_key);
+      if (!source.etag) throw new Error("MASTER object ETag missing; archive blocked");
+      const archiveKey = `bridge-dit/${actor.userId}/${data.jobId}/ARCHIVE/${file.id}/${safeDitName(file.file_name)}`;
+      await sealVerifiedObject(file.master_object_key, archiveKey, source.etag);
+      const verified = await verifyObjectSha256(archiveKey, file.source_sha256, Number(file.byte_size));
+      await sql`
+        insert into bridge_dit_archives (job_id, file_id, object_key, sha256, byte_size)
+        values (${data.jobId}::uuid, ${file.id}::uuid, ${archiveKey}, ${verified.sha256}, ${verified.byteSize})
+      `;
+      await sql`
+        insert into bridge_dit_job_logs (job_id, file_id, level, event, details)
+        values (${data.jobId}::uuid, ${file.id}::uuid, 'PASS', 'ARCHIVE_COPY_VERIFIED',
+          jsonb_build_object('objectKey', ${archiveKey}, 'sha256', ${verified.sha256}, 'byteSize', ${verified.byteSize}))
+      `;
+      archived += 1;
+    }
+    await writeAudit({ actorUserId: actor.userId, action: "dit.job_archived", entityType: "bridge_dit_job", entityId: data.jobId, metadata: { archivedFiles: archived } });
+    return { jobId: data.jobId, archivedFiles: archived, verified: true as const };
+  });
+
