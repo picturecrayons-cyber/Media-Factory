@@ -8,7 +8,20 @@ import * as rights from "./rights-coverage.ts";
 
 // Execute the real server handler with isolated transport/database dependencies.
 // No database or AWS requests are made by this harness.
-function harness(grants: unknown[], allowed = true, existing = false) {
+const previewStagingEnv = {
+  VERCEL_ENV: "preview",
+  BRIDGE_LOOP_GATEWAY_ENABLED: "true",
+  BRIDGE_DATABASE_TARGET: "staging",
+  SUPABASE_URL: "https://jbymleftneggcgutlcqu.supabase.co",
+  DATABASE_URL: "postgres://postgres.jbymleftneggcgutlcqu:unused@aws-0-ap-south-1.pooler.supabase.com:6543/postgres",
+};
+
+function harness(
+  grants: unknown[],
+  allowed = true,
+  existing = false,
+  env: Record<string, string> = previewStagingEnv,
+) {
   const writes: { query: string; values: unknown[] }[] = [];
   const title = {
     id: "title-1",
@@ -67,6 +80,7 @@ function harness(grants: unknown[], allowed = true, existing = false) {
   const exports: Record<string, (args: unknown) => Promise<unknown>> = {};
   runInNewContext(output, {
     exports,
+    process: { env },
     require: (name: string) => {
       assert.ok(name in modules, `Unexpected dependency: ${name}`);
       return modules[name];
@@ -125,4 +139,23 @@ test("status alignment never bypasses operator, rights or commercial coverage", 
     await assert.rejects(h.authorize({ context, data: scenario.data }));
     assert.equal(h.writes.length, 0);
   }
+});
+
+
+test("production environment can never authorize, suspend, revoke or extend Loop publication", async () => {
+  const production = harness([grant], true, false, {
+    ...previewStagingEnv,
+    VERCEL_ENV: "production",
+  });
+  await assert.rejects(production.authorize({ context, data }), /Gateway is locked/);
+  assert.equal(production.writes.length, 0);
+});
+
+test("Preview with a Production or unknown database binding remains locked", async () => {
+  const wrongDatabase = harness([grant], true, false, {
+    ...previewStagingEnv,
+    DATABASE_URL: "postgres://postgres.mlmgugivsyoxzdgwkbpu:unused@aws-0-ap-southeast-1.pooler.supabase.com:6543/postgres",
+  });
+  await assert.rejects(wrongDatabase.authorize({ context, data }), /Gateway is locked/);
+  assert.equal(wrongDatabase.writes.length, 0);
 });
