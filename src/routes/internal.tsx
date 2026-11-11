@@ -155,7 +155,7 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
   const [model] = useState<ExploitationModel>("TVOD");
   const [windowStart, setWindowStart] = useState("");
   const [windowEnd, setWindowEnd] = useState("");
-  const [consumerPrice, setConsumerPrice] = useState("");
+  const [consumerPrice] = useState("99");
   const [rightsOwnerShare, setRightsOwnerShare] = useState<string>("80");
   const [distributorShare, setDistributorShare] = useState<string>("20");
   const [extendTitleId, setExtendTitleId] = useState<string | null>(null);
@@ -421,14 +421,15 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
               <span className="font-semibold text-muted">TVOD Rental Price (INR)</span>
               <input
                 type="number"
-                min="0.01"
-                step="0.01"
+                min="99"
+                max="99"
+                step="1"
                 required
+                readOnly
                 value={consumerPrice}
-                onChange={(e) => setConsumerPrice(e.target.value)}
                 className="h-9 w-full rounded-xl border border-line bg-elevated px-3 text-fg focus:outline-none"
-                placeholder="Enter customer rental price"
               />
+              <span className="text-[11px] text-muted">Loop checkout is fixed at ₹99 for a 48-hour rental.</span>
             </label>
 
             <label className="block space-y-1">
