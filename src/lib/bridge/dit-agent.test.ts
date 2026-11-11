@@ -1,18 +1,15 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { detectDitFormat, ditCodecProbeStatus } from "./dit-format.ts";
 
-const formats = [
-  ["camera.arx", "ARRIRAW"],
-  ["camera.r3d", "RED RAW"],
-  ["master.mov", "MOV_CONTAINER"],
-  ["master.mxf", "MXF_CONTAINER"],
-] as const;
-
-test("DIT format labels distinguish container extensions from codec proof", () => {
-  assert.deepEqual(formats.map(([name]) => name.split(".").pop()), ["arx", "r3d", "mov", "mxf"]);
-  assert.equal("ProRes 422 HQ".includes("ProRes"), true);
-  // A .mov extension alone is not evidence of ProRes 422 HQ.
-  assert.notEqual("master.mov".toLowerCase().includes("prores"), true);
+test("DIT classifies camera source formats without claiming codec proof", () => {
+  assert.equal(detectDitFormat("A001_C001.ari"), "ARRIRAW");
+  assert.equal(detectDitFormat("A001_C001.r3d"), "RED_RAW");
+  assert.equal(detectDitFormat("A001_C001.mov"), "QUICKTIME_CONTAINER");
+  assert.equal(detectDitFormat("A001_C001.mxf"), "MXF_CONTAINER");
+  assert.equal(ditCodecProbeStatus("QUICKTIME_CONTAINER"), "NOT_PROBED");
+  assert.equal(ditCodecProbeStatus("MXF_CONTAINER"), "NOT_PROBED");
+  assert.equal(detectDitFormat("unknown.bin"), "UNKNOWN");
 });
 
 test("three-copy Storage Verified gate is fail-closed", () => {
