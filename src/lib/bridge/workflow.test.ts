@@ -341,7 +341,7 @@ test("only Super Admin can approve and can self-approve with an audited override
     );
     const evidence = await f.sql.query<{ evidence: unknown }>("select evidence from bridge_legal_cases");
     assert.match(JSON.stringify(evidence[0]?.evidence), /superAdminSelfApprovalOverride/);
-    assert.match(JSON.stringify(evidence.rows[0]?.evidence), /true/);
+    assert.match(JSON.stringify(evidence[0]?.evidence), /true/);
   } finally {
     await f.db.close();
   }
