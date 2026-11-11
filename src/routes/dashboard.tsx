@@ -106,11 +106,7 @@ function DashboardBody() {
     <div className="space-y-7">
       <section className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">
-            Crayons Bridge · Super Admin
-          </p>
-          <h2 className="font-display text-3xl font-semibold">Founder control centre</h2>
-          <p className="mt-1 max-w-2xl text-sm text-muted">
+          <p className="max-w-2xl text-sm text-muted">
             One place to see what needs attention, understand the business and open the right workspace.
           </p>
         </div>
@@ -158,7 +154,7 @@ function DashboardBody() {
                 <div className="min-w-0">
                   <p className="font-medium">{title.name}</p>
                   <p className="mt-1 text-xs text-muted">
-                    {ACTION_GUIDANCE[title.status]} · {title.status.replaceAll("_", " ").toLowerCase()}
+                    {ACTION_GUIDANCE[title.status]}
                   </p>
                 </div>
                 <Link
@@ -275,9 +271,8 @@ function DashboardBody() {
               <li key={title.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 text-sm">
                 <div className="min-w-0">
                   <p className="font-medium">{title.name}</p>
-                  <p className="break-all font-mono text-[10px] text-muted">ID: {title.id}</p>
                 </div>
-                <span className="shrink-0 rounded-sm border border-line px-2 py-1 text-xs text-muted">
+                <span className="shrink-0 rounded-sm border border-line px-2 py-1 text-xs capitalize text-muted">
                   {title.status.replaceAll("_", " ").toLowerCase()}
                 </span>
               </li>
