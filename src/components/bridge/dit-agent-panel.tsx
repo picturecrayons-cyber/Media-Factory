@@ -8,7 +8,9 @@ export function DitAgentPanel() {
   const [sourceLabel, setSourceLabel] = useState("");
   const [sourceType, setSourceType] = useState<"CAMERA_CARD" | "EXTERNAL_DRIVE" | "FOLDER">("CAMERA_CARD");
   const [uploadState, setUploadState] = useState("");
-  const [uploadProgress, setUploadProgress] = useState(0);\n  const [signoffStatement, setSignoffStatement] = useState("");\n  const [signoffChecks, setSignoffChecks] = useState({ sourceReconciled: false, noMissingClips: false, noDuplicateClips: false, checksumsVerified: false, allThreeCopiesVerified: false, sourceCardSafeToReuse: false });
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [signoffStatement, setSignoffStatement] = useState("");
+  const [signoffChecks, setSignoffChecks] = useState({ sourceReconciled: false, noMissingClips: false, noDuplicateClips: false, checksumsVerified: false, allThreeCopiesVerified: false, sourceCardSafeToReuse: false });
   const folderInput = useRef<HTMLInputElement>(null);
   useEffect(() => { folderInput.current?.setAttribute("webkitdirectory", ""); folderInput.current?.setAttribute("directory", ""); }, []);
   const workspace = useQuery({ queryKey: ["studio-dit-workspace"], queryFn: () => getDitWorkspace(), retry: false });
