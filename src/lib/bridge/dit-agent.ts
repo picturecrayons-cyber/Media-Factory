@@ -220,23 +220,3 @@ export const createDitIntakeJob = createServerFn({ method: "POST" })
     });
     return { jobId: id, status: "CREATED" as const, cardSafe: false as const };
   });
-
-  .middleware([authMiddleware])
-  .handler(async ({ context }) => {
-    const actor = await requireVerifiedActor(context.userId);
-    requireDitOperator(actor);
-    const sql = await getSql();
-    const settings = await sql<{ enabled: boolean }>`
-      select enabled from bridge_dit_agent_settings where user_id = ${actor.userId} limit 1
-    `;
-    const jobs = await sql<{
-      id: string; title_id: string; source_label: string; source_type: string;
-      status: string; card_safe: boolean; created_at: string;
-    }>`
-      select id, title_id, source_label, source_type, status, card_safe, created_at
-      from bridge_dit_jobs
-      where created_by = ${actor.userId}
-      order by created_at desc limit 50
-    `;
-    return { enabled: settings[0]?.enabled ?? false, jobs };
-  });
