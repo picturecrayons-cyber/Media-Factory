@@ -64,7 +64,7 @@ export function TitleList({ empty, query = "" }: { empty: string; query?: string
               {isDraft ? (
                 <div className="flex shrink-0 flex-wrap items-center gap-2 border-t border-line pt-3 sm:border-0 sm:pt-0">
                   <Button type="button" size="sm" variant="outline" onClick={() => void navigate({ to: "/title/$id", params: { id: title.id } })} className="min-h-9 rounded-full px-4">Continue</Button>
-                  <Button type="button" size="sm" variant="ghost" onClick={() => setDeleteTarget({ id: title.id, name: title.name })} className="min-h-9 rounded-full px-4 text-accent hover:bg-accent/10" disabled={deleteMutation.isPending}>Delete</Button>
+                  <Button type="button" size="sm" variant="ghost" className="min-h-9 rounded-full px-4" disabled title="Permanent deletion is disabled until archive and restore are available">Delete disabled</Button>
                 </div>
               ) : null}
             </li>
