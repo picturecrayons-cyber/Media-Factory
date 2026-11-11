@@ -74,7 +74,7 @@ const reviewInput = z.object({
 
 export async function reviewWorkflow(tx: Sql, actor: Actor, data: z.infer<typeof reviewInput>) {
   data = reviewInput.parse(data);
-  assertPermission(actor, data.stage === "QC" ? "title.qc_review" : "title.rights_review");
+  assertPermission(actor, "title.approve");
   const [title] = await tx<{
     status: string;
     master_key: string | null;
