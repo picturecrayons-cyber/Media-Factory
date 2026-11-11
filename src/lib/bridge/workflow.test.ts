@@ -184,7 +184,7 @@ test("real SQL services persist QC and Super Admin-approved license, lifecycle a
       }),
     );
     await f.sql.transaction((tx) =>
-      f.review(tx, legal, {
+      f.review(tx, superAdmin, {
         titleId: "title-123",
         stage: "LEGAL",
         decision: "APPROVE",
