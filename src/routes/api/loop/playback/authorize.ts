@@ -41,11 +41,11 @@ export const Route = createFileRoute("/api/loop/playback/authorize")({
 
         const bridgeTitleId = typeof input.bridgeTitleId === "string" ? input.bridgeTitleId.trim() : "";
         const loopTitleId = typeof input.loopTitleId === "string" ? input.loopTitleId.trim() : "";
-        const objectKey = typeof input.objectKey === "string" ? input.objectKey.trim().replace(/^\\//, "") : "";
+        const requestedObjectKey = typeof input.objectKey === "string" ? input.objectKey.trim().replace(/^\//, "") : "";
         const mediaType = input.mediaType || "video";
         if (!["video", "poster", "trailer"].includes(mediaType) ||
             (mediaType === "video" && (!bridgeTitleId || !loopTitleId)) ||
-            (mediaType !== "video" && !((bridgeTitleId && loopTitleId) || objectKey))) {
+            (mediaType !== "video" && !((bridgeTitleId && loopTitleId) || requestedObjectKey))) {
           return jsonError("Valid title identity or a canonical public asset key is required", "INVALID_REQUEST", 400);
         }
 
@@ -76,11 +76,11 @@ export const Route = createFileRoute("/api/loop/playback/authorize")({
             where (${bridgeTitleId || null}::text is null or p.bridge_title_id = ${bridgeTitleId || null})
               and (${loopTitleId || null}::text is null or p.loop_title_id = ${loopTitleId || null})
               and (
-                ${mediaType === "poster" && objectKey ? objectKey : null}::text is null
+                ${mediaType === "poster" && requestedObjectKey ? requestedObjectKey : null}::text is null
                 or b.poster_key = ${mediaType === "poster" && objectKey ? objectKey : null}
               )
               and (
-                ${mediaType === "trailer" && objectKey ? objectKey : null}::text is null
+                ${mediaType === "trailer" && requestedObjectKey ? requestedObjectKey : null}::text is null
                 or exists (
                   select 1 from bridge_assets a
                   where a.title_id = b.id and a.kind = 'trailer' and a.s3_key = ${mediaType === "trailer" && objectKey ? objectKey : null}
