@@ -35,7 +35,14 @@ function Internal() {
           <p className="mb-6 text-xs text-muted">
             {actor.internalRole?.replaceAll("_", " ")} · {actor.email}
           </p>
-          {desk === "gateway" ? (
+          {desk === "gateway" && actor.internalRole !== "super_admin" ? (
+            <section className="rounded-2xl border border-line bg-surface p-6">
+              <h2 className="font-display text-xl font-semibold">Super Admin access required</h2>
+              <p className="mt-2 text-sm text-muted">
+                The Bridge → Loop Publishing Gateway is restricted to the verified Super Admin account.
+              </p>
+            </section>
+          ) : desk === "gateway" ? (
             <DistributionDesk
               canPublish={hasPermission(actor, "loop.publish")}
               canRevoke={hasPermission(actor, "loop.revoke")}
