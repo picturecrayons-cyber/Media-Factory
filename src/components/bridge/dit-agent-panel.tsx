@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
-import { createDitIntakeJob, finalizeDitFileUpload, getDitJobFiles, getDitWorkspace, registerDitFile, setDitAgentEnabled, signOffDitJob } from "@/lib/bridge/dit-agent";
+import { createDitIntakeJob, finalizeDitFileUpload, getDitJobFiles, getDitWorkspace, registerDitFile, setDitAgentEnabled, signOffDitJob, markDitFileFailed } from "@/lib/bridge/dit-agent";
 
 export function DitAgentPanel() {
   const qc = useQueryClient();
@@ -40,8 +40,10 @@ export function DitAgentPanel() {
       const relativePath = (file as File & { webkitRelativePath?: string }).webkitRelativePath || file.name;
       setUploadState("Registering " + (index + 1) + "/" + selected.length + ": " + relativePath);
       setUploadProgress(0);
+      let registeredFileId: string | undefined;
       try {
         const registered = await registerDitFile({ data: { jobId: activeJobId, relativePath, fileName: file.name, byteSize: file.size, contentType: file.type || "application/octet-stream" } });
+        registeredFileId = registered.fileId;
         await new Promise<void>((resolve, reject) => {
           const xhr = new XMLHttpRequest();
           xhr.open("PUT", registered.upload.url);
@@ -56,6 +58,7 @@ export function DitAgentPanel() {
         setUploadState("PASS · " + relativePath);
         void qc.invalidateQueries({ queryKey: ["studio-dit-files", activeJobId] });
       } catch (error) {
+        if (registeredFileId) { try { await markDitFileFailed({ data: { jobId: activeJobId, fileId: registeredFileId, reason: String(error).slice(0, 900) } }); } catch { /* preserve original upload failure */ } }
         setUploadState("FAIL · " + relativePath + " · " + String(error));
         void qc.invalidateQueries({ queryKey: ["studio-dit-files", activeJobId] });
         break;
