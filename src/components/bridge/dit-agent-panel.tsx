@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
-import { createDitIntakeJob, finalizeDitFileUpload, getDitJobFiles, getDitWorkspace, registerDitFile, setDitAgentEnabled } from "@/lib/bridge/dit-agent";
+import { createDitIntakeJob, finalizeDitFileUpload, getDitJobFiles, getDitWorkspace, registerDitFile, setDitAgentEnabled, signOffDitJob } from "@/lib/bridge/dit-agent";
 
 export function DitAgentPanel() {
   const qc = useQueryClient();
@@ -8,7 +8,7 @@ export function DitAgentPanel() {
   const [sourceLabel, setSourceLabel] = useState("");
   const [sourceType, setSourceType] = useState<"CAMERA_CARD" | "EXTERNAL_DRIVE" | "FOLDER">("CAMERA_CARD");
   const [uploadState, setUploadState] = useState("");
-  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadProgress, setUploadProgress] = useState(0);\n  const [signoffStatement, setSignoffStatement] = useState("");\n  const [signoffChecks, setSignoffChecks] = useState({ sourceReconciled: false, noMissingClips: false, noDuplicateClips: false, checksumsVerified: false, allThreeCopiesVerified: false, sourceCardSafeToReuse: false });
   const folderInput = useRef<HTMLInputElement>(null);
   useEffect(() => { folderInput.current?.setAttribute("webkitdirectory", ""); folderInput.current?.setAttribute("directory", ""); }, []);
   const workspace = useQuery({ queryKey: ["studio-dit-workspace"], queryFn: () => getDitWorkspace(), retry: false });
@@ -25,6 +25,7 @@ export function DitAgentPanel() {
   });
 
   const activeJobId = create.data?.jobId;
+  const signoff = useMutation({ mutationFn: () => signOffDitJob({ data: { jobId: activeJobId!, statement: signoffStatement, checklist: { sourceReconciled: true, noMissingClips: true, noDuplicateClips: true, checksumsVerified: true, allThreeCopiesVerified: true, sourceCardSafeToReuse: true } } }), onSuccess: () => { void qc.invalidateQueries({ queryKey: ["studio-dit-workspace"] }); } });
   const jobFiles = useQuery({
     queryKey: ["studio-dit-files", activeJobId],
     queryFn: () => getDitJobFiles({ data: { jobId: activeJobId! } }),
@@ -115,6 +116,21 @@ export function DitAgentPanel() {
           </div>
           {uploadState ? <div className="space-y-1 text-xs"><p role="status">{uploadState}</p><div className="h-2 overflow-hidden rounded-full bg-line"><div className="h-full bg-fg transition-all" style={{ width: uploadProgress + "%" }} /></div><p className="text-muted">{uploadProgress}% transfer progress</p></div> : null}
           {jobFiles.data?.files?.length ? <div className="space-y-1">{jobFiles.data.files.map((file: {id:string;relative_path:string;status:string;detected_format:string|null;byte_size:number}) => <div key={file.id} className="flex flex-wrap justify-between gap-2 border-t border-line py-2 text-xs"><span>{file.relative_path} · {file.detected_format || "UNKNOWN"} · {Math.round(file.byte_size / 1024 / 1024)} MB</span><strong>{file.status}</strong></div>)}</div> : null}
+          <div className="space-y-2 border-t border-line pt-3">
+            <h4 className="text-sm font-semibold">DIT sign-off</h4>
+            {([
+              ["sourceReconciled", "Source card inventory reconciled"],
+              ["noMissingClips", "No missing clips confirmed"],
+              ["noDuplicateClips", "No duplicate clips confirmed"],
+              ["checksumsVerified", "Source and destination checksums verified"],
+              ["allThreeCopiesVerified", "MASTER, BACKUP_1 and BACKUP_2 verified"],
+              ["sourceCardSafeToReuse", "Source card safe to reuse"],
+            ] as const).map(([key, label]) => <label key={key} className="flex items-center gap-2 text-xs"><input type="checkbox" checked={signoffChecks[key]} onChange={(e) => setSignoffChecks((current) => ({ ...current, [key]: e.target.checked }))} />{label}</label>)}
+            <textarea value={signoffStatement} onChange={(e) => setSignoffStatement(e.target.value)} placeholder="DIT operator sign-off statement (minimum 20 characters)" className="min-h-20 w-full rounded-lg border border-line bg-bg px-3 py-2 text-sm" />
+            <button type="button" disabled={signoff.isPending || !jobFiles.data?.files?.length || jobFiles.data.files.some((file: {status:string}) => file.status !== "VERIFIED") || Object.values(signoffChecks).some((value) => !value) || signoffStatement.trim().length < 20} onClick={() => signoff.mutate()} className="rounded-full border border-line px-4 py-2 text-sm disabled:opacity-40">{signoff.isPending ? "Signing off…" : "Submit DIT sign-off"}</button>
+            {signoff.isError ? <p role="alert" className="text-xs text-accent">{String(signoff.error)}</p> : null}
+            {signoff.isSuccess ? <p className="text-xs font-semibold">Sign-off saved · Card Safe PASS</p> : null}
+          </div>
           <p className="text-xs text-muted">Codec probing, resumable multipart, pause/resume, proxy generation and editor handoff are not yet connected. Format labels are extension-based, not codec certification.</p>
         </div>
       ) : null}
