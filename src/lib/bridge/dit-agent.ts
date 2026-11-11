@@ -264,10 +264,26 @@ export const registerDitFile = createServerFn({ method: "POST" })
     const fileName = safeDitName(data.fileName);
     const extension = fileName.includes(".") ? fileName.slice(fileName.lastIndexOf(".")).toLowerCase() : "";
     const detectedFormat = DIT_EXTENSIONS[extension] ?? "UNKNOWN";
-    const existing = await sql<{ id: string }>`
-      select id from bridge_dit_job_files where job_id = ${data.jobId}::uuid and relative_path = ${relativePath} limit 1
+    const existing = await sql<{ id: string; byte_size: number; content_type: string | null; source_object_key: string; status: string }>`
+      select id, byte_size, content_type, source_object_key, status
+      from bridge_dit_job_files where job_id = ${data.jobId}::uuid and relative_path = ${relativePath} limit 1
     `;
-    if (existing[0]) throw new Error("Duplicate relative path detected; reconcile the card inventory before retrying");
+    if (existing[0]) {
+      if (existing[0].status === "VERIFIED") throw new Error("This file is already verified; do not ingest it again");
+      if (Number(existing[0].byte_size) !== data.byteSize || existing[0].content_type !== data.contentType) {
+        throw new Error("Retry file size or content type differs from the original manifest");
+      }
+      const signedRetry = await signUpload({ key: existing[0].source_object_key, contentType: data.contentType, expiresIn: 3600 });
+      await sql`
+        update bridge_dit_job_files set status = 'QUEUED', updated_at = now()
+        where id = ${existing[0].id}::uuid
+      `;
+      await sql`
+        insert into bridge_dit_job_logs (job_id, file_id, level, event, details)
+        values (${data.jobId}::uuid, ${existing[0].id}::uuid, 'WARNING', 'UPLOAD_RETRY_ISSUED', '{}'::jsonb)
+      `;
+      return { fileId: existing[0].id, upload: signedRetry, detectedFormat, codec: null as string | null, codecStatus: "NOT_PROBED" as const };
+    }
     const id = randomUUID();
     const root = `bridge-dit/${actor.userId}/${data.jobId}/${id}`;
     const sourceKey = `${root}/SOURCE/${fileName}`;
@@ -334,6 +350,26 @@ export const finalizeDitFileUpload = createServerFn({ method: "POST" })
       values (${data.jobId}::uuid, ${data.fileId}::uuid, 'INFO', 'SOURCE_SHA256_READY',
         jsonb_build_object('byteSize', ${sourceHash.byteSize}, 'sha256', ${sourceHash.sha256}, 'etag', ${sourceHash.etag}))
     `;
+    const duplicates = await sql<{ id: string; relative_path: string }>`
+      select id, relative_path from bridge_dit_job_files
+      where job_id = ${data.jobId}::uuid and id <> ${data.fileId}::uuid and source_sha256 = ${sourceHash.sha256}
+      limit 1
+    `;
+    if (duplicates[0]) {
+      await sql`
+        update bridge_dit_job_files
+        set status = 'WARNING', warnings = jsonb_build_array(jsonb_build_object(
+          'code', 'DUPLICATE_CONTENT_SHA256', 'matchesFileId', ${duplicates[0].id}, 'matchesPath', ${duplicates[0].relative_path}
+        )), updated_at = now()
+        where id = ${data.fileId}::uuid
+      `;
+      await sql`
+        insert into bridge_dit_job_logs (job_id, file_id, level, event, details)
+        values (${data.jobId}::uuid, ${data.fileId}::uuid, 'WARNING', 'DUPLICATE_CONTENT_DETECTED',
+          jsonb_build_object('matchesFileId', ${duplicates[0].id}, 'matchesPath', ${duplicates[0].relative_path}, 'sha256', ${sourceHash.sha256}))
+      `;
+      return { fileId: file.id, byteSize: sourceHash.byteSize, sha256: sourceHash.sha256, verifiedCopies: [] as string[], duplicate: true as const };
+    }
     const destinations = [
       ["MASTER", file.master_object_key],
       ["BACKUP_1", file.backup_1_object_key],
