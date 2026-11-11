@@ -383,13 +383,15 @@ export const getTitle = createServerFn({ method: "GET" })
     if (!title) throw new Error("Not found");
     if (actor.accountType === "buyer" && !actor.internalRole) await assertVerifiedBuyerOrganization(actor);
     const sql = await getSql();
-    if (actor.accountType === "investor" && !actor.internalRole) {
+    if (actor.accountType === "buyer" && !actor.internalRole) {
+      await assertVerifiedBuyerOrganization(actor);
+      await assertBuyerPublishable(title.id);
+    } else if (actor.accountType === "investor" && !actor.internalRole) {
       const assigned = await sql<{ id: string }>
         `select id from bridge_title_investors where title_id = ${title.id} and investor_user_id = ${actor.userId} limit 1`;
       if (!assigned[0]) throw new Error("Not found");
     } else if (!canReadTitle(actor, title)) {
-      if (actor.accountType !== "buyer") throw new Error("Not found");
-      await assertBuyerPublishable(title.id);
+      throw new Error("Not found");
     }
     const events = await sql<{
       from_status: string | null;
