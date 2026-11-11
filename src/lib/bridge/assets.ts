@@ -9,6 +9,7 @@ import { requireVerifiedActor } from "./session";
 import { loadTitle } from "./titles";
 import { writeAudit } from "./audit";
 import { assertNotDevUser } from "./guards";
+import { assertBuyerAcquisitionAuthorization, assertVerifiedBuyerOrganization } from "./buyer-acquisition";
 import { persistVerifiedAsset } from "./asset-confirmation";
 import { downloadDecision } from "./delivery-policy";
 import { uploadUrlLifetimeSeconds } from "./upload-url-lifetime";
@@ -278,6 +279,9 @@ export const requestAssetDownload = createServerFn({ method: "POST" })
     if (!asset) throw new Error("Not found");
     const title = await loadTitle(asset.title_id);
     if (!title || !canReadTitle(actor, title)) throw new Error("Not found");
+    if (actor.accountType === "buyer" && !actor.internalRole) {
+      await assertBuyerAcquisitionAuthorization(actor, title.id);
+    }
     const entitled = await hasLicenseEntitlement(actor.userId, title.id);
     const decision = downloadDecision({
       kind: asset.kind,
@@ -316,6 +320,7 @@ export const listTitleAssets = createServerFn({ method: "GET" })
     if (!title || !canReadTitle(actor, title)) throw new Error("Not found");
     const sql = await getSql();
     const buyer = actor.accountType === "buyer" && !actor.internalRole;
+    if (buyer) await assertVerifiedBuyerOrganization(actor);
     const rows = await sql<{
       id: string;
       kind: string;
