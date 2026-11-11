@@ -229,7 +229,7 @@ const DIT_EXTENSIONS: Record<string, string> = {
 };
 
 function safeDitName(value: string) {
-  const cleaned = value.replaceAll("\\\\", "/").split("/").pop() ?? "";
+  const cleaned = value.replaceAll("\\", "/").split("/").pop() ?? "";
   const safe = cleaned.replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 120);
   if (!safe || safe === "." || safe === "..") throw new Error("Invalid DIT filename");
   return safe;
@@ -259,7 +259,7 @@ export const registerDitFile = createServerFn({ method: "POST" })
     requireDitOperator(actor);
     const job = await ownedDitJob(actor.userId, data.jobId);
     const sql = await getSql();
-    const relativePath = data.relativePath.replaceAll("\\\\", "/").replace(/^\\/+/, "");
+    const relativePath = data.relativePath.replaceAll("\\", "/").replace(/^\/+/, "");
     if (relativePath.split("/").some((part) => part === ".." || part === ".")) throw new Error("Unsafe relative path");
     const fileName = safeDitName(data.fileName);
     const extension = fileName.includes(".") ? fileName.slice(fileName.lastIndexOf(".")).toLowerCase() : "";
