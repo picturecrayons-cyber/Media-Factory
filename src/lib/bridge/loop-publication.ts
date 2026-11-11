@@ -61,6 +61,7 @@ const publishInput = z.object({
   windowStart: z.string().datetime().nullable().optional(),
   windowEnd: z.string().datetime().nullable().optional(),
   accessTier: z.enum(["FREE", "SVOD", "TVOD"]),
+  consumerPricePaise: z.number().int().positive().max(2_000_000_000).optional(),
   commercialTerms: z
     .object({
       rightsOwnerSharePct: z.number().min(0).max(100).optional(),
@@ -74,6 +75,18 @@ const publishInput = z.object({
 function iso(v: string | Date | null) {
   if (!v) return null;
   return v instanceof Date ? v.toISOString() : String(v);
+}
+
+async function usesCurrentLoopTitleSchema(sql: Sql): Promise<boolean> {
+  const rows = await sql<{ current_schema: boolean }>`
+    select
+      exists (select 1 from information_schema.columns where table_schema='public' and table_name='loop_titles' and column_name='is_listed')
+      and exists (select 1 from information_schema.columns where table_schema='public' and table_name='loop_titles' and column_name='is_published')
+      and exists (select 1 from information_schema.columns where table_schema='public' and table_name='loop_titles' and column_name='poster_url')
+      and not exists (select 1 from information_schema.columns where table_schema='public' and table_name='loop_titles' and column_name='playback_path')
+      as current_schema
+  `;
+  return Boolean(rows[0]?.current_schema);
 }
 
 /** Pre-flight verification checking rights, assets, QC and operator authority */
@@ -204,20 +217,31 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
     assertPermission(actor, "title.read_catalog");
     const sql = await getSql();
 
-    // Auto-reevaluate any expired distribution windows
+    // Expire publication rows using the canonical enum values in the current schema.
     await sql`
       update bridge_loop_publications
-      set authorization_status = 'expired', updated_at = now()
-      where window_end is not null and window_end < now() and authorization_status in ('authorized', 'live')
+      set authorization_status = 'EXPIRED', updated_at = now()
+      where window_end is not null and window_end < now()
+        and authorization_status in ('AUTHORIZED', 'LIVE', 'authorized', 'live')
     `.catch(() => {});
 
-    await sql`
-      update loop_titles
-      set status = 'expired', published = false, listed = false, updated_at = now()
-      where bridge_title_id in (
-        select bridge_title_id from bridge_loop_publications where authorization_status = 'expired'
-      ) and published = true
-    `.catch(() => {});
+    if (await usesCurrentLoopTitleSchema(sql)) {
+      await sql`
+        update loop_titles
+        set status = 'ARCHIVED', is_published = false, is_listed = false, updated_at = now()
+        where bridge_title_id in (
+          select bridge_title_id from bridge_loop_publications where authorization_status = 'EXPIRED'
+        ) and is_published = true
+      `.catch(() => {});
+    } else {
+      await sql`
+        update loop_titles
+        set status = 'expired', published = false, listed = false, updated_at = now()
+        where bridge_title_id in (
+          select bridge_title_id from bridge_loop_publications where authorization_status = 'EXPIRED'
+        ) and published = true
+      `.catch(() => {});
+    }
 
     const rows = await sql<{
       id: string;
@@ -246,7 +270,10 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
              b.synopsis, b.year, b.runtime_minutes,
              p.loop_title_id, p.authorization_status, p.window_start, p.window_end,
              p.territories, p.languages, p.exploitation_models,
-             l.status as loop_status, l.listed, l.published, l.playback_path
+             l.status as loop_status,
+             coalesce((to_jsonb(l)->>'listed')::boolean, (to_jsonb(l)->>'is_listed')::boolean, false) as listed,
+             coalesce((to_jsonb(l)->>'published')::boolean, (to_jsonb(l)->>'is_published')::boolean, false) as published,
+             to_jsonb(l)->>'playback_path' as playback_path
       from bridge_titles b
       left join bridge_loop_publications p on p.bridge_title_id = b.id
       left join loop_titles l on l.id = p.loop_title_id
@@ -354,6 +381,9 @@ export const authorizeLoopPublication = createServerFn({ method: "POST" })
     if (!data.exploitationModels.includes(data.accessTier)) {
       throw new Error("Consumer access tier must be covered by the requested exploitation models.");
     }
+    if (data.accessTier === "TVOD" && (!data.consumerPricePaise || data.consumerPricePaise <= 0)) {
+      throw new Error("Enter a positive consumer TVOD rental price in paise before publishing.");
+    }
     return (await getSql()).transaction(async (sql) => {
       await sql`select id from bridge_titles where id=${data.bridgeTitleId} for update`;
       const preflight = await verifyDistributionPreflight(sql, data.bridgeTitleId, {
@@ -374,33 +404,57 @@ export const authorizeLoopPublication = createServerFn({ method: "POST" })
       }>`select id from loop_titles where bridge_title_id = ${title.id} limit 1`;
       const loopTitleId = existing[0]?.id ?? randomUUID();
 
-      // 1. Synchronize master publication record in Crayons Loop
-      await sql`
-      insert into loop_titles (
-        id, bridge_title_id, slug, title, synopsis, content_type, language, year,
-        duration_minutes, poster_path, playback_path, metadata, status, listed,
-        published, featured, access_tier, updated_at
-      ) values (
-        ${loopTitleId}, ${title.id}, ${title.slug}, ${title.name}, ${title.synopsis}, ${loopStageType(title.content_type)},
-        ${title.language}, ${title.year}, ${title.runtime_minutes}, ${title.poster_key}, ${title.master_key},
-        ${JSON.stringify({
-          source: "crayons-bridge-master-distribution",
-          lane: loopStageType(title.content_type),
-          rightsGrantId: preflight.rightsGrantId,
-          authorizedBy: actor.userId,
-          commercialTerms: preflight.commercialTerms || null,
-        })}::jsonb,
-        ${"approved"}, true, true, false,
-        ${data.accessTier}, now()
-      )
-      on conflict (bridge_title_id) do update set
-        slug = excluded.slug, title = excluded.title, synopsis = excluded.synopsis,
-        content_type = excluded.content_type,
-        language = excluded.language, year = excluded.year, duration_minutes = excluded.duration_minutes,
-        poster_path = excluded.poster_path, playback_path = excluded.playback_path,
-        status = 'approved', listed = true, published = true, access_tier = excluded.access_tier,
-        metadata = excluded.metadata, updated_at = now()
-    `;
+      // 1. Synchronize the canonical Loop title projection. The current Testing DB
+      // schema uses is_listed/is_published + poster_url and has no playback_path.
+      if (await usesCurrentLoopTitleSchema(sql)) {
+        await sql`
+          insert into loop_titles (
+            id, bridge_title_id, slug, title, synopsis, language, genres,
+            runtime_minutes, release_year, age_rating, access_tier, price_paise,
+            poster_url, backdrop_url, trailer_url, status, is_listed, is_published, updated_at
+          ) values (
+            ${loopTitleId}, ${title.id}, ${title.slug}, ${title.name}, ${title.synopsis},
+            ${title.language}, ${[]}, ${title.runtime_minutes}, ${title.year}, null,
+            ${data.accessTier}, ${data.consumerPricePaise ?? 0},
+            ${title.poster_key}, ${title.poster_key}, null, 'APPROVED', true, true, now()
+          )
+          on conflict (bridge_title_id) do update set
+            slug = excluded.slug, title = excluded.title, synopsis = excluded.synopsis,
+            language = excluded.language, genres = excluded.genres,
+            runtime_minutes = excluded.runtime_minutes, release_year = excluded.release_year,
+            access_tier = excluded.access_tier, price_paise = excluded.price_paise,
+            poster_url = excluded.poster_url, backdrop_url = excluded.backdrop_url,
+            status = 'APPROVED', is_listed = true, is_published = true, updated_at = now()
+        `;
+      } else {
+        await sql`
+          insert into loop_titles (
+            id, bridge_title_id, slug, title, synopsis, content_type, language, year,
+            duration_minutes, poster_path, playback_path, metadata, status, listed,
+            published, featured, access_tier, updated_at
+          ) values (
+            ${loopTitleId}, ${title.id}, ${title.slug}, ${title.name}, ${title.synopsis}, ${loopStageType(title.content_type)},
+            ${title.language}, ${title.year}, ${title.runtime_minutes}, ${title.poster_key}, ${title.master_key},
+            ${JSON.stringify({
+              source: "crayons-bridge-master-distribution",
+              lane: loopStageType(title.content_type),
+              rightsGrantId: preflight.rightsGrantId,
+              authorizedBy: actor.userId,
+              commercialTerms: preflight.commercialTerms || null,
+              consumerPricePaise: data.consumerPricePaise ?? null,
+            })}::jsonb,
+            ${"approved"}, true, true, false,
+            ${data.accessTier}, now()
+          )
+          on conflict (bridge_title_id) do update set
+            slug = excluded.slug, title = excluded.title, synopsis = excluded.synopsis,
+            content_type = excluded.content_type,
+            language = excluded.language, year = excluded.year, duration_minutes = excluded.duration_minutes,
+            poster_path = excluded.poster_path, playback_path = excluded.playback_path,
+            status = 'approved', listed = true, published = true, access_tier = excluded.access_tier,
+            metadata = excluded.metadata, updated_at = now()
+        `;
+      }
 
       // 2. Authorize distribution record in Bridge control plane
       await sql`
@@ -408,19 +462,20 @@ export const authorizeLoopPublication = createServerFn({ method: "POST" })
         id, bridge_title_id, loop_title_id, authorization_status, territories, languages,
         exploitation_models, window_start, window_end, approved_by, approved_at, metadata, updated_at
       ) values (
-        ${randomUUID()}, ${title.id}, ${loopTitleId}, ${"authorized"}, ${data.territories}, ${data.languages},
+        ${randomUUID()}, ${title.id}, ${loopTitleId}, ${"AUTHORIZED"}, ${data.territories}, ${data.languages},
         ${data.exploitationModels}, ${data.windowStart ?? null}, ${data.windowEnd ?? null},
         ${actor.userId}, now(),
         ${JSON.stringify({
           destination: "CRAYONS_LOOP",
           commercialTerms: preflight.commercialTerms || null,
+          consumerPricePaise: data.consumerPricePaise ?? null,
           authorizedOperator: actor.userId,
           rightsGrantId: preflight.rightsGrantId,
         })}::jsonb,
         now()
       )
       on conflict (bridge_title_id) do update set
-        loop_title_id = excluded.loop_title_id, authorization_status = 'authorized',
+        loop_title_id = excluded.loop_title_id, authorization_status = 'AUTHORIZED',
         territories = excluded.territories, languages = excluded.languages,
         exploitation_models = excluded.exploitation_models, window_start = excluded.window_start,
         window_end = excluded.window_end, approved_by = excluded.approved_by, approved_at = now(),
@@ -468,15 +523,21 @@ export const suspendLoopPublication = createServerFn({ method: "POST" })
 
       await sql`
       update bridge_loop_publications
-      set authorization_status = 'suspended', updated_at = now()
+      set authorization_status = 'HOLD', updated_at = now()
       where bridge_title_id = ${data.bridgeTitleId}
     `;
 
-      await sql`
-      update loop_titles
-      set status = 'suspended', listed = false, published = false, updated_at = now()
-      where id = ${pubs[0].loop_title_id}
-    `;
+      if (await usesCurrentLoopTitleSchema(sql)) {
+        await sql`
+          update loop_titles set status = 'ARCHIVED', is_listed = false, is_published = false, updated_at = now()
+          where id = ${pubs[0].loop_title_id}
+        `;
+      } else {
+        await sql`
+          update loop_titles set status = 'suspended', listed = false, published = false, updated_at = now()
+          where id = ${pubs[0].loop_title_id}
+        `;
+      }
 
       await writeAudit(
         {
@@ -508,15 +569,21 @@ export const revokeLoopPublication = createServerFn({ method: "POST" })
 
       await sql`
       update bridge_loop_publications
-      set authorization_status = 'revoked', revoked_at = now(), updated_at = now()
+      set authorization_status = 'REVOKED', revoked_at = now(), updated_at = now()
       where bridge_title_id = ${data.bridgeTitleId}
     `;
 
-      await sql`
-      update loop_titles
-      set status = 'revoked', listed = false, published = false, updated_at = now()
-      where id = ${pubs[0].loop_title_id}
-    `;
+      if (await usesCurrentLoopTitleSchema(sql)) {
+        await sql`
+          update loop_titles set status = 'REVOKED', is_listed = false, is_published = false, updated_at = now()
+          where id = ${pubs[0].loop_title_id}
+        `;
+      } else {
+        await sql`
+          update loop_titles set status = 'revoked', listed = false, published = false, updated_at = now()
+          where id = ${pubs[0].loop_title_id}
+        `;
+      }
 
       await writeAudit(
         {
@@ -581,7 +648,7 @@ export const extendDistributionWindow = createServerFn({ method: "POST" })
           metadata = metadata || ${JSON.stringify({ rightsGrantId: preflight.rightsGrantId })}::jsonb,
           updated_at = now()
       where bridge_title_id = ${data.bridgeTitleId}
-        and authorization_status in ('authorized', 'live')
+        and authorization_status in ('AUTHORIZED', 'LIVE', 'authorized', 'live')
         and revoked_at is null
       returning id
     `;
@@ -613,7 +680,10 @@ export const getLoopPublication = createServerFn({ method: "GET" })
     const sql = await getSql();
 
     const rows = await sql<PublicationRow>`
-      select p.*, l.status as loop_status, l.listed, l.published, l.playback_path
+      select p.*, l.status as loop_status,
+             coalesce((to_jsonb(l)->>'listed')::boolean, (to_jsonb(l)->>'is_listed')::boolean, false) as listed,
+             coalesce((to_jsonb(l)->>'published')::boolean, (to_jsonb(l)->>'is_published')::boolean, false) as published,
+             to_jsonb(l)->>'playback_path' as playback_path
       from bridge_loop_publications p
       join loop_titles l on l.id = p.loop_title_id
       where p.bridge_title_id = ${data.bridgeTitleId}
