@@ -92,6 +92,7 @@ const data = {
   languages: ["Malayalam"],
   exploitationModels: ["TVOD"],
   accessTier: "TVOD",
+  consumerPricePaise: 9900,
   windowStart: "2026-01-01T00:00:00.000Z",
   windowEnd: "2099-01-01T00:00:00.000Z",
 };
@@ -106,8 +107,8 @@ test("new and existing publications emit the status accepted by the Loop catalog
       write.query.includes("insert into bridge_loop_publications"),
     );
     assert.ok(publication);
-    assert.equal(publication.values[3], "authorized");
-    assert.match(publication.query, /authorization_status = 'authorized'/);
+    assert.equal(publication.values[3], "AUTHORIZED");
+    assert.match(publication.query, /authorization_status = 'AUTHORIZED'/);
     assert.ok(publication.values.includes(data.territories));
     assert.ok(publication.values.includes(data.windowEnd));
   }
