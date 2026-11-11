@@ -828,7 +828,7 @@ function BuyerLegalReview() {
       </div>
       <div className="space-y-3">
         <h3 className="font-semibold">Acquisition mandates ({data.mandates.length})</h3>
-        {data.mandates.map((mandate: any) => (
+        {data.mandates.map((mandate) => (
           <article key={mandate.id} className="rounded-sm border border-line p-3 space-y-2">
             <p className="font-medium">{mandate.legal_name} · YouTube</p>
             <p className="text-xs text-muted">Account: {mandate.platform_account_id} · Channel: {mandate.platform_channel_id}</p>
