@@ -153,6 +153,7 @@ const owner = {
   accountType: "independent_creator" as const,
   internalRole: null,
 };
+const superAdmin = { ...owner, userId: "super-admin", internalRole: "super_admin" as const };
 const qc = { ...owner, userId: "qc", internalRole: "qc_reviewer" as const };
 const legal = { ...owner, userId: "legal", internalRole: "legal_reviewer" as const };
 const license = {
@@ -183,7 +184,7 @@ test("real SQL services persist QC, independently approved license, lifecycle an
       }),
     );
     await f.sql.transaction((tx) =>
-      f.review(tx, legal, {
+      f.review(tx, superAdmin, {
         titleId: "title-123",
         stage: "LEGAL",
         decision: "APPROVE",
@@ -219,7 +220,7 @@ test("unauthorized review and unverified current assets cannot clear QC", async 
     );
     await f.sql.query("update bridge_assets set byte_size=null where kind='master'");
     await assert.rejects(
-      f.sql.transaction((tx) => f.review(tx, qc, data)),
+      f.sql.transaction((tx) => f.review(tx, superAdmin, data)),
       /Verified/,
     );
     assert.equal((await f.sql.query("select * from bridge_qc_cases")).length, 0);
@@ -233,7 +234,7 @@ test("a stale artwork pointer cannot clear QC even when a verified vertical post
     await f.sql.query("update bridge_titles set poster_key='old/sealed/poster'");
     await assert.rejects(
       f.sql.transaction((tx) =>
-        f.review(tx, qc, {
+        f.review(tx, superAdmin, {
           titleId: "title-123",
           stage: "QC",
           decision: "APPROVE",
@@ -293,8 +294,8 @@ test("concurrent reviewer calls cannot approve the same lifecycle twice", async 
       note: "Verified playback review",
     };
     const results = await Promise.allSettled([
-      f.sql.transaction((tx) => f.review(tx, qc, data)),
-      f.sql.transaction((tx) => f.review(tx, qc, data)),
+      f.sql.transaction((tx) => f.review(tx, superAdmin, data)),
+      f.sql.transaction((tx) => f.review(tx, superAdmin, data)),
     ]);
     assert.equal(results.filter((r) => r.status === "fulfilled").length, 1);
     assert.equal((await f.sql.query("select * from bridge_qc_cases")).length, 1);
@@ -305,7 +306,6 @@ test("concurrent reviewer calls cannot approve the same lifecycle twice", async 
 test("only Super Admin can approve and can self-approve with an audited override reason", async () => {
   const f = await fixture();
   try {
-    const superAdmin = { ...owner, userId: "super-admin", internalRole: "super_admin" as const };
     const saved = (await f.sql.transaction((tx) => f.save(tx, superAdmin, license))) as {
       grantId: string;
     };
