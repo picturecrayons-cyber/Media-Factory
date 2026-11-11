@@ -176,7 +176,7 @@ test("real SQL services persist QC, independently approved license, lifecycle an
       grantId: string;
     };
     await f.sql.transaction((tx) =>
-      f.review(tx, qc, {
+      f.review(tx, superAdmin, {
         titleId: "title-123",
         stage: "QC",
         decision: "APPROVE",
@@ -255,7 +255,7 @@ test("an audit failure rolls back review records and lifecycle", async () => {
     await f.sql.query("drop table bridge_audit_logs");
     await assert.rejects(
       f.sql.transaction((tx) =>
-        f.review(tx, qc, {
+        f.review(tx, superAdmin, {
           titleId: "title-123",
           stage: "QC",
           decision: "APPROVE",
