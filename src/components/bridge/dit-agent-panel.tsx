@@ -1,12 +1,16 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
-import { createDitIntakeJob, getDitWorkspace, setDitAgentEnabled } from "@/lib/bridge/dit-agent";
+import { useEffect, useRef, useState } from "react";
+import { createDitIntakeJob, finalizeDitFileUpload, getDitJobFiles, getDitWorkspace, registerDitFile, setDitAgentEnabled } from "@/lib/bridge/dit-agent";
 
 export function DitAgentPanel() {
   const qc = useQueryClient();
   const [titleId, setTitleId] = useState("");
   const [sourceLabel, setSourceLabel] = useState("");
   const [sourceType, setSourceType] = useState<"CAMERA_CARD" | "EXTERNAL_DRIVE" | "FOLDER">("CAMERA_CARD");
+  const [uploadState, setUploadState] = useState("");
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const folderInput = useRef<HTMLInputElement>(null);
+  useEffect(() => { folderInput.current?.setAttribute("webkitdirectory", ""); folderInput.current?.setAttribute("directory", ""); }, []);
   const workspace = useQuery({ queryKey: ["studio-dit-workspace"], queryFn: () => getDitWorkspace(), retry: false });
   const toggle = useMutation({
     mutationFn: (enabled: boolean) => setDitAgentEnabled({ data: { enabled } }),
@@ -19,6 +23,45 @@ export function DitAgentPanel() {
       void qc.invalidateQueries({ queryKey: ["studio-dit-workspace"] });
     },
   });
+
+  const activeJobId = create.data?.jobId;
+  const jobFiles = useQuery({
+    queryKey: ["studio-dit-files", activeJobId],
+    queryFn: () => getDitJobFiles({ data: { jobId: activeJobId! } }),
+    enabled: Boolean(activeJobId),
+    refetchInterval: activeJobId ? 5000 : false,
+  });
+  async function uploadSelected(files: FileList | null) {
+    if (!files || !activeJobId) return;
+    const selected = Array.from(files);
+    for (let index = 0; index < selected.length; index += 1) {
+      const file = selected[index];
+      const relativePath = (file as File & { webkitRelativePath?: string }).webkitRelativePath || file.name;
+      setUploadState("Registering " + (index + 1) + "/" + selected.length + ": " + relativePath);
+      setUploadProgress(0);
+      try {
+        const registered = await registerDitFile({ data: { jobId: activeJobId, relativePath, fileName: file.name, byteSize: file.size, contentType: file.type || "application/octet-stream" } });
+        await new Promise<void>((resolve, reject) => {
+          const xhr = new XMLHttpRequest();
+          xhr.open("PUT", registered.upload.url);
+          xhr.setRequestHeader("Content-Type", file.type || "application/octet-stream");
+          xhr.upload.onprogress = (event) => { if (event.lengthComputable) setUploadProgress(Math.round(event.loaded / event.total * 100)); };
+          xhr.onerror = () => reject(new Error("OCI upload network error"));
+          xhr.onload = () => xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error("OCI upload failed (" + xhr.status + ")"));
+          xhr.send(file);
+        });
+        setUploadState("Verifying source and creating three copies: " + relativePath);
+        await finalizeDitFileUpload({ data: { jobId: activeJobId, fileId: registered.fileId } });
+        setUploadState("PASS · " + relativePath);
+        void qc.invalidateQueries({ queryKey: ["studio-dit-files", activeJobId] });
+      } catch (error) {
+        setUploadState("FAIL · " + relativePath + " · " + String(error));
+        void qc.invalidateQueries({ queryKey: ["studio-dit-files", activeJobId] });
+        break;
+      }
+    }
+    void qc.invalidateQueries({ queryKey: ["studio-dit-workspace"] });
+  }
 
   if (workspace.isLoading) return <section className="rounded-2xl border border-line p-5 text-sm text-muted">Loading DIT Agent…</section>;
   if (workspace.isError) return <section className="rounded-2xl border border-line p-5 text-sm text-muted">DIT Agent service unavailable. Check Production database migration and server configuration before enabling.</section>;
@@ -63,6 +106,18 @@ export function DitAgentPanel() {
           </div>
         </div>
       ) : <p className="text-sm text-muted">Enable the agent to create a new intake job.</p>}
+      {activeJobId ? (
+        <div className="space-y-3 rounded-xl border border-line p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div><h3 className="text-sm font-semibold">Camera card / folder ingest</h3><p className="text-xs text-muted">Job {activeJobId} · original relative paths retained</p></div>
+            <button type="button" onClick={() => folderInput.current?.click()} className="rounded-full bg-fg px-4 py-2 text-sm font-medium text-bg">Choose card folder</button>
+            <input ref={folderInput} type="file" multiple className="hidden" onChange={(e) => { void uploadSelected(e.currentTarget.files); e.currentTarget.value = ""; }} />
+          </div>
+          {uploadState ? <div className="space-y-1 text-xs"><p role="status">{uploadState}</p><div className="h-2 overflow-hidden rounded-full bg-line"><div className="h-full bg-fg transition-all" style={{ width: uploadProgress + "%" }} /></div><p className="text-muted">{uploadProgress}% transfer progress</p></div> : null}
+          {jobFiles.data?.files?.length ? <div className="space-y-1">{jobFiles.data.files.map((file: {id:string;relative_path:string;status:string;detected_format:string|null;byte_size:number}) => <div key={file.id} className="flex flex-wrap justify-between gap-2 border-t border-line py-2 text-xs"><span>{file.relative_path} · {file.detected_format || "UNKNOWN"} · {Math.round(file.byte_size / 1024 / 1024)} MB</span><strong>{file.status}</strong></div>)}</div> : null}
+          <p className="text-xs text-muted">Codec probing, resumable multipart, pause/resume, proxy generation and editor handoff are not yet connected. Format labels are extension-based, not codec certification.</p>
+        </div>
+      ) : null}
       {toggle.isError || create.isError ? <p role="alert" className="text-sm text-accent">{String(toggle.error ?? create.error)}</p> : null}
       {create.isSuccess ? <p className="text-sm text-muted">Job {create.data.jobId} created. Ingest remains NOT CONNECTED until the card-ingest worker is installed.</p> : null}
       <div className="space-y-2">
