@@ -302,30 +302,46 @@ test("concurrent reviewer calls cannot approve the same lifecycle twice", async 
     await f.db.close();
   }
 });
-test("license author cannot approve their own agreement", async () => {
+test("only Super Admin can approve and can self-approve with an audited override reason", async () => {
   const f = await fixture();
   try {
-    const admin = { ...owner, userId: "admin", internalRole: "admin" as const };
-    const saved = (await f.sql.transaction((tx) => f.save(tx, admin, license))) as {
+    const superAdmin = { ...owner, userId: "super-admin", internalRole: "super_admin" as const };
+    const saved = (await f.sql.transaction((tx) => f.save(tx, superAdmin, license))) as {
       grantId: string;
     };
     await f.sql.query("update bridge_titles set status='RIGHTS_REVIEW'");
     await assert.rejects(
       f.sql.transaction((tx) =>
-        f.review(tx, admin, {
+        f.review(tx, legal, {
           titleId: "title-123",
           stage: "LEGAL",
           decision: "APPROVE",
-          note: "Agreement checked",
+          note: "Legal reviewer cannot finalize",
           grantId: saved.grantId,
         }),
       ),
-      /Another legal reviewer/,
+      /Forbidden/,
     );
     assert.equal(
       (await f.sql.query<{ status: string }>("select status from bridge_rights_grants"))[0].status,
       "DRAFT",
     );
+    await f.sql.transaction((tx) =>
+      f.review(tx, superAdmin, {
+        titleId: "title-123",
+        stage: "LEGAL",
+        decision: "APPROVE",
+        note: "Super Admin verified agreement and ownership evidence",
+        grantId: saved.grantId,
+      }),
+    );
+    assert.equal(
+      (await f.sql.query<{ status: string }>("select status from bridge_rights_grants"))[0].status,
+      "VALID",
+    );
+    const evidence = await f.sql.query<{ evidence: unknown }>("select evidence from bridge_legal_cases");
+    assert.match(JSON.stringify(evidence.rows[0]?.evidence), /superAdminSelfApprovalOverride/);
+    assert.match(JSON.stringify(evidence.rows[0]?.evidence), /true/);
   } finally {
     await f.db.close();
   }
