@@ -375,3 +375,42 @@ export const reviewBuyerAcquisitionMandate = createServerFn({ method: "POST" })
     await writeAudit({ actorUserId: actor.userId, action: `buyer.acquisition_mandate.${data.decision}`, entityType: "buyer_acquisition_mandate", entityId: data.mandateId, metadata: { notes: data.notes } });
     return { ok: true, status };
   });
+
+
+export const reviewBuyerComplianceEvidence = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({
+    target: z.enum(["organization", "mandate"]),
+    evidenceId: z.string().uuid(),
+    decision: z.enum(["accept", "reject"]),
+    notes: z.string().trim().min(8).max(4000),
+  }))
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    requireLegalReviewer(actor);
+    const sql = await getSql();
+    const reviewStatus = data.decision === "accept" ? "accepted" : "rejected";
+    if (data.target === "organization") {
+      const rows = await sql<{ uploaded_by: string; organization_id: string }>`
+        select uploaded_by,organization_id from bridge_private.buyer_organization_verification_evidence
+        where id=${data.evidenceId} limit 1
+      `;
+      if (!rows[0] || rows[0].uploaded_by === actor.userId) throw new Error("Independent evidence reviewer required");
+      await sql`update bridge_private.buyer_organization_verification_evidence
+        set review_status=${reviewStatus},reviewed_by=${actor.userId},reviewed_at=now(),review_notes=${data.notes}
+        where id=${data.evidenceId}`;
+      await writeAudit({ actorUserId: actor.userId, action: `buyer.organization_evidence.${data.decision}`, entityType: "buyer_organization", entityId: rows[0].organization_id, metadata: { evidenceId: data.evidenceId, notes: data.notes } });
+    } else {
+      const rows = await sql<{ uploaded_by: string; mandate_id: string }>`
+        select uploaded_by,mandate_id from bridge_private.buyer_acquisition_mandate_evidence
+        where id=${data.evidenceId} limit 1
+      `;
+      if (!rows[0] || rows[0].uploaded_by === actor.userId) throw new Error("Independent evidence reviewer required");
+      await sql`update bridge_private.buyer_acquisition_mandate_evidence
+        set review_status=${reviewStatus},reviewed_by=${actor.userId},reviewed_at=now(),review_notes=${data.notes}
+        where id=${data.evidenceId}`;
+      await writeAudit({ actorUserId: actor.userId, action: `buyer.mandate_evidence.${data.decision}`, entityType: "buyer_acquisition_mandate", entityId: rows[0].mandate_id, metadata: { evidenceId: data.evidenceId, notes: data.notes } });
+    }
+    return { ok: true, reviewStatus };
+  });
