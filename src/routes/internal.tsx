@@ -799,11 +799,11 @@ function BuyerLegalReview() {
       </div>
       <div className="space-y-3">
         <h3 className="font-semibold">Organization applications ({data.organizations.length})</h3>
-        {data.organizations.map((org: any) => (
+        {data.organizations.map((org) => (
           <article key={org.organization_id} className="rounded-sm border border-line p-3 space-y-2">
             <p className="font-medium">{org.legal_name} · {org.buyer_kind}</p>
             <p className="text-xs text-muted">{org.legal_registration_country} · {org.legal_registration_number} · {org.official_website ?? "No website"}</p>
-            {data.organizationEvidence.filter((e: any) => e.organization_id === org.organization_id).map((e: any) => (
+            {data.organizationEvidence.filter((e) => e.organization_id === org.organization_id).map((e) => (
               <div key={e.id} className="flex flex-wrap items-center justify-between gap-2 border-t border-line pt-2 text-xs">
                 <span>{e.evidence_kind} · {e.review_status} · {e.storage_object_path}</span>
                 {e.review_status === "pending" ? <span className="flex gap-2"><Button size="sm" disabled={evidenceMutation.isPending} onClick={() => evidenceMutation.mutate({target:"organization",evidenceId:e.id,decision:"accept"})}>Accept evidence</Button><Button size="sm" variant="outline" disabled={evidenceMutation.isPending} onClick={() => evidenceMutation.mutate({target:"organization",evidenceId:e.id,decision:"reject"})}>Reject</Button></span> : null}
@@ -826,7 +826,7 @@ function BuyerLegalReview() {
             <p className="text-xs text-muted">Account: {mandate.platform_account_id} · Channel: {mandate.platform_channel_id}</p>
             <p className="text-xs text-muted">Territories: {mandate.territory_codes.join(", ")} · Languages: {mandate.language_codes.join(", ")}</p>
             <p className="text-xs text-muted">Media: {mandate.media_rights.join(", ")} · Models: {mandate.exploitation_models.join(", ")}</p>
-            {data.mandateEvidence.filter((e: any) => e.mandate_id === mandate.id).map((e: any) => (
+            {data.mandateEvidence.filter((e) => e.mandate_id === mandate.id).map((e) => (
               <div key={e.id} className="flex flex-wrap items-center justify-between gap-2 border-t border-line pt-2 text-xs">
                 <span>{e.evidence_kind} · {e.review_status} · {e.storage_object_path}</span>
                 {e.review_status === "pending" ? <span className="flex gap-2"><Button size="sm" disabled={evidenceMutation.isPending} onClick={() => evidenceMutation.mutate({target:"mandate",evidenceId:e.id,decision:"accept"})}>Accept evidence</Button><Button size="sm" variant="outline" disabled={evidenceMutation.isPending} onClick={() => evidenceMutation.mutate({target:"mandate",evidenceId:e.id,decision:"reject"})}>Reject</Button></span> : null}
