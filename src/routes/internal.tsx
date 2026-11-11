@@ -45,15 +45,7 @@ function Internal() {
   );
 }
 
-function InternalBody({
-  canInvite,
-  canPublish,
-  canRevoke,
-}: {
-  canInvite: boolean;
-  canPublish: boolean;
-  canRevoke: boolean;
-}) {
+function InternalBody({ canInvite }: { canInvite: boolean }) {
   const titlesQ = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles() });
   const logsQ = useQuery({ queryKey: ["bridge-audit"], queryFn: () => listAuditLogs() });
   const titles = titlesQ.data?.titles ?? [];
