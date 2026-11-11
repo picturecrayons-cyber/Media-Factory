@@ -61,3 +61,20 @@
 - Added `src/lib/bridge/buyer-mandate-policy.test.ts` with positive and negative cases; included it in the standard `npm test` command.
 - This policy is not yet wired into live Buyer server functions. It must not be treated as active enforcement until the DB schema is reconciled, server-side organization/membership/mandate resolution is implemented, and all buyer endpoints are guarded. Existing Buyer checkout remains unchanged in this milestone.
 - Tests have not been executed in this environment; CI evidence is pending.
+
+## STAGING read-only reconciliation findings (2026-11-11)
+
+**STAGING DB:** Supabase project `jbymleftneggcgutlcqu` — Action: schema/history inspection only; Access: READ-ONLY; Risk: low (metadata/catalog reads only; no mutation).
+
+- The migration ledger currently returns **46 applied migration records**, not the earlier 13-record snapshot. This newer result supersedes the earlier inventory.
+- `public.bridge_organizations` currently contains only `id, legal_name, normalized_name, status, created_at, updated_at`; buyer classification and verification fields are absent.
+- `public.bridge_organization_memberships` exists with organization/user/role/status fields and RLS enabled.
+- `public.bridge_profiles` includes `organization_id` and account type supports `buyer`.
+- `public.bridge_buyer_title_access` exists with buyer-user/title grants, expiry and revocation timestamps.
+- The private schema already contains `bridge_private.buyer_accounts`, `buyer_requirements`, `buyer_requirement_evidence`, and `buyer_title_matches`. These are buyer-intelligence/requirement records and must be reused or explicitly related where appropriate; do not create a parallel generic buyer-account registry.
+- The migration ledger includes two distinct entries both named `20261106083617` / `20261106084908`-style buyer-mandate migration labels (both named `20261106_story_concept_buyer_mandates`), so source-to-ledger reconciliation is still required before deciding whether a buyer mandate schema already exists elsewhere or only for story-concept workflows.
+- A metadata query confirmed RLS on the organization/profile/membership records; the inspected role grants shown were postgres/service_role. Full policy and function grant review remains pending.
+
+**Decision:** the earlier generic `bridge_buyer_mandates` proposal is NOT approved for application as-is. First map the existing story-concept buyer mandate tables/functions and distinguish (a) buyer requirements/intelligence, (b) legal acquisition mandate, and (c) title-specific buyer access. Avoid duplicate tables and avoid conflating a buyer's demand signal with contractual acquisition authority.
+
+**PRODUCTION DB:** `mlmgugivsyoxzdgwkbpu` — Action: none; Access: NO-GO / no query; Risk: protected by release hold.
