@@ -56,7 +56,12 @@ export function DitAgentPanel() {
           xhr.send(file);
         });
         setUploadState("Verifying source and creating three copies: " + relativePath);
-        await finalizeDitFileUpload({ data: { jobId: activeJobId, fileId: registered.fileId } });
+        const finalized = await finalizeDitFileUpload({ data: { jobId: activeJobId, fileId: registered.fileId } });
+        if ("duplicate" in finalized && finalized.duplicate) {
+          setUploadState("WARNING · Duplicate content detected: " + relativePath);
+          void qc.invalidateQueries({ queryKey: ["studio-dit-files", activeJobId] });
+          break;
+        }
         setUploadState("PASS · " + relativePath);
         void qc.invalidateQueries({ queryKey: ["studio-dit-files", activeJobId] });
       } catch (error) {
