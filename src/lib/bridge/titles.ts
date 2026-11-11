@@ -12,6 +12,7 @@ import { writeAudit } from "./audit";
 import { assertNotDevUser } from "./guards";
 import { loopStageType } from "./loop-lanes";
 import { assertBuyerPublishable, getBuyerGateStatus } from "./buyer-visibility";
+import { assertVerifiedBuyerOrganization } from "./buyer-acquisition";
 import { submitTitleForQc } from "./title-submission";
 
 type TitleRow = {
@@ -341,6 +342,7 @@ export const listTitles = createServerFn({ method: "GET" })
       rows = await listCatalog(sql);
     } else if (actor.accountType === "buyer") {
       assertPermission(actor, "title.read_catalog");
+      await assertVerifiedBuyerOrganization(actor);
       if (await hasTitleMergeColumn(sql)) {
         rows = await sql<TitleRow>`
           select t.* from bridge_titles t
@@ -379,6 +381,7 @@ export const getTitle = createServerFn({ method: "GET" })
     const actor = await requireVerifiedActor(context.userId);
     const title = await loadTitle(data.id);
     if (!title) throw new Error("Not found");
+    if (actor.accountType === "buyer" && !actor.internalRole) await assertVerifiedBuyerOrganization(actor);
     const sql = await getSql();
     if (actor.accountType === "investor" && !actor.internalRole) {
       const assigned = await sql<{ id: string }>
