@@ -20,6 +20,7 @@ import { INTERNAL_ROLES } from "@/lib/bridge/types";
 import { hasPermission } from "@/lib/bridge/rbac";
 import {
   listBuyerComplianceQueue,
+  getBuyerEvidenceReviewUrl,
   reviewBuyerComplianceEvidence,
   reviewBuyerOrganizationVerification,
   reviewBuyerAcquisitionMandate,
@@ -765,10 +766,16 @@ function InviteForm() {
 
 function BuyerLegalReview() {
   const qc = useQueryClient();
+  const [evidenceUrls, setEvidenceUrls] = useState<Record<string, string>>({});
   const queue = useQuery({
     queryKey: ["buyer-legal-compliance-queue"],
     queryFn: () => listBuyerComplianceQueue(),
     retry: false,
+  });
+  const evidenceUrlMutation = useMutation({
+    mutationFn: (data: { target: "organization" | "mandate"; evidenceId: string }) => getBuyerEvidenceReviewUrl({ data }),
+    onSuccess: (result, variables) => setEvidenceUrls((current) => ({ ...current, [variables.evidenceId]: result.url })),
+    onError: (error) => toast.error(error instanceof Error ? error.message : "Evidence preview link failed"),
   });
   const evidenceMutation = useMutation({
     mutationFn: (data: { target: "organization" | "mandate"; evidenceId: string; decision: "accept" | "reject" }) =>
@@ -806,7 +813,8 @@ function BuyerLegalReview() {
             {data.organizationEvidence.filter((e) => e.organization_id === org.organization_id).map((e) => (
               <div key={e.id} className="flex flex-wrap items-center justify-between gap-2 border-t border-line pt-2 text-xs">
                 <span>{e.evidence_kind} · {e.review_status} · {e.storage_object_path}</span>
-                {e.review_status === "pending" ? <span className="flex gap-2"><Button size="sm" disabled={evidenceMutation.isPending} onClick={() => evidenceMutation.mutate({target:"organization",evidenceId:e.id,decision:"accept"})}>Accept evidence</Button><Button size="sm" variant="outline" disabled={evidenceMutation.isPending} onClick={() => evidenceMutation.mutate({target:"organization",evidenceId:e.id,decision:"reject"})}>Reject</Button></span> : null}
+                <span className="flex gap-2"><Button size="sm" variant="outline" disabled={evidenceUrlMutation.isPending} onClick={() => evidenceUrlMutation.mutate({target:"organization",evidenceId:e.id})}>Get private preview</Button>{evidenceUrls[e.id] ? <a className="underline" href={evidenceUrls[e.id]} target="_blank" rel="noreferrer">Open · 5 min</a> : null}
+                {e.review_status === "pending" ? <><Button size="sm" disabled={evidenceMutation.isPending} onClick={() => evidenceMutation.mutate({target:"organization",evidenceId:e.id,decision:"accept"})}>Accept evidence</Button><Button size="sm" variant="outline" disabled={evidenceMutation.isPending} onClick={() => evidenceMutation.mutate({target:"organization",evidenceId:e.id,decision:"reject"})}>Reject</Button></> : null}</span>
               </div>
             ))}
             <div className="flex flex-wrap gap-2 pt-2">
@@ -829,7 +837,8 @@ function BuyerLegalReview() {
             {data.mandateEvidence.filter((e) => e.mandate_id === mandate.id).map((e) => (
               <div key={e.id} className="flex flex-wrap items-center justify-between gap-2 border-t border-line pt-2 text-xs">
                 <span>{e.evidence_kind} · {e.review_status} · {e.storage_object_path}</span>
-                {e.review_status === "pending" ? <span className="flex gap-2"><Button size="sm" disabled={evidenceMutation.isPending} onClick={() => evidenceMutation.mutate({target:"mandate",evidenceId:e.id,decision:"accept"})}>Accept evidence</Button><Button size="sm" variant="outline" disabled={evidenceMutation.isPending} onClick={() => evidenceMutation.mutate({target:"mandate",evidenceId:e.id,decision:"reject"})}>Reject</Button></span> : null}
+                <span className="flex gap-2"><Button size="sm" variant="outline" disabled={evidenceUrlMutation.isPending} onClick={() => evidenceUrlMutation.mutate({target:"mandate",evidenceId:e.id})}>Get private preview</Button>{evidenceUrls[e.id] ? <a className="underline" href={evidenceUrls[e.id]} target="_blank" rel="noreferrer">Open · 5 min</a> : null}
+                {e.review_status === "pending" ? <><Button size="sm" disabled={evidenceMutation.isPending} onClick={() => evidenceMutation.mutate({target:"mandate",evidenceId:e.id,decision:"accept"})}>Accept evidence</Button><Button size="sm" variant="outline" disabled={evidenceMutation.isPending} onClick={() => evidenceMutation.mutate({target:"mandate",evidenceId:e.id,decision:"reject"})}>Reject</Button></> : null}</span>
               </div>
             ))}
             <div className="flex flex-wrap gap-2 pt-2">
