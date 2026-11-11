@@ -305,8 +305,8 @@ export const submitBuyerAcquisitionMandate = createServerFn({ method: "POST" })
          sublicensing_allowed,onward_delegation_allowed,effective_from,effective_until,
          agreement_reference,created_by)
       values (${verified.organizationId},'youtube',${data.platformAccountId},${data.platformChannelId},'pending_review',
-        ${JSON.stringify(data.territoryCodes)}::text[],${JSON.stringify(data.languageCodes)}::text[],
-        ${JSON.stringify(data.mediaRights)}::text[],${JSON.stringify(data.exploitationModels)}::text[],
+        ${data.territoryCodes}::text[],${data.languageCodes}::text[],
+        ${data.mediaRights}::text[],${data.exploitationModels}::text[],
         ${data.exclusivity},${data.sublicensingAllowed},${data.onwardDelegationAllowed},
         ${data.effectiveFrom},${data.effectiveUntil},${data.agreementReference},${actor.userId})
       returning id
@@ -368,7 +368,7 @@ export const reviewBuyerAcquisitionMandate = createServerFn({ method: "POST" })
     const kinds = new Set(accepted.map((r) => r.evidence_kind));
     if (data.decision === "approve") {
       for (const required of ["signed_agreement", "channel_ownership", "territory_schedule", "rights_schedule"]) if (!kinds.has(required)) throw new Error(`Accepted ${required} evidence is required`);
-      if (new Date(rows[0].effective_from) <= new Date() || new Date(rows[0].effective_until) <= new Date()) throw new Error("Mandate must have a future effective period when approved");
+      if (new Date(rows[0].effective_until) <= new Date() || new Date(rows[0].effective_until) <= new Date(rows[0].effective_from)) throw new Error("Mandate must have a valid, unexpired effective period");
     }
     const status = data.decision === "approve" ? "approved" : data.decision === "reject" ? "rejected" : "suspended";
     await sql`update bridge_private.buyer_acquisition_mandates set status=${status},reviewed_by=${actor.userId},reviewed_at=now(),review_notes=${data.notes},updated_at=now() where id=${data.mandateId}`;
