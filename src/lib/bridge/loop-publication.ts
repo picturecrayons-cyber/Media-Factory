@@ -381,8 +381,9 @@ export const authorizeLoopPublication = createServerFn({ method: "POST" })
     if (!data.exploitationModels.includes(data.accessTier)) {
       throw new Error("Consumer access tier must be covered by the requested exploitation models.");
     }
-    if (data.accessTier === "TVOD" && (!data.consumerPricePaise || data.consumerPricePaise <= 0)) {
-      throw new Error("Enter a positive consumer TVOD rental price in paise before publishing.");
+    // Loop checkout and payment verification currently enforce one canonical ₹99 rental.
+    if (data.accessTier === "TVOD" && data.consumerPricePaise !== 9900) {
+      throw new Error("Loop currently supports the canonical ₹99 / 48-hour TVOD rental only.");
     }
     return (await getSql()).transaction(async (sql) => {
       await sql`select id from bridge_titles where id=${data.bridgeTitleId} for update`;
