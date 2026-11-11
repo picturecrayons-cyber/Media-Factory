@@ -59,13 +59,13 @@ Bridge maintains the buyer registry and buyer-specific delivery profiles. A clea
 
 Each buyer delivery is a scoped authorization with exact assets, metadata, territory/language/window and delivery method. Private screener access is not master-download permission.
 
-## Publish / License actions
+## Loop listing authorization / License actions
 
 The title workspace should present two distinct actions when authorized:
 
 **License / Deliver to Buyer** — starts or fulfills a B2B licensing workflow for a selected buyer/destination.
 
-**Publish to Crayons Loop** — available only after destination rights, QC, legal, package and required commercial/authorization gates pass.
+**Authorize listing on Crayons Loop** — available only after destination rights, QC, legal, package and required commercial/authorization gates pass.
 
 The Loop action creates a versioned publication package/event containing the Bridge title UUID, package version, approved metadata, trailer/poster/playback assets, languages/subtitles, age classification, territories, rights window and monetization model. Loop must acknowledge the exact package version.
 
@@ -85,6 +85,6 @@ All creator, studio, buyer and Bridge staff actions remain server-enforced by or
 
 Implementation is not complete until the same exact commit passes CI and a matching Vercel Preview proves signed-in role-based E2E:
 
-creator/studio minimal submit → upload assets → Bridge QC → legal/rights clearance → licensing/business model → agreement/payment clearance where required → buyer delivery **or** Publish to Loop → Loop acknowledgement/catalog/playback authorization → revocation/takedown reconciliation.
+creator/studio Submit → submit files/assets → Bridge QC → legal/rights clearance → licensing/business model → agreement/payment clearance where required → buyer delivery **or** Bridge authorization for Loop listing → Loop acknowledgement/catalog/playback authorization → revocation/takedown reconciliation.
 
 No merge or Production promotion should be performed solely from this document update.

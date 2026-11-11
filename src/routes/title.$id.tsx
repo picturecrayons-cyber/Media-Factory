@@ -72,7 +72,7 @@ function LaneStore({ titleId, stored, locked }: { titleId: string; stored: strin
         ))}
       </select>
       <span className="mt-1 block text-xs text-muted">
-        {locked ? "Locked after prepare. Staff can still correct it before publish." : "Saved on the Bridge title. Loop shows it only after TVOD publish."}
+        {locked ? "Locked after preparation. Staff can still correct it before Loop listing." : "Saved on the Bridge title. Loop lists it only after TVOD authorization."}
         {save.isError ? ` ${save.error instanceof Error ? save.error.message : "Could not save."}` : ""}
       </span>
     </label>
@@ -247,7 +247,7 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
             <Metric label="QC" value={qcReady ? "READY" : "PENDING"} />
             <Metric label="Rights" value={rightsReady ? "READY" : "PENDING"} />
             <Metric label="Licensing" value={legalReady ? "READY" : "PENDING"} />
-            <Metric label="Publish" value={distributionReady ? "LIVE" : packageReady ? "READY" : "PENDING"} />
+            <Metric label="Loop Listing" value={distributionReady ? "LISTED" : packageReady ? "READY" : "PENDING"} />
           </div>
         </section>
       ) : activeTab === "Files" ? (
