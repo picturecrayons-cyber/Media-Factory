@@ -259,7 +259,7 @@ export const registerDitFile = createServerFn({ method: "POST" })
     requireDitOperator(actor);
     const job = await ownedDitJob(actor.userId, data.jobId);
     const sql = await getSql();
-    const relativePath = data.relativePath.replaceAll("\\", "/").replace(/^\/+/, "");
+    const relativePath = data.relativePath.replaceAll("\\", "/").split("/").filter(Boolean).join("/");
     if (relativePath.split("/").some((part) => part === ".." || part === ".")) throw new Error("Unsafe relative path");
     const fileName = safeDitName(data.fileName);
     const extension = fileName.includes(".") ? fileName.slice(fileName.lastIndexOf(".")).toLowerCase() : "";
