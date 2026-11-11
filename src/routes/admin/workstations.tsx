@@ -7,6 +7,8 @@ import { BridgeShell } from "@/components/bridge/shell";
 import { StoryConceptDesk } from "@/components/bridge/story-concept-desk";
 import { listAdminWorkstations, reviewAdminTitle, setBuyerPublicationGate } from "@/lib/bridge/admin-workstations";
 import { listDuplicateReviews, openDuplicateReview, decideDuplicateReview } from "@/lib/bridge/duplicate-reconciliation";
+import { hasPermission } from "@/lib/bridge/rbac";
+import type { BridgeActor } from "@/lib/bridge/session";
 
 export const Route = createFileRoute("/admin/workstations")({ component: AdminWorkstations });
 
@@ -22,12 +24,12 @@ const STATUS_LABELS: Record<string, string> = {
 function AdminWorkstations() {
   return (
     <RequireBridge allow="internal">
-      {(actor) => <BridgeShell actor={actor} title="Admin"><WorkstationBody /></BridgeShell>}
+      {(actor) => <BridgeShell actor={actor} title="Admin"><WorkstationBody actor={actor} /></BridgeShell>}
     </RequireBridge>
   );
 }
 
-function WorkstationBody() {
+function WorkstationBody({ actor }: { actor: BridgeActor }) {
   const qc = useQueryClient();
   const query = useQuery({ queryKey: ["admin-workstations"], queryFn: () => listAdminWorkstations() });
   const review = useMutation({
@@ -72,20 +74,20 @@ function WorkstationBody() {
       </nav>
 
       {activeTab === "Titles" ? (
-        <TitleQueue titles={data.titles} review={review} />
+        <TitleQueue titles={data.titles} review={review} canAccept={hasPermission(actor, "title.advance_upload")} />
       ) : activeTab === "Concepts" ? (
         <StoryConceptDesk />
       ) : activeTab === "QC" ? (
         <ReviewQueue title="QC Review" description="Review technical quality before rights review." titles={qcQueue}
-          actions={[["PASS", "Approve → Rights"], ["FAIL", "Fail QC"]]} mutation={review} />
+          actions={hasPermission(actor, "title.qc_review") ? [["PASS", "Approve → Rights"], ["FAIL", "Fail QC"]] : []} mutation={review} />
       ) : activeTab === "Rights" ? (
         <ReviewQueue title="Rights Review" description="Clear ownership, territory, language and window before licensing." titles={rightsQueue}
-          actions={[["APPROVE", "Approve → Licensing"], ["REJECT", "Reject"]]} mutation={review} />
+          actions={hasPermission(actor, "title.rights_review") ? [["APPROVE", "Approve → Licensing"], ["REJECT", "Reject"]] : []} mutation={review} />
       ) : activeTab === "Assets" ? (
         <SimpleTable title="Assets" description={data.assets.length + " base assets · " + data.assetVersions.length + " versioned assets"}
           rows={data.assets} fields={["kind", "s3_key", "content_type", "byte_size"]} />
       ) : activeTab === "Buyers" ? (
-        <BuyerRelease titles={data.titles} qc={data.qc} legal={data.legal} gate={gate}
+        <BuyerRelease titles={data.titles} canApprove={hasPermission(actor, "title.license")}
           onGate={(titleId, gateName) => gate.mutate({ data: { titleId, gate: gateName as "OTT", decision: "PASS" } })} />
       ) : activeTab === "Deliveries" ? (
         <div className="space-y-6">
@@ -106,7 +108,7 @@ function WorkstationBody() {
   );
 }
 
-function TitleQueue({ titles, review }: { titles: any[]; review: any }) {
+function TitleQueue({ titles, review, canAccept }: { titles: any[]; review: any; canAccept: boolean }) {
   return (
     <section className="space-y-3">
       <SectionHeader title="Titles" description="One canonical Title ID from intake through delivery." />
@@ -118,7 +120,7 @@ function TitleQueue({ titles, review }: { titles: any[]; review: any }) {
               <p className="mt-1 text-xs text-muted">{STATUS_LABELS[title.status] ?? title.status} · {title.language}</p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              {title.status === "PREPARING" ? <ActionButton label="Accept → QC" onClick={() => review.mutate({ data: { titleId: title.id, decision: "ACCEPT" } })} disabled={review.isPending} /> : null}
+              {title.status === "PREPARING" && canAccept ? <ActionButton label="Accept → QC" onClick={() => review.mutate({ data: { titleId: title.id, decision: "ACCEPT" } })} disabled={review.isPending} /> : null}
               <Link to="/title/$id" params={{ id: title.id }} className="rounded-full border border-line px-3.5 py-1.5 text-xs text-muted hover:border-line-strong hover:text-fg">Open</Link>
             </div>
           </div>
@@ -163,6 +165,6 @@ function ReviewQueue({ title, description, titles, actions, mutation }: { title:
 function SimpleTable({ title, description, rows, fields, titleName }: { title: string; description: string; rows: any[]; fields: string[]; titleName?: Map<any, any> }) {
   return <section className="space-y-3"><SectionHeader title={title} description={description} /><RecordTable rows={rows} fields={fields} titleName={titleName ?? new Map()} /></section>;
 }
-function BuyerRelease({ titles, onGate }: { titles: any[]; qc?: any; legal?: any; gate?: any; onGate: (titleId: string, gateName: string) => void }) {
-  return <section className="space-y-3"><SectionHeader title="Buyer release" description="Pass a gate only after the required check." />{titles.map((t) => <div key={t.id} className="flex items-center justify-between rounded-2xl border border-line p-4"><span>{t.name}</span><ActionButton label="Pass gate" onClick={() => onGate(t.id, "buyer")} /></div>)}</section>;
+function BuyerRelease({ titles, canApprove, onGate }: { titles: any[]; canApprove: boolean; onGate: (titleId: string, gateName: string) => void }) {
+  return <section className="space-y-3"><SectionHeader title="Buyer release" description="Pass a gate only after the required check." />{titles.map((t) => <div key={t.id} className="flex items-center justify-between rounded-2xl border border-line p-4"><span>{t.name}</span>{canApprove ? <ActionButton label="Pass gate" onClick={() => onGate(t.id, "buyer")} /> : <span className="text-xs text-muted">Approval reserved to Super Admin</span>}</div>)}</section>;
 }
