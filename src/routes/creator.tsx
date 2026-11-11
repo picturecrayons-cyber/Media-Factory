@@ -129,6 +129,7 @@ function Creator() {
                 href="#my-titles"
               />
               <InfoPanel
+                id="rights"
                 eyebrow="Ownership evidence"
                 title="Rights & Ownership"
                 description="Provide ownership and authorization information where requested. Attestations do not replace signed chain-of-title documents or Legal verification."
@@ -164,6 +165,7 @@ function Creator() {
                 href="#my-titles"
               />
               <InfoPanel
+                id="delivery"
                 eyebrow="Release control"
                 title="Delivery Status"
                 description="Delivery is visible only after the required Bridge authorization. Submission or upload alone does not publish a title to Loop or buyers."
@@ -197,12 +199,14 @@ function Creator() {
 }
 
 function InfoPanel({
+  id,
   eyebrow,
   title,
   description,
   action,
   href,
 }: {
+  id?: string;
   eyebrow: string;
   title: string;
   description: string;
@@ -210,7 +214,7 @@ function InfoPanel({
   href: string;
 }) {
   return (
-    <article className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
+    <article id={id} className="scroll-mt-20 rounded-2xl border border-line bg-surface p-5 sm:p-6">
       <p className="text-xs font-semibold uppercase tracking-widest text-accent">{eyebrow}</p>
       <h2 className="mt-2 font-display text-xl font-semibold">{title}</h2>
       <p className="mt-2 text-sm leading-relaxed text-muted">{description}</p>
