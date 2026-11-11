@@ -2,9 +2,10 @@ import type { AccountType, InternalRole, Permission, TitleStatus } from "./types
 
 const INTERNAL_PERMISSIONS: Record<InternalRole, readonly Permission[]> = {
   viewer: ["title.read_catalog", "audit.read"],
-  qc_reviewer: ["title.read_catalog", "asset.sign_download", "audit.read"],
+  qc_reviewer: ["title.read_catalog", "title.qc_review", "asset.sign_download", "audit.read"],
   legal_reviewer: [
     "title.read_catalog",
+    "title.rights_review",
     "asset.sign_download",
     "audit.read",
   ],
@@ -20,6 +21,9 @@ const INTERNAL_PERMISSIONS: Record<InternalRole, readonly Permission[]> = {
     "service.quote_create",
     "service.order_create",
     "service.fulfill",
+    "title.qc_review",
+    "title.rights_review",
+    "title.license",
     "title.merge_duplicate",
     "title.negotiate",
     "title.deliver",
@@ -50,6 +54,7 @@ const INTERNAL_PERMISSIONS: Record<InternalRole, readonly Permission[]> = {
     "title.license",
     "title.negotiate",
     "title.deliver",
+    "title.approve",
     "delivery.read",
     "delivery.read_finance",
     "asset.sign_download",
