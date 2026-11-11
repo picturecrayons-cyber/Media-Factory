@@ -77,13 +77,13 @@ export const Route = createFileRoute("/api/loop/playback/authorize")({
               and (${loopTitleId || null}::text is null or p.loop_title_id = ${loopTitleId || null})
               and (
                 ${mediaType === "poster" && requestedObjectKey ? requestedObjectKey : null}::text is null
-                or b.poster_key = ${mediaType === "poster" && objectKey ? objectKey : null}
+                or b.poster_key = ${mediaType === "poster" && requestedObjectKey ? requestedObjectKey : null}
               )
               and (
                 ${mediaType === "trailer" && requestedObjectKey ? requestedObjectKey : null}::text is null
                 or exists (
                   select 1 from bridge_assets a
-                  where a.title_id = b.id and a.kind = 'trailer' and a.s3_key = ${mediaType === "trailer" && objectKey ? objectKey : null}
+                  where a.title_id = b.id and a.kind = 'trailer' and a.s3_key = ${mediaType === "trailer" && requestedObjectKey ? requestedObjectKey : null}
                     and coalesce(a.byte_size, 0) > 0
                 )
               )
