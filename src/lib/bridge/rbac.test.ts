@@ -220,3 +220,20 @@ it("CMS ingest belongs only to verified super admins", () => {
   for (const a of [creator(), studio(), buyer(), admin(), viewer(), qc, legal, finance])
     assert.equal(hasPermission(a, "title.ingest_internal"), false);
 });
+
+it("reserves every final approval and publication authority to Super Admin", () => {
+  const privileged = superAdmin();
+  for (const staff of [admin(), viewer(), qc, legal, finance]) {
+    assert.equal(hasPermission(staff, "title.approve"), false);
+    assert.equal(hasPermission(staff, "loop.publish"), false);
+    assert.equal(hasPermission(staff, "loop.revoke"), false);
+    assert.equal(hasPermission(staff, "loop.certify_playback"), false);
+  }
+  assert.equal(hasPermission(privileged, "title.approve"), true);
+  assert.equal(hasPermission(privileged, "loop.publish"), true);
+  assert.equal(hasPermission(privileged, "loop.revoke"), true);
+  assert.equal(hasPermission(privileged, "loop.certify_playback"), true);
+  assert.equal(hasPermission(qc, "title.qc_review"), true);
+  assert.equal(hasPermission(legal, "title.rights_review"), true);
+  assert.equal(hasPermission(admin(), "title.license"), true);
+});
