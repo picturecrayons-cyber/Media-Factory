@@ -94,3 +94,30 @@ create index if not exists bridge_dit_job_logs_file_created_idx
   on public.bridge_dit_job_logs(file_id, created_at desc);
 alter table public.bridge_dit_job_logs enable row level security;
 revoke all on public.bridge_dit_job_logs from anon, authenticated;
+
+
+create table if not exists public.bridge_dit_handoffs (
+  id uuid primary key default gen_random_uuid(),
+  job_id uuid not null references public.bridge_dit_jobs(id) on delete restrict,
+  created_by text not null,
+  report jsonb not null,
+  created_at timestamptz not null default now()
+);
+create table if not exists public.bridge_dit_archives (
+  id uuid primary key default gen_random_uuid(),
+  job_id uuid not null references public.bridge_dit_jobs(id) on delete restrict,
+  file_id uuid not null references public.bridge_dit_job_files(id) on delete restrict,
+  object_key text not null unique,
+  sha256 text not null,
+  byte_size bigint not null check (byte_size > 0),
+  verified_at timestamptz not null default now(),
+  created_at timestamptz not null default now()
+);
+create index if not exists bridge_dit_handoffs_job_created_idx
+  on public.bridge_dit_handoffs(job_id, created_at desc);
+create index if not exists bridge_dit_archives_job_created_idx
+  on public.bridge_dit_archives(job_id, created_at desc);
+alter table public.bridge_dit_handoffs enable row level security;
+alter table public.bridge_dit_archives enable row level security;
+revoke all on public.bridge_dit_handoffs from anon, authenticated;
+revoke all on public.bridge_dit_archives from anon, authenticated;
