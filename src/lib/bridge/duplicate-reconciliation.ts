@@ -160,7 +160,7 @@ export const openDuplicateReview = createServerFn({ method: "POST" })
   .validator(openInput)
   .handler(async ({ context, data }) => {
     const actor = await actorFor(context.userId);
-    assertPermission(actor, "title.license");
+    assertPermission(actor, "title.approve");
     if (data.candidateTitleId === data.canonicalTitleId) throw new Error("Candidate and canonical IDs must differ.");
 
     const sql = await getSql();
