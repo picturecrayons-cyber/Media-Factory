@@ -17,7 +17,7 @@
 1. `20261111163440_buyer_acquisition_mandate_legal_scope`
    - `bridge_private.buyer_acquisition_mandates`: organization, platform/account/channel, territory, language, media, exploitation model, exclusivity, sublicensing/delegation, effective term, reviewer, status and revocation metadata.
    - `bridge_private.buyer_acquisition_mandate_evidence`: evidence kind, private object path, SHA-256, uploader and reviewer metadata.
-2. `20261111164120_buyer_organization_legal_verification`
+2. `20261111163555_buyer_organization_legal_verification`
    - `bridge_private.buyer_organization_verifications`: buyer classification, legal registration metadata, official website, verification status and reviewer metadata.
    - `bridge_private.buyer_organization_verification_evidence`: private evidence object references, hashes and review metadata.
 
