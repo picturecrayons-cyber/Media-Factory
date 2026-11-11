@@ -1,80 +1,66 @@
 # Buyer account implementation — YouTube platform buyer
 
-**Status: implementation proposal / not applied.** This proposal is for the canonical Bridge application. It does not create a YouTube relationship, grant buyer access, or certify legal authority.
+**Current status: STAGING schema foundation applied; application authorization integration remains incomplete.** This work does not create a YouTube relationship, grant buyer access, or certify legal authority.
 
-## Existing implementation facts
+## Model boundaries
 
-- The canonical app already has a `buyer` account type and `/buyer` dashboard.
-- The dashboard currently lists titles returned by `listTitles()` and can initiate a Razorpay license order.
-- `bridge_organizations` and `bridge_organization_memberships` were introduced for Studio organization scope. Their current schema has only legal name, normalized name and active/suspended/closed status; it does not encode buyer type, legal verification, or acquisition mandate.
-- The Buyer account currently has no first-class organization verification or mandate scope in the organization model. Therefore do not simply create a buyer user, set a display name to YouTube, or allow it to transact.
+- Keep `account_type = 'buyer'`; no new privileged RBAC role.
+- Distinguish (a) buyer requirements/intelligence, (b) story-concept buyer mandates, (c) legal platform acquisition mandates, and (d) title-specific buyer access.
+- YouTube is a provisional platform label. The contracting legal entity, authorized representative, channel, scope, and documentary mandate must be verified before transactions are enabled.
+- OAuth/channel connection and public YouTube APIs do not prove acquisition authority. Content ID / Content Manager remains partner-restricted.
 
-## Proposed account model
+## STAGING schema implemented
 
-1. Keep `account_type = 'buyer'`; no new privileged RBAC role.
-2. Extend the organization record with `organization_kind`, `verification_status`, `commercial_capacity`, `verified_at`, and `verified_by`.
-3. Add server-only `bridge_buyer_mandates` records containing counterparty legal name, representative, documentary evidence hash/reference, channel/media/territory/language scope, exploitation models, exclusivity, sublicensing, delegation, validity window, reviewer and status.
-4. YouTube remains a provisional display label until the actual contracting legal entity and authorized acquisition mandate are evidenced and reviewed.
-5. Organization membership must be explicitly invited/approved by Bridge Admin; never inferred from email domain, channel URL, OAuth identity, organization display name, or user-supplied organization ID.
+**STAGING DB:** Supabase project `jbymleftneggcgutlcqu`.
+**Action:** Applied two additive migrations; Access: WRITE (explicitly authorized by user); Risk: moderate — additive private-schema DDL, no existing records altered and no production access.
 
-## Required server enforcement before enabling Buyer Dashboard transactions
+1. `20261111163440_buyer_acquisition_mandate_legal_scope`
+   - `bridge_private.buyer_acquisition_mandates`: organization, platform/account/channel, territory, language, media, exploitation model, exclusivity, sublicensing/delegation, effective term, reviewer, status and revocation metadata.
+   - `bridge_private.buyer_acquisition_mandate_evidence`: evidence kind, private object path, SHA-256, uploader and reviewer metadata.
+2. `20261111164120_buyer_organization_legal_verification`
+   - `bridge_private.buyer_organization_verifications`: buyer classification, legal registration metadata, official website, verification status and reviewer metadata.
+   - `bridge_private.buyer_organization_verification_evidence`: private evidence object references, hashes and review metadata.
 
-- Resolve buyer organization from authenticated Bridge profile + active membership on the server.
-- Require organization kind in buyer/platform_buyer/distributor/aggregator and verification status = verified.
-- Require at least one active, verified, non-expired, non-revoked mandate.
-- For every title, intersect mandate scope with valid rights grant and legal/QC clearance. Fail closed on missing, ambiguous, expired or revoked evidence.
-- Apply same checks to discovery, title detail, screener issuance, offer, order creation, payment verification, entitlement creation, delivery, and finance reconciliation. Hiding buttons is not authorization.
-- Bind every record to organization ID, actor ID, mandate ID, title ID, exact rights scope, contract and audit evidence.
-- Do not expose mandate or organization control-plane tables to anon/authenticated browser roles. Server-only service access plus explicit RBAC and audit.
-- Separate buyer acquisition/licensing payments from Creator YPP/AdSense earnings.
+Both migrations:
+- Keep sensitive legal data in `bridge_private`, not in public organization rows.
+- Enable RLS and install explicit `deny_browser_access` policies for `anon` and `authenticated`.
+- Revoke browser-role table privileges; grant required table privileges only to `service_role`.
+- Preserve `bridge_story_concept_mandates`, buyer intelligence tables and existing title access records without rewriting them.
+- Store evidence object references only; document bytes must remain in private object storage.
 
-## YouTube-specific limits
+Migration source files are committed to the integration branch under `supabase/migrations/`.
 
-- Public YouTube Data / Analytics / Reporting APIs are only used after OAuth consent, scope review, and applicable account authorization.
-- Content ID / Content Manager is partner-restricted. Do not enable those operations without documented YouTube partner access.
-- An API-connected channel is not proof of a film acquisition mandate.
+## STAGING verification evidence
 
-## Required tests
+- Both migration versions are present in `supabase_migrations.schema_migrations`.
+- All four new tables exist with RLS enabled.
+- All four tables have exactly the expected deny-browser policy.
+- `has_table_privilege` checks: anon SELECT = false; authenticated SELECT = false; service_role SELECT/INSERT = true for all four tables.
+- No application or sample buyer rows were inserted; existing records were not updated or deleted.
+- Security advisor still reports unrelated existing findings (7 RLS-enabled/no-policy tables, 3 security-definer exposure findings across 2 functions, and leaked-password protection disabled). These were not changed by this scoped migration.
 
-- unverified buyer organization denied dashboard transaction operations;
-- verified organization with no active mandate denied;
-- mandate expired/revoked/suspended/rejected denied;
-- territory, language, channel, media, exploitation model, term and exclusivity mismatch denied;
-- buyer A cannot read buyer B's titles, screeners, offers, orders, entitlements or deliveries;
-- browser anon/authenticated cannot read/write buyer mandate records;
-- changing client-supplied organization_id / mandate_id cannot widen access;
-- valid mandate + valid title rights + QC/legal pass permits only the exact authorized transaction;
-- all denials and approvals emit auditable events;
-- existing Studio/Creator/Buyer regression tests pass.
+## Application integration still required
+
+The new policy helper is pure and fail-closed, but is **not wired into live Buyer server functions**. Current `createLicenseOrder` still does not resolve a verified buyer organization + active acquisition mandate; captured-payment entitlement flow also lacks mandate revalidation. Admin/legal UI and end-to-end cross-tenant tests are not yet implemented.
+
+Required before Buyer transactions can be certified:
+- Resolve buyer organization only from authenticated profile + active membership on the server.
+- Load private verification and mandate rows server-side; never trust client organization/mandate IDs.
+- Require verified organization, accepted evidence, approved mandate, active term, and exact channel/territory/language/media/exploitation/exclusivity scope.
+- Enforce at discovery, screener, offer, order creation, payment verification, entitlement creation, delivery and finance.
+- Revalidate the mandate before granting entitlements and before delivery; fail closed on revoked/expired/suspended mandates.
+- Add Admin/legal review endpoints and UI with immutable audit events.
+- Add tenant A/B isolation and existing Creator/Studio/Buyer regression tests.
 
 ## Release controls
 
-- STAGING DB `jbymleftneggcgutlcqu`: READ-ONLY. First reconcile applied migration history and table/grant/RLS compatibility. No SQL execution, migration, seed, RLS/ACL/Auth change, or runtime test until separately approved.
-- PRODUCTION DB `mlmgugivsyoxzdgwkbpu`: HOLD / NOT CERTIFIED / NO-GO. No queries or writes.
-- This SQL is a proposal artifact only, not an executable migration. Do not move it into the migration runner until gates are cleared.
-- No live YouTube OAuth credentials, channel linking, Content ID operations, payment, email, merge or deployment.
+- **STAGING DB:** `jbymleftneggcgutlcqu` — the user authorized WRITE only for this mandate schema, RLS/ACL and test-only verification scope.
+- **PRODUCTION DB:** `mlmgugivsyoxzdgwkbpu` — Action: none; Access: NO-GO; Risk: protected release hold. No Production query, write, migration or deployment.
+- No merge, Production deployment, live YouTube OAuth/channel linking, Content ID operation, payment, or email was performed.
 - No paid upgrades. Preserve current Creator, Studio and Buyer workflows — App-inu pani kittaruthu.
 
-## Implemented source-only milestone (2026-11-11)
+## Source-only policy milestone
 
-- Added `src/lib/bridge/buyer-mandate-policy.ts`: pure fail-closed policy for verified platform-buyer organization, verified mandate, exact channel/territory/language/media/exploitation scope, exclusivity, sublicensing, onward delegation and mandate-term checks.
-- Added `src/lib/bridge/buyer-mandate-policy.test.ts` with positive and negative cases; included it in the standard `npm test` command.
-- This policy is not yet wired into live Buyer server functions. It must not be treated as active enforcement until the DB schema is reconciled, server-side organization/membership/mandate resolution is implemented, and all buyer endpoints are guarded. Existing Buyer checkout remains unchanged in this milestone.
-- Tests have not been executed in this environment; CI evidence is pending.
-
-## STAGING read-only reconciliation findings (2026-11-11)
-
-**STAGING DB:** Supabase project `jbymleftneggcgutlcqu` — Action: schema/history inspection only; Access: READ-ONLY; Risk: low (metadata/catalog reads only; no mutation).
-
-- The migration ledger currently returns **46 applied migration records**, not the earlier 13-record snapshot. This newer result supersedes the earlier inventory.
-- `public.bridge_organizations` currently contains only `id, legal_name, normalized_name, status, created_at, updated_at`; buyer classification and verification fields are absent.
-- `public.bridge_organization_memberships` exists with organization/user/role/status fields and RLS enabled.
-- `public.bridge_profiles` includes `organization_id` and account type supports `buyer`.
-- `public.bridge_buyer_title_access` exists with buyer-user/title grants, expiry and revocation timestamps.
-- The private schema already contains `bridge_private.buyer_accounts`, `buyer_requirements`, `buyer_requirement_evidence`, and `buyer_title_matches`. These are buyer-intelligence/requirement records and must be reused or explicitly related where appropriate; do not create a parallel generic buyer-account registry.
-- The migration ledger includes two distinct entries both named `20261106083617` / `20261106084908`-style buyer-mandate migration labels (both named `20261106_story_concept_buyer_mandates`), so source-to-ledger reconciliation is still required before deciding whether a buyer mandate schema already exists elsewhere or only for story-concept workflows.
-- A metadata query confirmed RLS on the organization/profile/membership records; the inspected role grants shown were postgres/service_role. Full policy and function grant review remains pending.
-
-**Decision:** the earlier generic `bridge_buyer_mandates` proposal is NOT approved for application as-is. First map the existing story-concept buyer mandate tables/functions and distinguish (a) buyer requirements/intelligence, (b) legal acquisition mandate, and (c) title-specific buyer access. Avoid duplicate tables and avoid conflating a buyer's demand signal with contractual acquisition authority.
-
-**PRODUCTION DB:** `mlmgugivsyoxzdgwkbpu` — Action: none; Access: NO-GO / no query; Risk: protected by release hold.
+- `src/lib/bridge/buyer-mandate-policy.ts` implements pure fail-closed checks for organization verification, mandate status/term, exact channel/territory/language/media/exploitation scope, exclusivity, sublicensing and onward delegation.
+- `src/lib/bridge/buyer-mandate-policy.test.ts` contains positive/negative policy cases and is included in `npm test`.
+- Passing these unit tests does not prove live endpoint enforcement.
