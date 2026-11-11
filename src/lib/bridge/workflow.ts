@@ -74,13 +74,14 @@ const reviewInput = z.object({
 
 export async function reviewWorkflow(tx: Sql, actor: Actor, data: z.infer<typeof reviewInput>) {
   data = reviewInput.parse(data);
-  assertPermission(actor, data.stage === "QC" ? "title.qc_review" : "title.rights_review");
+  assertPermission(actor, "title.approve");
   const [title] = await tx<{
     status: string;
     master_key: string | null;
     poster_key: string | null;
   }>`select status,master_key,poster_key from bridge_titles where id=${data.titleId} for update`;
   if (!title) throw new Error("Not found");
+  let superAdminSelfApprovalOverride = false;
   const expected = data.stage === "QC" ? "QC_REVIEW" : "RIGHTS_REVIEW";
   if (title.status !== expected) throw new Error(`Title must be in ${expected}`);
   if (data.stage === "QC") {
@@ -104,13 +105,12 @@ export async function reviewWorkflow(tx: Sql, actor: Actor, data: z.infer<typeof
       created_by: string;
     }>`select status,window_end,created_by from bridge_rights_grants where id=${data.grantId} and title_id=${data.titleId} for update`;
     if (!grant || grant.status !== "DRAFT") throw new Error("License draft is unavailable");
-    if (grant.created_by === actor.userId)
-      throw new Error("Another legal reviewer must approve this license");
+    superAdminSelfApprovalOverride = grant.created_by === actor.userId;
     if (data.decision === "APPROVE" && new Date(grant.window_end) <= new Date())
       throw new Error("License has expired");
     await tx`insert into bridge_legal_cases(title_id,status,evidence,reviewed_by,reviewed_at)
       values (${data.titleId},${data.decision === "APPROVE" ? "APPROVED" : "REJECTED"},
-      ${JSON.stringify([{ grantId: data.grantId, note: data.note }])}::jsonb,${actor.userId},now())`;
+      ${JSON.stringify([{ grantId: data.grantId, note: data.note, superAdminSelfApprovalOverride }])}::jsonb,${actor.userId},now())`;
     await tx`update bridge_rights_grants set status=${data.decision === "APPROVE" ? "VALID" : "REVOKED"} where id=${data.grantId}`;
   }
   const next =
@@ -126,7 +126,7 @@ export async function reviewWorkflow(tx: Sql, actor: Actor, data: z.infer<typeof
     actor.userId,
     data.titleId,
     `workflow.${data.stage.toLowerCase()}.${data.decision.toLowerCase()}`,
-    { grantId: data.grantId ?? null },
+    { grantId: data.grantId ?? null, superAdminSelfApprovalOverride },
   );
   return { status: next };
 }
