@@ -216,21 +216,29 @@ function DashboardBody() {
           </p>
         </div>
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          {ADMIN_MODULES.map((module) => (
-            <Link
-              key={module.title}
-              to={module.to}
-              search={"search" in module ? module.search : undefined}
-              className={"group rounded-sm border p-4 transition-colors hover:border-accent " + ("primary" in module && module.primary ? "border-accent bg-accent/5" : "border-line")}
-            >
-              <div className="flex items-center justify-between gap-3">
-                <h4 className="font-semibold">{module.title}</h4>
-                <span aria-hidden="true" className="text-accent">→</span>
-              </div>
-              <p className="mt-2 text-sm leading-relaxed text-muted">{module.description}</p>
-              <p className="mt-4 text-xs font-semibold text-accent">Open workspace</p>
-            </Link>
-          ))}
+          {ADMIN_MODULES.map((module) => {
+            const className = "group rounded-sm border p-4 transition-colors hover:border-accent " +
+              ("primary" in module && module.primary ? "border-accent bg-accent/5" : "border-line");
+            const content = (
+              <>
+                <div className="flex items-center justify-between gap-3">
+                  <h4 className="font-semibold">{module.title}</h4>
+                  <span aria-hidden="true" className="text-accent">→</span>
+                </div>
+                <p className="mt-2 text-sm leading-relaxed text-muted">{module.description}</p>
+                <p className="mt-4 text-xs font-semibold text-accent">Open workspace</p>
+              </>
+            );
+            return "search" in module ? (
+              <Link key={module.title} to="/internal" search={{ desk: "gateway" }} className={className}>
+                {content}
+              </Link>
+            ) : (
+              <Link key={module.title} to={module.to} className={className}>
+                {content}
+              </Link>
+            );
+          })}
         </div>
       </section>
 
