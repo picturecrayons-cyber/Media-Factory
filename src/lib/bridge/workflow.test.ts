@@ -218,6 +218,10 @@ test("unauthorized review and unverified current assets cannot clear QC", async 
       f.sql.transaction((tx) => f.review(tx, owner, data)),
       /Forbidden/,
     );
+    await assert.rejects(
+      f.sql.transaction((tx) => f.review(tx, qc, data)),
+      /Forbidden/,
+    );
     await f.sql.query("update bridge_assets set byte_size=null where kind='master'");
     await assert.rejects(
       f.sql.transaction((tx) => f.review(tx, superAdmin, data)),
