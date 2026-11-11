@@ -15,13 +15,13 @@ const digest = sha256Hex(new TextEncoder().encode("camera-original-content"));
 const goodEvidence = (): DitIngestEvidence => ({
   assetId: "asset-dit-001",
   sourceObjectKey: "bridge/title/source/camera-a.mov",
-  byteSize: 24,
+  byteSize: 23,
   sha256: digest,
   qc: "passed",
   backups: [1, 2, 3].map((n) => ({
     objectKey: `backup-${n}/camera-a.mov`,
     failureDomain: `location-${n}`,
-    byteSize: 24,
+    byteSize: 23,
     sha256: digest,
     verifiedAt: "2026-11-11T10:00:00Z",
   })),
