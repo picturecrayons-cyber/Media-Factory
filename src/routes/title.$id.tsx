@@ -590,7 +590,7 @@ function FilesPanel({
       assertAttemptActive();
       // Use the OCI pre-authenticated URL verbatim; rewriting its encoded path can invalidate it.
       setProgress({ kind, phase: "transferring", percent: 0, etaSeconds: null, loaded: 0, total: file.size });
-      announce(`Uploading ${kindLabel(kind)}…`);
+      announce(`Submitting ${kindLabel(kind)}…`);
       await transferWithProgress(kind, signed.url, signed.method, file, contentType);
       assertAttemptActive();
       assetId = signed.assetId;
