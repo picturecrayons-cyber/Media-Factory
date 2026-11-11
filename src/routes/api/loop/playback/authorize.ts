@@ -127,7 +127,7 @@ export const Route = createFileRoute("/api/loop/playback/authorize")({
               select s3_key from bridge_assets
               where title_id = ${publication.bridge_title_id} and kind = 'trailer'
                 and coalesce(byte_size, 0) > 0
-                and (${objectKey || null}::text is null or s3_key = ${objectKey || null})
+                and (${requestedObjectKey || null}::text is null or s3_key = ${requestedObjectKey || null})
               limit 1
             `;
             objectKey = assets[0]?.s3_key || null;
