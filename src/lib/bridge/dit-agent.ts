@@ -8,6 +8,7 @@ import { loadTitle } from "@/lib/bridge/titles";
 import { canOperateOnTitle } from "@/lib/bridge/rbac";
 import { writeAudit } from "@/lib/bridge/audit";
 import { hashObjectSha256, sealVerifiedObject, signUpload, verifyObject, verifyObjectSha256 } from "@/lib/bridge/oci-object-storage.server";
+import { detectDitFormat } from "@/lib/bridge/dit-format";
 
 function requireDitOperator(actor: Awaited<ReturnType<typeof requireVerifiedActor>>) {
   if (actor.internalRole === "super_admin") return;
@@ -221,13 +222,6 @@ export const createDitIntakeJob = createServerFn({ method: "POST" })
     return { jobId: id, status: "CREATED" as const, cardSafe: false as const };
   });
 
-const DIT_EXTENSIONS: Record<string, string> = {
-  ".ari": "ARRIRAW", ".r3d": "RED_RAW", ".mov": "QUICKTIME_CONTAINER",
-  ".mxf": "MXF_CONTAINER", ".mp4": "MPEG4_CONTAINER", ".wav": "WAVE_AUDIO",
-  ".braw": "BLACKMAGIC_RAW", ".crm": "CANON_RAW", ".xml": "SIDECAR",
-  ".ale": "SIDECAR", ".csv": "SIDECAR", ".json": "SIDECAR", ".srt": "SUBTITLE",
-};
-
 function safeDitName(value: string) {
   const cleaned = value.replaceAll("\\", "/").split("/").pop() ?? "";
   const safe = cleaned.replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 120);
@@ -262,8 +256,7 @@ export const registerDitFile = createServerFn({ method: "POST" })
     const relativePath = data.relativePath.replaceAll("\\", "/").split("/").filter(Boolean).join("/");
     if (relativePath.split("/").some((part) => part === ".." || part === ".")) throw new Error("Unsafe relative path");
     const fileName = safeDitName(data.fileName);
-    const extension = fileName.includes(".") ? fileName.slice(fileName.lastIndexOf(".")).toLowerCase() : "";
-    const detectedFormat = DIT_EXTENSIONS[extension] ?? "UNKNOWN";
+    const detectedFormat = detectDitFormat(fileName);
     const existing = await sql<{ id: string; byte_size: number; content_type: string | null; source_object_key: string; status: string }>`
       select id, byte_size, content_type, source_object_key, status
       from bridge_dit_job_files where job_id = ${data.jobId}::uuid and relative_path = ${relativePath} limit 1
