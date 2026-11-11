@@ -41,8 +41,8 @@ export function StatusRail({ status }: { status: TitleStatus }) {
 
 export function StatusChip({ status }: { status: TitleStatus }) {
   return (
-    <span className="inline-flex items-center rounded-sm border border-line-strong px-2 py-1 font-mono text-[11px] uppercase tracking-[0.16em] text-accent">
-      {status.replaceAll("_", " ")}
+    <span className="inline-flex items-center rounded-sm border border-line-strong px-2 py-1 text-xs font-semibold text-accent">
+      {LABELS[status]}
     </span>
   );
 }
