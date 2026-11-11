@@ -79,15 +79,15 @@ function WorkstationBody({ actor }: { actor: BridgeActor }) {
         <StoryConceptDesk />
       ) : activeTab === "QC" ? (
         <ReviewQueue title="QC Review" description="Review technical quality before rights review." titles={qcQueue}
-          actions={hasPermission(actor, "title.qc_review") ? [["PASS", "Approve → Rights"], ["FAIL", "Fail QC"]] : []} mutation={review} />
+          actions={hasPermission(actor, "title.approve") ? [["PASS", "Approve → Rights"], ["FAIL", "Fail QC"]] : []} mutation={review} />
       ) : activeTab === "Rights" ? (
         <ReviewQueue title="Rights Review" description="Clear ownership, territory, language and window before licensing." titles={rightsQueue}
-          actions={hasPermission(actor, "title.rights_review") ? [["APPROVE", "Approve → Licensing"], ["REJECT", "Reject"]] : []} mutation={review} />
+          actions={hasPermission(actor, "title.approve") ? [["APPROVE", "Approve → Licensing"], ["REJECT", "Reject"]] : []} mutation={review} />
       ) : activeTab === "Assets" ? (
         <SimpleTable title="Assets" description={data.assets.length + " base assets · " + data.assetVersions.length + " versioned assets"}
           rows={data.assets} fields={["kind", "s3_key", "content_type", "byte_size"]} />
       ) : activeTab === "Buyers" ? (
-        <BuyerRelease titles={data.titles} canApprove={hasPermission(actor, "title.license")}
+        <BuyerRelease titles={data.titles} canApprove={hasPermission(actor, "title.approve")}
           onGate={(titleId, gateName) => gate.mutate({ data: { titleId, gate: gateName as "OTT", decision: "PASS" } })} />
       ) : activeTab === "Deliveries" ? (
         <div className="space-y-6">
