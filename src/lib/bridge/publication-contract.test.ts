@@ -81,6 +81,7 @@ function harness(
   runInNewContext(output, {
     exports,
     process: { env },
+    URL,
     require: (name: string) => {
       assert.ok(name in modules, `Unexpected dependency: ${name}`);
       return modules[name];
@@ -148,7 +149,7 @@ test("status alignment never bypasses operator, rights or commercial coverage", 
 });
 
 
-test("production environment can never authorize, suspend, revoke or extend Loop publication", async () => {
+test("production environment blocks every Loop publication write", async () => {
   const production = harness([grant], true, false, {
     ...previewStagingEnv,
     VERCEL_ENV: "production",
