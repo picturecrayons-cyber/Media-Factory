@@ -323,11 +323,13 @@ export const listBuyerComplianceQueue = createServerFn({ method: "GET" })
     const actor = await requireVerifiedActor(context.userId);
     requireLegalReviewer(actor);
     const sql = await getSql();
-    const [organizations, mandates] = await Promise.all([
+    const [organizations, mandates, organizationEvidence, mandateEvidence] = await Promise.all([
       sql`select v.*,o.legal_name from bridge_private.buyer_organization_verifications v join bridge_organizations o on o.id=v.organization_id where v.verification_status='pending_review' order by v.submitted_at asc limit 100`,
       sql`select m.*,o.legal_name from bridge_private.buyer_acquisition_mandates m join bridge_organizations o on o.id=m.buyer_organization_id where m.status='pending_review' order by m.created_at asc limit 100`,
+      sql`select e.* from bridge_private.buyer_organization_verification_evidence e join bridge_private.buyer_organization_verifications v on v.organization_id=e.organization_id where v.verification_status='pending_review' order by e.uploaded_at asc limit 300`,
+      sql`select e.* from bridge_private.buyer_acquisition_mandate_evidence e join bridge_private.buyer_acquisition_mandates m on m.id=e.mandate_id where m.status='pending_review' order by e.uploaded_at asc limit 300`,
     ]);
-    return { organizations, mandates };
+    return { organizations, mandates, organizationEvidence, mandateEvidence };
   });
 
 export const reviewBuyerOrganizationVerification = createServerFn({ method: "POST" })
