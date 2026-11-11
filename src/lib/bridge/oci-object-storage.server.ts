@@ -252,6 +252,31 @@ export async function signDownload(opts: { key: string; expiresIn?: number }) {
 }
 
 /** Independently stream an OCI object and compare its bytes with the source SHA-256. */
+/** Stream an OCI object once to establish its source SHA-256 after upload. */
+export async function hashObjectSha256(key: string) {
+  const cfg = config();
+  const namespace = await resolveNamespace(cfg);
+  const path = `/n/${encodeURIComponent(namespace)}/b/${encodeURIComponent(cfg.bucket)}/o/${encodedObjectName(key)}`;
+  const res = await signedFetch({ cfg, method: "GET", path });
+  if (!res.ok || !res.body) throw new Error(`OCI source read failed (${res.status})`);
+  const declaredSize = Number(res.headers.get("content-length") || 0);
+  if (!Number.isSafeInteger(declaredSize) || declaredSize <= 0) throw new Error("OCI source object has invalid size");
+  const hash = createHash("sha256");
+  const reader = res.body.getReader();
+  let byteSize = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      byteSize += value.byteLength;
+      if (byteSize > declaredSize) { await reader.cancel(); throw new Error("OCI source exceeded declared size"); }
+      hash.update(value);
+    }
+  } finally { reader.releaseLock(); }
+  if (byteSize !== declaredSize) throw new Error("OCI source size changed while hashing");
+  return { key, byteSize, sha256: hash.digest("hex"), etag: res.headers.get("etag")?.replaceAll('"', "") ?? null };
+}
+
 export async function verifyObjectSha256(
   key: string,
   expectedSha256: string,
