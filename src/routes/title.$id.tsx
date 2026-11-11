@@ -572,7 +572,7 @@ function FilesPanel({
     const validation = validateOttIngestFile({ kind, filename, contentType });
     if (!validation.ok) {
       announce(validation.message, "error");
-      return;
+      return false;
     }
 
     cancelRequestedRef.current = false;
