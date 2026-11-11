@@ -2,6 +2,7 @@ import type { AccountType, InternalRole, Permission, TitleStatus } from "./types
 
 const INTERNAL_PERMISSIONS: Record<InternalRole, readonly Permission[]> = {
   viewer: ["title.read_catalog", "audit.read"],
+  dit_operator: ["title.read_catalog", "asset.sign_upload", "audit.read", "dit.workspace_read", "dit.signoff"],
   qc_reviewer: ["title.read_catalog", "title.qc_review", "asset.sign_download", "audit.read"],
   legal_reviewer: [
     "title.read_catalog",
@@ -168,11 +169,12 @@ function sharesStudioOrganization(
 
 const ROLE_GRANTS: Record<InternalRole, readonly InternalRole[]> = {
   viewer: [],
+  dit_operator: [],
   qc_reviewer: [],
   legal_reviewer: [],
   finance: [],
-  admin: ["viewer", "qc_reviewer", "legal_reviewer", "finance", "admin"],
-  super_admin: ["viewer", "qc_reviewer", "legal_reviewer", "finance", "admin", "super_admin"],
+  admin: ["viewer", "qc_reviewer", "legal_reviewer", "finance", "dit_operator", "admin"],
+  super_admin: ["viewer", "qc_reviewer", "legal_reviewer", "finance", "dit_operator", "admin", "super_admin"],
 };
 
 export function canGrantInternalRole(actor: Actor, role: InternalRole): boolean {
@@ -249,6 +251,7 @@ export function workspaceHome(actor: Actor): string {
   // Resolve the post-auth destination from the server-backed Bridge profile.
   // Signup query parameters are intent only and never grant privileges.
   if (canAccessDashboard(actor)) return "/dashboard";
+  if (actor.internalRole === "dit_operator") return "/dit";
   if (actor.internalRole === "qc_reviewer") return "/internal?desk=qc";
   if (actor.internalRole) return "/internal";
   if (actor.accountType === "independent_creator") return "/creator";
