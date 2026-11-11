@@ -303,6 +303,33 @@ test("concurrent reviewer calls cannot approve the same lifecycle twice", async 
     await f.db.close();
   }
 });
+
+test("QC and Legal reviewers cannot approve through the server workflow", async () => {
+  const f = await fixture();
+  try {
+    const saved = (await f.sql.transaction((tx) => f.save(tx, owner, license))) as { grantId: string };
+    await assert.rejects(
+      f.sql.transaction((tx) => f.review(tx, qc, {
+        titleId: "title-123", stage: "QC", decision: "APPROVE", note: "QC evidence reviewed",
+      })),
+      /Forbidden/,
+    );
+    await f.sql.query("update bridge_titles set status='RIGHTS_REVIEW'");
+    await assert.rejects(
+      f.sql.transaction((tx) => f.review(tx, legal, {
+        titleId: "title-123", stage: "LEGAL", decision: "APPROVE",
+        note: "Legal evidence reviewed", grantId: saved.grantId,
+      })),
+      /Forbidden/,
+    );
+    assert.equal((await f.sql.query("select * from bridge_qc_cases")).length, 0);
+    assert.equal((await f.sql.query("select * from bridge_legal_cases")).length, 0);
+    assert.equal((await f.sql.query<{status:string}>("select status from bridge_rights_grants"))[0].status, "DRAFT");
+  } finally {
+    await f.db.close();
+  }
+});
+
 test("designated Super Admin can self-approve a license with a recorded override reason", async () => {
   const f = await fixture();
   try {
@@ -323,9 +350,10 @@ test("designated Super Admin can self-approve a license with a recorded override
       (await f.sql.query<{ status: string }>("select status from bridge_rights_grants"))[0].status,
       "VALID",
     );
-    const legalCase = (await f.sql.query<{ evidence: string }>("select evidence from bridge_legal_cases"))[0];
-    assert.match(legalCase.evidence, /Super Admin verified the agreement/);
-    assert.match(legalCase.evidence, new RegExp(saved.grantId));
+    const legalCase = (await f.sql.query<{ evidence: unknown }>("select evidence from bridge_legal_cases"))[0];
+    const evidence = JSON.stringify(legalCase.evidence);
+    assert.match(evidence, /Super Admin verified the agreement/);
+    assert.match(evidence, new RegExp(saved.grantId));
     const audit = (await f.sql.query<{ metadata: string }>("select metadata from bridge_audit_logs where action='workflow.legal.approve'"))[0];
     assert.match(audit.metadata, /superAdminSelfApprovalOverride/);
     assert.match(audit.metadata, /Super Admin verified the agreement/);
