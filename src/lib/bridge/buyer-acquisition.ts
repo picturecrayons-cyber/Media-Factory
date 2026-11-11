@@ -416,3 +416,21 @@ export const reviewBuyerComplianceEvidence = createServerFn({ method: "POST" })
     }
     return { ok: true, reviewStatus };
   });
+
+
+export const getBuyerComplianceStatus = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    const org = await buyerOrganizationFor(actor);
+    const [verification, mandates] = await Promise.all([
+      org.sql`select * from bridge_private.buyer_organization_verifications where organization_id=${org.organization_id} limit 1`,
+      org.sql`select * from bridge_private.buyer_acquisition_mandates where buyer_organization_id=${org.organization_id} order by created_at desc limit 50`,
+    ]);
+    const organizationEvidence = await org.sql`select id,evidence_kind,storage_object_path,sha256_hex,review_status,reviewed_at,review_notes from bridge_private.buyer_organization_verification_evidence where organization_id=${org.organization_id} order by uploaded_at desc limit 100`;
+    const mandateEvidence = mandates.length
+      ? await org.sql`select e.id,e.mandate_id,e.evidence_kind,e.storage_object_path,e.sha256_hex,e.review_status,e.reviewed_at,e.review_notes from bridge_private.buyer_acquisition_mandate_evidence e join bridge_private.buyer_acquisition_mandates m on m.id=e.mandate_id where m.buyer_organization_id=${org.organization_id} order by e.uploaded_at desc limit 200`
+      : [];
+    return { organization: { id: org.organization_id, legalName: org.legal_name }, verification: verification[0] ?? null, mandates, organizationEvidence, mandateEvidence };
+  });
