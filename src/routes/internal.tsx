@@ -18,6 +18,13 @@ import {
 } from "@/lib/bridge/loop-publication";
 import { INTERNAL_ROLES } from "@/lib/bridge/types";
 import { hasPermission } from "@/lib/bridge/rbac";
+import {
+  listBuyerComplianceQueue,
+  getBuyerEvidenceReviewUrl,
+  reviewBuyerComplianceEvidence,
+  reviewBuyerOrganizationVerification,
+  reviewBuyerAcquisitionMandate,
+} from "@/lib/bridge/buyer-acquisition";
 
 export const Route = createFileRoute("/internal")({ component: Internal });
 
@@ -33,6 +40,7 @@ function Internal() {
             canInvite={hasPermission(actor, "users.invite_internal")}
             canPublish={hasPermission(actor, "loop.publish")}
             canRevoke={hasPermission(actor, "loop.revoke")}
+            canReviewBuyerLegal={["legal_reviewer", "admin", "super_admin"].includes(actor.internalRole ?? "")}
           />
         </BridgeShell>
       )}
@@ -44,10 +52,12 @@ function InternalBody({
   canInvite,
   canPublish,
   canRevoke,
+  canReviewBuyerLegal,
 }: {
   canInvite: boolean;
   canPublish: boolean;
   canRevoke: boolean;
+  canReviewBuyerLegal: boolean;
 }) {
   const titlesQ = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles() });
   const logsQ = useQuery({ queryKey: ["bridge-audit"], queryFn: () => listAuditLogs() });
@@ -59,6 +69,9 @@ function InternalBody({
     <div className="grid gap-12">
       {/* 1. Master Distribution Desk */}
       <DistributionDesk canPublish={canPublish} canRevoke={canRevoke} />
+
+      {/* Buyer legal verification is separate from title-rights review. */}
+      {canReviewBuyerLegal ? <BuyerLegalReview /> : null}
 
       {/* 2. Team Invitation Module */}
       {canInvite ? <InviteForm /> : null}
@@ -747,5 +760,96 @@ function InviteForm() {
         </Button>
       </div>
     </form>
+  );
+}
+
+
+function BuyerLegalReview() {
+  const qc = useQueryClient();
+  const [evidenceUrls, setEvidenceUrls] = useState<Record<string, string>>({});
+  const queue = useQuery({
+    queryKey: ["buyer-legal-compliance-queue"],
+    queryFn: () => listBuyerComplianceQueue(),
+    retry: false,
+  });
+  const evidenceUrlMutation = useMutation({
+    mutationFn: (data: { target: "organization" | "mandate"; evidenceId: string }) => getBuyerEvidenceReviewUrl({ data }),
+    onSuccess: (result, variables) => setEvidenceUrls((current) => ({ ...current, [variables.evidenceId]: result.url })),
+    onError: (error) => toast.error(error instanceof Error ? error.message : "Evidence preview link failed"),
+  });
+  const evidenceMutation = useMutation({
+    mutationFn: (data: { target: "organization" | "mandate"; evidenceId: string; decision: "accept" | "reject" }) =>
+      reviewBuyerComplianceEvidence({ data: { ...data, notes: "Reviewed by authorized legal reviewer." } }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["buyer-legal-compliance-queue"] }),
+    onError: (error) => toast.error(error instanceof Error ? error.message : "Evidence review failed"),
+  });
+  const organizationMutation = useMutation({
+    mutationFn: (data: { organizationId: string; decision: "approve" | "reject" | "suspend" }) =>
+      reviewBuyerOrganizationVerification({ data: { ...data, notes: "Reviewed by authorized legal reviewer." } }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["buyer-legal-compliance-queue"] }),
+    onError: (error) => toast.error(error instanceof Error ? error.message : "Organization review failed"),
+  });
+  const mandateMutation = useMutation({
+    mutationFn: (data: { mandateId: string; decision: "approve" | "reject" | "suspend" }) =>
+      reviewBuyerAcquisitionMandate({ data: { ...data, notes: "Reviewed by authorized legal reviewer." } }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["buyer-legal-compliance-queue"] }),
+    onError: (error) => toast.error(error instanceof Error ? error.message : "Mandate review failed"),
+  });
+  if (queue.isPending) return <section><h2 className="font-display text-2xl font-semibold">Buyer legal verification</h2><p className="text-sm text-muted">Loading legal review queue…</p></section>;
+  if (queue.isError) return <section><h2 className="font-display text-2xl font-semibold">Buyer legal verification</h2><p role="alert" className="text-sm text-accent">Legal queue unavailable. Retry after checking reviewer access.</p><Button variant="outline" onClick={() => void queue.refetch()}>Retry</Button></section>;
+  const data = queue.data;
+  return (
+    <section className="space-y-4 rounded-sm border border-line p-4">
+      <div>
+        <h2 className="font-display text-2xl font-semibold">Buyer legal verification</h2>
+        <p className="text-xs text-muted">Independent legal review of buyer entity evidence and platform acquisition mandates. Approval is blocked until required evidence is accepted.</p>
+      </div>
+      <div className="space-y-3">
+        <h3 className="font-semibold">Organization applications ({data.organizations.length})</h3>
+        {data.organizations.map((org) => (
+          <article key={org.organization_id} className="rounded-sm border border-line p-3 space-y-2">
+            <p className="font-medium">{org.legal_name} · {org.buyer_kind}</p>
+            <p className="text-xs text-muted">{org.legal_registration_country} · {org.legal_registration_number} · {org.official_website ?? "No website"}</p>
+            {data.organizationEvidence.filter((e) => e.organization_id === org.organization_id).map((e) => (
+              <div key={e.id} className="flex flex-wrap items-center justify-between gap-2 border-t border-line pt-2 text-xs">
+                <span>{e.evidence_kind} · {e.review_status} · {e.storage_object_path}</span>
+                <span className="flex gap-2"><Button size="sm" variant="outline" disabled={evidenceUrlMutation.isPending} onClick={() => evidenceUrlMutation.mutate({target:"organization",evidenceId:e.id})}>Get private preview</Button>{evidenceUrls[e.id] ? <a className="underline" href={evidenceUrls[e.id]} target="_blank" rel="noreferrer">Open · 5 min</a> : null}
+                {e.review_status === "pending" ? <><Button size="sm" disabled={evidenceMutation.isPending} onClick={() => evidenceMutation.mutate({target:"organization",evidenceId:e.id,decision:"accept"})}>Accept evidence</Button><Button size="sm" variant="outline" disabled={evidenceMutation.isPending} onClick={() => evidenceMutation.mutate({target:"organization",evidenceId:e.id,decision:"reject"})}>Reject</Button></> : null}</span>
+              </div>
+            ))}
+            <div className="flex flex-wrap gap-2 pt-2">
+              <Button size="sm" disabled={organizationMutation.isPending} onClick={() => organizationMutation.mutate({organizationId:org.organization_id,decision:"approve"})}>Verify organization</Button>
+              <Button size="sm" variant="outline" disabled={organizationMutation.isPending} onClick={() => organizationMutation.mutate({organizationId:org.organization_id,decision:"reject"})}>Reject</Button>
+              <Button size="sm" variant="outline" disabled={organizationMutation.isPending} onClick={() => organizationMutation.mutate({organizationId:org.organization_id,decision:"suspend"})}>Suspend</Button>
+            </div>
+          </article>
+        ))}
+        {!data.organizations.length ? <p className="text-sm text-muted">No pending organization applications.</p> : null}
+      </div>
+      <div className="space-y-3">
+        <h3 className="font-semibold">Acquisition mandates ({data.mandates.length})</h3>
+        {data.mandates.map((mandate) => (
+          <article key={mandate.id} className="rounded-sm border border-line p-3 space-y-2">
+            <p className="font-medium">{mandate.legal_name} · YouTube</p>
+            <p className="text-xs text-muted">Account: {mandate.platform_account_id} · Channel: {mandate.platform_channel_id}</p>
+            <p className="text-xs text-muted">Territories: {mandate.territory_codes.join(", ")} · Languages: {mandate.language_codes.join(", ")}</p>
+            <p className="text-xs text-muted">Media: {mandate.media_rights.join(", ")} · Models: {mandate.exploitation_models.join(", ")}</p>
+            {data.mandateEvidence.filter((e) => e.mandate_id === mandate.id).map((e) => (
+              <div key={e.id} className="flex flex-wrap items-center justify-between gap-2 border-t border-line pt-2 text-xs">
+                <span>{e.evidence_kind} · {e.review_status} · {e.storage_object_path}</span>
+                <span className="flex gap-2"><Button size="sm" variant="outline" disabled={evidenceUrlMutation.isPending} onClick={() => evidenceUrlMutation.mutate({target:"mandate",evidenceId:e.id})}>Get private preview</Button>{evidenceUrls[e.id] ? <a className="underline" href={evidenceUrls[e.id]} target="_blank" rel="noreferrer">Open · 5 min</a> : null}
+                {e.review_status === "pending" ? <><Button size="sm" disabled={evidenceMutation.isPending} onClick={() => evidenceMutation.mutate({target:"mandate",evidenceId:e.id,decision:"accept"})}>Accept evidence</Button><Button size="sm" variant="outline" disabled={evidenceMutation.isPending} onClick={() => evidenceMutation.mutate({target:"mandate",evidenceId:e.id,decision:"reject"})}>Reject</Button></> : null}</span>
+              </div>
+            ))}
+            <div className="flex flex-wrap gap-2 pt-2">
+              <Button size="sm" disabled={mandateMutation.isPending} onClick={() => mandateMutation.mutate({mandateId:mandate.id,decision:"approve"})}>Approve mandate</Button>
+              <Button size="sm" variant="outline" disabled={mandateMutation.isPending} onClick={() => mandateMutation.mutate({mandateId:mandate.id,decision:"reject"})}>Reject</Button>
+              <Button size="sm" variant="outline" disabled={mandateMutation.isPending} onClick={() => mandateMutation.mutate({mandateId:mandate.id,decision:"suspend"})}>Suspend</Button>
+            </div>
+          </article>
+        ))}
+        {!data.mandates.length ? <p className="text-sm text-muted">No pending acquisition mandates.</p> : null}
+      </div>
+    </section>
   );
 }

@@ -5,7 +5,8 @@ import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import { bridgeEnv } from "./env";
 import { paymentVerifyBody, verifyRazorpaySignature } from "./razorpay-crypto";
-import { requireVerifiedActor } from "./session";
+import { loadActor, requireVerifiedActor } from "./session";
+import { assertBuyerAcquisitionAuthorization } from "./buyer-acquisition";
 import { assertPermission, canReadTitle } from "./rbac";
 import { loadTitle, recordTransition } from "./titles";
 import { writeAudit } from "./audit";
@@ -64,8 +65,9 @@ export async function grantFromCapturedPayment(opts: {
     currency: string;
     provider_payment_id: string | null;
     package_id: string | null;
+    purpose: string;
   }>`
-    select id, user_id, title_id, package_id, amount_paise, status, currency, provider_payment_id
+    select id, user_id, title_id, package_id, purpose, amount_paise, status, currency, provider_payment_id
     from bridge_payments where provider_order_id = ${opts.orderId} limit 1
   `;
   const payment = rows[0];
@@ -78,6 +80,12 @@ export async function grantFromCapturedPayment(opts: {
   }
   if (opts.actorUserId && opts.actorUserId !== payment.user_id) {
     throw new Error("Payment does not belong to this account");
+  }
+  let buyerAuthorization: { organizationId: string; mandateId: string } | null = null;
+  if (payment.purpose === "title_license" && payment.title_id) {
+    const buyerActor = await loadActor(payment.user_id);
+    if (!buyerActor || buyerActor.accountType !== "buyer") throw new Error("Verified buyer account required");
+    buyerAuthorization = await assertBuyerAcquisitionAuthorization(buyerActor, payment.title_id, payment.package_id);
   }
 
   await sql`
@@ -115,7 +123,7 @@ export async function grantFromCapturedPayment(opts: {
       action: "licensing.language_package_licensed",
       entityType: "bridge_license_package",
       entityId: pkg[0].id,
-      metadata: { titleId: payment.title_id, paymentId: payment.id },
+      metadata: { titleId: payment.title_id, paymentId: payment.id, buyerOrganizationId: buyerAuthorization?.organizationId ?? null, buyerMandateId: buyerAuthorization?.mandateId ?? null },
     });
     return { paymentId: payment.id, entitled: true, titleId: payment.title_id, packageId: pkg[0].id };
   }
@@ -142,7 +150,7 @@ export async function grantFromCapturedPayment(opts: {
     action: "payment.captured",
     entityType: "bridge_payment",
     entityId: payment.id,
-    metadata: { titleId: payment.title_id },
+    metadata: { titleId: payment.title_id, buyerOrganizationId: buyerAuthorization?.organizationId ?? null, buyerMandateId: buyerAuthorization?.mandateId ?? null },
   });
 
   return { paymentId: payment.id, entitled: true, titleId: payment.title_id };
@@ -171,7 +179,7 @@ export const createLicenseOrder = createServerFn({ method: "POST" })
     const actor = await requireVerifiedActor(context.userId);
     assertPermission(actor, "payment.create_order");
     const title = await loadTitle(data.titleId);
-    if (!title || (!canReadTitle(actor, title) && actor.accountType !== "buyer")) throw new Error("Not found");
+    if (!title || actor.accountType !== "buyer" || !canReadTitle(actor, title)) throw new Error("Not found");
     await assertBuyerPublishable(title.id);
     const sql = await getSql();
     if (title.status !== "LIVE_FOR_BUYERS" && title.status !== "IN_NEGOTIATION" && title.status !== "LICENSED" && title.status !== "DELIVERED") {
@@ -188,6 +196,7 @@ export const createLicenseOrder = createServerFn({ method: "POST" })
       if (!pkg[0] || !["READY", "IN_NEGOTIATION"].includes(pkg[0].status)) throw new Error("License package is not available");
       amountPaise = Number(pkg[0].price_paise);
     }
+    const buyerAuthorization = await assertBuyerAcquisitionAuthorization(actor, title.id, data.packageId ?? null);
     if (amountPaise <= 0) throw new Error("Licensing price is not set");
     const { keyId } = requireRazorpayKeys();
     const existing = await sql<{
@@ -276,7 +285,7 @@ export const createLicenseOrder = createServerFn({ method: "POST" })
       action: "payment.order_created",
       entityType: "bridge_payment",
       entityId: id,
-      metadata: { titleId: title.id, packageId: data.packageId ?? null },
+      metadata: { titleId: title.id, packageId: data.packageId ?? null, buyerOrganizationId: buyerAuthorization.organizationId, buyerMandateId: buyerAuthorization.mandateId },
     });
 
     return {
