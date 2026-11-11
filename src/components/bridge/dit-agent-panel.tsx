@@ -27,7 +27,7 @@ export function DitAgentPanel() {
   });
 
   const activeJobId = create.data?.jobId;
-  const signoff = useMutation({ mutationFn: () => signOffDitJob({ data: { jobId: activeJobId!, statement: signoffStatement, checklist: { sourceReconciled: true, noMissingClips: true, noDuplicateClips: true, checksumsVerified: true, allThreeCopiesVerified: true, sourceCardSafeToReuse: true } } }), onSuccess: () => { void qc.invalidateQueries({ queryKey: ["studio-dit-workspace"] }); } }); = useMutation({ mutationFn: () => createDitEditorHandoff({ data: { jobId: activeJobId! } }) });
+  const signoff = useMutation({ mutationFn: () => signOffDitJob({ data: { jobId: activeJobId!, statement: signoffStatement, checklist: { sourceReconciled: true, noMissingClips: true, noDuplicateClips: true, checksumsVerified: true, allThreeCopiesVerified: true, sourceCardSafeToReuse: true } } }), onSuccess: () => { void qc.invalidateQueries({ queryKey: ["studio-dit-workspace"] }); } });
   const handoff = useMutation({ mutationFn: () => createDitEditorHandoff({ data: { jobId: activeJobId! } }) });
   const archive = useMutation({ mutationFn: () => archiveDitJob({ data: { jobId: activeJobId! } }) });
 
