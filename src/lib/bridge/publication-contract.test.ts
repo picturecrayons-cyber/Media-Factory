@@ -86,7 +86,13 @@ function harness(
       return modules[name];
     },
   });
-  return { authorize: exports.authorizeLoopPublication, writes };
+  return {
+    authorize: exports.authorizeLoopPublication,
+    suspend: exports.suspendLoopPublication,
+    revoke: exports.revokeLoopPublication,
+    extend: exports.extendDistributionWindow,
+    writes,
+  };
 }
 
 const grant = {
@@ -148,6 +154,9 @@ test("production environment can never authorize, suspend, revoke or extend Loop
     VERCEL_ENV: "production",
   });
   await assert.rejects(production.authorize({ context, data }), /Gateway is locked/);
+  await assert.rejects(production.suspend({ context, data: { bridgeTitleId: "title-1" } }), /Gateway is locked/);
+  await assert.rejects(production.revoke({ context, data: { bridgeTitleId: "title-1" } }), /Gateway is locked/);
+  await assert.rejects(production.extend({ context, data: { bridgeTitleId: "title-1", newWindowEnd: "2099-01-01T00:00:00.000Z" } }), /Gateway is locked/);
   assert.equal(production.writes.length, 0);
 });
 
