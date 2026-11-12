@@ -25,6 +25,11 @@ function Dashboard() {
 
 const ADMIN_MODULES = [
   {
+    title: "Creator owner workspace",
+    description: "Read-only view of titles owned by this authenticated Creator/Super Admin identity.",
+    to: "/creator-owner",
+  },
+  {
     title: "Titles & media",
     description: "Title records, metadata, artwork, uploads, QC and rights.",
     to: "/workspace",
