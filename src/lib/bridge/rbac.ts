@@ -128,12 +128,13 @@ export function permissionForTransition(from: TitleStatus, to: TitleStatus): Per
 }
 
 export function permissionsFor(actor: Actor): Set<Permission> {
-  // Internal staff identities are governed by their explicit staff role.
-  // Account-type powers must never silently widen a staff role (for example,
-  // a viewer profile whose account_type happens to be independent_creator).
-  const staff = actor.internalRole ? INTERNAL_PERMISSIONS[actor.internalRole] : undefined;
-  if (staff) return new Set<Permission>(staff);
-  return new Set<Permission>(ACCOUNT_PERMISSIONS[actor.accountType] ?? []);
+  // Account identity and internal staff role are independent dimensions.
+  // Keep the account's own workspace permissions while adding only the
+  // explicitly granted staff permissions; ownership checks still scope
+  // account permissions to the actor's own title/organization.
+  const account = ACCOUNT_PERMISSIONS[actor.accountType] ?? [];
+  const staff = actor.internalRole ? INTERNAL_PERMISSIONS[actor.internalRole] : [];
+  return new Set<Permission>([...account, ...staff]);
 }
 
 export function canAccessDashboard(actor: Actor): boolean {
@@ -143,11 +144,10 @@ export function canAccessDashboard(actor: Actor): boolean {
 /** Title workspace is for Creator/Studio accounts and internal staff with catalog-read access. */
 export function canAccessTitleWorkspace(actor: Actor): boolean {
   if (!actor.emailVerified) return false;
-  if (actor.internalRole) return hasPermission(actor, "title.read_catalog");
-  return (
-    (actor.accountType === "independent_creator" || actor.accountType === "studio") &&
-    hasPermission(actor, "title.read_own")
-  );
+  const ownsWorkspace = (actor.accountType === "independent_creator" || actor.accountType === "studio") &&
+    hasAccountPermission(actor, "title.read_own");
+  const hasStaffCatalog = hasStaffPermission(actor, "title.read_catalog");
+  return ownsWorkspace || hasStaffCatalog;
 }
 
 function sharesStudioOrganization(
@@ -157,7 +157,6 @@ function sharesStudioOrganization(
   const actorOrg = actor.organizationId;
   const ownerOrg = title.ownerOrganizationId;
   return Boolean(
-    !actor.internalRole &&
     actor.accountType === "studio" &&
     title.ownerAccountType === "studio" &&
     actorOrg &&
@@ -181,7 +180,7 @@ export function canGrantInternalRole(actor: Actor, role: InternalRole): boolean 
 }
 
 export function hasAccountPermission(actor: Actor, permission: Permission): boolean {
-  return actor.emailVerified && !actor.internalRole && ACCOUNT_PERMISSIONS[actor.accountType].includes(permission);
+  return actor.emailVerified && ACCOUNT_PERMISSIONS[actor.accountType].includes(permission);
 }
 
 export function hasStaffPermission(actor: Actor, permission: Permission): boolean {
@@ -191,9 +190,7 @@ export function hasStaffPermission(actor: Actor, permission: Permission): boolea
 
 export function hasPermission(actor: Actor, permission: Permission): boolean {
   if (!actor.emailVerified) return false;
-  return actor.internalRole
-    ? hasStaffPermission(actor, permission)
-    : hasAccountPermission(actor, permission);
+  return hasAccountPermission(actor, permission) || hasStaffPermission(actor, permission);
 }
 
 export function assertPermission(actor: Actor, permission: Permission): void {
@@ -210,9 +207,9 @@ export function canReadTitle(
   if (!actor.emailVerified) return false;
   if (
     (title.ownerUserId === actor.userId || sharesStudioOrganization(actor, title)) &&
-    !actor.internalRole
-  ) return hasPermission(actor, "title.read_own");
-  if (actor.internalRole) return hasPermission(actor, "title.read_catalog");
+    hasAccountPermission(actor, "title.read_own")
+  ) return true;
+  if (hasStaffPermission(actor, "title.read_catalog")) return true;
   if (actor.accountType === "buyer") return ["LIVE_FOR_BUYERS","IN_NEGOTIATION","LICENSED","DELIVERED"].includes(title.status) && hasPermission(actor, "title.read_catalog");
   return false;
 }
@@ -224,11 +221,11 @@ export function canMutateTitle(
   staffPermission: Permission,
 ): boolean {
   if (!actor.emailVerified) return false;
-  if (actor.internalRole) return hasPermission(actor, staffPermission);
-  return (
+  if (
     (title.ownerUserId === actor.userId || sharesStudioOrganization(actor, title)) &&
-    hasPermission(actor, ownerPermission)
-  );
+    hasAccountPermission(actor, ownerPermission)
+  ) return true;
+  return hasStaffPermission(actor, staffPermission);
 }
 
 export function canOperateOnTitle(
@@ -238,11 +235,11 @@ export function canOperateOnTitle(
   staffPermission: Permission | null = null,
 ): boolean {
   if (!actor.emailVerified) return false;
-  if (actor.internalRole) return staffPermission ? hasPermission(actor, staffPermission) : false;
-  return (
+  if (
     (title.ownerUserId === actor.userId || sharesStudioOrganization(actor, title)) &&
-    hasPermission(actor, ownerPermission)
-  );
+    hasAccountPermission(actor, ownerPermission)
+  ) return true;
+  return staffPermission ? hasStaffPermission(actor, staffPermission) : false;
 }
 
 export function workspaceHome(actor: Actor): string {
