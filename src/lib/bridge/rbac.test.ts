@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { assertPermission, canAccessAdminWorkstations, canAccessDashboard, canAccessTitleWorkspace, canGrantInternalRole, canMutateTitle, canOperateOnTitle, canReadTitle, hasPermission, hasStaffPermission, permissionForTransition, workspaceHome } from "./rbac.ts";
+import { assertPermission, canAccessAdminWorkstations, canReadOwnInvestorPortfolio, canAccessDashboard, canAccessTitleWorkspace, canGrantInternalRole, canMutateTitle, canOperateOnTitle, canReadTitle, hasPermission, hasStaffPermission, permissionForTransition, workspaceHome } from "./rbac.ts";
 import type { Actor } from "./rbac.ts";
 
 const actor = (
@@ -68,6 +68,15 @@ describe("PRD authorization matrix", () => {
     assert.equal(hasPermission(a, "asset.sign_upload"), false);
     assert.equal(canReadTitle(a, { ownerUserId: "other-org-user", status: "DRAFT" }), true);
     assert.equal(hasPermission(viewer(), "asset.sign_download"), false);
+  });
+
+  it("allows investor portfolio reads only for the verified investor account itself", () => {
+    assert.equal(canReadOwnInvestorPortfolio(investor()), true);
+    assert.equal(canReadOwnInvestorPortfolio(buyer()), false);
+    assert.equal(canReadOwnInvestorPortfolio(creator()), false);
+    assert.equal(canReadOwnInvestorPortfolio(admin()), false);
+    assert.equal(canReadOwnInvestorPortfolio(superAdmin()), false);
+    assert.equal(canReadOwnInvestorPortfolio(actor("unverified-investor", "investor", null, false)), false);
   });
 
   it("restricts broad Admin Workstations payloads to verified Admin and Super Admin roles", () => {
