@@ -1,13 +1,16 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { useState } from "react";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { TitleList } from "@/components/bridge/title-desk";
 import { MyStoryConcepts } from "@/components/bridge/my-story-concepts";
 import { NewSubmissionPanel } from "@/components/bridge/new-submission-panel";
+import { CreatorStorageWorkspace } from "@/components/bridge/creator-storage-workspace";
 
 export const Route = createFileRoute("/creator")({ component: Creator });
 
 function Creator() {
+  const [activeTab, setActiveTab] = useState<"finished" | "story" | "storage">("finished");
   return (
     <RequireBridge allow="creator">
       {(actor) => (
@@ -23,17 +26,15 @@ function Creator() {
               <NewSubmissionPanel />
             </header>
 
-            <MyStoryConcepts />
-
-            <section>
-              <div className="mb-3 flex items-center justify-between">
-                <h2 className="text-lg font-semibold">Your titles</h2>
-                <Link to="/account" className="text-sm text-muted">
-                  Account
-                </Link>
-              </div>
-              <TitleList empty="No titles yet. Start with a new submission." />
-            </section>
+            <nav aria-label="Creator workspace sections" className="flex flex-wrap gap-2 border-b border-line pb-3">
+              <button type="button" onClick={() => setActiveTab("finished")} aria-pressed={activeTab === "finished"} className={activeTab === "finished" ? "rounded-full border border-accent bg-accent-soft px-4 py-2 text-sm font-medium text-accent" : "rounded-full border border-line px-4 py-2 text-sm font-medium text-muted"}>Finished</button>
+              <button type="button" onClick={() => setActiveTab("story")} aria-pressed={activeTab === "story"} className={activeTab === "story" ? "rounded-full border border-accent bg-accent-soft px-4 py-2 text-sm font-medium text-accent" : "rounded-full border border-line px-4 py-2 text-sm font-medium text-muted"}>Story</button>
+              <button type="button" onClick={() => setActiveTab("storage")} aria-pressed={activeTab === "storage"} className={activeTab === "storage" ? "rounded-full border border-accent bg-accent-soft px-4 py-2 text-sm font-medium text-accent" : "rounded-full border border-line px-4 py-2 text-sm font-medium text-muted"}>Storage</button>
+              <Link to="/account" className="ml-auto self-center text-sm text-muted">Account</Link>
+            </nav>
+            {activeTab === "finished" ? <section><h2 className="mb-3 text-lg font-semibold">Finished films & title pipeline</h2><TitleList empty="No titles yet. Start with a new submission." /></section> : null}
+            {activeTab === "story" ? <MyStoryConcepts /> : null}
+            {activeTab === "storage" ? <CreatorStorageWorkspace /> : null}
           </div>
         </BridgeShell>
       )}
