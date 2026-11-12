@@ -4,7 +4,6 @@ import { hasStaffPermission } from "./rbac.ts";
 type InternalPricingLine = {
   costBasisPaise: number;
   estimatedMarginPaise: number;
-  [key: string]: unknown;
 };
 
 type InternalPricingQuote<TLine extends InternalPricingLine> = {
