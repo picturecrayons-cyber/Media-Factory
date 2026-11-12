@@ -12,6 +12,7 @@ import { ACCOUNT_TYPES } from "@/lib/bridge/types";
 import { publicAccountTypeFrom } from "@/lib/auth/public-account-type";
 import { BRIDGE_LOOP_LANES } from "@/lib/bridge/loop-lanes";
 import { publicOnboardingError } from "@/lib/bridge/onboarding-errors";
+import { workspaceFailureCode, workspaceFailureMessage } from "@/lib/bridge/workspace-schema";
 import { BrandMark } from "@/components/bridge/shell";
 import { Button } from "@/components/ui/button";
 
@@ -207,6 +208,7 @@ function Onboarding() {
           <BrandMark />
           <h1 className="font-display text-2xl">Could not load Bridge</h1>
           <p className="text-sm leading-relaxed text-muted">Retry without clearing your session.</p>
+          <p role="alert" className="text-sm text-accent">{workspaceFailureMessage(workspaceFailureCode(sessionQ.error))}</p>
           {error ? <p role="alert" className="text-sm text-accent">{error}</p> : null}
           <Button type="button" disabled={retrying} className="w-full" onClick={() => void retrySession()}>{retrying ? "Checking…" : "Retry"}</Button>
         </div>
