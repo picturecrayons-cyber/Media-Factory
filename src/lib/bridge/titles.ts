@@ -341,15 +341,28 @@ export const listTitles = createServerFn({ method: "GET" })
       rows = await listCatalog(sql);
     } else if (actor.accountType === "buyer") {
       assertPermission(actor, "title.read_catalog");
-      if (await hasTitleMergeColumn(sql)) {
-        rows = await sql<TitleRow>`
-          select t.* from bridge_titles t
-          where t.merged_into_title_id is null
-            and t.status in ('LIVE_FOR_BUYERS','IN_NEGOTIATION','LICENSED','DELIVERED')
-            and public.bridge_title_buyer_visibility(t.id)
-          order by t.updated_at desc limit 200
-        `;
-      } else {
+      const mergeColumnAvailable = await hasTitleMergeColumn(sql);
+      rows = mergeColumnAvailable
+        ? await sql<TitleRow>`
+            select t.* from bridge_titles t
+            join bridge_buyer_title_access a on a.title_id = t.id
+              and a.buyer_user_id = ${actor.userId}
+              and a.revoked_at is null and (a.expires_at is null or a.expires_at > now())
+            where t.merged_into_title_id is null
+              and t.status in ('LIVE_FOR_BUYERS','IN_NEGOTIATION','LICENSED','DELIVERED')
+              and public.bridge_title_buyer_visibility(t.id)
+            order by t.updated_at desc limit 200
+          `
+        : await sql<TitleRow>`
+            select t.* from bridge_titles t
+            join bridge_buyer_title_access a on a.title_id = t.id
+              and a.buyer_user_id = ${actor.userId}
+              and a.revoked_at is null and (a.expires_at is null or a.expires_at > now())
+            where t.status in ('LIVE_FOR_BUYERS','IN_NEGOTIATION','LICENSED','DELIVERED')
+              and public.bridge_title_buyer_visibility(t.id)
+            order by t.updated_at desc limit 200
+          `;
+    }{
         rows = await sql<TitleRow>`
           select t.* from bridge_titles t
           where t.status in ('LIVE_FOR_BUYERS','IN_NEGOTIATION','LICENSED','DELIVERED')
@@ -371,6 +384,49 @@ export const listTitles = createServerFn({ method: "GET" })
     }) };
   });
 
+export const grantBuyerPreviewAccess = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({
+    titleId: z.string().min(8),
+    buyerUserId: z.string().min(1).max(200),
+    expiresInDays: z.number().int().min(1).max(30).default(7),
+  }))
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    if (!actor.internalRole || !hasStaffPermission(actor, "title.license")) {
+      throw new Error("Admin approval is required to grant a private Buyer preview");
+    }
+    const sql = await getSql();
+    const buyer = await sql<{ user_id: string }>`
+      select user_id from bridge_profiles
+      where user_id = ${data.buyerUserId} and account_type = 'buyer' and email_verified = true
+      limit 1
+    `;
+    if (!buyer[0]) throw new Error("Verified Buyer account not found");
+    const title = await loadTitle(data.titleId);
+    if (!title) throw new Error("Title not found");
+    await assertBuyerPublishable(title.id);
+    const expiresAt = new Date(Date.now() + data.expiresInDays * 24 * 60 * 60 * 1000);
+    await sql.transaction(async (tx) => {
+      await tx`
+        insert into bridge_buyer_title_access
+          (title_id, buyer_user_id, granted_by, granted_at, expires_at, revoked_at)
+        values (${title.id}, ${data.buyerUserId}, ${actor.userId}, now(), ${expiresAt.toISOString()}, null)
+        on conflict (title_id, buyer_user_id) do update
+          set granted_by = excluded.granted_by, granted_at = now(),
+              expires_at = excluded.expires_at, revoked_at = null
+      `;
+      await writeAudit({
+        actorUserId: actor.userId,
+        action: "buyer.preview_access_granted",
+        entityType: "bridge_title",
+        entityId: title.id,
+        metadata: { buyerUserId: data.buyerUserId, expiresAt: expiresAt.toISOString() },
+      }, tx);
+    });
+    return { granted: true, titleId: title.id, buyerUserId: data.buyerUserId, expiresAt: expiresAt.toISOString() };
+  });
 export const getTitle = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .validator(z.object({ id: z.string().min(8) }))
@@ -381,12 +437,19 @@ export const getTitle = createServerFn({ method: "GET" })
     if (!title) throw new Error("Not found");
     const sql = await getSql();
     if (actor.accountType === "investor" && !actor.internalRole) {
-      const assigned = await sql<{ id: string }>
-        `select id from bridge_title_investors where title_id = ${title.id} and investor_user_id = ${actor.userId} limit 1`;
+      const assigned = await sql<{ id: string }>`select id from bridge_title_investors where title_id = ${title.id} and investor_user_id = ${actor.userId} limit 1`;
       if (!assigned[0]) throw new Error("Not found");
-    } else if (!canReadTitle(actor, title)) {
-      if (actor.accountType !== "buyer") throw new Error("Not found");
+    } else if (actor.accountType === "buyer" && !actor.internalRole) {
+      const access = await sql<{ title_id: string }>`
+        select title_id from bridge_buyer_title_access
+        where title_id = ${title.id} and buyer_user_id = ${actor.userId}
+          and revoked_at is null and (expires_at is null or expires_at > now())
+        limit 1
+      `;
+      if (!access[0]) throw new Error("Private preview access has not been approved for this title");
       await assertBuyerPublishable(title.id);
+    } else if (!canReadTitle(actor, title)) {
+      throw new Error("Not found");
     }
     const events = await sql<{
       from_status: string | null;
