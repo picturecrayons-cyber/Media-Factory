@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { assertPermission, canAccessDashboard, canAccessTitleWorkspace, canGrantInternalRole, canMutateTitle, canOperateOnTitle, canReadTitle, hasPermission, hasStaffPermission, permissionForTransition, workspaceHome } from "./rbac.ts";
+import { assertPermission, canAccessCreatorOwnerWorkspace, canAccessDashboard, canAccessTitleWorkspace, canGrantInternalRole, canMutateTitle, canOperateOnTitle, canReadTitle, hasPermission, hasStaffPermission, permissionForTransition, workspaceHome } from "./rbac.ts";
 import type { Actor } from "./rbac.ts";
 
 const actor = (
@@ -141,6 +141,20 @@ describe("PRD authorization matrix", () => {
       "title.rights_review",
     );
     assert.equal(permissionForTransition("IN_NEGOTIATION", "LICENSED"), null);
+  });
+
+  it("reserves Creator Owner workspace for verified dual-role Super Admin Creator accounts", () => {
+    assert.equal(canAccessCreatorOwnerWorkspace(superAdmin()), true);
+    assert.equal(canAccessCreatorOwnerWorkspace(creator()), false);
+    assert.equal(canAccessCreatorOwnerWorkspace(admin()), false);
+    assert.equal(canAccessCreatorOwnerWorkspace(viewer()), false);
+    assert.equal(canAccessCreatorOwnerWorkspace(qc), false);
+    assert.equal(canAccessCreatorOwnerWorkspace(legal), false);
+    assert.equal(canAccessCreatorOwnerWorkspace(finance), false);
+    assert.equal(
+      canAccessCreatorOwnerWorkspace(actor("unverified-super", "independent_creator", "super_admin", false)),
+      false,
+    );
   });
 
   it("reserves dashboard and super-admin grants for verified super admins", () => {
