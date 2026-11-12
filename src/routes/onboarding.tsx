@@ -242,6 +242,14 @@ function Onboarding() {
         },
       });
 
+      // Creator account setup is complete once the verified profile and
+      // identity link are persisted. Title intake is a separate action on
+      // the Creator desk; it must never block workspace access.
+      if (accountType === "independent_creator") {
+        void navigate({ to: "/creator", replace: true });
+        return;
+      }
+
       if (accountType === "buyer") {
         void navigate({ to: "/buyer", replace: true });
         return;
