@@ -140,6 +140,19 @@ export function canAccessDashboard(actor: Actor): boolean {
   return actor.emailVerified && actor.internalRole === "super_admin";
 }
 
+/**
+ * The broad workstation payload contains internal QC, legal, asset and audit
+ * records. Keep it behind the dedicated Admin / Super Admin boundary rather
+ * than allowing every staff role with catalog-read to retrieve every dataset.
+ */
+export function canAccessAdminWorkstations(actor: Actor): boolean {
+  return (
+    actor.emailVerified &&
+    (actor.internalRole === "admin" || actor.internalRole === "super_admin") &&
+    hasPermission(actor, "title.read_catalog")
+  );
+}
+
 /** Title workspace is for Creator/Studio accounts and internal staff with catalog-read access. */
 export function canAccessTitleWorkspace(actor: Actor): boolean {
   if (!actor.emailVerified) return false;
