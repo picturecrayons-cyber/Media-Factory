@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { assertPermission, canAccessDashboard, canAccessTitleWorkspace, canGrantInternalRole, canMutateTitle, canOperateOnTitle, canReadTitle, hasPermission, hasStaffPermission, permissionForTransition, workspaceHome } from "./rbac.ts";
+import { assertPermission, canAccessAdminWorkstations, canAccessDashboard, canAccessTitleWorkspace, canGrantInternalRole, canMutateTitle, canOperateOnTitle, canReadTitle, hasPermission, hasStaffPermission, permissionForTransition, workspaceHome } from "./rbac.ts";
 import type { Actor } from "./rbac.ts";
 
 const actor = (
@@ -68,6 +68,17 @@ describe("PRD authorization matrix", () => {
     assert.equal(hasPermission(a, "asset.sign_upload"), false);
     assert.equal(canReadTitle(a, { ownerUserId: "other-org-user", status: "DRAFT" }), true);
     assert.equal(hasPermission(viewer(), "asset.sign_download"), false);
+  });
+
+  it("restricts broad Admin Workstations payloads to verified Admin and Super Admin roles", () => {
+    assert.equal(canAccessAdminWorkstations(admin()), true);
+    assert.equal(canAccessAdminWorkstations(superAdmin()), true);
+    assert.equal(canAccessAdminWorkstations(qc), false);
+    assert.equal(canAccessAdminWorkstations(legal), false);
+    assert.equal(canAccessAdminWorkstations(finance), false);
+    assert.equal(canAccessAdminWorkstations(viewer()), false);
+    assert.equal(canAccessAdminWorkstations(actor("unverified-admin", "independent_creator", "admin", false)), false);
+    assert.equal(canAccessAdminWorkstations(buyer()), false);
   });
 
   it("mixed account/staff roles never regain owner mutations through ownership alone", () => {
