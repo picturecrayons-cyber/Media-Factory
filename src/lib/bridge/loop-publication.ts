@@ -538,6 +538,7 @@ export const revokeLoopPublication = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
+    if (actor.internalRole !== "super_admin") throw new Error("Super Admin access required");
     assertPermission(actor, "loop.revoke");
     assertLoopGatewayEnabled();
     return (await getSql()).transaction(async (sql) => {
