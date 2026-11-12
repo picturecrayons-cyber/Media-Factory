@@ -11,7 +11,10 @@ test("Creator Owner dashboard is Super Admin gated and uses a dedicated owner-on
   const rbac = read("./rbac.ts");
   assert.match(route, /<RequireBridge allow="super_admin">/);
   assert.match(route, /listCreatorOwnerTitles/);
-  assert.match(titles, /actor\.internalRole !== "super_admin" \|\| actor\.accountType !== "independent_creator"/);
+  assert.match(titles, /canAccessCreatorOwnerWorkspace\(actor\)/);
+  assert.match(rbac, /actor\.emailVerified &&/);
+  assert.match(rbac, /actor\.internalRole === "super_admin"/);
+  assert.match(rbac, /actor\.accountType === "independent_creator"/);
   assert.match(titles, /where owner_user_id = \$\{actor\.userId\}/);
   assert.doesNotMatch(titles.slice(titles.indexOf("export const listCreatorOwnerTitles")), /listCatalog\(/);
   assert.match(dashboard, /to: "\/creator-owner"/);
