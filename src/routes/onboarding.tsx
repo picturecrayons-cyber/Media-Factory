@@ -219,6 +219,10 @@ function Onboarding() {
   }
 
   async function createWorkspaceOnly() {
+    if (unsupportedSignupRole) {
+      setError("This account type needs an invitation or support review. Please contact Crayons Bridge before continuing.");
+      return;
+    }
     if (!displayName.trim()) {
       setError("Enter your name before creating the workspace.");
       return;
