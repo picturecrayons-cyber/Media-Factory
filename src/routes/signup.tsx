@@ -262,6 +262,11 @@ function Signup() {
             <p id="account-type-help" className="text-xs text-muted">
               Choose the workspace that matches your role. Access is restricted by permissions after sign-in.
             </p>
+            {accountType === "buyer" ? (
+              <p className="rounded-lg border border-line bg-elevated px-3 py-2 text-xs leading-5 text-muted">
+                Buyer registration does not open the catalogue. Admin must approve each private title preview separately.
+              </p>
+            ) : null}
             <div role="radiogroup" aria-describedby="account-type-help" className="grid grid-cols-1 gap-2 sm:grid-cols-3">
               {[
                 { id: "independent_creator" as const, label: "Creator / Filmmaker", detail: "Submit and manage your own titles" },

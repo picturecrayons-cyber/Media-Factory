@@ -12,6 +12,7 @@ import { bridgeEnv } from "./env";
 import { paymentVerifyBody, verifyRazorpaySignature } from "./razorpay-crypto";
 import { destinationSchema, detectRequiredWork, type DetectedAsset, type RequiredWork } from "./service-pricing";
 import { calculateServiceLine, calculateRefundSplit, calculateNetProfit } from "./commercial-math";
+import { presentServiceQuote } from "./service-quote-view";
 
 const quoteInputSchema = z.object({
   titleId: z.string().min(8),
@@ -386,7 +387,7 @@ export const createServiceQuote = createServerFn({ method: "POST" })
       metadata: { titleId: title.id, quoteNumber, subtotal, taxPaise, total, estimatedCost },
     });
 
-    return {
+    return presentServiceQuote(actor, {
       quoteId: quote[0].id,
       quoteNumber,
       status: "QUOTED",
@@ -399,7 +400,7 @@ export const createServiceQuote = createServerFn({ method: "POST" })
       detectedAssets: plan.detectedAssets,
       requiredWork: plan.requiredWork,
       lines,
-    };
+    });
   });
 
 export const acceptServiceQuote = createServerFn({ method: "POST" })

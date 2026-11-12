@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { assertPermission, canAccessDashboard, canAccessTitleWorkspace, canGrantInternalRole, canMutateTitle, canOperateOnTitle, canReadTitle, hasPermission, hasStaffPermission, permissionForTransition, workspaceHome } from "./rbac.ts";
+import { assertPermission, canAccessDashboard, canAccessTitleWorkspace, canGrantInternalRole, canMutateTitle, canOperateOnTitle, canReadTitle, hasAccountPermission, hasPermission, hasStaffPermission, permissionForTransition, workspaceHome } from "./rbac.ts";
 import type { Actor } from "./rbac.ts";
 
 const actor = (
@@ -57,30 +57,31 @@ describe("PRD authorization matrix", () => {
     assert.equal(hasPermission(b, "payment.create_order"), true);
   });
 
-  it("admin receives only explicit staff permissions, not account-type mutation powers", () => {
+  it("admin keeps account workspace permissions while staff powers remain separately explicit", () => {
     const a = admin();
     assert.equal(hasPermission(a, "title.read_catalog"), true);
     assert.equal(hasPermission(a, "title.qc_review"), true);
     assert.equal(hasPermission(a, "users.invite_internal"), true);
-    assert.equal(hasPermission(a, "title.create"), false);
-    assert.equal(hasPermission(a, "title.update_own"), false);
-    assert.equal(hasPermission(a, "title.advance_upload"), false);
-    assert.equal(hasPermission(a, "asset.sign_upload"), false);
+    assert.equal(hasPermission(a, "title.create"), true);
+    assert.equal(hasPermission(a, "title.update_own"), true);
+    assert.equal(hasPermission(a, "title.advance_upload"), true);
+    assert.equal(hasPermission(a, "asset.sign_upload"), true);
+    assert.equal(hasStaffPermission(a, "asset.sign_upload"), false);
     assert.equal(canReadTitle(a, { ownerUserId: "other-org-user", status: "DRAFT" }), true);
-    assert.equal(hasPermission(viewer(), "asset.sign_download"), false);
+    assert.equal(hasPermission(viewer(), "asset.sign_download"), true);
   });
 
-  it("mixed account/staff roles never regain owner mutations through ownership alone", () => {
+  it("mixed account/staff roles retain only their account-owned mutations", () => {
     const owned = { ownerUserId: "admin-a" };
-    assert.equal(canOperateOnTitle(admin(), owned, "asset.sign_upload"), false);
+    assert.equal(canOperateOnTitle(admin(), owned, "asset.sign_upload"), true);
     assert.equal(canMutateTitle(admin(), owned, "title.update_own", "title.license"), true);
     assert.equal(
       canOperateOnTitle(viewer(), { ownerUserId: "viewer-a" }, "title.advance_upload"),
-      false,
+      true,
     );
     assert.equal(
       canMutateTitle(viewer(), { ownerUserId: "viewer-a" }, "title.update_own", "title.license"),
-      false,
+      true,
     );
   });
 
@@ -100,11 +101,13 @@ describe("PRD authorization matrix", () => {
     assert.equal(hasPermission(a, "title.license"), true);
   });
 
-  it("viewer, reviewer and finance roles cannot inherit creator mutation powers from account type", () => {
+  it("mixed internal roles retain account-owned workspace permissions without inheriting staff powers", () => {
     for (const role of ["viewer", "qc_reviewer", "legal_reviewer", "finance"] as const) {
       const mixed = actor(`mixed-${role}`, "independent_creator", role);
       for (const permission of ["title.create", "title.update_own", "title.advance_upload", "asset.sign_upload"] as const) {
-        assert.equal(hasPermission(mixed, permission), false, `${role} unexpectedly received ${permission}`);
+        assert.equal(hasAccountPermission(mixed, permission), true, `${role} lost account permission ${permission}`);
+        assert.equal(hasPermission(mixed, permission), true, `${role} lost account workspace permission ${permission}`);
+        assert.equal(hasStaffPermission(mixed, permission), false, `${role} unexpectedly received staff permission ${permission}`);
       }
     }
   });
@@ -130,7 +133,7 @@ describe("PRD authorization matrix", () => {
     assert.equal(hasPermission(buyer(), "asset.sign_upload"), false);
     assert.equal(hasPermission(buyer(), "asset.sign_download"), true);
     assert.equal(hasPermission(qc, "asset.sign_download"), true);
-    assert.equal(hasPermission(viewer(), "asset.sign_download"), false);
+    assert.equal(hasPermission(viewer(), "asset.sign_download"), true);
   });
 
   it("maps lifecycle steps to separated duties and withholds LICENSED", () => {
@@ -169,6 +172,9 @@ describe("PRD authorization matrix", () => {
     assert.equal(canAccessTitleWorkspace(buyer()), false);
     assert.equal(canAccessTitleWorkspace(investor()), false);
     assert.equal(canAccessTitleWorkspace(viewer()), true);
+    assert.equal(canAccessTitleWorkspace(superAdmin()), true);
+    assert.equal(canReadTitle(superAdmin(), { ownerUserId: "super-a", status: "DRAFT" }), true);
+    assert.equal(canMutateTitle(superAdmin(), { ownerUserId: "super-a" }, "title.update_own", "title.license"), true);
     assert.equal(canAccessTitleWorkspace(actor("unverified", "studio", null, false)), false);
   });
 
@@ -209,6 +215,8 @@ describe("PRD authorization matrix", () => {
     assert.equal(workspaceHome(buyer()), "/buyer");
     assert.equal(workspaceHome(investor()), "/investor");
     assert.equal(workspaceHome(superAdmin()), "/dashboard");
+    assert.equal(hasAccountPermission(superAdmin(), "title.create"), true);
+    assert.equal(hasStaffPermission(superAdmin(), "title.ingest_internal"), true);
     assert.equal(workspaceHome(admin()), "/internal");
     assert.equal(workspaceHome(qc), "/internal?desk=qc");
   });

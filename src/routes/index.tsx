@@ -96,6 +96,9 @@ function Home() {
               </h1>
               <p className="bridge-hero-subcopy mx-auto mt-4 max-w-2xl text-base leading-7 text-muted sm:text-lg">
                 Prepare. Protect. License. Deliver.
+              </p>              <p className="mx-auto mt-3 max-w-2xl text-xs leading-6 text-muted">
+                Crayons Bridge is a private rights and licensing workspace. Buyer and Investor title previews are shared only after Admin approval. Public streaming is available on Crayons Loop.
+                <a href="https://crayonsloop.in/" className="ml-1 font-semibold text-accent underline-offset-4 hover:underline">Open Crayons Loop ↗</a>
               </p>
 
               <div className="bridge-hero-actions mt-7 flex flex-wrap items-center justify-center gap-3 sm:mt-8">
@@ -106,6 +109,21 @@ function Home() {
                 </Link>
                 <Link to="/login" className="px-2 text-sm font-semibold text-muted hover:text-fg transition-colors">Sign in</Link>
               </div>
+
+              <nav aria-label="Choose your Bridge workspace" className="mx-auto mt-7 grid max-w-4xl grid-cols-2 gap-2 sm:grid-cols-4">
+                <Link to="/signup" search={{ role: "creator" }} className="rounded-xl border border-line bg-surface px-3 py-3 text-left text-sm font-semibold text-fg transition hover:border-accent hover:bg-accent-soft">
+                  Creator <span className="mt-1 block text-xs font-normal text-muted">Start a title</span>
+                </Link>
+                <Link to="/signup" search={{ role: "studio" }} className="rounded-xl border border-line bg-surface px-3 py-3 text-left text-sm font-semibold text-fg transition hover:border-accent hover:bg-accent-soft">
+                  Studio <span className="mt-1 block text-xs font-normal text-muted">Create a workspace</span>
+                </Link>
+                <Link to="/signup" search={{ role: "buyer" }} className="rounded-xl border border-line bg-surface px-3 py-3 text-left text-sm font-semibold text-fg transition hover:border-accent hover:bg-accent-soft">
+                  Buyer <span className="mt-1 block text-xs font-normal text-muted">Explore licensing</span>
+                </Link>
+                <Link to="/contact" className="rounded-xl border border-line bg-surface px-3 py-3 text-left text-sm font-semibold text-fg transition hover:border-accent hover:bg-accent-soft">
+                  Investor <span className="mt-1 block text-xs font-normal text-muted">Request access</span>
+                </Link>
+              </nav>
             </div>
           </div>
         </section>
@@ -232,7 +250,7 @@ function Home() {
                     search={{ role: "buyer" }}
                     className="inline-flex items-center text-xs font-semibold text-accent hover:underline"
                   >
-                    Explore Buyer Access →
+                    Request private Buyer preview →
                   </Link>
                 </div>
               </div>

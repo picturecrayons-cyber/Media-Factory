@@ -218,6 +218,45 @@ function Onboarding() {
     setter(checked ? [...current, value] : current.filter((item) => item !== value));
   }
 
+  async function createWorkspaceOnly() {
+    if (unsupportedSignupRole) {
+      setError("This account type needs an invitation or support review. Please contact Crayons Bridge before continuing.");
+      return;
+    }
+    if (!displayName.trim()) {
+      setError("Enter your name before creating the workspace.");
+      return;
+    }
+    if (accountType === "studio" && !organizationName.trim()) {
+      setError("Enter your Studio / company name.");
+      return;
+    }
+    if (submitInFlight.current) return;
+    submitInFlight.current = true;
+    setBusy(true);
+    setError(null);
+    try {
+      let inviteToken: string | undefined;
+      try { inviteToken = sessionStorage.getItem("bridge-invite") ?? undefined; } catch { /* ignore */ }
+      const result = await completeOnboarding({
+        data: {
+          displayName: displayName.trim(),
+          accountType,
+          organizationName: accountType === "studio" ? organizationName.trim() : undefined,
+          inviteToken,
+        },
+      });
+      try { sessionStorage.removeItem("bridge-invite"); } catch { /* ignore */ }
+      const destination = result.home || (accountType === "studio" ? "/studio" : accountType === "buyer" ? "/buyer" : "/creator");
+      await navigate({ to: destination as any, replace: true });
+    } catch (err) {
+      setError(publicOnboardingError(err));
+    } finally {
+      submitInFlight.current = false;
+      setBusy(false);
+    }
+  }
+
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     if (unsupportedSignupRole) {
@@ -453,9 +492,17 @@ function Onboarding() {
         )}
 
         {error ? <div role="alert" className="rounded-xl border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-600 dark:text-red-400">{error}</div> : null}
-        <div className="flex flex-col gap-3 border-t border-line pt-5 sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-xs leading-relaxed text-muted">© 2026 StreamVista OPC Pvt Ltd. Crayons Bridge is the media supply chain, rights and licensing control plane.</p>
-          <Button type="submit" disabled={busy} className="h-11 rounded-full px-6 font-semibold">{busy ? "Submitting…" : accountType === "buyer" ? "Enter Bridge" : "Submit title for review"}</Button>
+        <div className="flex flex-col gap-3 border-t border-line pt-5">
+          <p className="text-xs leading-relaxed text-muted">Create your account and workspace first. Film metadata and rights submission are a separate workflow; creating an account does not submit or publish a title.</p>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-xs leading-relaxed text-muted">© 2026 StreamVista OPC Pvt Ltd. Crayons Bridge is the media supply chain, rights and licensing control plane.</p>
+            <Button type="button" disabled={busy} onClick={() => void createWorkspaceOnly()} className="h-11 rounded-full px-6 font-semibold">{busy ? "Creating workspace…" : "Create account & open workspace"}</Button>
+          </div>
+          <details className="rounded-xl border border-line p-4">
+            <summary className="cursor-pointer text-sm font-semibold">Continue directly to film and rights submission</summary>
+            <p className="mt-2 text-xs text-muted">Use this only when you are ready to submit a title. Account creation and title submission remain separate records.</p>
+            <Button type="submit" disabled={busy} variant="outline" className="mt-3 h-10 rounded-full px-5">{busy ? "Submitting…" : "Submit title for review"}</Button>
+          </details>
         </div>
       </form>
     </main>
