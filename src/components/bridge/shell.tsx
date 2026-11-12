@@ -8,23 +8,21 @@ type NavItem = { to: string; label: string };
 
 function navigationFor(actor: BridgeActor): NavItem[] {
   if (actor.internalRole) {
-    const items: NavItem[] = [{ to: "/internal", label: "Operations" }];
+    const items: NavItem[] = [
+      { to: "/internal", label: "Operations" },
+      { to: "/workspace", label: "Titles" },
+    ];
 
     if (actor.internalRole === "admin" || actor.internalRole === "super_admin") {
       items.push(
         { to: "/admin", label: "Admin" },
         { to: "/admin-cms", label: "Website CMS" },
       );
-    } else {
-      items.push({ to: "/workspace", label: "Titles" });
     }
 
     if (actor.internalRole === "super_admin") {
       items.unshift({ to: "/dashboard", label: "Founder Centre" });
-      items.push(
-        { to: "/workspace", label: "Titles" },
-        { to: "/cms", label: "Loop Gateway" },
-      );
+      items.push({ to: "/cms", label: "Loop Gateway" });
     }
 
     return [...items, { to: "/account", label: "Account" }];
