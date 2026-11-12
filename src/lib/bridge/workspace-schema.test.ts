@@ -23,7 +23,8 @@ test("workspace failure diagnostics classify missing config and schema without l
 });
 
 
-test("approved STAGING Preview requires an explicit database URL, not generic POSTGRES_URL", () => {
+
+test("approved STAGING Preview rejects an injected Postgres URL for another Supabase project", () => {
   assert.throws(
     () =>
       resolveBridgeDatabaseUrl({
@@ -32,11 +33,11 @@ test("approved STAGING Preview requires an explicit database URL, not generic PO
         SUPABASE_URL: "https://jbymleftneggcgutlcqu.supabase.co",
         POSTGRES_URL: "postgresql://postgres:secret@db.bbtrosuwisnxacuxvegt.supabase.co:5432/postgres",
       }),
-    /explicit STAGING Supabase project is required/,
+    /does not match the configured STAGING Supabase project/,
   );
 });
 
-test("approved STAGING Preview accepts only the matching direct database host", () => {
+test("approved STAGING Preview accepts a matching direct database host", () => {
   assert.equal(
     resolveBridgeDatabaseUrl({
       VERCEL_ENV: "preview",
@@ -48,38 +49,37 @@ test("approved STAGING Preview accepts only the matching direct database host", 
   );
 });
 
-test("approved STAGING Preview accepts a pooler only when its username is project-scoped", () => {
+test("approved STAGING Preview accepts a pooler URL only when its username is project-scoped", () => {
   assert.equal(
     resolveBridgeDatabaseUrl({
       VERCEL_ENV: "preview",
       BRIDGE_DATABASE_TARGET: "staging",
       SUPABASE_URL: "https://jbymleftneggcgutlcqu.supabase.co",
-      DATABASE_URL: "postgresql://postgres.jbymleftneggcgutlcqu:secret@aws-0-ap-south-1.pooler.supabase.com:6543/postgres",
+      POSTGRES_URL: "postgresql://postgres.jbymleftneggcgutlcqu:secret@aws-0-ap-south-1.pooler.supabase.com:6543/postgres",
     }),
     "postgresql://postgres.jbymleftneggcgutlcqu:secret@aws-0-ap-south-1.pooler.supabase.com:6543/postgres",
   );
 });
 
-test("approved STAGING Preview rejects a database URL for another Supabase project", () => {
+test("approved STAGING Preview rejects a missing or malformed Supabase project URL", () => {
   assert.throws(
     () =>
       resolveBridgeDatabaseUrl({
         VERCEL_ENV: "preview",
         BRIDGE_DATABASE_TARGET: "staging",
-        SUPABASE_URL: "https://jbymleftneggcgutlcqu.supabase.co",
-        DATABASE_URL: "postgresql://postgres:secret@db.bbtrosuwisnxacuxvegt.supabase.co:5432/postgres",
+        POSTGRES_URL: "postgresql://postgres:secret@db.jbymleftneggcgutlcqu.supabase.co:5432/postgres",
       }),
-    /does not match the configured STAGING Supabase project/,
+    /valid STAGING Supabase URL/,
   );
 });
 
-test("non-STAGING environments preserve the existing database URL fallback order", () => {
+test("non-STAGING environments preserve database fallback behavior and ignore blank values", () => {
   assert.equal(
     resolveBridgeDatabaseUrl({
       VERCEL_ENV: "production",
-      DATABASE_URL: "",
+      DATABASE_URL: " ",
       POSTGRES_URL: "postgresql://postgres:secret@db.other.supabase.co:5432/postgres",
     }),
-    "",
+    "postgresql://postgres:secret@db.other.supabase.co:5432/postgres",
   );
 });
