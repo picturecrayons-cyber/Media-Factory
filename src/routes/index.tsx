@@ -96,6 +96,9 @@ function Home() {
               </h1>
               <p className="bridge-hero-subcopy mx-auto mt-4 max-w-2xl text-base leading-7 text-muted sm:text-lg">
                 Prepare. Protect. License. Deliver.
+              </p>              <p className="mx-auto mt-3 max-w-2xl text-xs leading-6 text-muted">
+                Crayons Bridge is a private rights and licensing workspace. Buyer and Investor title previews are shared only after Admin approval. Public streaming is available on Crayons Loop.
+                <a href="https://crayonsloop.in/" className="ml-1 font-semibold text-accent underline-offset-4 hover:underline">Open Crayons Loop ↗</a>
               </p>
 
               <div className="bridge-hero-actions mt-7 flex flex-wrap items-center justify-center gap-3 sm:mt-8">
@@ -247,7 +250,7 @@ function Home() {
                     search={{ role: "buyer" }}
                     className="inline-flex items-center text-xs font-semibold text-accent hover:underline"
                   >
-                    Explore Buyer Access →
+                    Request private Buyer preview →
                   </Link>
                 </div>
               </div>
