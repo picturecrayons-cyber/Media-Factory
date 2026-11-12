@@ -37,7 +37,7 @@ test("disallowed codec, undersized picture and out-of-range frame rate fail", ()
     probe: {
       format: { duration: 120, format_name: "matroska" },
       streams: [
-        { codec_type: "video", codec_name: "mpeg2video", width: 320, height: 240, avg_frame_rate: "24000/1001" },
+        { codec_type: "video", codec_name: "mpeg2video", width: 320, height: 240, avg_frame_rate: "240/1" },
         { codec_type: "audio", codec_name: "aac" },
       ],
     },
