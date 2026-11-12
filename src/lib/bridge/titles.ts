@@ -6,7 +6,7 @@ import { getSql, type Sql } from "@/lib/db";
 import type { AccountType, TitleStatus } from "./types";
 import { TITLE_STATUSES, type BridgeTitle } from "./types";
 import { assertTransition, nextStatus } from "./lifecycle";
-import { assertPermission, canMutateTitle, canReadTitle, hasPermission, hasStaffPermission, permissionForTransition } from "./rbac";
+import { assertPermission, canAccessCreatorOwnerWorkspace, canMutateTitle, canReadTitle, hasPermission, hasStaffPermission, permissionForTransition } from "./rbac";
 import { requireVerifiedActor } from "./session";
 import { writeAudit } from "./audit";
 import { assertNotDevUser } from "./guards";
@@ -677,7 +677,7 @@ export const listCreatorOwnerTitles = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
-    if (actor.internalRole !== "super_admin" || actor.accountType !== "independent_creator") {
+    if (!canAccessCreatorOwnerWorkspace(actor)) {
       throw new Error("Creator owner workspace access required");
     }
     const sql = await getSql();
