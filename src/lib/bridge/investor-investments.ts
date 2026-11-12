@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
-import { assertPermission } from "./rbac";
+import { canReadOwnInvestorPortfolio } from "./rbac";
 import { requireVerifiedActor } from "./session";
 import { assertNotDevUser } from "./guards";
 
@@ -14,10 +14,7 @@ export const listOwnInvestorInvestments = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
-    if (actor.internalRole || actor.accountType !== "investor") {
-      throw new Error("Forbidden");
-    }
-    assertPermission(actor, "entitlement.read_own");
+    if (!canReadOwnInvestorPortfolio(actor)) throw new Error("Forbidden");
 
     const sql = await getSql();
     const rows = await sql<{
