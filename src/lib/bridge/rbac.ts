@@ -257,3 +257,12 @@ export function workspaceHome(actor: Actor): string {
   if (actor.accountType === "investor") return "/investor";
   return "/";
 }
+
+/** Creator Owner is a dual-role workspace, never a generic staff dashboard. */
+export function canAccessCreatorOwnerWorkspace(actor: Actor): boolean {
+  return (
+    actor.emailVerified &&
+    actor.internalRole === "super_admin" &&
+    actor.accountType === "independent_creator"
+  );
+}
