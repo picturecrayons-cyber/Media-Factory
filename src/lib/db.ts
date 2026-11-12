@@ -1,4 +1,5 @@
 import { pendingMigrations } from "../../scripts/migration-plan.mjs";
+import { resolveBridgeDatabaseUrl } from "./db-url.ts";
 
 /** Which database backend is active. */
 export type DbSource = "postgres" | "pglite";
@@ -6,41 +7,8 @@ export type DbSource = "postgres" | "pglite";
 // Prefer an explicit DATABASE_URL when present. On Vercel, the native Supabase
 // integration injects POSTGRES_URL, so accept that as the canonical fallback.
 // Empty/whitespace values are treated as unset to avoid a silent PGLite fallback.
-const rawDatabaseUrl =
-  typeof process !== "undefined"
-    ? (
-        process.env.DATABASE_URL ??
-        process.env.POSTGRES_URL ??
-        process.env.SUPABASE_DB_URL ??
-        process.env.SUPABASE_DATABASE_URL
-      )
-    : undefined;
-function normalizePostgresUrl(value: string | undefined): string | undefined {
-  if (!value) return undefined;
-  const trimmed = value.trim();
-  if (!trimmed) return undefined;
-  try {
-    const url = new URL(trimmed);
-    if (!["postgres:", "postgresql:"].includes(url.protocol)) {
-      throw new Error("Database URL must use postgres:// or postgresql://");
-    }
-    if (!url.hostname || url.hostname === "base") {
-      throw new Error("Database URL host is invalid");
-    }
-    // pg-connection-string can override the explicit ssl object when sslmode is
-    // present in the URL. Remove SSL query params so node-postgres uses the
-    // explicit runtime TLS configuration below.
-    for (const key of ["sslmode", "sslrootcert", "sslcert", "sslkey", "uselibpqcompat"]) {
-      url.searchParams.delete(key);
-    }
-    return url.toString();
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "invalid database URL";
-    throw new Error(`Invalid Bridge database binding: ${message}`);
-  }
-}
-const databaseUrl = normalizePostgresUrl(
-  rawDatabaseUrl && rawDatabaseUrl.trim() ? rawDatabaseUrl : undefined,
+const databaseUrl = resolveBridgeDatabaseUrl(
+  typeof process !== "undefined" ? process.env : {},
 );
 
 /**
