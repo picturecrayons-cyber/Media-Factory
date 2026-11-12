@@ -153,6 +153,16 @@ export function canAccessAdminWorkstations(actor: Actor): boolean {
   );
 }
 
+/** Investor reporting is an account capability, never an internal-staff shortcut. */
+export function canReadOwnInvestorPortfolio(actor: Actor): boolean {
+  return (
+    actor.emailVerified &&
+    actor.internalRole === null &&
+    actor.accountType === "investor" &&
+    hasPermission(actor, "entitlement.read_own")
+  );
+}
+
 /** Title workspace is for Creator/Studio accounts and internal staff with catalog-read access. */
 export function canAccessTitleWorkspace(actor: Actor): boolean {
   if (!actor.emailVerified) return false;
