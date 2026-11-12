@@ -362,28 +362,18 @@ export const listTitles = createServerFn({ method: "GET" })
               and public.bridge_title_buyer_visibility(t.id)
             order by t.updated_at desc limit 200
           `;
-    }{
-        rows = await sql<TitleRow>`
-          select t.* from bridge_titles t
-          where t.status in ('LIVE_FOR_BUYERS','IN_NEGOTIATION','LICENSED','DELIVERED')
-            and public.bridge_title_buyer_visibility(t.id)
-          order by t.updated_at desc limit 200
-        `;
-      }
     } else {
       assertPermission(actor, "title.read_own");
       rows = await listOwned(sql, actor.userId, actor.accountType === "studio" ? actor.organizationId : null);
     }
     return { titles: rows.flatMap((row) => {
-      try {
-        return [mapTitle(row)];
-      } catch (error) {
+      try { return [mapTitle(row)]; }
+      catch (error) {
         console.error("[bridge] skipped unreadable title", row?.id, error);
         return [];
       }
     }) };
   });
-
 export const grantBuyerPreviewAccess = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(z.object({
