@@ -665,3 +665,36 @@ export const listAuditLogs = createServerFn({ method: "GET" })
       })),
     };
   });
+
+
+/**
+ * Read-only self-owner view for the dual-role production Creator/Super Admin
+ * profile. This intentionally returns only records whose owner_user_id equals
+ * the authenticated Bridge identity; it never falls back to the staff catalog.
+ */
+export const listCreatorOwnerTitles = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    if (actor.internalRole !== "super_admin" || actor.accountType !== "independent_creator") {
+      throw new Error("Creator owner workspace access required");
+    }
+    const sql = await getSql();
+    const rows = await sql<TitleRow>`
+      select * from bridge_titles
+      where owner_user_id = ${actor.userId}
+      order by updated_at desc
+      limit 200
+    `;
+    return {
+      titles: rows.flatMap((row) => {
+        try {
+          return [mapTitle(row)];
+        } catch (error) {
+          console.error("[bridge] skipped unreadable creator-owned title", row?.id, error);
+          return [];
+        }
+      }),
+    };
+  });
