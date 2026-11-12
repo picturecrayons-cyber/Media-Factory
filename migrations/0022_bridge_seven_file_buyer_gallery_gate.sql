@@ -54,8 +54,8 @@ as $$
               where audit.entity_type = 'bridge_asset'
                 and audit.entity_id = a.id
                 and audit.action = 'asset.upload_verified'
-                and nullif(trim(audit.metadata->>'checksum'), '') is not null
-                and nullif(trim(audit.metadata->>'byteSize'), '') is not null
+                and nullif(trim(audit.metadata::jsonb->>'checksum'), '') is not null
+                and nullif(trim(audit.metadata::jsonb->>'byteSize'), '') is not null
             )
         )
       )
