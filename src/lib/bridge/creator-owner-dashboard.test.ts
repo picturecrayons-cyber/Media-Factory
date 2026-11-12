@@ -8,6 +8,7 @@ test("Creator Owner dashboard is Super Admin gated and uses a dedicated owner-on
   const route = read("../../routes/creator-owner.tsx");
   const titles = read("./titles.ts");
   const dashboard = read("../../routes/dashboard.tsx");
+  const rbac = read("./rbac.ts");
   assert.match(route, /<RequireBridge allow="super_admin">/);
   assert.match(route, /listCreatorOwnerTitles/);
   assert.match(titles, /actor\.internalRole !== "super_admin" \|\| actor\.accountType !== "independent_creator"/);
