@@ -106,6 +106,21 @@ function Home() {
                 </Link>
                 <Link to="/login" className="px-2 text-sm font-semibold text-muted hover:text-fg transition-colors">Sign in</Link>
               </div>
+
+              <nav aria-label="Choose your Bridge workspace" className="mx-auto mt-7 grid max-w-4xl grid-cols-2 gap-2 sm:grid-cols-4">
+                <Link to="/signup" search={{ role: "creator" }} className="rounded-xl border border-line bg-surface px-3 py-3 text-left text-sm font-semibold text-fg transition hover:border-accent hover:bg-accent-soft">
+                  Creator <span className="mt-1 block text-xs font-normal text-muted">Start a title</span>
+                </Link>
+                <Link to="/signup" search={{ role: "studio" }} className="rounded-xl border border-line bg-surface px-3 py-3 text-left text-sm font-semibold text-fg transition hover:border-accent hover:bg-accent-soft">
+                  Studio <span className="mt-1 block text-xs font-normal text-muted">Create a workspace</span>
+                </Link>
+                <Link to="/signup" search={{ role: "buyer" }} className="rounded-xl border border-line bg-surface px-3 py-3 text-left text-sm font-semibold text-fg transition hover:border-accent hover:bg-accent-soft">
+                  Buyer <span className="mt-1 block text-xs font-normal text-muted">Explore licensing</span>
+                </Link>
+                <Link to="/contact" className="rounded-xl border border-line bg-surface px-3 py-3 text-left text-sm font-semibold text-fg transition hover:border-accent hover:bg-accent-soft">
+                  Investor <span className="mt-1 block text-xs font-normal text-muted">Request access</span>
+                </Link>
+              </nav>
             </div>
           </div>
         </section>
