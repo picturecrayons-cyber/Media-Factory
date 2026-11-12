@@ -12,7 +12,7 @@ function projectRefFromSupabaseUrl(value: string | undefined): string | undefine
   try {
     const url = new URL(value.trim());
     if (url.protocol !== "https:" && url.protocol !== "http:") return undefined;
-    const match = url.hostname.match(/^([a-z0-9-]+)\\.supabase\\.co$/i);
+    const match = url.hostname.match(/^([a-z0-9-]+)\.supabase\.co$/i);
     return match?.[1];
   } catch {
     return undefined;
@@ -23,11 +23,11 @@ function projectRefFromDatabaseUrl(value: string): string | undefined {
   try {
     const url = new URL(value);
     if (url.hostname.endsWith(".supabase.co")) {
-      return url.hostname.match(/^db\\.([a-z0-9-]+)\\.supabase\\.co$/i)?.[1];
+      return url.hostname.match(/^db\.([a-z0-9-]+)\.supabase\.co$/i)?.[1];
     }
     // Supabase pooler usernames are scoped as postgres.<project-ref>.
     if (url.hostname.endsWith(".pooler.supabase.com")) {
-      return url.username.match(/(?:^|\\.)([a-z0-9-]{16,})(?:\\.|$)/i)?.[1];
+      return url.username.match(/(?:^|\.)([a-z0-9-]{16,})(?:\.|$)/i)?.[1];
     }
     return undefined;
   } catch {
