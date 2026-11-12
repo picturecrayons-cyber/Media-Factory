@@ -172,8 +172,11 @@ test("Preview with a Production or unknown database binding remains locked", asy
 });
 
 
-test("non-Super-Admin staff cannot call the Loop publication writer", async () => {
+test("non-Super-Admin staff cannot call any Loop publication writer", async () => {
   const admin = harness([grant], true, false, previewStagingEnv, "admin");
   await assert.rejects(admin.authorize({ context, data }), /Super Admin access required/);
+  await assert.rejects(admin.suspend({ context, data: { bridgeTitleId: "title-1" } }), /Super Admin access required/);
+  await assert.rejects(admin.revoke({ context, data: { bridgeTitleId: "title-1" } }), /Super Admin access required/);
+  await assert.rejects(admin.extend({ context, data: { bridgeTitleId: "title-1", newWindowEnd: "2099-01-01T00:00:00.000Z" } }), /Super Admin access required/);
   assert.equal(admin.writes.length, 0);
 });
