@@ -90,7 +90,7 @@ test("customer quote response omits internal cost and margin at quote and line l
 
 test("explicit finance staff permission can view internal quote economics", () => {
   const view = presentServiceQuote(creatorAdminActor, sampleQuote);
-  assert.equal(view.estimatedCostPaise, 6200);
-  assert.equal(view.estimatedMarginPaise, 3800);
-  assert.equal(view.lines[0].costBasisPaise, 6200);
+  assert.equal("estimatedCostPaise" in view ? view.estimatedCostPaise : undefined, 6200);
+  assert.equal("estimatedMarginPaise" in view ? view.estimatedMarginPaise : undefined, 3800);
+  assert.equal("costBasisPaise" in view.lines[0] ? view.lines[0].costBasisPaise : undefined, 6200);
 });
