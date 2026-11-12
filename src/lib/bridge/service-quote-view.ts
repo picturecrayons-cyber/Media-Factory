@@ -10,7 +10,6 @@ type InternalPricingQuote<TLine extends InternalPricingLine> = {
   estimatedCostPaise: number;
   estimatedMarginPaise: number;
   lines: TLine[];
-  [key: string]: unknown;
 };
 
 /**
