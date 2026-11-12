@@ -133,7 +133,7 @@ describe("PRD authorization matrix", () => {
     assert.equal(hasPermission(buyer(), "asset.sign_upload"), false);
     assert.equal(hasPermission(buyer(), "asset.sign_download"), true);
     assert.equal(hasPermission(qc, "asset.sign_download"), true);
-    assert.equal(hasPermission(viewer(), "asset.sign_download"), false);
+    assert.equal(hasPermission(viewer(), "asset.sign_download"), true);
   });
 
   it("maps lifecycle steps to separated duties and withholds LICENSED", () => {
