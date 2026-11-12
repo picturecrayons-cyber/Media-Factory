@@ -7,6 +7,8 @@ import { BridgeShell } from "@/components/bridge/shell";
 import { StatusChip } from "@/components/bridge/status-rail";
 import { Button } from "@/components/ui/button";
 import { inviteInternalRole } from "@/lib/bridge/profiles";
+import { grantBuyerPreviewAccess } from "@/lib/bridge/titles";
+import { listAdminWorkstations } from "@/lib/bridge/admin-workstations";
 import { listAuditLogs, listTitles } from "@/lib/bridge/titles";
 import {
   authorizeLoopPublication,
@@ -17,7 +19,7 @@ import {
   type ExploitationModel,
 } from "@/lib/bridge/loop-publication";
 import { INTERNAL_ROLES } from "@/lib/bridge/types";
-import { hasPermission } from "@/lib/bridge/rbac";
+import { hasPermission, hasStaffPermission } from "@/lib/bridge/rbac";
 
 export const Route = createFileRoute("/internal")({ component: Internal });
 
@@ -33,6 +35,7 @@ function Internal() {
             canInvite={hasPermission(actor, "users.invite_internal")}
             canPublish={hasPermission(actor, "loop.publish")}
             canRevoke={hasPermission(actor, "loop.revoke")}
+            canGrantBuyerPreview={Boolean(actor.internalRole && hasStaffPermission(actor, "title.license"))}
           />
         </BridgeShell>
       )}
@@ -44,10 +47,12 @@ function InternalBody({
   canInvite,
   canPublish,
   canRevoke,
+  canGrantBuyerPreview,
 }: {
   canInvite: boolean;
   canPublish: boolean;
   canRevoke: boolean;
+  canGrantBuyerPreview: boolean;
 }) {
   const titlesQ = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles() });
   const logsQ = useQuery({ queryKey: ["bridge-audit"], queryFn: () => listAuditLogs() });
@@ -63,7 +68,10 @@ function InternalBody({
       {/* 2. Team Invitation Module */}
       {canInvite ? <InviteForm /> : null}
 
-      {/* 3. Catalog Queue */}
+      {/* 3. Private Buyer preview approvals */}
+      {canGrantBuyerPreview ? <BuyerPreviewDesk /> : null}
+
+      {/* 4. Catalog Queue */}
       <section className="space-y-4">
         <div className="flex items-center justify-between">
           <div>
@@ -98,7 +106,7 @@ function InternalBody({
         </ul>
       </section>
 
-      {/* 4. Immutable Audit Trail */}
+      {/* 5. Immutable Audit Trail */}
       <section className="space-y-4">
         <div>
           <h2 className="font-display text-2xl font-semibold text-fg">Audit Ledger</h2>
@@ -123,6 +131,57 @@ function InternalBody({
         </div>
       </section>
     </div>
+  );
+}
+
+function BuyerPreviewDesk() {
+  const qc = useQueryClient();
+  const [buyerUserId, setBuyerUserId] = useState("");
+  const [titleId, setTitleId] = useState("");
+  const [expiresInDays, setExpiresInDays] = useState("7");
+  const peopleQ = useQuery({ queryKey: ["bridge-admin-workstations"], queryFn: () => listAdminWorkstations() });
+  const titlesQ = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles() });
+  const buyers = (peopleQ.data?.profiles ?? []).filter((p: { account_type: string; email_verified: boolean }) => p.account_type === "buyer" && p.email_verified);
+  const titles = titlesQ.data?.titles ?? [];
+  const grant = useMutation({
+    mutationFn: () => grantBuyerPreviewAccess({ data: { titleId, buyerUserId, expiresInDays: Number(expiresInDays) } }),
+    onSuccess: (result) => {
+      toast.success("Private preview granted until " + new Date(result.expiresAt).toLocaleString("en-IN"));
+      void qc.invalidateQueries({ queryKey: ["bridge-audit"] });
+      setBuyerUserId(""); setTitleId("");
+    },
+    onError: (error) => toast.error(error instanceof Error ? error.message : "Preview grant failed"),
+  });
+  function submit(e: FormEvent) { e.preventDefault(); if (buyerUserId && titleId) grant.mutate(); }
+  return (
+    <section className="space-y-4 rounded-2xl border border-line bg-surface p-5">
+      <div>
+        <h2 className="font-display text-2xl font-semibold">Private Buyer previews</h2>
+        <p className="mt-1 max-w-2xl text-xs leading-5 text-muted">Grant a verified Buyer access to one publishable title only. Access expires automatically and is recorded in the audit ledger. Public Loop viewing is separate.</p>
+      </div>
+      {peopleQ.isError || titlesQ.isError ? <p role="alert" className="text-sm text-accent">Buyer/title records could not be loaded. Retry the page before granting access.</p> : null}
+      <form onSubmit={submit} className="grid gap-3 sm:grid-cols-3">
+        <label className="text-sm">Verified Buyer
+          <select required value={buyerUserId} onChange={(e) => setBuyerUserId(e.target.value)} className="mt-1 h-11 w-full rounded-lg border border-line-strong bg-elevated px-3">
+            <option value="">Select Buyer</option>
+            {buyers.map((buyer: { user_id: string; email: string; display_name: string }) => <option key={buyer.user_id} value={buyer.user_id}>{buyer.display_name} · {buyer.email}</option>)}
+          </select>
+        </label>
+        <label className="text-sm">Publishable title
+          <select required value={titleId} onChange={(e) => setTitleId(e.target.value)} className="mt-1 h-11 w-full rounded-lg border border-line-strong bg-elevated px-3">
+            <option value="">Select title</option>
+            {titles.filter((t) => ["LIVE_FOR_BUYERS","IN_NEGOTIATION","LICENSED","DELIVERED"].includes(t.status)).map((title) => <option key={title.id} value={title.id}>{title.name} · {title.status}</option>)}
+          </select>
+        </label>
+        <label className="text-sm">Preview duration
+          <select value={expiresInDays} onChange={(e) => setExpiresInDays(e.target.value)} className="mt-1 h-11 w-full rounded-lg border border-line-strong bg-elevated px-3">
+            <option value="1">1 day</option><option value="3">3 days</option><option value="7">7 days</option><option value="14">14 days</option><option value="30">30 days</option>
+          </select>
+        </label>
+        <div className="sm:col-span-3"><Button type="submit" disabled={grant.isPending || peopleQ.isPending || titlesQ.isPending || !buyers.length || !titles.length}>{grant.isPending ? "Granting…" : "Grant private preview"}</Button></div>
+      </form>
+      {!peopleQ.isPending && !buyers.length ? <p className="text-xs text-muted">No verified Buyer accounts are available for approval.</p> : null}
+    </section>
   );
 }
 
