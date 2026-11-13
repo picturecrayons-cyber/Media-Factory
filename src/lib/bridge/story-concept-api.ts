@@ -21,7 +21,10 @@ import {
 
 type ConceptRow = {
   id: string;
-  title_id: string;
+  title_id: string | null;
+  title_name: string;
+  owner_user_id: string;
+  owner_organization_id: string | null;
   logline: string | null;
   synopsis: string | null;
   treatment_url: string | null;
@@ -113,41 +116,19 @@ export const createStoryConceptSubmission = createServerFn({ method: "POST" })
     const actor = await requireVerifiedActor(context.userId);
     assertPermission(actor, actor.internalRole ? "title.ingest_internal" : "title.create");
 
-    const titleId = randomBytes(16).toString("hex");
-    const slug = slugify(data.titleName, titleId);
     const sql = await getSql();
 
     try {
-      await sql`
-        insert into bridge_titles (
-          id, slug, name, owner_user_id, owner_account_type, status,
-          synopsis, language, content_type, owner_organization_id, submission_type
-        ) values (
-          ${titleId},
-          ${slug},
-          ${data.titleName},
-          ${actor.userId},
-          ${actor.accountType},
-          ${"DRAFT"},
-          ${data.synopsis},
-          ${data.language},
-          ${"OTHER"},
-          ${actor.accountType === "studio" ? actor.organizationId ?? null : null},
-          ${"story_concept"}
-        )
-      `;
-
-      await sql`
-        insert into bridge_title_events (title_id, from_status, to_status, actor_user_id, note)
-        values (${titleId}, null, ${"DRAFT"}, ${actor.userId}, ${"story concept submission received"})
-      `;
-
       const conceptRows = await sql<ConceptRow>`
         insert into bridge_story_concept_submissions (
-          title_id, logline, synopsis, treatment_url, screenplay_url,
+          title_id, title_name, owner_user_id, owner_organization_id,
+          logline, synopsis, treatment_url, screenplay_url,
           genre, estimated_budget_range, target_platforms, curation_status
         ) values (
-          ${titleId},
+          null,
+          ${data.titleName},
+          ${actor.userId},
+          ${actor.accountType === "studio" ? actor.organizationId ?? null : null},
           ${data.logline},
           ${data.synopsis},
           ${data.treatmentUrl || null},
@@ -168,13 +149,10 @@ export const createStoryConceptSubmission = createServerFn({ method: "POST" })
         action: "story_concept.create",
         entityType: "bridge_story_concept_submission",
         entityId: concept.id,
-        metadata: { titleId },
+        metadata: { titleName: data.titleName },
       });
 
-      return {
-        titleId,
-        concept: mapConcept(concept),
-      };
+      return { concept: mapConcept(concept) };
     } catch (err) {
       migrationHint(err);
     }
@@ -188,17 +166,15 @@ export const listMyStoryConcepts = createServerFn({ method: "GET" })
     const sql = await getSql();
 
     try {
-      const rows = await sql<ConceptRow & { title_name: string }>`
-        select c.*, t.name as title_name
-        from bridge_story_concept_submissions c
-        join bridge_titles t on t.id = c.title_id
-        where t.owner_user_id = ${actor.userId}
+      const rows = await sql<ConceptRow>`
+        select *
+        from bridge_story_concept_submissions
+        where owner_user_id = ${actor.userId}
            or (
-             t.owner_account_type = 'studio'
-             and t.owner_organization_id is not null
-             and t.owner_organization_id = ${actor.organizationId ?? null}
+             owner_organization_id is not null
+             and owner_organization_id = ${actor.organizationId ?? null}
            )
-        order by c.created_at desc
+        order by created_at desc
         limit 100
       `;
 
@@ -226,12 +202,11 @@ export const listPendingStoryConcepts = createServerFn({ method: "GET" })
 
     const sql = await getSql();
     try {
-      const rows = await sql<ConceptRow & { title_name: string; owner_user_id: string }>`
-        select c.*, t.name as title_name, t.owner_user_id
-        from bridge_story_concept_submissions c
-        join bridge_titles t on t.id = c.title_id
-        where c.curation_status in ('PENDING', 'UNDER_REVIEW', 'APPROVED')
-        order by c.created_at asc
+      const rows = await sql<ConceptRow>`
+        select *
+        from bridge_story_concept_submissions
+        where curation_status in ('PENDING', 'UNDER_REVIEW', 'APPROVED')
+        order by created_at asc
         limit 200
       `;
 
