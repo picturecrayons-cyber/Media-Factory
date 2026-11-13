@@ -2,8 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
-import { listTitles } from "@/lib/bridge/titles";
-import { getSql } from "@/lib/db";
+import { listInvestorInvestments } from "@/lib/bridge/investor";
 
 export const Route = createFileRoute("/investor")({ component: Investor });
 
@@ -22,14 +21,20 @@ function Investor() {
 function InvestorBody({ userId }: { userId: string }) {
   const investmentsQ = useQuery({
     queryKey: ["bridge-investor-investments", userId],
-    queryFn: () => listInvestorInvestments(userId),
+    queryFn: () => listInvestorInvestments(),
   });
   const rows = investmentsQ.data?.investments ?? [];
   const totalCapital = rows.reduce((sum, row) => sum + Number(row.investedAmountPaise ?? 0), 0);
-  const totalParticipation = rows.reduce((sum, row) => sum + Number(row.participationPercent ?? 0), 0);
 
   return (
     <div className="space-y-6">
+      {investmentsQ.isPending ? <p className="text-sm text-muted">Loading your assigned investment records…</p> : null}
+      {investmentsQ.isError ? (
+        <p role="alert" className="rounded-sm border border-line p-4 text-sm text-muted">
+          Your portfolio could not be loaded. Totals are hidden until the authenticated data source responds.
+        </p>
+      ) : null}
+      {!investmentsQ.isPending && !investmentsQ.isError ? <>
       <section className="grid gap-3 sm:grid-cols-3">
         <article className="rounded-sm border border-line p-4"><p className="text-xs uppercase tracking-widest text-muted">Scope</p><p className="mt-2 text-sm">Assigned titles only. Read participation. No title edits.</p></article>
         <article className="rounded-sm border border-line p-4"><p className="text-xs uppercase tracking-widest text-muted">Opportunity</p><p className="mt-2 text-sm">Capital is recorded by Bridge. You see only titles assigned to this account.</p></article>
@@ -50,36 +55,8 @@ function InvestorBody({ userId }: { userId: string }) {
           </table>
         </div>
       </section>
+      </> : null}
     </div>
   );
 }
 
-async function listInvestorInvestments(investorUserId: string) {
-  const sql = await getSql();
-  const rows = await sql<{
-    id: string;
-    title_id: string;
-    title_name: string;
-    investment_reference: string | null;
-    invested_amount_paise: number | string | null;
-    participation_percent: number | string | null;
-    created_at: string | Date;
-  }>`
-    select i.id, i.title_id, t.name as title_name, i.investment_reference,
-           i.invested_amount_paise, i.participation_percent, i.created_at
-    from bridge_title_investors i
-    join bridge_titles t on t.id = i.title_id
-    where i.investor_user_id = ${investorUserId}
-    order by i.created_at desc
-    limit 200
-  `;
-  return { investments: rows.map((row) => ({
-    id: row.id,
-    titleId: row.title_id,
-    titleName: row.title_name,
-    investmentReference: row.investment_reference,
-    investedAmountPaise: row.invested_amount_paise,
-    participationPercent: row.participation_percent,
-    createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : String(row.created_at),
-  })) };
-}
