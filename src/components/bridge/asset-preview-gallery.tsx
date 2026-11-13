@@ -83,7 +83,6 @@ export function AssetPreviewGallery({ assets }: { assets: PreviewAsset[] }) {
     () => assets.filter((asset) => asset.verified && (isImage(asset) || isVideo(asset))),
     [assets],
   );
-  const imageAssetIds = mediaAssets.filter(isImage).map((asset) => asset.id).join("|");
   const visibleAssets = mediaAssets.filter((asset) =>
     filter === "all" || (filter === "images" ? isImage(asset) : isVideo(asset))
   );
@@ -113,7 +112,7 @@ export function AssetPreviewGallery({ assets }: { assets: PreviewAsset[] }) {
     });
 
     return () => { active = false; };
-  }, [imageAssetIds]);
+  }, [mediaAssets]);
 
   async function openPreview(asset: PreviewAsset) {
     if (!asset.verified || loadingId) return;
