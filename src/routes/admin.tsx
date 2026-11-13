@@ -44,6 +44,8 @@ function AdminBody({ actor }: { actor: any }) {
   const titles = titlesQ.data?.titles ?? [];
   const distribution = distQ.data?.titles ?? [];
   const profiles = profilesQ.data?.profiles ?? [];
+  const investorProfiles = profiles.filter((profile) => profile.accountType === "investor");
+  const verifiedInvestorProfiles = investorProfiles.filter((profile) => profile.emailVerified);
   const organizations = new Set(profiles.map((profile) => profile.organizationName).filter(Boolean));
   const qcQueue = titles.filter((title) => title.status === "PREPARING" || title.status === "QC_REVIEW").length;
   const rightsQueue = titles.filter((title) => title.status === "RIGHTS_REVIEW").length;
@@ -115,6 +117,31 @@ function AdminBody({ actor }: { actor: any }) {
 
         <section className="rounded-2xl border border-line bg-surface p-4 sm:p-5">
           <StoryConceptReviewQueue />
+        </section>
+
+        <section className="rounded-2xl border border-line bg-surface p-4 sm:p-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h3 className="font-display text-xl font-semibold">Investor registrations</h3>
+              <p className="mt-1 text-sm text-muted">Public account creation is open. Investment records remain visible only after an explicit Bridge assignment.</p>
+            </div>
+            <span className="rounded-full border border-line px-3 py-1 text-xs font-semibold">{profilesQ.isPending ? "Loading" : `${investorProfiles.length} registered`}</span>
+          </div>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <CompactMetric label="Registered investor accounts" value={profilesQ.isPending ? "—" : String(investorProfiles.length)} />
+            <CompactMetric label="Email verified" value={profilesQ.isPending ? "—" : String(verifiedInvestorProfiles.length)} />
+          </div>
+          {investorProfiles.length ? (
+            <ul className="mt-3 divide-y divide-line">
+              {investorProfiles.slice(0, 8).map((profile) => (
+                <li key={profile.userId} className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm">
+                  <span><strong>{profile.displayName}</strong><span className="ml-2 text-muted">{profile.email}</span></span>
+                  <span className="text-xs text-muted">{profile.emailVerified ? "Email verified · assignment required" : "Email verification pending"}</span>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          <p className="mt-3 text-xs text-muted">This is a registration view, not an approval or capital-allocation control. Do not grant access to unassigned titles or internal cost/margin data.</p>
         </section>
 
         <section className="grid gap-3 lg:grid-cols-2">
