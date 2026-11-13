@@ -8,7 +8,21 @@ import * as rights from "./rights-coverage.ts";
 
 // Execute the real server handler with isolated transport/database dependencies.
 // No database or AWS requests are made by this harness.
-function harness(grants: unknown[], allowed = true, existing = false) {
+const previewStagingEnv = {
+  VERCEL_ENV: "preview",
+  BRIDGE_LOOP_GATEWAY_ENABLED: "true",
+  BRIDGE_DATABASE_TARGET: "staging",
+  SUPABASE_URL: "https://jbymleftneggcgutlcqu.supabase.co",
+  DATABASE_URL: "postgres://postgres.jbymleftneggcgutlcqu:unused@aws-0-ap-south-1.pooler.supabase.com:6543/postgres",
+};
+
+function harness(
+  grants: unknown[],
+  allowed = true,
+  existing = false,
+  env: Record<string, string> = previewStagingEnv,
+  internalRole = "super_admin",
+) {
   const writes: { query: string; values: unknown[] }[] = [];
   const title = {
     id: "title-1",
@@ -51,7 +65,7 @@ function harness(grants: unknown[], allowed = true, existing = false) {
     "@/lib/auth/middleware": { authMiddleware: {} },
     "@/lib/db": { getSql: async () => sql },
     "./rbac": { assertPermission: () => { if (!allowed) throw new Error("Forbidden"); } },
-    "./session": { requireVerifiedActor: async () => ({ userId: "operator", emailVerified: true }) },
+    "./session": { requireVerifiedActor: async () => ({ userId: "operator", emailVerified: true, internalRole }) },
     "./guards": { assertNotDevUser: () => {} },
     "./audit": { writeAudit: async () => {} },
     "./rights-coverage": rights,
@@ -67,12 +81,20 @@ function harness(grants: unknown[], allowed = true, existing = false) {
   const exports: Record<string, (args: unknown) => Promise<unknown>> = {};
   runInNewContext(output, {
     exports,
+    process: { env },
+    URL,
     require: (name: string) => {
       assert.ok(name in modules, `Unexpected dependency: ${name}`);
       return modules[name];
     },
   });
-  return { authorize: exports.authorizeLoopPublication, writes };
+  return {
+    authorize: exports.authorizeLoopPublication,
+    suspend: exports.suspendLoopPublication,
+    revoke: exports.revokeLoopPublication,
+    extend: exports.extendDistributionWindow,
+    writes,
+  };
 }
 
 const grant = {
@@ -125,4 +147,36 @@ test("status alignment never bypasses operator, rights or commercial coverage", 
     await assert.rejects(h.authorize({ context, data: scenario.data }));
     assert.equal(h.writes.length, 0);
   }
+});
+
+
+test("production environment blocks every Loop publication write", async () => {
+  const production = harness([grant], true, false, {
+    ...previewStagingEnv,
+    VERCEL_ENV: "production",
+  });
+  await assert.rejects(production.authorize({ context, data }), /Gateway is locked/);
+  await assert.rejects(production.suspend({ context, data: { bridgeTitleId: "title-1" } }), /Gateway is locked/);
+  await assert.rejects(production.revoke({ context, data: { bridgeTitleId: "title-1" } }), /Gateway is locked/);
+  await assert.rejects(production.extend({ context, data: { bridgeTitleId: "title-1", newWindowEnd: "2099-01-01T00:00:00.000Z" } }), /Gateway is locked/);
+  assert.equal(production.writes.length, 0);
+});
+
+test("Preview with a Production or unknown database binding remains locked", async () => {
+  const wrongDatabase = harness([grant], true, false, {
+    ...previewStagingEnv,
+    DATABASE_URL: "postgres://postgres.mlmgugivsyoxzdgwkbpu:unused@aws-0-ap-southeast-1.pooler.supabase.com:6543/postgres",
+  });
+  await assert.rejects(wrongDatabase.authorize({ context, data }), /Gateway is locked/);
+  assert.equal(wrongDatabase.writes.length, 0);
+});
+
+
+test("non-Super-Admin staff cannot call any Loop publication writer", async () => {
+  const admin = harness([grant], true, false, previewStagingEnv, "admin");
+  await assert.rejects(admin.authorize({ context, data }), /Super Admin access required/);
+  await assert.rejects(admin.suspend({ context, data: { bridgeTitleId: "title-1" } }), /Super Admin access required/);
+  await assert.rejects(admin.revoke({ context, data: { bridgeTitleId: "title-1" } }), /Super Admin access required/);
+  await assert.rejects(admin.extend({ context, data: { bridgeTitleId: "title-1", newWindowEnd: "2099-01-01T00:00:00.000Z" } }), /Super Admin access required/);
+  assert.equal(admin.writes.length, 0);
 });

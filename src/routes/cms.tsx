@@ -220,15 +220,14 @@ function PublishingDesk({ publications }: { publications: Array<any> }) {
             Publishing desk
           </p>
           <h3 className="mt-1 font-display text-2xl font-semibold">
-            Crayons Loop authorization queue
+            Bridge → Loop Publishing Gateway
           </h3>
           <p className="mt-2 text-sm text-muted">
-            Publication remains gated by active rights coverage, title status and required
-            master/artwork readiness.
+            Crayons Loop is Bridge's internal buyer and consumer destination — not an independent rights owner. Only Bridge-authorized titles with valid rights and every publication gate cleared can reach Loop.
           </p>
         </div>
-        <Link to="/internal">
-          <Button>Open distribution controls</Button>
+        <Link to="/internal" search={{ desk: "gateway" }}>
+          <Button>Open secure Loop Gateway</Button>
         </Link>
       </div>
       <div className="mt-5 space-y-3">
@@ -242,7 +241,7 @@ function PublishingDesk({ publications }: { publications: Array<any> }) {
                 </p>
               </div>
               <span className="rounded-full border border-line px-3 py-1 text-xs font-semibold">
-                {item.publication?.published ? "LIVE" : item.ready ? "READY" : "BLOCKED"}
+                {item.publication?.published ? "PUBLISHED" : item.ready ? "PRE-FLIGHT" : "BLOCKED"}
               </span>
             </div>
             {!item.ready && item.blockers?.length ? (
@@ -253,11 +252,11 @@ function PublishingDesk({ publications }: { publications: Array<any> }) {
               </ul>
             ) : null}
             <div className="mt-3">
-              <Link to="/internal" className="text-sm font-semibold text-accent hover:underline">
+              <Link to="/internal" search={{ desk: "gateway" }} className="text-sm font-semibold text-accent hover:underline">
                 {item.publication?.published
-                  ? "Manage publication"
+                  ? "Manage in Gateway"
                   : item.ready
-                    ? "Authorize publication"
+                    ? "Open Gateway"
                     : "Review blockers"}{" "}
                 →
               </Link>

@@ -19,36 +19,44 @@ import {
 import { INTERNAL_ROLES } from "@/lib/bridge/types";
 import { hasPermission } from "@/lib/bridge/rbac";
 
-export const Route = createFileRoute("/internal")({ component: Internal });
+export const Route = createFileRoute("/internal")({
+  validateSearch: (search: Record<string, unknown>) => ({
+    desk: search.desk === "gateway" ? "gateway" as const : "operations" as const,
+  }),
+  component: Internal,
+});
 
 function Internal() {
+  const { desk } = Route.useSearch();
   return (
     <RequireBridge allow="internal">
       {(actor) => (
-        <BridgeShell actor={actor} title="Distribution & Operations Desk">
+        <BridgeShell actor={actor} title={desk === "gateway" ? "Loop Publishing Gateway" : "People & Operations"}>
           <p className="mb-6 text-xs text-muted">
             {actor.internalRole?.replaceAll("_", " ")} · {actor.email}
           </p>
-          <InternalBody
-            canInvite={hasPermission(actor, "users.invite_internal")}
-            canPublish={hasPermission(actor, "loop.publish")}
-            canRevoke={hasPermission(actor, "loop.revoke")}
-          />
+          {desk === "gateway" && actor.internalRole !== "super_admin" ? (
+            <section className="rounded-2xl border border-line bg-surface p-6">
+              <h2 className="font-display text-xl font-semibold">Super Admin access required</h2>
+              <p className="mt-2 text-sm text-muted">
+                The Bridge → Loop Publishing Gateway is restricted to the verified Super Admin account.
+              </p>
+            </section>
+          ) : desk === "gateway" ? (
+            <DistributionDesk
+              canPublish={hasPermission(actor, "loop.publish")}
+              canRevoke={hasPermission(actor, "loop.revoke")}
+            />
+          ) : (
+            <InternalBody canInvite={hasPermission(actor, "users.invite_internal")} />
+          )}
         </BridgeShell>
       )}
     </RequireBridge>
   );
 }
 
-function InternalBody({
-  canInvite,
-  canPublish,
-  canRevoke,
-}: {
-  canInvite: boolean;
-  canPublish: boolean;
-  canRevoke: boolean;
-}) {
+function InternalBody({ canInvite }: { canInvite: boolean }) {
   const titlesQ = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles() });
   const logsQ = useQuery({ queryKey: ["bridge-audit"], queryFn: () => listAuditLogs() });
   const titles = titlesQ.data?.titles ?? [];
@@ -57,10 +65,7 @@ function InternalBody({
 
   return (
     <div className="grid gap-12">
-      {/* 1. Master Distribution Desk */}
-      <DistributionDesk canPublish={canPublish} canRevoke={canRevoke} />
-
-      {/* 2. Team Invitation Module */}
+      {/* Team Invitation Module */}
       {canInvite ? <InviteForm /> : null}
 
       {/* 3. Catalog Queue */}
@@ -236,6 +241,7 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
   });
 
   const allTitles = q.data?.titles ?? [];
+  const gatewayEnabled = q.data?.gatewayEnabled === true;
   if (q.isPending) return <p>Loading distribution readiness…</p>;
   if (q.isError)
     return <p role="alert">Distribution readiness is unavailable. Refresh to retry.</p>;
@@ -274,13 +280,21 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
             Master Control Plane
           </p>
           <h2 className="font-display text-3xl font-semibold tracking-tight text-fg">
-            Distribution Desk
+            Bridge → Loop Publishing Gateway
           </h2>
           <p className="mt-1 text-xs text-muted">
-            Bridge authorizes master titles for consumer destinations and external distribution
-            licenses.
+            Crayons Loop is Bridge's internal consumer destination. Bridge remains the master catalogue and rights authority; Loop receives only titles explicitly authorized here.
           </p>
         </div>
+      </div>
+
+      <div className="rounded-xl border border-line bg-elevated/40 p-4 text-sm">
+        <p className="font-semibold">{gatewayEnabled ? "Preview gateway enabled" : "Gateway locked — no publication writes allowed"}</p>
+        <p className="mt-1 text-xs text-muted">
+          {gatewayEnabled
+            ? "This Preview is bound to the approved Bridge Testing DB. Production publishing remains disabled."
+            : "Publishing, suspension, revocation and window changes are disabled until an isolated Vercel Preview is proven to use the approved Bridge Testing DB. Production is always blocked."}
+        </p>
       </div>
 
       {/* Tabs */}
@@ -310,8 +324,8 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
           <div className="rounded-2xl border border-line bg-surface p-6 space-y-3">
             <div className="flex items-center justify-between">
               <span className="font-display text-lg font-semibold text-fg">Crayons Loop</span>
-              <span className="rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-400">
-                ACTIVE DESTINATION
+              <span className="rounded-full border border-line px-2.5 py-0.5 text-[11px] font-semibold text-muted">
+                {gatewayEnabled ? "PREVIEW GATE ENABLED" : "LOCKED — STAGING ONLY"}
               </span>
             </div>
             <p className="text-xs text-muted leading-relaxed">
@@ -321,6 +335,9 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
             <div className="text-xs text-muted space-y-1">
               <div>
                 Destination URL: <strong className="text-fg">https://crayonsloop.in/</strong>
+              </div>
+              <div>
+                Role: <strong className="text-fg">Bridge internal buyer / consumer destination</strong>
               </div>
               <div>
                 Supported Model: <strong className="text-fg">TVOD rental only</strong>
@@ -453,7 +470,7 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
           <div className="flex items-center gap-3 pt-2">
             <Button
               type="button"
-              disabled={publishMut.isPending}
+              disabled={!gatewayEnabled || publishMut.isPending}
               onClick={() => publishMut.mutate(selectedTitleId)}
               className="rounded-full px-5 text-xs font-semibold"
             >
@@ -489,7 +506,7 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
             />
             <Button
               type="button"
-              disabled={!newExtendEnd || extendMut.isPending}
+              disabled={!gatewayEnabled || !newExtendEnd || extendMut.isPending}
               onClick={() =>
                 extendMut.mutate({ bridgeTitleId: extendTitleId, newWindowEnd: newExtendEnd })
               }
@@ -598,7 +615,7 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
                   pub.authorizationStatus === "DRAFT") ? (
                   <Button
                     type="button"
-                    disabled={!t.ready}
+                    disabled={!gatewayEnabled || !t.ready}
                     onClick={() => setSelectedTitleId(t.id)}
                     className="rounded-full text-xs font-semibold px-4 h-9"
                   >
@@ -613,7 +630,7 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
                     <Button
                       type="button"
                       variant="outline"
-                      disabled={suspendMut.isPending}
+                      disabled={!gatewayEnabled || suspendMut.isPending}
                       onClick={() => suspendMut.mutate(t.id)}
                       className="rounded-full border-line text-xs font-semibold h-9 hover:border-amber-500/40 hover:text-amber-400"
                     >
@@ -622,7 +639,7 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
                     <Button
                       type="button"
                       variant="outline"
-                      disabled={revokeMut.isPending}
+                      disabled={!gatewayEnabled || revokeMut.isPending}
                       onClick={() => revokeMut.mutate(t.id)}
                       className="rounded-full border-line text-xs font-semibold h-9 hover:border-red-500/40 hover:text-red-400"
                     >
@@ -631,6 +648,7 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
                     <Button
                       type="button"
                       variant="outline"
+                      disabled={!gatewayEnabled}
                       onClick={() => {
                         setExtendTitleId(t.id);
                         setNewExtendEnd(
