@@ -43,6 +43,6 @@ test("CRA-101 expired or missing auth redirects once without retry loop", () => 
 
 test("CRA-101 callback ignores caller-controlled next and routes from the verified Bridge profile", () => {
   const source = read("src/routes/auth/callback.tsx");
-  assert.match(source, /navigate\\(\\{ to: syncResult\\.home \\|\\| "\\/onboarding" \\}\\)/);
+  assert.ok(source.includes('navigate({ to: syncResult.home || "/onboarding" })'));
   assert.doesNotMatch(source, /sanitizeNextPath|safeNext/);
 });
