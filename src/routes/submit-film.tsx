@@ -7,7 +7,9 @@ import { BRIDGE_LOOP_LANES, type BridgeLoopLane } from "@/lib/bridge/loop-lanes"
 import { BrandMark } from "@/components/bridge/shell";
 import { Button } from "@/components/ui/button";
 
-export const Route = createFileRoute("/submit-film")({ component: RightsReadySubmission });
+export const Route = createFileRoute("/submit-film")({
+  head: () => ({ meta: [{ title: "submit-film | Crayons Bridge" }, { name: "robots", content: "noindex, nofollow" }] }),
+   component: RightsReadySubmission });
 
 const LANGUAGES = ["Malayalam", "Tamil", "Telugu", "Kannada", "Hindi", "English"];
 const TERRITORIES = ["IN", "GCC", "US", "CA", "GB", "AU", "Worldwide"];
