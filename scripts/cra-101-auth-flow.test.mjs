@@ -88,7 +88,9 @@ test("Story Concept submissions open by submission UUID and never route to a lin
   const list = read("src/components/bridge/my-story-concepts.tsx");
   const detail = read("src/routes/story-concepts.$conceptId.tsx");
   const api = read("src/lib/bridge/story-concept-api.ts");
+  const adminDesk = read("src/components/bridge/story-concept-desk.tsx");
   assert.match(list, /to="\/story-concepts\/\$conceptId"/);
+  assert.match(adminDesk, /to="\/story-concepts\/\$conceptId"/);
   assert.match(detail, /getStoryConceptById\(\{ data: \{ conceptId \} \}\)/);
   assert.match(api, /where c\.id = \$\{data\.conceptId\}/);
   assert.match(api, /t\.owner_user_id = \$\{actor\.userId\}/);
