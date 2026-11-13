@@ -86,9 +86,12 @@ export async function sendWelcomeEmail(opts: { to: string; name: string; account
       : accountType === "studio"
         ? "Your Studio workspace helps you manage productions, submissions and your company slate."
         : "Your Creator workspace helps you submit titles, manage uploads, complete QC and track rights and licensing.";
-  const safeName = (opts.name || "there").replace(/[&<>"']/g, (character) => ({
-    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
-  })[character] ?? character);
+  const safeName = (opts.name || "there")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
   const url = `https://www.crayonspictures.in${destination}`;
   const body = `<p>Welcome, ${safeName}.</p><p>Your Crayons Bridge ${workspace} workspace is ready.</p><p>${nextStep}</p>`;
   return sendTransactionalEmail({
