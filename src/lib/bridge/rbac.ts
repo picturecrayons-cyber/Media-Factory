@@ -140,6 +140,13 @@ export function canAccessDashboard(actor: Actor): boolean {
   return actor.emailVerified && actor.internalRole === "super_admin";
 }
 
+/** Broad internal workstation datasets are restricted to verified Admin roles. */
+export function canAccessAdminWorkstations(actor: Actor): boolean {
+  return actor.emailVerified &&
+    (actor.internalRole === "admin" || actor.internalRole === "super_admin") &&
+    hasPermission(actor, "title.read_catalog");
+}
+
 /** Title workspace is for Creator/Studio accounts and internal staff with catalog-read access. */
 export function canAccessTitleWorkspace(actor: Actor): boolean {
   if (!actor.emailVerified) return false;
