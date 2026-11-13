@@ -2,7 +2,6 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
-import { listTitles } from "@/lib/bridge/titles";
 import { listInvestorInvestments } from "@/lib/bridge/investor";
 
 export const Route = createFileRoute("/investor")({ component: Investor });
