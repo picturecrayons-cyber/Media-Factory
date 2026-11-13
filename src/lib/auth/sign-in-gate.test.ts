@@ -28,3 +28,33 @@ describe("resolveSignInGateState", () => {
     );
   });
 });
+
+
+describe("resolvePostLoginDestination", () => {
+  it("routes a server-resolved independent creator to the Creator workspace", async () => {
+    const { resolvePostLoginDestination } = await import("./sign-in-gate.ts");
+    assert.equal(resolvePostLoginDestination({ next: null, sessionHome: "/creator" }), "/creator");
+  });
+
+  it("routes a server-resolved studio to the Studio workspace", async () => {
+    const { resolvePostLoginDestination } = await import("./sign-in-gate.ts");
+    assert.equal(resolvePostLoginDestination({ next: null, sessionHome: "/studio" }), "/studio");
+  });
+
+  it("uses onboarding rather than the super-admin dashboard when session resolution fails", async () => {
+    const { resolvePostLoginDestination } = await import("./sign-in-gate.ts");
+    assert.equal(resolvePostLoginDestination({ next: null, sessionHome: null }), "/onboarding");
+    assert.equal(resolvePostLoginDestination({ next: null, sessionHome: undefined }), "/onboarding");
+  });
+
+  it("rejects external and protocol-relative next destinations", async () => {
+    const { resolvePostLoginDestination } = await import("./sign-in-gate.ts");
+    assert.equal(resolvePostLoginDestination({ next: "https://evil.example", sessionHome: "/creator" }), "/creator");
+    assert.equal(resolvePostLoginDestination({ next: "//evil.example", sessionHome: "/creator" }), "/creator");
+  });
+
+  it("preserves a safe internal next destination", async () => {
+    const { resolvePostLoginDestination } = await import("./sign-in-gate.ts");
+    assert.equal(resolvePostLoginDestination({ next: "/account", sessionHome: "/creator" }), "/account");
+  });
+});
