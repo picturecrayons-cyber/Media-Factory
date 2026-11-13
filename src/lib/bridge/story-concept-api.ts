@@ -25,6 +25,9 @@ type ConceptRow = {
   title_name?: string;
   owner_user_id?: string;
   owner_organization_id?: string | null;
+  owner_display_name?: string | null;
+  owner_account_type?: string | null;
+  owner_organization_name?: string | null;
   logline: string | null;
   synopsis: string | null;
   treatment_url: string | null;
@@ -221,9 +224,12 @@ export const listPendingStoryConcepts = createServerFn({ method: "GET" })
     const sql = await getSql();
     try {
       const rows = await sql<ConceptRow>`
-        select c.*, t.name as title_name, t.owner_user_id, t.owner_organization_id
+        select c.*, t.name as title_name, t.owner_user_id, t.owner_organization_id,
+          p.display_name as owner_display_name, p.account_type as owner_account_type,
+          p.organization_name as owner_organization_name
         from bridge_story_concept_submissions c
         join bridge_titles t on t.id = c.title_id
+        left join bridge_profiles p on p.user_id = t.owner_user_id
         where t.submission_type = 'story_concept'
           and c.curation_status in ('PENDING', 'UNDER_REVIEW', 'APPROVED')
         order by c.created_at asc
@@ -235,6 +241,9 @@ export const listPendingStoryConcepts = createServerFn({ method: "GET" })
           ...mapConcept(r),
           titleName: r.title_name,
           ownerUserId: r.owner_user_id,
+          ownerDisplayName: r.owner_display_name,
+          ownerAccountType: r.owner_account_type,
+          ownerOrganizationName: r.owner_organization_name,
         })),
       };
     } catch (err) {
