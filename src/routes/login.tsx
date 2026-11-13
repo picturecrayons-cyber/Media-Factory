@@ -62,7 +62,10 @@ function Login() {
       } else if (s?.home) {
         window.location.assign(s.home);
       } else {
-        window.location.assign("/dashboard");
+        // Do not send an unresolved account to the internal super-admin dashboard.
+        // Onboarding re-checks the authenticated Bridge session and routes a
+        // verified creator/studio/buyer/investor to its server-resolved home.
+        window.location.assign("/onboarding");
       }
     } catch (err: unknown) {
       console.error("[Login error]", err);
