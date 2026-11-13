@@ -4,7 +4,7 @@ import { Client } from "pg";
 import { persistVerifiedAsset } from "../src/lib/bridge/asset-confirmation.ts";
 import { seedStagingRbacFixtures } from "./staging-rbac-fixtures.mjs";
 
-const REQUIRED_PROJECT_REF = "bbtrosuwisnxacuxvegt";
+const REQUIRED_PROJECT_REF = "jbymleftneggcgutlcqu";
 
 function requireStagingOnlyEnvironment() {
   const projectRef = process.env.BRIDGE_STAGING_PROJECT_REF;
@@ -43,6 +43,20 @@ async function main() {
   await client.connect();
   let transactionOpen = false;
   try {
+    // Read-only schema preflight happens before BEGIN or fixture writes.
+    // The approved Testing DB may not yet contain optional Studio RBAC tables.
+    const requiredTables = await client.query(`
+      select name, to_regclass('public.' || name) is not null as present
+      from unnest(array[
+        'bridge_profiles', 'bridge_organizations',
+        'bridge_organization_memberships', 'bridge_titles', 'bridge_assets'
+      ]) as name
+    `);
+    const missingTables = requiredTables.rows.filter((row) => !row.present).map((row) => row.name);
+    if (missingTables.length) {
+      throw new Error(`STAGING BLOCKED: approved Testing DB ${REQUIRED_PROJECT_REF} is missing required RBAC tables: ${missingTables.join(", ")}. No transaction or fixture writes were started.`);
+    }
+
     await client.query("BEGIN");
     transactionOpen = true;
     await client.query("SET LOCAL statement_timeout = '10s'");
