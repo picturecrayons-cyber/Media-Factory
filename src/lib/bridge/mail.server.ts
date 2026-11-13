@@ -72,9 +72,17 @@ export async function sendBridgeMail(opts: { to: string; subject: string; text: 
   return sendTransactionalEmail(opts);
 }
 
-export async function sendWelcomeEmail(opts: { to: string; name: string }) {
+export async function sendWelcomeEmail(opts: { to: string; name: string; accountType?: string }) {
   const subject = "Welcome to Crayons Bridge";
-  const body = `<p>Welcome, ${opts.name || "Creator"}.</p><p>Your Crayons Bridge workspace is ready. Upload masters, complete QC, manage rights and licensing, and authorize distribution from one workspace.</p>`;
+  const workspace = opts.accountType === "investor" ? "Investor" : opts.accountType === "studio" ? "Studio" : opts.accountType === "buyer" ? "Buyer" : "Creator";
+  const nextStep = opts.accountType === "investor"
+    ? "Your Investor workspace shows only participation and investment records assigned to your account."
+    : opts.accountType === "buyer"
+      ? "Your Buyer workspace helps you discover authorized titles and manage licensing activity."
+      : opts.accountType === "studio"
+        ? "Your Studio workspace helps you manage productions, submissions and your company slate."
+        : "Your Creator workspace helps you submit titles, manage uploads, complete QC and track rights and licensing.";
+  const body = `<p>Welcome, ${opts.name || "there"}.</p><p>Your Crayons Bridge ${workspace} workspace is ready.</p><p>${nextStep}</p>`;
   return sendTransactionalEmail({
     to: opts.to,
     subject,
