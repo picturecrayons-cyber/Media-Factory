@@ -1,6 +1,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState, type FormEvent } from "react";
 import { signInWithEmail, signInWithGoogle } from "@/lib/auth/client";
+import { resolvePostLoginDestination } from "@/lib/auth/sign-in-gate";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { BrandMark } from "@/components/bridge/shell";
 import { Button } from "@/components/ui/button";
@@ -23,7 +24,10 @@ function Login() {
     if (isPending || !user) return;
     void getBridgeSession()
       .then((s) => {
-        void navigate({ to: s.home || "/onboarding" });
+        const nextParam = typeof window !== "undefined"
+          ? new URLSearchParams(window.location.search).get("next")
+          : null;
+        window.location.assign(resolvePostLoginDestination({ next: nextParam, sessionHome: s.home }));
       })
       .catch(() => {
         void navigate({ to: "/onboarding" });
@@ -50,7 +54,10 @@ function Login() {
       await signInWithEmail(email.trim(), password);
       // Session established; let the useEffect resolve profile or route
       const s = await getBridgeSession().catch(() => null);
-      window.location.assign(s?.home || "/onboarding");
+      const nextParam = typeof window !== "undefined"
+        ? new URLSearchParams(window.location.search).get("next")
+        : null;
+      window.location.assign(resolvePostLoginDestination({ next: nextParam, sessionHome: s?.home }));
     } catch (err: unknown) {
       console.error("[Login error]", err);
       const message = err instanceof Error ? err.message : String(err);
