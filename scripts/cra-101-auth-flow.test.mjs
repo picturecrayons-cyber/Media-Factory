@@ -115,15 +115,29 @@ test("Admin User Submissions maps Films and Story Concepts to their owner and st
   assert.match(api, /left join bridge_profiles p on p\.user_id = t\.owner_user_id/);
 });
 
-test("Studio Members & Roles roster is organization-scoped and read-only", () => {
+test("Studio Members & Roles requires verified owner/admin and scopes audited membership changes", () => {
   const api = read("src/lib/bridge/studio-members.ts");
   const route = read("src/routes/studio.tsx");
   assert.match(api, /requireVerifiedActor/);
   assert.match(api, /actor\.accountType !== "studio"/);
   assert.match(api, /actor\.organizationId/);
+  assert.match(api, /actor\.organizationRole/);
+  assert.match(api, /owner.*admin/);
   assert.match(api, /m\.organization_id = \$\{actor\.organizationId\}/);
   assert.match(api, /join bridge_profiles p on p\.user_id = m\.user_id/);
+  assert.match(api, /updateStudioMember/);
+  assert.match(api, /membership_role = \$\{data\.membershipRole\}/);
+  assert.match(api, /writeAudit/);
+  assert.match(api, /current\.membership_role === "owner"/);
   assert.match(route, /StudioMemberDesk/);
-  assert.match(api, /method: "GET"/);
-  assert.doesNotMatch(api, /insert into|update bridge_organization_memberships|delete from/i);
+});
+
+test("Investor portfolio is read through authenticated server identity, not a client-supplied user id", () => {
+  const api = read("src/lib/bridge/investor.ts");
+  const route = read("src/routes/investor.tsx");
+  assert.match(api, /\.middleware\(\[authMiddleware\]\)/);
+  assert.match(api, /requireVerifiedActor\(context\.userId\)/);
+  assert.match(api, /actor\.accountType !== "investor"/);
+  assert.match(api, /where i\.investor_user_id = \$\{actor\.userId\}/);
+  assert.doesNotMatch(route, /getSql|investorUserId/);
 });
