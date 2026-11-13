@@ -5,7 +5,6 @@
 
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { randomBytes } from "node:crypto";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import { requireVerifiedActor } from "./session";
@@ -61,15 +60,6 @@ function mapConcept(r: ConceptRow): StoryConceptSubmission {
     created_at: asIso(r.created_at) ?? "",
     updated_at: asIso(r.updated_at) ?? "",
   };
-}
-
-function slugify(name: string, id: string): string {
-  const base = name
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 48);
-  return `${base || "concept"}-${id.slice(0, 6)}`;
 }
 
 function migrationHint(err: unknown): never {
