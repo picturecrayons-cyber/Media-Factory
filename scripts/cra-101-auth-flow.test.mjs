@@ -114,3 +114,16 @@ test("Admin User Submissions maps Films and Story Concepts to their owner and st
   assert.match(admin, /Account \/ Studio/);
   assert.match(api, /left join bridge_profiles p on p\.user_id = t\.owner_user_id/);
 });
+
+test("Studio Members & Roles roster is organization-scoped and read-only", () => {
+  const api = read("src/lib/bridge/studio-members.ts");
+  const route = read("src/routes/studio.tsx");
+  assert.match(api, /requireVerifiedActor/);
+  assert.match(api, /actor\.accountType !== "studio"/);
+  assert.match(api, /actor\.organizationId/);
+  assert.match(api, /m\.organization_id = \$\{actor\.organizationId\}/);
+  assert.match(api, /join bridge_profiles p on p\.user_id = m\.user_id/);
+  assert.match(route, /StudioMemberDesk/);
+  assert.match(api, /method: "GET"/);
+  assert.doesNotMatch(api, /insert into|update bridge_organization_memberships|delete from/i);
+});
