@@ -74,20 +74,28 @@ export async function sendBridgeMail(opts: { to: string; subject: string; text: 
 
 export async function sendWelcomeEmail(opts: { to: string; name: string; accountType?: string }) {
   const subject = "Welcome to Crayons Bridge";
-  const workspace = opts.accountType === "investor" ? "Investor" : opts.accountType === "studio" ? "Studio" : opts.accountType === "buyer" ? "Buyer" : "Creator";
-  const nextStep = opts.accountType === "investor"
+  const accountType = opts.accountType === "investor" || opts.accountType === "studio" || opts.accountType === "buyer"
+    ? opts.accountType
+    : "independent_creator";
+  const workspace = accountType === "investor" ? "Investor" : accountType === "studio" ? "Studio" : accountType === "buyer" ? "Buyer" : "Creator";
+  const destination = accountType === "investor" ? "/investor" : accountType === "studio" ? "/studio" : accountType === "buyer" ? "/buyer" : "/creator";
+  const nextStep = accountType === "investor"
     ? "Your Investor workspace shows only participation and investment records assigned to your account."
-    : opts.accountType === "buyer"
+    : accountType === "buyer"
       ? "Your Buyer workspace helps you discover authorized titles and manage licensing activity."
-      : opts.accountType === "studio"
+      : accountType === "studio"
         ? "Your Studio workspace helps you manage productions, submissions and your company slate."
         : "Your Creator workspace helps you submit titles, manage uploads, complete QC and track rights and licensing.";
-  const body = `<p>Welcome, ${opts.name || "there"}.</p><p>Your Crayons Bridge ${workspace} workspace is ready.</p><p>${nextStep}</p>`;
+  const safeName = (opts.name || "there").replace(/[&<>"']/g, (character) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  })[character] ?? character);
+  const url = `https://www.crayonspictures.in${destination}`;
+  const body = `<p>Welcome, ${safeName}.</p><p>Your Crayons Bridge ${workspace} workspace is ready.</p><p>${nextStep}</p>`;
   return sendTransactionalEmail({
     to: opts.to,
     subject,
-    text: "Welcome to Crayons Bridge. Open your workspace at https://www.crayonspictures.in/dashboard",
-    html: formatBrandedEmailHtml(subject, body, { label: "Open Crayons Bridge", url: "https://www.crayonspictures.in/dashboard" }),
+    text: `Welcome to Crayons Bridge. Open your ${workspace} workspace at ${url}`,
+    html: formatBrandedEmailHtml(subject, body, { label: `Open ${workspace} workspace`, url }),
     category: "welcome",
   });
 }
