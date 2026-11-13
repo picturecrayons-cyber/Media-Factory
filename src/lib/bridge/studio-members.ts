@@ -45,7 +45,7 @@ export const listStudioMembers = createServerFn({ method: "GET" })
         join bridge_profiles p on p.user_id = m.user_id
         join bridge_organizations o on o.id = m.organization_id
         where m.organization_id = ${actor.organizationId}::uuid
-          and m.status <> 'removed'
+          and m.status in ('active', 'suspended')
           and o.status = 'active'
         order by case m.membership_role
           when 'owner' then 0 when 'admin' then 1 when 'producer' then 2
