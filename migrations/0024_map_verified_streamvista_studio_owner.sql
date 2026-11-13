@@ -14,8 +14,11 @@ begin
   where account_type = 'studio'
     and upper(trim(organization_name)) = 'STREAMVISTA OPC PVT LTD';
 
-  if v_match_count <> 1 then
-    raise exception 'Expected exactly one StreamVista Studio profile; found %', v_match_count;
+  if v_match_count = 0 then
+    raise notice 'No legacy StreamVista Studio profile exists in this environment; no mapping required';
+    return;
+  elsif v_match_count <> 1 then
+    raise exception 'Expected at most one StreamVista Studio profile; found %', v_match_count;
   end if;
 
   select user_id, organization_name
