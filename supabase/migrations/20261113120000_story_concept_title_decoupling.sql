@@ -5,8 +5,7 @@
 ALTER TABLE public.bridge_story_concept_submissions
   ADD COLUMN IF NOT EXISTS title_name text,
   ADD COLUMN IF NOT EXISTS owner_user_id text,
-  ADD COLUMN IF NOT EXISTS owner_organization_id uuid
-    REFERENCES public.bridge_organizations(id) ON DELETE RESTRICT;
+  ADD COLUMN IF NOT EXISTS owner_organization_id uuid;
 
 UPDATE public.bridge_story_concept_submissions c
 SET title_name = COALESCE(c.title_name, t.name),
