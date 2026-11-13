@@ -74,6 +74,11 @@ export function StoryConceptDesk() {
                     {STATUS_LABEL[c.curation_status] ?? c.curation_status}
                     {c.created_at ? ` · ${new Date(c.created_at).toLocaleDateString()}` : ""}
                   </p>
+                  <p className="mt-1 text-xs text-muted">
+                    Owner: {(c as { ownerDisplayName?: string | null; ownerUserId?: string }).ownerDisplayName || (c as { ownerUserId?: string }).ownerUserId || "Unresolved"}
+                    {" · "}{(c as { ownerAccountType?: string | null }).ownerAccountType || "Account type unverified"}
+                    {(c as { ownerOrganizationName?: string | null }).ownerOrganizationName ? ` · ${(c as { ownerOrganizationName?: string | null }).ownerOrganizationName}` : ""}
+                  </p>
                   {c.logline ? (
                     <p className="mt-3 text-sm leading-relaxed text-fg/90">{c.logline}</p>
                   ) : null}
