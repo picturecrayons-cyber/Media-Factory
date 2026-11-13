@@ -77,6 +77,25 @@ export async function resendConfirmationEmail(email: string) {
   return data;
 }
 
+export async function signInWithGoogle(accountType?: "independent_creator" | "studio" | "buyer" | "investor") {
+  if (typeof window !== "undefined" && accountType) {
+    window.sessionStorage.setItem("bridge.signup-role-intent", accountType);
+  }
+  const { data, error } = await supabase.auth.signInWithOAuth({
+    provider: "google",
+    options: {
+      redirectTo: bridgeCallbackUrl(undefined),
+      scopes: "openid email profile",
+      queryParams: { prompt: "select_account" },
+    },
+  });
+  if (error) {
+    if (typeof window !== "undefined") window.sessionStorage.removeItem("bridge.signup-role-intent");
+    throw error;
+  }
+  return data;
+}
+
 export async function signInWithEmail(email: string, password: string) {
   const { data, error } = await supabase.auth.signInWithPassword({
     email,
