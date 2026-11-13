@@ -1,4 +1,3 @@
-import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { listMyStoryConcepts } from "@/lib/bridge/story-concept-api";
 import { STORY_CONCEPT_ENABLED } from "@/lib/bridge/story-concept";
@@ -39,19 +38,16 @@ export function MyStoryConcepts() {
           const logline = listLogline(c.logline);
           return (
             <li key={c.id}>
-              <Link
-                to="/title/$id"
-                params={{ id: c.title_id }}
-                className="flex flex-wrap items-center justify-between gap-3 px-4 py-4 hover:bg-fg/5"
-              >
+              <article className="flex flex-wrap items-center justify-between gap-3 px-4 py-4">
                 <div>
                   <p className="font-medium">{(c as { titleName?: string }).titleName ?? "Concept"}</p>
+                  <p className="mt-1 font-mono text-xs text-muted">Ref: {c.id}</p>
                   <p className="text-sm text-muted">
                     {STATUS_LABEL[c.curation_status] ?? c.curation_status}
                     {logline ? ` · ${logline}` : ""}
                   </p>
                 </div>
-              </Link>
+              </article>
             </li>
           );
         })}
