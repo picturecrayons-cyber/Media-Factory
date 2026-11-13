@@ -20,7 +20,11 @@ function normalize(user: ReturnType<typeof getStoredSupabaseUser>): AppUser | nu
     primaryEmail: user.email ?? null,
     profileImageUrl: user.user_metadata?.avatar_url ?? null,
     signupAccountTypeHint:
-      typeof user.user_metadata?.account_type === "string" ? user.user_metadata.account_type : null,
+      typeof user.user_metadata?.account_type === "string"
+        ? user.user_metadata.account_type
+        : typeof window !== "undefined"
+          ? window.sessionStorage.getItem("bridge.signup-role-intent")
+          : null,
   };
 }
 
