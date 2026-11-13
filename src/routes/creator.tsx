@@ -12,13 +12,17 @@ function Creator() {
     <RequireBridge allow="creator">
       {(actor) => (
         <BridgeShell actor={actor} title="Creator desk">
-          <div className="mx-auto max-w-3xl space-y-10 px-1 pb-16">
-            <header className="space-y-4">
-              <div>
-                <h1 className="font-display text-2xl tracking-tight sm:text-3xl">Creator</h1>
-                <p className="mt-1 text-sm text-muted">
-                  Own titles only. Upload, update drafts, and track delivery.
-                </p>
+          <div className="mx-auto max-w-3xl space-y-8 px-1 pb-16">
+            <header className="space-y-4 rounded-2xl border border-line bg-surface p-5 sm:p-6">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-accent">Creator workspace</p>
+                  <h1 className="mt-1 font-display text-2xl tracking-tight sm:text-3xl">Welcome, {actor.displayName}</h1>
+                  <p className="mt-2 max-w-xl text-sm text-muted">
+                    Your Creator desk is scoped to your own titles and submissions. Upload, update drafts, and track each review stage here.
+                  </p>
+                </div>
+                <Link to="/account" className="rounded-full border border-line px-4 py-2 text-sm font-semibold hover:border-accent">Account settings</Link>
               </div>
               <NewSubmissionPanel />
             </header>
