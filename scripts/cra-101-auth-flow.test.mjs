@@ -51,7 +51,9 @@ test("CRA-101 Google signup preserves the selected public account intent through
   const auth = read("src/lib/auth/client.ts");
   const signup = read("src/routes/signup.tsx");
   const onboarding = read("src/routes/onboarding.tsx");
+  const currentUser = read("src/lib/auth/use-current-user.ts");
   assert.match(auth, /sessionStorage\.setItem\("bridge\.signup-role-intent", accountType\)/);
+  assert.match(currentUser, /sessionStorage\.getItem\("bridge\.signup-role-intent"\)/);
   assert.match(auth, /provider: "google"/);
   assert.match(auth, /scopes: "email profile"/);
   assert.match(signup, /signInWithGoogle\(accountType\)/);
