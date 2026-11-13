@@ -238,6 +238,21 @@ function Onboarding() {
       let inviteToken: string | undefined;
       try { inviteToken = sessionStorage.getItem("bridge-invite") ?? undefined; } catch { /* ignore */ }
 
+      // Validate the full Creator/Studio submission before creating the profile
+      // or sending its one-time welcome email. Buyer and Investor accounts do not
+      // create a title during onboarding.
+      if (accountType !== "buyer" && accountType !== "investor") {
+        if (!titleName.trim()) throw new Error("Title name is required");
+        if (synopsis.trim().length < 20) throw new Error("Add a synopsis of at least 20 characters");
+        if (!territories.length || !rightsLanguages.length || !media.length || !destinations.length) {
+          throw new Error("Select at least one value in each rights package group");
+        }
+        if (!windowStart || !windowEnd) throw new Error("Rights window start and end are required");
+        if (!authorizationAttested) throw new Error("Confirm that you have authority to license the submitted rights");
+        if (!authorizationEvidenceType) throw new Error("Select the authorization evidence you will provide");
+        if (new Date(windowEnd) <= new Date(windowStart)) throw new Error("Rights window end must be after start");
+      }
+
       await completeOnboarding({
         data: {
           displayName: displayName.trim(),
@@ -252,16 +267,6 @@ function Onboarding() {
         void navigate({ to: accountType === "buyer" ? "/buyer" : "/investor", replace: true });
         return;
       }
-
-      if (!titleName.trim()) throw new Error("Title name is required");
-      if (synopsis.trim().length < 20) throw new Error("Add a synopsis of at least 20 characters");
-      if (!territories.length || !rightsLanguages.length || !media.length || !destinations.length) {
-        throw new Error("Select at least one value in each rights package group");
-      }
-      if (!windowStart || !windowEnd) throw new Error("Rights window start and end are required");
-      if (!authorizationAttested) throw new Error("Confirm that you have authority to license the submitted rights");
-      if (!authorizationEvidenceType) throw new Error("Select the authorization evidence you will provide");
-      if (new Date(windowEnd) <= new Date(windowStart)) throw new Error("Rights window end must be after start");
 
       const result = await createTitle({
         data: {
