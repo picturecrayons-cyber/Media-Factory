@@ -46,3 +46,39 @@ test("CRA-101 callback ignores caller-controlled next and routes from the verifi
   assert.ok(source.includes('navigate({ to: syncResult.home || "/onboarding" })'));
   assert.doesNotMatch(source, /sanitizeNextPath|safeNext/);
 });
+
+test("CRA-101 Google signup preserves the selected public account intent through OAuth", () => {
+  const auth = read("src/lib/auth/client.ts");
+  const signup = read("src/routes/signup.tsx");
+  const onboarding = read("src/routes/onboarding.tsx");
+  assert.match(auth, /sessionStorage\.setItem\("bridge\.signup-role-intent", accountType\)/);
+  assert.match(auth, /provider: "google"/);
+  assert.match(auth, /scopes: "email profile"/);
+  assert.match(signup, /signInWithGoogle\(accountType\)/);
+  assert.match(onboarding, /sessionStorage\.getItem\("bridge\.signup-role-intent"\)/);
+  for (const role of ["independent_creator", "studio", "buyer", "investor"]) {
+    assert.ok(signup.includes(`id: "${role}"`));
+  }
+});
+
+test("CRA-101 homepage exposes all four direct role-specific signup CTAs", () => {
+  const source = read("src/routes/index.tsx");
+  for (const role of ["creator", "studio", "buyer", "investor"]) {
+    assert.ok(source.includes(`role: "${role}"`));
+  }
+  assert.match(source, /id="account-pathways"/);
+});
+
+test("CRA-101 welcome email links to the selected role workspace and escapes the display name", () => {
+  const source = read("src/lib/bridge/mail.server.ts");
+  for (const route of ["/creator", "/studio", "/buyer", "/investor"]) {
+    assert.ok(source.includes(route));
+  }
+  assert.match(source, /replaceAll\("&", "&amp;"\)/);
+  assert.match(source, /category: "welcome"/);
+});
+
+test("CRA-101 Creator and Studio intake is validated before account completion", () => {
+  const source = read("src/routes/onboarding.tsx");
+  assert.ok(source.indexOf("if (!titleName.trim())") < source.indexOf("await completeOnboarding("));
+});
