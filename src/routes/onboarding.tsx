@@ -296,7 +296,7 @@ function Onboarding() {
           promotionalRights,
           rightsBasis,
           authorizationAttested,
-          authorizationEvidenceType,
+          authorizationEvidenceType: authorizationEvidenceType || undefined,
           publicSubmission: true,
           screenerAccess: "SCREENER_PENDING",
           intendedDestinations: destinations,
