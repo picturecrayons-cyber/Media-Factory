@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState, type FormEvent } from "react";
-import { signInWithEmail } from "@/lib/auth/client";
+import { signInWithEmail, signInWithGoogle } from "@/lib/auth/client";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { BrandMark } from "@/components/bridge/shell";
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,7 @@ function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [googleBusy, setGoogleBusy] = useState(false);
 
   // If already authenticated with Supabase session, resolve profile and route to dashboard
   useEffect(() => {
@@ -28,6 +29,17 @@ function Login() {
         void navigate({ to: "/onboarding" });
       });
   }, [isPending, user, navigate]);
+
+  async function onGoogleSignIn() {
+    setError(null);
+    setGoogleBusy(true);
+    try {
+      await signInWithGoogle();
+    } catch (err: unknown) {
+      setGoogleBusy(false);
+      setError(err instanceof Error ? err.message : "Google sign-in is temporarily unavailable.");
+    }
+  }
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -70,6 +82,11 @@ function Login() {
             Securely access your Crayons Bridge workspace.
           </p>
         </div>
+
+        <Button type="button" variant="outline" disabled={busy || googleBusy} onClick={() => void onGoogleSignIn()} className="w-full h-11 rounded-full font-semibold">
+          {googleBusy ? "Connecting to Google…" : "Continue with Google"}
+        </Button>
+        <div className="flex items-center gap-3 text-xs text-muted"><span className="h-px flex-1 bg-line" />or use email<span className="h-px flex-1 bg-line" /></div>
 
         <form className="space-y-4" onSubmit={(e) => void onSubmit(e)}>
           <label className="block text-sm font-medium text-fg">
