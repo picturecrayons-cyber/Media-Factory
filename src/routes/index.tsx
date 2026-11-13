@@ -86,6 +86,15 @@ function Home() {
 
   return (
     <div className="min-h-screen bg-white text-fg antialiased selection:bg-accent/20 selection:text-fg">
+      <script type="application/ld+json">
+        {JSON.stringify({
+          "@context": "https://schema.org",
+          "@graph": [
+            { "@type": "Organization", "@id": "https://www.crayonspictures.in/#organization", "name": "StreamVista OPC Pvt Ltd", "url": "https://www.crayonspictures.in/" },
+            { "@type": "WebSite", "@id": "https://www.crayonspictures.in/#website", "name": "Crayons Bridge", "url": "https://www.crayonspictures.in/", "publisher": { "@id": "https://www.crayonspictures.in/#organization" } }
+          ]
+        })}
+      </script>
       <header className="sticky top-0 z-50 border-b border-line bg-white/95 backdrop-blur-md">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-5 px-5 py-3.5 sm:px-6 lg:px-8">
           <div className="flex min-w-0 items-center gap-6 lg:gap-8">
