@@ -81,15 +81,13 @@ export function StoryConceptDesk() {
                     <p className="mt-2 text-xs text-muted">{c.genre.join(" · ")}</p>
                   ) : null}
                 </div>
-                {c.title_id ? (
-                  <Link
-                    to="/title/$id"
-                    params={{ id: c.title_id }}
-                    className="shrink-0 rounded-full border border-line px-3.5 py-1.5 text-xs text-muted hover:border-line-strong hover:text-fg"
-                  >
-                    Open title
-                  </Link>
-                ) : null}
+                <Link
+                  to="/story-concepts/$conceptId"
+                  params={{ conceptId: c.id }}
+                  className="shrink-0 rounded-full border border-line px-3.5 py-1.5 text-xs text-muted hover:border-line-strong hover:text-fg"
+                >
+                  Open submission
+                </Link>
               </div>
 
               <div className="mt-4 flex flex-wrap gap-2">
