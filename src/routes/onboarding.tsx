@@ -148,6 +148,10 @@ function Onboarding() {
     if (signupAccountType) setAccountType(signupAccountType);
   }, [signupAccountType]);
 
+  useEffect(() => {
+    if (user?.displayName && !displayName) setDisplayName(user.displayName);
+  }, [user?.displayName, displayName]);
+
   const home = sessionQ.data?.profile ? sessionQ.data.home : null;
 
   useEffect(() => {
