@@ -16,6 +16,7 @@ function MemberRow({
   const [role, setRole] = useState<Role>(member.membershipRole as Role);
   const [status, setStatus] = useState<Status>(member.status as Status);
   const protectedOwner = member.membershipRole === "owner";
+  const cannotManage = protectedOwner || (managerRole === "admin" && member.membershipRole === "admin");
   const roleOptions: Role[] = managerRole === "owner"
     ? ["admin", "member", "producer", "dit"]
     : ["member", "producer", "dit"];
@@ -28,7 +29,7 @@ function MemberRow({
         {protectedOwner ? "owner" : (
           <select aria-label={`Role for ${member.displayName || member.userId}`} value={role}
             onChange={(event) => setRole(event.target.value as Role)} className="rounded border border-line bg-surface px-2 py-1"
-            disabled={managerRole === "admin" && member.membershipRole === "admin"}>
+            disabled={cannotManage}>
             {roleOptions.map((value) => <option key={value} value={value}>{value}</option>)}
           </select>
         )}
@@ -42,7 +43,7 @@ function MemberRow({
         )}
       </td>
       <td className="px-2 py-3">
-        {!protectedOwner ? <button type="button" disabled={saving || (role === member.membershipRole && status === member.status)}
+        {!cannotManage ? <button type="button" disabled={saving || (role === member.membershipRole && status === member.status)}
           onClick={() => onSave({ userId: member.userId, membershipRole: role, status })}
           className="rounded border border-line px-3 py-1.5 text-xs hover:border-accent disabled:opacity-50">
           {saving ? "Saving…" : "Save"}
