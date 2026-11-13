@@ -104,3 +104,13 @@ test("Story Concept intake persists against the existing required title_id schem
   assert.match(api, /insert into bridge_story_concept_submissions \([\s\S]*title_id/);
   assert.match(titles, /submission_type = 'finished_film'/);
 });
+
+test("Admin User Submissions maps Films and Story Concepts to their owner and status", () => {
+  const admin = read("src/routes/admin.tsx");
+  const api = read("src/lib/bridge/story-concept-api.ts");
+  assert.match(admin, /User Submissions/);
+  assert.match(admin, /listAdminStoryConcepts/);
+  assert.match(admin, /Owner/);
+  assert.match(admin, /Account \/ Studio/);
+  assert.match(api, /left join bridge_profiles p on p\.user_id = t\.owner_user_id/);
+});
