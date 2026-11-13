@@ -20,12 +20,13 @@ export const Route = createFileRoute("/onboarding")({
   component: Onboarding,
 });
 
-type PublicAccountType = "independent_creator" | "studio" | "buyer";
+type PublicAccountType = "independent_creator" | "studio" | "buyer" | "investor";
 
 const ACCOUNT_LABELS: Record<PublicAccountType, string> = {
   independent_creator: "Independent Creator",
   studio: "Studio / Company",
   buyer: "Buyer / Acquisitions",
+  investor: "Investor",
 };
 
 const LANGUAGES = ["Malayalam", "Tamil", "Telugu", "Kannada", "Hindi", "English", "Bengali", "Marathi", "Other"];
@@ -138,7 +139,8 @@ function Onboarding() {
 
   // Preserve the role chosen during signup instead of silently defaulting
   // every new account to Creator when onboarding opens.
-  const signupAccountTypeHint = user?.signupAccountTypeHint;
+  const signupAccountTypeHint = user?.signupAccountTypeHint ??
+    (typeof window !== "undefined" ? window.sessionStorage.getItem("bridge.signup-role-intent") : null);
   const signupAccountType = publicAccountTypeFrom(signupAccountTypeHint);
   const unsupportedSignupRole = Boolean(signupAccountTypeHint && !signupAccountType);
 
@@ -242,8 +244,9 @@ function Onboarding() {
         },
       });
 
-      if (accountType === "buyer") {
-        void navigate({ to: "/buyer", replace: true });
+      if (typeof window !== "undefined") window.sessionStorage.removeItem("bridge.signup-role-intent");
+      if (accountType === "buyer" || accountType === "investor") {
+        void navigate({ to: accountType === "buyer" ? "/buyer" : "/investor", replace: true });
         return;
       }
 
