@@ -82,3 +82,23 @@ test("CRA-101 Creator and Studio intake is validated before account completion",
   const source = read("src/routes/onboarding.tsx");
   assert.ok(source.indexOf("if (!titleName.trim())") < source.indexOf("await completeOnboarding("));
 });
+
+
+test("Story Concept submissions open by submission UUID and never route to a linked title", () => {
+  const list = read("src/components/bridge/my-story-concepts.tsx");
+  const detail = read("src/routes/story-concepts.$conceptId.tsx");
+  const api = read("src/lib/bridge/story-concept-api.ts");
+  assert.match(list, /to="\/story-concepts\/\$conceptId"/);
+  assert.match(detail, /getStoryConceptById\(\{ data: \{ conceptId \} \}\)/);
+  assert.match(api, /where c\.id = \$\{data\.conceptId\}/);
+  assert.match(api, /t\.owner_user_id = \$\{actor\.userId\}/);
+  assert.doesNotMatch(list, /to="\/title\/\$id"/);
+});
+
+test("Story Concept intake persists against the existing required title_id schema", () => {
+  const api = read("src/lib/bridge/story-concept-api.ts");
+  const titles = read("src/lib/bridge/titles.ts");
+  assert.match(api, /insert into bridge_titles[\s\S]*submission_type[\s\S]*'story_concept'/);
+  assert.match(api, /insert into bridge_story_concept_submissions \([\s\S]*title_id/);
+  assert.match(titles, /submission_type = 'finished_film'/);
+});
