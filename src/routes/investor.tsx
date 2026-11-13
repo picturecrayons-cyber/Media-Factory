@@ -44,7 +44,7 @@ function InvestorBody({ userId }: { userId: string }) {
           <table className="w-full min-w-[700px] text-left text-sm">
             <thead className="border-b border-line text-xs uppercase tracking-wider text-muted"><tr><th className="px-3 py-3">Title</th><th className="px-3 py-3">Reference</th><th className="px-3 py-3">Capital</th><th className="px-3 py-3">Participation</th><th className="px-3 py-3">Recorded</th></tr></thead>
             <tbody className="divide-y divide-line">
-              {rows.map((row) => <tr key={row.id}><td className="px-3 py-3"><Link to="/title/$id" params={{ id: row.titleId }} className="font-medium hover:text-accent">{row.titleName}</Link></td><td className="px-3 py-3">{row.investmentReference ?? "—"}</td><td className="px-3 py-3">₹{Math.round(Number(row.investedAmountPaise ?? 0) / 100).toLocaleString("en-IN")}</td><td className="px-3 py-3">{Number(row.participationPercent ?? 0).toFixed(2)}%</td><td className="px-3 py-3">{new Date(row.createdAt).toLocaleDateString("en-IN")}</td></tr>)}
+              {rows.map((row) => <tr key={row.id}><td className="px-3 py-3"><span className="font-medium">{row.titleName}</span></td><td className="px-3 py-3">{row.investmentReference ?? "—"}</td><td className="px-3 py-3">₹{Math.round(Number(row.investedAmountPaise ?? 0) / 100).toLocaleString("en-IN")}</td><td className="px-3 py-3">{Number(row.participationPercent ?? 0).toFixed(2)}%</td><td className="px-3 py-3">{new Date(row.createdAt).toLocaleDateString("en-IN")}</td></tr>)}
               {!rows.length ? <tr><td colSpan={5} className="px-3 py-8 text-center text-muted">No investment records are assigned to this account yet.</td></tr> : null}
             </tbody>
           </table>
