@@ -5,7 +5,9 @@ import { BridgeShell } from "@/components/bridge/shell";
 import { listTitles } from "@/lib/bridge/titles";
 import { getSql } from "@/lib/db";
 
-export const Route = createFileRoute("/investor")({ component: Investor });
+export const Route = createFileRoute("/investor")({
+  head: () => ({ meta: [{ title: "investor | Crayons Bridge" }, { name: "robots", content: "noindex, nofollow" }] }),
+   component: Investor });
 
 function Investor() {
   return (
