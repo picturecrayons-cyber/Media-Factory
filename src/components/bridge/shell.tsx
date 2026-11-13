@@ -32,7 +32,7 @@ function navigationFor(actor: BridgeActor): NavItem[] {
     independent_creator: [
       { to: "/creator", label: "Creator Home" },
       { to: "/workspace", label: "My Titles" },
-      { to: "/deliveries", label: "Deliveries" },
+      { to: "/deliveries", label: "Updates & Deliveries" },
     ],
     studio: [
       { to: "/studio", label: "Studio Home" },
