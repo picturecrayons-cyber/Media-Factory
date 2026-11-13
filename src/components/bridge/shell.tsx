@@ -10,7 +10,6 @@ function navigationFor(actor: BridgeActor): NavItem[] {
   if (!actor.internalRole && actor.accountType === "independent_creator") {
     return [
       { to: "/creator", label: "Home" },
-      { to: "/creator", label: "My Titles" },
       { to: "/deliveries", label: "Updates & Deliveries" },
       { to: "/account", label: "Account" },
     ];
@@ -18,7 +17,6 @@ function navigationFor(actor: BridgeActor): NavItem[] {
   if (!actor.internalRole && actor.accountType === "studio") {
     return [
       { to: "/studio", label: "Home" },
-      { to: "/studio", label: "Studio Titles" },
       { to: "/deliveries", label: "Deliveries" },
       { to: "/account", label: "Account" },
     ];
