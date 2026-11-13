@@ -21,7 +21,13 @@ import {
 
 type ConceptRow = {
   id: string;
-  title_id: string;
+  title_id: string | null;
+  title_name?: string;
+  owner_user_id?: string;
+  owner_organization_id?: string | null;
+  owner_display_name?: string | null;
+  owner_account_type?: string | null;
+  owner_organization_name?: string | null;
   logline: string | null;
   synopsis: string | null;
   treatment_url: string | null;
@@ -60,15 +66,6 @@ function mapConcept(r: ConceptRow): StoryConceptSubmission {
   };
 }
 
-function slugify(name: string, id: string): string {
-  const base = name
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 48);
-  return `${base || "concept"}-${id.slice(0, 6)}`;
-}
-
 function migrationHint(err: unknown): never {
   const msg = err instanceof Error ? err.message : String(err);
   if (
@@ -77,7 +74,7 @@ function migrationHint(err: unknown): never {
     )
   ) {
     throw new Error(
-      "Story/Concept tables are not installed yet. Apply migration 20261027_story_concept_submission.sql on Supabase, then retry.",
+      "Story / Concept storage is unavailable in this environment. Verify its exact schema and migration history before retrying.",
     );
   }
   throw err instanceof Error ? err : new Error(msg);
@@ -113,68 +110,46 @@ export const createStoryConceptSubmission = createServerFn({ method: "POST" })
     const actor = await requireVerifiedActor(context.userId);
     assertPermission(actor, actor.internalRole ? "title.ingest_internal" : "title.create");
 
-    const titleId = randomBytes(16).toString("hex");
-    const slug = slugify(data.titleName, titleId);
     const sql = await getSql();
 
     try {
-      await sql`
-        insert into bridge_titles (
-          id, slug, name, owner_user_id, owner_account_type, status,
-          synopsis, language, content_type, owner_organization_id, submission_type
-        ) values (
-          ${titleId},
-          ${slug},
-          ${data.titleName},
-          ${actor.userId},
-          ${actor.accountType},
-          ${"DRAFT"},
-          ${data.synopsis},
-          ${data.language},
-          ${"OTHER"},
-          ${actor.accountType === "studio" ? actor.organizationId ?? null : null},
-          ${"story_concept"}
-        )
-      `;
-
-      await sql`
-        insert into bridge_title_events (title_id, from_status, to_status, actor_user_id, note)
-        values (${titleId}, null, ${"DRAFT"}, ${actor.userId}, ${"story concept submission received"})
-      `;
-
-      const conceptRows = await sql<ConceptRow>`
-        insert into bridge_story_concept_submissions (
-          title_id, logline, synopsis, treatment_url, screenplay_url,
-          genre, estimated_budget_range, target_platforms, curation_status
-        ) values (
-          ${titleId},
-          ${data.logline},
-          ${data.synopsis},
-          ${data.treatmentUrl || null},
-          ${data.screenplayUrl || null},
-          ${data.genre},
-          ${data.estimatedBudgetRange ?? null},
-          ${data.targetPlatforms},
-          ${"PENDING"}
-        )
-        returning *
-      `;
-
-      const concept = conceptRows[0];
-      if (!concept) throw new Error("Story concept create failed");
-
-      await writeAudit({
-        actorUserId: actor.userId,
-        action: "story_concept.create",
-        entityType: "bridge_story_concept_submission",
-        entityId: concept.id,
-        metadata: { titleId },
+      const concept = await sql.transaction(async (tx) => {
+        const titleId = randomBytes(16).toString("hex");
+        const slugBase = data.titleName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 48);
+        const slug = `${slugBase || "concept"}-${titleId.slice(0, 6)}`;
+        await tx`
+          insert into bridge_titles (
+            id, slug, name, owner_user_id, owner_account_type, status,
+            synopsis, language, content_type, owner_organization_id, submission_type
+          ) values (
+            ${titleId}, ${slug}, ${data.titleName}, ${actor.userId}, ${actor.accountType},
+            'DRAFT', ${data.synopsis}, ${data.language}, 'OTHER',
+            ${actor.accountType === "studio" ? actor.organizationId ?? null : null}, 'story_concept'
+          )
+        `;
+        const rows = await tx<ConceptRow>`
+          insert into bridge_story_concept_submissions (
+            title_id, logline, synopsis, treatment_url, screenplay_url,
+            genre, estimated_budget_range, target_platforms, curation_status
+          ) values (
+            ${titleId}, ${data.logline}, ${data.synopsis}, ${data.treatmentUrl || null},
+            ${data.screenplayUrl || null}, ${data.genre},
+            ${data.estimatedBudgetRange ?? null}, ${data.targetPlatforms}, 'PENDING'
+          )
+          returning *
+        `;
+        const created = rows[0];
+        if (!created) throw new Error("Story concept create failed");
+        await writeAudit({
+          actorUserId: actor.userId,
+          action: "story_concept.create",
+          entityType: "bridge_story_concept_submission",
+          entityId: created.id,
+          metadata: { titleId, titleName: data.titleName },
+        }, tx);
+        return { ...created, title_id: titleId, title_name: data.titleName, owner_user_id: actor.userId, owner_organization_id: actor.accountType === "studio" ? actor.organizationId ?? null : null };
       });
-
-      return {
-        titleId,
-        concept: mapConcept(concept),
-      };
+      return { concept: mapConcept(concept), titleId: concept.title_id };
     } catch (err) {
       migrationHint(err);
     }
@@ -188,16 +163,13 @@ export const listMyStoryConcepts = createServerFn({ method: "GET" })
     const sql = await getSql();
 
     try {
-      const rows = await sql<ConceptRow & { title_name: string }>`
-        select c.*, t.name as title_name
+      const rows = await sql<ConceptRow>`
+        select c.*, t.name as title_name, t.owner_user_id, t.owner_organization_id
         from bridge_story_concept_submissions c
         join bridge_titles t on t.id = c.title_id
-        where t.owner_user_id = ${actor.userId}
-           or (
-             t.owner_account_type = 'studio'
-             and t.owner_organization_id is not null
-             and t.owner_organization_id = ${actor.organizationId ?? null}
-           )
+        where t.submission_type = 'story_concept'
+          and (t.owner_user_id = ${actor.userId}
+            or (t.owner_organization_id is not null and t.owner_organization_id = ${actor.organizationId ?? null}))
         order by c.created_at desc
         limit 100
       `;
@@ -211,10 +183,35 @@ export const listMyStoryConcepts = createServerFn({ method: "GET" })
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       if (/bridge_story_concept_submissions|does not exist|undefined_table/i.test(msg)) {
-        return { concepts: [] };
+        throw new Error("Story Concept storage is unavailable. No empty state was assumed.");
       }
       throw err;
     }
+  });
+
+
+export const getStoryConceptById = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .validator(z.object({ conceptId: z.string().uuid() }))
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    const sql = await getSql();
+    const rows = await sql<ConceptRow & { language: string }>`
+      select c.*, t.name as title_name, t.owner_user_id, t.owner_organization_id, t.language
+      from bridge_story_concept_submissions c
+      join bridge_titles t on t.id = c.title_id
+      where c.id = ${data.conceptId} and t.submission_type = 'story_concept'
+      limit 1
+    `;
+    const row = rows[0];
+    if (!row) throw new Error("Story concept not found");
+    const isOwner = row.owner_user_id === actor.userId ||
+      (actor.accountType === "studio" && !!actor.organizationId && row.owner_organization_id === actor.organizationId);
+    const isAdmin = Boolean(actor.internalRole);
+    if (isAdmin) requireCurationStaff(actor);
+    if (!isOwner && !isAdmin) throw new Error("Story concept not found");
+    return { concept: { ...mapConcept(row), titleName: row.title_name ?? "Story concept", language: row.language } };
   });
 
 export const listPendingStoryConcepts = createServerFn({ method: "GET" })
@@ -226,11 +223,15 @@ export const listPendingStoryConcepts = createServerFn({ method: "GET" })
 
     const sql = await getSql();
     try {
-      const rows = await sql<ConceptRow & { title_name: string; owner_user_id: string }>`
-        select c.*, t.name as title_name, t.owner_user_id
+      const rows = await sql<ConceptRow>`
+        select c.*, t.name as title_name, t.owner_user_id, t.owner_organization_id,
+          p.display_name as owner_display_name, p.account_type as owner_account_type,
+          p.organization_name as owner_organization_name
         from bridge_story_concept_submissions c
         join bridge_titles t on t.id = c.title_id
-        where c.curation_status in ('PENDING', 'UNDER_REVIEW', 'APPROVED')
+        left join bridge_profiles p on p.user_id = t.owner_user_id
+        where t.submission_type = 'story_concept'
+          and c.curation_status in ('PENDING', 'UNDER_REVIEW', 'APPROVED')
         order by c.created_at asc
         limit 200
       `;
@@ -240,11 +241,46 @@ export const listPendingStoryConcepts = createServerFn({ method: "GET" })
           ...mapConcept(r),
           titleName: r.title_name,
           ownerUserId: r.owner_user_id,
+          ownerDisplayName: r.owner_display_name,
+          ownerAccountType: r.owner_account_type,
+          ownerOrganizationName: r.owner_organization_name,
         })),
       };
     } catch (err) {
       migrationHint(err);
     }
+  });
+
+
+export const listAdminStoryConcepts = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    requireCurationStaff(actor);
+    const sql = await getSql();
+    const rows = await sql<ConceptRow>`
+      select c.*, t.name as title_name, t.owner_user_id, t.owner_organization_id,
+        p.display_name as owner_display_name, p.account_type as owner_account_type,
+        p.organization_name as owner_organization_name
+      from bridge_story_concept_submissions c
+      join bridge_titles t on t.id = c.title_id
+      left join bridge_profiles p on p.user_id = t.owner_user_id
+      where t.submission_type = 'story_concept'
+      order by c.created_at desc
+      limit 500
+    `;
+    return {
+      concepts: rows.map((r) => ({
+        ...mapConcept(r),
+        titleId: r.title_id,
+        titleName: r.title_name ?? "Story concept",
+        ownerUserId: r.owner_user_id,
+        ownerDisplayName: r.owner_display_name,
+        ownerAccountType: r.owner_account_type,
+        ownerOrganizationName: r.owner_organization_name,
+      })),
+    };
   });
 
 export const updateStoryConceptCuration = createServerFn({ method: "POST" })

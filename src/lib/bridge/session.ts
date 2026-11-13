@@ -13,6 +13,7 @@ export type BridgeActor = Actor & {
   email: string;
   displayName: string;
   organizationName: string | null;
+  organizationRole: string | null;
 };
 
 type BridgeProfileRow = {
@@ -33,6 +34,7 @@ function mapRow(r: BridgeProfileRow): BridgeActor {
     displayName: r.display_name,
     accountType: r.account_type as AccountType,
     organizationName: r.organization_name,
+    organizationRole: null,
     organizationId: r.organization_id,
     internalRole: (r.internal_role as InternalRole | null) ?? null,
     emailVerified: !!r.email_verified,
@@ -58,8 +60,8 @@ async function loadActorByBridgeUserId(userId: string): Promise<BridgeActor | nu
   // schema is absent, keep the profile available but do not grant organization
   // scope. Never infer an ID from organization_name or use another environment's ID.
   try {
-    const memberships = await sql<{ organization_id: string }>`
-      select bp.organization_id
+    const memberships = await sql<{ organization_id: string; membership_role: string }>`
+      select bp.organization_id, m.membership_role
       from bridge_profiles bp
       join bridge_organization_memberships m
         on m.organization_id = bp.organization_id
@@ -73,9 +75,11 @@ async function loadActorByBridgeUserId(userId: string): Promise<BridgeActor | nu
       limit 1
     `;
     actor.organizationId = memberships[0]?.organization_id ?? null;
+    actor.organizationRole = memberships[0]?.membership_role ?? null;
   } catch (error) {
     if (!isMissingOrganizationSchemaError(error)) throw error;
     actor.organizationId = null;
+    actor.organizationRole = null;
     console.warn("[bridge-session] optional organization schema unavailable; profile loaded without organization scope", {
       code: workspaceFailureCode(error),
     });

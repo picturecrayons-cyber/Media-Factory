@@ -1,4 +1,3 @@
-import { useNavigate } from "@tanstack/react-router";
 import { useMutation } from "@tanstack/react-query";
 import { useState, type FormEvent } from "react";
 import { toast } from "sonner";
@@ -30,7 +29,6 @@ const PLATFORMS = [
 ];
 
 export function StoryConceptForm() {
-  const navigate = useNavigate();
   const [titleName, setTitleName] = useState("");
   const [logline, setLogline] = useState("");
   const [synopsis, setSynopsis] = useState("");
@@ -40,6 +38,7 @@ export function StoryConceptForm() {
   const [estimatedBudgetRange, setEstimatedBudgetRange] = useState("");
   const [treatmentUrl, setTreatmentUrl] = useState("");
   const [screenplayUrl, setScreenplayUrl] = useState("");
+  const [submissionReference, setSubmissionReference] = useState<string | null>(null);
 
   const mut = useMutation({
     mutationFn: () =>
@@ -57,8 +56,9 @@ export function StoryConceptForm() {
         },
       }),
     onSuccess: (res) => {
+      const reference = res.concept.id;
+      setSubmissionReference(reference);
       toast("Story / Concept submitted for review");
-      void navigate({ to: "/title/$id", params: { id: res.titleId } });
     },
     onError: (err) =>
       toast(err instanceof Error ? err.message : "Could not submit concept"),
@@ -82,6 +82,14 @@ export function StoryConceptForm() {
   }
 
   return (
+    <>
+    {submissionReference ? (
+      <section className="mb-4 rounded-xl border border-line bg-elevated p-4" role="status" aria-live="polite">
+        <p className="text-sm font-semibold">Submission received</p>
+        <p className="mt-1 text-sm text-muted">Reference: <span className="font-mono">{submissionReference}</span></p>
+        <p className="mt-1 text-sm text-muted">Status: Pending review. Track updates in Story concepts on your Studio desk. You do not need to open a title workspace.</p>
+      </section>
+    ) : null}
     <form onSubmit={onSubmit} className="grid gap-4 sm:grid-cols-2">
       <label className="text-sm sm:col-span-2">
         Working title
@@ -211,5 +219,6 @@ export function StoryConceptForm() {
         </Button>
       </div>
     </form>
+    </>
   );
 }

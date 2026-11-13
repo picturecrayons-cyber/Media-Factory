@@ -20,12 +20,13 @@ export const Route = createFileRoute("/onboarding")({
   component: Onboarding,
 });
 
-type PublicAccountType = "independent_creator" | "studio" | "buyer";
+type PublicAccountType = "independent_creator" | "studio" | "buyer" | "investor";
 
 const ACCOUNT_LABELS: Record<PublicAccountType, string> = {
   independent_creator: "Independent Creator",
   studio: "Studio / Company",
   buyer: "Buyer / Acquisitions",
+  investor: "Investor",
 };
 
 const LANGUAGES = ["Malayalam", "Tamil", "Telugu", "Kannada", "Hindi", "English", "Bengali", "Marathi", "Other"];
@@ -138,7 +139,8 @@ function Onboarding() {
 
   // Preserve the role chosen during signup instead of silently defaulting
   // every new account to Creator when onboarding opens.
-  const signupAccountTypeHint = user?.signupAccountTypeHint;
+  const signupAccountTypeHint = user?.signupAccountTypeHint ??
+    (typeof window !== "undefined" ? window.sessionStorage.getItem("bridge.signup-role-intent") : null);
   const signupAccountType = publicAccountTypeFrom(signupAccountTypeHint);
   const unsupportedSignupRole = Boolean(signupAccountTypeHint && !signupAccountType);
 
@@ -146,10 +148,17 @@ function Onboarding() {
     if (signupAccountType) setAccountType(signupAccountType);
   }, [signupAccountType]);
 
+  useEffect(() => {
+    if (user?.displayName && !displayName) setDisplayName(user.displayName);
+  }, [user?.displayName, displayName]);
+
   const home = sessionQ.data?.profile ? sessionQ.data.home : null;
 
   useEffect(() => {
-    if (home) goHome(home, navigate);
+    if (home) {
+      if (typeof window !== "undefined") window.sessionStorage.removeItem("bridge.signup-role-intent");
+      goHome(home, navigate);
+    }
   }, [home, navigate]);
 
   if (isPending || (user && sessionQ.isPending) || home) {
@@ -233,6 +242,21 @@ function Onboarding() {
       let inviteToken: string | undefined;
       try { inviteToken = sessionStorage.getItem("bridge-invite") ?? undefined; } catch { /* ignore */ }
 
+      // Validate the full Creator/Studio submission before creating the profile
+      // or sending its one-time welcome email. Buyer and Investor accounts do not
+      // create a title during onboarding.
+      if (accountType !== "buyer" && accountType !== "investor") {
+        if (!titleName.trim()) throw new Error("Title name is required");
+        if (synopsis.trim().length < 20) throw new Error("Add a synopsis of at least 20 characters");
+        if (!territories.length || !rightsLanguages.length || !media.length || !destinations.length) {
+          throw new Error("Select at least one value in each rights package group");
+        }
+        if (!windowStart || !windowEnd) throw new Error("Rights window start and end are required");
+        if (!authorizationAttested) throw new Error("Confirm that you have authority to license the submitted rights");
+        if (!authorizationEvidenceType) throw new Error("Select the authorization evidence you will provide");
+        if (new Date(windowEnd) <= new Date(windowStart)) throw new Error("Rights window end must be after start");
+      }
+
       await completeOnboarding({
         data: {
           displayName: displayName.trim(),
@@ -242,20 +266,11 @@ function Onboarding() {
         },
       });
 
-      if (accountType === "buyer") {
-        void navigate({ to: "/buyer", replace: true });
+      if (typeof window !== "undefined") window.sessionStorage.removeItem("bridge.signup-role-intent");
+      if (accountType === "buyer" || accountType === "investor") {
+        void navigate({ to: accountType === "buyer" ? "/buyer" : "/investor", replace: true });
         return;
       }
-
-      if (!titleName.trim()) throw new Error("Title name is required");
-      if (synopsis.trim().length < 20) throw new Error("Add a synopsis of at least 20 characters");
-      if (!territories.length || !rightsLanguages.length || !media.length || !destinations.length) {
-        throw new Error("Select at least one value in each rights package group");
-      }
-      if (!windowStart || !windowEnd) throw new Error("Rights window start and end are required");
-      if (!authorizationAttested) throw new Error("Confirm that you have authority to license the submitted rights");
-      if (!authorizationEvidenceType) throw new Error("Select the authorization evidence you will provide");
-      if (new Date(windowEnd) <= new Date(windowStart)) throw new Error("Rights window end must be after start");
 
       const result = await createTitle({
         data: {
@@ -281,7 +296,7 @@ function Onboarding() {
           promotionalRights,
           rightsBasis,
           authorizationAttested,
-          authorizationEvidenceType,
+          authorizationEvidenceType: authorizationEvidenceType || undefined,
           publicSubmission: true,
           screenerAccess: "SCREENER_PENDING",
           intendedDestinations: destinations,

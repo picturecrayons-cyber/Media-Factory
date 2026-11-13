@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { Button } from "@/components/ui/button";
@@ -7,6 +7,7 @@ import { listTitles, listAuditLogs } from "@/lib/bridge/titles";
 import { listLoopPublicationReadiness } from "@/lib/bridge/loop-publication";
 import { listAdminProfiles } from "@/lib/bridge/profiles";
 import { StreamVistaOrders } from "@/components/bridge/streamvista-orders";
+import { listAdminStoryConcepts, listPendingStoryConcepts, updateStoryConceptCuration } from "@/lib/bridge/story-concept-api";
 
 export const Route = createFileRoute("/admin")({
   head: () => ({ meta: [{ name: "robots", content: "noindex, nofollow" }] }),
@@ -39,10 +40,14 @@ function AdminBody({ actor }: { actor: any }) {
   const auditQ = useQuery({ queryKey: ["bridge-audit"], queryFn: () => listAuditLogs() });
   const distQ = useQuery({ queryKey: ["loop-publication-readiness"], queryFn: () => listLoopPublicationReadiness() });
   const profilesQ = useQuery({ queryKey: ["bridge-admin-profiles"], queryFn: () => listAdminProfiles() });
+  const allConceptsQ = useQuery({ queryKey: ["admin-all-story-concepts"], queryFn: () => listAdminStoryConcepts() });
 
   const titles = titlesQ.data?.titles ?? [];
   const distribution = distQ.data?.titles ?? [];
   const profiles = profilesQ.data?.profiles ?? [];
+  const allConcepts = allConceptsQ.data?.concepts ?? [];
+  const investorProfiles = profiles.filter((profile) => profile.accountType === "investor");
+  const verifiedInvestorProfiles = investorProfiles.filter((profile) => profile.emailVerified);
   const organizations = new Set(profiles.map((profile) => profile.organizationName).filter(Boolean));
   const qcQueue = titles.filter((title) => title.status === "PREPARING" || title.status === "QC_REVIEW").length;
   const rightsQueue = titles.filter((title) => title.status === "RIGHTS_REVIEW").length;
@@ -112,6 +117,73 @@ function AdminBody({ actor }: { actor: any }) {
           </div>
         </section>
 
+        <section className="rounded-2xl border border-line bg-surface p-4 sm:p-5">
+          <div className="mb-3">
+            <h3 className="font-display text-xl font-semibold">User Submissions</h3>
+            <p className="mt-1 text-sm text-muted">Films and Story Concepts are listed as separate submission types. Owner and Studio identity are resolved from Bridge records; status is shown from the authoritative record.</p>
+          </div>
+          {titlesQ.isError || allConceptsQ.isError ? <p role="alert" className="text-sm text-accent">Submission mapping is incomplete. Check the title and Story Concept data sources; no missing records are assumed.</p> : null}
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[760px] text-left text-sm">
+              <thead><tr className="border-b border-line text-xs text-muted">
+                <th className="px-2 py-2">Type</th><th className="px-2 py-2">Submission</th><th className="px-2 py-2">Owner</th><th className="px-2 py-2">Account / Studio</th><th className="px-2 py-2">Status</th><th className="px-2 py-2">Open</th>
+              </tr></thead>
+              <tbody>
+                {titles.map((title) => {
+                  const owner = profiles.find((profile) => profile.userId === title.ownerUserId);
+                  return <tr key={title.id} className="border-b border-line/70">
+                    <td className="px-2 py-3">Film</td>
+                    <td className="px-2 py-3 font-medium">{title.name}</td>
+                    <td className="px-2 py-3">{owner?.displayName || title.ownerUserId}</td>
+                    <td className="px-2 py-3">{owner?.accountType || title.ownerAccountType}{owner?.organizationName ? " · " + owner.organizationName : ""}</td>
+                    <td className="px-2 py-3">{title.status}</td>
+                    <td className="px-2 py-3"><Link to="/title/$id" params={{ id: title.id }} className="text-accent hover:underline">Open film</Link></td>
+                  </tr>;
+                })}
+                {allConcepts.map((concept) => <tr key={concept.id} className="border-b border-line/70">
+                  <td className="px-2 py-3">Story Concept</td>
+                  <td className="px-2 py-3 font-medium">{concept.titleName}</td>
+                  <td className="px-2 py-3">{concept.ownerDisplayName || concept.ownerUserId || "Unresolved"}</td>
+                  <td className="px-2 py-3">{concept.ownerAccountType || "Unverified"}{concept.ownerOrganizationName ? " · " + concept.ownerOrganizationName : ""}</td>
+                  <td className="px-2 py-3">{concept.curation_status}</td>
+                  <td className="px-2 py-3"><Link to="/story-concepts/$conceptId" params={{ conceptId: concept.id }} className="text-accent hover:underline">Open submission</Link></td>
+                </tr>)}
+                {titlesQ.isPending || allConceptsQ.isPending ? <tr><td colSpan={6} className="px-2 py-4 text-muted">Loading submissions…</td></tr> : null}
+                {!titlesQ.isPending && !allConceptsQ.isPending && !titlesQ.isError && !allConceptsQ.isError && titles.length === 0 && allConcepts.length === 0 ? <tr><td colSpan={6} className="px-2 py-4 text-muted">No submissions returned.</td></tr> : null}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section className="rounded-2xl border border-line bg-surface p-4 sm:p-5">
+          <StoryConceptReviewQueue />
+        </section>
+
+        <section className="rounded-2xl border border-line bg-surface p-4 sm:p-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h3 className="font-display text-xl font-semibold">Investor registrations</h3>
+              <p className="mt-1 text-sm text-muted">Public account creation is open. Investment records remain visible only after an explicit Bridge assignment.</p>
+            </div>
+            <span className="rounded-full border border-line px-3 py-1 text-xs font-semibold">{profilesQ.isPending ? "Loading" : `${investorProfiles.length} registered`}</span>
+          </div>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <CompactMetric label="Registered investor accounts" value={profilesQ.isPending ? "—" : String(investorProfiles.length)} />
+            <CompactMetric label="Email verified" value={profilesQ.isPending ? "—" : String(verifiedInvestorProfiles.length)} />
+          </div>
+          {investorProfiles.length ? (
+            <ul className="mt-3 divide-y divide-line">
+              {investorProfiles.slice(0, 8).map((profile) => (
+                <li key={profile.userId} className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm">
+                  <span><strong>{profile.displayName}</strong><span className="ml-2 text-muted">{profile.email}</span></span>
+                  <span className="text-xs text-muted">{profile.emailVerified ? "Email verified · assignment required" : "Email verification pending"}</span>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          <p className="mt-3 text-xs text-muted">This is a registration view, not an approval or capital-allocation control. Do not grant access to unassigned titles or internal cost/margin data.</p>
+        </section>
+
         <section className="grid gap-3 lg:grid-cols-2">
           <details className="min-w-0 rounded-2xl border border-line bg-surface p-4">
             <summary className="cursor-pointer list-none font-semibold">Users & organizations <span className="ml-1 text-sm font-normal text-muted">({profiles.length})</span></summary>
@@ -162,6 +234,80 @@ function AdminBody({ actor }: { actor: any }) {
         </details>
       </div>
     </BridgeShell>
+  );
+}
+
+
+function StoryConceptReviewQueue() {
+  const queryClient = useQueryClient();
+  const query = useQuery({
+    queryKey: ["admin-story-concept-review"],
+    queryFn: () => listPendingStoryConcepts(),
+  });
+  const mutation = useMutation({
+    mutationFn: (input: { id: string; status: "PENDING" | "UNDER_REVIEW" | "APPROVED" | "REJECTED" | "INTRODUCED_TO_BUYERS" }) =>
+      updateStoryConceptCuration({ data: input }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["admin-story-concept-review"] });
+      await queryClient.invalidateQueries({ queryKey: ["my-story-concepts"] });
+    },
+  });
+  const concepts = query.data?.concepts ?? [];
+  const nextActions: Record<string, Array<"PENDING" | "UNDER_REVIEW" | "APPROVED" | "REJECTED" | "INTRODUCED_TO_BUYERS">> = {
+    PENDING: ["UNDER_REVIEW", "APPROVED", "REJECTED"],
+    UNDER_REVIEW: ["PENDING", "APPROVED", "REJECTED"],
+    APPROVED: ["INTRODUCED_TO_BUYERS"],
+    REJECTED: ["UNDER_REVIEW", "PENDING"],
+    INTRODUCED_TO_BUYERS: [],
+  };
+  const labels: Record<string, string> = {
+    PENDING: "Pending",
+    UNDER_REVIEW: "Under review",
+    APPROVED: "Approved",
+    REJECTED: "Rejected",
+    INTRODUCED_TO_BUYERS: "Introduced to buyers",
+  };
+  return (
+    <div>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h3 className="font-display text-xl font-semibold">Story Concept submissions</h3>
+          <p className="mt-1 text-sm text-muted">Admin curation queue, separate from finished-film title intake.</p>
+        </div>
+        <span className="text-xs text-muted">{query.isPending ? "Loading…" : `${concepts.length} in queue`}</span>
+      </div>
+      {query.isError ? <p role="alert" className="mt-3 text-sm text-muted">Story Concept queue could not be loaded. Check the migration and server logs.</p> : null}
+      <div className="mt-3 divide-y divide-line">
+        {concepts.map((concept) => (
+          <article key={concept.id} className="py-4">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+              <div className="min-w-0">
+                <p className="font-semibold">{concept.titleName || "Untitled concept"}</p>
+                <p className="mt-1 break-all font-mono text-xs text-muted">Ref: {concept.id}</p>
+                <p className="mt-1 text-xs text-muted">Submitter: {concept.ownerUserId}</p>
+                {concept.logline ? <p className="mt-2 max-w-3xl text-sm text-muted">{concept.logline}</p> : null}
+                <p className="mt-2 text-xs font-semibold text-accent">{labels[concept.curation_status] ?? concept.curation_status}</p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {(nextActions[concept.curation_status] ?? []).map((status) => (
+                  <Button
+                    key={status}
+                    size="sm"
+                    variant={status === "REJECTED" ? "danger" : "ghost"}
+                    disabled={mutation.isPending}
+                    onClick={() => mutation.mutate({ id: concept.id, status })}
+                  >
+                    {status === "UNDER_REVIEW" ? "Start review" : status === "INTRODUCED_TO_BUYERS" ? "Introduce to buyers" : status === "PENDING" ? "Return to pending" : status === "APPROVED" ? "Approve" : "Reject"}
+                  </Button>
+                ))}
+              </div>
+            </div>
+          </article>
+        ))}
+        {!query.isPending && !query.isError && concepts.length === 0 ? <p className="py-5 text-sm text-muted">No Story Concept submissions are awaiting curation.</p> : null}
+      </div>
+      {mutation.isError ? <p role="alert" className="mt-3 text-sm text-red-600">Curation update failed. Refresh the queue and retry.</p> : null}
+    </div>
   );
 }
 

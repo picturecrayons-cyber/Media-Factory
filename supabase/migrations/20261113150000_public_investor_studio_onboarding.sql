@@ -1,0 +1,97 @@
+-- Public Creator / Investor onboarding and canonical Studio organization scope.
+-- Additive only: existing accounts, titles, assets and concept submissions are preserved.
+-- All new tables remain server-only; authenticated clients receive no direct table grants.
+
+CREATE TABLE IF NOT EXISTS public.bridge_organizations (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  legal_name text NOT NULL,
+  normalized_name text NOT NULL,
+  status text NOT NULL DEFAULT 'active'
+    CHECK (status IN ('active', 'suspended', 'closed')),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+ALTER TABLE public.bridge_profiles
+  ADD COLUMN IF NOT EXISTS organization_id uuid;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'bridge_profiles_organization_id_fkey'
+      AND conrelid = 'public.bridge_profiles'::regclass
+  ) THEN
+    ALTER TABLE public.bridge_profiles
+      ADD CONSTRAINT bridge_profiles_organization_id_fkey
+      FOREIGN KEY (organization_id) REFERENCES public.bridge_organizations(id);
+  END IF;
+END $$;
+
+CREATE TABLE IF NOT EXISTS public.bridge_organization_memberships (
+  organization_id uuid NOT NULL REFERENCES public.bridge_organizations(id),
+  user_id text NOT NULL REFERENCES public.bridge_profiles(user_id),
+  membership_role text NOT NULL
+    CHECK (membership_role IN ('owner', 'admin', 'member', 'producer', 'dit')),
+  status text NOT NULL DEFAULT 'active'
+    CHECK (status IN ('active', 'suspended', 'removed')),
+  created_by text NOT NULL REFERENCES public.bridge_profiles(user_id),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (organization_id, user_id)
+);
+
+-- STAGING may already contain this table with a narrower legacy role check,
+-- an invitation status, and a surrogate id primary key. Preserve its existing
+-- keys/rows while making the role vocabulary compatible with the Studio desk.
+ALTER TABLE public.bridge_organization_memberships
+  DROP CONSTRAINT IF EXISTS bridge_organization_memberships_membership_role_check;
+ALTER TABLE public.bridge_organization_memberships
+  ADD CONSTRAINT bridge_organization_memberships_membership_role_check
+  CHECK (membership_role IN ('owner', 'admin', 'member', 'producer', 'dit'));
+
+ALTER TABLE public.bridge_organization_memberships
+  DROP CONSTRAINT IF EXISTS bridge_organization_memberships_status_check;
+ALTER TABLE public.bridge_organization_memberships
+  ADD CONSTRAINT bridge_organization_memberships_status_check
+  CHECK (status IN ('invited', 'active', 'suspended', 'removed'));
+
+-- Give each pre-existing Studio profile its own organization. Never merge
+-- separate accounts merely because their free-text organization names match.
+CREATE TEMP TABLE _bridge_studio_org_backfill ON COMMIT DROP AS
+SELECT user_id, organization_name, gen_random_uuid() AS organization_id
+FROM public.bridge_profiles
+WHERE account_type = 'studio'
+  AND organization_id IS NULL
+  AND NULLIF(btrim(organization_name), '') IS NOT NULL;
+
+INSERT INTO public.bridge_organizations (id, legal_name, normalized_name, status)
+SELECT organization_id,
+       organization_name,
+       lower(regexp_replace(btrim(organization_name), '[[:space:]]+', ' ', 'g')) || ':' || user_id,
+       'active'
+FROM _bridge_studio_org_backfill;
+
+UPDATE public.bridge_profiles p
+SET organization_id = b.organization_id,
+    updated_at = now()
+FROM _bridge_studio_org_backfill b
+WHERE p.user_id = b.user_id
+  AND p.organization_id IS NULL;
+
+INSERT INTO public.bridge_organization_memberships
+  (organization_id, user_id, membership_role, status, created_by)
+SELECT organization_id, user_id, 'owner', 'active', user_id
+FROM _bridge_studio_org_backfill
+ON CONFLICT (organization_id, user_id) DO NOTHING;
+
+CREATE INDEX IF NOT EXISTS bridge_org_memberships_user_status_idx
+  ON public.bridge_organization_memberships (user_id, status);
+
+ALTER TABLE public.bridge_organizations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.bridge_organization_memberships ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON public.bridge_organizations FROM anon, authenticated;
+REVOKE ALL ON public.bridge_organization_memberships FROM anon, authenticated;
+
+COMMENT ON COLUMN public.bridge_profiles.organization_id IS
+  'Server-resolved canonical Studio organization UUID; never inferred from organization_name.';

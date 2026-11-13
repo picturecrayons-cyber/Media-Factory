@@ -21,7 +21,13 @@ Login or signup
 
 The Supabase user ID is the authentication identity. Bridge resolves that identity through its profile and identity-link records before applying application permissions.
 
-Normal onboarding account types are independent creator, studio, and buyer. Internal roles are not granted by normal signup and require the server-controlled invite flow.
+Normal public onboarding account types are independent creator, studio, buyer, and investor. The selected public role is an account-type request used to complete the Bridge profile and route the user to the matching workspace; it is not proof of permission to read or mutate any record.
+
+Google OAuth uses Supabase Auth authorization-code/PKCE flow. The selected signup role is carried as a same-tab signup hint through the OAuth redirect, then reconciled with the authenticated Bridge profile. Existing profiles retain their server-resolved account type; client metadata and redirect parameters never grant roles.
+
+Investor registration is public. Investor workspace access is limited to records explicitly assigned to that verified Bridge profile. Public signup does not grant internal staff roles, unassigned title visibility, investment terms belonging to another investor, or internal cost/margin data.
+
+Internal roles are not granted by normal signup and require the server-controlled invite flow.
 
 ## Security boundary
 

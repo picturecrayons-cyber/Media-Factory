@@ -40,7 +40,7 @@ export function StoryConceptDesk() {
   if (query.isError) {
     return (
       <div className="rounded-2xl border border-line bg-surface p-6 text-sm">
-        Unable to load story concepts. Confirm migration is applied and you have staff access.
+        Unable to load Story Concepts. Confirm storage is available and your account has curation permission.
       </div>
     );
   }
@@ -74,6 +74,11 @@ export function StoryConceptDesk() {
                     {STATUS_LABEL[c.curation_status] ?? c.curation_status}
                     {c.created_at ? ` · ${new Date(c.created_at).toLocaleDateString()}` : ""}
                   </p>
+                  <p className="mt-1 text-xs text-muted">
+                    Owner: {(c as { ownerDisplayName?: string | null; ownerUserId?: string }).ownerDisplayName || (c as { ownerUserId?: string }).ownerUserId || "Unresolved"}
+                    {" · "}{(c as { ownerAccountType?: string | null }).ownerAccountType || "Account type unverified"}
+                    {(c as { ownerOrganizationName?: string | null }).ownerOrganizationName ? ` · ${(c as { ownerOrganizationName?: string | null }).ownerOrganizationName}` : ""}
+                  </p>
                   {c.logline ? (
                     <p className="mt-3 text-sm leading-relaxed text-fg/90">{c.logline}</p>
                   ) : null}
@@ -82,11 +87,11 @@ export function StoryConceptDesk() {
                   ) : null}
                 </div>
                 <Link
-                  to="/title/$id"
-                  params={{ id: c.title_id }}
+                  to="/story-concepts/$conceptId"
+                  params={{ conceptId: c.id }}
                   className="shrink-0 rounded-full border border-line px-3.5 py-1.5 text-xs text-muted hover:border-line-strong hover:text-fg"
                 >
-                  Open title
+                  Open submission
                 </Link>
               </div>
 

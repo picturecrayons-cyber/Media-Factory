@@ -1,18 +1,13 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState, type FormEvent } from "react";
-import { signInWithEmail } from "@/lib/auth/client";
+import { signInWithEmail, signInWithGoogle } from "@/lib/auth/client";
+import { resolvePostLoginDestination } from "@/lib/auth/sign-in-gate";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { BrandMark } from "@/components/bridge/shell";
 import { Button } from "@/components/ui/button";
 import { getBridgeSession } from "@/lib/bridge/session";
 
 export const Route = createFileRoute("/login")({ component: Login });
-
-function isSafeRedirect(url: string | null): boolean {
-  if (!url) return false;
-  // Allow only safe relative internal paths starting with /
-  return url.startsWith("/") && !url.startsWith("//") && !url.includes("://");
-}
 
 function Login() {
   const { user, isPending } = useCurrentUserState();
@@ -22,26 +17,33 @@ function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [googleBusy, setGoogleBusy] = useState(false);
 
   // If already authenticated with Supabase session, resolve profile and route to dashboard
   useEffect(() => {
     if (isPending || !user) return;
     void getBridgeSession()
       .then((s) => {
-        const nextParam =
-          typeof window !== "undefined"
-            ? new URLSearchParams(window.location.search).get("next")
-            : null;
-        if (isSafeRedirect(nextParam)) {
-          void navigate({ to: nextParam! });
-        } else {
-          void navigate({ to: s.home || "/dashboard" });
-        }
+        const nextParam = typeof window !== "undefined"
+          ? new URLSearchParams(window.location.search).get("next")
+          : null;
+        window.location.assign(resolvePostLoginDestination({ next: nextParam, sessionHome: s.home }));
       })
       .catch(() => {
         void navigate({ to: "/onboarding" });
       });
   }, [isPending, user, navigate]);
+
+  async function onGoogleSignIn() {
+    setError(null);
+    setGoogleBusy(true);
+    try {
+      await signInWithGoogle();
+    } catch (err: unknown) {
+      setGoogleBusy(false);
+      setError(err instanceof Error ? err.message : "Google sign-in is temporarily unavailable.");
+    }
+  }
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -52,18 +54,10 @@ function Login() {
       await signInWithEmail(email.trim(), password);
       // Session established; let the useEffect resolve profile or route
       const s = await getBridgeSession().catch(() => null);
-      const nextParam =
-        typeof window !== "undefined"
-          ? new URLSearchParams(window.location.search).get("next")
-          : null;
-
-      if (isSafeRedirect(nextParam)) {
-        window.location.assign(nextParam!);
-      } else if (s?.home) {
-        window.location.assign(s.home);
-      } else {
-        window.location.assign("/dashboard");
-      }
+      const nextParam = typeof window !== "undefined"
+        ? new URLSearchParams(window.location.search).get("next")
+        : null;
+      window.location.assign(resolvePostLoginDestination({ next: nextParam, sessionHome: s?.home }));
     } catch (err: unknown) {
       console.error("[Login error]", err);
       const message = err instanceof Error ? err.message : String(err);
@@ -95,6 +89,11 @@ function Login() {
             Securely access your Crayons Bridge workspace.
           </p>
         </div>
+
+        <Button type="button" variant="outline" disabled={busy || googleBusy} onClick={() => void onGoogleSignIn()} className="w-full h-11 rounded-full font-semibold">
+          {googleBusy ? "Connecting to Google…" : "Continue with Google"}
+        </Button>
+        <div className="flex items-center gap-3 text-xs text-muted"><span className="h-px flex-1 bg-line" />or use email<span className="h-px flex-1 bg-line" /></div>
 
         <form className="space-y-4" onSubmit={(e) => void onSubmit(e)}>
           <label className="block text-sm font-medium text-fg">

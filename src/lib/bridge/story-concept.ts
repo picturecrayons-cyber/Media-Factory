@@ -40,7 +40,7 @@ export const STORY_CONCEPT_SERVICE_CODE = "STORY_CONCEPT_NETWORK_SUBMISSION";
 
 export interface StoryConceptSubmission {
   id: string;
-  title_id: string;
+  title_id: string | null;
   logline: string | null;
   synopsis: string | null;
   treatment_url: string | null;

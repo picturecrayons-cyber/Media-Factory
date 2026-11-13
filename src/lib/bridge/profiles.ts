@@ -110,12 +110,6 @@ export const completeOnboarding = createServerFn({ method: "POST" })
       return { home: workspaceHome(existing), profile: existing };
     }
 
-    // Investor access is granted only after a reviewed access request. Enforce
-    // this at the authenticated server endpoint, not only in the signup UI.
-    if (data.accountType === "investor") {
-      throw new Error("Investor access requires a reviewed access request.");
-    }
-
     const email = context.userEmail;
     if (!email) throw new Error("Account email is required from Supabase session");
     const verified = true;
@@ -123,9 +117,8 @@ export const completeOnboarding = createServerFn({ method: "POST" })
     // Email uniqueness is a safety boundary, not an ownership signal. If this
     // authenticated identity is not already directly/explicitly linked, never
     // adopt an existing profile merely because the mailbox matches.
-    const org =
-      data.accountType === "independent_creator" ? null : (data.organizationName ?? "").trim() || null;
-    if (data.accountType !== "independent_creator" && !org) {
+    const org = data.accountType === "studio" ? (data.organizationName ?? "").trim() || null : null;
+    if (data.accountType === "studio" && !org) {
       throw new Error("Organization name is required");
     }
 
@@ -282,7 +275,7 @@ export const completeOnboarding = createServerFn({ method: "POST" })
     if (welcomeClaim.length > 0) {
       try {
         const { sendWelcomeEmail } = await import("./mail.server");
-        await sendWelcomeEmail({ to: email, name: data.displayName });
+        await sendWelcomeEmail({ to: email, name: data.displayName, accountType: data.accountType });
         await writeAudit({
           actorUserId: bridgeUserId!,
           action: "email.welcome_sent",

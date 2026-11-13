@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState, type FormEvent } from "react";
-import { resendConfirmationEmail, signUpWithEmail } from "@/lib/auth/client";
+import { resendConfirmationEmail, signInWithGoogle, signUpWithEmail } from "@/lib/auth/client";
 import { classifySignupResult } from "@/lib/auth/signup-classification";
 import { publicAccountTypeFrom } from "@/lib/auth/public-account-type";
 import { BrandMark } from "@/components/bridge/shell";
@@ -13,7 +13,7 @@ export const Route = createFileRoute("/signup")({
   component: Signup,
 });
 
-type AccountChoice = "independent_creator" | "studio" | "buyer";
+type AccountChoice = "independent_creator" | "studio" | "buyer" | "investor";
 
 function Signup() {
   const search = Route.useSearch();
@@ -28,6 +28,7 @@ function Signup() {
 
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [googleBusy, setGoogleBusy] = useState(false);
 
   // Verification state
   const [submittedEmail, setSubmittedEmail] = useState<string | null>(null);
@@ -81,6 +82,17 @@ function Signup() {
       }
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function handleGoogleSignup() {
+    setError(null);
+    setGoogleBusy(true);
+    try {
+      await signInWithGoogle(accountType);
+    } catch (err: unknown) {
+      setGoogleBusy(false);
+      setError(err instanceof Error ? err.message : "Google sign-up is temporarily unavailable.");
     }
   }
 
@@ -198,25 +210,6 @@ function Signup() {
     );
   }
 
-  if (search.role === "investor") {
-    return (
-      <main className="grid min-h-screen place-items-center bg-bg p-6">
-        <div className="w-full max-w-md space-y-5 rounded-2xl border border-line bg-surface p-7 text-center shadow-sm">
-          <BrandMark />
-          <h1 className="font-display text-2xl font-semibold text-fg">Investor access</h1>
-          <p className="text-sm leading-relaxed text-muted">
-            Investor workspaces are provisioned after access review. This public signup form is for
-            Creator, Studio, and Buyer accounts only.
-          </p>
-          <div className="flex flex-wrap justify-center gap-3">
-            <Link to="/contact" className="text-sm font-semibold text-accent underline-offset-4 hover:underline">Request investor access</Link>
-            <Link to="/" className="text-sm text-muted underline-offset-4 hover:underline">Back to Crayons Bridge</Link>
-          </div>
-        </div>
-      </main>
-    );
-  }
-
   return (
     <main className="grid min-h-screen place-items-center bg-bg p-6">
       <div className="w-full max-w-md space-y-6 rounded-2xl border border-line bg-surface p-7 shadow-sm">
@@ -257,16 +250,29 @@ function Signup() {
             />
           </label>
 
+          <Button
+            type="button"
+            variant="outline"
+            disabled={busy || googleBusy}
+            onClick={() => void handleGoogleSignup()}
+            className="w-full h-11 rounded-full font-semibold"
+          >
+            {googleBusy ? "Connecting to Google…" : "Continue with Google"}
+          </Button>
+
+          <div className="flex items-center gap-3 text-xs text-muted"><span className="h-px flex-1 bg-line" />or use email<span className="h-px flex-1 bg-line" /></div>
+
           <fieldset className="space-y-1.5">
             <legend className="block text-sm font-medium text-fg">I am a:</legend>
             <p id="account-type-help" className="text-xs text-muted">
               Choose the workspace that matches your role. Access is restricted by permissions after sign-in.
             </p>
-            <div role="radiogroup" aria-describedby="account-type-help" className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+            <div role="radiogroup" aria-describedby="account-type-help" className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               {[
                 { id: "independent_creator" as const, label: "Creator / Filmmaker", detail: "Submit and manage your own titles" },
                 { id: "studio" as const, label: "Studio / Production", detail: "Manage a company slate" },
                 { id: "buyer" as const, label: "Buyer / Platform", detail: "Review cleared titles and licensing" },
+                { id: "investor" as const, label: "Investor", detail: "Access assigned investment and participation records" },
               ].map((opt) => (
                 <label
                   key={opt.id}

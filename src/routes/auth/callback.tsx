@@ -18,24 +18,6 @@ export const Route = createFileRoute("/auth/callback")({
   component: AuthCallback,
 });
 
-/** Validates that redirect paths are strictly internal to prevent open redirect vulnerabilities */
-function sanitizeNextPath(raw: string | undefined): string | null {
-  if (!raw) return null;
-  const trimmed = raw.trim();
-  if (trimmed.startsWith("/") && !trimmed.startsWith("//") && !trimmed.startsWith("/\\")) {
-    if (
-      trimmed.startsWith("/dashboard") ||
-      trimmed.startsWith("/onboarding") ||
-      trimmed.startsWith("/workspace") ||
-      trimmed.startsWith("/title/") ||
-      trimmed.startsWith("/buyer") ||
-      trimmed.startsWith("/account")
-    ) {
-      return trimmed;
-    }
-  }
-  return null;
-}
 
 function AuthCallback() {
   const navigate = useNavigate();
@@ -131,11 +113,10 @@ function AuthCallback() {
 
         if (!alive) return;
 
-        // 7. Route to destination based on onboarding completion and safe next parameter
-        const safeNext = sanitizeNextPath(search.next || url.searchParams.get("next") || undefined);
-
+        // 7. Resolve the destination only from the server-backed Bridge profile.
+        // Callback query parameters are navigation hints, never role authorization.
         if (syncResult?.isComplete && syncResult.profile) {
-          void navigate({ to: safeNext || syncResult.home || "/dashboard" });
+          void navigate({ to: syncResult.home || "/onboarding" });
         } else {
           void navigate({ to: "/onboarding" });
         }

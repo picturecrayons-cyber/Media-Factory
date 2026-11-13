@@ -26,7 +26,7 @@ export function MyStoryConcepts() {
 
   if (!STORY_CONCEPT_ENABLED) return null;
   if (query.isLoading) return <p className="text-sm text-muted">Loading concepts…</p>;
-  if (query.isError) return null;
+  if (query.isError) return <p role="alert" className="text-sm text-accent">Story Concept submissions could not be loaded. No empty state was assumed.</p>;
 
   const concepts = query.data?.concepts ?? [];
   if (!concepts.length) return null;
@@ -39,13 +39,10 @@ export function MyStoryConcepts() {
           const logline = listLogline(c.logline);
           return (
             <li key={c.id}>
-              <Link
-                to="/title/$id"
-                params={{ id: c.title_id }}
-                className="flex flex-wrap items-center justify-between gap-3 px-4 py-4 hover:bg-fg/5"
-              >
+              <Link to="/story-concepts/$conceptId" params={{ conceptId: c.id }} className="flex flex-wrap items-center justify-between gap-3 px-4 py-4 hover:bg-fg/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent">
                 <div>
                   <p className="font-medium">{(c as { titleName?: string }).titleName ?? "Concept"}</p>
+                  <p className="mt-1 font-mono text-xs text-muted">Ref: {c.id}</p>
                   <p className="text-sm text-muted">
                     {STATUS_LABEL[c.curation_status] ?? c.curation_status}
                     {logline ? ` · ${logline}` : ""}
