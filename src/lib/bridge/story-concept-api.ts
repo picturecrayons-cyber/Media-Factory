@@ -74,7 +74,7 @@ function migrationHint(err: unknown): never {
     )
   ) {
     throw new Error(
-      "Story/Concept tables are not installed yet. Apply migration 20261027_story_concept_submission.sql on Supabase, then retry.",
+      "Story / Concept storage is unavailable in this environment. Verify its exact schema and migration history before retrying.",
     );
   }
   throw err instanceof Error ? err : new Error(msg);
@@ -183,7 +183,7 @@ export const listMyStoryConcepts = createServerFn({ method: "GET" })
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       if (/bridge_story_concept_submissions|does not exist|undefined_table/i.test(msg)) {
-        return { concepts: [] };
+        throw new Error("Story Concept storage is unavailable. No empty state was assumed.");
       }
       throw err;
     }
