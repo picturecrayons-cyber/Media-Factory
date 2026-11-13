@@ -15,6 +15,29 @@ const required = [
   "BRIDGE_E2E_ASSET_ID",
 ];
 
+if (process.env.BRIDGE_E2E_TARGET !== "staging") {
+  console.error("STORAGE_E2E_BLOCKED: BRIDGE_E2E_TARGET must be exactly staging");
+  process.exit(2);
+}
+const expectedProjectRef = process.env.BRIDGE_E2E_EXPECTED_PROJECT_REF;
+if (expectedProjectRef !== "jbymleftneggcgutlcqu") {
+  console.error("STORAGE_E2E_BLOCKED: expected STAGING project ref is not configured");
+  process.exit(2);
+}
+const databaseUrl = process.env.DATABASE_URL ?? "";
+let databaseIdentity = "";
+try {
+  const parsed = new URL(databaseUrl);
+  databaseIdentity = `${decodeURIComponent(parsed.username)} ${parsed.hostname}`;
+} catch {
+  console.error("STORAGE_E2E_BLOCKED: DATABASE_URL is not a valid URL");
+  process.exit(2);
+}
+if (!databaseIdentity.includes(expectedProjectRef)) {
+  console.error("STORAGE_E2E_BLOCKED: DATABASE_URL does not identify the approved STAGING project");
+  process.exit(2);
+}
+
 const missing = required.filter((key) => !String(process.env[key] ?? "").trim());
 if (missing.length) {
   console.error(`STORAGE_E2E_BLOCKED missing: ${missing.join(", ")}`);
