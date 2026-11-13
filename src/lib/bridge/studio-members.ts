@@ -17,16 +17,26 @@ export type StudioMember = {
 /** Read-only roster, restricted to verified Studio owners/admins in their own organization. */
 export const listStudioMembers = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
-  .handler(async ({ context }): Promise<{ members: StudioMember[]; managerRole: string }> => {
+  .handler(async ({ context }): Promise<{ members: StudioMember[] }> => {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
     if (actor.internalRole || actor.accountType !== "studio") {
       throw new Error("Studio account required");
     }
-    if (!actor.organizationId || !["owner", "admin"].includes(actor.organizationRole ?? "")) {
+    if (!actor.organizationId) throw new Error("Studio organization membership required");
+    const sql = await getSql();
+    const managerRows = await sql<{ membership_role: string }>`
+      select membership_role
+      from bridge_organization_memberships
+      where organization_id = ${actor.organizationId}::uuid
+        and user_id = ${actor.userId}
+        and status = 'active'
+      limit 1
+    `;
+    const managerRole = managerRows[0]?.membership_role;
+    if (managerRole !== "owner" && managerRole !== "admin") {
       throw new Error("Studio owner or admin membership required");
     }
-    const sql = await getSql();
     const rows = await sql<{
       user_id: string;
       display_name: string;
@@ -49,7 +59,6 @@ export const listStudioMembers = createServerFn({ method: "GET" })
         when 'dit' then 3 else 4 end, p.display_name, p.email
     `;
     return {
-      managerRole: actor.organizationRole,
       members: rows.map((row) => ({
         userId: row.user_id,
         displayName: row.display_name,
