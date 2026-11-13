@@ -4,12 +4,13 @@ import { BridgeShell } from "@/components/bridge/shell";
 import { TitleList } from "@/components/bridge/title-desk";
 import { MyStoryConcepts } from "@/components/bridge/my-story-concepts";
 import { NewSubmissionPanel } from "@/components/bridge/new-submission-panel";
+import { StudioMemberDesk } from "@/components/bridge/studio-member-desk";
 
 export const Route = createFileRoute("/studio")({ component: Studio });
 
 const studioModules = [
   ["Organization", "Studio profile and organization workspace.", "Organization data is shown only when the verified organization mapping is available."],
-  ["Members & Roles", "Manage approved studio members and access roles.", "Membership management is not enabled in this dashboard yet."],
+  ["Members & Roles", "View verified studio members and their current organization roles.", "Read-only roster is available below; invitations and role changes remain gated."],
   ["Productions", "Track projects, production stages and title ownership.", "Production project tracking is not connected yet."],
   ["DIT & Media", "Coordinate media intake, checksums, copies and handover sign-off.", "DIT manifests and sign-off workflow are not connected yet."],
   ["QC & Rights", "Follow quality-control and rights-review progress.", "Use the status shown on each title; separate review approvals remain authoritative."],
@@ -56,6 +57,14 @@ function Studio() {
               </div>
               <TitleList empty="No finished films are currently returned for this studio account." />
               <MyStoryConcepts />
+            </section>
+
+            <section id="studio-members" className="space-y-3">
+              <div>
+                <h3 className="font-display text-xl font-semibold">Members & Roles</h3>
+                <p className="mt-1 text-sm text-muted">Members are resolved from the authenticated Studio organization membership, never from a matching organization name.</p>
+              </div>
+              <StudioMemberDesk />
             </section>
 
             <section id="studio-operations" className="space-y-3">
