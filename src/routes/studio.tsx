@@ -5,7 +5,9 @@ import { TitleList } from "@/components/bridge/title-desk";
 import { MyStoryConcepts } from "@/components/bridge/my-story-concepts";
 import { NewSubmissionPanel } from "@/components/bridge/new-submission-panel";
 
-export const Route = createFileRoute("/studio")({ component: Studio });
+export const Route = createFileRoute("/studio")({
+  head: () => ({ meta: [{ title: "studio | Crayons Bridge" }, { name: "robots", content: "noindex, nofollow" }] }),
+   component: Studio });
 
 function Studio() {
   return (
