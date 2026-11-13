@@ -101,7 +101,6 @@ export const updateStudioMember = createServerFn({ method: "POST" })
       if (data.membershipRole === "admin" && actor.organizationRole !== "owner") {
         throw new Error("Only the Studio owner can grant administrator access");
       }
-      if (data.membershipRole === "owner") throw new Error("Owner transfer requires a separate verified ownership process");
 
       await tx`
         update bridge_organization_memberships
