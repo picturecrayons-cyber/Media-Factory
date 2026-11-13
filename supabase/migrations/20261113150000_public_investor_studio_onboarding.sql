@@ -53,7 +53,7 @@ WHERE account_type = 'studio'
 INSERT INTO public.bridge_organizations (id, legal_name, normalized_name, status)
 SELECT organization_id,
        organization_name,
-       lower(regexp_replace(btrim(organization_name), '\\s+', ' ', 'g')) || ':' || user_id,
+       lower(regexp_replace(btrim(organization_name), '[[:space:]]+', ' ', 'g')) || ':' || user_id,
        'active'
 FROM _bridge_studio_org_backfill;
 
