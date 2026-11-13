@@ -380,15 +380,21 @@ export const getTitle = createServerFn({ method: "GET" })
     const title = await loadTitle(data.id);
     if (!title) throw new Error("Not found");
     const sql = await getSql();
-    if (actor.accountType === "investor" && !actor.internalRole) {
+    const buyerView = actor.accountType === "buyer" && !actor.internalRole;
+    if (buyerView) {
+      // A published status alone is not enough: re-check every publication gate
+      // on direct listing access, not only when the catalogue is queried.
+      await assertBuyerPublishable(title.id);
+    } else if (actor.accountType === "investor" && !actor.internalRole) {
       const assigned = await sql<{ id: string }>
         `select id from bridge_title_investors where title_id = ${title.id} and investor_user_id = ${actor.userId} limit 1`;
       if (!assigned[0]) throw new Error("Not found");
     } else if (!canReadTitle(actor, title)) {
-      if (actor.accountType !== "buyer") throw new Error("Not found");
-      await assertBuyerPublishable(title.id);
+      throw new Error("Not found");
     }
-    const events = await sql<{
+    // Buyer listings are not an operational workspace. Do not return internal
+    // lifecycle notes, actor IDs, or storage object keys to a buyer session.
+    const events = buyerView ? [] : await sql<{
       from_status: string | null;
       to_status: string;
       actor_user_id: string;
@@ -399,7 +405,9 @@ export const getTitle = createServerFn({ method: "GET" })
       from bridge_title_events where title_id = ${title.id} order by created_at asc
     `;
     return {
-      title,
+      title: buyerView
+        ? { ...title, ownerUserId: "", ownerOrganizationId: null, posterKey: null, masterKey: null }
+        : title,
       events: events.map((e) => ({
         from: e.from_status,
         to: e.to_status,
