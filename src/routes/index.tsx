@@ -7,7 +7,27 @@ import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { getBridgeSession } from "@/lib/bridge/session";
 
 
-export const Route = createFileRoute("/")({ component: Home });
+const HOME_TITLE = "Crayons Bridge | Film Rights, Licensing & Media Delivery";
+const HOME_DESCRIPTION = "Prepare, protect, license and deliver film content with Crayons Bridge, StreamVista's B2B media operations and rights management platform.";
+
+export const Route = createFileRoute("/")({
+  head: () => ({
+    meta: [
+      { title: HOME_TITLE },
+      { name: "description", content: HOME_DESCRIPTION },
+      { property: "og:type", content: "website" },
+      { property: "og:site_name", content: "Crayons Bridge" },
+      { property: "og:title", content: HOME_TITLE },
+      { property: "og:description", content: HOME_DESCRIPTION },
+      { property: "og:url", content: "https://www.crayonspictures.in/" },
+      { name: "twitter:card", content: "summary_large_image" },
+      { name: "twitter:title", content: HOME_TITLE },
+      { name: "twitter:description", content: HOME_DESCRIPTION },
+    ],
+    links: [{ rel: "canonical", href: "https://www.crayonspictures.in/" }],
+  }),
+  component: Home,
+});
 
 const WORKFLOW_STEPS = [
   {
