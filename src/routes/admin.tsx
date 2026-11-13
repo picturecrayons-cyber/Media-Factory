@@ -253,7 +253,7 @@ function StoryConceptReviewQueue() {
                   <Button
                     key={status}
                     size="sm"
-                    variant={status === "REJECTED" ? "outline" : "secondary"}
+                    variant={status === "REJECTED" ? "danger" : "ghost"}
                     disabled={mutation.isPending}
                     onClick={() => mutation.mutate({ id: concept.id, status })}
                   >
