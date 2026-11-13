@@ -85,7 +85,7 @@ export async function signInWithGoogle(accountType?: "independent_creator" | "st
     provider: "google",
     options: {
       redirectTo: bridgeCallbackUrl(undefined),
-      scopes: "openid email profile",
+      scopes: "email profile",
       queryParams: { prompt: "select_account" },
     },
   });
