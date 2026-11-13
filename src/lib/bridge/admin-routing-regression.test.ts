@@ -16,7 +16,8 @@ test("authenticated profiles route through the server-resolved workspace home", 
   const onboarding = read("../../routes/onboarding.tsx");
   assert.match(session, /profile: actor, home: workspaceHome\(actor\)/);
   assert.match(onboarding, /const home = sessionQ\.data\?\.profile \? sessionQ\.data\.home : null/);
-  assert.match(onboarding, /if \(home\) \{/);\n  assert.match(onboarding, /goHome\(home, navigate\)/);
+  assert.match(onboarding, /if \(home\) \{/);
+  assert.match(onboarding, /goHome\(home, navigate\)/);
 });
 
 test("dashboard access is enforced server-side for verified super admins", () => {
@@ -30,7 +31,8 @@ test("dashboard access is enforced server-side for verified super admins", () =>
 test("public onboarding does not silently treat a missing profile as an admin session", () => {
   const onboarding = read("../../routes/onboarding.tsx");
   assert.match(onboarding, /if \(!user\) return <RedirectToSignIn \/>/);
-  assert.match(onboarding, /if \(home\) \{/);\n  assert.match(onboarding, /goHome\(home, navigate\)/);
+  assert.match(onboarding, /if \(home\) \{/);
+  assert.match(onboarding, /goHome\(home, navigate\)/);
   assert.doesNotMatch(onboarding, /internal_role\s*=\s*["']super_admin["']/);
 });
 
@@ -39,7 +41,9 @@ test("public signup role selector is accessible and includes the four public rol
   assert.match(signup, /role="radiogroup"/);
   assert.match(signup, /type="radio"/);
   assert.match(signup, /publicAccountTypeFrom\(search\.role\)/);
-  for (const role of ["independent_creator", "studio", "buyer", "investor"]) {\n    assert.ok(signup.includes(`id: "${role}"`));\n  }
+  for (const role of ["independent_creator", "studio", "buyer", "investor"]) {
+    assert.ok(signup.includes(`id: "${role}"`));
+  }
 });
 
 test("onboarding preserves the signup-selected role and fails closed for unsupported roles", () => {
@@ -50,16 +54,21 @@ test("onboarding preserves the signup-selected role and fails closed for unsuppo
   assert.match(onboarding, /if \(unsupportedSignupRole\)/);
 });
 
-test("the server rejects direct Investor onboarding without a reviewed access path", () => {
+test("the server accepts public Investor account intent without granting staff privileges", () => {
   const profiles = read("./profiles.ts");
-  assert.match(profiles, /data\.accountType === "investor"[\s\S]{0,120}Investor access requires a reviewed access request/);
+  const rbac = read("./rbac.ts");
+  assert.match(profiles, /accountType: z\.enum\(ACCOUNT_TYPES\)/);
+  assert.doesNotMatch(profiles, /Investor access requires a reviewed access request/);
+  assert.match(rbac, /investor: \[\s*"entitlement\.read_own"/);
 });
 
-test("investor CTA requests reviewed access instead of silently signing up as Creator", () => {
+test("homepage exposes a direct Investor signup CTA alongside Creator, Studio and Buyer", () => {
   const home = read("../../routes/index.tsx");
-  assert.match(home, /to="\/contact"/);
-  assert.match(home, /Request Investor Access/);
-  assert.doesNotMatch(home, /search=\{\{ role: "investor" \}\}/);
+  assert.match(home, /id="account-pathways"/);
+  for (const role of ["creator", "studio", "buyer", "investor"]) {
+    assert.ok(home.includes(`role: "${role}"`));
+  }
+  assert.match(home, /search=\{\{ role: "investor" \}\}/);
 });
 
 test("shared title workspace has an explicit role gate and Studio list scope", () => {
