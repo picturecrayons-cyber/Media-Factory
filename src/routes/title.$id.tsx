@@ -40,6 +40,8 @@ import {
 import { AssetPosterSlot, AssetPreviewGallery } from "@/components/bridge/asset-preview-gallery";
 
 export const Route = createFileRoute("/title/$id")({
+  head: () => ({ meta: [{ title: "Title Workspace | Crayons Bridge" }, { name: "robots", content: "noindex, nofollow" }] }),
+  
   head: () => ({ meta: [{ name: "robots", content: "noindex, nofollow" }] }),
   component: TitlePage,
 });
