@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { Button } from "@/components/ui/button";
@@ -7,6 +7,7 @@ import { listTitles, listAuditLogs } from "@/lib/bridge/titles";
 import { listLoopPublicationReadiness } from "@/lib/bridge/loop-publication";
 import { listAdminProfiles } from "@/lib/bridge/profiles";
 import { StreamVistaOrders } from "@/components/bridge/streamvista-orders";
+import { listPendingStoryConcepts, updateStoryConceptCuration } from "@/lib/bridge/story-concept-api";
 
 export const Route = createFileRoute("/admin")({
   head: () => ({ meta: [{ name: "robots", content: "noindex, nofollow" }] }),
@@ -112,6 +113,10 @@ function AdminBody({ actor }: { actor: any }) {
           </div>
         </section>
 
+        <section className="rounded-2xl border border-line bg-surface p-4 sm:p-5">
+          <StoryConceptReviewQueue />
+        </section>
+
         <section className="grid gap-3 lg:grid-cols-2">
           <details className="min-w-0 rounded-2xl border border-line bg-surface p-4">
             <summary className="cursor-pointer list-none font-semibold">Users & organizations <span className="ml-1 text-sm font-normal text-muted">({profiles.length})</span></summary>
@@ -162,6 +167,80 @@ function AdminBody({ actor }: { actor: any }) {
         </details>
       </div>
     </BridgeShell>
+  );
+}
+
+
+function StoryConceptReviewQueue() {
+  const queryClient = useQueryClient();
+  const query = useQuery({
+    queryKey: ["admin-story-concept-review"],
+    queryFn: () => listPendingStoryConcepts(),
+  });
+  const mutation = useMutation({
+    mutationFn: (input: { id: string; status: "PENDING" | "UNDER_REVIEW" | "APPROVED" | "REJECTED" | "INTRODUCED_TO_BUYERS" }) =>
+      updateStoryConceptCuration({ data: input }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["admin-story-concept-review"] });
+      await queryClient.invalidateQueries({ queryKey: ["my-story-concepts"] });
+    },
+  });
+  const concepts = query.data?.concepts ?? [];
+  const nextActions: Record<string, Array<"PENDING" | "UNDER_REVIEW" | "APPROVED" | "REJECTED" | "INTRODUCED_TO_BUYERS">> = {
+    PENDING: ["UNDER_REVIEW", "APPROVED", "REJECTED"],
+    UNDER_REVIEW: ["PENDING", "APPROVED", "REJECTED"],
+    APPROVED: ["INTRODUCED_TO_BUYERS"],
+    REJECTED: ["UNDER_REVIEW", "PENDING"],
+    INTRODUCED_TO_BUYERS: [],
+  };
+  const labels: Record<string, string> = {
+    PENDING: "Pending",
+    UNDER_REVIEW: "Under review",
+    APPROVED: "Approved",
+    REJECTED: "Rejected",
+    INTRODUCED_TO_BUYERS: "Introduced to buyers",
+  };
+  return (
+    <div>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h3 className="font-display text-xl font-semibold">Story Concept submissions</h3>
+          <p className="mt-1 text-sm text-muted">Admin curation queue, separate from finished-film title intake.</p>
+        </div>
+        <span className="text-xs text-muted">{query.isPending ? "Loading…" : `${concepts.length} in queue`}</span>
+      </div>
+      {query.isError ? <p role="alert" className="mt-3 text-sm text-muted">Story Concept queue could not be loaded. Check the migration and server logs.</p> : null}
+      <div className="mt-3 divide-y divide-line">
+        {concepts.map((concept) => (
+          <article key={concept.id} className="py-4">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+              <div className="min-w-0">
+                <p className="font-semibold">{concept.titleName || "Untitled concept"}</p>
+                <p className="mt-1 break-all font-mono text-xs text-muted">Ref: {concept.id}</p>
+                <p className="mt-1 text-xs text-muted">Submitter: {concept.ownerUserId}</p>
+                {concept.logline ? <p className="mt-2 max-w-3xl text-sm text-muted">{concept.logline}</p> : null}
+                <p className="mt-2 text-xs font-semibold text-accent">{labels[concept.curation_status] ?? concept.curation_status}</p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {(nextActions[concept.curation_status] ?? []).map((status) => (
+                  <Button
+                    key={status}
+                    size="sm"
+                    variant={status === "REJECTED" ? "outline" : "secondary"}
+                    disabled={mutation.isPending}
+                    onClick={() => mutation.mutate({ id: concept.id, status })}
+                  >
+                    {status === "UNDER_REVIEW" ? "Start review" : status === "INTRODUCED_TO_BUYERS" ? "Introduce to buyers" : status === "PENDING" ? "Return to pending" : status === "APPROVED" ? "Approve" : "Reject"}
+                  </Button>
+                ))}
+              </div>
+            </div>
+          </article>
+        ))}
+        {!query.isPending && !query.isError && concepts.length === 0 ? <p className="py-5 text-sm text-muted">No Story Concept submissions are awaiting curation.</p> : null}
+      </div>
+      {mutation.isError ? <p role="alert" className="mt-3 text-sm text-red-600">Curation update failed. Refresh the queue and retry.</p> : null}
+    </div>
   );
 }
 
