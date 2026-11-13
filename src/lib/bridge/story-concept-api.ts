@@ -206,6 +206,7 @@ export const getStoryConceptById = createServerFn({ method: "GET" })
     const isOwner = row.owner_user_id === actor.userId ||
       (actor.accountType === "studio" && !!actor.organizationId && row.owner_organization_id === actor.organizationId);
     const isAdmin = Boolean(actor.internalRole);
+    if (isAdmin) requireCurationStaff(actor);
     if (!isOwner && !isAdmin) throw new Error("Story concept not found");
     return { concept: { ...mapConcept(row), titleName: row.title_name ?? "Story concept", language: row.language } };
   });
@@ -220,10 +221,12 @@ export const listPendingStoryConcepts = createServerFn({ method: "GET" })
     const sql = await getSql();
     try {
       const rows = await sql<ConceptRow>`
-        select *
-        from bridge_story_concept_submissions
-        where curation_status in ('PENDING', 'UNDER_REVIEW', 'APPROVED')
-        order by created_at asc
+        select c.*, t.name as title_name, t.owner_user_id, t.owner_organization_id
+        from bridge_story_concept_submissions c
+        join bridge_titles t on t.id = c.title_id
+        where t.submission_type = 'story_concept'
+          and c.curation_status in ('PENDING', 'UNDER_REVIEW', 'APPROVED')
+        order by c.created_at asc
         limit 200
       `;
 
