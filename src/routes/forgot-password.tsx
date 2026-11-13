@@ -4,7 +4,9 @@ import { resetPasswordForEmail } from "@/lib/auth/client";
 import { BrandMark } from "@/components/bridge/shell";
 import { Button } from "@/components/ui/button";
 
-export const Route = createFileRoute("/forgot-password")({ component: Forgot });
+export const Route = createFileRoute("/forgot-password")({
+  head: () => ({ meta: [{ title: "Reset Password | Crayons Bridge" }, { name: "description", content: "Request a secure password reset for your Crayons Bridge account." }, { name: "robots", content: "noindex, nofollow" }] }),
+   component: Forgot });
 
 function Forgot() {
   const [email, setEmail] = useState("");
