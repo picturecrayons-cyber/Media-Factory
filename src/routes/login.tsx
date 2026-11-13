@@ -8,12 +8,6 @@ import { getBridgeSession } from "@/lib/bridge/session";
 
 export const Route = createFileRoute("/login")({ component: Login });
 
-function isSafeRedirect(url: string | null): boolean {
-  if (!url) return false;
-  // Allow only safe relative internal paths starting with /
-  return url.startsWith("/") && !url.startsWith("//") && !url.includes("://");
-}
-
 function Login() {
   const { user, isPending } = useCurrentUserState();
   const navigate = useNavigate();
@@ -28,15 +22,7 @@ function Login() {
     if (isPending || !user) return;
     void getBridgeSession()
       .then((s) => {
-        const nextParam =
-          typeof window !== "undefined"
-            ? new URLSearchParams(window.location.search).get("next")
-            : null;
-        if (isSafeRedirect(nextParam)) {
-          void navigate({ to: nextParam! });
-        } else {
-          void navigate({ to: s.home || "/dashboard" });
-        }
+        void navigate({ to: s.home || "/onboarding" });
       })
       .catch(() => {
         void navigate({ to: "/onboarding" });
@@ -52,18 +38,7 @@ function Login() {
       await signInWithEmail(email.trim(), password);
       // Session established; let the useEffect resolve profile or route
       const s = await getBridgeSession().catch(() => null);
-      const nextParam =
-        typeof window !== "undefined"
-          ? new URLSearchParams(window.location.search).get("next")
-          : null;
-
-      if (isSafeRedirect(nextParam)) {
-        window.location.assign(nextParam!);
-      } else if (s?.home) {
-        window.location.assign(s.home);
-      } else {
-        window.location.assign("/dashboard");
-      }
+      window.location.assign(s?.home || "/onboarding");
     } catch (err: unknown) {
       console.error("[Login error]", err);
       const message = err instanceof Error ? err.message : String(err);
