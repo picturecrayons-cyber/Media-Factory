@@ -79,7 +79,7 @@ export const updateStudioMember = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     const actor = await requireStudioManager(context.userId);
     const sql = await getSql();
-    await sql.begin(async (tx) => {
+    await sql.transaction(async (tx) => {
       const rows = await tx<{
         membership_role: string; status: string;
       }>`
