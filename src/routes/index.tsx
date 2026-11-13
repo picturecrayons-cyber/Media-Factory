@@ -110,6 +110,23 @@ function Home() {
           </div>
         </section>
 
+        <section id="account-pathways" aria-label="Choose your Bridge workspace" className="relative z-10 border-b border-line bg-surface py-6 sm:py-8">
+          <div className="mx-auto grid max-w-7xl grid-cols-2 gap-3 px-4 sm:grid-cols-4 sm:px-6">
+            {[
+              { role: "creator", title: "Creator", detail: "Submit films and concepts" },
+              { role: "studio", title: "Studio", detail: "Manage company productions" },
+              { role: "buyer", title: "Buyer", detail: "Discover and license titles" },
+              { role: "investor", title: "Investor", detail: "View assigned participation" },
+            ].map((item) => (
+              <Link key={item.role} to="/signup" search={{ role: item.role }} className="group rounded-2xl border border-line bg-white p-4 text-left transition hover:border-accent hover:shadow-sm sm:p-5">
+                <span className="block text-base font-semibold text-fg group-hover:text-accent">{item.title}</span>
+                <span className="mt-1 block text-xs leading-relaxed text-muted">{item.detail}</span>
+                <span className="mt-3 block text-xs font-semibold text-accent">Create account →</span>
+              </Link>
+            ))}
+          </div>
+        </section>
+
         <section id="how-it-works" className="border-b border-line bg-surface/50 py-10 sm:py-12">
           <div className="mx-auto max-w-7xl px-4 sm:px-6">
             <div className="max-w-2xl">
@@ -206,10 +223,11 @@ function Home() {
                 </div>
                 <div className="mt-8 pt-5 border-t border-line">
                   <Link
-                    to="/contact"
+                    to="/signup"
+                    search={{ role: "investor" }}
                     className="inline-flex items-center text-xs font-semibold text-accent hover:underline"
                   >
-                    Request Investor Access →
+                    Create Investor Account →
                   </Link>
                 </div>
               </div>
