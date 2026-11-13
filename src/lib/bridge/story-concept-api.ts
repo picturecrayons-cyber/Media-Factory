@@ -251,6 +251,38 @@ export const listPendingStoryConcepts = createServerFn({ method: "GET" })
     }
   });
 
+
+export const listAdminStoryConcepts = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    requireCurationStaff(actor);
+    const sql = await getSql();
+    const rows = await sql<ConceptRow>`
+      select c.*, t.name as title_name, t.owner_user_id, t.owner_organization_id,
+        p.display_name as owner_display_name, p.account_type as owner_account_type,
+        p.organization_name as owner_organization_name
+      from bridge_story_concept_submissions c
+      join bridge_titles t on t.id = c.title_id
+      left join bridge_profiles p on p.user_id = t.owner_user_id
+      where t.submission_type = 'story_concept'
+      order by c.created_at desc
+      limit 500
+    `;
+    return {
+      concepts: rows.map((r) => ({
+        ...mapConcept(r),
+        titleId: r.title_id,
+        titleName: r.title_name ?? "Story concept",
+        ownerUserId: r.owner_user_id,
+        ownerDisplayName: r.owner_display_name,
+        ownerAccountType: r.owner_account_type,
+        ownerOrganizationName: r.owner_organization_name,
+      })),
+    };
+  });
+
 export const updateStoryConceptCuration = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(
