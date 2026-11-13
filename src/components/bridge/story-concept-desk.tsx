@@ -40,7 +40,7 @@ export function StoryConceptDesk() {
   if (query.isError) {
     return (
       <div className="rounded-2xl border border-line bg-surface p-6 text-sm">
-        Unable to load story concepts. Confirm migration is applied and you have staff access.
+        Unable to load Story Concepts. Confirm storage is available and your account has curation permission.
       </div>
     );
   }
