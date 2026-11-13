@@ -1,6 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 
-export const Route = createFileRoute("/privacy")({ component: Privacy });
+export const Route = createFileRoute("/privacy")({
+  head: () => ({ meta: [{ title: "Privacy Policy | Crayons Bridge" }, { name: "description", content: "Read the Crayons Bridge privacy policy, including how StreamVista handles account, workspace, rights, licensing and security information." }, { property: "og:title", content: "Privacy Policy | Crayons Bridge" }, { property: "og:url", content: "https://www.crayonspictures.in/privacy" }], links: [{ rel: "canonical", href: "https://www.crayonspictures.in/privacy" }] }),
+   component: Privacy });
 
 function Privacy() {
   return (
