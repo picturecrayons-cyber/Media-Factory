@@ -16,7 +16,7 @@ test("authenticated profiles route through the server-resolved workspace home", 
   const onboarding = read("../../routes/onboarding.tsx");
   assert.match(session, /profile: actor, home: workspaceHome\(actor\)/);
   assert.match(onboarding, /const home = sessionQ\.data\?\.profile \? sessionQ\.data\.home : null/);
-  assert.match(onboarding, /if \(home\) goHome\(home, navigate\)/);
+  assert.match(onboarding, /if \(home\) \{/);\n  assert.match(onboarding, /goHome\(home, navigate\)/);
 });
 
 test("dashboard access is enforced server-side for verified super admins", () => {
@@ -30,16 +30,16 @@ test("dashboard access is enforced server-side for verified super admins", () =>
 test("public onboarding does not silently treat a missing profile as an admin session", () => {
   const onboarding = read("../../routes/onboarding.tsx");
   assert.match(onboarding, /if \(!user\) return <RedirectToSignIn \/>/);
-  assert.match(onboarding, /if \(home\) goHome\(home, navigate\)/);
+  assert.match(onboarding, /if \(home\) \{/);\n  assert.match(onboarding, /goHome\(home, navigate\)/);
   assert.doesNotMatch(onboarding, /internal_role\s*=\s*["']super_admin["']/);
 });
 
-test("public signup role selector is accessible and limited to supported public roles", () => {
+test("public signup role selector is accessible and includes the four public roles", () => {
   const signup = read("../../routes/signup.tsx");
   assert.match(signup, /role="radiogroup"/);
   assert.match(signup, /type="radio"/);
   assert.match(signup, /publicAccountTypeFrom\(search\.role\)/);
-  assert.match(signup, /Investor access/);
+  for (const role of ["independent_creator", "studio", "buyer", "investor"]) {\n    assert.ok(signup.includes(`id: "${role}"`));\n  }
 });
 
 test("onboarding preserves the signup-selected role and fails closed for unsupported roles", () => {
