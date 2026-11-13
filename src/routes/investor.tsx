@@ -26,10 +26,16 @@ function InvestorBody({ userId }: { userId: string }) {
   });
   const rows = investmentsQ.data?.investments ?? [];
   const totalCapital = rows.reduce((sum, row) => sum + Number(row.investedAmountPaise ?? 0), 0);
-  const totalParticipation = rows.reduce((sum, row) => sum + Number(row.participationPercent ?? 0), 0);
 
   return (
     <div className="space-y-6">
+      {investmentsQ.isPending ? <p className="text-sm text-muted">Loading your assigned investment records…</p> : null}
+      {investmentsQ.isError ? (
+        <p role="alert" className="rounded-sm border border-line p-4 text-sm text-muted">
+          Your portfolio could not be loaded. Totals are hidden until the authenticated data source responds.
+        </p>
+      ) : null}
+      {!investmentsQ.isPending && !investmentsQ.isError ? <>
       <section className="grid gap-3 sm:grid-cols-3">
         <article className="rounded-sm border border-line p-4"><p className="text-xs uppercase tracking-widest text-muted">Scope</p><p className="mt-2 text-sm">Assigned titles only. Read participation. No title edits.</p></article>
         <article className="rounded-sm border border-line p-4"><p className="text-xs uppercase tracking-widest text-muted">Opportunity</p><p className="mt-2 text-sm">Capital is recorded by Bridge. You see only titles assigned to this account.</p></article>
@@ -50,6 +56,7 @@ function InvestorBody({ userId }: { userId: string }) {
           </table>
         </div>
       </section>
+      </> : null}
     </div>
   );
 }
