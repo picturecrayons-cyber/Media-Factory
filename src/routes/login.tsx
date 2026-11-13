@@ -1,6 +1,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState, type FormEvent } from "react";
 import { signInWithEmail } from "@/lib/auth/client";
+import { resolvePostLoginDestination } from "@/lib/auth/sign-in-gate";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { BrandMark } from "@/components/bridge/shell";
 import { Button } from "@/components/ui/button";
@@ -57,13 +58,9 @@ function Login() {
           ? new URLSearchParams(window.location.search).get("next")
           : null;
 
-      if (isSafeRedirect(nextParam)) {
-        window.location.assign(nextParam!);
-      } else if (s?.home) {
-        window.location.assign(s.home);
-      } else {
-        window.location.assign("/dashboard");
-      }
+      window.location.assign(
+        resolvePostLoginDestination({ next: nextParam, sessionHome: s?.home }),
+      );
     } catch (err: unknown) {
       console.error("[Login error]", err);
       const message = err instanceof Error ? err.message : String(err);
