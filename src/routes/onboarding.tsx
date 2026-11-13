@@ -151,7 +151,10 @@ function Onboarding() {
   const home = sessionQ.data?.profile ? sessionQ.data.home : null;
 
   useEffect(() => {
-    if (home) goHome(home, navigate);
+    if (home) {
+      if (typeof window !== "undefined") window.sessionStorage.removeItem("bridge.signup-role-intent");
+      goHome(home, navigate);
+    }
   }, [home, navigate]);
 
   if (isPending || (user && sessionQ.isPending) || home) {
