@@ -41,6 +41,21 @@ CREATE TABLE IF NOT EXISTS public.bridge_organization_memberships (
   PRIMARY KEY (organization_id, user_id)
 );
 
+-- STAGING may already contain this table with a narrower legacy role check,
+-- an invitation status, and a surrogate id primary key. Preserve its existing
+-- keys/rows while making the role vocabulary compatible with the Studio desk.
+ALTER TABLE public.bridge_organization_memberships
+  DROP CONSTRAINT IF EXISTS bridge_organization_memberships_membership_role_check;
+ALTER TABLE public.bridge_organization_memberships
+  ADD CONSTRAINT bridge_organization_memberships_membership_role_check
+  CHECK (membership_role IN ('owner', 'admin', 'member', 'producer', 'dit'));
+
+ALTER TABLE public.bridge_organization_memberships
+  DROP CONSTRAINT IF EXISTS bridge_organization_memberships_status_check;
+ALTER TABLE public.bridge_organization_memberships
+  ADD CONSTRAINT bridge_organization_memberships_status_check
+  CHECK (status IN ('invited', 'active', 'suspended', 'removed'));
+
 -- Give each pre-existing Studio profile its own organization. Never merge
 -- separate accounts merely because their free-text organization names match.
 CREATE TEMP TABLE _bridge_studio_org_backfill ON COMMIT DROP AS
