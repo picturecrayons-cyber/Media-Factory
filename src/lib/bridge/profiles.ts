@@ -275,7 +275,7 @@ export const completeOnboarding = createServerFn({ method: "POST" })
     if (welcomeClaim.length > 0) {
       try {
         const { sendWelcomeEmail } = await import("./mail.server");
-        await sendWelcomeEmail({ to: email, name: data.displayName });
+        await sendWelcomeEmail({ to: email, name: data.displayName, accountType: data.accountType });
         await writeAudit({
           actorUserId: bridgeUserId!,
           action: "email.welcome_sent",
