@@ -15,7 +15,7 @@ function StoryConceptWorkspace() {
   });
 
   return (
-    <RequireBridge allow="studio">
+    <RequireBridge>
       {(actor) => (
         <BridgeShell actor={actor} title="Story Concept Workspace">
           <main className="mx-auto max-w-3xl space-y-5 px-4 pb-16">
