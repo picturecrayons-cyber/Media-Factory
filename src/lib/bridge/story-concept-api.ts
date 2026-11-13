@@ -110,7 +110,7 @@ export const createStoryConceptSubmission = createServerFn({ method: "POST" })
     const sql = await getSql();
 
     try {
-      const concept = await sql.begin(async (tx) => {
+      const concept = await sql.transaction(async (tx) => {
         const titleId = randomBytes(16).toString("hex");
         const slugBase = data.titleName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 48);
         const slug = `${slugBase || "concept"}-${titleId.slice(0, 6)}`;
