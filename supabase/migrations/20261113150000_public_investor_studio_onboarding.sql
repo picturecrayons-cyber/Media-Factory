@@ -147,6 +147,10 @@ CREATE POLICY bridge_story_concepts_owner_update
       AND l.auth_user_id = (SELECT auth.uid())
   ));
 
+-- Story Concept writes and curation must pass through authenticated server functions.
+-- The existing broad table grants would otherwise allow a submitter to alter curation_status.
+REVOKE ALL ON public.bridge_story_concept_submissions FROM anon, authenticated;
+
 ALTER TABLE public.bridge_organizations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.bridge_organization_memberships ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON public.bridge_organizations FROM anon, authenticated;
