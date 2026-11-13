@@ -18,7 +18,7 @@ function projectRefFromSupabaseUrl(value: string | undefined): string | null {
   if (!value) return null;
   try {
     const hostname = new URL(value).hostname.toLowerCase();
-    const match = hostname.match(/^([a-z0-9]{20})\.supabase\.co$/);
+    const match = hostname.match(/^([a-z0-9]{20})\\.supabase\\.co$/);
     return match?.[1] ?? null;
   } catch {
     return null;
@@ -26,21 +26,28 @@ function projectRefFromSupabaseUrl(value: string | undefined): string | null {
 }
 
 /**
- * Select a server-side Postgres binding. A Preview explicitly marked as STAGING
- * must prove that its PostgreSQL host or pooler username belongs to the same
- * Supabase project as the configured API URL before any query can run.
+ * Select a server-side Postgres binding.
+ *
+ * Every Vercel Preview is fail-closed unless it is explicitly marked STAGING
+ * and its PostgreSQL host/pooler username proves the same Supabase project as
+ * the configured Supabase API URL. A missing or mistyped target must never
+ * silently fall through to a Production database binding.
  */
 export function resolveBridgeDatabaseUrl(env: DatabaseBindingEnv): string | undefined {
-  const isApprovedStagingPreview =
-    env.VERCEL_ENV === "preview" && env.BRIDGE_DATABASE_TARGET === "staging";
-
   const selected = firstConfigured(
     env.DATABASE_URL,
     env.POSTGRES_URL,
     env.SUPABASE_DB_URL,
     env.SUPABASE_DATABASE_URL,
   );
-  if (!isApprovedStagingPreview) return selected;
+
+  if (env.VERCEL_ENV === "preview" && env.BRIDGE_DATABASE_TARGET !== "staging") {
+    throw new Error(
+      "Bridge Preview is blocked: BRIDGE_DATABASE_TARGET must explicitly equal staging. Production database fallback is forbidden.",
+    );
+  }
+
+  if (env.VERCEL_ENV !== "preview") return selected;
 
   if (!selected) {
     throw new Error(
