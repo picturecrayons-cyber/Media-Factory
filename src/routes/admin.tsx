@@ -7,7 +7,7 @@ import { listTitles, listAuditLogs } from "@/lib/bridge/titles";
 import { listLoopPublicationReadiness } from "@/lib/bridge/loop-publication";
 import { listAdminProfiles } from "@/lib/bridge/profiles";
 import { StreamVistaOrders } from "@/components/bridge/streamvista-orders";
-import { listPendingStoryConcepts, updateStoryConceptCuration } from "@/lib/bridge/story-concept-api";
+import { listAdminStoryConcepts, listPendingStoryConcepts, updateStoryConceptCuration } from "@/lib/bridge/story-concept-api";
 
 export const Route = createFileRoute("/admin")({
   head: () => ({ meta: [{ name: "robots", content: "noindex, nofollow" }] }),
@@ -40,10 +40,12 @@ function AdminBody({ actor }: { actor: any }) {
   const auditQ = useQuery({ queryKey: ["bridge-audit"], queryFn: () => listAuditLogs() });
   const distQ = useQuery({ queryKey: ["loop-publication-readiness"], queryFn: () => listLoopPublicationReadiness() });
   const profilesQ = useQuery({ queryKey: ["bridge-admin-profiles"], queryFn: () => listAdminProfiles() });
+  const allConceptsQ = useQuery({ queryKey: ["admin-all-story-concepts"], queryFn: () => listAdminStoryConcepts() });
 
   const titles = titlesQ.data?.titles ?? [];
   const distribution = distQ.data?.titles ?? [];
   const profiles = profilesQ.data?.profiles ?? [];
+  const allConcepts = allConceptsQ.data?.concepts ?? [];
   const investorProfiles = profiles.filter((profile) => profile.accountType === "investor");
   const verifiedInvestorProfiles = investorProfiles.filter((profile) => profile.emailVerified);
   const organizations = new Set(profiles.map((profile) => profile.organizationName).filter(Boolean));
@@ -112,6 +114,44 @@ function AdminBody({ actor }: { actor: any }) {
             {loading ? <p className="py-5 text-sm text-muted">Loading title queue…</p> : null}
             {titlesQ.isError ? <p role="alert" className="py-5 text-sm text-muted">Could not load titles. Refresh to retry.</p> : null}
             {!loading && !titlesQ.isError && attention.length === 0 ? <p className="py-5 text-sm text-muted">Nothing needs attention in these stages.</p> : null}
+          </div>
+        </section>
+
+        <section className="rounded-2xl border border-line bg-surface p-4 sm:p-5">
+          <div className="mb-3">
+            <h3 className="font-display text-xl font-semibold">User Submissions</h3>
+            <p className="mt-1 text-sm text-muted">Films and Story Concepts are listed as separate submission types. Owner and Studio identity are resolved from Bridge records; status is shown from the authoritative record.</p>
+          </div>
+          {titlesQ.isError || allConceptsQ.isError ? <p role="alert" className="text-sm text-accent">Submission mapping is incomplete. Check the title and Story Concept data sources; no missing records are assumed.</p> : null}
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[760px] text-left text-sm">
+              <thead><tr className="border-b border-line text-xs text-muted">
+                <th className="px-2 py-2">Type</th><th className="px-2 py-2">Submission</th><th className="px-2 py-2">Owner</th><th className="px-2 py-2">Account / Studio</th><th className="px-2 py-2">Status</th><th className="px-2 py-2">Open</th>
+              </tr></thead>
+              <tbody>
+                {titles.map((title) => {
+                  const owner = profiles.find((profile) => profile.userId === title.ownerUserId);
+                  return <tr key={title.id} className="border-b border-line/70">
+                    <td className="px-2 py-3">Film</td>
+                    <td className="px-2 py-3 font-medium">{title.name}</td>
+                    <td className="px-2 py-3">{owner?.displayName || title.ownerUserId}</td>
+                    <td className="px-2 py-3">{owner?.accountType || title.ownerAccountType}{owner?.organizationName ? " · " + owner.organizationName : ""}</td>
+                    <td className="px-2 py-3">{title.status}</td>
+                    <td className="px-2 py-3"><Link to="/title/$id" params={{ id: title.id }} className="text-accent hover:underline">Open film</Link></td>
+                  </tr>;
+                })}
+                {allConcepts.map((concept) => <tr key={concept.id} className="border-b border-line/70">
+                  <td className="px-2 py-3">Story Concept</td>
+                  <td className="px-2 py-3 font-medium">{concept.titleName}</td>
+                  <td className="px-2 py-3">{concept.ownerDisplayName || concept.ownerUserId || "Unresolved"}</td>
+                  <td className="px-2 py-3">{concept.ownerAccountType || "Unverified"}{concept.ownerOrganizationName ? " · " + concept.ownerOrganizationName : ""}</td>
+                  <td className="px-2 py-3">{concept.curation_status}</td>
+                  <td className="px-2 py-3"><Link to="/story-concepts/$conceptId" params={{ conceptId: concept.id }} className="text-accent hover:underline">Open submission</Link></td>
+                </tr>)}
+                {titlesQ.isPending || allConceptsQ.isPending ? <tr><td colSpan={6} className="px-2 py-4 text-muted">Loading submissions…</td></tr> : null}
+                {!titlesQ.isPending && !allConceptsQ.isPending && !titlesQ.isError && !allConceptsQ.isError && titles.length === 0 && allConcepts.length === 0 ? <tr><td colSpan={6} className="px-2 py-4 text-muted">No submissions returned.</td></tr> : null}
+              </tbody>
+            </table>
           </div>
         </section>
 
