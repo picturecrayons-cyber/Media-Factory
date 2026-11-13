@@ -6,12 +6,30 @@ import { cn } from "@/lib/cn";
 
 type NavItem = { to: string; label: string };
 
-const NAV: NavItem[] = [
-  { to: "/dashboard", label: "Dashboard" },
-  { to: "/workspace", label: "Titles" },
-  { to: "/deliveries", label: "Deliveries" },
-  { to: "/account", label: "Account" },
-];
+function navigationFor(actor: BridgeActor): NavItem[] {
+  if (!actor.internalRole && actor.accountType === "independent_creator") {
+    return [
+      { to: "/creator", label: "Home" },
+      { to: "/creator", label: "My Titles" },
+      { to: "/deliveries", label: "Updates & Deliveries" },
+      { to: "/account", label: "Account" },
+    ];
+  }
+  if (!actor.internalRole && actor.accountType === "studio") {
+    return [
+      { to: "/studio", label: "Home" },
+      { to: "/studio", label: "Studio Titles" },
+      { to: "/deliveries", label: "Deliveries" },
+      { to: "/account", label: "Account" },
+    ];
+  }
+  return [
+    { to: "/dashboard", label: "Dashboard" },
+    { to: "/workspace", label: "Titles" },
+    { to: "/deliveries", label: "Deliveries" },
+    { to: "/account", label: "Account" },
+  ];
+}
 
 function NavLink({ item }: { item: NavItem }) {
   return <Link to={item.to} className="bridge-nav-item" activeProps={{ className: "bridge-nav-item bridge-nav-active" }}>{item.label}</Link>;
@@ -38,7 +56,7 @@ export function BridgeShell({ actor, title, children }: { actor: BridgeActor; ti
       <header className="sticky top-0 z-50 border-b border-line bg-surface/88 backdrop-blur-xl">
         <div className="mx-auto flex max-w-[1440px] items-center gap-6 px-4 py-3.5 sm:px-6 lg:px-8">
           <BrandMark />
-          <nav className="hidden flex-1 items-center gap-1 md:flex">{NAV.map((item) => <NavLink key={item.label} item={item} />)}</nav>
+          <nav className="hidden flex-1 items-center gap-1 md:flex">{navigationFor(actor).map((item, index) => <NavLink key={`${item.label}-${index}`} item={item} />)}</nav>
           <a href="https://crayonsloop.in/" target="_blank" rel="noreferrer" className="hidden text-sm font-semibold text-muted transition hover:text-fg lg:inline">Open Crayons Loop ↗</a>
           <div className="ml-auto flex items-center gap-3">
             {actor.internalRole ? <span className="hidden rounded-full border border-line px-3 py-1 text-xs text-muted sm:inline">{actor.internalRole.replaceAll("_", " ")}</span> : null}
