@@ -267,7 +267,6 @@ export const requestDitFileUpload = createServerFn({ method: "POST" })
     if (session.status === "SIGNED_OFF") throw new Error("A signed-off DIT session is locked");
 
     const { bridgeEnv, signUpload } = await loadDitOciStorage();
-    const { bridgeEnv, verifyObject, verifyObjectSha256, sealVerifiedObject } = await loadDitOciStorage();
     const primaryBucket = bridgeEnv.ociBucket();
     const recoveryBucket = bridgeEnv.ociRecoveryBucket();
     if (!primaryBucket || !recoveryBucket) {
@@ -338,6 +337,7 @@ export const verifyDitFileUpload = createServerFn({ method: "POST" })
     const session = await requireSession(sql, data.sessionId, actor.organizationId!);
     if (session.status === "SIGNED_OFF") throw new Error("A signed-off DIT session is locked");
 
+    const { bridgeEnv, verifyObject, verifyObjectSha256, sealVerifiedObject } = await loadDitOciStorage();
     const primaryBucket = bridgeEnv.ociBucket();
     const recoveryBucket = bridgeEnv.ociRecoveryBucket();
     if (!primaryBucket || !recoveryBucket || primaryBucket === recoveryBucket) {
