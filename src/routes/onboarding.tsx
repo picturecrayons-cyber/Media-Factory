@@ -4,13 +4,10 @@ import { useQuery } from "@tanstack/react-query";
 import { RedirectToSignIn } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { completeOnboarding } from "@/lib/bridge/profiles";
-import { createTitle } from "@/lib/bridge/titles";
 import { getBridgeSession } from "@/lib/bridge/session";
 import { retryWorkspaceSession } from "@/lib/auth/workspace-session-retry";
 import { supabase } from "@/lib/supabase";
-import { ACCOUNT_TYPES } from "@/lib/bridge/types";
 import { publicAccountTypeFrom } from "@/lib/auth/public-account-type";
-import { BRIDGE_LOOP_LANES } from "@/lib/bridge/loop-lanes";
 import { publicOnboardingError } from "@/lib/bridge/onboarding-errors";
 import { BrandMark } from "@/components/bridge/shell";
 import { Button } from "@/components/ui/button";
@@ -27,11 +24,6 @@ const ACCOUNT_LABELS: Record<PublicAccountType, string> = {
   studio: "Studio / Company",
   buyer: "Buyer / Acquisitions",
 };
-
-const LANGUAGES = ["Malayalam", "Tamil", "Telugu", "Kannada", "Hindi", "English", "Bengali", "Marathi", "Other"];
-const TERRITORIES = ["India", "Worldwide", "South Asia", "GCC", "North America", "United Kingdom", "Europe", "Australia / New Zealand", "Other"];
-const MEDIA = ["SVOD", "TVOD", "AVOD", "FAST", "Broadcast", "Theatrical", "Airline", "Educational", "Festival", "Crayons Loop"];
-const DESTINATIONS = ["Crayons Loop", "External OTT", "Broadcast / TV", "TVOD / EST", "FAST", "Festival / Educational", "Buyer delivery"];
 
 const SESSION_TIMEOUT_MS = 12_000;
 
@@ -53,40 +45,6 @@ function goHome(home: string | null | undefined, navigate: ReturnType<typeof use
   void navigate({ to: (home || "/dashboard") as any, replace: true });
 }
 
-function CheckGroup({
-  label,
-  values,
-  selected,
-  onChange,
-  required = false,
-}: {
-  label: string;
-  values: string[];
-  selected: string[];
-  onChange: (value: string, checked: boolean) => void;
-  required?: boolean;
-}) {
-  return (
-    <fieldset className="space-y-2">
-      <legend className="text-sm font-medium text-fg">
-        {label}{required ? " *" : ""}
-      </legend>
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-        {values.map((value) => (
-          <label key={value} className="flex min-h-10 items-center gap-2 rounded-xl border border-line bg-elevated px-3 text-xs text-fg">
-            <input
-              type="checkbox"
-              checked={selected.includes(value)}
-              onChange={(e) => onChange(value, e.target.checked)}
-              className="accent-current"
-            />
-            <span>{value}</span>
-          </label>
-        ))}
-      </div>
-    </fieldset>
-  );
-}
 
 function Onboarding() {
   const { user, isPending } = useCurrentUserState();
@@ -102,7 +60,6 @@ function Onboarding() {
   const [displayName, setDisplayName] = useState("");
   const [accountType, setAccountType] = useState<PublicAccountType>("independent_creator");
   const [organizationName, setOrganizationName] = useState("");
-
 
   if (sessionQ.isError) {
     async function retrySession() {
