@@ -15,7 +15,7 @@ test("fallback event ID awaits the body hash", () => {
 });
 
 test("captured Bridge payment is resolved from provider_order_id, not only notes", () => {
-  assert.match(source, /from\("bridge_payments"\)[\s\S]*eq\("provider_order_id", payment\.order_id\)/);
+  assert.match(source, /from\("bridge_payments"\)[\s\S]*eq\("provider_order_id",\s*payment\.order_id\)/);
   assert.match(source, /if\s*\(\s*localPayment\s*\)\s*surface\s*=\s*"bridge"/);
 });
 
