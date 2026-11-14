@@ -71,74 +71,46 @@ export function mapTitle(r: TitleRow): BridgeTitle {
   } as BridgeTitle;
 }
 
-async function hasTitleMergeColumn(sql: Sql): Promise<boolean> {
-  const rows = await sql<{ exists: boolean }>`
-    select exists (
-      select 1
-      from information_schema.columns
-      where table_schema = 'public'
-        and table_name = 'bridge_titles'
-        and column_name = 'merged_into_title_id'
-    ) as exists
-  `;
-  return Boolean(rows[0]?.exists);
-}
-
 async function listCatalog(sql: Sql): Promise<TitleRow[]> {
-  if (!(await hasTitleMergeColumn(sql))) {
-    return sql<TitleRow>`select * from bridge_titles where archived_at is null and submission_type is distinct from 'story_concept' order by updated_at desc limit 200`;
-  }
-  return sql<TitleRow>`select * from bridge_titles where archived_at is null and merged_into_title_id is null and submission_type is distinct from 'story_concept' order by updated_at desc limit 200`;
+  // JSON row access keeps the query compatible while additive archive/merge migrations
+  // are still pending in some environments. Missing columns behave as NULL.
+  return sql<TitleRow>`select t.* from bridge_titles t
+    where to_jsonb(t)->>'archived_at' is null
+      and to_jsonb(t)->>'merged_into_title_id' is null
+      and t.submission_type is distinct from 'story_concept'
+    order by t.updated_at desc limit 200`;
 }
 
 async function listOwned(sql: Sql, userId: string, organizationId: string | null | undefined): Promise<TitleRow[]> {
   const orgId = organizationId || null;
-  const mergeColumnAvailable = await hasTitleMergeColumn(sql);
   if (!orgId) {
-    return mergeColumnAvailable
-      ? sql<TitleRow>`select * from bridge_titles where owner_user_id = ${userId} and archived_at is null and merged_into_title_id is null and submission_type is distinct from 'story_concept' order by updated_at desc limit 200`
-      : sql<TitleRow>`select * from bridge_titles where owner_user_id = ${userId} and archived_at is null and submission_type is distinct from 'story_concept' order by updated_at desc limit 200`;
+    return sql<TitleRow>`select t.* from bridge_titles t
+      where t.owner_user_id = ${userId}
+        and to_jsonb(t)->>'archived_at' is null
+        and to_jsonb(t)->>'merged_into_title_id' is null
+        and t.submission_type is distinct from 'story_concept'
+      order by t.updated_at desc limit 200`;
   }
-  return mergeColumnAvailable
-    ? sql<TitleRow>`
-        select t.* from bridge_titles t
-        where t.archived_at is null
-          and t.merged_into_title_id is null
-          and t.submission_type is distinct from 'story_concept'
-          and (
-            t.owner_user_id = ${userId}
-            or (
-              t.owner_account_type = 'studio'
-              and t.owner_organization_id = ${orgId}
-              and exists (
-                select 1 from bridge_organization_memberships m
-                where m.organization_id = ${orgId}
-                  and m.user_id = ${userId}
-                  and m.status = 'active'
-              )
-            )
+  return sql<TitleRow>`
+    select t.* from bridge_titles t
+    where to_jsonb(t)->>'archived_at' is null
+      and to_jsonb(t)->>'merged_into_title_id' is null
+      and t.submission_type is distinct from 'story_concept'
+      and (
+        t.owner_user_id = ${userId}
+        or (
+          t.owner_account_type = 'studio'
+          and t.owner_organization_id = ${orgId}
+          and exists (
+            select 1 from bridge_organization_memberships m
+            where m.organization_id = ${orgId}
+              and m.user_id = ${userId}
+              and m.status = 'active'
           )
-        order by t.updated_at desc limit 200
-      `
-    : sql<TitleRow>`
-        select t.* from bridge_titles t
-        where t.archived_at is null
-          and t.submission_type is distinct from 'story_concept'
-          and (
-            t.owner_user_id = ${userId}
-            or (
-              t.owner_account_type = 'studio'
-              and t.owner_organization_id = ${orgId}
-              and exists (
-                select 1 from bridge_organization_memberships m
-                where m.organization_id = ${orgId}
-                  and m.user_id = ${userId}
-                  and m.status = 'active'
-              )
-            )
-          )
-        order by t.updated_at desc limit 200
-      `;
+        )
+      )
+    order by t.updated_at desc limit 200
+  `;
 }
 
 function slugify(name: string, id: string): string {
@@ -363,12 +335,18 @@ export const listPendingTitleRevisions = createServerFn({ method: "GET" })
 
 export const listTitles = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
-  .handler(async ({ context }) => {
+  .validator(z.object({ scope: z.enum(["catalog", "owned"]).optional() }).optional())
+  .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
     const sql = await getSql();
     let rows: TitleRow[] = [];
-    if (actor.internalRole && hasPermission(actor, "title.read_catalog")) {
+    if (data?.scope === "owned") {
+      if (actor.accountType !== "independent_creator" || (actor.internalRole !== null && actor.internalRole !== "super_admin")) {
+        throw new Error("Creator-owned title scope is unavailable for this account");
+      }
+      rows = await listOwned(sql, actor.userId, null);
+    } else if (actor.internalRole && hasPermission(actor, "title.read_catalog")) {
       rows = await listCatalog(sql);
     } else if (actor.accountType === "buyer") {
       assertPermission(actor, "title.read_catalog");
