@@ -3,7 +3,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { TitleList } from "@/components/bridge/title-desk";
-import type { BridgeWorkspaceActor } from "@/lib/bridge/query-scope";
+import type { BridgeActor } from "@/lib/bridge/session";
 import { MyStoryConcepts } from "@/components/bridge/my-story-concepts";
 import { NewSubmissionPanel } from "@/components/bridge/new-submission-panel";
 import { StudioMemberDesk } from "@/components/bridge/studio-member-desk";
@@ -13,7 +13,7 @@ import { MediaWorkspaceDesk } from "@/components/bridge/media-workspace-desk";
 export const Route = createFileRoute("/studio")({ component: Studio });
 
 type StudioTab = "films" | "stories" | "members" | "storage" | "post-production" | "dit";
-type StudioActor = BridgeWorkspaceActor;
+type StudioActor = BridgeActor;
 
 function Studio() {
   return (
