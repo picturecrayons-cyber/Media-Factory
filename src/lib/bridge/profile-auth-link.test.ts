@@ -16,7 +16,7 @@ test("onboarding persists verified auth-to-Bridge identity binding", () => {
 
 test("internal role revocation is Super Admin-only, self-protected, and audited in the same transaction", () => {
   const src = readFileSync(new URL("./profiles.ts", import.meta.url), "utf8");
-  const block = src.match(/export const revokeInternalRole = createServerFn[\\s\\S]*?(?=export const inviteInternalRole)/)?.[0] ?? "";
+  const block = src.slice(src.indexOf("export const revokeInternalRole = createServerFn"), src.indexOf("export const inviteInternalRole"));
   assert.ok(block.length > 0, "revocation server function is present");
   assert.match(block, /requireVerifiedActor\(context\.userId\)/);
   assert.match(block, /actor\.internalRole !== "super_admin"/);
