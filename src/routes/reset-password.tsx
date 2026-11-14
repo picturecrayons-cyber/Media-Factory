@@ -4,7 +4,9 @@ import { hasSupabaseRecoverySession, updatePassword } from "@/lib/auth/client";
 import { BrandMark } from "@/components/bridge/shell";
 import { Button } from "@/components/ui/button";
 
-export const Route = createFileRoute("/reset-password")({ component: Reset });
+export const Route = createFileRoute("/reset-password")({
+  head: () => ({ meta: [{ title: "reset-password | Crayons Bridge" }, { name: "robots", content: "noindex, nofollow" }] }),
+   component: Reset });
 
 function Reset() {
   const navigate = useNavigate();

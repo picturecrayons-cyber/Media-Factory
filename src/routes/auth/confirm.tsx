@@ -2,6 +2,8 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect } from "react";
 
 export const Route = createFileRoute("/auth/confirm")({
+  head: () => ({ meta: [{ title: "auth confirm | Crayons Bridge" }, { name: "robots", content: "noindex, nofollow" }] }),
+  
   component: AuthConfirmAlias,
 });
 

@@ -6,7 +6,9 @@ import { BridgeShell } from "@/components/bridge/shell";
 import { Button } from "@/components/ui/button";
 import { getPublicSiteContent, updateHomepageContent } from "@/lib/bridge/site-content";
 
-export const Route = createFileRoute("/admin-cms")({ component: BridgeCms });
+export const Route = createFileRoute("/admin-cms")({
+  head: () => ({ meta: [{ title: "admin-cms | Crayons Bridge" }, { name: "robots", content: "noindex, nofollow" }] }),
+   component: BridgeCms });
 
 function BridgeCms() {
   return (

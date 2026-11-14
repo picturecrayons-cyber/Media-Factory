@@ -7,6 +7,8 @@ import { BrandMark } from "@/components/bridge/shell";
 import { Button } from "@/components/ui/button";
 
 export const Route = createFileRoute("/signup")({
+  head: () => ({ meta: [{ title: "Create an Account | Crayons Bridge" }, { name: "description", content: "Create a Crayons Bridge account for creator, studio or buyer workflows." }, { name: "robots", content: "noindex, nofollow" }] }),
+  
   validateSearch: (search: Record<string, unknown>): { role?: string } => ({
     role: typeof search.role === "string" ? search.role : undefined,
   }),

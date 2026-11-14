@@ -4,7 +4,9 @@ import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { listInvestorInvestments } from "@/lib/bridge/investor";
 
-export const Route = createFileRoute("/investor")({ component: Investor });
+export const Route = createFileRoute("/investor")({
+  head: () => ({ meta: [{ title: "investor | Crayons Bridge" }, { name: "robots", content: "noindex, nofollow" }] }),
+   component: Investor });
 
 function Investor() {
   return (

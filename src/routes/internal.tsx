@@ -19,7 +19,9 @@ import {
 import { INTERNAL_ROLES } from "@/lib/bridge/types";
 import { hasPermission } from "@/lib/bridge/rbac";
 
-export const Route = createFileRoute("/internal")({ component: Internal });
+export const Route = createFileRoute("/internal")({
+  head: () => ({ meta: [{ title: "internal | Crayons Bridge" }, { name: "robots", content: "noindex, nofollow" }] }),
+   component: Internal });
 
 function Internal() {
   return (

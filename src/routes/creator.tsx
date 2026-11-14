@@ -8,7 +8,9 @@ import { MyStoryConcepts } from "@/components/bridge/my-story-concepts";
 import { NewSubmissionPanel } from "@/components/bridge/new-submission-panel";
 import { listTitles } from "@/lib/bridge/titles";
 
-export const Route = createFileRoute("/creator")({ component: Creator });
+export const Route = createFileRoute("/creator")({
+  head: () => ({ meta: [{ title: "creator | Crayons Bridge" }, { name: "robots", content: "noindex, nofollow" }] }),
+   component: Creator });
 
 const LIVE = new Set(["LIVE_FOR_BUYERS", "IN_NEGOTIATION", "LICENSED", "DELIVERED"]);
 const IN_PROGRESS = new Set(["UPLOADING", "PREPARING", "QC_REVIEW", "RIGHTS_REVIEW"]);

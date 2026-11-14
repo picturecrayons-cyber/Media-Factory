@@ -14,7 +14,9 @@ import {
   type VendorJobType,
 } from "@/lib/delivery/vendor-jobs";
 
-export const Route = createFileRoute("/deliveries")({ component: Deliveries });
+export const Route = createFileRoute("/deliveries")({
+  head: () => ({ meta: [{ title: "Deliveries | Crayons Bridge" }, { name: "description", content: "Manage authorized media delivery workflows in Crayons Bridge." }, { name: "robots", content: "noindex, nofollow" }] }),
+   component: Deliveries });
 
 const LABELS: Record<VendorJobType, string> = {
   dubbing: "Dubbing request",

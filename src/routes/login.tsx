@@ -7,7 +7,9 @@ import { BrandMark } from "@/components/bridge/shell";
 import { Button } from "@/components/ui/button";
 import { getBridgeSession } from "@/lib/bridge/session";
 
-export const Route = createFileRoute("/login")({ component: Login });
+export const Route = createFileRoute("/login")({
+  head: () => ({ meta: [{ title: "Sign In | Crayons Bridge" }, { name: "description", content: "Sign in securely to your Crayons Bridge workspace." }, { name: "robots", content: "noindex, nofollow" }] }),
+   component: Login });
 
 function isSafeRedirect(url: string | null): boolean {
   if (!url) return false;

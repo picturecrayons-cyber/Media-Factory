@@ -7,6 +7,8 @@ import { BrandMark } from "@/components/bridge/shell";
 import { Button } from "@/components/ui/button";
 
 export const Route = createFileRoute("/auth/callback")({
+  head: () => ({ meta: [{ title: "auth callback | Crayons Bridge" }, { name: "robots", content: "noindex, nofollow" }] }),
+  
   validateSearch: (search: Record<string, unknown>) => ({
     token_hash: typeof search.token_hash === "string" ? search.token_hash : undefined,
     type: typeof search.type === "string" ? search.type : undefined,

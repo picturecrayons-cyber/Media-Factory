@@ -13,7 +13,9 @@ import {
   verifyLicensePayment,
 } from "@/lib/bridge/payments";
 
-export const Route = createFileRoute("/buyer")({ component: Buyer });
+export const Route = createFileRoute("/buyer")({
+  head: () => ({ meta: [{ title: "buyer | Crayons Bridge" }, { name: "robots", content: "noindex, nofollow" }] }),
+   component: Buyer });
 
 type RzCtor = new (opts: {
   key: string;

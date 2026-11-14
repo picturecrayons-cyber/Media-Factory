@@ -16,7 +16,7 @@ import { BrandMark } from "@/components/bridge/shell";
 import { Button } from "@/components/ui/button";
 
 export const Route = createFileRoute("/onboarding")({
-  head: () => ({ meta: [{ name: "robots", content: "noindex, nofollow" }] }),
+  head: () => ({ meta: [{ title: "onboarding | Crayons Bridge" }, { name: "robots", content: "noindex, nofollow" }] }),
   component: Onboarding,
 });
 

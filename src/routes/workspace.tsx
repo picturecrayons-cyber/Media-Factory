@@ -6,7 +6,9 @@ import { CreateTitleForm, TitleList } from "@/components/bridge/title-desk";
 import { Button } from "@/components/ui/button";
 import { hasPermission } from "@/lib/bridge/rbac";
 
-export const Route = createFileRoute("/workspace")({ component: Workspace });
+export const Route = createFileRoute("/workspace")({
+  head: () => ({ meta: [{ title: "Title Workspace | Crayons Bridge" }, { name: "description", content: "Manage title records and media workflows in Crayons Bridge." }, { name: "robots", content: "noindex, nofollow" }] }),
+   component: Workspace });
 
 function Workspace() {
   const [showCreate,setShowCreate]=useState(false);

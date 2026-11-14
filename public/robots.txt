@@ -1,4 +1,4 @@
-# Robots policy for the public Crayons Pictures domain.
+# Robots policy for the public Crayons Bridge domain.
 # This is a crawler hint, not an access-control mechanism.
 User-agent: *
 Allow: /
@@ -8,3 +8,5 @@ Allow: /
 # Keep private server-function and API endpoints out of crawler discovery.
 Disallow: /_serverFn/
 Disallow: /api/
+
+Sitemap: https://www.crayonspictures.in/sitemap.xml

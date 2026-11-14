@@ -7,7 +7,27 @@ import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { getBridgeSession } from "@/lib/bridge/session";
 
 
-export const Route = createFileRoute("/")({ component: Home });
+const HOME_TITLE = "Crayons Bridge | Film Rights, Licensing & Media Delivery";
+const HOME_DESCRIPTION = "Prepare, protect, license and deliver film content with Crayons Bridge, StreamVista's B2B media operations and rights management platform.";
+
+export const Route = createFileRoute("/")({
+  head: () => ({
+    meta: [
+      { title: HOME_TITLE },
+      { name: "description", content: HOME_DESCRIPTION },
+      { property: "og:type", content: "website" },
+      { property: "og:site_name", content: "Crayons Bridge" },
+      { property: "og:title", content: HOME_TITLE },
+      { property: "og:description", content: HOME_DESCRIPTION },
+      { property: "og:url", content: "https://www.crayonspictures.in/" },
+      { name: "twitter:card", content: "summary_large_image" },
+      { name: "twitter:title", content: HOME_TITLE },
+      { name: "twitter:description", content: HOME_DESCRIPTION },
+    ],
+    links: [{ rel: "canonical", href: "https://www.crayonspictures.in/" }],
+  }),
+  component: Home,
+});
 
 const WORKFLOW_STEPS = [
   {
@@ -66,6 +86,15 @@ function Home() {
 
   return (
     <div className="min-h-screen bg-white text-fg antialiased selection:bg-accent/20 selection:text-fg">
+      <script type="application/ld+json">
+        {JSON.stringify({
+          "@context": "https://schema.org",
+          "@graph": [
+            { "@type": "Organization", "@id": "https://www.crayonspictures.in/#organization", "name": "StreamVista OPC Pvt Ltd", "url": "https://www.crayonspictures.in/" },
+            { "@type": "WebSite", "@id": "https://www.crayonspictures.in/#website", "name": "Crayons Bridge", "url": "https://www.crayonspictures.in/", "publisher": { "@id": "https://www.crayonspictures.in/#organization" } }
+          ]
+        })}
+      </script>
       <header className="sticky top-0 z-50 border-b border-line bg-white/95 backdrop-blur-md">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-5 px-5 py-3.5 sm:px-6 lg:px-8">
           <div className="flex min-w-0 items-center gap-6 lg:gap-8">

@@ -6,7 +6,9 @@ import { BridgeShell } from "@/components/bridge/shell";
 import { Button } from "@/components/ui/button";
 import { requestEmailVerification } from "@/lib/bridge/profiles";
 
-export const Route = createFileRoute("/account")({ component: Account });
+export const Route = createFileRoute("/account")({
+  head: () => ({ meta: [{ title: "Account | Crayons Bridge" }, { name: "description", content: "Manage your Crayons Bridge account." }, { name: "robots", content: "noindex, nofollow" }] }),
+   component: Account });
 
 function Account() {
   return (

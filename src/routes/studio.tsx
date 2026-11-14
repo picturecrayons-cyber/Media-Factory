@@ -7,7 +7,9 @@ import { NewSubmissionPanel } from "@/components/bridge/new-submission-panel";
 import { StudioMemberDesk } from "@/components/bridge/studio-member-desk";
 import { DitAgentDesk } from "@/components/bridge/dit-agent-desk";
 
-export const Route = createFileRoute("/studio")({ component: Studio });
+export const Route = createFileRoute("/studio")({
+  head: () => ({ meta: [{ title: "studio | Crayons Bridge" }, { name: "robots", content: "noindex, nofollow" }] }),
+   component: Studio });
 
 const studioModules = [
   ["Organization", "Studio profile and organization workspace.", "Organization data is shown only when the verified organization mapping is available."],

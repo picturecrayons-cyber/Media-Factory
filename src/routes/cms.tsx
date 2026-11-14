@@ -8,7 +8,9 @@ import { listTitles } from "@/lib/bridge/titles";
 import { listLoopPublicationReadiness } from "@/lib/bridge/loop-publication";
 import { hasPermission } from "@/lib/bridge/rbac";
 
-export const Route = createFileRoute("/cms")({ component: OperationalCms });
+export const Route = createFileRoute("/cms")({
+  head: () => ({ meta: [{ title: "cms | Crayons Bridge" }, { name: "robots", content: "noindex, nofollow" }] }),
+   component: OperationalCms });
 
 const tabs = ["ingest", "licensing", "publishing"] as const;
 type Tab = (typeof tabs)[number];

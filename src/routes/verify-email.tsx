@@ -4,7 +4,9 @@ import { useEffect } from "react";
 import { confirmEmailVerification } from "@/lib/bridge/profiles";
 import { BrandMark } from "@/components/bridge/shell";
 
-export const Route = createFileRoute("/verify-email")({ component: Verify });
+export const Route = createFileRoute("/verify-email")({
+  head: () => ({ meta: [{ title: "verify-email | Crayons Bridge" }, { name: "robots", content: "noindex, nofollow" }] }),
+   component: Verify });
 
 function Verify() {
   const qc = useQueryClient();

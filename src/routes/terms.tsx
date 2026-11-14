@@ -1,6 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 
-export const Route = createFileRoute("/terms")({ component: Terms });
+export const Route = createFileRoute("/terms")({
+  head: () => ({ meta: [{ title: "Terms & Conditions | Crayons Bridge" }, { name: "description", content: "Review the terms governing Crayons Bridge media submissions, rights management, licensing, delivery and workspaces." }, { property: "og:title", content: "Terms & Conditions | Crayons Bridge" }, { property: "og:url", content: "https://www.crayonspictures.in/terms" }], links: [{ rel: "canonical", href: "https://www.crayonspictures.in/terms" }] }),
+   component: Terms });
 
 function Terms() {
   return (

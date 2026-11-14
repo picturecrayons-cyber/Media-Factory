@@ -9,7 +9,7 @@ import { listAdminProfiles } from "@/lib/bridge/profiles";
 import { StreamVistaOrders } from "@/components/bridge/streamvista-orders";
 
 export const Route = createFileRoute("/admin")({
-  head: () => ({ meta: [{ name: "robots", content: "noindex, nofollow" }] }),
+  head: () => ({ meta: [{ title: "admin | Crayons Bridge" }, { name: "robots", content: "noindex, nofollow" }] }),
   component: AdminControlPlane,
 });
 
