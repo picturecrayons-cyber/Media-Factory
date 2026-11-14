@@ -87,7 +87,18 @@ async function requireStudioTitle(sql: Awaited<ReturnType<typeof getSql>>, title
     from bridge_titles
     where id = ${titleId}
       and owner_account_type = 'studio'
-      and owner_organization_id = ${organizationId}
+      and (
+        owner_organization_id = ${organizationId}
+        or (
+          owner_organization_id is null
+          and exists (
+            select 1 from bridge_profiles owner_profile
+            where owner_profile.user_id = bridge_titles.owner_user_id
+              and owner_profile.account_type = 'studio'
+              and owner_profile.organization_id = ${organizationId}
+          )
+        )
+      )
       and submission_type = 'finished_film'
       and merged_into_title_id is null
     limit 1
@@ -126,7 +137,18 @@ export const getDitWorkspace = createServerFn({ method: "GET" })
       select id, name, status, year
       from bridge_titles
       where owner_account_type = 'studio'
-        and owner_organization_id = ${actor.organizationId}
+        and (
+        owner_organization_id = ${actor.organizationId}
+        or (
+          owner_organization_id is null
+          and exists (
+            select 1 from bridge_profiles owner_profile
+            where owner_profile.user_id = bridge_titles.owner_user_id
+              and owner_profile.account_type = 'studio'
+              and owner_profile.organization_id = ${actor.organizationId}
+          )
+        )
+      )
         and submission_type = 'finished_film'
         and merged_into_title_id is null
       order by updated_at desc
