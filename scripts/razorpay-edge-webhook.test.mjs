@@ -50,3 +50,13 @@ test("webhook event processing uses a claim token and stale-processing guard", (
   assert.match(source, /processing_started_at/);
   assert.match(source, /processing_token[\s\S]*processing_started_at/);
 });
+
+test("failed webhook worker releases only its own claim token", () => {
+  assert.match(source, /async function failEvent\(supabase: any, id: string, token: string, message: string\)/);
+  assert.match(source, /\.eq\("event_id", id\)[\s\S]*\.eq\("processing_token", token\)/);
+});
+
+test("active webhook claim returns retryable 503 instead of acknowledging in-progress delivery", () => {
+  assert.match(source, /if\s*\(!claimed\)\s*\{[\s\S]*status:\s*503[\s\S]*Retry-After/);
+  assert.doesNotMatch(source, /if\s*\(!claimed\)\s*return\s*Response\.json\(\{\s*ok:\s*true,\s*duplicate:\s*true,\s*in_progress:\s*true\s*\}\)/);
+});
