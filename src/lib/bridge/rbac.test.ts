@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { assertPermission, canAccessAdminWorkstations, canAccessDashboard, canAccessTitleWorkspace, canGrantInternalRole, canMutateTitle, canOperateOnTitle, canReadTitle, hasPermission, hasStaffPermission, permissionForTransition, workspaceHome } from "./rbac.ts";
+import { assertPermission, canAccessAdminWorkstations, canAccessDashboard, canAccessTitleWorkspace, canGrantInternalRole, canGrantInternalRoleToEmail, canMutateTitle, canOperateOnTitle, canReadTitle, hasPermission, hasStaffPermission, permissionForTransition, workspaceHome } from "./rbac.ts";
 import type { Actor } from "./rbac.ts";
 
 const actor = (
@@ -117,6 +117,14 @@ describe("PRD authorization matrix", () => {
     assert.equal(canGrantInternalRole(superAdmin(), "super_admin"), true);
     assert.equal(canGrantInternalRole(qc, "viewer"), false);
     assert.equal(canGrantInternalRole(actor("unverified", "independent_creator", "admin", false), "viewer"), false);
+  });
+
+  it("allows Super Admin invitations only for the canonical verified Bridge identity", () => {
+    assert.equal(canGrantInternalRoleToEmail(superAdmin(), "super_admin", "picturecrayons@gmail.com"), true);
+    assert.equal(canGrantInternalRoleToEmail(superAdmin(), "super_admin", "PICTURECRAYONS@GMAIL.COM"), true);
+    assert.equal(canGrantInternalRoleToEmail(superAdmin(), "super_admin", "attacker@example.com"), false);
+    assert.equal(canGrantInternalRoleToEmail(admin(), "super_admin", "picturecrayons@gmail.com"), false);
+    assert.equal(canGrantInternalRoleToEmail(superAdmin(), "admin", "admin@example.com"), true);
   });
 
   it("cross-title staff capability must come from an explicit staff permission", () => {
