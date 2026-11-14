@@ -60,6 +60,21 @@ function Onboarding() {
   const [displayName, setDisplayName] = useState("");
   const [accountType, setAccountType] = useState<PublicAccountType>("independent_creator");
   const [organizationName, setOrganizationName] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [retrying, setRetrying] = useState(false);
+  const submitInFlight = useRef(false);
+
+  // Signup metadata is only a UI hint. Server authorization is determined by
+  // the verified identity and the persisted Bridge profile.
+  const signupAccountTypeHint = user?.signupAccountTypeHint;
+  const signupAccountType = publicAccountTypeFrom(signupAccountTypeHint);
+  const unsupportedSignupRole = Boolean(signupAccountTypeHint && !signupAccountType);
+
+  useEffect(() => {
+    if (signupAccountType) setAccountType(signupAccountType);
+  }, [signupAccountType]);
+
 
   if (sessionQ.isError) {
     async function retrySession() {
