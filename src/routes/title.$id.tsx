@@ -255,7 +255,7 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
           </div>
           {!buyerView ? (
             <>
-              <LaneStore key={title.contentType} titleId={title.id} stored={loopStageType(title.contentType)} locked={!actor.internalRole && !["DRAFT", "UPLOADING", "PREPARING"].includes(title.status)} />
+              <LaneStore key={title.contentType} titleId={title.id} stored={loopStageType(title.contentType)} locked={actor.internalRole !== "super_admin"} />
               {title.synopsis ? <p className="mt-4 text-sm leading-6 text-muted">{title.synopsis}</p> : null}
               <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                 <Metric label="QC" value={qcReady ? "READY" : "PENDING"} />
@@ -327,8 +327,8 @@ function TitleMetadataEditor({
   });
   const editableDraft = !actor.internalRole && title.status === "DRAFT";
   const canSubmitRevision = !actor.internalRole && ["UPLOADING", "PREPARING", "QC_REVIEW", "RIGHTS_REVIEW", "LICENSING_READY"].includes(title.status);
-  const adminEditor = false;
-  const canEdit = editableDraft || canSubmitRevision;
+  const adminEditor = actor.internalRole === "super_admin";
+  const canEdit = editableDraft || canSubmitRevision || adminEditor;
   const locked = !canEdit;
   return (
     <section className="space-y-4 rounded-2xl border border-line bg-surface p-5">
@@ -341,7 +341,7 @@ function TitleMetadataEditor({
         <label className="text-sm">Runtime (minutes)<input inputMode="numeric" value={runtimeMinutes} disabled={locked} onChange={e=>setRuntimeMinutes(e.target.value)} className="mt-1 h-11 w-full rounded-lg border border-line-strong bg-elevated px-3"/></label>
         <label className="text-sm sm:col-span-2">Synopsis<textarea value={synopsis} disabled={locked} onChange={e=>setSynopsis(e.target.value)} rows={4} className="mt-1 w-full rounded-lg border border-line-strong bg-elevated px-3 py-2"/></label>
       </div>
-      <div className="flex justify-end"><Button type="button" disabled={locked || save.isPending} onClick={()=>save.mutate()}>{save.isPending ? "Saving…" : editableDraft ? "Save draft" : "Submit revision"}</Button></div>
+      <div className="flex justify-end"><Button type="button" disabled={locked || save.isPending} onClick={()=>save.mutate()}>{save.isPending ? "Saving…" : adminEditor ? "Save admin correction" : editableDraft ? "Save draft" : "Submit revision"}</Button></div>
       {canSubmitRevision ? <p className="text-xs text-muted">Changes are submitted as a revision request. Commercial terms and title status cannot be changed here. Existing metadata remains unchanged until Admin review.</p> : null}
       <div className="border-t border-line pt-4"><h3 className="font-semibold">Revision history</h3>{revisionsLoading ? <p className="mt-2 text-sm text-muted">Loading revisions…</p> : revisions.length ? <ul className="mt-2 space-y-2">{revisions.map(rev=><li key={rev.id} className="rounded-lg bg-bg p-3 text-sm"><div className="flex justify-between gap-2"><strong>Revision {rev.revision_number}</strong><span>{rev.status}</span></div><pre className="mt-2 overflow-auto text-xs">{JSON.stringify(rev.proposed_changes,null,2)}</pre>{rev.review_note ? <p className="mt-1 text-xs text-muted">{rev.review_note}</p> : null}</li>)}</ul> : <p className="mt-2 text-sm text-muted">No revisions recorded.</p>}</div>
     </section>
