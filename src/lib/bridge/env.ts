@@ -19,6 +19,8 @@ export const bridgeEnv = {
   ociRegion: () => read("OCI_REGION"),
   ociNamespace: () => read("OCI_NAMESPACE"),
   ociBucket: () => read("OCI_BUCKET_NAME"),
+  // DIT Recovery Vault is a separately controlled OCI bucket; never reuse Primary.
+  ociRecoveryBucket: () => read("OCI_RECOVERY_BUCKET_NAME"),
   // Legacy AWS/S3 compatibility adapter only; never used by production readiness.
   awsRegion: () => read("AWS_REGION"),
   awsBucket: () => read("AWS_S3_MEDIA_BUCKET") || read("S3_MEDIA_BUCKET") || read("AWS_S3_BUCKET"),
@@ -49,6 +51,11 @@ export function integrationStatus() {
         bridgeEnv.ociPrivateKey() &&
         bridgeEnv.ociRegion() &&
         bridgeEnv.ociBucket(),
+    ),
+    ociRecovery: Boolean(
+      bridgeEnv.ociBucket() &&
+        bridgeEnv.ociRecoveryBucket() &&
+        bridgeEnv.ociBucket() !== bridgeEnv.ociRecoveryBucket(),
     ),
     mail: Boolean(bridgeEnv.smtpHost() && bridgeEnv.smtpUser() && bridgeEnv.smtpPass()),
     hostingerIncomingWebhook: Boolean(bridgeEnv.hostingerIncomingWebhookSecret()),
