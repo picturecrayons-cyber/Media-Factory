@@ -124,7 +124,7 @@ export function DitAgentDesk({ actor }: { actor: StudioActor }) {
           manifest: sourceManifest,
         } });
       }
-      return session;
+      return { sessionId };
     },
     onSuccess: async () => {
       setSourceManifest(null);
