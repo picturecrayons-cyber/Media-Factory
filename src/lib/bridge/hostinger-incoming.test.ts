@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import {
   isValidHostingerBearer,
   parseHostingerIncomingPayload,
+  readLimitedRequestBody,
 } from "./hostinger-incoming.ts";
 
 const mailbox = "abijithasokan@crayonspictures.com";
@@ -75,5 +76,48 @@ describe("Hostinger incoming mail webhook", () => {
     assert.equal(result.preview?.length, 1500);
     assert.equal(result.threadId, null);
     assert.equal(result.messageReceivedAt, null);
+  });
+});
+
+
+describe("bounded Hostinger webhook body reader", () => {
+  it("reads chunked request bodies that stay within the byte limit", async () => {
+    const chunks = [
+      new TextEncoder().encode('{"event":'),
+      new TextEncoder().encode('"message.received"}'),
+    ];
+    const request = new Request("https://example.test/api/hostinger-incoming", {
+      method: "POST",
+      body: new ReadableStream<Uint8Array>({
+        start(controller) {
+          for (const chunk of chunks) controller.enqueue(chunk);
+          controller.close();
+        },
+      }),
+    });
+
+    assert.equal(
+      await readLimitedRequestBody(request, 128),
+      '{"event":"message.received"}',
+    );
+  });
+
+  it("cancels a chunked stream as soon as it exceeds the configured cap", async () => {
+    let cancelled = false;
+    const request = new Request("https://example.test/api/hostinger-incoming", {
+      method: "POST",
+      body: new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode("1234567890"));
+          controller.enqueue(new TextEncoder().encode("abcdefghij"));
+        },
+        cancel() {
+          cancelled = true;
+        },
+      }),
+    });
+
+    assert.equal(await readLimitedRequestBody(request, 16), null);
+    assert.equal(cancelled, true);
   });
 });
