@@ -50,6 +50,7 @@ function AdminBody({ actor }: { actor: any }) {
   const live = distribution.filter((title) => title.publication?.published).length;
   const attention = titles.filter((title) => ["PREPARING", "QC_REVIEW", "RIGHTS_REVIEW", "LICENSING_READY"].includes(title.status)).slice(0, 5);
   const loading = titlesQ.isPending;
+  const titlesUnavailable = titlesQ.isError;
 
   return (
     <BridgeShell actor={actor} title="Admin dashboard">
@@ -68,10 +69,10 @@ function AdminBody({ actor }: { actor: any }) {
         </section>
 
         <section aria-label="Title overview" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <Metric label="All titles" value={loading ? "—" : String(titles.length)} detail="Canonical catalog" />
-          <Metric label="QC / intake" value={loading ? "—" : String(qcQueue)} detail="Awaiting review" />
-          <Metric label="Rights review" value={loading ? "—" : String(rightsQueue)} detail="Clearance queue" />
-          <Metric label="Buyer-ready" value={loading ? "—" : String(buyerReady)} detail="Licensing stages" />
+          <Metric label="All titles" value={loading ? "—" : titlesUnavailable ? "Unavailable" : String(titles.length)} detail="Canonical catalog" />
+          <Metric label="QC / intake" value={loading ? "—" : titlesUnavailable ? "Unavailable" : String(qcQueue)} detail="Awaiting review" />
+          <Metric label="Rights review" value={loading ? "—" : titlesUnavailable ? "Unavailable" : String(rightsQueue)} detail="Clearance queue" />
+          <Metric label="Buyer-ready" value={loading ? "—" : titlesUnavailable ? "Unavailable" : String(buyerReady)} detail="Licensing stages" />
         </section>
 
         <section className="rounded-2xl border border-line bg-surface p-4">
@@ -80,9 +81,9 @@ function AdminBody({ actor }: { actor: any }) {
             <span className="text-xs text-muted">Live records</span>
           </div>
           <div className="grid gap-3 sm:grid-cols-3">
-            <CompactMetric label="Loop publications" value={distQ.isPending ? "—" : String(live)} />
-            <CompactMetric label="Bridge profiles" value={profilesQ.isPending ? "—" : String(profiles.length)} />
-            <CompactMetric label="Organizations" value={profilesQ.isPending ? "—" : String(organizations.size)} />
+            <CompactMetric label="Loop publications" value={distQ.isPending ? "—" : distQ.isError ? "Unavailable" : String(live)} />
+            <CompactMetric label="Bridge profiles" value={profilesQ.isPending ? "—" : profilesQ.isError ? "Unavailable" : String(profiles.length)} />
+            <CompactMetric label="Organizations" value={profilesQ.isPending ? "—" : profilesQ.isError ? "Unavailable" : String(organizations.size)} />
           </div>
         </section>
 

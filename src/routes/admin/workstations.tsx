@@ -10,7 +10,7 @@ import { listDuplicateReviews, openDuplicateReview, decideDuplicateReview } from
 
 export const Route = createFileRoute("/admin/workstations")({ component: AdminWorkstations });
 
-const TABS = ["Titles", "Concepts", "QC", "Rights", "Assets", "Buyers", "Deliveries", "Audit"] as const;
+const TABS = ["Titles", "Submissions", "Concepts", "QC", "Rights", "Assets", "Buyers", "Deliveries", "Audit"] as const;
 type Tab = (typeof TABS)[number];
 
 const STATUS_LABELS: Record<string, string> = {
@@ -22,12 +22,12 @@ const STATUS_LABELS: Record<string, string> = {
 function AdminWorkstations() {
   return (
     <RequireBridge allow="internal">
-      {(actor) => <BridgeShell actor={actor} title="Admin"><WorkstationBody /></BridgeShell>}
+      {(actor) => <BridgeShell actor={actor} title="Admin"><WorkstationBody actor={actor} /></BridgeShell>}
     </RequireBridge>
   );
 }
 
-function WorkstationBody() {
+function WorkstationBody({ actor }: { actor: { internalRole: string | null } }) {
   const qc = useQueryClient();
   const query = useQuery({ queryKey: ["admin-workstations"], queryFn: () => listAdminWorkstations() });
   const review = useMutation({
@@ -72,7 +72,9 @@ function WorkstationBody() {
       </nav>
 
       {activeTab === "Titles" ? (
-        <TitleQueue titles={data.titles} review={review} />
+        <TitleQueue titles={data.titles} review={review} internalRole={actor.internalRole} />
+      ) : activeTab === "Submissions" ? (
+        <SubmissionQueue submissions={data.submissions} />
       ) : activeTab === "Concepts" ? (
         <StoryConceptDesk />
       ) : activeTab === "QC" ? (
@@ -106,7 +108,7 @@ function WorkstationBody() {
   );
 }
 
-function TitleQueue({ titles, review }: { titles: any[]; review: any }) {
+function TitleQueue({ titles, review, internalRole }: { titles: any[]; review: any; internalRole: string | null }) {
   return (
     <section className="space-y-3">
       <SectionHeader title="Titles" description="One canonical Title ID from intake through delivery." />
@@ -116,13 +118,47 @@ function TitleQueue({ titles, review }: { titles: any[]; review: any }) {
             <div>
               <p className="font-medium">{title.name}</p>
               <p className="mt-1 text-xs text-muted">{STATUS_LABELS[title.status] ?? title.status} · {title.language}</p>
+              <p className="mt-1 text-xs text-muted">Owner: {title.owner_display_name || title.owner_user_id} · {title.owner_account_type}{title.owner_organization_name ? ` · ${title.owner_organization_name}` : ""}</p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              {title.status === "PREPARING" ? <ActionButton label="Accept → QC" onClick={() => review.mutate({ data: { titleId: title.id, decision: "ACCEPT" } })} disabled={review.isPending} /> : null}
+              {title.status === "PREPARING" && internalRole === "super_admin" ? <ActionButton label="Accept → QC" onClick={() => review.mutate({ data: { titleId: title.id, decision: "ACCEPT" } })} disabled={review.isPending} /> : null}
               <Link to="/title/$id" params={{ id: title.id }} className="rounded-full border border-line px-3.5 py-1.5 text-xs text-muted hover:border-line-strong hover:text-fg">Open</Link>
             </div>
           </div>
         )) : <Empty text="No titles in the Bridge catalog." />}
+      </div>
+    </section>
+  );
+}
+
+function SubmissionQueue({ submissions }: { submissions: any[] }) {
+  if (!submissions.length) return <section className="space-y-3"><SectionHeader title="Incoming finished-film submissions" description="Submitted film records and owner context from the existing intake table." /><Empty text="No finished-film intake records are currently available." /></section>;
+  return (
+    <section className="space-y-3">
+      <SectionHeader title="Incoming finished-film submissions" description={`${submissions.length} persisted submissions · Story / Concept submissions remain in their own queue.`} />
+      <div className="space-y-3">
+        {submissions.map((item) => (
+          <article key={item.title_id} className="rounded-2xl border border-line bg-surface p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="font-medium">{item.title_name || item.title_id}</p>
+                <p className="mt-1 text-xs text-muted">{STATUS_LABELS[item.status] ?? item.status} · {item.owner_account_type}</p>
+                <p className="mt-1 text-sm">{item.owner_display_name || item.owner_user_id}{item.owner_organization_name ? ` · ${item.owner_organization_name}` : ""}</p>
+                <p className="mt-1 break-all text-xs text-muted">{item.owner_email || "Owner email unavailable"}</p>
+              </div>
+              <Link to="/title/$id" params={{ id: item.title_id }} className="rounded-full border border-line px-3.5 py-1.5 text-xs text-muted hover:border-line-strong">Open submission</Link>
+            </div>
+            <div className="mt-4 grid gap-2 text-xs sm:grid-cols-2 lg:grid-cols-3">
+              <span>Authority: {item.authority_type}</span>
+              <span>Evidence: {item.authorization_evidence_type}</span>
+              <span>Owner confirmation: {item.authorization_confirmed ? "Submitted — review required" : "Not confirmed"}</span>
+              <span>Buyer channels: {(item.buyer_channels ?? []).join(", ") || "None specified"}</span>
+              <span>Screener: {item.screener_mode}</span>
+              <span>Submitted: {item.submitted_at ? new Date(item.submitted_at).toLocaleString() : "Unknown"}</span>
+            </div>
+            <p className="mt-3 text-xs text-muted">Submission metadata is not an approval. QC, rights evidence, legal review and publication gates remain separate.</p>
+          </article>
+        ))}
       </div>
     </section>
   );
@@ -158,7 +194,31 @@ function ActionButton({ label, onClick, disabled }: { label: string; onClick: ()
   return <Button size="sm" disabled={disabled} onClick={onClick}>{label}</Button>;
 }
 function ReviewQueue({ title, description, titles, actions, mutation }: { title: string; description: string; titles: any[]; actions: [string, string][]; mutation: any }) {
-  return <section className="space-y-3"><SectionHeader title={title} description={description} />{titles.length ? titles.map((t) => <div key={t.id} className="flex items-center justify-between rounded-2xl border border-line p-4"><span>{t.name}</span><div className="flex gap-2">{actions.map(([decision, label]) => <ActionButton key={decision} label={label} disabled={mutation.isPending} onClick={() => mutation.mutate({ data: { titleId: t.id, decision } })} />)}</div></div>) : <Empty text="Queue is clear." />}</section>;
+  const [notes, setNotes] = useState<Record<string, string>>({});
+  return (
+    <section className="space-y-3">
+      <SectionHeader title={title} description={description} />
+      {titles.length ? titles.map((item) => (
+        <article key={item.id} className="space-y-3 rounded-2xl border border-line p-4">
+          <div>
+            <p className="font-medium">{item.name}</p>
+            <p className="mt-1 text-xs text-muted">Owner: {item.owner_display_name || item.owner_user_id} · {item.owner_account_type}{item.owner_organization_name ? ` · ${item.owner_organization_name}` : ""}</p>
+          </div>
+          <label className="block space-y-1 text-xs text-muted">
+            <span>Review note (saved to the audit trail)</span>
+            <textarea value={notes[item.id] ?? ""} onChange={(event) => setNotes((current) => ({ ...current, [item.id]: event.target.value }))}
+              maxLength={4000} rows={2} className="w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm text-fg" placeholder="Record the reason for this decision…" />
+          </label>
+          <div className="flex flex-wrap gap-2">
+            {actions.map(([decision, label]) => (
+              <ActionButton key={decision} label={label} disabled={mutation.isPending}
+                onClick={() => mutation.mutate({ data: { titleId: item.id, decision, notes: notes[item.id]?.trim() || undefined } })} />
+            ))}
+          </div>
+        </article>
+      )) : <Empty text="Queue is clear." />}
+    </section>
+  );
 }
 function SimpleTable({ title, description, rows, fields, titleName }: { title: string; description: string; rows: any[]; fields: string[]; titleName?: Map<any, any> }) {
   return <section className="space-y-3"><SectionHeader title={title} description={description} /><RecordTable rows={rows} fields={fields} titleName={titleName ?? new Map()} /></section>;
