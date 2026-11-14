@@ -27,5 +27,9 @@ create table if not exists public.bridge_title_revisions (
 create index if not exists bridge_title_revisions_title_created_idx
   on public.bridge_title_revisions (title_id, submitted_at desc);
 
+-- Database-level guard against more than one open revision per title.
+create unique index if not exists bridge_title_revisions_one_pending_per_title_idx
+  on public.bridge_title_revisions (title_id) where status = 'PENDING';
+
 alter table public.bridge_title_revisions enable row level security;
 revoke all privileges on table public.bridge_title_revisions from public, anon, authenticated;
