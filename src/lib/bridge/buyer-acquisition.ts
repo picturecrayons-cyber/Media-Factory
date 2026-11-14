@@ -358,25 +358,39 @@ export const reviewBuyerComplianceEvidence = createServerFn({ method: "POST" })
     const sql = await getSql();
     const reviewStatus = data.decision === "accept" ? "accepted" : "rejected";
     if (data.target === "organization") {
-      const rows = await sql<{ uploaded_by: string; organization_id: string }>`
-        select uploaded_by,organization_id from bridge_private.buyer_organization_verification_evidence
-        where id=${data.evidenceId} limit 1
+      const rows = await sql<{ uploaded_by: string; organization_id: string; parent_status: string }>`
+        select e.uploaded_by,e.organization_id,v.verification_status as parent_status
+        from bridge_private.buyer_organization_verification_evidence e
+        join bridge_private.buyer_organization_verifications v on v.organization_id=e.organization_id
+        where e.id=${data.evidenceId} limit 1
       `;
-      if (!rows[0] || rows[0].uploaded_by === actor.userId) throw new Error("Independent evidence reviewer required");
-      const updated = await sql<{ id: string }>`update bridge_private.buyer_organization_verification_evidence
+      if (!rows[0] || rows[0].uploaded_by === actor.userId || rows[0].parent_status !== "pending_review") {
+        throw new Error("Pending evidence and independent reviewer on an active organization review are required");
+      }
+      const updated = await sql<{ id: string }>`update bridge_private.buyer_organization_verification_evidence e
         set review_status=${reviewStatus},reviewed_by=${actor.userId},reviewed_at=now(),review_notes=${data.notes}
-        where id=${data.evidenceId} and review_status='pending' returning id`;
+        where e.id=${data.evidenceId} and e.review_status='pending'
+          and exists (select 1 from bridge_private.buyer_organization_verifications v
+            where v.organization_id=e.organization_id and v.verification_status='pending_review')
+        returning e.id`;
       if (!updated[0]) throw new Error("Evidence has already been reviewed");
       await writeAudit({ actorUserId: actor.userId, action: `buyer.organization_evidence.${data.decision}`, entityType: "buyer_organization", entityId: rows[0].organization_id, metadata: { evidenceId: data.evidenceId, notes: data.notes } });
     } else {
-      const rows = await sql<{ uploaded_by: string; mandate_id: string }>`
-        select uploaded_by,mandate_id from bridge_private.buyer_acquisition_mandate_evidence
-        where id=${data.evidenceId} limit 1
+      const rows = await sql<{ uploaded_by: string; mandate_id: string; parent_status: string }>`
+        select e.uploaded_by,e.mandate_id,m.status as parent_status
+        from bridge_private.buyer_acquisition_mandate_evidence e
+        join bridge_private.buyer_acquisition_mandates m on m.id=e.mandate_id
+        where e.id=${data.evidenceId} limit 1
       `;
-      if (!rows[0] || rows[0].uploaded_by === actor.userId) throw new Error("Independent evidence reviewer required");
-      const updated = await sql<{ id: string }>`update bridge_private.buyer_acquisition_mandate_evidence
+      if (!rows[0] || rows[0].uploaded_by === actor.userId || rows[0].parent_status !== "pending_review") {
+        throw new Error("Pending evidence and independent reviewer on an active mandate review are required");
+      }
+      const updated = await sql<{ id: string }>`update bridge_private.buyer_acquisition_mandate_evidence e
         set review_status=${reviewStatus},reviewed_by=${actor.userId},reviewed_at=now(),review_notes=${data.notes}
-        where id=${data.evidenceId} and review_status='pending' returning id`;
+        where e.id=${data.evidenceId} and e.review_status='pending'
+          and exists (select 1 from bridge_private.buyer_acquisition_mandates m
+            where m.id=e.mandate_id and m.status='pending_review')
+        returning e.id`;
       if (!updated[0]) throw new Error("Evidence has already been reviewed");
       await writeAudit({ actorUserId: actor.userId, action: `buyer.mandate_evidence.${data.decision}`, entityType: "buyer_acquisition_mandate", entityId: rows[0].mandate_id, metadata: { evidenceId: data.evidenceId, notes: data.notes } });
     }
