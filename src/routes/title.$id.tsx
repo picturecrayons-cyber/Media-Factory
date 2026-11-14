@@ -51,7 +51,7 @@ function LaneStore({ titleId, stored, locked }: { titleId: string; stored: strin
   const qc = useQueryClient();
   const [value, setValue] = useState(stored);
   const save = useMutation({
-    mutationFn: (contentType: string) => updateTitle({ data: { id: titleId, contentType } }),
+    mutationFn: (contentType: string) => updateTitle({ data: { id: titleId, changes: { contentType } } }),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ["bridge-title", titleId] }),
   });
   return (
