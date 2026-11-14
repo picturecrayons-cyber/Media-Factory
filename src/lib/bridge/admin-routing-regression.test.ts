@@ -15,8 +15,12 @@ test("authenticated profiles route through the server-resolved workspace home", 
   const session = read("./session.ts");
   const onboarding = read("../../routes/onboarding.tsx");
   assert.match(session, /profile: actor, home: workspaceHome\(actor\)/);
-  assert.match(onboarding, /const home = sessionQ\.data\?\.profile \? sessionQ\.data\.home : null/);
-  assert.match(onboarding, /if \(home\) goHome\(home, navigate\)/);
+  assert.match(onboarding, /queryKey: \["bridge-session", user\?\.id\]/);
+  assert.match(onboarding, /getBridgeSessionWithTimeout/);
+  assert.match(onboarding, /const result = await completeOnboarding/);
+  assert.match(onboarding, /const destination = result\.home \|\|/);
+  assert.match(onboarding, /accountType === "studio" \? "\/studio"/);
+  assert.match(onboarding, /accountType === "buyer" \? "\/buyer"/);
 });
 
 test("dashboard access is enforced server-side for verified super admins", () => {
@@ -29,8 +33,10 @@ test("dashboard access is enforced server-side for verified super admins", () =>
 
 test("public onboarding does not silently treat a missing profile as an admin session", () => {
   const onboarding = read("../../routes/onboarding.tsx");
-  assert.match(onboarding, /if \(!user\) return <RedirectToSignIn \/>/);
-  assert.match(onboarding, /if \(home\) goHome\(home, navigate\)/);
+  assert.match(onboarding, /if \(isPending\)/);
+  assert.match(onboarding, /if \(unsupportedSignupRole\)/);
+  assert.match(onboarding, /No role has been granted/);
+  assert.match(onboarding, /if \(unsupportedSignupRole\) \{/);
   assert.doesNotMatch(onboarding, /internal_role\s*=\s*["']super_admin["']/);
 });
 
