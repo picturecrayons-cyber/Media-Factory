@@ -55,10 +55,10 @@ export function DitAgentDesk({ actor }: { actor: StudioActor }) {
   const createMutation = useMutation({
     mutationFn: () => {
       if (!sourceManifest) throw new Error("Select the source-card manifest first");
-      return createDitIngestSession({
+      return createDitIngestSession({ data: {
         titleId, cameraUnit, cameraLabel, cardLabel, shootDate, sourceVolume, sourceRoot,
         manifest: sourceManifest,
-      });
+      } });
     },
     onSuccess: async () => {
       setSourceManifest(null);
@@ -68,7 +68,7 @@ export function DitAgentDesk({ actor }: { actor: StudioActor }) {
   });
   const copyMutation = useMutation({
     mutationFn: (args: { sessionId: string; copyType: CopyType; manifest: ManifestDraft; copyRoot: string }) =>
-      recordDitCopyVerification(args),
+      recordDitCopyVerification({ data: args }),
     onSuccess: refresh,
   });
   const signoffMutation = useMutation({
@@ -86,8 +86,9 @@ export function DitAgentDesk({ actor }: { actor: StudioActor }) {
     if (!file) return;
     try {
       setFileError("");
-      setSourceManifest(await readManifest(file));
-      if (!sourceRoot && file.name) setSourceRoot(file.name.replace(/\.json$/i, ""));
+      const manifest = await readManifest(file);
+      setSourceManifest(manifest);
+      if (!sourceRoot) setSourceRoot(manifest.root || file.name.replace(/\.json$/i, ""));
     } catch (error) {
       setSourceManifest(null);
       setFileError(error instanceof Error ? error.message : "Could not read the manifest");
@@ -201,10 +202,13 @@ export function DitAgentDesk({ actor }: { actor: StudioActor }) {
                       </div>
                       {!signedOff ? <>
                         <input type="file" accept="application/json,.json" className="mt-3 block w-full text-xs text-muted" onChange={(event) => void handleCopyFile(session.id, type, event.target.files?.[0])} />
-                        <Button size="sm" className="mt-3" disabled={!manifest || copyMutation.isPending} onClick={() => copyMutation.mutate({
-                          sessionId: session.id, copyType: type, manifest,
-                          copyRoot: copyRoots[session.id]?.[type] || manifest.root || "unlabelled-copy-root",
-                        })}>Verify {type === "PRIMARY" ? "Primary" : "Recovery"} copy</Button>
+                        <Button size="sm" className="mt-3" disabled={!manifest || copyMutation.isPending} onClick={() => {
+                          if (!manifest) return;
+                          copyMutation.mutate({
+                            sessionId: session.id, copyType: type, manifest,
+                            copyRoot: copyRoots[session.id]?.[type] || manifest.root || "unlabelled-copy-root",
+                          });
+                        }}>Verify {type === "PRIMARY" ? "Primary" : "Recovery"} copy</Button>
                       </> : null}
                       {copy ? <p className="mt-2 break-all text-xs text-muted">{copy.fileCount} files · {formatBytes(copy.totalBytes)} · SHA-256 {copy.manifestSha256.slice(0, 16)}…</p> : null}
                     </div>
