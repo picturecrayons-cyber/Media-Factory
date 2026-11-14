@@ -6,10 +6,11 @@ import { TitleList } from "@/components/bridge/title-desk";
 import { MyStoryConcepts } from "@/components/bridge/my-story-concepts";
 import { NewSubmissionPanel } from "@/components/bridge/new-submission-panel";
 import { StudioMemberDesk } from "@/components/bridge/studio-member-desk";
+import { DitAgentDesk } from "@/components/bridge/dit-agent-desk";
 
 export const Route = createFileRoute("/studio")({ component: Studio });
 
-type StudioTab = "films" | "stories" | "members";
+type StudioTab = "films" | "stories" | "members" | "dit";
 type StudioActor = { userId: string; displayName: string; organizationName?: string | null; organizationId?: string | null };
 
 function Studio() {
@@ -30,6 +31,7 @@ function StudioDashboard({ actor }: { actor: StudioActor }) {
     { id: "films", label: "Finished Films" },
     { id: "stories", label: "Story & Concept" },
     { id: "members", label: "Members" },
+    { id: "dit", label: "DIT Agent" },
   ];
 
   return (
@@ -71,15 +73,19 @@ function StudioDashboard({ actor }: { actor: StudioActor }) {
             <div><h2 className="font-display text-xl font-semibold">Story & Concept submissions</h2><p className="mt-1 text-sm text-muted">Concepts follow a separate curation path. They are not finished films and are not automatically published to buyers.</p></div>
             <MyStoryConcepts actor={actor} />
           </>
-        ) : (
+        ) : activeTab === "members" ? (
           <>
             <div><h2 className="font-display text-xl font-semibold">Studio members</h2><p className="mt-1 text-sm text-muted">Verified organization roster. This view is read-only; invitations and role changes are not enabled in this release.</p></div>
             <StudioMemberDesk actor={actor} />
           </>
+        ) : (
+          <>
+            <DitAgentDesk actor={actor} />
+          </>
         )}
       </section>
 
-      <p className="rounded-xl border border-line p-4 text-xs leading-5 text-muted">Production job scheduling, DIT manifests and sign-off, membership invitations, editable roles, financial statements and portfolio analytics are not enabled here. QC, rights, licensing and publication approvals remain with their designated Bridge reviewers.</p>
+      <p className="rounded-xl border border-line p-4 text-xs leading-5 text-muted">Automated production scheduling and media transfers, membership invitations, editable roles, financial statements and portfolio analytics are not enabled here. The DIT Agent records manifest and copy-verification evidence only. QC, rights, licensing and publication approvals remain with their designated Bridge reviewers.</p>
     </div>
   );
 }
