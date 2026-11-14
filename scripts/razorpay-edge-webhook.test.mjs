@@ -21,7 +21,7 @@ test("captured Bridge payment is resolved from provider_order_id, not only notes
 });
 
 test("unmatched Bridge capture remains retriable", () => {
-  assert.match(source, /if\s*\(\s*!localPayment\s*\)\s*return\s*await failEvent\(supabase,\s*id,\s*"Bridge order not persisted yet"\)/);
+  assert.match(source, /if\s*\(\s*!localPayment\s*\)\s*return\s*await failEvent\(supabase,\s*id,\s*token,\s*"Bridge order not persisted yet"\)/);
   assert.match(source, /new Response\(message,\s*\{\s*status:\s*503\s*\}\)/);
 });
 
