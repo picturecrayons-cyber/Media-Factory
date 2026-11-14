@@ -350,23 +350,14 @@ export const listTitles = createServerFn({ method: "GET" })
       rows = await listCatalog(sql);
     } else if (actor.accountType === "buyer") {
       assertPermission(actor, "title.read_catalog");
-      if (await hasTitleMergeColumn(sql)) {
-        rows = await sql<TitleRow>`
-          select t.* from bridge_titles t
-          where t.archived_at is null
-            and t.merged_into_title_id is null
-            and t.status in ('LIVE_FOR_BUYERS','IN_NEGOTIATION','LICENSED','DELIVERED')
-            and public.bridge_title_buyer_visibility(t.id)
-          order by t.updated_at desc limit 200
-        `;
-      } else {
-        rows = await sql<TitleRow>`
-          select t.* from bridge_titles t
-          where t.archived_at is null and t.status in ('LIVE_FOR_BUYERS','IN_NEGOTIATION','LICENSED','DELIVERED')
-            and public.bridge_title_buyer_visibility(t.id)
-          order by t.updated_at desc limit 200
-        `;
-      }
+      rows = await sql<TitleRow>`
+        select t.* from bridge_titles t
+        where to_jsonb(t)->>'archived_at' is null
+          and to_jsonb(t)->>'merged_into_title_id' is null
+          and t.status in ('LIVE_FOR_BUYERS','IN_NEGOTIATION','LICENSED','DELIVERED')
+          and public.bridge_title_buyer_visibility(t.id)
+        order by t.updated_at desc limit 200
+      `;
     } else {
       assertPermission(actor, "title.read_own");
       rows = await listOwned(sql, actor.userId, actor.accountType === "studio" ? actor.organizationId : null);
