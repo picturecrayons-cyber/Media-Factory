@@ -85,6 +85,7 @@ export const PERMISSIONS = [
   "title.qc_review",
   "title.rights_review",
   "title.license",
+  "title.approve",
   "title.negotiate",
   "title.deliver",
   "asset.sign_upload",
