@@ -13,6 +13,7 @@ import {
   type BuyerMandate,
   type BuyerOrganization,
 } from "./buyer-mandate-policy";
+import { canReviewBuyerEvidence } from "./buyer-evidence-policy";
 
 function requireLegalReviewer(actor: BridgeActor) {
   if (!actor.internalRole || !["legal_reviewer", "admin", "super_admin"].includes(actor.internalRole)) {
@@ -364,7 +365,7 @@ export const reviewBuyerComplianceEvidence = createServerFn({ method: "POST" })
         join bridge_private.buyer_organization_verifications v on v.organization_id=e.organization_id
         where e.id=${data.evidenceId} limit 1
       `;
-      if (!rows[0] || rows[0].uploaded_by === actor.userId || rows[0].parent_status !== "pending_review") {
+      if (!rows[0] || !canReviewBuyerEvidence({ evidenceStatus: "pending", parentStatus: rows[0].parent_status, uploadedBy: rows[0].uploaded_by, reviewerId: actor.userId })) {
         throw new Error("Pending evidence and independent reviewer on an active organization review are required");
       }
       const updated = await sql<{ id: string }>`update bridge_private.buyer_organization_verification_evidence e
@@ -382,7 +383,7 @@ export const reviewBuyerComplianceEvidence = createServerFn({ method: "POST" })
         join bridge_private.buyer_acquisition_mandates m on m.id=e.mandate_id
         where e.id=${data.evidenceId} limit 1
       `;
-      if (!rows[0] || rows[0].uploaded_by === actor.userId || rows[0].parent_status !== "pending_review") {
+      if (!rows[0] || !canReviewBuyerEvidence({ evidenceStatus: "pending", parentStatus: rows[0].parent_status, uploadedBy: rows[0].uploaded_by, reviewerId: actor.userId })) {
         throw new Error("Pending evidence and independent reviewer on an active mandate review are required");
       }
       const updated = await sql<{ id: string }>`update bridge_private.buyer_acquisition_mandate_evidence e
