@@ -1,4 +1,4 @@
-import { createServerFn } from "@tanstack/react-start";
+import { createServerFn, createServerOnlyFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { createHash, randomBytes } from "node:crypto";
 import { authMiddleware } from "@/lib/auth/middleware";
@@ -11,7 +11,7 @@ import { loadTitle, recordTransition } from "./titles";
 import { writeAudit } from "./audit";
 import { assertBuyerPublishable } from "./buyer-visibility";
 import { assertNotDevUser } from "./guards";
-import { formatBrandedEmailHtml, sendTransactionalEmail } from "./mail.server";
+
 
 function requireRazorpayKeys() {
   const keyId = bridgeEnv.razorpayKeyId();
@@ -43,6 +43,8 @@ type RzPayment = {
   currency: string;
 };
 
+const loadBridgeMail = createServerOnlyFn(() => import("./mail.server"));
+
 async function sendLicenseReceiptEmail(
   sql: Awaited<ReturnType<typeof getSql>>,
   userId: string,
@@ -50,6 +52,7 @@ async function sendLicenseReceiptEmail(
   paymentId: string,
   packageLicense: boolean,
 ) {
+  const { formatBrandedEmailHtml, sendTransactionalEmail } = await loadBridgeMail();
   const [profiles, titles] = await Promise.all([
     sql<{ email: string | null; display_name: string | null }>`
       select email, display_name from bridge_profiles where user_id = ${userId} limit 1
