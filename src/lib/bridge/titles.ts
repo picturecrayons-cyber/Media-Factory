@@ -599,40 +599,47 @@ export const reviewTitleRevision = createServerFn({ method: "POST" })
     assertPermission(actor, "title.revision_review");
     const sql = await getSql();
     await sql.transaction(async (tx) => {
-      const rows = await tx<{ id: string; title_id: string; status: string; proposed_changes: Record<string, unknown> }[]>`
+      const rows = await tx<{ id: string; title_id: string; status: string; proposed_changes: Record<string, unknown> }[]> `
         select id::text, title_id, status, proposed_changes
         from bridge_title_revisions where id = ${data.revisionId}::uuid
         for update
       `;
       const revision = rows[0];
       if (!revision || revision.status !== "PENDING") throw new Error("Pending revision not found");
-      const titleRows = await tx<{ id: string; status: string; archived_at: string | null; name: string; name_ml: string | null; synopsis: string; language: string; year: number | null; runtime_minutes: number | null; licensing_fee_paise: number; content_type: string }[]>`
-        select id, status, archived_at, name, name_ml, synopsis, language, year, runtime_minutes, licensing_fee_paise, content_type from bridge_titles where id = ${revision.title_id} for update
+      const titleRows = await tx<TitleRow[]> `
+        select * from bridge_titles where id = ${revision.title_id} for update
       `;
-      const target = titleRows[0];
-      if (!target || target.archived_at) throw new Error("Title is archived");
+      const row = titleRows[0];
+      if (!row || row.archived_at) throw new Error("Title is archived or missing");
+      const title = mapTitle(row);
       if (data.decision === "APPROVED") {
         const changes = titleEditSchema.parse(revision.proposed_changes);
-        await tx`
+        await tx `
           update bridge_titles set
-            name = ${changes.name ?? target.name},
-            name_ml = ${changes.nameMl === undefined ? target.name_ml : changes.nameMl},
-            synopsis = ${changes.synopsis ?? target.synopsis},
-            language = ${changes.language ?? target.language},
-            year = ${changes.year === undefined ? target.year : changes.year},
-            runtime_minutes = ${changes.runtimeMinutes === undefined ? target.runtime_minutes : changes.runtimeMinutes},
-            licensing_fee_paise = ${changes.licensingFeePaise ?? target.licensing_fee_paise},
-            content_type = ${changes.contentType ? loopStageType(changes.contentType) : target.content_type},
+            name = ${changes.name ?? title.name},
+            name_ml = ${changes.nameMl === undefined ? title.nameMl : changes.nameMl},
+            synopsis = ${changes.synopsis ?? title.synopsis},
+            language = ${changes.language ?? title.language},
+            year = ${changes.year === undefined ? title.year : changes.year},
+            runtime_minutes = ${changes.runtimeMinutes === undefined ? title.runtimeMinutes : changes.runtimeMinutes},
+            licensing_fee_paise = ${changes.licensingFeePaise ?? title.licensingFeePaise},
+            content_type = ${changes.contentType ? loopStageType(changes.contentType) : title.contentType},
             updated_at = now()
-          where id = ${target.id}
+          where id = ${title.id}
         `;
       }
-      await tx`
+      await tx `
         update bridge_title_revisions set status = ${data.decision}, reviewed_by = ${actor.userId},
           reviewed_at = now(), review_note = ${data.note ?? null}
         where id = ${revision.id}
       `;
-      await writeAudit({ actorUserId: actor.userId, action: data.decision === "APPROVED" ? "title.revision.approve" : "title.revision.reject", entityType: "bridge_title", entityId: target.id, metadata: { revisionId: revision.id, note: data.note ?? null } }, tx);
+      await writeAudit({
+        actorUserId: actor.userId,
+        action: data.decision === "APPROVED" ? "title.revision.approve" : "title.revision.reject",
+        entityType: "bridge_title",
+        entityId: title.id,
+        metadata: { revisionId: revision.id, note: data.note ?? null },
+      }, tx);
     });
     return { reviewed: true };
   });
