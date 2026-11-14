@@ -18,6 +18,8 @@ const INTERNAL_PERMISSIONS: Record<InternalRole, readonly Permission[]> = {
   ],
   admin: [
     "title.read_catalog",
+    "title.archive_any",
+    "title.revision_review",
     "service.quote_create",
     "service.order_create",
     "service.fulfill",
@@ -45,6 +47,8 @@ const INTERNAL_PERMISSIONS: Record<InternalRole, readonly Permission[]> = {
     "title.ingest_internal",
     "title.create",
     "title.read_catalog",
+    "title.archive_any",
+    "title.revision_review",
     "title.advance_upload",
     "title.qc_review",
     "title.rights_review",
@@ -71,6 +75,8 @@ const ACCOUNT_PERMISSIONS: Record<AccountType, readonly Permission[]> = {
     "title.create",
     "title.read_own",
     "title.update_own",
+    "title.archive_own",
+    "title.revision_submit",
     "title.advance_upload",
     "service.quote_create",
     "service.order_create",
@@ -84,6 +90,8 @@ const ACCOUNT_PERMISSIONS: Record<AccountType, readonly Permission[]> = {
     "title.create",
     "title.read_own",
     "title.update_own",
+    "title.archive_own",
+    "title.revision_submit",
     "title.advance_upload",
     "service.quote_create",
     "service.order_create",
@@ -179,7 +187,7 @@ const ROLE_GRANTS: Record<InternalRole, readonly InternalRole[]> = {
   legal_reviewer: [],
   finance: [],
   admin: ["viewer", "qc_reviewer", "legal_reviewer", "finance", "admin"],
-  super_admin: ["viewer", "qc_reviewer", "legal_reviewer", "finance", "admin", "super_admin"],
+  // The designated root administrator is unique. Super Admin may grant every operational role,\n  // but no in-app action may create a second Super Admin identity.\n  super_admin: ["viewer", "qc_reviewer", "legal_reviewer", "finance", "admin"],
 };
 
 export function canGrantInternalRole(actor: Actor, role: InternalRole): boolean {

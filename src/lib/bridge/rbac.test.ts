@@ -30,6 +30,8 @@ describe("PRD authorization matrix", () => {
     for (const owner of [creator(), studio()]) {
       assert.equal(hasPermission(owner, "title.create"), true);
       assert.equal(hasPermission(owner, "asset.sign_upload"), true);
+      assert.equal(hasPermission(owner, "title.archive_own"), true);
+      assert.equal(hasPermission(owner, "title.revision_submit"), true);
       assert.equal(canReadTitle(owner, { ownerUserId: owner.userId, status: "DRAFT" }), true);
       assert.equal(canReadTitle(owner, { ownerUserId: "other-org-user", status: "DRAFT" }), false);
       assert.equal(
@@ -92,6 +94,19 @@ describe("PRD authorization matrix", () => {
     assert.equal(canMutateTitle(viewer(), foreign, "title.update_own", "title.qc_review"), false);
   });
 
+  it("draft owners can archive and submitted owners can request metadata revisions", () => {
+    assert.equal(hasPermission(creator(), "title.archive_own"), true);
+    assert.equal(hasPermission(creator(), "title.revision_submit"), true);
+    assert.equal(hasPermission(studio(), "title.archive_own"), true);
+    assert.equal(hasPermission(studio(), "title.revision_submit"), true);
+    assert.equal(hasPermission(buyer(), "title.archive_own"), false);
+    assert.equal(hasPermission(viewer(), "title.revision_submit"), false);
+    assert.equal(hasPermission(admin(), "title.revision_review"), true);
+    assert.equal(hasPermission(admin(), "title.license"), true);
+    assert.equal(hasPermission(superAdmin(), "title.archive_any"), true);
+    assert.equal(hasPermission(superAdmin(), "title.revision_review"), true);
+  });
+
   it("super admin can create canonical Bridge titles and use explicit internal upload powers", () => {
     const a = superAdmin();
     assert.equal(hasPermission(a, "title.create"), true);
@@ -113,7 +128,7 @@ describe("PRD authorization matrix", () => {
     assert.equal(canGrantInternalRole(admin(), "viewer"), true);
     assert.equal(canGrantInternalRole(admin(), "admin"), true);
     assert.equal(canGrantInternalRole(admin(), "super_admin"), false);
-    assert.equal(canGrantInternalRole(superAdmin(), "super_admin"), true);
+    assert.equal(canGrantInternalRole(superAdmin(), "super_admin"), false);
     assert.equal(canGrantInternalRole(qc, "viewer"), false);
     assert.equal(canGrantInternalRole(actor("unverified", "independent_creator", "admin", false), "viewer"), false);
   });
@@ -163,7 +178,7 @@ describe("PRD authorization matrix", () => {
     assert.equal(canAccessDashboard(viewer()), false);
     assert.equal(canGrantInternalRole(admin(), "viewer"), true);
     assert.equal(canGrantInternalRole(admin(), "super_admin"), false);
-    assert.equal(canGrantInternalRole(superAdmin(), "super_admin"), true);
+    assert.equal(canGrantInternalRole(superAdmin(), "super_admin"), false);
     assert.equal(
       canAccessDashboard(actor("super-u", "independent_creator", "super_admin", false)),
       false,

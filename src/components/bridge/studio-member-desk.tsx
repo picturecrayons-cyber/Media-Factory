@@ -1,9 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
 import { listStudioMembers } from "@/lib/bridge/studio-members";
+import { bridgeWorkspaceQueryKey, type BridgeWorkspaceActor } from "@/lib/bridge/query-scope";
 
-export function StudioMemberDesk() {
+export function StudioMemberDesk({ actor }: { actor: BridgeWorkspaceActor }) {
   const query = useQuery({
-    queryKey: ["bridge-studio-members"],
+    queryKey: bridgeWorkspaceQueryKey("bridge-studio-members", actor),
     queryFn: () => listStudioMembers(),
     retry: 1,
   });
