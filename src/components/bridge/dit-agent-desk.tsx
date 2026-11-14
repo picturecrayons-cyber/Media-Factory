@@ -73,12 +73,12 @@ export function DitAgentDesk({ actor }: { actor: StudioActor }) {
   });
   const signoffMutation = useMutation({
     mutationFn: (args: { sessionId: string; signoffNote: string }) =>
-      signOffDitIngestSession({
+      signOffDitIngestSession({ data: {
         ...args,
         folderStructurePreserved: true,
         originalFilenamesPreserved: true,
         cameraCardRetained: true,
-      }),
+      } }),
     onSuccess: refresh,
   });
 
