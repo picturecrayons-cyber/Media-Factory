@@ -10,6 +10,7 @@ import { canOperateOnTitle } from "@/lib/bridge/rbac";
 import { writeAudit } from "@/lib/bridge/audit";
 import { hashObjectSha256, sealVerifiedObject, signUpload, verifyObject, verifyObjectSha256 } from "@/lib/bridge/oci-object-storage.server";
 import { detectDitFormat } from "@/lib/bridge/dit-format";
+import { bridgeEnv } from "@/lib/bridge/env";
 
 async function requireDitOperator(actor: Awaited<ReturnType<typeof requireVerifiedActor>>) {
   if (actor.internalRole === "super_admin") return;
@@ -45,9 +46,11 @@ export const verifyDitFileCopies = createServerFn({ method: "POST" })
       id: string; job_id: string; title_id: string; source_sha256: string | null;
       byte_size: number | null; master_object_key: string | null;
       backup_1_object_key: string | null; backup_2_object_key: string | null;
+      master_bucket: string | null; backup_1_bucket: string | null; backup_2_bucket: string | null;
     }>`
       select f.id, f.job_id, j.title_id, f.source_sha256, f.byte_size,
-        f.master_object_key, f.backup_1_object_key, f.backup_2_object_key
+        f.master_object_key, f.backup_1_object_key, f.backup_2_object_key,
+        f.master_bucket, f.backup_1_bucket, f.backup_2_bucket
       from bridge_dit_job_files f
       join bridge_dit_jobs j on j.id = f.job_id
       where f.id = ${data.fileId}::uuid
@@ -59,17 +62,23 @@ export const verifyDitFileCopies = createServerFn({ method: "POST" })
     if (!file.source_sha256 || !file.byte_size || file.byte_size <= 0) {
       throw new Error("Source SHA-256 and byte size must be recorded before copy verification");
     }
-    const keys = [
-      ["MASTER", file.master_object_key],
-      ["BACKUP_1", file.backup_1_object_key],
-      ["BACKUP_2", file.backup_2_object_key],
+    const copies = [
+      ["MASTER", file.master_object_key, file.master_bucket],
+      ["BACKUP_1", file.backup_1_object_key, file.backup_1_bucket],
+      ["BACKUP_2", file.backup_2_object_key, file.backup_2_bucket],
     ] as const;
-    if (keys.some(([, key]) => !key)) {
-      throw new Error("All three isolated OCI object keys are required");
+    if (copies.some(([, key, bucket]) => !key || !bucket)) {
+      throw new Error("All three OCI object keys and bucket assignments are required");
     }
-    const verified = await Promise.all(keys.map(async ([copy, key]) => ({
+    if (file.master_bucket !== bridgeEnv.ociBucket() ||
+        file.backup_1_bucket !== bridgeEnv.ociRecoveryBucket() ||
+        file.backup_2_bucket !== bridgeEnv.ociRecoveryBucket() ||
+        file.master_bucket === file.backup_1_bucket) {
+      throw new Error("Primary and Recovery bucket assignments do not match the configured vaults");
+    }
+    const verified = await Promise.all(copies.map(async ([copy, key, bucket]) => ({
       copy,
-      result: await verifyObjectSha256(key!, file.source_sha256!, Number(file.byte_size)),
+      result: await verifyObjectSha256(key!, file.source_sha256!, Number(file.byte_size), bucket!),
     })));
     const byCopy = Object.fromEntries(verified.map(({ copy, result }) => [copy, result]));
     await sql`
@@ -318,6 +327,14 @@ export const registerDitFile = createServerFn({ method: "POST" })
       `;
       return { fileId: existing[0].id, upload: signedRetry, detectedFormat, codec: null as string | null, codecStatus: "NOT_PROBED" as const };
     }
+    const primaryBucket = bridgeEnv.ociBucket();
+    const recoveryBucket = bridgeEnv.ociRecoveryBucket();
+    if (!primaryBucket || !recoveryBucket) {
+      throw new Error("DIT ingest is disabled until both OCI Primary and Recovery Vault buckets are configured");
+    }
+    if (primaryBucket === recoveryBucket) {
+      throw new Error("OCI Primary and Recovery Vault must be different buckets");
+    }
     const id = randomUUID();
     const root = `bridge-dit/${actor.userId}/${data.jobId}/${id}`;
     const sourceKey = `${root}/SOURCE/${fileName}`;
@@ -327,11 +344,13 @@ export const registerDitFile = createServerFn({ method: "POST" })
     await sql`
       insert into bridge_dit_job_files
         (id, job_id, relative_path, file_name, detected_format, codec, byte_size,
-         source_object_key, content_type, master_object_key, backup_1_object_key, backup_2_object_key, status)
+         source_object_key, content_type, master_object_key, backup_1_object_key, backup_2_object_key,
+         master_bucket, backup_1_bucket, backup_2_bucket, status)
       values
         (${id}::uuid, ${data.jobId}::uuid, ${relativePath}, ${fileName}, ${detectedFormat},
          null, ${data.byteSize}, ${sourceKey}, ${data.contentType},
-         ${masterKey}, ${backup1Key}, ${backup2Key}, 'QUEUED')
+         ${masterKey}, ${backup1Key}, ${backup2Key},
+         ${primaryBucket}, ${recoveryBucket}, ${recoveryBucket}, 'QUEUED')
     `;
     await sql`
       insert into bridge_dit_job_logs (job_id, file_id, level, event, details)
@@ -361,10 +380,12 @@ export const finalizeDitFileUpload = createServerFn({ method: "POST" })
     const rows = await sql<{
       id: string; source_object_key: string; byte_size: number; content_type: string | null;
       master_object_key: string; backup_1_object_key: string; backup_2_object_key: string;
+      master_bucket: string; backup_1_bucket: string; backup_2_bucket: string;
       status: string;
     }>`
       select f.id, f.source_object_key, f.byte_size, f.content_type,
-        f.master_object_key, f.backup_1_object_key, f.backup_2_object_key, f.status
+        f.master_object_key, f.backup_1_object_key, f.backup_2_object_key,
+        f.master_bucket, f.backup_1_bucket, f.backup_2_bucket, f.status
       from bridge_dit_job_files f
       where f.id = ${data.fileId}::uuid and f.job_id = ${data.jobId}::uuid
     `;
@@ -404,21 +425,27 @@ export const finalizeDitFileUpload = createServerFn({ method: "POST" })
       `;
       return { fileId: file.id, byteSize: sourceHash.byteSize, sha256: sourceHash.sha256, verifiedCopies: [] as string[], duplicate: true as const };
     }
+    if (file.master_bucket !== bridgeEnv.ociBucket() ||
+        file.backup_1_bucket !== bridgeEnv.ociRecoveryBucket() ||
+        file.backup_2_bucket !== bridgeEnv.ociRecoveryBucket() ||
+        file.master_bucket === file.backup_1_bucket) {
+      throw new Error("OCI Primary and Recovery bucket assignments are not configured or no longer match this job");
+    }
     const destinations = [
-      ["MASTER", file.master_object_key],
-      ["BACKUP_1", file.backup_1_object_key],
-      ["BACKUP_2", file.backup_2_object_key],
+      ["MASTER", file.master_object_key, file.master_bucket],
+      ["BACKUP_1", file.backup_1_object_key, file.backup_1_bucket],
+      ["BACKUP_2", file.backup_2_object_key, file.backup_2_bucket],
     ] as const;
-    for (const [copy, key] of destinations) {
-      await sealVerifiedObject(file.source_object_key, key, sourceHash.etag);
+    for (const [copy, key, bucket] of destinations) {
+      await sealVerifiedObject(file.source_object_key, key, sourceHash.etag, undefined, bucket);
       await sql`
         insert into bridge_dit_job_logs (job_id, file_id, level, event, details)
         values (${data.jobId}::uuid, ${data.fileId}::uuid, 'INFO', 'COPY_CREATED',
           jsonb_build_object('copy', ${copy}, 'objectKey', ${key}))
       `;
     }
-    const checks = await Promise.all(destinations.map(async ([copy, key]) => ({
-      copy, result: await verifyObjectSha256(key, sourceHash.sha256, sourceHash.byteSize),
+    const checks = await Promise.all(destinations.map(async ([copy, key, bucket]) => ({
+      copy, result: await verifyObjectSha256(key, sourceHash.sha256, sourceHash.byteSize, bucket),
     })));
     const byCopy = Object.fromEntries(checks.map(({ copy, result }) => [copy, result]));
     await sql`
@@ -532,9 +559,11 @@ export const createDitEditorHandoff = createServerFn({ method: "POST" })
       relative_path: string; file_name: string; detected_format: string | null; codec: string | null;
       byte_size: number; source_sha256: string; master_object_key: string; master_sha256: string;
       backup_1_sha256: string; backup_2_sha256: string;
+      master_bucket: string; backup_1_bucket: string; backup_2_bucket: string;
     }>`
       select relative_path, file_name, detected_format, codec, byte_size, source_sha256,
-        master_object_key, master_sha256, backup_1_sha256, backup_2_sha256
+        master_object_key, master_bucket, backup_1_bucket, backup_2_bucket,
+        master_sha256, backup_1_sha256, backup_2_sha256
       from bridge_dit_job_files where job_id = ${data.jobId}::uuid and status = 'VERIFIED'
       order by relative_path
     `;
@@ -546,6 +575,7 @@ export const createDitEditorHandoff = createServerFn({ method: "POST" })
         path: file.relative_path, fileName: file.file_name, format: file.detected_format,
         codec: file.codec, byteSize: Number(file.byte_size), sha256: file.source_sha256,
         masterObjectKey: file.master_object_key,
+        vaults: { primary: file.master_bucket, recovery: file.backup_1_bucket },
         copies: { master: file.master_sha256, backup1: file.backup_1_sha256, backup2: file.backup_2_sha256 },
       })),
     };
