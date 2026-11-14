@@ -7,6 +7,7 @@ import { TitleList } from "@/components/bridge/title-desk";
 import { MyStoryConcepts } from "@/components/bridge/my-story-concepts";
 import { NewSubmissionPanel } from "@/components/bridge/new-submission-panel";
 import { listTitles } from "@/lib/bridge/titles";
+import { MediaWorkspaceDesk } from "@/components/bridge/media-workspace-desk";
 
 export const Route = createFileRoute("/creator")({ component: Creator });
 
@@ -19,7 +20,8 @@ const SECTIONS = [
   ["Add New Title", "#add-title"],
   ["Metadata & Credits", "#metadata"],
   ["Rights & Ownership", "#rights"],
-  ["My Assets", "#assets"],
+  ["Storage / Media Vault", "#assets"],
+  ["Post-Production", "#post-production"],
   ["Review & Corrections", "#review"],
   ["Delivery Status", "#delivery"],
   ["Statements", "#statements"],
@@ -202,22 +204,12 @@ function CreatorDashboard({
         />
       </section>
 
-      <section id="assets" className="scroll-mt-20 rounded-2xl border border-line bg-surface p-5 sm:p-6">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-widest text-accent">Secure media</p>
-            <h2 className="mt-1 font-display text-2xl font-semibold">My Assets & Uploads</h2>
-          </div>
-          <span className="rounded-full border border-line px-3 py-1 text-xs text-muted">Title-scoped access</span>
-        </div>
-        <p className="mt-3 max-w-3xl text-sm leading-relaxed text-muted">
-          Uploads, verified file details, processing progress and asset versions remain inside each title's
-          secure workspace. This dashboard does not invent file sizes, resolutions, upload percentages or
-          completion states when no verified asset feed is available.
-        </p>
-        <a href="#my-titles" className="mt-4 inline-flex text-sm font-semibold text-accent hover:underline">
-          Open a title's asset workspace →
-        </a>
+      <section id="assets" className="scroll-mt-20">
+        <MediaWorkspaceDesk actor={actor} mode="storage" />
+      </section>
+
+      <section id="post-production" className="scroll-mt-20">
+        <MediaWorkspaceDesk actor={actor} mode="post-production" />
       </section>
 
       <section id="review" className="scroll-mt-20 grid gap-4 md:grid-cols-2">
