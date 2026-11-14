@@ -102,6 +102,7 @@ describe("PRD authorization matrix", () => {
     assert.equal(hasPermission(buyer(), "title.archive_own"), false);
     assert.equal(hasPermission(viewer(), "title.revision_submit"), false);
     assert.equal(hasPermission(admin(), "title.revision_review"), true);
+    assert.equal(hasPermission(admin(), "title.license"), true);
     assert.equal(hasPermission(superAdmin(), "title.archive_any"), true);
     assert.equal(hasPermission(superAdmin(), "title.revision_review"), true);
   });
