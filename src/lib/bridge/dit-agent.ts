@@ -1,4 +1,4 @@
-import { createServerFn } from "@tanstack/react-start";
+import { createServerFn, createServerOnlyFn } from "@tanstack/react-start";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { authMiddleware } from "@/lib/auth/middleware";
@@ -6,8 +6,13 @@ import { getSql } from "@/lib/db";
 import { requireVerifiedActor } from "./session";
 import { assertNotDevUser } from "./guards";
 import { ditManifestDigest, ditManifestTotals, normalizeDitFiles } from "./dit-manifest";
-import { bridgeEnv } from "./env";
-import { sealVerifiedObject, signUpload, verifyObject, verifyObjectSha256 } from "./oci-object-storage.server";
+const loadDitOciStorage = createServerOnlyFn(async () => {
+  const [{ bridgeEnv }, storage] = await Promise.all([
+    import("./env"),
+    import("./oci-object-storage.server"),
+  ]);
+  return { bridgeEnv, ...storage };
+});
 
 const manifestFile = z.object({
   relativePath: z.string().min(1).max(1024),
@@ -261,6 +266,8 @@ export const requestDitFileUpload = createServerFn({ method: "POST" })
     const session = await requireSession(sql, data.sessionId, actor.organizationId!);
     if (session.status === "SIGNED_OFF") throw new Error("A signed-off DIT session is locked");
 
+    const { bridgeEnv, signUpload } = await loadDitOciStorage();
+    const { bridgeEnv, verifyObject, verifyObjectSha256, sealVerifiedObject } = await loadDitOciStorage();
     const primaryBucket = bridgeEnv.ociBucket();
     const recoveryBucket = bridgeEnv.ociRecoveryBucket();
     if (!primaryBucket || !recoveryBucket) {
@@ -440,6 +447,7 @@ export const recordDitCopyVerification = createServerFn({ method: "POST" })
     const files = normalizeDitFiles(data.manifest.files);
     const digest = ditManifestDigest(files);
     const totals = ditManifestTotals(files);
+    const { bridgeEnv } = await loadDitOciStorage();
     const expectedBucket = data.copyType === "PRIMARY"
       ? bridgeEnv.ociBucket()
       : bridgeEnv.ociRecoveryBucket();
@@ -519,6 +527,7 @@ export const signOffDitIngestSession = createServerFn({ method: "POST" })
         where session_id = ${data.sessionId}::uuid
       `;
       const verifiedTypes = new Set(copies.filter((copy) => copy.verified).map((copy) => copy.copy_type));
+      const { bridgeEnv } = await loadDitOciStorage();
       const primaryBucket = bridgeEnv.ociBucket();
       const recoveryBucket = bridgeEnv.ociRecoveryBucket();
       if (!primaryBucket || !recoveryBucket || primaryBucket === recoveryBucket) {
