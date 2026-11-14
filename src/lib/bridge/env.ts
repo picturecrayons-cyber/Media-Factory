@@ -29,6 +29,8 @@ export const bridgeEnv = {
   smtpPort: () => read("SMTP_PORT") || "587",
   smtpUser: () => read("SMTP_USER") || read("HOSTINGER_SMTP_USER"),
   smtpPass: () => read("SMTP_PASS") || read("HOSTINGER_SMTP_PASS"),
+  hostingerIncomingWebhookSecret: () => read("HOSTINGER_INCOMING_WEBHOOK_SECRET"),
+  hostingerIncomingMailbox: () => read("HOSTINGER_INCOMING_MAILBOX") || "abijithasokan@crayonspictures.com",
   mailFrom: () => read("MAIL_FROM") || "abijithasokan@crayonspictures.com",
   appUrl: () => resolveBridgeConfiguredOrigin(read("APP_URL"), read("SITE_URL")),
   databaseUrl: () => read("DATABASE_URL") || read("POSTGRES_URL"),
@@ -49,5 +51,6 @@ export function integrationStatus() {
         bridgeEnv.ociBucket(),
     ),
     mail: Boolean(bridgeEnv.smtpHost() && bridgeEnv.smtpUser() && bridgeEnv.smtpPass()),
+    hostingerIncomingWebhook: Boolean(bridgeEnv.hostingerIncomingWebhookSecret()),
   };
 }
