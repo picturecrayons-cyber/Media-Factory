@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { StatusChip } from "@/components/bridge/status-rail";
 import { createTitle, listTitles } from "@/lib/bridge/titles";
-import { getTitleAssetDownloadUrl, listTitleAssets } from "@/lib/bridge/assets";
+import { listTitleAssets, requestAssetDownload } from "@/lib/bridge/assets";
 import { bridgeWorkspaceQueryKey, type BridgeWorkspaceActor } from "@/lib/bridge/query-scope";
 import { BRIDGE_LOOP_LANES } from "@/lib/bridge/loop-lanes";
 
