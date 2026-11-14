@@ -64,3 +64,16 @@ test("flags conflicting identity links for manual review", () => {
   });
   assert.equal(result[0].status, "manual_review_conflicting_links");
 });
+
+
+test("dashboard certification routes each existing public account type to its workspace", async () => {
+  const { workspaceHome, canAccessDashboard } = await import("./rbac.ts");
+  const base = { userId: "user", emailVerified: true, organizationId: null };
+  assert.equal(workspaceHome({ ...base, accountType: "independent_creator", internalRole: null }), "/creator");
+  assert.equal(workspaceHome({ ...base, accountType: "studio", internalRole: null }), "/studio");
+  assert.equal(workspaceHome({ ...base, accountType: "buyer", internalRole: null }), "/buyer");
+  assert.equal(workspaceHome({ ...base, accountType: "independent_creator", internalRole: "super_admin" }), "/dashboard");
+  assert.equal(canAccessDashboard({ ...base, accountType: "independent_creator", internalRole: "super_admin" }), true);
+  assert.equal(canAccessDashboard({ ...base, accountType: "studio", internalRole: null }), false);
+  assert.equal(canAccessDashboard({ ...base, accountType: "independent_creator", internalRole: "admin" }), false);
+});
