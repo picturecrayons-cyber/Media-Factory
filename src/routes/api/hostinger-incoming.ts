@@ -4,6 +4,7 @@ import { getSql } from "@/lib/db";
 import {
   isValidHostingerBearer,
   parseHostingerIncomingPayload,
+  readLimitedRequestBody,
   type HostingerIncomingMailRecord,
 } from "@/lib/bridge/hostinger-incoming";
 import { bridgeEnv } from "@/lib/bridge/env";
@@ -32,8 +33,13 @@ export const Route = createFileRoute("/api/hostinger-incoming")({
           return Response.json({ error: "Payload too large" }, { status: 413 });
         }
 
-        const raw = await request.text();
-        if (Buffer.byteLength(raw, "utf8") > MAX_WEBHOOK_BYTES) {
+        let raw: string | null;
+        try {
+          raw = await readLimitedRequestBody(request, MAX_WEBHOOK_BYTES);
+        } catch {
+          return Response.json({ error: "Could not read request body" }, { status: 400 });
+        }
+        if (raw === null) {
           return Response.json({ error: "Payload too large" }, { status: 413 });
         }
 
