@@ -338,6 +338,29 @@ export const createTitle = createServerFn({ method: "POST" })
     return { title, submission: isPublicSubmission };
   });
 
+
+export const listPendingTitleRevisions = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    assertPermission(actor, "title.revision_review");
+    const sql = await getSql();
+    const revisions = await sql<{
+      id: string; title_id: string; title_name: string; revision_number: number;
+      submitted_by: string; submitted_at: string | Date; proposed_changes: Record<string, unknown>;
+    }[]> `
+      select r.id::text, r.title_id, t.name as title_name, r.revision_number,
+        r.submitted_by, r.submitted_at, r.proposed_changes
+      from bridge_title_revisions r
+      join bridge_titles t on t.id = r.title_id
+      where r.status = 'PENDING' and t.archived_at is null
+      order by r.submitted_at asc
+      limit 100
+    `;
+    return { revisions };
+  });
+
 export const listTitles = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
