@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { StatusChip } from "@/components/bridge/status-rail";
-import { createTitle, listTitles } from "@/lib/bridge/titles";
+import { archiveTitle, createTitle, listTitles } from "@/lib/bridge/titles";
 import { listTitleAssets, requestAssetDownload } from "@/lib/bridge/assets";
 import { bridgeWorkspaceQueryKey, type BridgeWorkspaceActor } from "@/lib/bridge/query-scope";
 import { BRIDGE_LOOP_LANES } from "@/lib/bridge/loop-lanes";
@@ -15,6 +15,11 @@ export function TitleList({ empty, query = "", actor }: { empty: string; query?:
   const [posterUrls, setPosterUrls] = useState<Record<string, string | null>>({});
   const [posterLoading, setPosterLoading] = useState(false);
   const loaded = useRef(new Set<string>());
+  const archive = useMutation({
+    mutationFn: (titleId: string) => archiveTitle({ data: { id: titleId } }),
+    onSuccess: () => { loaded.current.clear(); setPosterUrls({}); void titlesQ.refetch(); toast("Draft archived"); },
+    onError: (err) => toast(err instanceof Error ? err.message : "Could not archive draft"),
+  });
 
   useEffect(() => {
     let cancelled = false;
@@ -83,6 +88,13 @@ export function TitleList({ empty, query = "", actor }: { empty: string; query?:
                 <span className="inline-flex text-sm font-semibold text-accent">Open title →</span>
               </div>
             </Link>
+            {!actor.internalRole && title.status === "DRAFT" ? (
+              <div className="flex justify-end border-t border-line p-3">
+                <Button type="button" variant="outline" disabled={archive.isPending} onClick={() => {
+                  if (window.confirm("Archive this draft? Its media and audit history will be retained.")) archive.mutate(title.id);
+                }}>Delete draft</Button>
+              </div>
+            ) : null}
           </li>
         ))}
       </ul>
