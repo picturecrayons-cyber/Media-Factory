@@ -14,13 +14,13 @@ test("missing Bridge profiles fall back to onboarding without granting access", 
 test("authenticated profiles route through the server-resolved workspace home", () => {
   const session = read("./session.ts");
   const onboarding = read("../../routes/onboarding.tsx");
-  assert.match(session, /profile: actor, home: workspaceHome\(actor\)/);
-  assert.match(onboarding, /queryKey: \["bridge-session", user\?\.id\]/);
+  assert.match(session, /profile: actor, home: workspaceHome\\(actor\\)/);
+  assert.match(onboarding, /queryKey: \\["bridge-session", user\\?\\.id\\]/);
   assert.match(onboarding, /getBridgeSessionWithTimeout/);
   assert.match(onboarding, /const result = await completeOnboarding/);
-  assert.match(onboarding, /const destination = result\.home \|\|/);
-  assert.match(onboarding, /accountType === "studio" \? "\/studio"/);
-  assert.match(onboarding, /accountType === "buyer" \? "\/buyer"/);
+  assert.match(onboarding, /const destination = result\\.home \\|\\|/);
+  assert.match(onboarding, /accountType === "studio" \\? "\\/studio"/);
+  assert.match(onboarding, /accountType === "buyer" \\? "\\/buyer"/);
 });
 
 test("dashboard access is enforced server-side for verified super admins", () => {
