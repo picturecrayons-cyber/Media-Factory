@@ -170,8 +170,10 @@ async function createPar(opts: {
   key: string;
   accessType: "ObjectWrite" | "ObjectRead";
   expiresIn: number;
+  bucket?: string;
 }) {
   const cfg = config();
+  const targetBucket = opts.bucket?.trim() || cfg.bucket;
   const namespace = await resolveNamespace(cfg);
   const timeExpires = new Date(Date.now() + opts.expiresIn * 1000).toISOString();
   const body = {
@@ -180,23 +182,24 @@ async function createPar(opts: {
     objectName: opts.key,
     timeExpires,
   };
-  const path = `/n/${encodeURIComponent(namespace)}/b/${encodeURIComponent(cfg.bucket)}/p/`;
+  const path = `/n/${encodeURIComponent(namespace)}/b/${encodeURIComponent(targetBucket)}/p/`;
   const res = await signedFetch({ cfg, method: "POST", path, body });
   if (!res.ok) throw new Error(`OCI pre-authenticated request failed (${res.status})`);
   const parsed = (await res.json()) as { accessUri?: string };
   if (!parsed.accessUri) throw new Error("OCI pre-authenticated request returned no access URI");
   return {
     url: new URL(parsed.accessUri, endpoint(cfg.region)).toString(),
-    bucket: cfg.bucket,
+    bucket: targetBucket,
     namespace,
   };
 }
 
-export async function signUpload(opts: { key: string; contentType: string; expiresIn?: number }) {
+export async function signUpload(opts: { key: string; contentType: string; expiresIn?: number; bucket?: string }) {
   const signed = await createPar({
     key: opts.key,
     accessType: "ObjectWrite",
     expiresIn: opts.expiresIn ?? 900,
+    bucket: opts.bucket,
   });
   return { url: signed.url, key: opts.key, bucket: signed.bucket, method: "PUT" as const };
 }
@@ -242,19 +245,21 @@ export async function abortMultipartUpload(partBaseUrl: string, objectKey: strin
   if (!res.ok && res.status !== 404) throw new Error(`OCI multipart cancel failed (${res.status})`);
 }
 
-export async function signDownload(opts: { key: string; expiresIn?: number }) {
+export async function signDownload(opts: { key: string; expiresIn?: number; bucket?: string }) {
   const signed = await createPar({
     key: opts.key,
     accessType: "ObjectRead",
     expiresIn: opts.expiresIn ?? 300,
+    bucket: opts.bucket,
   });
   return { url: signed.url, key: opts.key, bucket: signed.bucket, method: "GET" as const };
 }
 
-export async function verifyObject(key: string, expectedContentType?: string | null) {
+export async function verifyObject(key: string, expectedContentType?: string | null, bucket?: string) {
   const cfg = config();
+  const targetBucket = bucket?.trim() || cfg.bucket;
   const namespace = await resolveNamespace(cfg);
-  const path = `/n/${encodeURIComponent(namespace)}/b/${encodeURIComponent(cfg.bucket)}/o/${encodedObjectName(key)}`;
+  const path = `/n/${encodeURIComponent(namespace)}/b/${encodeURIComponent(targetBucket)}/o/${encodedObjectName(key)}`;
   const res = await signedFetch({ cfg, method: "HEAD", path });
   if (!res.ok) throw new Error(`OCI object verification failed (${res.status})`);
   const contentLength = Number(res.headers.get("content-length") || 0);
@@ -262,7 +267,7 @@ export async function verifyObject(key: string, expectedContentType?: string | n
   if (expectedContentType && contentType !== expectedContentType) {
     throw new Error(`OCI object content type mismatch: expected ${expectedContentType}, received ${contentType || "missing"}`);
   }
-  if (!Number.isSafeInteger(contentLength) || contentLength <= 0) throw new Error("Uploaded object is empty");
+  if (!Number.isSafeInteger(contentLength) || contentLength < 0) throw new Error("Uploaded object has an invalid size");
   return {
     byteSize: contentLength,
     contentType,
@@ -332,8 +337,10 @@ export async function sealVerifiedObject(
   destinationKey: string,
   expectedEtag: string,
   pollOpts?: { propagationGracePeriodMs?: number; pollIntervalMs?: number },
+  destinationBucket?: string,
 ) {
   const cfg = config();
+  const targetBucket = destinationBucket?.trim() || cfg.bucket;
   const namespace = await resolveNamespace(cfg);
   const path = `/n/${encodeURIComponent(namespace)}/b/${encodeURIComponent(cfg.bucket)}/actions/copyObject`;
   const res = await signedFetch({
@@ -345,14 +352,62 @@ export async function sealVerifiedObject(
       sourceObjectIfMatch: expectedEtag,
       destinationRegion: cfg.region,
       destinationNamespace: namespace,
-      destinationBucket: cfg.bucket,
+      destinationBucket: targetBucket,
       destinationObjectName: destinationKey,
     },
   });
   if (res.status !== 202 && !res.ok) throw new Error(`OCI object copy failed (${res.status})`);
   const workRequestId = res.headers.get("opc-work-request-id");
   if (workRequestId) await pollWorkRequest(cfg, workRequestId, pollOpts);
-  return verifyObject(destinationKey);
+  return verifyObject(destinationKey, undefined, targetBucket);
+}
+
+/** Stream an OCI object and verify its exact byte length and SHA-256 digest. */
+export async function verifyObjectSha256(
+  key: string,
+  expectedSha256: string,
+  expectedByteSize: number,
+  bucket?: string,
+) {
+  if (!/^[a-f0-9]{64}$/i.test(expectedSha256)) {
+    throw new Error("Expected SHA-256 must be a 64-character hexadecimal digest");
+  }
+  if (!Number.isSafeInteger(expectedByteSize) || expectedByteSize < 0) {
+    throw new Error("Expected byte size must be a non-negative safe integer");
+  }
+  const cfg = config();
+  const targetBucket = bucket?.trim() || cfg.bucket;
+  const namespace = await resolveNamespace(cfg);
+  const path = `/n/${encodeURIComponent(namespace)}/b/${encodeURIComponent(targetBucket)}/o/${encodedObjectName(key)}`;
+  const res = await signedFetch({ cfg, method: "GET", path });
+  if (!res.ok || !res.body) throw new Error(`OCI object download for checksum failed (${res.status})`);
+  const declaredSize = Number(res.headers.get("content-length") || 0);
+  if (declaredSize !== expectedByteSize) {
+    await res.body.cancel();
+    throw new Error(`OCI object size mismatch: expected ${expectedByteSize}, received ${declaredSize}`);
+  }
+  const hash = createHash("sha256");
+  const reader = res.body.getReader();
+  let byteSize = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      byteSize += value.byteLength;
+      if (byteSize > expectedByteSize) {
+        await reader.cancel();
+        throw new Error("OCI object exceeded expected byte size during checksum");
+      }
+      hash.update(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  const sha256 = hash.digest("hex");
+  if (byteSize !== expectedByteSize || sha256.toLowerCase() !== expectedSha256.toLowerCase()) {
+    throw new Error(`OCI object SHA-256 mismatch for ${key}`);
+  }
+  return { key, bucket: targetBucket, byteSize, sha256, etag: res.headers.get("etag")?.replaceAll('"', "") ?? null, verified: true as const };
 }
 
 export async function deleteObject(key: string) {
