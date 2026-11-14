@@ -4,7 +4,7 @@ on:
   push:
     branches: ["main", "feat/crayons-bridge-production", "fix/bridge-production-gate-20260923", "fix/bridge-final-production-gate-20260924", "fix/canonical-supabase-url-resolution-20261024", "fix/signup-role-dashboards-rbac-20261024", "fix/workspace-studio-rbac-20261024"]
   pull_request:
-    branches: ["main", "fix/canonical-supabase-url-resolution-20261024", "fix/signup-role-dashboards-rbac-20261024", "fix/workspace-studio-rbac-20261024", "abijithasokan1992/youtube-buyer-account-integration", "feat/bridge-buyer-revenue-operations-20261111"]
+    branches: ["main", "fix/canonical-supabase-url-resolution-20261024", "fix/signup-role-dashboards-rbac-20261024", "fix/workspace-studio-rbac-20261024", "abijithasokan1992/youtube-buyer-account-integration", "feat/bridge-buyer-revenue-operations-20261111", "feat/bridge-admin-creator-studio-workflows-20261114"]
   workflow_dispatch:
 
 jobs:
