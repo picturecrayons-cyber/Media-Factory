@@ -88,7 +88,7 @@ function WorkstationBody({ actor }: { actor: BridgeActor }) {
           rows={data.assets} fields={["kind", "s3_key", "content_type", "byte_size"]} />
       ) : activeTab === "Buyers" ? (
         <BuyerRelease titles={data.titles} canApprove={hasPermission(actor, "title.approve")}
-          onGate={(titleId, gateName) => gate.mutate({ data: { titleId, gate: gateName as "OTT", decision: "PASS" } })} />
+          onGate={(titleId, gateName) => gate.mutate({ data: { titleId, gate: gateName, decision: "PASS" } })} />
       ) : activeTab === "Deliveries" ? (
         <div className="space-y-6">
           <SimpleTable title="Licensing & Delivery" description={ready.length + " titles in the commercial pipeline"}
@@ -165,6 +165,31 @@ function ReviewQueue({ title, description, titles, canAct, actions, mutation }: 
 function SimpleTable({ title, description, rows, fields, titleName }: { title: string; description: string; rows: any[]; fields: string[]; titleName?: Map<any, any> }) {
   return <section className="space-y-3"><SectionHeader title={title} description={description} /><RecordTable rows={rows} fields={fields} titleName={titleName ?? new Map()} /></section>;
 }
-function BuyerRelease({ titles, canApprove, onGate }: { titles: any[]; canApprove: boolean; onGate: (titleId: string, gateName: string) => void }) {
-  return <section className="space-y-3"><SectionHeader title="Buyer release" description="Pass a gate only after the required check." />{titles.map((t) => <div key={t.id} className="flex items-center justify-between rounded-2xl border border-line p-4"><span>{t.name}</span>{canApprove ? <ActionButton label="Pass gate" onClick={() => onGate(t.id, "buyer")} /> : <span className="text-xs text-muted">Approval reserved to Super Admin</span>}</div>)}</section>;
+type BuyerGateName = "OTT" | "PACKAGING" | "CURATION" | "DELIVERY";
+
+const BUYER_GATES: { name: BuyerGateName; label: string }[] = [
+  { name: "OTT", label: "Pass OTT" },
+  { name: "PACKAGING", label: "Pass packaging" },
+  { name: "CURATION", label: "Pass curation" },
+  { name: "DELIVERY", label: "Pass delivery" },
+];
+
+function BuyerRelease({ titles, canApprove, onGate }: { titles: any[]; canApprove: boolean; onGate: (titleId: string, gateName: BuyerGateName) => void }) {
+  return (
+    <section className="space-y-3">
+      <SectionHeader title="Buyer release" description="Pass each named release gate only after its required evidence has been checked." />
+      {titles.map((title) => (
+        <div key={title.id} className="flex flex-col gap-3 rounded-2xl border border-line p-4 sm:flex-row sm:items-center sm:justify-between">
+          <span>{title.name}</span>
+          {canApprove ? (
+            <div className="flex flex-wrap gap-2">
+              {BUYER_GATES.map((gate) => (
+                <ActionButton key={gate.name} label={gate.label} onClick={() => onGate(title.id, gate.name)} />
+              ))}
+            </div>
+          ) : <span className="text-xs text-muted">Approval reserved to Super Admin</span>}
+        </div>
+      ))}
+    </section>
+  );
 }
