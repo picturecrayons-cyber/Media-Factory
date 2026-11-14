@@ -60,7 +60,8 @@ describe("PRD authorization matrix", () => {
   it("admin receives only explicit staff permissions, not account-type mutation powers", () => {
     const a = admin();
     assert.equal(hasPermission(a, "title.read_catalog"), true);
-    assert.equal(hasPermission(a, "title.qc_review"), true);
+    assert.equal(hasPermission(a, "title.qc_review"), false);
+    assert.equal(hasPermission(a, "title.rights_review"), false);
     assert.equal(hasPermission(a, "users.invite_internal"), true);
     assert.equal(hasPermission(a, "title.create"), false);
     assert.equal(hasPermission(a, "title.update_own"), false);
