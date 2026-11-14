@@ -313,13 +313,11 @@ function TitleMetadataEditor({
   const [language, setLanguage] = useState(title.language);
   const [year, setYear] = useState(title.year ? String(title.year) : "");
   const [runtimeMinutes, setRuntimeMinutes] = useState(title.runtimeMinutes ? String(title.runtimeMinutes) : "");
-  const [fee, setFee] = useState(String(title.licensingFeePaise / 100));
   const save = useMutation({
     mutationFn: () => updateTitle({ data: { id: title.id, changes: {
       name, nameMl: nameMl || null, synopsis, language,
       year: year ? Number(year) : null,
       runtimeMinutes: runtimeMinutes ? Number(runtimeMinutes) : null,
-      licensingFeePaise: Math.round(Number(fee || "0") * 100),
     } } }),
     onSuccess: (result) => {
       onSaved();
@@ -327,9 +325,11 @@ function TitleMetadataEditor({
     },
     onError: (err) => window.alert(err instanceof Error ? err.message : "Could not save title changes"),
   });
-  const editableDraft = !actor.internalRole && ["DRAFT", "UPLOADING", "PREPARING"].includes(title.status);
+  const editableDraft = !actor.internalRole && title.status === "DRAFT";
+  const canSubmitRevision = !actor.internalRole && ["UPLOADING", "PREPARING", "QC_REVIEW", "RIGHTS_REVIEW", "LICENSING_READY"].includes(title.status);
   const adminEditor = false;
-  const locked = !editableDraft;
+  const canEdit = editableDraft || canSubmitRevision;
+  const locked = !canEdit;
   return (
     <section className="space-y-4 rounded-2xl border border-line bg-surface p-5">
       <div><h2 className="font-display text-xl font-semibold">Edit title details</h2><p className="mt-1 text-sm text-muted">{editableDraft ? "Draft metadata saves directly." : adminEditor ? "Super Admin metadata correction." : "Submitted-title changes are sent as a revision request and do not change the live title until approved."}</p></div>
@@ -339,11 +339,10 @@ function TitleMetadataEditor({
         <label className="text-sm">Language<input value={language} disabled={locked} onChange={e=>setLanguage(e.target.value)} className="mt-1 h-11 w-full rounded-lg border border-line-strong bg-elevated px-3"/></label>
         <label className="text-sm">Year<input inputMode="numeric" value={year} disabled={locked} onChange={e=>setYear(e.target.value)} className="mt-1 h-11 w-full rounded-lg border border-line-strong bg-elevated px-3"/></label>
         <label className="text-sm">Runtime (minutes)<input inputMode="numeric" value={runtimeMinutes} disabled={locked} onChange={e=>setRuntimeMinutes(e.target.value)} className="mt-1 h-11 w-full rounded-lg border border-line-strong bg-elevated px-3"/></label>
-        <label className="text-sm">License fee (INR)<input inputMode="decimal" value={fee} disabled={locked} onChange={e=>setFee(e.target.value)} className="mt-1 h-11 w-full rounded-lg border border-line-strong bg-elevated px-3"/></label>
         <label className="text-sm sm:col-span-2">Synopsis<textarea value={synopsis} disabled={locked} onChange={e=>setSynopsis(e.target.value)} rows={4} className="mt-1 w-full rounded-lg border border-line-strong bg-elevated px-3 py-2"/></label>
       </div>
       <div className="flex justify-end"><Button type="button" disabled={locked || save.isPending} onClick={()=>save.mutate()}>{save.isPending ? "Saving…" : editableDraft ? "Save draft" : "Submit revision"}</Button></div>
-      {!editableDraft && !adminEditor ? <p className="text-xs text-muted">Changes remain pending until an Admin or Super Admin reviews the request. Existing title metadata remains unchanged until approval.</p> : null}
+      {canSubmitRevision ? <p className="text-xs text-muted">Changes are submitted as a revision request. Commercial terms and title status cannot be changed here. Existing metadata remains unchanged until Admin review.</p> : null}
       <div className="border-t border-line pt-4"><h3 className="font-semibold">Revision history</h3>{revisionsLoading ? <p className="mt-2 text-sm text-muted">Loading revisions…</p> : revisions.length ? <ul className="mt-2 space-y-2">{revisions.map(rev=><li key={rev.id} className="rounded-lg bg-bg p-3 text-sm"><div className="flex justify-between gap-2"><strong>Revision {rev.revision_number}</strong><span>{rev.status}</span></div><pre className="mt-2 overflow-auto text-xs">{JSON.stringify(rev.proposed_changes,null,2)}</pre>{rev.review_note ? <p className="mt-1 text-xs text-muted">{rev.review_note}</p> : null}</li>)}</ul> : <p className="mt-2 text-sm text-muted">No revisions recorded.</p>}</div>
     </section>
   );
