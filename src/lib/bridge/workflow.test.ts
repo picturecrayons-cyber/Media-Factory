@@ -174,6 +174,8 @@ test("real SQL services persist QC, independently approved license, lifecycle an
     const saved = (await f.sql.transaction((tx) => f.save(tx, owner, license))) as {
       grantId: string;
     };
+    // The test fixture represents a grant whose signed instrument explicitly permits sublicensing.
+    await f.sql.query("update bridge_rights_grants set sublicensing_allowed=true where id=$1", [saved.grantId]);
     await f.sql.transaction((tx) =>
       f.review(tx, qc, {
         titleId: "title-123",
@@ -204,6 +206,73 @@ test("real SQL services persist QC, independently approved license, lifecycle an
     await f.db.close();
   }
 });
+test("legal approval fails closed when sublicensing authority is not expressly recorded", async () => {
+  const f = await fixture();
+  try {
+    const saved = (await f.sql.transaction((tx) => f.save(tx, owner, license))) as {
+      grantId: string;
+    };
+    await f.sql.query("update bridge_titles set status='RIGHTS_REVIEW' where id='title-123'");
+    await assert.rejects(
+      f.sql.transaction((tx) => f.review(tx, legal, {
+        titleId: "title-123",
+        stage: "LEGAL",
+        decision: "APPROVE",
+        note: "Review agreement and scope",
+        grantId: saved.grantId,
+      })),
+      /Rights grant is incomplete/,
+    );
+    assert.equal(
+      (await f.sql.query<{ status: string }>("select status from bridge_titles where id='title-123'"))[0].status,
+      "RIGHTS_REVIEW",
+    );
+    assert.equal((await f.sql.query("select * from bridge_legal_cases")).length, 0);
+    assert.equal(
+      (await f.sql.query<{ status: string }>("select status from bridge_rights_grants where id=$1", [saved.grantId]))[0].status,
+      "DRAFT",
+    );
+  } finally {
+    await f.db.close();
+  }
+});
+
+test("legal approval rejects expired, empty-scope and revoked grants", async () => {
+  for (const mutation of [
+    "update bridge_rights_grants set window_end='2000-01-01T00:00:00Z' where id=$1",
+    "update bridge_rights_grants set territories='[]'::jsonb where id=$1",
+    "update bridge_rights_grants set languages='[]'::jsonb where id=$1",
+    "update bridge_rights_grants set media='[]'::jsonb where id=$1",
+    "update bridge_rights_grants set status='REVOKED' where id=$1",
+  ]) {
+    const f = await fixture();
+    try {
+      const saved = (await f.sql.transaction((tx) => f.save(tx, owner, license))) as {
+        grantId: string;
+      };
+      await f.sql.query("update bridge_titles set status='RIGHTS_REVIEW' where id='title-123'");
+      await f.sql.query(mutation, [saved.grantId]);
+      await assert.rejects(
+        f.sql.transaction((tx) => f.review(tx, legal, {
+          titleId: "title-123",
+          stage: "LEGAL",
+          decision: "APPROVE",
+          note: "Review rights scope and term",
+          grantId: saved.grantId,
+        })),
+        /License draft is unavailable|Rights grant is incomplete/,
+      );
+      assert.equal((await f.sql.query("select * from bridge_legal_cases")).length, 0);
+      assert.equal(
+        (await f.sql.query<{ status: string }>("select status from bridge_titles where id='title-123'"))[0].status,
+        "RIGHTS_REVIEW",
+      );
+    } finally {
+      await f.db.close();
+    }
+  }
+});
+
 test("unauthorized review and unverified current assets cannot clear QC", async () => {
   const f = await fixture();
   try {
