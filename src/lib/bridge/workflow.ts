@@ -88,8 +88,16 @@ function hasCompleteRightsAuthority(grant: {
     Array.isArray(value) &&
     value.length > 0 &&
     value.every((entry) => typeof entry === "string" && entry.trim().length > 0);
-  const start = grant.window_start ? new Date(grant.window_start).getTime() : Number.NaN;
-  const end = grant.window_end ? new Date(grant.window_end).getTime() : Number.NaN;
+  const start = grant.window_start
+    ? grant.window_start instanceof Date
+      ? grant.window_start.getTime()
+      : new Date(grant.window_start).getTime()
+    : Number.NaN;
+  const end = grant.window_end
+    ? grant.window_end instanceof Date
+      ? grant.window_end.getTime()
+      : new Date(grant.window_end).getTime()
+    : Number.NaN;
   const evidence = Array.isArray(grant.evidence) ? grant.evidence : [];
   const firstEvidence = evidence[0] && typeof evidence[0] === "object"
     ? evidence[0] as Record<string, unknown>
