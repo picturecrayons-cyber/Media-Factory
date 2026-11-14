@@ -250,4 +250,8 @@ it("reserves final approval, duplicate merge, and Loop publication to Super Admi
   assert.equal(hasPermission(qc, "title.qc_review"), true);
   assert.equal(hasPermission(legal, "title.rights_review"), true);
   assert.equal(hasPermission(admin(), "title.license"), true);
+  assert.equal(hasPermission(admin(), "title.qc_review"), false);
+  assert.equal(hasPermission(admin(), "title.rights_review"), false);
+  assert.equal(hasPermission(qc, "title.rights_review"), false);
+  assert.equal(hasPermission(legal, "title.qc_review"), false);
 });
