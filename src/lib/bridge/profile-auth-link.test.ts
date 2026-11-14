@@ -12,3 +12,12 @@ test("onboarding persists verified auth-to-Bridge identity binding", () => {
   assert.match(src, /where lower\(email\) = lower\(\$\{email\}\)/);
   assert.doesNotMatch(src, /on conflict \(auth_user_id\) do update set/);
 });
+
+
+test("Super Admin invite acceptance is allowlisted and accepted internal roles are audited", () => {
+  const src = readFileSync(new URL("./profiles.ts", import.meta.url), "utf8");
+  assert.match(src, /canGrantInternalRoleToEmail\(actor, data\.role, data\.email\)/);
+  assert.match(src, /inv\.internal_role === "super_admin"[\s\S]*?CANONICAL_SUPER_ADMIN_EMAIL/);
+  assert.match(src, /action: "users\.internal_role_granted"/);
+  assert.match(src, /metadata:[\s\S]*?role: internalRole,[\s\S]*?inviteId/);
+});
