@@ -4,6 +4,7 @@ import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { Button } from "@/components/ui/button";
 import { listTitles, listAuditLogs } from "@/lib/bridge/titles";
+import { TitleList } from "@/components/bridge/title-desk";
 import { listLoopPublicationReadiness } from "@/lib/bridge/loop-publication";
 import { listAdminProfiles } from "@/lib/bridge/profiles";
 import { StreamVistaOrders } from "@/components/bridge/streamvista-orders";
@@ -67,6 +68,11 @@ function AdminBody({ actor }: { actor: any }) {
             <Link to="/cms"><Button variant="outline">Open CMS</Button></Link>
             <a href="https://crayonsloop.in/" target="_blank" rel="noreferrer"><Button variant="outline">Open Loop ↗</Button></a>
           </div>
+        </section>
+
+        <section aria-label="Admin title gallery" className="rounded-2xl border border-line bg-surface p-4 sm:p-5">
+          <div className="mb-4"><h3 className="font-display text-xl font-semibold">Titles</h3><p className="mt-1 text-sm text-muted">Canonical Bridge title catalogue and poster gallery. Open a title to review assets, metadata, QC, rights and delivery gates.</p></div>
+          <TitleList actor={actor} empty="No active titles found." />
         </section>
 
         <section aria-label="Title overview" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
