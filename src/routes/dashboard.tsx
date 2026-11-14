@@ -25,6 +25,11 @@ function Dashboard() {
 
 const ADMIN_MODULES = [
   {
+    title: "My Creator workspace",
+    description: "Open the Creator desk for your own submissions, media and title updates.",
+    to: "/creator",
+  },
+  {
     title: "Titles & media",
     description: "Title records, metadata, artwork, uploads, QC and rights.",
     to: "/workspace",
