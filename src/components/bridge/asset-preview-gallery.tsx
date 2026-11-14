@@ -46,7 +46,7 @@ export function AssetPosterSlot({ assets }: { assets: PreviewAsset[] }) {
       })
       .catch(() => { if (active) setFailed(true); });
     return () => { active = false; };
-  }, [poster?.id]);
+  }, [poster?.id, poster?.kind, poster?.contentType]);
 
   return (
     <div className="aspect-[2/3] overflow-hidden rounded-xl border border-line bg-elevated">
