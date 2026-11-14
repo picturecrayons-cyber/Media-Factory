@@ -4,16 +4,29 @@ import { z } from "zod";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import { requireVerifiedActor } from "@/lib/bridge/session";
+import { assertNotDevUser } from "@/lib/bridge/guards";
 import { loadTitle } from "@/lib/bridge/titles";
 import { canOperateOnTitle } from "@/lib/bridge/rbac";
 import { writeAudit } from "@/lib/bridge/audit";
 import { hashObjectSha256, sealVerifiedObject, signUpload, verifyObject, verifyObjectSha256 } from "@/lib/bridge/oci-object-storage.server";
 import { detectDitFormat } from "@/lib/bridge/dit-format";
 
-function requireDitOperator(actor: Awaited<ReturnType<typeof requireVerifiedActor>>) {
+async function requireDitOperator(actor: Awaited<ReturnType<typeof requireVerifiedActor>>) {
   if (actor.internalRole === "super_admin") return;
-  if (!actor.internalRole && actor.accountType === "studio") return;
-  throw new Error("Studio DIT access required");
+  if (actor.internalRole || actor.accountType !== "studio" || !actor.organizationId) {
+    throw new Error("Active Studio DIT membership required");
+  }
+  const sql = await getSql();
+  const memberships = await sql<{ membership_role: string }>`
+    select membership_role
+    from bridge_organization_memberships
+    where organization_id = ${actor.organizationId}::uuid
+      and user_id = ${actor.userId}
+      and status = 'active'
+      and membership_role in ('owner', 'admin', 'producer', 'dit')
+    limit 1
+  `;
+  if (!memberships[0]) throw new Error("Active Studio owner, admin, producer or DIT membership required");
 }
 
 export const verifyDitFileCopies = createServerFn({ method: "POST" })
@@ -23,8 +36,10 @@ export const verifyDitFileCopies = createServerFn({ method: "POST" })
     fileId: z.string().uuid(),
   }))
   .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
-    requireDitOperator(actor);
+    await requireDitOperator(actor);
+    await ownedDitJob(actor, data.jobId);
     const sql = await getSql();
     const rows = await sql<{
       id: string; job_id: string; title_id: string; source_sha256: string | null;
@@ -37,7 +52,6 @@ export const verifyDitFileCopies = createServerFn({ method: "POST" })
       join bridge_dit_jobs j on j.id = f.job_id
       where f.id = ${data.fileId}::uuid
         and f.job_id = ${data.jobId}::uuid
-        and j.created_by = ${actor.userId}
       limit 1
     `;
     const file = rows[0];
@@ -95,12 +109,14 @@ export const signOffDitJob = createServerFn({ method: "POST" })
     }),
   }))
   .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
-    requireDitOperator(actor);
+    await requireDitOperator(actor);
+    await ownedDitJob(actor, data.jobId);
     const sql = await getSql();
     const jobs = await sql<{ id: string; title_id: string }>`
       select id, title_id from bridge_dit_jobs
-      where id = ${data.jobId}::uuid and created_by = ${actor.userId}
+      where id = ${data.jobId}::uuid
       limit 1
     `;
     if (!jobs[0]) throw new Error("DIT job not found or access denied");
@@ -129,7 +145,7 @@ export const signOffDitJob = createServerFn({ method: "POST" })
     await sql`
       update bridge_dit_jobs
       set card_safe = true, status = 'COMPLETED', updated_at = now()
-      where id = ${data.jobId}::uuid and created_by = ${actor.userId}
+      where id = ${data.jobId}::uuid
     `;
     await writeAudit({
       actorUserId: actor.userId,
@@ -144,8 +160,9 @@ export const signOffDitJob = createServerFn({ method: "POST" })
 export const getDitWorkspace = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
+    assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
-    requireDitOperator(actor);
+    await requireDitOperator(actor);
     const sql = await getSql();
     const settings = await sql<{ enabled: boolean }>`
       select enabled from bridge_dit_agent_settings where user_id = ${actor.userId} limit 1
@@ -154,10 +171,16 @@ export const getDitWorkspace = createServerFn({ method: "GET" })
       id: string; title_id: string; source_label: string; source_type: string;
       status: string; card_safe: boolean; created_at: string;
     }>`
-      select id, title_id, source_label, source_type, status, card_safe, created_at
-      from bridge_dit_jobs
-      where created_by = ${actor.userId}
-      order by created_at desc limit 50
+      select j.id, j.title_id, j.source_label, j.source_type, j.status, j.card_safe, j.created_at::text as created_at
+      from bridge_dit_jobs j
+      join bridge_titles t on t.id = j.title_id
+      where j.created_by = ${actor.userId}
+        or ${actor.internalRole === "super_admin"}
+        or (
+          ${actor.accountType === "studio" && !actor.internalRole && Boolean(actor.organizationId)}
+          and t.owner_organization_id = ${actor.organizationId ?? null}::uuid
+        )
+      order by j.created_at desc limit 50
     `;
     return { enabled: settings[0]?.enabled ?? false, jobs };
   });
@@ -166,8 +189,9 @@ export const setDitAgentEnabled = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(z.object({ enabled: z.boolean() }))
   .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
-    requireDitOperator(actor);
+    await requireDitOperator(actor);
     const sql = await getSql();
     await sql`
       insert into bridge_dit_agent_settings (user_id, enabled, updated_at)
@@ -192,8 +216,9 @@ export const createDitIntakeJob = createServerFn({ method: "POST" })
     studioLabel: z.string().trim().max(160).optional(),
   }))
   .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
-    requireDitOperator(actor);
+    await requireDitOperator(actor);
     const sql = await getSql();
     const enabled = await sql<{ enabled: boolean }>`
       select enabled from bridge_dit_agent_settings where user_id = ${actor.userId} limit 1
@@ -229,10 +254,25 @@ function safeDitName(value: string) {
   return safe;
 }
 
-async function ownedDitJob(userId: string, jobId: string) {
+async function ownedDitJob(
+  actor: Awaited<ReturnType<typeof requireVerifiedActor>>,
+  jobId: string,
+) {
   const sql = await getSql();
   const rows = await sql<{ id: string; title_id: string }>`
-    select id, title_id from bridge_dit_jobs where id = ${jobId}::uuid and created_by = ${userId} limit 1
+    select j.id, j.title_id
+    from bridge_dit_jobs j
+    join bridge_titles t on t.id = j.title_id
+    where j.id = ${jobId}::uuid
+      and (
+        j.created_by = ${actor.userId}
+        or ${actor.internalRole === "super_admin"}
+        or (
+          ${actor.accountType === "studio" && !actor.internalRole && Boolean(actor.organizationId)}
+          and t.owner_organization_id = ${actor.organizationId ?? null}::uuid
+        )
+      )
+    limit 1
   `;
   if (!rows[0]) throw new Error("DIT job not found or access denied");
   return rows[0];
@@ -249,9 +289,10 @@ export const registerDitFile = createServerFn({ method: "POST" })
     contentType: z.string().trim().min(3).max(160),
   }))
   .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
-    requireDitOperator(actor);
-    const job = await ownedDitJob(actor.userId, data.jobId);
+    await requireDitOperator(actor);
+    const job = await ownedDitJob(actor, data.jobId);
     const sql = await getSql();
     const relativePath = data.relativePath.replaceAll("\\", "/").split("/").filter(Boolean).join("/");
     if (relativePath.split("/").some((part) => part === ".." || part === ".")) throw new Error("Unsafe relative path");
@@ -312,9 +353,10 @@ export const finalizeDitFileUpload = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(z.object({ jobId: z.string().uuid(), fileId: z.string().uuid() }))
   .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
-    requireDitOperator(actor);
-    await ownedDitJob(actor.userId, data.jobId);
+    await requireDitOperator(actor);
+    await ownedDitJob(actor, data.jobId);
     const sql = await getSql();
     const rows = await sql<{
       id: string; source_object_key: string; byte_size: number; content_type: string | null;
@@ -323,9 +365,8 @@ export const finalizeDitFileUpload = createServerFn({ method: "POST" })
     }>`
       select f.id, f.source_object_key, f.byte_size, f.content_type,
         f.master_object_key, f.backup_1_object_key, f.backup_2_object_key, f.status
-      from bridge_dit_job_files f join bridge_dit_jobs j on j.id = f.job_id
+      from bridge_dit_job_files f
       where f.id = ${data.fileId}::uuid and f.job_id = ${data.jobId}::uuid
-        and j.created_by = ${actor.userId} limit 1
     `;
     const file = rows[0];
     if (!file) throw new Error("DIT file not found or access denied");
@@ -400,9 +441,10 @@ export const getDitJobFiles = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .validator(z.object({ jobId: z.string().uuid() }))
   .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
-    requireDitOperator(actor);
-    await ownedDitJob(actor.userId, data.jobId);
+    await requireDitOperator(actor);
+    await ownedDitJob(actor, data.jobId);
     const sql = await getSql();
     const [fileRows, logRows] = await Promise.all([
       sql<{
@@ -455,9 +497,10 @@ export const markDitFileFailed = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(z.object({ jobId: z.string().uuid(), fileId: z.string().uuid(), reason: z.string().trim().min(1).max(1000) }))
   .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
-    requireDitOperator(actor);
-    await ownedDitJob(actor.userId, data.jobId);
+    await requireDitOperator(actor);
+    await ownedDitJob(actor, data.jobId);
     const sql = await getSql();
     await sql`
       update bridge_dit_job_files set status = 'FAILED', updated_at = now()
@@ -476,9 +519,10 @@ export const createDitEditorHandoff = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(z.object({ jobId: z.string().uuid() }))
   .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
-    requireDitOperator(actor);
-    const job = await ownedDitJob(actor.userId, data.jobId);
+    await requireDitOperator(actor);
+    const job = await ownedDitJob(actor, data.jobId);
     const sql = await getSql();
     const signoffs = await sql<{ id: string; signed_at: string }>`
       select id, signed_at from bridge_dit_signoffs where job_id = ${data.jobId}::uuid order by signed_at desc limit 1
@@ -523,9 +567,10 @@ export const archiveDitJob = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(z.object({ jobId: z.string().uuid() }))
   .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
-    requireDitOperator(actor);
-    await ownedDitJob(actor.userId, data.jobId);
+    await requireDitOperator(actor);
+    await ownedDitJob(actor, data.jobId);
     const sql = await getSql();
     const signoffs = await sql<{ id: string }>`
       select id from bridge_dit_signoffs where job_id = ${data.jobId}::uuid limit 1
