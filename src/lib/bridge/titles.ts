@@ -484,7 +484,7 @@ export const updateTitle = createServerFn({ method: "POST" })
     const title = await loadTitle(data.id);
     if (!title || (title as BridgeTitle & { archivedAt?: string | null }).archivedAt) throw new Error("Not found");
     const ownerEdit = !actor.internalRole && canMutateTitle(actor, title, "title.update_own", "title.license");
-    const staffEdit = Boolean(actor.internalRole === "super_admin" && hasPermission(actor, "title.license"));
+    const staffEdit = Boolean(actor.internalRole && hasPermission(actor, "title.license"));
     if (!ownerEdit && !staffEdit) throw new Error("Forbidden");
     const changes = presentTitleChanges(data.changes);
     if (!Object.keys(changes).length) throw new Error("No title changes supplied");
