@@ -1,7 +1,7 @@
 -- Soft archive and submitted-title revision requests. Additive only; no existing title/assets changed.
 alter table public.bridge_titles
   add column if not exists archived_at timestamptz,
-  add column if not exists archived_by text references public.bridge_profiles(user_id) on delete restrict,
+  add column if not exists archived_by text,
   add column if not exists archive_reason text;
 
 create index if not exists bridge_titles_active_updated_idx
