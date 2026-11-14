@@ -15,7 +15,7 @@ test("authenticated profiles route through the server-resolved workspace home", 
   const session = read("./session.ts");
   const onboarding = read("../../routes/onboarding.tsx");
   assert.match(session, /profile: actor, home: workspaceHome\(actor\)/);
-  assert.match(onboarding, /queryKey: ["bridge-session", user?.id]/);
+  assert.match(onboarding, /queryKey:\s*\[["\x27]bridge-session["\x27],\s*user\?\.id\]/);
   assert.match(onboarding, /getBridgeSessionWithTimeout/);
   assert.match(onboarding, /const result = await completeOnboarding/);
   assert.match(onboarding, /const destination = result.home ||/);
@@ -33,7 +33,7 @@ test("dashboard access is enforced server-side for verified super admins", () =>
 
 test("public onboarding does not silently treat a missing profile as an admin session", () => {
   const onboarding = read("../../routes/onboarding.tsx");
-  assert.match(onboarding, /if \(isPending\)/);
+  assert.match(onboarding, /enabled:\s*!isPending\s*&&\s*Boolean\(user\)/);
   assert.match(onboarding, /if \(unsupportedSignupRole\)/);
   assert.match(onboarding, /No role has been granted/);
   assert.match(onboarding, /if \(unsupportedSignupRole\) \{/);
