@@ -5,6 +5,7 @@ import { getSql } from "@/lib/db";
 import { assertPermission, canAccessAdminWorkstations } from "./rbac";
 import { requireVerifiedActor } from "./session";
 import { writeAudit } from "./audit";
+import { listIncomingSubmissions } from "./submission-queue";
 import { assertNotDevUser } from "./guards";
 
 async function actorFor(userId: string) {
@@ -35,16 +36,7 @@ export const listAdminWorkstations = createServerFn({ method: "GET" })
       sql`select id, title_id, destination, package_version, rights_grant_id, qc_case_id, legal_case_id, readiness_state, authorized_by, authorized_at, created_at, commercial_model, distributor_exclusivity, revenue_share_percent from bridge_destination_packages order by created_at desc limit 200`,
       sql`select id, bridge_title_id, loop_title_id, authorization_status, territories, languages, exploitation_models, window_start, window_end, approved_by, approved_at, revoked_at, updated_at from bridge_loop_publications order by updated_at desc limit 200`,
       sql`select id, actor_user_id, action, entity_type, entity_id, metadata, created_at from bridge_audit_logs order by created_at desc limit 200`,
-      sql`select i.title_id, t.name as title_name, t.status, t.owner_user_id, t.owner_account_type,
-        p.display_name as owner_display_name, p.email as owner_email,
-        coalesce(o.legal_name, p.organization_name) as owner_organization_name,
-        i.authority_type, i.authorization_evidence_type, i.authorization_confirmed,
-        i.buyer_channels, i.screener_mode, i.submitted_at, i.updated_at
-        from bridge_title_submission_intake i
-        join bridge_titles t on t.id = i.title_id
-        left join bridge_profiles p on p.user_id = t.owner_user_id
-        left join bridge_organizations o on o.id = t.owner_organization_id
-        order by i.submitted_at desc limit 200`,
+      listIncomingSubmissions(sql),,
     ]);
     return JSON.parse(JSON.stringify({ titles, assets, assetVersions, qc, legal, rights, packages, publications, audit, submissions }, (_, value) => typeof value === "bigint" ? value.toString() : value));
   });
