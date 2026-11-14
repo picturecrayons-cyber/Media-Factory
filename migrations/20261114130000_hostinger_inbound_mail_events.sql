@@ -21,3 +21,4 @@ create index if not exists bridge_inbound_mail_events_received_idx
 alter table private.bridge_inbound_mail_events enable row level security;
 revoke all privileges on table private.bridge_inbound_mail_events from public, anon, authenticated;
 grant all privileges on table private.bridge_inbound_mail_events to service_role;
+grant insert, select on table private.bridge_inbound_mail_events to postgres;
