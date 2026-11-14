@@ -20,11 +20,6 @@ export function TitleList({ empty, query = "", actor }: { empty: string; query?:
     onSuccess: () => { loaded.current.clear(); setPosterUrls({}); void titlesQ.refetch(); toast("Draft archived"); },
     onError: (err) => toast(err instanceof Error ? err.message : "Could not archive draft"),
   });
-  const archive = useMutation({
-    mutationFn: (titleId: string) => archiveTitle({ data: { id: titleId } }),
-    onSuccess: () => { loaded.current.clear(); setPosterUrls({}); void titlesQ.refetch(); toast("Draft archived"); },
-    onError: (err) => toast(err instanceof Error ? err.message : "Could not archive draft"),
-  });
 
   useEffect(() => {
     let cancelled = false;
