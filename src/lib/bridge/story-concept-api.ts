@@ -178,6 +178,13 @@ export const listMyStoryConcepts = createServerFn({ method: "GET" })
              t.owner_account_type = 'studio'
              and t.owner_organization_id is not null
              and t.owner_organization_id = ${actor.organizationId ?? null}
+             and exists (
+               select 1
+               from bridge_organization_memberships m
+               where m.organization_id = t.owner_organization_id
+                 and m.user_id = ${actor.userId}
+                 and m.status = 'active'
+             )
            )
         order by c.created_at desc
         limit 100
