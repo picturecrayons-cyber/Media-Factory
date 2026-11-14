@@ -217,7 +217,7 @@ function ReviewQueue({ stage, title, description, titles, actions, mutation, gra
           <article key={item.id} className="space-y-3 rounded-2xl border border-line p-4">
             <div>
               <p className="font-medium">{item.name}</p>
-              <p className="mt-1 text-xs text-muted">Owner: {item.owner_display_name || item.owner_user_id} · {item.owner_account_type}{item.owner_organization_name ? \` · \${item.owner_organization_name}\` : ""}</p>
+              <p className="mt-1 text-xs text-muted">Owner: {item.owner_display_name || item.owner_user_id} · {item.owner_account_type}{item.owner_organization_name ? ` · ${item.owner_organization_name}` : ""}</p>
             </div>
             {stage === "LEGAL" ? (
               <label className="block space-y-1 text-xs text-muted">
