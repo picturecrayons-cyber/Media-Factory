@@ -5,10 +5,11 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { StatusChip } from "@/components/bridge/status-rail";
 import { createTitle, listTitles } from "@/lib/bridge/titles";
+import { bridgeWorkspaceQueryKey, type BridgeWorkspaceActor } from "@/lib/bridge/query-scope";
 import { BRIDGE_LOOP_LANES } from "@/lib/bridge/loop-lanes";
 
-export function TitleList({ empty, query = "" }: { empty: string; query?: string }) {
-  const titlesQ = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles() });
+export function TitleList({ empty, query = "", actor }: { empty: string; query?: string; actor: BridgeWorkspaceActor }) {
+  const titlesQ = useQuery({ queryKey: bridgeWorkspaceQueryKey("bridge-titles", actor), queryFn: () => listTitles() });
   const titles = (titlesQ.data?.titles ?? []).filter((t) => !query || `${t.name} ${t.language} ${t.year ?? ""}`.toLowerCase().includes(query.toLowerCase()));
   if (titlesQ.isPending) return <p className="text-sm text-muted">Loading titles…</p>;
   if (titlesQ.isError) {

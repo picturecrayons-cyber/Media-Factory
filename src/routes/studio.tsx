@@ -55,8 +55,8 @@ function Studio() {
                 <h3 className="font-display text-xl font-semibold">Finished films</h3>
                 <p className="mt-1 text-sm text-muted">Only titles authorized for this studio account should appear here.</p>
               </div>
-              <TitleList empty="No finished films are currently returned for this studio account." />
-              <MyStoryConcepts />
+              <TitleList actor={actor} empty="No finished films are currently returned for this studio account." />
+              <MyStoryConcepts actor={actor} />
             </section>
 
 
@@ -65,7 +65,7 @@ function Studio() {
                 <h3 className="font-display text-xl font-semibold">Members & Roles</h3>
                 <p className="mt-1 text-sm text-muted">Read-only roster for verified Studio owners and administrators. Role changes and invitations remain disabled until separately approved.</p>
               </div>
-              <StudioMemberDesk />
+              <StudioMemberDesk actor={actor} />
             </section>
 
             <section id="studio-operations" className="space-y-3">

@@ -159,7 +159,7 @@ function CreatorDashboard({
           </a>
         </div>
         <div className="rounded-2xl border border-line bg-surface p-4 sm:p-5">
-          <TitleList empty="No titles are available for this account yet. Start a submission to add your first title." />
+          <TitleList actor={actor} empty="No titles are available for this account yet. Start a submission to add your first title." />
         </div>
       </section>
 
@@ -180,7 +180,7 @@ function CreatorDashboard({
             Keep story concepts separate from finished-film title records. A concept submission is not a
             finished film or a license-ready asset.
           </p>
-          <MyStoryConcepts />
+          <MyStoryConcepts actor={actor} />
         </div>
       </section>
 
