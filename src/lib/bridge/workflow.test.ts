@@ -306,13 +306,14 @@ test("license author cannot approve their own agreement", async () => {
   const f = await fixture();
   try {
     const admin = { ...owner, userId: "admin", internalRole: "admin" as const };
+    const legalReviewer = { ...admin, internalRole: "legal_reviewer" as const };
     const saved = (await f.sql.transaction((tx) => f.save(tx, admin, license))) as {
       grantId: string;
     };
     await f.sql.query("update bridge_titles set status='RIGHTS_REVIEW'");
     await assert.rejects(
       f.sql.transaction((tx) =>
-        f.review(tx, admin, {
+        f.review(tx, legalReviewer, {
           titleId: "title-123",
           stage: "LEGAL",
           decision: "APPROVE",
