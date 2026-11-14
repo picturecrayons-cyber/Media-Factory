@@ -108,7 +108,7 @@ export const handoffStreamVistaOrder = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
-    if (actor.internalRole !== "admin" && actor.internalRole !== "super_admin") throw new Error("Forbidden");
+    if (actor.internalRole !== "super_admin") throw new Error("Forbidden");
     assertPermission(actor, "loop.publish");
     const sql = await getSql();
     const rows = await sql<{ id: string }>`update streamvista_orders o set bridge_title_id = ${data.bridgeTitleId}, updated_at = now()
