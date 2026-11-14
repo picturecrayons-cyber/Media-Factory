@@ -104,7 +104,17 @@ export function assessBuyerRevenueReadiness(
   if (record.paymentStatus === "INVOICED" && contractEffective) {
     revenueClassification = "INVOICED";
   }
-  if (contractEffective && paymentSettled && payeeVerified) {
+  // Recognize revenue only after the complete buyer path is evidenced.
+  // A settled payment record must not bypass verified account, territory, or
+  // explicit demand evidence (which are independent commercial prerequisites).
+  if (
+    accountVerified &&
+    verifiedTerritories.length > 0 &&
+    demandConfirmed &&
+    contractEffective &&
+    paymentSettled &&
+    payeeVerified
+  ) {
     revenueClassification = "CASH_RECEIVED";
   }
 
