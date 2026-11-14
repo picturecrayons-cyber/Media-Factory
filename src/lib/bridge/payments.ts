@@ -11,6 +11,7 @@ import { loadTitle, recordTransition } from "./titles";
 import { writeAudit } from "./audit";
 import { assertBuyerPublishable } from "./buyer-visibility";
 import { assertNotDevUser } from "./guards";
+import { sendTransactionalEmail } from "./mail.server";
 
 function requireRazorpayKeys() {
   const keyId = bridgeEnv.razorpayKeyId();
@@ -42,6 +43,40 @@ type RzPayment = {
   currency: string;
 };
 
+async function sendLicenseReceiptEmail(
+  sql: Awaited<ReturnType<typeof getSql>>,
+  userId: string,
+  titleId: string,
+  paymentId: string,
+  packageLicense: boolean,
+) {
+  const [profiles, titles] = await Promise.all([
+    sql<{ email: string | null; display_name: string | null }>`
+      select email, display_name from bridge_profiles where user_id = ${userId} limit 1
+    `,
+    sql<{ name: string }>`select name from bridge_titles where id = ${titleId} limit 1`,
+  ]);
+  const email = profiles[0]?.email?.trim();
+  if (!email) return;
+  const titleName = titles[0]?.name ?? "your licensed title";
+  const subject = `Crayons Bridge licence payment confirmed: ${titleName}`;
+  try {
+    await sendTransactionalEmail({
+      to: email,
+      subject,
+      text: `Payment received and licence entitlement recorded for ${titleName}. Payment reference: ${paymentId}. Open your Bridge buyer workspace: https://www.crayonspictures.in/buyer`,
+      category: "bridge_license_captured",
+    });
+  } catch (error) {
+    // Email delivery is retriable and must never undo a verified payment/entitlement.
+    console.warn("Bridge licence receipt email was not sent", {
+      paymentId,
+      packageLicense,
+      error: error instanceof Error ? error.message : "mail_delivery_failed",
+    });
+  }
+}
+
 export async function grantFromCapturedPayment(opts: {
   orderId: string;
   paymentId: string;
@@ -64,8 +99,10 @@ export async function grantFromCapturedPayment(opts: {
     currency: string;
     provider_payment_id: string | null;
     package_id: string | null;
+    purpose: string;
+    provider: string;
   }>`
-    select id, user_id, title_id, package_id, amount_paise, status, currency, provider_payment_id
+    select id, user_id, title_id, package_id, amount_paise, status, currency, provider_payment_id, purpose, provider
     from bridge_payments where provider_order_id = ${opts.orderId} limit 1
   `;
   const payment = rows[0];
@@ -80,16 +117,22 @@ export async function grantFromCapturedPayment(opts: {
     throw new Error("Payment does not belong to this account");
   }
 
-  await sql`
-    update bridge_payments
-    set status = ${"captured"},
-        provider_payment_id = ${opts.paymentId},
-        verified_at = now()
-    where id = ${payment.id} and status <> 'captured'
-  `;
-
   if (!payment.title_id) {
+    await sql`
+      update bridge_payments
+      set status = 'captured', provider_payment_id = ${opts.paymentId}, verified_at = now()
+      where id = ${payment.id} and status <> 'captured'
+    `;
     return { paymentId: payment.id, entitled: false };
+  }
+  if (payment.purpose !== "title_license" || payment.provider !== "razorpay") {
+    throw new Error("Payment is not a Bridge title-licensing order");
+  }
+
+  // Re-check buyer visibility immediately before granting a new title entitlement.
+  // A retry after our own capture can finish an interrupted idempotent grant.
+  if (payment.status !== "captured") {
+    await assertBuyerPublishable(payment.title_id);
   }
 
   if (payment.package_id) {
@@ -100,6 +143,9 @@ export async function grantFromCapturedPayment(opts: {
       limit 1
     `;
     if (!pkg[0]) throw new Error("License package not found");
+    if (!["IN_NEGOTIATION", "LICENSED"].includes(pkg[0].status)) {
+      throw new Error("License package is not in an active buyer negotiation");
+    }
     await sql`
       insert into bridge_package_entitlements (package_id, title_id, buyer_user_id, payment_id)
       values (${pkg[0].id}, ${payment.title_id}, ${payment.user_id}, ${payment.id})
@@ -117,6 +163,7 @@ export async function grantFromCapturedPayment(opts: {
       entityId: pkg[0].id,
       metadata: { titleId: payment.title_id, paymentId: payment.id },
     });
+    await sendLicenseReceiptEmail(sql, payment.user_id, payment.title_id, payment.id, true);
     return { paymentId: payment.id, entitled: true, titleId: payment.title_id, packageId: pkg[0].id };
   }
 
@@ -144,6 +191,7 @@ export async function grantFromCapturedPayment(opts: {
     entityId: payment.id,
     metadata: { titleId: payment.title_id },
   });
+  await sendLicenseReceiptEmail(sql, payment.user_id, payment.title_id, payment.id, false);
 
   return { paymentId: payment.id, entitled: true, titleId: payment.title_id };
 }
