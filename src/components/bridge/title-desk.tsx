@@ -6,11 +6,11 @@ import { Button } from "@/components/ui/button";
 import { StatusChip } from "@/components/bridge/status-rail";
 import { archiveTitle, createTitle, listTitles } from "@/lib/bridge/titles";
 import { listTitleAssets, requestAssetDownload } from "@/lib/bridge/assets";
-import { bridgeWorkspaceQueryKey } from "@/lib/bridge/query-scope";
-import type { BridgeActor } from "@/lib/bridge/session";
+import { bridgeWorkspaceQueryKey, type BridgeWorkspaceActor } from "@/lib/bridge/query-scope";
+import type { InternalRole } from "@/lib/bridge/types";
 import { BRIDGE_LOOP_LANES } from "@/lib/bridge/loop-lanes";
 
-export function TitleList({ empty, query = "", actor }: { empty: string; query?: string; actor: BridgeActor }) {
+export function TitleList({ empty, query = "", actor }: { empty: string; query?: string; actor: BridgeWorkspaceActor & { internalRole?: InternalRole | null } }) {
   const titlesQ = useQuery({ queryKey: bridgeWorkspaceQueryKey("bridge-titles", actor), queryFn: () => listTitles() });
   const titles = (titlesQ.data?.titles ?? []).filter((t) => !query || `${t.name} ${t.language} ${t.year ?? ""}`.toLowerCase().includes(query.toLowerCase()));
   const [posterUrls, setPosterUrls] = useState<Record<string, string | null>>({});
