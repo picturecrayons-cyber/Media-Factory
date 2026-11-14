@@ -32,3 +32,16 @@ test("entitlement and title transition happen before webhook is marked processed
   assert.ok(entitlement < processed);
   assert.ok(transition < processed);
 });
+
+
+test("Bridge capture validates the persisted provider, exact amount, and currency", () => {
+  assert.match(source, /provider !== ["']razorpay["']/);
+  assert.match(source, /providerAmount[\s\S]*localPayment\.amount_paise/);
+  assert.match(source, /providerCurrency[\s\S]*localPayment\.currency/);
+});
+
+test("webhook event processing uses a claim token and stale-processing guard", () => {
+  assert.match(source, /processing_token/);
+  assert.match(source, /processing_started_at/);
+  assert.match(source, /processing_token[\s\S]*processing_started_at/);
+});
