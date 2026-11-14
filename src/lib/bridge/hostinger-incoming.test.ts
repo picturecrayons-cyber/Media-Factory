@@ -88,6 +88,7 @@ describe("bounded Hostinger webhook body reader", () => {
     ];
     const request = new Request("https://example.test/api/hostinger-incoming", {
       method: "POST",
+      duplex: "half",
       body: new ReadableStream<Uint8Array>({
         start(controller) {
           for (const chunk of chunks) controller.enqueue(chunk);
