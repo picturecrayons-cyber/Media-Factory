@@ -38,6 +38,14 @@ export function TitleList({ empty, query = "", excludeStoryConcepts = false }: {
       </div>
     );
   }
+  if (excludeStoryConcepts && conceptsQ.isError) {
+    return (
+      <div role="alert" className="flex flex-wrap items-center gap-3 text-sm text-accent">
+        <p>Could not verify story concepts. Finished films are hidden until this check succeeds.</p>
+        <Button type="button" onClick={() => void conceptsQ.refetch()}>Retry</Button>
+      </div>
+    );
+  }
   if (!titles.length) return <p className="text-sm text-muted">{empty}</p>;
   return (
     <ul className="divide-y divide-line rounded-sm border border-line">
