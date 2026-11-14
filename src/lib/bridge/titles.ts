@@ -22,6 +22,7 @@ type TitleRow = {
   owner_user_id: string;
   owner_account_type: string;
   owner_organization_id?: string | null;
+  submission_type?: string | null;
   status: string;
   synopsis: string;
   language: string;
@@ -52,6 +53,7 @@ export function mapTitle(r: TitleRow): BridgeTitle {
     ownerUserId: r.owner_user_id,
     ownerAccountType: r.owner_account_type as AccountType,
     ownerOrganizationId: r.owner_organization_id ?? null,
+    submissionType: (r.submission_type ?? "finished_film") as BridgeTitle["submissionType"],
     status: r.status as TitleStatus,
     synopsis: r.synopsis,
     language: r.language,
@@ -94,13 +96,18 @@ async function listOwned(sql: Sql, userId: string, organizationId: string | null
   const mergeColumnAvailable = await hasTitleMergeColumn(sql);
   if (!orgId) {
     return mergeColumnAvailable
-      ? sql<TitleRow>`select * from bridge_titles where owner_user_id = ${userId} and merged_into_title_id is null order by updated_at desc limit 200`
-      : sql<TitleRow>`select * from bridge_titles where owner_user_id = ${userId} order by updated_at desc limit 200`;
+      ? sql<TitleRow>`select * from bridge_titles where owner_user_id = ${userId} and merged_into_title_id is null
+          and coalesce(submission_type, 'finished_film') <> 'story_concept'
+        order by updated_at desc limit 200`
+      : sql<TitleRow>`select * from bridge_titles where owner_user_id = ${userId}
+          and coalesce(submission_type, 'finished_film') <> 'story_concept'
+        order by updated_at desc limit 200`;
   }
   return mergeColumnAvailable
     ? sql<TitleRow>`
         select t.* from bridge_titles t
         where t.merged_into_title_id is null
+          and coalesce(t.submission_type, 'finished_film') <> 'story_concept'
           and (
             t.owner_user_id = ${userId}
             or (
@@ -118,7 +125,8 @@ async function listOwned(sql: Sql, userId: string, organizationId: string | null
       `
     : sql<TitleRow>`
         select t.* from bridge_titles t
-        where t.owner_user_id = ${userId}
+        where coalesce(t.submission_type, 'finished_film') <> 'story_concept'
+          and (t.owner_user_id = ${userId}
           or (
             t.owner_account_type = 'studio'
             and t.owner_organization_id = ${orgId}
