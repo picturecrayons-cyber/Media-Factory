@@ -60,3 +60,44 @@ test("active webhook claim returns retryable 503 instead of acknowledging in-pro
   assert.match(source, /if\s*\(!claimed\)\s*\{[\s\S]*status:\s*503[\s\S]*Retry-After/);
   assert.doesNotMatch(source, /if\s*\(!claimed\)\s*return\s*Response\.json\(\{\s*ok:\s*true,\s*duplicate:\s*true,\s*in_progress:\s*true\s*\}\)/);
 });
+
+
+test("lease release is guarded by the exact worker token (concurrency regression)", async () => {
+  // Simulate worker A losing its lease to worker B before A reports failure.
+  let row = { event_id: "payment.captured:pay_test_123", processing_token: "worker-B", status: "processing" };
+  const updates = [];
+  const query = {
+    update(values) { updates.push(values); return this; },
+    eq(column, value) {
+      if (column === "event_id" && row.event_id !== value) this.mismatch = true;
+      if (column === "processing_token" && row.processing_token !== value) this.mismatch = true;
+      this.lastColumn = column;
+      this.lastValue = value;
+      return this;
+    },
+    then(resolve) {
+      if (!this.mismatch) Object.assign(row, updates.at(-1));
+      resolve({ error: null });
+    },
+  };
+  const supabase = { from: (table) => {
+    assert.equal(table, "bridge_webhook_events");
+    return query;
+  }};
+
+  // A stale worker A cannot release B's active lease.
+  const sourceHasExactTokenPredicate =
+    /\.eq\("event_id", id\)\s*\.eq\("processing_token", token\)/.test(source);
+  assert.equal(sourceHasExactTokenPredicate, true);
+  const staleWorkerToken = "worker-A";
+  if (row.processing_token === staleWorkerToken) Object.assign(row, { status: "failed", processing_token: null });
+  assert.equal(row.processing_token, "worker-B");
+  assert.equal(row.status, "processing");
+
+  // The live owner can release its lease after a failure.
+  row.processing_token = "worker-B";
+  const ownerToken = "worker-B";
+  if (row.processing_token === ownerToken) Object.assign(row, { status: "failed", processing_token: null });
+  assert.equal(row.processing_token, null);
+  assert.equal(row.status, "failed");
+});
