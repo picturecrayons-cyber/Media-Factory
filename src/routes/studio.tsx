@@ -57,6 +57,13 @@ function Studio() {
                 <p className="mt-1 text-sm text-muted">Only titles authorized for this studio account should appear here.</p>
               </div>
               <TitleList empty="No finished films are currently returned for this studio account." />
+            </section>
+
+            <section id="studio-story-concepts" className="space-y-4">
+              <div>
+                <h3 className="font-display text-xl font-semibold">Story concepts</h3>
+                <p className="mt-1 text-sm text-muted">Concept submissions and their curation status are shown separately from finished films.</p>
+              </div>
               <MyStoryConcepts />
             </section>
 
