@@ -463,7 +463,7 @@ const titleEditSchema = z.object({
 }).strict();
 
 // Owners may request descriptive changes, but cannot change commercial terms.
-const ownerTitleEditSchema = titleEditSchema.omit({ licensingFeePaise: true });
+const ownerTitleEditSchema = titleEditSchema.omit({ licensingFeePaise: true, contentType: true });
 
 function presentTitleChanges(data: z.infer<typeof titleEditSchema>) {
   const changes: Record<string, unknown> = {};
