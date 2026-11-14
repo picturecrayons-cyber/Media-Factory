@@ -1,12 +1,14 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { Button } from "@/components/ui/button";
-import { listTitles, listAuditLogs } from "@/lib/bridge/titles";
+import { listTitles, listAuditLogs, listPendingTitleRevisions, reviewTitleRevision } from "@/lib/bridge/titles";
+import { TitleList } from "@/components/bridge/title-desk";
 import { listLoopPublicationReadiness } from "@/lib/bridge/loop-publication";
 import { listAdminProfiles } from "@/lib/bridge/profiles";
 import { StreamVistaOrders } from "@/components/bridge/streamvista-orders";
+import { bridgeWorkspaceQueryKey } from "@/lib/bridge/query-scope";
 
 export const Route = createFileRoute("/admin")({
   head: () => ({ meta: [{ name: "robots", content: "noindex, nofollow" }] }),
@@ -35,10 +37,13 @@ function AdminControlPlane() {
 }
 
 function AdminBody({ actor }: { actor: any }) {
-  const titlesQ = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles() });
-  const auditQ = useQuery({ queryKey: ["bridge-audit"], queryFn: () => listAuditLogs() });
-  const distQ = useQuery({ queryKey: ["loop-publication-readiness"], queryFn: () => listLoopPublicationReadiness() });
-  const profilesQ = useQuery({ queryKey: ["bridge-admin-profiles"], queryFn: () => listAdminProfiles() });
+  const qc = useQueryClient();
+  const titlesQ = useQuery({ queryKey: bridgeWorkspaceQueryKey("bridge-titles", actor), queryFn: () => listTitles() });
+  const revisionsQ = useQuery({ queryKey: bridgeWorkspaceQueryKey("bridge-title-revisions", actor), queryFn: () => listPendingTitleRevisions() });
+  const revisionMutation = useMutation({ mutationFn: (input: { revisionId: string; decision: "APPROVED" | "REJECTED" }) => reviewTitleRevision({ data: input }), onSuccess: () => { void qc.invalidateQueries({ queryKey: ["bridge-title-revisions"] }); void qc.invalidateQueries({ queryKey: ["bridge-titles"] }); }, onError: (err) => window.alert(err instanceof Error ? err.message : "Revision review failed") });
+  const auditQ = useQuery({ queryKey: bridgeWorkspaceQueryKey("bridge-audit", actor), queryFn: () => listAuditLogs() });
+  const distQ = useQuery({ queryKey: bridgeWorkspaceQueryKey("loop-publication-readiness", actor), queryFn: () => listLoopPublicationReadiness() });
+  const profilesQ = useQuery({ queryKey: bridgeWorkspaceQueryKey("bridge-admin-profiles", actor), queryFn: () => listAdminProfiles() });
 
   const titles = titlesQ.data?.titles ?? [];
   const distribution = distQ.data?.titles ?? [];
@@ -50,6 +55,7 @@ function AdminBody({ actor }: { actor: any }) {
   const live = distribution.filter((title) => title.publication?.published).length;
   const attention = titles.filter((title) => ["PREPARING", "QC_REVIEW", "RIGHTS_REVIEW", "LICENSING_READY"].includes(title.status)).slice(0, 5);
   const loading = titlesQ.isPending;
+  const titlesUnavailable = titlesQ.isError;
 
   return (
     <BridgeShell actor={actor} title="Admin dashboard">
@@ -67,11 +73,18 @@ function AdminBody({ actor }: { actor: any }) {
           </div>
         </section>
 
+        <section aria-label="Admin title gallery" className="rounded-2xl border border-line bg-surface p-4 sm:p-5">
+          <div className="mb-4"><h3 className="font-display text-xl font-semibold">Titles</h3><p className="mt-1 text-sm text-muted">Canonical Bridge title catalogue and poster gallery. Open a title to review assets, metadata, QC, rights and delivery gates.</p></div>
+          <TitleList actor={actor} empty="No active titles found." />
+        </section>
+
+        {actor.internalRole === "admin" || actor.internalRole === "super_admin" ? <section aria-label="Submitted title revisions" className="rounded-2xl border border-line bg-surface p-4 sm:p-5"><h3 className="font-display text-xl font-semibold">Submitted title revisions</h3><p className="mt-1 text-sm text-muted">Review owner-requested changes before applying them to the canonical title record.</p>{revisionsQ.isError ? <p role="alert" className="mt-3 text-sm text-muted">Revision queue unavailable.</p> : null}<div className="mt-3 divide-y divide-line">{(revisionsQ.data?.revisions ?? []).map((revision) => <article key={revision.id} className="flex flex-col gap-3 py-3 sm:flex-row sm:items-center sm:justify-between"><div><p className="font-semibold">{revision.title_name} · Revision {revision.revision_number}</p><p className="text-xs text-muted">Submitted by {revision.submitted_by} · {new Date(revision.submitted_at).toLocaleString()}</p><pre className="mt-2 max-w-2xl overflow-auto rounded-lg bg-bg p-2 text-xs">{JSON.stringify(revision.proposed_changes, null, 2)}</pre></div><div className="flex shrink-0 gap-2"><Button type="button" disabled={revisionMutation.isPending} onClick={() => revisionMutation.mutate({ revisionId: revision.id, decision: "APPROVED" })}>Approve changes</Button><Button type="button" variant="outline" disabled={revisionMutation.isPending} onClick={() => revisionMutation.mutate({ revisionId: revision.id, decision: "REJECTED" })}>Reject</Button></div></article>)}{!revisionsQ.isPending && !(revisionsQ.data?.revisions ?? []).length ? <p className="py-4 text-sm text-muted">No pending title revisions.</p> : null}</div></section> : null}
+
         <section aria-label="Title overview" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <Metric label="All titles" value={loading ? "—" : String(titles.length)} detail="Canonical catalog" />
-          <Metric label="QC / intake" value={loading ? "—" : String(qcQueue)} detail="Awaiting review" />
-          <Metric label="Rights review" value={loading ? "—" : String(rightsQueue)} detail="Clearance queue" />
-          <Metric label="Buyer-ready" value={loading ? "—" : String(buyerReady)} detail="Licensing stages" />
+          <Metric label="All titles" value={loading ? "—" : titlesUnavailable ? "Unavailable" : String(titles.length)} detail="Canonical catalog" />
+          <Metric label="QC / intake" value={loading ? "—" : titlesUnavailable ? "Unavailable" : String(qcQueue)} detail="Awaiting review" />
+          <Metric label="Rights review" value={loading ? "—" : titlesUnavailable ? "Unavailable" : String(rightsQueue)} detail="Clearance queue" />
+          <Metric label="Buyer-ready" value={loading ? "—" : titlesUnavailable ? "Unavailable" : String(buyerReady)} detail="Licensing stages" />
         </section>
 
         <section className="rounded-2xl border border-line bg-surface p-4">
@@ -80,9 +93,9 @@ function AdminBody({ actor }: { actor: any }) {
             <span className="text-xs text-muted">Live records</span>
           </div>
           <div className="grid gap-3 sm:grid-cols-3">
-            <CompactMetric label="Loop publications" value={distQ.isPending ? "—" : String(live)} />
-            <CompactMetric label="Bridge profiles" value={profilesQ.isPending ? "—" : String(profiles.length)} />
-            <CompactMetric label="Organizations" value={profilesQ.isPending ? "—" : String(organizations.size)} />
+            <CompactMetric label="Loop publications" value={distQ.isPending ? "—" : distQ.isError ? "Unavailable" : String(live)} />
+            <CompactMetric label="Bridge profiles" value={profilesQ.isPending ? "—" : profilesQ.isError ? "Unavailable" : String(profiles.length)} />
+            <CompactMetric label="Organizations" value={profilesQ.isPending ? "—" : profilesQ.isError ? "Unavailable" : String(organizations.size)} />
           </div>
         </section>
 

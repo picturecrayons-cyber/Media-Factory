@@ -1,15 +1,63 @@
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { StatusChip } from "@/components/bridge/status-rail";
-import { createTitle, listTitles } from "@/lib/bridge/titles";
+import { archiveTitle, createTitle, listTitles } from "@/lib/bridge/titles";
+import { listTitleAssets, requestAssetDownload } from "@/lib/bridge/assets";
+import { bridgeWorkspaceQueryKey, type BridgeWorkspaceActor } from "@/lib/bridge/query-scope";
+import type { InternalRole } from "@/lib/bridge/types";
 import { BRIDGE_LOOP_LANES } from "@/lib/bridge/loop-lanes";
 
-export function TitleList({ empty, query = "" }: { empty: string; query?: string }) {
-  const titlesQ = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles() });
+export function TitleList({ empty, query = "", actor, scope = "catalog" }: { empty: string; query?: string; scope?: "catalog" | "owned"; actor: BridgeWorkspaceActor & { internalRole?: InternalRole | null } }) {
+  const titlesQ = useQuery({ queryKey: [...bridgeWorkspaceQueryKey("bridge-titles", actor), scope], queryFn: () => scope === "owned" ? listTitles({ data: { scope: "owned" } }) : listTitles() });
   const titles = (titlesQ.data?.titles ?? []).filter((t) => !query || `${t.name} ${t.language} ${t.year ?? ""}`.toLowerCase().includes(query.toLowerCase()));
+  const [posterUrls, setPosterUrls] = useState<Record<string, string | null>>({});
+  const [posterLoading, setPosterLoading] = useState(false);
+  const loaded = useRef(new Set<string>());
+  const archive = useMutation({
+    mutationFn: (titleId: string) => archiveTitle({ data: { id: titleId } }),
+    onSuccess: () => { loaded.current.clear(); setPosterUrls({}); void titlesQ.refetch(); toast("Draft archived"); },
+    onError: (err) => toast(err instanceof Error ? err.message : "Could not archive draft"),
+  });
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadPosters() {
+      if (!titles.length) return;
+      setPosterLoading(true);
+      try {
+        const results = await Promise.all(titles.map(async (title) => {
+          if (loaded.current.has(title.id)) return [title.id, posterUrls[title.id] ?? null] as const;
+          try {
+            const result = await listTitleAssets({ data: { titleId: title.id } });
+            const assets = result.assets ?? [];
+            const poster = assets.find((asset) => asset.kind === "poster_vertical")
+              ?? assets.find((asset) => asset.kind === "poster")
+              ?? assets.find((asset) => asset.kind === "poster_horizontal")
+              ?? assets.find((asset) => asset.kind === "thumbnail");
+            if (!poster) {
+              loaded.current.add(title.id);
+              return [title.id, null] as const;
+            }
+            const signed = await requestAssetDownload({ data: { assetId: poster.id } });
+            loaded.current.add(title.id);
+            return [title.id, signed.url ?? null] as const;
+          } catch {
+            loaded.current.add(title.id);
+            return [title.id, null] as const;
+          }
+        }));
+        if (!cancelled) setPosterUrls(Object.fromEntries(results));
+      } finally {
+        if (!cancelled) setPosterLoading(false);
+      }
+    }
+    void loadPosters();
+    return () => { cancelled = true; };
+  }, [titlesQ.dataUpdatedAt, actor.userId, actor.organizationId]);
+
   if (titlesQ.isPending) return <p className="text-sm text-muted">Loading titles…</p>;
   if (titlesQ.isError) {
     return (
@@ -21,29 +69,40 @@ export function TitleList({ empty, query = "" }: { empty: string; query?: string
   }
   if (!titles.length) return <p className="text-sm text-muted">{empty}</p>;
   return (
-    <ul className="divide-y divide-line rounded-sm border border-line">
-      {titles.map((t) => (
-        <li key={t.id}>
-          <Link
-            to="/title/$id"
-            params={{ id: t.id }}
-            className="flex flex-wrap items-center justify-between gap-3 px-4 py-4 hover:bg-fg/5"
-          >
-            <div>
-              <p className="font-medium">{t.name}</p>
-              <p className="text-sm text-muted">
-                {t.contentType ? `${t.contentType} · ` : ""}
-                {t.language}
-                {t.year ? ` · ${t.year}` : ""}
-              </p>
-            </div>
-            <StatusChip status={t.status} />
-          </Link>
-        </li>
-      ))}
-    </ul>
+    <div className="space-y-3">
+      {posterLoading ? <p className="text-xs text-muted">Loading artwork previews…</p> : null}
+      <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        {titles.map((title) => (
+          <li key={title.id} className="overflow-hidden rounded-xl border border-line bg-surface">
+            <Link to="/title/$id" params={{ id: title.id }} className="group block">
+              <div className="relative aspect-[2/3] overflow-hidden bg-bg">
+                {posterUrls[title.id] ? (
+                  <img src={posterUrls[title.id] ?? undefined} alt={`${title.name} poster`} loading="lazy" className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.02]" />
+                ) : (
+                  <div className="grid h-full place-items-center px-5 text-center text-sm text-muted">Artwork not available</div>
+                )}
+                <div className="absolute right-3 top-3"><StatusChip status={title.status} /></div>
+              </div>
+              <div className="space-y-2 p-4">
+                <p className="font-semibold leading-snug">{title.name}</p>
+                <p className="text-sm text-muted">{title.contentType ? `${title.contentType} · ` : ""}{title.language}{title.year ? ` · ${title.year}` : ""}</p>
+                <span className="inline-flex text-sm font-semibold text-accent">Open title →</span>
+              </div>
+            </Link>
+            {!actor.internalRole && title.status === "DRAFT" ? (
+              <div className="flex justify-end border-t border-line p-3">
+                <Button type="button" variant="outline" disabled={archive.isPending} onClick={() => {
+                  if (window.confirm("Archive this unsubmitted draft? Any linked assets or downstream activity will block the request.")) archive.mutate(title.id);
+                }}>Archive draft</Button>
+              </div>
+            ) : null}
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
+
 
 export function CreateTitleForm({ concise = false }: { concise?: boolean } = {}) {
   const qc = useQueryClient();

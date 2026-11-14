@@ -1,6 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { listMyStoryConcepts } from "@/lib/bridge/story-concept-api";
+import { bridgeWorkspaceQueryKey, type BridgeWorkspaceActor } from "@/lib/bridge/query-scope";
 import { STORY_CONCEPT_ENABLED } from "@/lib/bridge/story-concept";
 
 const STATUS_LABEL: Record<string, string> = {
@@ -17,16 +18,16 @@ function listLogline(value: string | null | undefined) {
   return text.length > 80 ? `${text.slice(0, 80)}…` : text;
 }
 
-export function MyStoryConcepts() {
+export function MyStoryConcepts({ actor }: { actor: BridgeWorkspaceActor }) {
   const query = useQuery({
-    queryKey: ["my-story-concepts"],
+    queryKey: bridgeWorkspaceQueryKey("my-story-concepts", actor),
     queryFn: () => listMyStoryConcepts(),
     enabled: STORY_CONCEPT_ENABLED,
   });
 
   if (!STORY_CONCEPT_ENABLED) return null;
   if (query.isLoading) return <p className="text-sm text-muted">Loading concepts…</p>;
-  if (query.isError) return null;
+  if (query.isError) return <div role="alert" className="rounded-lg border border-line p-4 text-sm text-accent">Story Concept submissions could not be loaded. <button type="button" className="ml-2 underline" onClick={() => void query.refetch()}>Retry</button></div>;
 
   const concepts = query.data?.concepts ?? [];
   if (!concepts.length) return null;

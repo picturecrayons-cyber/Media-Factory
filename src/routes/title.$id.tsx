@@ -7,7 +7,7 @@ import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
-import { getTitle, updateTitle } from "@/lib/bridge/titles";
+import { getTitle, updateTitle, listTitleRevisions } from "@/lib/bridge/titles";
 import { BRIDGE_LOOP_LANES, loopStageType } from "@/lib/bridge/loop-lanes";
 import {
   abortAssetMultipart,
@@ -38,20 +38,22 @@ import {
   sessionStorageKey,
 } from "@/lib/bridge/multipart-upload";
 import { AssetPosterSlot, AssetPreviewGallery } from "@/components/bridge/asset-preview-gallery";
+import { Button } from "@/components/ui/button";
+import type { BridgeTitle } from "@/lib/bridge/types";
 
 export const Route = createFileRoute("/title/$id")({
   head: () => ({ meta: [{ name: "robots", content: "noindex, nofollow" }] }),
   component: TitlePage,
 });
 
-const WORKSPACE_TABS = ["Overview", "Files"] as const;
+const WORKSPACE_TABS = ["Overview", "Files", "Edit"] as const;
 type WorkspaceTab = (typeof WORKSPACE_TABS)[number];
 
 function LaneStore({ titleId, stored, locked }: { titleId: string; stored: string; locked: boolean }) {
   const qc = useQueryClient();
   const [value, setValue] = useState(stored);
   const save = useMutation({
-    mutationFn: (contentType: string) => updateTitle({ data: { id: titleId, contentType } }),
+    mutationFn: (contentType: string) => updateTitle({ data: { id: titleId, changes: { contentType } } }),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ["bridge-title", titleId] }),
   });
   return (
@@ -115,6 +117,11 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
   const reviewQ = useQuery({
     queryKey: ["title-workflow", id, actor.userId, actor.internalRole ?? actor.accountType],
     queryFn: () => getTitleWorkflow({ data: { titleId: id } }),
+    enabled: !buyerView,
+  });
+  const revisionsQ = useQuery({
+    queryKey: ["bridge-title-revisions", id, actor.userId],
+    queryFn: () => listTitleRevisions({ data: { titleId: id } }),
     enabled: !buyerView,
   });
   const title = titleQ.data?.title;
@@ -250,7 +257,7 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
           </div>
           {!buyerView ? (
             <>
-              <LaneStore key={title.contentType} titleId={title.id} stored={loopStageType(title.contentType)} locked={!actor.internalRole && !["DRAFT", "UPLOADING", "PREPARING"].includes(title.status)} />
+              <LaneStore key={title.contentType} titleId={title.id} stored={loopStageType(title.contentType)} locked={actor.internalRole !== "super_admin"} />
               {title.synopsis ? <p className="mt-4 text-sm leading-6 text-muted">{title.synopsis}</p> : null}
               <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                 <Metric label="QC" value={qcReady ? "READY" : "PENDING"} />
@@ -272,9 +279,77 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
           onAssetsChanged={() => assetsQ.refetch()}
         />
       ) : null}
+      {activeTab === "Edit" && !buyerView ? (
+        <TitleMetadataEditor
+          title={title}
+          actor={actor}
+          revisions={revisionsQ.data?.revisions ?? []}
+          revisionsLoading={revisionsQ.isPending}
+          onSaved={() => {
+            void titleQ.refetch();
+            void revisionsQ.refetch();
+          }}
+        />
+      ) : null}
+
     </div>
   );
 }
+
+function TitleMetadataEditor({
+  title,
+  actor,
+  revisions,
+  revisionsLoading,
+  onSaved,
+}: {
+  title: BridgeTitle;
+  actor: BridgeActor;
+  revisions: Array<{ id: string; revision_number: number; status: string; proposed_changes: Record<string, unknown>; review_note: string | null }>;
+  revisionsLoading: boolean;
+  onSaved: () => void;
+}) {
+  const [name, setName] = useState(title.name);
+  const [nameMl, setNameMl] = useState(title.nameMl ?? "");
+  const [synopsis, setSynopsis] = useState(title.synopsis ?? "");
+  const [language, setLanguage] = useState(title.language);
+  const [year, setYear] = useState(title.year ? String(title.year) : "");
+  const [runtimeMinutes, setRuntimeMinutes] = useState(title.runtimeMinutes ? String(title.runtimeMinutes) : "");
+  const save = useMutation({
+    mutationFn: () => updateTitle({ data: { id: title.id, changes: {
+      name, nameMl: nameMl || null, synopsis, language,
+      year: year ? Number(year) : null,
+      runtimeMinutes: runtimeMinutes ? Number(runtimeMinutes) : null,
+    } } }),
+    onSuccess: (result) => {
+      onSaved();
+      window.alert(result.revisionSubmitted ? "Revision submitted to Admin for approval." : "Title metadata saved.");
+    },
+    onError: (err) => window.alert(err instanceof Error ? err.message : "Could not save title changes"),
+  });
+  const editableDraft = !actor.internalRole && title.status === "DRAFT";
+  const canSubmitRevision = !actor.internalRole && ["UPLOADING", "PREPARING", "QC_REVIEW", "RIGHTS_REVIEW", "LICENSING_READY"].includes(title.status);
+  const adminEditor = actor.internalRole === "super_admin";
+  const canEdit = editableDraft || canSubmitRevision || adminEditor;
+  const locked = !canEdit;
+  return (
+    <section className="space-y-4 rounded-2xl border border-line bg-surface p-5">
+      <div><h2 className="font-display text-xl font-semibold">Edit title details</h2><p className="mt-1 text-sm text-muted">{editableDraft ? "Draft metadata saves directly." : adminEditor ? "Super Admin metadata correction." : "Submitted-title changes are sent as a revision request and do not change the live title until approved."}</p></div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <label className="text-sm">Title<input value={name} disabled={locked} onChange={e=>setName(e.target.value)} className="mt-1 h-11 w-full rounded-lg border border-line-strong bg-elevated px-3"/></label>
+        <label className="text-sm">Original title<input value={nameMl} disabled={locked} onChange={e=>setNameMl(e.target.value)} className="mt-1 h-11 w-full rounded-lg border border-line-strong bg-elevated px-3"/></label>
+        <label className="text-sm">Language<input value={language} disabled={locked} onChange={e=>setLanguage(e.target.value)} className="mt-1 h-11 w-full rounded-lg border border-line-strong bg-elevated px-3"/></label>
+        <label className="text-sm">Year<input inputMode="numeric" value={year} disabled={locked} onChange={e=>setYear(e.target.value)} className="mt-1 h-11 w-full rounded-lg border border-line-strong bg-elevated px-3"/></label>
+        <label className="text-sm">Runtime (minutes)<input inputMode="numeric" value={runtimeMinutes} disabled={locked} onChange={e=>setRuntimeMinutes(e.target.value)} className="mt-1 h-11 w-full rounded-lg border border-line-strong bg-elevated px-3"/></label>
+        <label className="text-sm sm:col-span-2">Synopsis<textarea value={synopsis} disabled={locked} onChange={e=>setSynopsis(e.target.value)} rows={4} className="mt-1 w-full rounded-lg border border-line-strong bg-elevated px-3 py-2"/></label>
+      </div>
+      <div className="flex justify-end"><Button type="button" disabled={locked || save.isPending} onClick={()=>save.mutate()}>{save.isPending ? "Saving…" : adminEditor ? "Save admin correction" : editableDraft ? "Save draft" : "Submit revision"}</Button></div>
+      {canSubmitRevision ? <p className="text-xs text-muted">Changes are submitted as a revision request. Commercial terms and title status cannot be changed here. Existing metadata remains unchanged until Admin review.</p> : null}
+      <div className="border-t border-line pt-4"><h3 className="font-semibold">Revision history</h3>{revisionsLoading ? <p className="mt-2 text-sm text-muted">Loading revisions…</p> : revisions.length ? <ul className="mt-2 space-y-2">{revisions.map(rev=><li key={rev.id} className="rounded-lg bg-bg p-3 text-sm"><div className="flex justify-between gap-2"><strong>Revision {rev.revision_number}</strong><span>{rev.status}</span></div><pre className="mt-2 overflow-auto text-xs">{JSON.stringify(rev.proposed_changes,null,2)}</pre>{rev.review_note ? <p className="mt-1 text-xs text-muted">{rev.review_note}</p> : null}</li>)}</ul> : <p className="mt-2 text-sm text-muted">No revisions recorded.</p>}</div>
+    </section>
+  );
+}
+
 function Metric({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-xl border border-line bg-elevated/40 p-4">

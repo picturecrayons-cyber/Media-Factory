@@ -6,7 +6,7 @@ import { retryWorkspaceSession } from "@/lib/auth/workspace-session-retry";
 import { supabase } from "@/lib/supabase";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { getBridgeSession, type BridgeActor } from "@/lib/bridge/session";
-import { canAccessTitleWorkspace } from "@/lib/bridge/rbac";
+import { canAccessCreatorDashboard, canAccessTitleWorkspace } from "@/lib/bridge/rbac";
 import { requestEmailVerification } from "@/lib/bridge/profiles";
 import { Button } from "@/components/ui/button";
 import { BrandMark } from "./shell";
@@ -112,9 +112,8 @@ export function RequireBridge({
   // by the explicit "internal"/"super_admin" allow checks above.
   if (allow === "super_admin" && profile.internalRole !== "super_admin") return <Navigate to={sessionQ.data?.home ?? "/"} />;
   if (allow === "internal" && !profile.internalRole) return <Navigate to={sessionQ.data?.home ?? "/"} />;
-  if (allow && allow !== "internal" && allow !== "super_admin" && (profile.internalRole || profile.accountType !== (
-    allow === "creator" ? "independent_creator" : allow
-  ))) {
+  if (allow === "creator" && !canAccessCreatorDashboard(profile)) return <Navigate to={sessionQ.data?.home ?? "/"} />;
+  if (allow && allow !== "internal" && allow !== "super_admin" && allow !== "creator" && (profile.internalRole || profile.accountType !== allow)) {
     return <Navigate to={sessionQ.data?.home ?? "/"} />;
   }
 

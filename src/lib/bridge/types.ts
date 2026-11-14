@@ -45,6 +45,7 @@ export type BridgeTitle = {
   ownerAccountType: AccountType;
   /** Canonical organization UUID used for Studio authorization. */
   ownerOrganizationId?: string | null;
+  archivedAt?: string | null;
   status: TitleStatus;
   synopsis: string;
   language: string;
@@ -80,6 +81,10 @@ export const PERMISSIONS = [
   "title.read_own",
   "title.read_catalog",
   "title.update_own",
+  "title.archive_own",
+  "title.archive_any",
+  "title.revision_submit",
+  "title.revision_review",
   "title.merge_duplicate",
   "title.advance_upload",
   "title.qc_review",
