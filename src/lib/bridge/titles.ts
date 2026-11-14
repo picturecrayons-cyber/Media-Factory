@@ -615,6 +615,14 @@ export const reviewTitleRevision = createServerFn({ method: "POST" })
     assertPermission(actor, "title.revision_review");
     const sql = await getSql();
     await sql.transaction(async (tx) => {
+      const revisionRef = await tx<{ title_id: string }[]> `
+        select title_id from bridge_title_revisions where id = ${data.revisionId}::uuid
+      `;
+      if (!revisionRef[0]) throw new Error("Pending revision not found");
+      const titleRows = await tx<TitleRow[]> `
+        select * from bridge_titles where id = ${revisionRef[0].title_id} for update
+      `;
+      const row = titleRows[0];
       const rows = await tx<{ id: string; title_id: string; status: string; proposed_changes: Record<string, unknown> }[]> `
         select id::text, title_id, status, proposed_changes
         from bridge_title_revisions where id = ${data.revisionId}::uuid
@@ -622,10 +630,6 @@ export const reviewTitleRevision = createServerFn({ method: "POST" })
       `;
       const revision = rows[0];
       if (!revision || revision.status !== "PENDING") throw new Error("Pending revision not found");
-      const titleRows = await tx<TitleRow[]> `
-        select * from bridge_titles where id = ${revision.title_id} for update
-      `;
-      const row = titleRows[0];
       if (!row || row.archived_at) throw new Error("Title is archived or missing");
       const title = mapTitle(row);
       if (data.decision === "APPROVED") {
