@@ -348,8 +348,8 @@ export const listPendingTitleRevisions = createServerFn({ method: "GET" })
     const sql = await getSql();
     const revisions = await sql<{
       id: string; title_id: string; title_name: string; revision_number: number;
-      submitted_by: string; submitted_at: string | Date; proposed_changes: Record<string, unknown>;
-    }[]> `
+      submitted_by: string; submitted_at: string; proposed_changes: Record<string, string | number | null>;
+    }> `
       select r.id::text, r.title_id, t.name as title_name, r.revision_number,
         r.submitted_by, r.submitted_at, r.proposed_changes
       from bridge_title_revisions r
@@ -469,7 +469,9 @@ function presentTitleChanges(data: z.infer<typeof titleEditSchema>) {
   const changes: Record<string, unknown> = {};
   for (const key of TITLE_EDIT_FIELDS) {
     const value = data[key];
-    if (value !== undefined) changes[key] = key === "contentType" ? loopStageType(value) : value;
+    if (value !== undefined) {
+      changes[key] = key === "contentType" && typeof value === "string" ? loopStageType(value) : value;
+    }
   }
   return changes;
 }
@@ -504,17 +506,17 @@ export const updateTitle = createServerFn({ method: "POST" })
         throw new Error("This title stage does not accept owner revision requests");
       }
       await sql.transaction(async (tx) => {
-        const lockedTitle = await tx<{ id: string }[]> `
+        const lockedTitle = await tx<{ id: string }> `
           select id from bridge_titles where id = ${title.id} and archived_at is null for update
         `;
         if (!lockedTitle[0]) throw new Error("Title is archived or missing");
-        const active = await tx<{ id: string }[]>`
+        const active = await tx<{ id: string }>`
           select id from bridge_title_revisions
           where title_id = ${title.id} and status = 'PENDING'
           limit 1
         `;
         if (active[0]) throw new Error("A title revision is already awaiting review");
-        const seq = await tx<{ next_revision: number }[]>`
+        const seq = await tx<{ next_revision: number }>`
           select coalesce(max(revision_number), 0) + 1 as next_revision
           from bridge_title_revisions where title_id = ${title.id}
         `;
@@ -554,7 +556,7 @@ export const archiveTitle = createServerFn({ method: "POST" })
     const actor = await requireVerifiedActor(context.userId);
     const sql = await getSql();
     await sql.transaction(async (tx) => {
-      const rows = await tx<TitleRow[]> `
+      const rows = await tx<TitleRow> `
         select t.* from bridge_titles t where t.id = ${data.id} and t.archived_at is null for update
       `;
       const title = rows[0] ? mapTitle(rows[0]) : null;
@@ -565,7 +567,7 @@ export const archiveTitle = createServerFn({ method: "POST" })
       if (owner && title.status !== "DRAFT") throw new Error("Only an unsubmitted draft can be archived by its owner");
       if (superAdmin && !["DRAFT", "UPLOADING"].includes(title.status)) throw new Error("Admin archive requires a separate review/retention decision after submission");
 
-      const blockers = await tx<{ has_publication: boolean; has_deal: boolean; has_order: boolean; has_delivery: boolean; has_package: boolean; has_assets: boolean; has_active_revision: boolean }[]> `
+      const blockers = await tx<{ has_publication: boolean; has_deal: boolean; has_order: boolean; has_delivery: boolean; has_package: boolean; has_assets: boolean; has_active_revision: boolean }> `
         select
           exists(select 1 from bridge_loop_publications where bridge_title_id = ${title.id}) as has_publication,
           exists(select 1 from bridge_deals where title_id = ${title.id}) as has_deal,
@@ -598,8 +600,8 @@ export const listTitleRevisions = createServerFn({ method: "GET" })
     const title = await loadTitle(data.titleId);
     if (!title || !canReadTitle(actor, title)) throw new Error("Not found");
     const sql = await getSql();
-    const rows = await sql<{ id: string; revision_number: number; status: string; submitted_by: string; submitted_at: string | Date; proposed_changes: Record<string, unknown>; reviewed_by: string | null; reviewed_at: string | Date | null; review_note: string | null }[]>`
-      select id::text, revision_number, status, submitted_by, submitted_at, proposed_changes, reviewed_by, reviewed_at, review_note
+    const rows = await sql<{ id: string; revision_number: number; status: string; submitted_by: string; submitted_at: string | Date; proposed_changes: Record<string, string | number | null>; reviewed_by: string | null; reviewed_at: string | null; review_note: string | null }>`
+      select id::text, revision_number, status, submitted_by, submitted_at::text as submitted_at, proposed_changes, reviewed_by, reviewed_at::text as reviewed_at, review_note
       from bridge_title_revisions where title_id = ${title.id}
       order by revision_number desc
     `;
@@ -615,15 +617,15 @@ export const reviewTitleRevision = createServerFn({ method: "POST" })
     assertPermission(actor, "title.revision_review");
     const sql = await getSql();
     await sql.transaction(async (tx) => {
-      const revisionRef = await tx<{ title_id: string }[]> `
+      const revisionRef = await tx<{ title_id: string }> `
         select title_id from bridge_title_revisions where id = ${data.revisionId}::uuid
       `;
       if (!revisionRef[0]) throw new Error("Pending revision not found");
-      const titleRows = await tx<TitleRow[]> `
+      const titleRows = await tx<TitleRow> `
         select * from bridge_titles where id = ${revisionRef[0].title_id} for update
       `;
       const row = titleRows[0];
-      const rows = await tx<{ id: string; title_id: string; status: string; proposed_changes: Record<string, unknown> }[]> `
+      const rows = await tx<{ id: string; title_id: string; status: string; proposed_changes: Record<string, string | number | null> }> `
         select id::text, title_id, status, proposed_changes
         from bridge_title_revisions where id = ${data.revisionId}::uuid
         for update
