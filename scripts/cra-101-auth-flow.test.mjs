@@ -53,3 +53,15 @@ test("CRA-101 Creator onboarding creates the profile and opens the Creator dashb
   assert.doesNotMatch(source, /createTitle\(/);
   assert.doesNotMatch(source, /authorizationAttested/);
 });
+
+test("CRA-101 independent Creator completes account onboarding without submitting a title", () => {
+  const source = read("src/routes/onboarding.tsx");
+  assert.match(source, /signupAccountTypeHint/);
+  assert.match(source, /publicAccountTypeFrom\(signupAccountTypeHint\)/);
+  assert.match(source, /accountType: accountType,/);
+  assert.match(source, /completeOnboarding\(/);
+  assert.match(source, /result\.home/);
+  assert.match(source, /accountType === "studio" \? "\/studio" : "\/creator"/);
+  assert.doesNotMatch(source, /createTitle\(/);
+  assert.doesNotMatch(source, /authorizationAttested/);
+});
