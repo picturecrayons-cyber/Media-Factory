@@ -5,6 +5,7 @@ import { TitleList } from "@/components/bridge/title-desk";
 import { MyStoryConcepts } from "@/components/bridge/my-story-concepts";
 import { NewSubmissionPanel } from "@/components/bridge/new-submission-panel";
 import { StudioMemberDesk } from "@/components/bridge/studio-member-desk";
+import { DitAgentDesk } from "@/components/bridge/dit-agent-desk";
 
 export const Route = createFileRoute("/studio")({ component: Studio });
 
@@ -12,7 +13,6 @@ const studioModules = [
   ["Organization", "Studio profile and organization workspace.", "Organization data is shown only when the verified organization mapping is available."],
   ["Members & Roles", "Manage approved studio members and access roles.", "Membership management is not enabled in this dashboard yet."],
   ["Productions", "Track projects, production stages and title ownership.", "Production project tracking is not connected yet."],
-  ["DIT & Media", "Coordinate media intake, checksums, copies and handover sign-off.", "DIT manifests and sign-off workflow are not connected yet."],
   ["QC & Rights", "Follow quality-control and rights-review progress.", "Use the status shown on each title; separate review approvals remain authoritative."],
   ["Deliveries", "Track approved delivery packages.", "Open the current Deliveries workspace for available records."],
   ["Schedule", "Coordinate production and delivery milestones.", "A shared studio schedule is not connected yet."],
@@ -40,6 +40,7 @@ function Studio() {
               <a href="#studio-titles" className="rounded-sm border border-line p-4 hover:border-accent"><strong>Studio Titles</strong><p className="mt-1 text-sm text-muted">Finished films and story concepts</p></a>
               <a href="#studio-operations" className="rounded-sm border border-line p-4 hover:border-accent"><strong>Production & DIT</strong><p className="mt-1 text-sm text-muted">Production operations and media handover</p></a>
               <Link to="/account" className="rounded-sm border border-line p-4 hover:border-accent"><strong>Account</strong><p className="mt-1 text-sm text-muted">Studio account profile</p></Link>
+              <a href="#studio-dit" className="rounded-sm border border-line p-4 hover:border-accent"><strong>DIT Agent</strong><p className="mt-1 text-sm text-muted">Camera-card manifest, checksum evidence and sign-off</p></a>
             </section>
 
             <section className="space-y-4">
@@ -66,6 +67,14 @@ function Studio() {
                 <p className="mt-1 text-sm text-muted">Read-only roster for verified Studio owners and administrators. Role changes and invitations remain disabled until separately approved.</p>
               </div>
               <StudioMemberDesk />
+            </section>
+
+            <section id="studio-dit" className="space-y-3">
+              <div>
+                <h3 className="font-display text-xl font-semibold">Studio DIT Agent</h3>
+                <p className="mt-1 text-sm text-muted">Register source-card manifests, compare Primary and Recovery manifest evidence, and record operator sign-off. Server actions are restricted to active Studio owner, admin, producer or DIT memberships.</p>
+              </div>
+              <DitAgentDesk actor={actor} />
             </section>
 
             <section id="studio-operations" className="space-y-3">
