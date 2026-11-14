@@ -263,7 +263,19 @@ export function DitAgentDesk({ actor }: { actor: StudioActor }) {
                   <p className="mt-1 text-xs text-muted">{session.title_id} · {session.shoot_date} · {session.source_file_count} files · {formatBytes(Number(session.source_total_bytes))}</p>
                   <p className="mt-1 break-all text-xs text-muted">Source: {session.source_root}</p>
                 </div>
-                <span className="rounded-full border border-line px-3 py-1 text-xs font-semibold">{session.status.replaceAll("_", " ")}</span>
+                <div className="flex items-center gap-2">
+                  <span className="rounded-full border border-line px-3 py-1 text-xs font-semibold">{session.status.replaceAll("_", " ")}</span>
+                  {!signedOff ? <Button size="sm" variant="outline" onClick={() => {
+                    setActiveSessionId(session.id);
+                    setTitleId(session.title_id);
+                    setCameraUnit(session.camera_unit as "A" | "B" | "C");
+                    setCameraLabel(session.camera_label);
+                    setCardLabel(session.card_label);
+                    setShootDate(String(session.shoot_date).slice(0, 10));
+                    setSourceVolume(session.source_volume);
+                    setSourceRoot(session.source_root);
+                  }}>Resume ingest</Button> : null}
+                </div>
               </div>
               <div className="mt-4 grid gap-3 md:grid-cols-2">
                 {(["PRIMARY", "RECOVERY"] as const).map((type) => {
