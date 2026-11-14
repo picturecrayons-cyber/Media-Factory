@@ -73,9 +73,19 @@ describe("Buyer & Revenue Operations evidence gates", () => {
       demandStatus: "DISCOVERY",
       demandEvidenceReference: null,
       demandReceivedAt: null,
+      contractStatus: "NONE",
+      contractEvidenceReference: null,
+      contractSignedAt: null,
+      paymentStatus: "NONE",
+      paymentAmountMinor: null,
+      paymentCurrency: null,
+      paymentReference: null,
+      paymentReconciledAt: null,
     });
     assert.equal(result.demandConfirmed, false);
-    assert.equal(result.revenueClassification, "CONTRACTED");
+    assert.equal(result.contractEffective, false);
+    assert.equal(result.paymentSettled, false);
+    assert.equal(result.revenueClassification, "NO_REVENUE");
     assert.ok(result.blockers.includes("NO_EVIDENCED_BUYER_DEMAND"));
   });
 
