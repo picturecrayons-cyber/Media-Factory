@@ -8,6 +8,18 @@ import {
 
 const mailbox = "abijithasokan@crayonspictures.com";
 
+function createStreamedPostRequest(body: ReadableStream<Uint8Array>): Request {
+  const init = {
+    method: "POST",
+    body,
+    duplex: "half",
+  };
+  return new Request(
+    "https://example.test/api/hostinger-incoming",
+    init as RequestInit,
+  );
+}
+
 describe("Hostinger incoming mail webhook", () => {
   it("accepts the configured Bearer token and rejects invalid credentials", () => {
     assert.equal(isValidHostingerBearer("Bearer secret-token", "secret-token"), true);
@@ -79,23 +91,18 @@ describe("Hostinger incoming mail webhook", () => {
   });
 });
 
-
 describe("bounded Hostinger webhook body reader", () => {
   it("reads chunked request bodies that stay within the byte limit", async () => {
     const chunks = [
       new TextEncoder().encode('{"event":'),
       new TextEncoder().encode('"message.received"}'),
     ];
-    const request = new Request("https://example.test/api/hostinger-incoming", {
-      method: "POST",
-      duplex: "half",
-      body: new ReadableStream<Uint8Array>({
-        start(controller) {
-          for (const chunk of chunks) controller.enqueue(chunk);
-          controller.close();
-        },
-      }),
-    });
+    const request = createStreamedPostRequest(new ReadableStream<Uint8Array>({
+      start(controller) {
+        for (const chunk of chunks) controller.enqueue(chunk);
+        controller.close();
+      },
+    }));
 
     assert.equal(
       await readLimitedRequestBody(request, 128),
@@ -105,18 +112,15 @@ describe("bounded Hostinger webhook body reader", () => {
 
   it("cancels a chunked stream as soon as it exceeds the configured cap", async () => {
     let cancelled = false;
-    const request = new Request("https://example.test/api/hostinger-incoming", {
-      method: "POST",
-      body: new ReadableStream<Uint8Array>({
-        start(controller) {
-          controller.enqueue(new TextEncoder().encode("1234567890"));
-          controller.enqueue(new TextEncoder().encode("abcdefghij"));
-        },
-        cancel() {
-          cancelled = true;
-        },
-      }),
-    });
+    const request = createStreamedPostRequest(new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode("1234567890"));
+        controller.enqueue(new TextEncoder().encode("abcdefghij"));
+      },
+      cancel() {
+        cancelled = true;
+      },
+    }));
 
     assert.equal(await readLimitedRequestBody(request, 16), null);
     assert.equal(cancelled, true);
