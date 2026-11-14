@@ -402,7 +402,7 @@ test("QC and legal rejections return titles for rework and preserve the review t
     );
 
     await f.sql.query("update bridge_titles set status='RIGHTS_REVIEW' where id='title-123'");
-    const saved = (await f.sql.transaction((tx) => saveLoopLicense(tx, owner, license))) as { grantId: string };
+    const saved = (await f.sql.transaction((tx) => f.save(tx, owner, license))) as { grantId: string };
     await f.sql.transaction((tx) => f.review(tx, legal, {
       titleId: "title-123",
       stage: "LEGAL",
