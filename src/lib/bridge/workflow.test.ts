@@ -11,7 +11,6 @@ import * as policy from "./workflow-policy.ts";
 import * as rbac from "./rbac.ts";
 import * as assetRoles from "./asset-roles.ts";
 import { submitTitleForQc } from "./title-submission.ts";
-import { reviewWorkflow } from "./workflow.ts";
 import type { Sql } from "../db";
 
 type TestDb = {
@@ -387,7 +386,7 @@ test("Submit for QC advances PREPARING with the referenced vertical poster and w
 test("QC and legal rejections return titles for rework and preserve the review trail", async () => {
   const f = await fixture();
   try {
-    await f.sql.transaction((tx) => reviewWorkflow(tx, qc, {
+    await f.sql.transaction((tx) => f.review(tx, qc, {
       titleId: "title-123",
       stage: "QC",
       decision: "REJECT",
@@ -404,7 +403,7 @@ test("QC and legal rejections return titles for rework and preserve the review t
 
     await f.sql.query("update bridge_titles set status='RIGHTS_REVIEW' where id='title-123'");
     const saved = (await f.sql.transaction((tx) => saveLoopLicense(tx, owner, license))) as { grantId: string };
-    await f.sql.transaction((tx) => reviewWorkflow(tx, legal, {
+    await f.sql.transaction((tx) => f.review(tx, legal, {
       titleId: "title-123",
       stage: "LEGAL",
       decision: "REJECT",
