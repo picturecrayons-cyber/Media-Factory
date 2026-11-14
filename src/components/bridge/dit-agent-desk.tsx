@@ -20,7 +20,6 @@ type ManifestDraft = {
   root?: string;
   files: Array<{ relativePath: string; byteSize: number; sha256: string }>;
 };
-type CopyType = "PRIMARY" | "RECOVERY";
 type Attestations = { folders: boolean; names: boolean; card: boolean };
 
 async function readManifest(file: File): Promise<ManifestDraft> {
@@ -49,6 +48,7 @@ export function DitAgentDesk({ actor }: { actor: StudioActor }) {
   const [sourceManifest, setSourceManifest] = useState<ManifestDraft | null>(null);
   const [sourceMediaFiles, setSourceMediaFiles] = useState<File[]>([]);
   const [uploadProgress, setUploadProgress] = useState<{ completed: number; total: number } | null>(null);
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
   const [attestations, setAttestations] = useState<Record<string, Attestations>>({});
   const [signoffNotes, setSignoffNotes] = useState<Record<string, string>>({});
@@ -77,10 +77,11 @@ export function DitAgentDesk({ actor }: { actor: StudioActor }) {
         }
       }
 
-      const session = await createDitIngestSession({ data: {
+      const sessionId = activeSessionId ?? (await createDitIngestSession({ data: {
         titleId, cameraUnit, cameraLabel, cardLabel, shootDate, sourceVolume, sourceRoot,
         manifest: sourceManifest,
-      } });
+      } })).sessionId;
+      if (!activeSessionId) setActiveSessionId(sessionId);
       setUploadProgress({ completed: 0, total: sourceManifest.files.length });
 
       let nextIndex = 0;
@@ -93,7 +94,7 @@ export function DitAgentDesk({ actor }: { actor: StudioActor }) {
           const file = mediaByPath.get(entry.relativePath);
           if (!file) throw new Error(`Camera file missing: ${entry.relativePath}`);
           const request = await requestDitFileUpload({ data: {
-            sessionId: session.sessionId,
+            sessionId: sessionId,
             relativePath: entry.relativePath,
           } });
           if (!request.alreadyUploaded) {
@@ -105,7 +106,7 @@ export function DitAgentDesk({ actor }: { actor: StudioActor }) {
             });
             if (!response.ok) throw new Error(`OCI Primary upload failed for ${entry.relativePath} (${response.status})`);
             await verifyDitFileUpload({ data: {
-              sessionId: session.sessionId,
+              sessionId: sessionId,
               relativePath: entry.relativePath,
             } });
           }
@@ -117,7 +118,7 @@ export function DitAgentDesk({ actor }: { actor: StudioActor }) {
 
       for (const type of ["PRIMARY", "RECOVERY"] as const) {
         await recordDitCopyVerification({ data: {
-          sessionId: session.sessionId,
+          sessionId: sessionId,
           copyType: type,
           copyRoot: type === "PRIMARY" ? "OCI Primary Vault" : "OCI Recovery Vault",
           manifest: sourceManifest,
@@ -128,6 +129,7 @@ export function DitAgentDesk({ actor }: { actor: StudioActor }) {
     onSuccess: async () => {
       setSourceManifest(null);
       setSourceMediaFiles([]);
+      setActiveSessionId(null);
       setUploadProgress(null);
       setCardLabel("");
       if (folderInputRef.current) folderInputRef.current.value = "";
@@ -233,7 +235,7 @@ export function DitAgentDesk({ actor }: { actor: StudioActor }) {
         {createMutation.error ? <p role="alert" className="mt-3 text-sm text-red-600">{createMutation.error.message}</p> : null}
         <div className="mt-4 flex flex-wrap items-center gap-3">
           <Button disabled={createMutation.isPending || !titleId || !cardLabel.trim() || !sourceVolume.trim() || !sourceRoot.trim() || !sourceManifest || !sourceMediaFiles.length} onClick={() => createMutation.mutate()}>
-            {createMutation.isPending ? "Uploading and verifying…" : "Register and ingest camera card"}
+            {createMutation.isPending ? "Uploading and verifying…" : activeSessionId ? "Resume camera-card ingest" : "Register and ingest camera card"}
           </Button>
           <span className="text-xs text-muted">Original files upload to OCI Primary; Bridge creates and verifies the Recovery copy independently.</span>
         </div>
