@@ -490,10 +490,31 @@ export const getBuyerEvidenceReviewUrl = createServerFn({ method: "POST" })
     const sql = await getSql();
     let key: string | null = null;
     if (data.target === "organization") {
-      const rows = await sql<{ storage_object_path: string }>`select storage_object_path from bridge_private.buyer_organization_verification_evidence where id=${data.evidenceId} and review_status in ('pending','accepted','rejected') limit 1`;
+      // Reviewers may preview only evidence that is still in an active legal
+      // verification queue. A known evidence UUID must not expose another
+      // organization's approved/rejected records through this signed-URL API.
+      const rows = await sql<{ storage_object_path: string }>`
+        select e.storage_object_path
+        from bridge_private.buyer_organization_verification_evidence e
+        join bridge_private.buyer_organization_verifications v
+          on v.organization_id = e.organization_id
+        where e.id = ${data.evidenceId}
+          and e.review_status = 'pending'
+          and v.verification_status = 'pending_review'
+        limit 1
+      `;
       key = rows[0]?.storage_object_path ?? null;
     } else {
-      const rows = await sql<{ storage_object_path: string }>`select storage_object_path from bridge_private.buyer_acquisition_mandate_evidence where id=${data.evidenceId} and review_status in ('pending','accepted','rejected') limit 1`;
+      // Mandate evidence is visible only while its parent mandate is pending.
+      const rows = await sql<{ storage_object_path: string }>`
+        select e.storage_object_path
+        from bridge_private.buyer_acquisition_mandate_evidence e
+        join bridge_private.buyer_acquisition_mandates m on m.id = e.mandate_id
+        where e.id = ${data.evidenceId}
+          and e.review_status = 'pending'
+          and m.status = 'pending_review'
+        limit 1
+      `;
       key = rows[0]?.storage_object_path ?? null;
     }
     if (!key || !key.includes(".verified/")) throw new Error("Sealed legal evidence object not found");
