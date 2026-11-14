@@ -462,6 +462,9 @@ const titleEditSchema = z.object({
   contentType: z.string().min(1).max(80).optional(),
 }).strict();
 
+// Owners may request descriptive changes, but cannot change commercial terms.
+const ownerTitleEditSchema = titleEditSchema.omit({ licensingFeePaise: true });
+
 function presentTitleChanges(data: z.infer<typeof titleEditSchema>) {
   const changes: Record<string, unknown> = {};
   for (const key of TITLE_EDIT_FIELDS) {
@@ -472,7 +475,11 @@ function presentTitleChanges(data: z.infer<typeof titleEditSchema>) {
 }
 
 function canOwnerEditDraft(title: BridgeTitle) {
-  return ["DRAFT", "UPLOADING", "PREPARING"].includes(title.status);
+  return title.status === "DRAFT";
+}
+
+function canOwnerSubmitRevision(title: BridgeTitle) {
+  return ["UPLOADING", "PREPARING", "QC_REVIEW", "RIGHTS_REVIEW", "LICENSING_READY"].includes(title.status);
 }
 
 export const updateTitle = createServerFn({ method: "POST" })
@@ -484,18 +491,27 @@ export const updateTitle = createServerFn({ method: "POST" })
     const title = await loadTitle(data.id);
     if (!title || (title as BridgeTitle & { archivedAt?: string | null }).archivedAt) throw new Error("Not found");
     const ownerEdit = !actor.internalRole && canMutateTitle(actor, title, "title.update_own", "title.license");
-    const staffEdit = Boolean(actor.internalRole && hasPermission(actor, "title.license"));
+    const staffEdit = actor.internalRole === "super_admin" && hasPermission(actor, "title.license");
     if (!ownerEdit && !staffEdit) throw new Error("Forbidden");
-    const changes = presentTitleChanges(data.changes);
+    const changes = presentTitleChanges(
+      ownerEdit ? ownerTitleEditSchema.parse(data.changes) : titleEditSchema.parse(data.changes),
+    );
     if (!Object.keys(changes).length) throw new Error("No title changes supplied");
     const sql = await getSql();
 
     if (ownerEdit && !canOwnerEditDraft(title)) {
+      if (!hasPermission(actor, "title.revision_submit") || !canOwnerSubmitRevision(title)) {
+        throw new Error("This title stage does not accept owner revision requests");
+      }
       await sql.transaction(async (tx) => {
+        const lockedTitle = await tx<{ id: string }[]> `
+          select id from bridge_titles where id = ${title.id} and archived_at is null for update
+        `;
+        if (!lockedTitle[0]) throw new Error("Title is archived or missing");
         const active = await tx<{ id: string }[]>`
           select id from bridge_title_revisions
           where title_id = ${title.id} and status = 'PENDING'
-          limit 1 for update
+          limit 1
         `;
         if (active[0]) throw new Error("A title revision is already awaiting review");
         const seq = await tx<{ next_revision: number }[]>`
