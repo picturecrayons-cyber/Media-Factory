@@ -84,9 +84,9 @@ async function hasTitleMergeColumn(sql: Sql): Promise<boolean> {
 
 async function listCatalog(sql: Sql): Promise<TitleRow[]> {
   if (!(await hasTitleMergeColumn(sql))) {
-    return sql<TitleRow>`select * from bridge_titles where submission_type is distinct from 'story_concept' order by updated_at desc limit 200`;
+    return sql<TitleRow>`select * from bridge_titles where archived_at is null and submission_type is distinct from 'story_concept' order by updated_at desc limit 200`;
   }
-  return sql<TitleRow>`select * from bridge_titles where merged_into_title_id is null and submission_type is distinct from 'story_concept' order by updated_at desc limit 200`;
+  return sql<TitleRow>`select * from bridge_titles where archived_at is null and merged_into_title_id is null and submission_type is distinct from 'story_concept' order by updated_at desc limit 200`;
 }
 
 async function listOwned(sql: Sql, userId: string, organizationId: string | null | undefined): Promise<TitleRow[]> {
@@ -94,13 +94,14 @@ async function listOwned(sql: Sql, userId: string, organizationId: string | null
   const mergeColumnAvailable = await hasTitleMergeColumn(sql);
   if (!orgId) {
     return mergeColumnAvailable
-      ? sql<TitleRow>`select * from bridge_titles where owner_user_id = ${userId} and merged_into_title_id is null and submission_type is distinct from 'story_concept' order by updated_at desc limit 200`
-      : sql<TitleRow>`select * from bridge_titles where owner_user_id = ${userId} and submission_type is distinct from 'story_concept' order by updated_at desc limit 200`;
+      ? sql<TitleRow>`select * from bridge_titles where owner_user_id = ${userId} and archived_at is null and merged_into_title_id is null and submission_type is distinct from 'story_concept' order by updated_at desc limit 200`
+      : sql<TitleRow>`select * from bridge_titles where owner_user_id = ${userId} and archived_at is null and submission_type is distinct from 'story_concept' order by updated_at desc limit 200`;
   }
   return mergeColumnAvailable
     ? sql<TitleRow>`
         select t.* from bridge_titles t
-        where t.merged_into_title_id is null
+        where t.archived_at is null
+          and t.merged_into_title_id is null
           and t.submission_type is distinct from 'story_concept'
           and (
             t.owner_user_id = ${userId}
@@ -119,7 +120,8 @@ async function listOwned(sql: Sql, userId: string, organizationId: string | null
       `
     : sql<TitleRow>`
         select t.* from bridge_titles t
-        where t.submission_type is distinct from 'story_concept'
+        where t.archived_at is null
+          and t.submission_type is distinct from 'story_concept'
           and (
             t.owner_user_id = ${userId}
             or (
@@ -348,7 +350,8 @@ export const listTitles = createServerFn({ method: "GET" })
       if (await hasTitleMergeColumn(sql)) {
         rows = await sql<TitleRow>`
           select t.* from bridge_titles t
-          where t.merged_into_title_id is null
+          where t.archived_at is null
+            and t.merged_into_title_id is null
             and t.status in ('LIVE_FOR_BUYERS','IN_NEGOTIATION','LICENSED','DELIVERED')
             and public.bridge_title_buyer_visibility(t.id)
           order by t.updated_at desc limit 200
@@ -356,7 +359,7 @@ export const listTitles = createServerFn({ method: "GET" })
       } else {
         rows = await sql<TitleRow>`
           select t.* from bridge_titles t
-          where t.status in ('LIVE_FOR_BUYERS','IN_NEGOTIATION','LICENSED','DELIVERED')
+          where t.archived_at is null and t.status in ('LIVE_FOR_BUYERS','IN_NEGOTIATION','LICENSED','DELIVERED')
             and public.bridge_title_buyer_visibility(t.id)
           order by t.updated_at desc limit 200
         `;
@@ -422,59 +425,184 @@ export const getTitle = createServerFn({ method: "GET" })
     };
   });
 
+const TITLE_EDIT_FIELDS = ["name", "nameMl", "synopsis", "language", "year", "runtimeMinutes", "licensingFeePaise", "contentType"] as const;
+const titleEditSchema = z.object({
+  name: z.string().min(1).max(160).optional(),
+  nameMl: z.string().max(160).nullable().optional(),
+  synopsis: z.string().max(4000).optional(),
+  language: z.string().min(2).max(40).optional(),
+  year: z.number().int().min(1895).max(2100).nullable().optional(),
+  runtimeMinutes: z.number().int().min(1).max(600).nullable().optional(),
+  licensingFeePaise: z.number().int().min(0).max(2_000_000_000).optional(),
+  contentType: z.string().min(1).max(80).optional(),
+}).strict();
+
+function presentTitleChanges(data: z.infer<typeof titleEditSchema>) {
+  const changes: Record<string, unknown> = {};
+  for (const key of TITLE_EDIT_FIELDS) {
+    const value = data[key];
+    if (value !== undefined) changes[key] = key === "contentType" ? loopStageType(value) : value;
+  }
+  return changes;
+}
+
+function canOwnerEditDraft(title: BridgeTitle) {
+  return ["DRAFT", "UPLOADING", "PREPARING"].includes(title.status);
+}
+
 export const updateTitle = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .validator(
-    z.object({
-      id: z.string().min(8),
-      name: z.string().min(1).max(160).optional(),
-      nameMl: z.string().max(160).optional(),
-      synopsis: z.string().max(4000).optional(),
-      language: z.string().min(2).max(40).optional(),
-      year: z.number().int().min(1895).max(2100).nullable().optional(),
-      runtimeMinutes: z.number().int().min(1).max(600).nullable().optional(),
-      licensingFeePaise: z.number().int().min(0).max(2_000_000_000).optional(),
-      contentType: z.string().min(1).max(80).optional(),
-    }),
-  )
+  .validator(z.object({ id: z.string().min(8), changes: titleEditSchema }))
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    const title = await loadTitle(data.id);
+    if (!title || (title as BridgeTitle & { archivedAt?: string | null }).archivedAt) throw new Error("Not found");
+    const ownerEdit = canMutateTitle(actor, title, "title.update_own", "title.license") && !actor.internalRole;
+    const staffEdit = Boolean(actor.internalRole === "super_admin" && hasPermission(actor, "title.license"));
+    if (!ownerEdit && !staffEdit) throw new Error("Forbidden");
+    const changes = presentTitleChanges(data.changes);
+    if (!Object.keys(changes).length) throw new Error("No title changes supplied");
+    const sql = await getSql();
+
+    if (ownerEdit && !canOwnerEditDraft(title)) {
+      await sql.transaction(async (tx) => {
+        const active = await tx<{ id: string }>`
+          select id from bridge_title_revisions
+          where title_id = ${title.id} and status = 'PENDING'
+          limit 1 for update
+        `;
+        if (active[0]) throw new Error("A title revision is already awaiting review");
+        const seq = await tx<{ next_revision: number }>`
+          select coalesce(max(revision_number), 0) + 1 as next_revision
+          from bridge_title_revisions where title_id = ${title.id}
+        `;
+        await tx`
+          insert into bridge_title_revisions (title_id, revision_number, submitted_by, proposed_changes)
+          values (${title.id}, ${seq[0].next_revision}, ${actor.userId}, ${JSON.stringify(changes)}::jsonb)
+        `;
+        await writeAudit({ actorUserId: actor.userId, action: "title.revision.submit", entityType: "bridge_title", entityId: title.id, metadata: { revision: seq[0].next_revision, fields: Object.keys(changes) } }, tx);
+      });
+      return { title: await loadTitle(title.id), revisionSubmitted: true };
+    }
+
+    await sql.transaction(async (tx) => {
+      await tx`
+        update bridge_titles set
+          name = ${changes.name ?? title.name},
+          name_ml = ${changes.nameMl === undefined ? title.nameMl : changes.nameMl},
+          synopsis = ${changes.synopsis ?? title.synopsis},
+          language = ${changes.language ?? title.language},
+          year = ${changes.year === undefined ? title.year : changes.year},
+          runtime_minutes = ${changes.runtimeMinutes === undefined ? title.runtimeMinutes : changes.runtimeMinutes},
+          licensing_fee_paise = ${changes.licensingFeePaise ?? title.licensingFeePaise},
+          content_type = ${changes.contentType ?? title.contentType},
+          updated_at = now()
+        where id = ${title.id} and archived_at is null
+      `;
+      await writeAudit({ actorUserId: actor.userId, action: "title.update", entityType: "bridge_title", entityId: title.id, metadata: { fields: Object.keys(changes) } }, tx);
+    });
+    return { title: await loadTitle(title.id), revisionSubmitted: false };
+  });
+
+export const archiveTitle = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({ id: z.string().min(8), reason: z.string().max(300).optional() }))
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
     const title = await loadTitle(data.id);
     if (!title) throw new Error("Not found");
-    const owns = !actor.internalRole && canMutateTitle(actor, title, "title.update_own", "title.license");
-    if (!canMutateTitle(actor, title, "title.update_own", "title.license"))
-      throw new Error("Forbidden");
-    if (
-      owns &&
-      title.status !== "DRAFT" &&
-      title.status !== "UPLOADING" &&
-      title.status !== "PREPARING"
-    ) {
-      throw new Error("Title is locked after prepare");
-    }
+    const owner = !actor.internalRole && canMutateTitle(actor, title, "title.archive_own", "title.archive_any");
+    const superAdmin = actor.internalRole === "super_admin" && hasPermission(actor, "title.archive_any");
+    if (!owner && !superAdmin) throw new Error("Forbidden");
+    if (owner && title.status !== "DRAFT") throw new Error("Only an unsubmitted draft can be archived by its owner");
+    if (superAdmin && !["DRAFT", "UPLOADING"].includes(title.status)) throw new Error("Admin archive requires a separate review/retention decision after submission");
     const sql = await getSql();
-    await sql`
-      update bridge_titles set
-        name = ${data.name ?? title.name},
-        name_ml = ${data.nameMl ?? title.nameMl},
-        synopsis = ${data.synopsis ?? title.synopsis},
-        language = ${data.language ?? title.language},
-        year = ${data.year === undefined ? title.year : data.year},
-        runtime_minutes = ${data.runtimeMinutes === undefined ? title.runtimeMinutes : data.runtimeMinutes},
-        licensing_fee_paise = ${data.licensingFeePaise ?? title.licensingFeePaise},
-        content_type = ${data.contentType ? loopStageType(data.contentType) : title.contentType},
-        updated_at = now()
-      where id = ${title.id}
+    const blockers = await sql<{ has_publication: boolean; has_deal: boolean; has_order: boolean; has_delivery: boolean; has_revision: boolean }>`
+      select
+        exists(select 1 from bridge_loop_publications where bridge_title_id = ${title.id}) as has_publication,
+        exists(select 1 from bridge_deals where title_id = ${title.id}) as has_deal,
+        exists(select 1 from streamvista_orders where bridge_title_id = ${title.id}) as has_order,
+        exists(select 1 from bridge_delivery_jobs where title_id = ${title.id}) as has_delivery,
+        exists(select 1 from bridge_title_revisions where title_id = ${title.id} and status = 'PENDING') as has_revision
     `;
-    await writeAudit({
-      actorUserId: actor.userId,
-      action: "title.update",
-      entityType: "bridge_title",
-      entityId: title.id,
+    const b = blockers[0];
+    if (b?.has_publication || b?.has_deal || b?.has_order || b?.has_delivery || b?.has_revision)
+      throw new Error("Title has downstream activity or a pending revision; archive is blocked");
+    await sql.transaction(async (tx) => {
+      await tx`
+        update bridge_titles set archived_at = now(), archived_by = ${actor.userId},
+          archive_reason = ${data.reason ?? null}, updated_at = now()
+        where id = ${title.id} and archived_at is null
+      `;
+      await writeAudit({ actorUserId: actor.userId, action: "title.archive", entityType: "bridge_title", entityId: title.id, metadata: { previousStatus: title.status, reason: data.reason ?? null } }, tx);
     });
-    const next = await loadTitle(title.id);
-    return { title: next };
+    return { archived: true, titleId: title.id };
+  });
+
+export const listTitleRevisions = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .validator(z.object({ titleId: z.string().min(8) }))
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    const title = await loadTitle(data.titleId);
+    if (!title || !canReadTitle(actor, title)) throw new Error("Not found");
+    const sql = await getSql();
+    const rows = await sql<Array<{ id: string; revision_number: number; status: string; submitted_by: string; submitted_at: string | Date; proposed_changes: Record<string, unknown>; reviewed_by: string | null; reviewed_at: string | Date | null; review_note: string | null }>>`
+      select id::text, revision_number, status, submitted_by, submitted_at, proposed_changes, reviewed_by, reviewed_at, review_note
+      from bridge_title_revisions where title_id = ${title.id}
+      order by revision_number desc
+    `;
+    return { revisions: rows };
+  });
+
+export const reviewTitleRevision = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({ revisionId: z.string().uuid(), decision: z.enum(["APPROVED", "REJECTED"]), note: z.string().max(500).optional() }))
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    assertPermission(actor, "title.revision_review");
+    const sql = await getSql();
+    await sql.transaction(async (tx) => {
+      const rows = await tx<Array<{ id: string; title_id: string; status: string; proposed_changes: Record<string, unknown> }>>`
+        select id::text, title_id, status, proposed_changes
+        from bridge_title_revisions where id = ${data.revisionId}::uuid
+        for update
+      `;
+      const revision = rows[0];
+      if (!revision || revision.status !== "PENDING") throw new Error("Pending revision not found");
+      const titleRows = await tx<Array<{ id: string; status: string; archived_at: string | null }>>`
+        select id, status, archived_at from bridge_titles where id = ${revision.title_id} for update
+      `;
+      const target = titleRows[0];
+      if (!target || target.archived_at) throw new Error("Title is archived");
+      if (data.decision === "APPROVED") {
+        const changes = titleEditSchema.parse(revision.proposed_changes);
+        await tx`
+          update bridge_titles set
+            name = ${changes.name ?? sql`name`},
+            name_ml = ${changes.nameMl === undefined ? sql`name_ml` : changes.nameMl},
+            synopsis = ${changes.synopsis ?? sql`synopsis`},
+            language = ${changes.language ?? sql`language`},
+            year = ${changes.year === undefined ? sql`year` : changes.year},
+            runtime_minutes = ${changes.runtimeMinutes === undefined ? sql`runtime_minutes` : changes.runtimeMinutes},
+            licensing_fee_paise = ${changes.licensingFeePaise ?? sql`licensing_fee_paise`},
+            content_type = ${changes.contentType ? loopStageType(changes.contentType) : sql`content_type`},
+            updated_at = now()
+          where id = ${target.id}
+        `;
+      }
+      await tx`
+        update bridge_title_revisions set status = ${data.decision}, reviewed_by = ${actor.userId},
+          reviewed_at = now(), review_note = ${data.note ?? null}
+        where id = ${revision.id}
+      `;
+      await writeAudit({ actorUserId: actor.userId, action: data.decision === "APPROVED" ? "title.revision.approve" : "title.revision.reject", entityType: "bridge_title", entityId: target.id, metadata: { revisionId: revision.id, note: data.note ?? null } }, tx);
+    });
+    return { reviewed: true };
   });
 
 async function assertLicensingReady(titleId: string) {
