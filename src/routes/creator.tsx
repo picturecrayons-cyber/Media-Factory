@@ -45,8 +45,8 @@ function CreatorDashboard({
   actor: { userId: string; organizationId?: string | null };
 }) {
   const titlesQ = useQuery({
-    queryKey: ["bridge-titles", actor.userId, actor.organizationId],
-    queryFn: () => listTitles(),
+    queryKey: ["bridge-titles", actor.userId, actor.organizationId, "owned"],
+    queryFn: () => listTitles({ data: { scope: "owned" } }),
     retry: 1,
   });
   const titles = titlesQ.data?.titles ?? [];
@@ -161,7 +161,7 @@ function CreatorDashboard({
           </a>
         </div>
         <div className="rounded-2xl border border-line bg-surface p-4 sm:p-5">
-          <TitleList actor={actor} empty="No titles are available for this account yet. Start a submission to add your first title." />
+          <TitleList actor={actor} scope="owned" empty="No titles are available for this account yet. Start a submission to add your first title." />
         </div>
       </section>
 
@@ -205,11 +205,11 @@ function CreatorDashboard({
       </section>
 
       <section id="assets" className="scroll-mt-20">
-        <MediaWorkspaceDesk actor={actor} mode="storage" />
+        <MediaWorkspaceDesk actor={actor} mode="storage" scope="owned" />
       </section>
 
       <section id="post-production" className="scroll-mt-20">
-        <MediaWorkspaceDesk actor={actor} mode="post-production" />
+        <MediaWorkspaceDesk actor={actor} mode="post-production" scope="owned" />
       </section>
 
       <section id="review" className="scroll-mt-20 grid gap-4 md:grid-cols-2">
