@@ -12,6 +12,8 @@ export const bridgeEnv = {
   razorpayKeyId: () => read("RAZORPAY_KEY_ID"),
   razorpayKeySecret: () => read("RAZORPAY_KEY_SECRET"),
   razorpayWebhookSecret: () => read("RAZORPAY_WEBHOOK_SECRET"),
+  // Shared HMAC secret used only for authenticated Loop-to-Bridge playback handoff.
+  loopPlaybackHandoffSecret: () => read("BRIDGE_LOOP_PLAYBACK_HANDOFF_SECRET"),
   ociTenancyOcid: () => read("OCI_TENANCY_OCID"),
   ociUserOcid: () => read("OCI_USER_OCID"),
   ociFingerprint: () => read("OCI_FINGERPRINT"),
