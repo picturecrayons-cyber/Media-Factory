@@ -19,3 +19,15 @@ export function workspaceFailureCode(error: unknown): "CONFIG_MISSING" | "MISSIN
   }
   return "WORKSPACE_QUERY_FAILED";
 }
+
+
+export function workspaceFailureMessage(code: ReturnType<typeof workspaceFailureCode>): string {
+  switch (code) {
+    case "CONFIG_MISSING":
+      return "Bridge Preview backend configuration is incomplete. No onboarding changes were made.";
+    case "MISSING_RELATION":
+      return "Bridge workspace schema is incomplete in this environment. No onboarding changes were made.";
+    default:
+      return "Bridge could not verify your workspace session. No onboarding changes were made.";
+  }
+}
