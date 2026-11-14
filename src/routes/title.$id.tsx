@@ -38,6 +38,8 @@ import {
   sessionStorageKey,
 } from "@/lib/bridge/multipart-upload";
 import { AssetPosterSlot, AssetPreviewGallery } from "@/components/bridge/asset-preview-gallery";
+import { Button } from "@/components/ui/button";
+import type { BridgeTitle } from "@/lib/bridge/types";
 
 export const Route = createFileRoute("/title/$id")({
   head: () => ({ meta: [{ name: "robots", content: "noindex, nofollow" }] }),
@@ -301,7 +303,7 @@ function TitleMetadataEditor({
   revisionsLoading,
   onSaved,
 }: {
-  title: NonNullable<ReturnType<typeof getTitle> extends Promise<infer T> ? T["title"] : never>;
+  title: BridgeTitle;
   actor: BridgeActor;
   revisions: Array<{ id: string; revision_number: number; status: string; proposed_changes: Record<string, unknown>; review_note: string | null }>;
   revisionsLoading: boolean;
