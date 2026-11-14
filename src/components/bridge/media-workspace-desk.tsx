@@ -28,13 +28,15 @@ function formatBytes(value: number | null) {
 export function MediaWorkspaceDesk({
   actor,
   mode,
+  scope = "catalog",
 }: {
   actor: MediaActor;
   mode: "storage" | "post-production";
+  scope?: "catalog" | "owned";
 }) {
   const titlesQ = useQuery({
-    queryKey: ["bridge-media-titles", actor.userId, actor.organizationId],
-    queryFn: () => listTitles(),
+    queryKey: ["bridge-media-titles", actor.userId, actor.organizationId, scope],
+    queryFn: () => scope === "owned" ? listTitles({ data: { scope: "owned" } }) : listTitles(),
     retry: 1,
   });
   const titles = titlesQ.data?.titles ?? [];
