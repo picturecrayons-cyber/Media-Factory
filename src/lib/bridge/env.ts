@@ -19,6 +19,8 @@ export const bridgeEnv = {
   ociRegion: () => read("OCI_REGION"),
   ociNamespace: () => read("OCI_NAMESPACE"),
   ociBucket: () => read("OCI_BUCKET_NAME"),
+  // DIT Recovery Vault must be a separate bucket; never silently reuse Primary.
+  ociRecoveryBucket: () => read("OCI_RECOVERY_BUCKET_NAME"),
   // Legacy AWS/S3 compatibility adapter only; never used by production readiness.
   awsRegion: () => read("AWS_REGION"),
   awsBucket: () => read("AWS_S3_MEDIA_BUCKET") || read("S3_MEDIA_BUCKET") || read("AWS_S3_BUCKET"),
