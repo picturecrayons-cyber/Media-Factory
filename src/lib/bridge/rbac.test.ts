@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { assertPermission, canAccessAdminWorkstations, canAccessDashboard, canAccessTitleWorkspace, canGrantInternalRole, canMutateTitle, canOperateOnTitle, canReadTitle, hasPermission, hasStaffPermission, permissionForTransition, workspaceHome } from "./rbac.ts";
+import { assertPermission, canAccessAdminWorkstations, canAccessCreatorDashboard, canAccessDashboard, canAccessTitleWorkspace, canGrantInternalRole, canMutateTitle, canOperateOnTitle, canReadTitle, hasPermission, hasStaffPermission, permissionForTransition, workspaceHome } from "./rbac.ts";
 import type { Actor } from "./rbac.ts";
 
 const actor = (
@@ -105,6 +105,19 @@ describe("PRD authorization matrix", () => {
     assert.equal(hasPermission(admin(), "title.license"), true);
     assert.equal(hasPermission(superAdmin(), "title.archive_any"), true);
     assert.equal(hasPermission(superAdmin(), "title.revision_review"), true);
+  });
+
+  it("Super Admin retains Creator dashboard access for their own independent-creator profile", () => {
+    const rootCreator = superAdmin();
+    assert.equal(canAccessCreatorDashboard(rootCreator), true);
+    assert.equal(canAccessCreatorDashboard(admin()), false);
+    assert.equal(canAccessCreatorDashboard(viewer()), false);
+    assert.equal(canAccessCreatorDashboard(actor("unverified-root", "independent_creator", "super_admin", false)), false);
+    assert.equal(hasPermission(rootCreator, "title.update_own"), true);
+    assert.equal(hasPermission(rootCreator, "title.archive_own"), true);
+    assert.equal(hasPermission(rootCreator, "title.merge_duplicate"), true);
+    assert.equal(hasPermission(rootCreator, "finance.configure"), true);
+    assert.equal(hasPermission(rootCreator, "payment.create_order"), false);
   });
 
   it("super admin can create canonical Bridge titles and use explicit internal upload powers", () => {
