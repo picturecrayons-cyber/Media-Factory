@@ -113,3 +113,43 @@ export function parseHostingerIncomingPayload(
     messageReceivedAt,
   };
 }
+
+
+/**
+ * Read a request body without buffering beyond maxBytes. Returns null when
+ * the stream exceeds the cap and cancels the upstream reader immediately.
+ */
+export async function readLimitedRequestBody(
+  request: Request,
+  maxBytes: number,
+): Promise<string | null> {
+  if (!Number.isSafeInteger(maxBytes) || maxBytes < 1) {
+    throw new Error("maxBytes must be a positive safe integer");
+  }
+
+  const reader = request.body?.getReader();
+  if (!reader) return "";
+
+  const chunks: Buffer[] = [];
+  let totalBytes = 0;
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!value) continue;
+
+      totalBytes += value.byteLength;
+      if (totalBytes > maxBytes) {
+        await reader.cancel("Request body exceeds configured limit");
+        return null;
+      }
+
+      chunks.push(Buffer.from(value));
+    }
+
+    return Buffer.concat(chunks, totalBytes).toString("utf8");
+  } finally {
+    reader.releaseLock();
+  }
+}
