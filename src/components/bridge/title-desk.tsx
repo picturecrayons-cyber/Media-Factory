@@ -96,7 +96,7 @@ export function TitleList({ empty, query = "", actor }: { empty: string; query?:
             {!actor.internalRole && title.status === "DRAFT" ? (
               <div className="flex justify-end border-t border-line p-3">
                 <Button type="button" variant="outline" disabled={archive.isPending} onClick={() => {
-                  if (window.confirm("Archive this draft? Its media and audit history will be retained.")) archive.mutate(title.id);
+                  if (window.confirm("Archive this unsubmitted draft? Any linked assets or downstream activity will block the request.")) archive.mutate(title.id);
                 }}>Delete draft</Button>
               </div>
             ) : null}
