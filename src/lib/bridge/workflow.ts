@@ -72,6 +72,62 @@ const reviewInput = z.object({
   grantId: z.string().uuid().optional(),
 });
 
+function hasCompleteRightsAuthority(grant: {
+  grant_type: string;
+  territories: unknown;
+  languages: unknown;
+  media: unknown;
+  window_start: string | Date | null;
+  window_end: string | Date | null;
+  exclusivity: string;
+  sublicensing_allowed: boolean;
+  restrictions: unknown;
+  evidence: unknown;
+}, now = Date.now()) {
+  const nonEmptyStringArray = (value: unknown) =>
+    Array.isArray(value) &&
+    value.length > 0 &&
+    value.every((entry) => typeof entry === "string" && entry.trim().length > 0);
+  const start = grant.window_start ? new Date(grant.window_start).getTime() : Number.NaN;
+  const end = grant.window_end ? new Date(grant.window_end).getTime() : Number.NaN;
+  const evidence = Array.isArray(grant.evidence) ? grant.evidence : [];
+  const firstEvidence = evidence[0] && typeof evidence[0] === "object"
+    ? evidence[0] as Record<string, unknown>
+    : null;
+  const terms = firstEvidence?.commercialTerms && typeof firstEvidence.commercialTerms === "object"
+    ? firstEvidence.commercialTerms as Record<string, unknown>
+    : null;
+  const ownerShare = terms?.rightsOwnerSharePct;
+  const distributorShare = terms?.distributorSharePct;
+  const hasCommercialTerms =
+    Number.isInteger(ownerShare) &&
+    Number.isInteger(distributorShare) &&
+    Number(ownerShare) >= 0 &&
+    Number(ownerShare) <= 100 &&
+    Number(distributorShare) >= 0 &&
+    Number(distributorShare) <= 100 &&
+    Number(ownerShare) + Number(distributorShare) === 100;
+
+  return (
+    grant.grant_type === "DISTRIBUTION" &&
+    nonEmptyStringArray(grant.territories) &&
+    nonEmptyStringArray(grant.languages) &&
+    nonEmptyStringArray(grant.media) &&
+    Number.isFinite(start) &&
+    Number.isFinite(end) &&
+    start <= now &&
+    end > now &&
+    end > start &&
+    ["EXCLUSIVE", "NON_EXCLUSIVE"].includes(grant.exclusivity) &&
+    grant.sublicensing_allowed === true &&
+    Array.isArray(grant.restrictions) &&
+    grant.restrictions.length === 0 &&
+    Boolean(firstEvidence?.agreementReference && String(firstEvidence.agreementReference).trim()) &&
+    Boolean(firstEvidence?.ownershipReference && String(firstEvidence.ownershipReference).trim()) &&
+    hasCommercialTerms
+  );
+}
+
 export async function reviewWorkflow(tx: Sql, actor: Actor, data: z.infer<typeof reviewInput>) {
   data = reviewInput.parse(data);
   assertPermission(actor, data.stage === "QC" ? "title.qc_review" : "title.rights_review");
@@ -100,14 +156,27 @@ export async function reviewWorkflow(tx: Sql, actor: Actor, data: z.infer<typeof
     if (!data.grantId) throw new Error("Select a license draft");
     const [grant] = await tx<{
       status: string;
-      window_end: string;
+      grant_type: string;
+      territories: unknown;
+      languages: unknown;
+      media: unknown;
+      window_start: string | Date | null;
+      window_end: string | Date | null;
+      exclusivity: string;
+      sublicensing_allowed: boolean;
+      restrictions: unknown;
+      evidence: unknown;
       created_by: string;
-    }>`select status,window_end,created_by from bridge_rights_grants where id=${data.grantId} and title_id=${data.titleId} for update`;
+    }>`select status,grant_type,territories,languages,media,window_start,window_end,exclusivity,
+        sublicensing_allowed,restrictions,evidence,created_by
+      from bridge_rights_grants
+      where id=${data.grantId} and title_id=${data.titleId}
+      for update`;
     if (!grant || grant.status !== "DRAFT") throw new Error("License draft is unavailable");
     if (grant.created_by === actor.userId)
       throw new Error("Another legal reviewer must approve this license");
-    if (data.decision === "APPROVE" && new Date(grant.window_end) <= new Date())
-      throw new Error("License has expired");
+    if (data.decision === "APPROVE" && !hasCompleteRightsAuthority(grant))
+      throw new Error("Rights grant is incomplete or does not prove current distribution, territory, language, media, term, exclusivity and sublicensing authority");
     await tx`insert into bridge_legal_cases(title_id,status,evidence,reviewed_by,reviewed_at)
       values (${data.titleId},${data.decision === "APPROVE" ? "APPROVED" : "REJECTED"},
       ${JSON.stringify([{ grantId: data.grantId, note: data.note }])}::jsonb,${actor.userId},now())`;
