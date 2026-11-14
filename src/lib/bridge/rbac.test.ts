@@ -113,7 +113,7 @@ describe("PRD authorization matrix", () => {
     assert.equal(canGrantInternalRole(admin(), "viewer"), true);
     assert.equal(canGrantInternalRole(admin(), "admin"), true);
     assert.equal(canGrantInternalRole(admin(), "super_admin"), false);
-    assert.equal(canGrantInternalRole(superAdmin(), "super_admin"), true);
+    assert.equal(canGrantInternalRole(superAdmin(), "super_admin"), false);
     assert.equal(canGrantInternalRole(qc, "viewer"), false);
     assert.equal(canGrantInternalRole(actor("unverified", "independent_creator", "admin", false), "viewer"), false);
   });
@@ -163,7 +163,7 @@ describe("PRD authorization matrix", () => {
     assert.equal(canAccessDashboard(viewer()), false);
     assert.equal(canGrantInternalRole(admin(), "viewer"), true);
     assert.equal(canGrantInternalRole(admin(), "super_admin"), false);
-    assert.equal(canGrantInternalRole(superAdmin(), "super_admin"), true);
+    assert.equal(canGrantInternalRole(superAdmin(), "super_admin"), false);
     assert.equal(
       canAccessDashboard(actor("super-u", "independent_creator", "super_admin", false)),
       false,
