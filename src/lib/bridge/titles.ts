@@ -154,7 +154,7 @@ export async function loadTitle(id: string): Promise<BridgeTitle | null> {
   const sql = await getSql();
   const rows = await sql<TitleRow>`
     select t.* from bridge_titles t
-    where t.id = ${id}
+    where t.id = ${id} and t.archived_at is null
     limit 1
   `;
   return rows[0] ? mapTitle(rows[0]) : null;
@@ -469,13 +469,13 @@ export const updateTitle = createServerFn({ method: "POST" })
 
     if (ownerEdit && !canOwnerEditDraft(title)) {
       await sql.transaction(async (tx) => {
-        const active = await tx<{ id: string }>`
+        const active = await tx<{ id: string }[]>`
           select id from bridge_title_revisions
           where title_id = ${title.id} and status = 'PENDING'
           limit 1 for update
         `;
         if (active[0]) throw new Error("A title revision is already awaiting review");
-        const seq = await tx<{ next_revision: number }>`
+        const seq = await tx<{ next_revision: number }[]>`
           select coalesce(max(revision_number), 0) + 1 as next_revision
           from bridge_title_revisions where title_id = ${title.id}
         `;
@@ -521,7 +521,7 @@ export const archiveTitle = createServerFn({ method: "POST" })
     if (owner && title.status !== "DRAFT") throw new Error("Only an unsubmitted draft can be archived by its owner");
     if (superAdmin && !["DRAFT", "UPLOADING"].includes(title.status)) throw new Error("Admin archive requires a separate review/retention decision after submission");
     const sql = await getSql();
-    const blockers = await sql<{ has_publication: boolean; has_deal: boolean; has_order: boolean; has_delivery: boolean; has_revision: boolean }>`
+    const blockers = await sql<{ has_publication: boolean; has_deal: boolean; has_order: boolean; has_delivery: boolean; has_revision: boolean }[]>`
       select
         exists(select 1 from bridge_loop_publications where bridge_title_id = ${title.id}) as has_publication,
         exists(select 1 from bridge_deals where title_id = ${title.id}) as has_deal,
@@ -552,7 +552,7 @@ export const listTitleRevisions = createServerFn({ method: "GET" })
     const title = await loadTitle(data.titleId);
     if (!title || !canReadTitle(actor, title)) throw new Error("Not found");
     const sql = await getSql();
-    const rows = await sql<Array<{ id: string; revision_number: number; status: string; submitted_by: string; submitted_at: string | Date; proposed_changes: Record<string, unknown>; reviewed_by: string | null; reviewed_at: string | Date | null; review_note: string | null }>>`
+    const rows = await sql<{ id: string; revision_number: number; status: string; submitted_by: string; submitted_at: string | Date; proposed_changes: Record<string, unknown>; reviewed_by: string | null; reviewed_at: string | Date | null; review_note: string | null }[]>`
       select id::text, revision_number, status, submitted_by, submitted_at, proposed_changes, reviewed_by, reviewed_at, review_note
       from bridge_title_revisions where title_id = ${title.id}
       order by revision_number desc
@@ -569,15 +569,15 @@ export const reviewTitleRevision = createServerFn({ method: "POST" })
     assertPermission(actor, "title.revision_review");
     const sql = await getSql();
     await sql.transaction(async (tx) => {
-      const rows = await tx<Array<{ id: string; title_id: string; status: string; proposed_changes: Record<string, unknown> }>>`
+      const rows = await tx<{ id: string; title_id: string; status: string; proposed_changes: Record<string, unknown> }[]>`
         select id::text, title_id, status, proposed_changes
         from bridge_title_revisions where id = ${data.revisionId}::uuid
         for update
       `;
       const revision = rows[0];
       if (!revision || revision.status !== "PENDING") throw new Error("Pending revision not found");
-      const titleRows = await tx<Array<{ id: string; status: string; archived_at: string | null }>>`
-        select id, status, archived_at from bridge_titles where id = ${revision.title_id} for update
+      const titleRows = await tx<{ id: string; status: string; archived_at: string | null; name: string; name_ml: string | null; synopsis: string; language: string; year: number | null; runtime_minutes: number | null; licensing_fee_paise: number; content_type: string }[]>`
+        select id, status, archived_at, name, name_ml, synopsis, language, year, runtime_minutes, licensing_fee_paise, content_type from bridge_titles where id = ${revision.title_id} for update
       `;
       const target = titleRows[0];
       if (!target || target.archived_at) throw new Error("Title is archived");
@@ -585,14 +585,14 @@ export const reviewTitleRevision = createServerFn({ method: "POST" })
         const changes = titleEditSchema.parse(revision.proposed_changes);
         await tx`
           update bridge_titles set
-            name = ${changes.name ?? sql`name`},
-            name_ml = ${changes.nameMl === undefined ? sql`name_ml` : changes.nameMl},
-            synopsis = ${changes.synopsis ?? sql`synopsis`},
-            language = ${changes.language ?? sql`language`},
-            year = ${changes.year === undefined ? sql`year` : changes.year},
-            runtime_minutes = ${changes.runtimeMinutes === undefined ? sql`runtime_minutes` : changes.runtimeMinutes},
-            licensing_fee_paise = ${changes.licensingFeePaise ?? sql`licensing_fee_paise`},
-            content_type = ${changes.contentType ? loopStageType(changes.contentType) : sql`content_type`},
+            name = ${changes.name ?? target.name},
+            name_ml = ${changes.nameMl === undefined ? target.name_ml : changes.nameMl},
+            synopsis = ${changes.synopsis ?? target.synopsis},
+            language = ${changes.language ?? target.language},
+            year = ${changes.year === undefined ? target.year : changes.year},
+            runtime_minutes = ${changes.runtimeMinutes === undefined ? target.runtime_minutes : changes.runtimeMinutes},
+            licensing_fee_paise = ${changes.licensingFeePaise ?? target.licensing_fee_paise},
+            content_type = ${changes.contentType ? loopStageType(changes.contentType) : target.content_type},
             updated_at = now()
           where id = ${target.id}
         `;
