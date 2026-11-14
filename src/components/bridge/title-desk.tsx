@@ -52,7 +52,7 @@ export function TitleList({ empty, query = "", actor }: { empty: string; query?:
   if (!titles.length) return <p className="text-sm text-muted">{empty}</p>;
   return (
     <div className="space-y-3">
-      {posterKeys.isError ? <p className="text-xs text-muted">Artwork previews are temporarily unavailable; title records remain accessible.</p> : null}
+      {posterIds.some((query) => query.isError) ? <p className="text-xs text-muted">Artwork previews are temporarily unavailable; title records remain accessible.</p> : null}
       <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {titles.map((t, index) => {
           const poster = posterQueries[index]?.data;
