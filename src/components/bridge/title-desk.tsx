@@ -10,8 +10,8 @@ import { bridgeWorkspaceQueryKey, type BridgeWorkspaceActor } from "@/lib/bridge
 import type { InternalRole } from "@/lib/bridge/types";
 import { BRIDGE_LOOP_LANES } from "@/lib/bridge/loop-lanes";
 
-export function TitleList({ empty, query = "", actor }: { empty: string; query?: string; actor: BridgeWorkspaceActor & { internalRole?: InternalRole | null } }) {
-  const titlesQ = useQuery({ queryKey: bridgeWorkspaceQueryKey("bridge-titles", actor), queryFn: () => listTitles() });
+export function TitleList({ empty, query = "", actor, scope = "catalog" }: { empty: string; query?: string; scope?: "catalog" | "owned"; actor: BridgeWorkspaceActor & { internalRole?: InternalRole | null } }) {
+  const titlesQ = useQuery({ queryKey: [...bridgeWorkspaceQueryKey("bridge-titles", actor), scope], queryFn: () => scope === "owned" ? listTitles({ data: { scope: "owned" } }) : listTitles() });
   const titles = (titlesQ.data?.titles ?? []).filter((t) => !query || `${t.name} ${t.language} ${t.year ?? ""}`.toLowerCase().includes(query.toLowerCase()));
   const [posterUrls, setPosterUrls] = useState<Record<string, string | null>>({});
   const [posterLoading, setPosterLoading] = useState(false);
