@@ -328,8 +328,8 @@ function TitleMetadataEditor({
     onError: (err) => window.alert(err instanceof Error ? err.message : "Could not save title changes"),
   });
   const editableDraft = !actor.internalRole && ["DRAFT", "UPLOADING", "PREPARING"].includes(title.status);
-  const adminEditor = actor.internalRole === "super_admin";
-  const locked = !editableDraft && !adminEditor;
+  const adminEditor = false;
+  const locked = !editableDraft;
   return (
     <section className="space-y-4 rounded-2xl border border-line bg-surface p-5">
       <div><h2 className="font-display text-xl font-semibold">Edit title details</h2><p className="mt-1 text-sm text-muted">{editableDraft ? "Draft metadata saves directly." : adminEditor ? "Super Admin metadata correction." : "Submitted-title changes are sent as a revision request and do not change the live title until approved."}</p></div>
