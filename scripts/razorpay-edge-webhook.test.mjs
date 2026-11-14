@@ -10,7 +10,8 @@ test("external Razorpay function disables Supabase gateway JWT verification", ()
 });
 
 test("fallback event ID awaits the body hash", () => {
-  assert.match(source, /`\$\{e\}:\$\{await sha256\(raw\)\}`/);
+  assert.match(source, /\$\{event\}:\$\{await sha256\(raw\)\}/);
+  assert.match(source, /\$\{event\}:\$\{payment\.id\}/);
   assert.doesNotMatch(source, /\$\{awaitHash\(raw\)\}/);
 });
 
@@ -20,17 +21,21 @@ test("captured Bridge payment is resolved from provider_order_id, not only notes
 });
 
 test("unmatched Bridge capture remains retriable", () => {
-  assert.match(source, /if\s*\(\s*!localPayment\s*\)\s*return\s*await failEvent\(supabase,id,"Bridge order not persisted yet"\)/);
+  assert.match(source, /if\s*\(\s*!localPayment\s*\)\s*return\s*await failEvent\(supabase,\s*id,\s*"Bridge order not persisted yet"\)/);
   assert.match(source, /new Response\(message,\s*\{\s*status:\s*503\s*\}\)/);
 });
 
-test("entitlement and title transition happen before webhook is marked processed", () => {
-  const entitlement = source.indexOf('from("bridge_entitlements").upsert');
-  const transition = source.indexOf('from("bridge_titles").update');
+test("ordinary and package entitlements happen before webhook is marked processed", () => {
+  const entitlement = source.indexOf('from("bridge_entitlements")');
+  const packageEntitlement = source.indexOf('from("bridge_package_entitlements")');
+  const titleUpdate = source.indexOf('.update({ status: "LICENSED"');
   const processed = source.search(/status\s*:\s*"processed"/);
-  assert.ok(entitlement >= 0 && transition >= 0 && processed >= 0);
+  assert.ok(entitlement >= 0 && packageEntitlement >= 0 && titleUpdate >= 0 && processed >= 0);
   assert.ok(entitlement < processed);
-  assert.ok(transition < processed);
+  assert.ok(packageEntitlement < processed);
+  assert.ok(titleUpdate < processed);
+  assert.match(source, /bridge_assert_buyer_publishable/);
+  assert.match(source, /localPayment\.purpose !== "title_license"/);
 });
 
 

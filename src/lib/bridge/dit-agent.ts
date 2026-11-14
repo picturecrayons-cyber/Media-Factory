@@ -1,4 +1,4 @@
-import { createServerFn } from "@tanstack/react-start";
+import { createServerFn, createServerOnlyFn } from "@tanstack/react-start";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { authMiddleware } from "@/lib/auth/middleware";
@@ -6,6 +6,13 @@ import { getSql } from "@/lib/db";
 import { requireVerifiedActor } from "./session";
 import { assertNotDevUser } from "./guards";
 import { ditManifestDigest, ditManifestTotals, normalizeDitFiles } from "./dit-manifest";
+const loadDitOciStorage = createServerOnlyFn(async () => {
+  const [{ bridgeEnv }, storage] = await Promise.all([
+    import("./env"),
+    import("./oci-object-storage.server"),
+  ]);
+  return { bridgeEnv, ...storage };
+});
 
 const manifestFile = z.object({
   relativePath: z.string().min(1).max(1024),
@@ -32,6 +39,14 @@ const copyInput = z.object({
   copyType,
   copyRoot: z.string().trim().min(1).max(1000),
   manifest: manifestInput,
+});
+const uploadFileInput = z.object({
+  sessionId: z.string().uuid(),
+  relativePath: z.string().trim().min(1).max(1024),
+});
+const verifyFileInput = z.object({
+  sessionId: z.string().uuid(),
+  relativePath: z.string().trim().min(1).max(1024),
 });
 const signoffInput = z.object({
   sessionId: z.string().uuid(),
@@ -240,6 +255,186 @@ export const createDitIngestSession = createServerFn({ method: "POST" })
     return { sessionId: id, titleName: title.name, fileCount: totals.fileCount, totalBytes: totals.totalBytes, manifestSha256: digest };
   });
 
+/** Issue a short-lived OCI upload URL for one manifest file in the Primary Vault. */
+export const requestDitFileUpload = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(uploadFileInput)
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireDitOperator(context.userId);
+    const sql = await getSql();
+    const session = await requireSession(sql, data.sessionId, actor.organizationId!);
+    if (session.status === "SIGNED_OFF") throw new Error("A signed-off DIT session is locked");
+
+    const { bridgeEnv, signUpload } = await loadDitOciStorage();
+    const primaryBucket = bridgeEnv.ociBucket();
+    const recoveryBucket = bridgeEnv.ociRecoveryBucket();
+    if (!primaryBucket || !recoveryBucket) {
+      throw new Error("DIT media transfer is disabled until OCI Primary and Recovery buckets are configured");
+    }
+    if (primaryBucket === recoveryBucket) {
+      throw new Error("OCI Primary and Recovery Vault must use different buckets");
+    }
+
+    const manifestFiles = await sql<{ byte_size: number | string; sha256: string }>`
+      select byte_size, sha256
+      from bridge_dit_ingest_files
+      where session_id = ${data.sessionId}::uuid and relative_path = ${data.relativePath}
+      limit 1
+    `;
+    const manifestFile = manifestFiles[0];
+    if (!manifestFile) throw new Error("File is not present in the registered camera-card manifest");
+
+    const prior = await sql<{ status: string }>`
+      select status from bridge_dit_storage_objects
+      where session_id = ${data.sessionId}::uuid
+        and relative_path = ${data.relativePath}
+        and copy_type = 'PRIMARY'
+      limit 1
+    `;
+    if (prior[0]?.status === "VERIFIED") {
+      return { alreadyUploaded: true as const, relativePath: data.relativePath };
+    }
+
+    const objectKey = `bridge-dit/${actor.organizationId}/${data.sessionId}/PRIMARY/${data.relativePath}`;
+    const signed = await signUpload({
+      key: objectKey,
+      contentType: "application/octet-stream",
+      expiresIn: 3600,
+      bucket: primaryBucket,
+    });
+    await sql`
+      insert into bridge_dit_storage_objects (
+        session_id, relative_path, copy_type, bucket_name, object_key,
+        sha256, byte_size, status, created_by, updated_at
+      ) values (
+        ${data.sessionId}::uuid, ${data.relativePath}, 'PRIMARY', ${primaryBucket},
+        ${objectKey}, ${manifestFile.sha256.toLowerCase()}, ${Number(manifestFile.byte_size)},
+        'UPLOAD_PENDING', ${actor.userId}, now()
+      )
+      on conflict (session_id, relative_path, copy_type) do update set
+        bucket_name = excluded.bucket_name,
+        object_key = excluded.object_key,
+        sha256 = excluded.sha256,
+        byte_size = excluded.byte_size,
+        etag = null,
+        status = 'UPLOAD_PENDING',
+        verified_at = null,
+        created_by = excluded.created_by,
+        updated_at = now()
+    `;
+    return { alreadyUploaded: false as const, relativePath: data.relativePath, upload: signed };
+  });
+
+/** Verify the uploaded Primary object from OCI, copy it to Recovery, and verify the bytes again. */
+export const verifyDitFileUpload = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(verifyFileInput)
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireDitOperator(context.userId);
+    const sql = await getSql();
+    const session = await requireSession(sql, data.sessionId, actor.organizationId!);
+    if (session.status === "SIGNED_OFF") throw new Error("A signed-off DIT session is locked");
+
+    const { bridgeEnv, verifyObject, verifyObjectSha256, sealVerifiedObject } = await loadDitOciStorage();
+    const primaryBucket = bridgeEnv.ociBucket();
+    const recoveryBucket = bridgeEnv.ociRecoveryBucket();
+    if (!primaryBucket || !recoveryBucket || primaryBucket === recoveryBucket) {
+      throw new Error("Separate OCI Primary and Recovery buckets are required for DIT verification");
+    }
+    const rows = await sql<{
+      object_key: string; sha256: string; byte_size: number | string; status: string;
+    }>`
+      select object_key, sha256, byte_size, status
+      from bridge_dit_storage_objects
+      where session_id = ${data.sessionId}::uuid
+        and relative_path = ${data.relativePath}
+        and copy_type = 'PRIMARY'
+        and bucket_name = ${primaryBucket}
+      limit 1
+    `;
+    const primary = rows[0];
+    if (!primary) throw new Error("Primary upload has not been registered");
+    if (primary.status === "VERIFIED") {
+      return { verified: true as const, alreadyVerified: true as const, relativePath: data.relativePath };
+    }
+
+    const sourceMeta = await verifyObject(primary.object_key, "application/octet-stream", primaryBucket);
+    if (sourceMeta.byteSize !== Number(primary.byte_size) || !sourceMeta.etag) {
+      throw new Error("Primary OCI object size or ETag does not match the source manifest");
+    }
+    const sourceHash = await verifyObjectSha256(
+      primary.object_key,
+      primary.sha256,
+      Number(primary.byte_size),
+      primaryBucket,
+    );
+    const recoveryKey = `bridge-dit/${actor.organizationId}/${data.sessionId}/RECOVERY/${data.relativePath}`;
+    await sealVerifiedObject(primary.object_key, recoveryKey, sourceMeta.etag, undefined, recoveryBucket);
+    const recoveryMeta = await verifyObject(recoveryKey, "application/octet-stream", recoveryBucket);
+    if (recoveryMeta.byteSize !== Number(primary.byte_size) || !recoveryMeta.etag) {
+      throw new Error("Recovery OCI object size does not match the source manifest");
+    }
+    const recoveryHash = await verifyObjectSha256(
+      recoveryKey,
+      primary.sha256,
+      Number(primary.byte_size),
+      recoveryBucket,
+    );
+    if (sourceHash.sha256 !== recoveryHash.sha256) {
+      throw new Error("Primary and Recovery OCI SHA-256 values differ");
+    }
+
+    await sql.transaction(async (tx) => {
+      await tx`
+        update bridge_dit_storage_objects
+        set status = 'VERIFIED', etag = ${sourceMeta.etag}, verified_at = now(), updated_at = now()
+        where session_id = ${data.sessionId}::uuid
+          and relative_path = ${data.relativePath}
+          and copy_type = 'PRIMARY'
+          and bucket_name = ${primaryBucket}
+      `;
+      await tx`
+        insert into bridge_dit_storage_objects (
+          session_id, relative_path, copy_type, bucket_name, object_key,
+          sha256, byte_size, etag, status, verified_at, created_by, updated_at
+        ) values (
+          ${data.sessionId}::uuid, ${data.relativePath}, 'RECOVERY', ${recoveryBucket},
+          ${recoveryKey}, ${recoveryHash.sha256}, ${recoveryHash.byteSize},
+          ${recoveryMeta.etag}, 'VERIFIED', now(), ${actor.userId}, now()
+        )
+        on conflict (session_id, relative_path, copy_type) do update set
+          bucket_name = excluded.bucket_name,
+          object_key = excluded.object_key,
+          sha256 = excluded.sha256,
+          byte_size = excluded.byte_size,
+          etag = excluded.etag,
+          status = 'VERIFIED',
+          verified_at = now(),
+          created_by = excluded.created_by,
+          updated_at = now()
+      `;
+      await audit(tx, actor.userId, "dit.file_primary_recovery_verified", data.sessionId, {
+        relativePath: data.relativePath,
+        primaryBucket,
+        recoveryBucket,
+        byteSize: sourceHash.byteSize,
+        sha256: sourceHash.sha256,
+      });
+    });
+    return {
+      verified: true as const,
+      alreadyVerified: false as const,
+      relativePath: data.relativePath,
+      byteSize: sourceHash.byteSize,
+      sha256: sourceHash.sha256,
+      primaryBucket,
+      recoveryBucket,
+    };
+  });
+
+/** A copy manifest is accepted only when every file has matching server-verified OCI object evidence. */
 export const recordDitCopyVerification = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(copyInput)
@@ -252,9 +447,28 @@ export const recordDitCopyVerification = createServerFn({ method: "POST" })
     const files = normalizeDitFiles(data.manifest.files);
     const digest = ditManifestDigest(files);
     const totals = ditManifestTotals(files);
+    const { bridgeEnv } = await loadDitOciStorage();
+    const expectedBucket = data.copyType === "PRIMARY"
+      ? bridgeEnv.ociBucket()
+      : bridgeEnv.ociRecoveryBucket();
+    if (!expectedBucket) throw new Error("The requested OCI vault is not configured");
+
+    const evidence = await sql<{ count: number }>`
+      select count(*)::int as count
+      from bridge_dit_ingest_files f
+      join bridge_dit_storage_objects o
+        on o.session_id = f.session_id and o.relative_path = f.relative_path
+      where f.session_id = ${data.sessionId}::uuid
+        and o.copy_type = ${data.copyType}
+        and o.bucket_name = ${expectedBucket}
+        and o.status = 'VERIFIED'
+        and o.sha256 = f.sha256
+        and o.byte_size = f.byte_size
+    `;
     const verified = digest === session.source_manifest_sha256
       && totals.fileCount === Number(session.source_file_count)
-      && totals.totalBytes === Number(session.source_total_bytes);
+      && totals.totalBytes === Number(session.source_total_bytes)
+      && Number(evidence[0]?.count ?? 0) === totals.fileCount;
     await sql.transaction(async (tx) => {
       await tx`
         insert into bridge_dit_copy_verifications (
@@ -283,9 +497,10 @@ export const recordDitCopyVerification = createServerFn({ method: "POST" })
       `;
       await audit(tx, actor.userId, verified ? "dit.copy_verified" : "dit.copy_mismatch", data.sessionId, {
         copyType: data.copyType, fileCount: totals.fileCount, totalBytes: totals.totalBytes,
-        manifestSha256: digest, verified,
+        manifestSha256: digest, verified, verifiedObjects: Number(evidence[0]?.count ?? 0),
       });
     });
+    if (!verified) throw new Error("Copy verification is incomplete: every source file must exist in the configured OCI vault with matching size and SHA-256");
     return { verified, copyType: data.copyType, fileCount: totals.fileCount, totalBytes: totals.totalBytes, manifestSha256: digest };
   });
 
@@ -312,8 +527,34 @@ export const signOffDitIngestSession = createServerFn({ method: "POST" })
         where session_id = ${data.sessionId}::uuid
       `;
       const verifiedTypes = new Set(copies.filter((copy) => copy.verified).map((copy) => copy.copy_type));
-      if (!verifiedTypes.has("PRIMARY") || !verifiedTypes.has("RECOVERY")) {
-        throw new Error("Primary Vault and Recovery Vault copies must both match the source manifest before sign-off");
+      const { bridgeEnv } = await loadDitOciStorage();
+      const primaryBucket = bridgeEnv.ociBucket();
+      const recoveryBucket = bridgeEnv.ociRecoveryBucket();
+      if (!primaryBucket || !recoveryBucket || primaryBucket === recoveryBucket) {
+        throw new Error("Distinct OCI Primary and Recovery buckets are required before DIT sign-off");
+      }
+      const actualCopies = await tx<{ primary_count: number; recovery_count: number; source_count: number }>`
+        select
+          (select count(*)::int from bridge_dit_ingest_files f
+            join bridge_dit_storage_objects o on o.session_id=f.session_id and o.relative_path=f.relative_path
+            where f.session_id=${data.sessionId}::uuid and o.copy_type='PRIMARY'
+              and o.bucket_name=${primaryBucket} and o.status='VERIFIED'
+              and o.sha256=f.sha256 and o.byte_size=f.byte_size) as primary_count,
+          (select count(*)::int from bridge_dit_ingest_files f
+            join bridge_dit_storage_objects o on o.session_id=f.session_id and o.relative_path=f.relative_path
+            where f.session_id=${data.sessionId}::uuid and o.copy_type='RECOVERY'
+              and o.bucket_name=${recoveryBucket} and o.status='VERIFIED'
+              and o.sha256=f.sha256 and o.byte_size=f.byte_size) as recovery_count,
+          (select count(*)::int from bridge_dit_ingest_files f
+            where f.session_id=${data.sessionId}::uuid) as source_count
+      `;
+      const evidence = actualCopies[0];
+      const sourceCount = Number(evidence?.source_count ?? 0);
+      if (!verifiedTypes.has("PRIMARY") || !verifiedTypes.has("RECOVERY") ||
+          sourceCount === 0 ||
+          Number(evidence?.primary_count ?? 0) !== sourceCount ||
+          Number(evidence?.recovery_count ?? 0) !== sourceCount) {
+        throw new Error("Sign-off is blocked until every source file has matching OCI Primary and Recovery objects verified by SHA-256");
       }
       await tx`
         update bridge_dit_ingest_sessions set status = 'SIGNED_OFF', signoff_note = ${data.signoffNote},

@@ -133,7 +133,7 @@ export const createLanguageRight = createServerFn({ method: "POST" })
         ${id}, ${data.titleId}, ${data.language.trim()}, ${data.rightType},
         ${JSON.stringify(data.territories)}, ${JSON.stringify(data.media)},
         ${start}, ${end}, ${data.exclusivity}, ${data.askingPricePaise},
-        ${JSON.stringify(data.evidence)}, ${"VALID"}, ${actor.userId}
+        ${JSON.stringify(data.evidence)}, ${"DRAFT"}, ${actor.userId}
       )
     `;
     await writeAudit({
@@ -320,4 +320,45 @@ export const authorizeLanguagePackage = createServerFn({ method: "POST" })
       metadata: { titleId: pkg.title_id, assetVersionIds: [...new Set(selectedAssetIds)], destination: "CRAYONS_LOOP" },
     });
     return { packageId: pkg.id, titleId: pkg.title_id, deliveryStatus: "AUTHORIZED", assetVersionIds: [...new Set(selectedAssetIds)] };
+  });
+
+
+/** Legal review is a separate decision; creating a right never validates it. */
+export const approveLanguageRight = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({ rightId: z.string().uuid(), evidenceNote: z.string().trim().min(8).max(1000) }))
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    assertPermission(actor, "title.rights_review");
+    const sql = await getSql();
+    const rows = await sql<{ id: string; title_id: string; status: string; created_by: string }>`
+      select id, title_id, status, created_by
+      from bridge_language_rights
+      where id = ${data.rightId}::uuid
+      limit 1
+    `;
+    const right = rows[0];
+    if (!right || right.status !== "DRAFT") throw new Error("Only a draft language right can be reviewed");
+    if (right.created_by === actor.userId && actor.internalRole !== "super_admin") {
+      throw new Error("A language-right submission must be reviewed by a different authorized person");
+    }
+    const title = await loadTitle(right.title_id);
+    if (!title || (!canReadTitle(actor, title) && actor.internalRole !== "super_admin")) {
+      throw new Error("Not found");
+    }
+    await sql.transaction(async (tx) => {
+      await tx`
+        update bridge_language_rights set status = 'VALID', updated_at = now()
+        where id = ${data.rightId}::uuid and status = 'DRAFT'
+      `;
+      await writeAudit({
+        actorUserId: actor.userId,
+        action: "rights.language_validated",
+        entityType: "bridge_language_right",
+        entityId: data.rightId,
+        metadata: { titleId: right.title_id, evidenceNote: data.evidenceNote, submittedBy: right.created_by },
+      }, tx);
+    });
+    return { rightId: data.rightId, status: "VALID" as const };
   });

@@ -1,4 +1,4 @@
-import { createServerFn } from "@tanstack/react-start";
+import { createServerFn, createServerOnlyFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { createHash, randomBytes } from "node:crypto";
 import { authMiddleware } from "@/lib/auth/middleware";
@@ -11,6 +11,7 @@ import { loadTitle, recordTransition } from "./titles";
 import { writeAudit } from "./audit";
 import { assertBuyerPublishable } from "./buyer-visibility";
 import { assertNotDevUser } from "./guards";
+
 
 function requireRazorpayKeys() {
   const keyId = bridgeEnv.razorpayKeyId();
@@ -42,6 +43,87 @@ type RzPayment = {
   currency: string;
 };
 
+const loadBridgeMail = createServerOnlyFn(() => import("./mail.server"));
+
+async function sendLicenseReceiptEmail(
+  sql: Awaited<ReturnType<typeof getSql>>,
+  userId: string,
+  titleId: string,
+  paymentId: string,
+  packageLicense: boolean,
+) {
+  const { formatBrandedEmailHtml, sendTransactionalEmail } = await loadBridgeMail();
+  const [profiles, titles] = await Promise.all([
+    sql<{ email: string | null; display_name: string | null }>`
+      select email, display_name from bridge_profiles where user_id = ${userId} limit 1
+    `,
+    sql<{ name: string }>`select name from bridge_titles where id = ${titleId} limit 1`,
+  ]);
+  const email = profiles[0]?.email?.trim();
+  if (!email) return;
+  const titleName = titles[0]?.name ?? "your licensed title";
+  const subject = `Crayons Bridge licence payment confirmed: ${titleName}`;
+  const textBody = `Payment received and licence entitlement recorded for ${titleName}. Payment reference: ${paymentId}. Open your Bridge buyer workspace: https://www.crayonspictures.in/buyer`;
+  const htmlBody = formatBrandedEmailHtml(
+    subject,
+    `<p>Payment received and licence entitlement recorded for <strong>${titleName}</strong>.</p><p>Payment reference: ${paymentId}</p>`,
+    { label: "Open buyer workspace", url: "https://www.crayonspictures.in/buyer" },
+  );
+  await sql`
+    insert into bridge_notification_outbox (
+      event_key, recipient_email, subject, text_body, html_body
+    ) values (
+      ${`bridge-license:${paymentId}`}, ${email}, ${subject}, ${textBody}, ${htmlBody}
+    ) on conflict (event_key) do nothing
+  `;
+  const claimed = await sql<{
+    id: string; recipient_email: string; subject: string; text_body: string; html_body: string | null;
+    attempts: number;
+  }>`
+    update bridge_notification_outbox
+    set status = 'sending', attempts = attempts + 1, processing_started_at = now(), updated_at = now()
+    where event_key = ${`bridge-license:${paymentId}`}
+      and next_attempt_at <= now()
+      and (
+        status in ('pending','failed')
+        or (status = 'sending' and processing_started_at < now() - interval '10 minutes')
+      )
+    returning id, recipient_email, subject, text_body, html_body, attempts
+  `;
+  const outbox = claimed[0];
+  if (!outbox) return;
+  try {
+    const result = await sendTransactionalEmail({
+      to: outbox.recipient_email,
+      subject: outbox.subject,
+      text: outbox.text_body,
+      html: outbox.html_body ?? undefined,
+      category: packageLicense ? "bridge_package_license_captured" : "bridge_license_captured",
+    });
+    await sql`
+      update bridge_notification_outbox
+      set status = 'sent', sent_at = now(), provider_message_id = ${result.messageId ?? null},
+          last_error = null, processing_started_at = null, updated_at = now()
+      where id = ${outbox.id}::uuid
+    `;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "mail_delivery_failed";
+    await sql`
+      update bridge_notification_outbox
+      set status = 'failed',
+          last_error = ${message.slice(0, 500)},
+          next_attempt_at = now() + make_interval(mins => least(60, greatest(1, power(2, least(attempts, 6))::int))),
+          processing_started_at = null,
+          updated_at = now()
+      where id = ${outbox.id}::uuid
+    `;
+    console.warn("Bridge licence receipt notification queued for retry", {
+      paymentId,
+      error: message,
+    });
+  }
+}
+
 export async function grantFromCapturedPayment(opts: {
   orderId: string;
   paymentId: string;
@@ -64,8 +146,10 @@ export async function grantFromCapturedPayment(opts: {
     currency: string;
     provider_payment_id: string | null;
     package_id: string | null;
+    purpose: string;
+    provider: string;
   }>`
-    select id, user_id, title_id, package_id, amount_paise, status, currency, provider_payment_id
+    select id, user_id, title_id, package_id, amount_paise, status, currency, provider_payment_id, purpose, provider
     from bridge_payments where provider_order_id = ${opts.orderId} limit 1
   `;
   const payment = rows[0];
@@ -80,16 +164,22 @@ export async function grantFromCapturedPayment(opts: {
     throw new Error("Payment does not belong to this account");
   }
 
-  await sql`
-    update bridge_payments
-    set status = ${"captured"},
-        provider_payment_id = ${opts.paymentId},
-        verified_at = now()
-    where id = ${payment.id} and status <> 'captured'
-  `;
-
   if (!payment.title_id) {
+    await sql`
+      update bridge_payments
+      set status = 'captured', provider_payment_id = ${opts.paymentId}, verified_at = now()
+      where id = ${payment.id} and status <> 'captured'
+    `;
     return { paymentId: payment.id, entitled: false };
+  }
+  if (payment.purpose !== "title_license" || payment.provider !== "razorpay") {
+    throw new Error("Payment is not a Bridge title-licensing order");
+  }
+
+  // Re-check buyer visibility immediately before granting a new title entitlement.
+  // A retry after our own capture can finish an interrupted idempotent grant.
+  if (payment.status !== "captured") {
+    await assertBuyerPublishable(payment.title_id);
   }
 
   if (payment.package_id) {
@@ -100,6 +190,14 @@ export async function grantFromCapturedPayment(opts: {
       limit 1
     `;
     if (!pkg[0]) throw new Error("License package not found");
+    if (!["IN_NEGOTIATION", "LICENSED"].includes(pkg[0].status)) {
+      throw new Error("License package is not in an active buyer negotiation");
+    }
+    await sql`
+      update bridge_payments
+      set status = 'captured', provider_payment_id = ${opts.paymentId}, verified_at = now()
+      where id = ${payment.id} and status <> 'captured'
+    `;
     await sql`
       insert into bridge_package_entitlements (package_id, title_id, buyer_user_id, payment_id)
       values (${pkg[0].id}, ${payment.title_id}, ${payment.user_id}, ${payment.id})
@@ -117,9 +215,15 @@ export async function grantFromCapturedPayment(opts: {
       entityId: pkg[0].id,
       metadata: { titleId: payment.title_id, paymentId: payment.id },
     });
+    await sendLicenseReceiptEmail(sql, payment.user_id, payment.title_id, payment.id, true);
     return { paymentId: payment.id, entitled: true, titleId: payment.title_id, packageId: pkg[0].id };
   }
 
+  await sql`
+    update bridge_payments
+    set status = 'captured', provider_payment_id = ${opts.paymentId}, verified_at = now()
+    where id = ${payment.id} and status <> 'captured'
+  `;
   await sql`
     insert into bridge_entitlements (user_id, title_id, payment_id, access_type)
     values (${payment.user_id}, ${payment.title_id}, ${payment.id}, ${"license"})
@@ -144,6 +248,7 @@ export async function grantFromCapturedPayment(opts: {
     entityId: payment.id,
     metadata: { titleId: payment.title_id },
   });
+  await sendLicenseReceiptEmail(sql, payment.user_id, payment.title_id, payment.id, false);
 
   return { paymentId: payment.id, entitled: true, titleId: payment.title_id };
 }

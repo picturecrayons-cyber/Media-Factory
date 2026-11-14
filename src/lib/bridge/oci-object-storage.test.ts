@@ -315,3 +315,121 @@ test("OCI copy fails closed when copyObject returns precondition error 412", asy
   }
 });
 
+
+
+test("OCI Recovery copy uses a distinct destination bucket and verifies the Recovery object", async () => {
+  const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  const values = {
+    OCI_TENANCY_OCID: "test-tenancy",
+    OCI_USER_OCID: "test-user",
+    OCI_PRIVATE_KEY: privateKey.export({ type: "pkcs8", format: "pem" }).toString(),
+    OCI_FINGERPRINT: "test-fingerprint",
+    OCI_REGION: "ap-mumbai-1",
+    OCI_NAMESPACE: "test-namespace",
+    OCI_BUCKET_NAME: "primary-vault",
+    OCI_RECOVERY_BUCKET_NAME: "recovery-vault",
+  };
+  const saved = Object.fromEntries(Object.keys(values).map((key) => [key, process.env[key]]));
+  const originalFetch = globalThis.fetch;
+  Object.assign(process.env, values);
+  try {
+    const calls: Array<{ url: URL; method: string; body?: string }> = [];
+    globalThis.fetch = async (input, init) => {
+      const url = new URL(String(input));
+      const method = init?.method || "GET";
+      calls.push({ url, method, body: typeof init?.body === "string" ? init.body : undefined });
+      if (method === "POST") {
+        assert.equal(url.pathname, "/n/test-namespace/b/primary-vault/actions/copyObject");
+        const body = JSON.parse(String(init?.body));
+        assert.equal(body.destinationBucket, "recovery-vault");
+        assert.equal(body.sourceObjectIfMatch, "source-etag");
+        return new Response(null, { status: 202, headers: { "opc-work-request-id": "recovery-copy/1" } });
+      }
+      if (method === "GET") {
+        assert.equal(url.pathname, "/workRequests/recovery-copy%2F1");
+        return Response.json({ status: "COMPLETED" });
+      }
+      assert.equal(method, "HEAD");
+      assert.equal(url.pathname, "/n/test-namespace/b/recovery-vault/o/recovery-key");
+      return new Response(null, { status: 200, headers: { "content-length": "12", etag: '"recovery-etag"' } });
+    };
+    const result = await sealVerifiedObject("source-key", "recovery-key", "source-etag", undefined, "recovery-vault");
+    assert.equal(result.byteSize, 12);
+    assert.equal(result.etag, "recovery-etag");
+    assert.deepEqual(calls.map((call) => call.method), ["POST", "GET", "HEAD"]);
+  } finally {
+    globalThis.fetch = originalFetch;
+    for (const [key, value] of Object.entries(saved)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+});
+
+test("OCI SHA-256 read-back streams object bytes from the specified bucket", async () => {
+  const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  const values = {
+    OCI_TENANCY_OCID: "test-tenancy",
+    OCI_USER_OCID: "test-user",
+    OCI_PRIVATE_KEY: privateKey.export({ type: "pkcs8", format: "pem" }).toString(),
+    OCI_FINGERPRINT: "test-fingerprint",
+    OCI_REGION: "ap-mumbai-1",
+    OCI_NAMESPACE: "test-namespace",
+    OCI_BUCKET_NAME: "primary-vault",
+    OCI_RECOVERY_BUCKET_NAME: "recovery-vault",
+  };
+  const saved = Object.fromEntries(Object.keys(values).map((key) => [key, process.env[key]]));
+  const originalFetch = globalThis.fetch;
+  Object.assign(process.env, values);
+  try {
+    globalThis.fetch = async (input, init) => {
+      const url = new URL(String(input));
+      assert.equal(init?.method, "GET");
+      assert.equal(url.pathname, "/n/test-namespace/b/recovery-vault/o/verified-key");
+      return new Response("hello world!", { status: 200, headers: { "content-length": "12" } });
+    };
+    const { createHash } = await import("node:crypto");
+    const sha256 = createHash("sha256").update("hello world!").digest("hex");
+    const result = await (await import("./oci-object-storage.server.ts")).verifyObjectSha256(
+      "verified-key", sha256, 12, "recovery-vault",
+    );
+    assert.equal(result.bucket, "recovery-vault");
+    assert.equal(result.byteSize, 12);
+    assert.equal(result.sha256, sha256);
+  } finally {
+    globalThis.fetch = originalFetch;
+    for (const [key, value] of Object.entries(saved)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+});
+
+test("OCI SHA-256 read-back rejects a byte-for-byte mismatch", async () => {
+  const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  const values = {
+    OCI_TENANCY_OCID: "test-tenancy",
+    OCI_USER_OCID: "test-user",
+    OCI_PRIVATE_KEY: privateKey.export({ type: "pkcs8", format: "pem" }).toString(),
+    OCI_FINGERPRINT: "test-fingerprint",
+    OCI_REGION: "ap-mumbai-1",
+    OCI_NAMESPACE: "test-namespace",
+    OCI_BUCKET_NAME: "primary-vault",
+  };
+  const saved = Object.fromEntries(Object.keys(values).map((key) => [key, process.env[key]]));
+  const originalFetch = globalThis.fetch;
+  Object.assign(process.env, values);
+  try {
+    globalThis.fetch = async () => new Response("different", { status: 200, headers: { "content-length": "9" } });
+    const { createHash } = await import("node:crypto");
+    const sha256 = createHash("sha256").update("expected").digest("hex");
+    const { verifyObjectSha256 } = await import("./oci-object-storage.server.ts");
+    await assert.rejects(verifyObjectSha256("object-key", sha256, 9), /SHA-256 mismatch/);
+  } finally {
+    globalThis.fetch = originalFetch;
+    for (const [key, value] of Object.entries(saved)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+});

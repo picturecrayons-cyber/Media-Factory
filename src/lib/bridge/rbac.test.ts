@@ -60,7 +60,8 @@ describe("PRD authorization matrix", () => {
   it("admin receives only explicit staff permissions, not account-type mutation powers", () => {
     const a = admin();
     assert.equal(hasPermission(a, "title.read_catalog"), true);
-    assert.equal(hasPermission(a, "title.qc_review"), true);
+    assert.equal(hasPermission(a, "title.qc_review"), false);
+    assert.equal(hasPermission(a, "title.rights_review"), false);
     assert.equal(hasPermission(a, "users.invite_internal"), true);
     assert.equal(hasPermission(a, "title.create"), false);
     assert.equal(hasPermission(a, "title.update_own"), false);
@@ -230,4 +231,28 @@ it("CMS ingest belongs only to verified super admins", () => {
   assert.equal(hasPermission(superAdmin(), "title.ingest_internal"), true);
   for (const a of [creator(), studio(), buyer(), admin(), viewer(), qc, legal, finance])
     assert.equal(hasPermission(a, "title.ingest_internal"), false);
+});
+
+
+it("reserves final approval, duplicate merge, and Loop publication to Super Admin", () => {
+  const privileged = superAdmin();
+  for (const staff of [admin(), viewer(), qc, legal, finance]) {
+    assert.equal(hasPermission(staff, "title.approve"), false);
+    assert.equal(hasPermission(staff, "title.merge_duplicate"), false);
+    assert.equal(hasPermission(staff, "loop.publish"), false);
+    assert.equal(hasPermission(staff, "loop.revoke"), false);
+    assert.equal(hasPermission(staff, "loop.certify_playback"), false);
+  }
+  assert.equal(hasPermission(privileged, "title.approve"), true);
+  assert.equal(hasPermission(privileged, "title.merge_duplicate"), true);
+  assert.equal(hasPermission(privileged, "loop.publish"), true);
+  assert.equal(hasPermission(privileged, "loop.revoke"), true);
+  assert.equal(hasPermission(privileged, "loop.certify_playback"), true);
+  assert.equal(hasPermission(qc, "title.qc_review"), true);
+  assert.equal(hasPermission(legal, "title.rights_review"), true);
+  assert.equal(hasPermission(admin(), "title.license"), true);
+  assert.equal(hasPermission(admin(), "title.qc_review"), false);
+  assert.equal(hasPermission(admin(), "title.rights_review"), false);
+  assert.equal(hasPermission(qc, "title.rights_review"), false);
+  assert.equal(hasPermission(legal, "title.qc_review"), false);
 });

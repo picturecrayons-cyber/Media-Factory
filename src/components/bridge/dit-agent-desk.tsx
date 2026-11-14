@@ -1,11 +1,13 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import {
   createDitIngestSession,
   getDitWorkspace,
   recordDitCopyVerification,
+  requestDitFileUpload,
   signOffDitIngestSession,
+  verifyDitFileUpload,
 } from "@/lib/bridge/dit-agent";
 
 type StudioActor = {
@@ -18,7 +20,6 @@ type ManifestDraft = {
   root?: string;
   files: Array<{ relativePath: string; byteSize: number; sha256: string }>;
 };
-type CopyType = "PRIMARY" | "RECOVERY";
 type Attestations = { folders: boolean; names: boolean; card: boolean };
 
 async function readManifest(file: File): Promise<ManifestDraft> {
@@ -45,31 +46,99 @@ export function DitAgentDesk({ actor }: { actor: StudioActor }) {
   const [sourceVolume, setSourceVolume] = useState("");
   const [sourceRoot, setSourceRoot] = useState("");
   const [sourceManifest, setSourceManifest] = useState<ManifestDraft | null>(null);
-  const [copyFiles, setCopyFiles] = useState<Record<string, Partial<Record<CopyType, ManifestDraft>>>>({});
-  const [copyRoots, setCopyRoots] = useState<Record<string, Partial<Record<CopyType, string>>>>({});
+  const [sourceMediaFiles, setSourceMediaFiles] = useState<File[]>([]);
+  const [uploadProgress, setUploadProgress] = useState<{ completed: number; total: number } | null>(null);
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  const folderInputRef = useRef<HTMLInputElement>(null);
   const [attestations, setAttestations] = useState<Record<string, Attestations>>({});
   const [signoffNotes, setSignoffNotes] = useState<Record<string, string>>({});
   const [fileError, setFileError] = useState("");
 
   const refresh = async () => queryClient.invalidateQueries({ queryKey });
   const createMutation = useMutation({
-    mutationFn: () => {
+    mutationFn: async () => {
       if (!sourceManifest) throw new Error("Select the source-card manifest first");
-      return createDitIngestSession({ data: {
+      if (!sourceMediaFiles.length) throw new Error("Select the original camera-card folder");
+      const mediaByPath = new Map<string, File>();
+      for (const file of sourceMediaFiles) {
+        const rawPath = file.webkitRelativePath || file.name;
+        const segments = rawPath.replaceAll("\\", "/").split("/").filter(Boolean);
+        const relativePath = segments.length > 1 ? segments.slice(1).join("/") : rawPath;
+        if (mediaByPath.has(relativePath)) throw new Error(`Duplicate selected camera file path: ${relativePath}`);
+        mediaByPath.set(relativePath, file);
+      }
+      if (mediaByPath.size !== sourceManifest.files.length) {
+        throw new Error("Selected camera folder file count does not match the registered manifest");
+      }
+      for (const entry of sourceManifest.files) {
+        const file = mediaByPath.get(entry.relativePath);
+        if (!file || file.size !== entry.byteSize) {
+          throw new Error(`Camera file missing or size mismatch: ${entry.relativePath}`);
+        }
+      }
+
+      const sessionId = activeSessionId ?? (await createDitIngestSession({ data: {
         titleId, cameraUnit, cameraLabel, cardLabel, shootDate, sourceVolume, sourceRoot,
         manifest: sourceManifest,
-      } });
+      } })).sessionId;
+      if (!activeSessionId) setActiveSessionId(sessionId);
+      setUploadProgress({ completed: 0, total: sourceManifest.files.length });
+
+      let nextIndex = 0;
+      let completed = 0;
+      const worker = async () => {
+        while (true) {
+          const index = nextIndex++;
+          const entry = sourceManifest.files[index];
+          if (!entry) return;
+          const file = mediaByPath.get(entry.relativePath);
+          if (!file) throw new Error(`Camera file missing: ${entry.relativePath}`);
+          const request = await requestDitFileUpload({ data: {
+            sessionId: sessionId,
+            relativePath: entry.relativePath,
+          } });
+          if (!request.alreadyUploaded) {
+            const response = await fetch(request.upload.url, {
+              method: "PUT",
+              headers: { "content-type": "application/octet-stream" },
+              body: file,
+              redirect: "error",
+            });
+            if (!response.ok) throw new Error(`OCI Primary upload failed for ${entry.relativePath} (${response.status})`);
+            await verifyDitFileUpload({ data: {
+              sessionId: sessionId,
+              relativePath: entry.relativePath,
+            } });
+          }
+          completed += 1;
+          setUploadProgress({ completed, total: sourceManifest.files.length });
+        }
+      };
+      await Promise.all(Array.from({ length: Math.min(2, sourceManifest.files.length) }, () => worker()));
+
+      for (const type of ["PRIMARY", "RECOVERY"] as const) {
+        await recordDitCopyVerification({ data: {
+          sessionId: sessionId,
+          copyType: type,
+          copyRoot: type === "PRIMARY" ? "OCI Primary Vault" : "OCI Recovery Vault",
+          manifest: sourceManifest,
+        } });
+      }
+      return { sessionId };
     },
     onSuccess: async () => {
       setSourceManifest(null);
+      setSourceMediaFiles([]);
+      setActiveSessionId(null);
+      setUploadProgress(null);
       setCardLabel("");
+      if (folderInputRef.current) folderInputRef.current.value = "";
       await refresh();
     },
-  });
-  const copyMutation = useMutation({
-    mutationFn: (args: { sessionId: string; copyType: CopyType; manifest: ManifestDraft; copyRoot: string }) =>
-      recordDitCopyVerification({ data: args }),
-    onSuccess: refresh,
+    onError: async () => {
+      setUploadProgress(null);
+      await refresh();
+    },
   });
   const signoffMutation = useMutation({
     mutationFn: (args: { sessionId: string; signoffNote: string }) =>
@@ -94,16 +163,9 @@ export function DitAgentDesk({ actor }: { actor: StudioActor }) {
       setFileError(error instanceof Error ? error.message : "Could not read the manifest");
     }
   };
-  const handleCopyFile = async (sessionId: string, type: CopyType, file?: File) => {
-    if (!file) return;
-    try {
-      setFileError("");
-      const manifest = await readManifest(file);
-      setCopyFiles((current) => ({ ...current, [sessionId]: { ...current[sessionId], [type]: manifest } }));
-      setCopyRoots((current) => ({ ...current, [sessionId]: { ...current[sessionId], [type]: manifest.root ?? "" } }));
-    } catch (error) {
-      setFileError(error instanceof Error ? error.message : "Could not read the copy manifest");
-    }
+  const handleSourceFolder = (files: FileList | null) => {
+    setFileError("");
+    setSourceMediaFiles(files ? Array.from(files) : []);
   };
   const sessions = workspace.data?.sessions ?? [];
 
@@ -154,17 +216,30 @@ export function DitAgentDesk({ actor }: { actor: StudioActor }) {
           <label className="space-y-1 text-sm sm:col-span-2">
             <span className="font-medium">Source-card manifest (JSON)</span>
             <input type="file" accept="application/json,.json" className="block w-full text-sm text-muted file:mr-3 file:rounded-full file:border-0 file:bg-accent-soft file:px-4 file:py-2 file:font-semibold file:text-fg" onChange={(event) => void handleSourceFile(event.target.files?.[0])} />
-            {sourceManifest ? <span className="block text-xs text-muted">{sourceManifest.files.length} files loaded</span> : null}
+            {sourceManifest ? <span className="block text-xs text-muted">{sourceManifest.files.length} manifest entries · {formatBytes(sourceManifest.files.reduce((total, file) => total + file.byteSize, 0))}</span> : null}
+          </label>
+          <label className="space-y-1 text-sm sm:col-span-2">
+            <span className="font-medium">Original camera-card folder</span>
+            <input
+              ref={folderInputRef}
+              type="file"
+              multiple
+              className="block w-full text-sm text-muted"
+              onChange={(event) => handleSourceFolder(event.target.files)}
+              {...({ webkitdirectory: "", directory: "" } as Record<string, string>)}
+            />
+            <span className="block text-xs text-muted">{sourceMediaFiles.length} original files selected. Files upload directly from this browser to OCI.</span>
           </label>
         </div>
         {fileError ? <p role="alert" className="mt-3 text-sm text-red-600">{fileError}</p> : null}
         {createMutation.error ? <p role="alert" className="mt-3 text-sm text-red-600">{createMutation.error.message}</p> : null}
         <div className="mt-4 flex flex-wrap items-center gap-3">
-          <Button disabled={createMutation.isPending || !titleId || !cardLabel.trim() || !sourceVolume.trim() || !sourceRoot.trim() || !sourceManifest} onClick={() => createMutation.mutate()}>
-            {createMutation.isPending ? "Registering manifest…" : "Register camera-card manifest"}
+          <Button disabled={createMutation.isPending || !titleId || !cardLabel.trim() || !sourceVolume.trim() || !sourceRoot.trim() || !sourceManifest || !sourceMediaFiles.length} onClick={() => createMutation.mutate()}>
+            {createMutation.isPending ? "Uploading and verifying…" : activeSessionId ? "Resume camera-card ingest" : "Register and ingest camera card"}
           </Button>
-          <span className="text-xs text-muted">The local scanner records file paths, sizes and SHA-256 checksums. It does not alter media.</span>
+          <span className="text-xs text-muted">Original files upload to OCI Primary; Bridge creates and verifies the Recovery copy independently.</span>
         </div>
+        {uploadProgress ? <p className="mt-3 text-xs text-muted" aria-live="polite">Verified {uploadProgress.completed} of {uploadProgress.total} source files in Primary and Recovery Vaults.</p> : null}
       </section>
 
       <section className="space-y-3">
@@ -188,34 +263,34 @@ export function DitAgentDesk({ actor }: { actor: StudioActor }) {
                   <p className="mt-1 text-xs text-muted">{session.title_id} · {session.shoot_date} · {session.source_file_count} files · {formatBytes(Number(session.source_total_bytes))}</p>
                   <p className="mt-1 break-all text-xs text-muted">Source: {session.source_root}</p>
                 </div>
-                <span className="rounded-full border border-line px-3 py-1 text-xs font-semibold">{session.status.replaceAll("_", " ")}</span>
+                <div className="flex items-center gap-2">
+                  <span className="rounded-full border border-line px-3 py-1 text-xs font-semibold">{session.status.replaceAll("_", " ")}</span>
+                  {!signedOff ? <Button size="sm" variant="outline" onClick={() => {
+                    setActiveSessionId(session.id);
+                    setTitleId(session.title_id);
+                    setCameraUnit(session.camera_unit as "A" | "B" | "C");
+                    setCameraLabel(session.camera_label);
+                    setCardLabel(session.card_label);
+                    setShootDate(String(session.shoot_date).slice(0, 10));
+                    setSourceVolume(session.source_volume);
+                    setSourceRoot(session.source_root);
+                  }}>Resume ingest</Button> : null}
+                </div>
               </div>
               <div className="mt-4 grid gap-3 md:grid-cols-2">
                 {(["PRIMARY", "RECOVERY"] as const).map((type) => {
                   const copy = type === "PRIMARY" ? primary : recovery;
-                  const manifest = copyFiles[session.id]?.[type];
                   return (
                     <div key={type} className="rounded-xl border border-line p-3">
                       <div className="flex items-center justify-between gap-2">
                         <p className="font-semibold">{type === "PRIMARY" ? "Primary Vault" : "Recovery Vault"}</p>
-                        <span className="text-xs text-muted">{copy ? copy.verified ? "Checksum matched" : "Mismatch" : "Not checked"}</span>
+                        <span className="text-xs text-muted">{copy ? copy.verified ? "Object read-back verified" : "Verification incomplete" : "Not verified"}</span>
                       </div>
-                      {!signedOff ? <>
-                        <input type="file" accept="application/json,.json" className="mt-3 block w-full text-xs text-muted" onChange={(event) => void handleCopyFile(session.id, type, event.target.files?.[0])} />
-                        <Button size="sm" className="mt-3" disabled={!manifest || copyMutation.isPending} onClick={() => {
-                          if (!manifest) return;
-                          copyMutation.mutate({
-                            sessionId: session.id, copyType: type, manifest,
-                            copyRoot: copyRoots[session.id]?.[type] || manifest.root || "unlabelled-copy-root",
-                          });
-                        }}>Verify {type === "PRIMARY" ? "Primary" : "Recovery"} copy</Button>
-                      </> : null}
-                      {copy ? <p className="mt-2 break-all text-xs text-muted">{copy.fileCount} files · {formatBytes(copy.totalBytes)} · SHA-256 {copy.manifestSha256.slice(0, 16)}…</p> : null}
+                      {copy ? <p className="mt-2 break-all text-xs text-muted">{copy.fileCount} files · {formatBytes(copy.totalBytes)} · Manifest SHA-256 {copy.manifestSha256.slice(0, 16)}…</p> : null}
                     </div>
                   );
                 })}
               </div>
-              {copyMutation.error ? <p role="alert" className="mt-3 text-sm text-red-600">{copyMutation.error.message}</p> : null}
               {!signedOff ? (
                 <div className="mt-4 rounded-xl border border-line p-3">
                   <p className="font-semibold">DIT sign-off checks</p>
@@ -240,7 +315,7 @@ export function DitAgentDesk({ actor }: { actor: StudioActor }) {
         })}
       </section>
       <p className="rounded-xl border border-line p-4 text-xs leading-5 text-muted">
-        Production boundary: this desk records manifests, hashes, Primary/Recovery verification and operator sign-off. It does not itself copy camera media or transfer files to OCI. The operator must complete the approved storage copy separately, then scan each destination and verify its manifest here.
+        Production boundary: the browser uploads original camera files directly to the OCI Primary Vault. Bridge copies each file to a separately configured OCI Recovery Vault, reads both objects back and verifies SHA-256 against the registered source manifest before it permits DIT sign-off.
       </p>
     </div>
   );

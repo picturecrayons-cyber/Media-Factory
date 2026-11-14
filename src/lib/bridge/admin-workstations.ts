@@ -96,7 +96,7 @@ export const setBuyerPublicationGate = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     const actor = await actorFor(context.userId);
     if (!actor.internalRole) throw new Error("Forbidden");
-    assertPermission(actor, "title.license");
+    assertPermission(actor, "title.approve");
     const sql = await getSql();
     const rows = await sql<{ id: string }>`select id from bridge_titles where id = ${data.titleId} limit 1`;
     if (!rows[0]) throw new Error("Title not found");
