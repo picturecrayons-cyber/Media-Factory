@@ -179,7 +179,7 @@ const ROLE_GRANTS: Record<InternalRole, readonly InternalRole[]> = {
   legal_reviewer: [],
   finance: [],
   admin: ["viewer", "qc_reviewer", "legal_reviewer", "finance", "admin"],
-  super_admin: ["viewer", "qc_reviewer", "legal_reviewer", "finance", "admin", "super_admin"],
+  // The designated root administrator is unique. Super Admin may grant every operational role,\n  // but no in-app action may create a second Super Admin identity.\n  super_admin: ["viewer", "qc_reviewer", "legal_reviewer", "finance", "admin"],
 };
 
 export function canGrantInternalRole(actor: Actor, role: InternalRole): boolean {
