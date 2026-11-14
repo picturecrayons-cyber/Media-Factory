@@ -147,6 +147,11 @@ export async function grantFromCapturedPayment(opts: {
       throw new Error("License package is not in an active buyer negotiation");
     }
     await sql`
+      update bridge_payments
+      set status = 'captured', provider_payment_id = ${opts.paymentId}, verified_at = now()
+      where id = ${payment.id} and status <> 'captured'
+    `;
+    await sql`
       insert into bridge_package_entitlements (package_id, title_id, buyer_user_id, payment_id)
       values (${pkg[0].id}, ${payment.title_id}, ${payment.user_id}, ${payment.id})
       on conflict (package_id, buyer_user_id) do nothing
@@ -167,6 +172,11 @@ export async function grantFromCapturedPayment(opts: {
     return { paymentId: payment.id, entitled: true, titleId: payment.title_id, packageId: pkg[0].id };
   }
 
+  await sql`
+    update bridge_payments
+    set status = 'captured', provider_payment_id = ${opts.paymentId}, verified_at = now()
+    where id = ${payment.id} and status <> 'captured'
+  `;
   await sql`
     insert into bridge_entitlements (user_id, title_id, payment_id, access_type)
     values (${payment.user_id}, ${payment.title_id}, ${payment.id}, ${"license"})
