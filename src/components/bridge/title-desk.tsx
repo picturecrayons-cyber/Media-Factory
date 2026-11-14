@@ -12,38 +12,33 @@ import { BRIDGE_LOOP_LANES } from "@/lib/bridge/loop-lanes";
 export function TitleList({ empty, query = "", actor }: { empty: string; query?: string; actor: BridgeWorkspaceActor }) {
   const titlesQ = useQuery({ queryKey: bridgeWorkspaceQueryKey("bridge-titles", actor), queryFn: () => listTitles() });
   const titles = (titlesQ.data?.titles ?? []).filter((t) => !query || `${t.name} ${t.language} ${t.year ?? ""}`.toLowerCase().includes(query.toLowerCase()));
-  const posterKeys = useQuery({
-    queryKey: bridgeWorkspaceQueryKey("bridge-title-posters", actor),
-    queryFn: async () => {
-      const entries = await Promise.all(titles.map(async (title) => {
-        try {
-          const result = await listTitleAssets({ data: { titleId: title.id } });
-          const assets = result.assets ?? [];
-          const poster = assets.find((asset) => asset.kind === "poster_vertical")
-            ?? assets.find((asset) => asset.kind === "poster")
-            ?? assets.find((asset) => asset.kind === "poster_horizontal")
-            ?? assets.find((asset) => asset.kind === "thumbnail");
-          return [title.id, poster?.id ?? null] as const;
-        } catch {
-          return [title.id, null] as const;
-        }
-      }));
-      return Object.fromEntries(entries);
-    },
-    enabled: Boolean(titlesQ.data?.titles),
-    staleTime: 60_000,
+  const posterIds = useQueries({
+    queries: titles.map((title) => ({
+      queryKey: bridgeWorkspaceQueryKey(`bridge-title-poster-id-${title.id}`, actor),
+      queryFn: () => listTitleAssets({ data: { titleId: title.id } }),
+      enabled: Boolean(titlesQ.data),
+      retry: false,
+      staleTime: 60_000,
+    })),
+  });
+  const posterAssets = titles.map((title, index) => {
+    const assets = posterIds[index]?.data?.assets ?? [];
+    return assets.find((asset) => asset.kind === "poster_vertical")
+      ?? assets.find((asset) => asset.kind === "poster")
+      ?? assets.find((asset) => asset.kind === "poster_horizontal")
+      ?? assets.find((asset) => asset.kind === "thumbnail")
+      ?? null;
   });
   const posterQueries = useQueries({
-    queries: titles.map((title) => {
-      const assetId = posterKeys.data?.[title.id];
-      return {
-        queryKey: bridgeWorkspaceQueryKey(`bridge-title-poster-${title.id}-${assetId ?? "none"}`, actor),
-        queryFn: () => assetId ? getTitleAssetDownloadUrl({ data: { titleId: title.id, assetId } }) : null,
-        enabled: Boolean(assetId),
-        retry: false,
-        staleTime: 4 * 60_000,
-      };
-    }),
+    queries: titles.map((title, index) => ({
+      queryKey: bridgeWorkspaceQueryKey(`bridge-title-poster-${title.id}-${posterAssets[index]?.id ?? "none"}`, actor),
+      queryFn: () => posterAssets[index]
+        ? requestAssetDownload({ data: { assetId: posterAssets[index]!.id } })
+        : Promise.resolve(null),
+      enabled: Boolean(posterAssets[index]),
+      retry: false,
+      staleTime: 4 * 60_000,
+    })),
   });
   if (titlesQ.isPending) return <p className="text-sm text-muted">Loading titles…</p>;
   if (titlesQ.isError) {
