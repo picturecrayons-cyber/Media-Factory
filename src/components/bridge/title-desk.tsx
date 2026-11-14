@@ -1,5 +1,5 @@
 import { Link, useNavigate } from "@tanstack/react-router";
-import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -12,34 +12,46 @@ import { BRIDGE_LOOP_LANES } from "@/lib/bridge/loop-lanes";
 export function TitleList({ empty, query = "", actor }: { empty: string; query?: string; actor: BridgeWorkspaceActor }) {
   const titlesQ = useQuery({ queryKey: bridgeWorkspaceQueryKey("bridge-titles", actor), queryFn: () => listTitles() });
   const titles = (titlesQ.data?.titles ?? []).filter((t) => !query || `${t.name} ${t.language} ${t.year ?? ""}`.toLowerCase().includes(query.toLowerCase()));
-  const posterIds = useQueries({
-    queries: titles.map((title) => ({
-      queryKey: bridgeWorkspaceQueryKey(`bridge-title-poster-id-${title.id}`, actor),
-      queryFn: () => listTitleAssets({ data: { titleId: title.id } }),
-      enabled: Boolean(titlesQ.data),
-      retry: false,
-      staleTime: 60_000,
-    })),
-  });
-  const posterAssets = titles.map((title, index) => {
-    const assets = posterIds[index]?.data?.assets ?? [];
-    return assets.find((asset) => asset.kind === "poster_vertical")
-      ?? assets.find((asset) => asset.kind === "poster")
-      ?? assets.find((asset) => asset.kind === "poster_horizontal")
-      ?? assets.find((asset) => asset.kind === "thumbnail")
-      ?? null;
-  });
-  const posterQueries = useQueries({
-    queries: titles.map((title, index) => ({
-      queryKey: bridgeWorkspaceQueryKey(`bridge-title-poster-${title.id}-${posterAssets[index]?.id ?? "none"}`, actor),
-      queryFn: () => posterAssets[index]
-        ? requestAssetDownload({ data: { assetId: posterAssets[index]!.id } })
-        : Promise.resolve(null),
-      enabled: Boolean(posterAssets[index]),
-      retry: false,
-      staleTime: 4 * 60_000,
-    })),
-  });
+  const [posterUrls, setPosterUrls] = useState<Record<string, string | null>>({});
+  const [posterLoading, setPosterLoading] = useState(false);
+  const loaded = useRef(new Set<string>());
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadPosters() {
+      if (!titles.length) return;
+      setPosterLoading(true);
+      try {
+        const results = await Promise.all(titles.map(async (title) => {
+          if (loaded.current.has(title.id)) return [title.id, posterUrls[title.id] ?? null] as const;
+          try {
+            const result = await listTitleAssets({ data: { titleId: title.id } });
+            const assets = result.assets ?? [];
+            const poster = assets.find((asset) => asset.kind === "poster_vertical")
+              ?? assets.find((asset) => asset.kind === "poster")
+              ?? assets.find((asset) => asset.kind === "poster_horizontal")
+              ?? assets.find((asset) => asset.kind === "thumbnail");
+            if (!poster) {
+              loaded.current.add(title.id);
+              return [title.id, null] as const;
+            }
+            const signed = await requestAssetDownload({ data: { assetId: poster.id } });
+            loaded.current.add(title.id);
+            return [title.id, signed.url ?? null] as const;
+          } catch {
+            loaded.current.add(title.id);
+            return [title.id, null] as const;
+          }
+        }));
+        if (!cancelled) setPosterUrls(Object.fromEntries(results));
+      } finally {
+        if (!cancelled) setPosterLoading(false);
+      }
+    }
+    void loadPosters();
+    return () => { cancelled = true; };
+  }, [titlesQ.dataUpdatedAt, actor.userId, actor.organizationId]);
+
   if (titlesQ.isPending) return <p className="text-sm text-muted">Loading titles…</p>;
   if (titlesQ.isError) {
     return (
@@ -52,34 +64,32 @@ export function TitleList({ empty, query = "", actor }: { empty: string; query?:
   if (!titles.length) return <p className="text-sm text-muted">{empty}</p>;
   return (
     <div className="space-y-3">
-      {posterIds.some((query) => query.isError) ? <p className="text-xs text-muted">Artwork previews are temporarily unavailable; title records remain accessible.</p> : null}
+      {posterLoading ? <p className="text-xs text-muted">Loading artwork previews…</p> : null}
       <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        {titles.map((t, index) => {
-          const poster = posterQueries[index]?.data;
-          return (
-            <li key={t.id} className="overflow-hidden rounded-xl border border-line bg-surface">
-              <Link to="/title/$id" params={{ id: t.id }} className="group block">
-                <div className="relative aspect-[2/3] overflow-hidden bg-bg">
-                  {poster?.url ? (
-                    <img src={poster.url} alt={`${t.name} poster`} loading="lazy" className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.02]" />
-                  ) : (
-                    <div className="grid h-full place-items-center px-5 text-center text-sm text-muted">Artwork not available</div>
-                  )}
-                  <div className="absolute right-3 top-3"><StatusChip status={t.status} /></div>
-                </div>
-                <div className="space-y-2 p-4">
-                  <p className="font-semibold leading-snug">{t.name}</p>
-                  <p className="text-sm text-muted">{t.contentType ? `${t.contentType} · ` : ""}{t.language}{t.year ? ` · ${t.year}` : ""}</p>
-                  <span className="inline-flex text-sm font-semibold text-accent">Open title →</span>
-                </div>
-              </Link>
-            </li>
-          );
-        })}
+        {titles.map((title) => (
+          <li key={title.id} className="overflow-hidden rounded-xl border border-line bg-surface">
+            <Link to="/title/$id" params={{ id: title.id }} className="group block">
+              <div className="relative aspect-[2/3] overflow-hidden bg-bg">
+                {posterUrls[title.id] ? (
+                  <img src={posterUrls[title.id] ?? undefined} alt={`${title.name} poster`} loading="lazy" className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.02]" />
+                ) : (
+                  <div className="grid h-full place-items-center px-5 text-center text-sm text-muted">Artwork not available</div>
+                )}
+                <div className="absolute right-3 top-3"><StatusChip status={title.status} /></div>
+              </div>
+              <div className="space-y-2 p-4">
+                <p className="font-semibold leading-snug">{title.name}</p>
+                <p className="text-sm text-muted">{title.contentType ? `${title.contentType} · ` : ""}{title.language}{title.year ? ` · ${title.year}` : ""}</p>
+                <span className="inline-flex text-sm font-semibold text-accent">Open title →</span>
+              </div>
+            </Link>
+          </li>
+        ))}
       </ul>
     </div>
   );
 }
+
 
 export function CreateTitleForm({ concise = false }: { concise?: boolean } = {}) {
   const qc = useQueryClient();
