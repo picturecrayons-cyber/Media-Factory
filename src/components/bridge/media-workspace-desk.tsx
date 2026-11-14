@@ -56,7 +56,9 @@ export function MediaWorkspaceDesk({
     ["master", "screener", "technical", "subtitle"].includes(asset.kind),
   ));
 
-  const allAssets = rows.flatMap((row) => row.assets);
+  const allAssets = rows.flatMap((row) => row.assets).filter((asset) =>
+    mode === "storage" || ["master", "screener", "technical", "subtitle"].includes(asset.kind),
+  );
   const verifiedCount = allAssets.filter((asset) => asset.verified && (asset.byteSize ?? 0) > 0).length;
   const totalBytes = allAssets.reduce((sum, asset) => sum + (asset.byteSize ?? 0), 0);
 
