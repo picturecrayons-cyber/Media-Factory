@@ -154,10 +154,10 @@ export async function loadTitle(id: string): Promise<BridgeTitle | null> {
   const sql = await getSql();
   const rows = await sql<TitleRow>`
     select t.* from bridge_titles t
-    where t.id = ${id} and t.archived_at is null
+    where t.id = ${id}
     limit 1
   `;
-  return rows[0] ? mapTitle(rows[0]) : null;
+  return rows[0]?.archived_at ? null : rows[0] ? mapTitle(rows[0]) : null;
 }
 
 export async function recordTransition(
@@ -536,34 +536,41 @@ export const archiveTitle = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
-    const title = await loadTitle(data.id);
-    if (!title) throw new Error("Not found");
-    const owner = !actor.internalRole && canMutateTitle(actor, title, "title.archive_own", "title.archive_any");
-    const superAdmin = actor.internalRole === "super_admin" && hasPermission(actor, "title.archive_any");
-    if (!owner && !superAdmin) throw new Error("Forbidden");
-    if (owner && title.status !== "DRAFT") throw new Error("Only an unsubmitted draft can be archived by its owner");
-    if (superAdmin && !["DRAFT", "UPLOADING"].includes(title.status)) throw new Error("Admin archive requires a separate review/retention decision after submission");
     const sql = await getSql();
-    const blockers = await sql<{ has_publication: boolean; has_deal: boolean; has_order: boolean; has_delivery: boolean; has_revision: boolean }[]>`
-      select
-        exists(select 1 from bridge_loop_publications where bridge_title_id = ${title.id}) as has_publication,
-        exists(select 1 from bridge_deals where title_id = ${title.id}) as has_deal,
-        exists(select 1 from streamvista_orders where bridge_title_id = ${title.id}) as has_order,
-        exists(select 1 from bridge_delivery_jobs where title_id = ${title.id}) as has_delivery,
-        exists(select 1 from bridge_title_revisions where title_id = ${title.id} and status = 'PENDING') as has_revision
-    `;
-    const b = blockers[0];
-    if (b?.has_publication || b?.has_deal || b?.has_order || b?.has_delivery || b?.has_revision)
-      throw new Error("Title has downstream activity or a pending revision; archive is blocked");
     await sql.transaction(async (tx) => {
-      await tx`
+      const rows = await tx<TitleRow[]> `
+        select t.* from bridge_titles t where t.id = ${data.id} and t.archived_at is null for update
+      `;
+      const title = rows[0] ? mapTitle(rows[0]) : null;
+      if (!title) throw new Error("Not found");
+      const owner = !actor.internalRole && canMutateTitle(actor, title, "title.archive_own", "title.archive_any");
+      const superAdmin = actor.internalRole === "super_admin" && hasPermission(actor, "title.archive_any");
+      if (!owner && !superAdmin) throw new Error("Forbidden");
+      if (owner && title.status !== "DRAFT") throw new Error("Only an unsubmitted draft can be archived by its owner");
+      if (superAdmin && !["DRAFT", "UPLOADING"].includes(title.status)) throw new Error("Admin archive requires a separate review/retention decision after submission");
+
+      const blockers = await tx<{ has_publication: boolean; has_deal: boolean; has_order: boolean; has_delivery: boolean; has_package: boolean; has_assets: boolean; has_active_revision: boolean }[]> `
+        select
+          exists(select 1 from bridge_loop_publications where bridge_title_id = ${title.id}) as has_publication,
+          exists(select 1 from bridge_deals where title_id = ${title.id}) as has_deal,
+          exists(select 1 from streamvista_orders where bridge_title_id = ${title.id}) as has_order,
+          exists(select 1 from bridge_delivery_jobs where title_id = ${title.id}) as has_delivery,
+          exists(select 1 from bridge_destination_packages where title_id = ${title.id}) as has_package,
+          exists(select 1 from bridge_assets where title_id = ${title.id}) as has_assets,
+          exists(select 1 from bridge_title_revisions where title_id = ${title.id} and status = 'PENDING') as has_active_revision
+      `;
+      const b = blockers[0];
+      if (b && (b.has_publication || b.has_deal || b.has_order || b.has_delivery || b.has_package || b.has_assets || b.has_active_revision)) {
+        throw new Error("Title has registered assets, downstream activity or a pending revision; archive is blocked");
+      }
+      await tx `
         update bridge_titles set archived_at = now(), archived_by = ${actor.userId},
           archive_reason = ${data.reason ?? null}, updated_at = now()
         where id = ${title.id} and archived_at is null
       `;
       await writeAudit({ actorUserId: actor.userId, action: "title.archive", entityType: "bridge_title", entityId: title.id, metadata: { previousStatus: title.status, reason: data.reason ?? null } }, tx);
     });
-    return { archived: true, titleId: title.id };
+    return { archived: true, titleId: data.id };
   });
 
 export const listTitleRevisions = createServerFn({ method: "GET" })
