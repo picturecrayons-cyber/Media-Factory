@@ -1,9 +1,9 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { Button } from "@/components/ui/button";
-import { listTitles, listAuditLogs } from "@/lib/bridge/titles";
+import { listTitles, listAuditLogs, listPendingTitleRevisions, reviewTitleRevision } from "@/lib/bridge/titles";
 import { TitleList } from "@/components/bridge/title-desk";
 import { listLoopPublicationReadiness } from "@/lib/bridge/loop-publication";
 import { listAdminProfiles } from "@/lib/bridge/profiles";
@@ -37,7 +37,10 @@ function AdminControlPlane() {
 }
 
 function AdminBody({ actor }: { actor: any }) {
+  const qc = useQueryClient();
   const titlesQ = useQuery({ queryKey: bridgeWorkspaceQueryKey("bridge-titles", actor), queryFn: () => listTitles() });
+  const revisionsQ = useQuery({ queryKey: bridgeWorkspaceQueryKey("bridge-title-revisions", actor), queryFn: () => listPendingTitleRevisions() });
+  const revisionMutation = useMutation({ mutationFn: (input: { revisionId: string; decision: "APPROVED" | "REJECTED" }) => reviewTitleRevision({ data: input }), onSuccess: () => { void qc.invalidateQueries({ queryKey: ["bridge-title-revisions"] }); void qc.invalidateQueries({ queryKey: ["bridge-titles"] }); }, onError: (err) => window.alert(err instanceof Error ? err.message : "Revision review failed") });
   const auditQ = useQuery({ queryKey: bridgeWorkspaceQueryKey("bridge-audit", actor), queryFn: () => listAuditLogs() });
   const distQ = useQuery({ queryKey: bridgeWorkspaceQueryKey("loop-publication-readiness", actor), queryFn: () => listLoopPublicationReadiness() });
   const profilesQ = useQuery({ queryKey: bridgeWorkspaceQueryKey("bridge-admin-profiles", actor), queryFn: () => listAdminProfiles() });
@@ -74,6 +77,8 @@ function AdminBody({ actor }: { actor: any }) {
           <div className="mb-4"><h3 className="font-display text-xl font-semibold">Titles</h3><p className="mt-1 text-sm text-muted">Canonical Bridge title catalogue and poster gallery. Open a title to review assets, metadata, QC, rights and delivery gates.</p></div>
           <TitleList actor={actor} empty="No active titles found." />
         </section>
+
+        {actor.internalRole === "admin" || actor.internalRole === "super_admin" ? <section aria-label="Submitted title revisions" className="rounded-2xl border border-line bg-surface p-4 sm:p-5"><h3 className="font-display text-xl font-semibold">Submitted title revisions</h3><p className="mt-1 text-sm text-muted">Review owner-requested changes before applying them to the canonical title record.</p>{revisionsQ.isError ? <p role="alert" className="mt-3 text-sm text-muted">Revision queue unavailable.</p> : null}<div className="mt-3 divide-y divide-line">{(revisionsQ.data?.revisions ?? []).map((revision) => <article key={revision.id} className="flex flex-col gap-3 py-3 sm:flex-row sm:items-center sm:justify-between"><div><p className="font-semibold">{revision.title_name} · Revision {revision.revision_number}</p><p className="text-xs text-muted">Submitted by {revision.submitted_by} · {new Date(revision.submitted_at).toLocaleString()}</p><pre className="mt-2 max-w-2xl overflow-auto rounded-lg bg-bg p-2 text-xs">{JSON.stringify(revision.proposed_changes, null, 2)}</pre></div><div className="flex shrink-0 gap-2"><Button type="button" disabled={revisionMutation.isPending} onClick={() => revisionMutation.mutate({ revisionId: revision.id, decision: "APPROVED" })}>Approve changes</Button><Button type="button" variant="outline" disabled={revisionMutation.isPending} onClick={() => revisionMutation.mutate({ revisionId: revision.id, decision: "REJECTED" })}>Reject</Button></div></article>)}{!revisionsQ.isPending && !(revisionsQ.data?.revisions ?? []).length ? <p className="py-4 text-sm text-muted">No pending title revisions.</p> : null}</div></section> : null}
 
         <section aria-label="Title overview" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <Metric label="All titles" value={loading ? "—" : titlesUnavailable ? "Unavailable" : String(titles.length)} detail="Canonical catalog" />
