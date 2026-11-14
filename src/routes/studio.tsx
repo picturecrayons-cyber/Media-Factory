@@ -56,7 +56,7 @@ function Studio() {
                 <h3 className="font-display text-xl font-semibold">Finished films</h3>
                 <p className="mt-1 text-sm text-muted">Only titles authorized for this studio account should appear here.</p>
               </div>
-              <TitleList empty="No finished films are currently returned for this studio account." />
+              <TitleList empty="No finished films are currently returned for this studio account." excludeStoryConcepts />
               <MyStoryConcepts />
             </section>
 
