@@ -233,7 +233,7 @@ function Onboarding() {
       let inviteToken: string | undefined;
       try { inviteToken = sessionStorage.getItem("bridge-invite") ?? undefined; } catch { /* ignore */ }
 
-      await completeOnboarding({
+      const result = await completeOnboarding({
         data: {
           displayName: displayName.trim(),
           accountType,
@@ -242,54 +242,16 @@ function Onboarding() {
         },
       });
 
-      if (accountType === "buyer") {
-        void navigate({ to: "/buyer", replace: true });
-        return;
-      }
-
-      if (!titleName.trim()) throw new Error("Title name is required");
-      if (synopsis.trim().length < 20) throw new Error("Add a synopsis of at least 20 characters");
-      if (!territories.length || !rightsLanguages.length || !media.length || !destinations.length) {
-        throw new Error("Select at least one value in each rights package group");
-      }
-      if (!windowStart || !windowEnd) throw new Error("Rights window start and end are required");
-      if (!authorizationAttested) throw new Error("Confirm that you have authority to license the submitted rights");
-      if (!authorizationEvidenceType) throw new Error("Select the authorization evidence you will provide");
-      if (new Date(windowEnd) <= new Date(windowStart)) throw new Error("Rights window end must be after start");
-
-      const result = await createTitle({
-        data: {
-          name: titleName.trim(),
-          originalTitle: originalTitle.trim() || undefined,
-          contentType,
-          language,
-          additionalLanguages,
-          year: year ? Number(year) : undefined,
-          runtimeMinutes: runtimeMinutes ? Number(runtimeMinutes) : undefined,
-          synopsis: synopsis.trim(),
-          countryOfOrigin: countryOfOrigin.trim() || undefined,
-          releaseDate: releaseDate || undefined,
-          director: director.trim() || undefined,
-          producer: producer.trim() || undefined,
-          territories,
-          rightsLanguages,
-          media,
-          windowStart: new Date(windowStart).toISOString(),
-          windowEnd: new Date(windowEnd).toISOString(),
-          exclusivity,
-          sublicensingAllowed,
-          promotionalRights,
-          rightsBasis,
-          authorizationAttested,
-          authorizationEvidenceType,
-          publicSubmission: true,
-          screenerAccess: "SCREENER_PENDING",
-          intendedDestinations: destinations,
-        },
-      });
-
-      setSubmittedTitleId(result.title.id);
       try { sessionStorage.removeItem("bridge-invite"); } catch { /* ignore */ }
+      // Account creation is complete at this point. Do not require a title,
+      // rights package, or legal attestation before opening the user's desk.
+      // Those are separate, optional workflows inside the Creator / Studio UI.
+      const destination = result.home || (
+        accountType === "buyer" ? "/buyer" :
+        accountType === "studio" ? "/studio" : "/creator"
+      );
+      void navigate({ to: destination as any, replace: true });
+      return;
     } catch (err) {
       setError(publicOnboardingError(err));
     } finally {
