@@ -6,7 +6,12 @@ import { ACCOUNT_TYPES, INTERNAL_ROLES } from "./types";
 import { writeAudit } from "./audit";
 import { loadActor, requireVerifiedActor } from "./session";
 import { verificationProfileId } from "./verification-profile-id";
-import { assertPermission, canGrantInternalRole, workspaceHome } from "./rbac";
+import {
+  assertPermission,
+  canGrantInternalRoleToEmail,
+  CANONICAL_SUPER_ADMIN_EMAIL,
+  workspaceHome,
+} from "./rbac";
 import { createHash, randomBytes } from "node:crypto";
 import { bridgeEnv } from "./env";
 import { bridgeInvitationUrl, bridgeVerificationUrl } from "./origin";
@@ -152,6 +157,12 @@ export const completeOnboarding = createServerFn({ method: "POST" })
       if (inv.email.toLowerCase() !== email.toLowerCase()) {
         throw new Error("Invite email does not match this account");
       }
+      if (
+        inv.internal_role === "super_admin" &&
+        email.trim().toLowerCase() !== CANONICAL_SUPER_ADMIN_EMAIL
+      ) {
+        throw new Error("Super Admin access is reserved for the canonical Bridge identity.");
+      }
       internalRole = inv.internal_role;
       invitedBy = inv.invited_by;
       inviteId = inv.id;
@@ -250,6 +261,22 @@ export const completeOnboarding = createServerFn({ method: "POST" })
           }
         }
         await persistSupabaseIdentityLink(tx, bridgeUserId, context.userId);
+        if (internalRole) {
+          await writeAudit(
+            {
+              actorUserId: invitedBy ?? bridgeUserId,
+              action: "users.internal_role_granted",
+              entityType: "bridge_profile",
+              entityId: bridgeUserId,
+              metadata: {
+                role: internalRole,
+                email: email.trim().toLowerCase(),
+                inviteId,
+              },
+            },
+            tx,
+          );
+        }
         const roleForTransaction: string | null = internalRole;
         return roleForTransaction;
       });
@@ -401,8 +428,12 @@ export const inviteInternalRole = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     const actor = await requireVerifiedActor(context.userId);
     assertPermission(actor, "users.invite_internal");
-    if (!canGrantInternalRole(actor, data.role)) {
-      throw new Error("Role grant is not permitted");
+    if (!canGrantInternalRoleToEmail(actor, data.role, data.email)) {
+      throw new Error(
+        data.role === "super_admin"
+          ? "Super Admin access is reserved for the canonical Bridge identity."
+          : "Role grant is not permitted",
+      );
     }
     const sql = await getSql();
     const { token, hash } = tokenPair();
