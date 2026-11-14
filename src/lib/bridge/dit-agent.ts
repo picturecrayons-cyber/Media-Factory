@@ -208,7 +208,7 @@ export const createDitIngestSession = createServerFn({ method: "POST" })
       await tx`
         insert into bridge_dit_ingest_files (session_id, relative_path, byte_size, sha256)
         select ${id}::uuid, f.relative_path, f.byte_size, f.sha256
-        from jsonb_to_recordset(${JSON.stringify(files)}::jsonb)
+        from jsonb_to_recordset(${JSON.stringify(files.map((file) => ({ relative_path: file.relativePath, byte_size: file.byteSize, sha256: file.sha256 })))}::jsonb)
           as f(relative_path text, byte_size bigint, sha256 text)
       `;
       await audit(tx, actor.userId, "dit.source_manifest_registered", id, {
