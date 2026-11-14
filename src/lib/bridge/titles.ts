@@ -22,6 +22,7 @@ type TitleRow = {
   owner_user_id: string;
   owner_account_type: string;
   owner_organization_id?: string | null;
+  archived_at?: string | Date | null;
   status: string;
   synopsis: string;
   language: string;
@@ -66,7 +67,8 @@ export function mapTitle(r: TitleRow): BridgeTitle {
     credits: r.credits,
     createdAt: asIso(r.created_at),
     updatedAt: asIso(r.updated_at),
-  };
+    archivedAt: r.archived_at ? asIso(r.archived_at) : null,
+  } as BridgeTitle;
 }
 
 async function hasTitleMergeColumn(sql: Sql): Promise<boolean> {
