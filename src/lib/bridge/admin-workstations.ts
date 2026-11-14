@@ -26,8 +26,8 @@ export const listAdminWorkstations = createServerFn({ method: "GET" })
         t.status, t.language, t.updated_at
         from bridge_titles t
         left join bridge_profiles p on p.user_id = t.owner_user_id
-        where t.submission_type is distinct from 'story_concept'
         left join bridge_organizations o on o.id = t.owner_organization_id
+        where t.submission_type is distinct from 'story_concept'
         order by t.updated_at desc limit 200`,
       sql`select id, title_id, kind, s3_key, content_type, byte_size, created_at from bridge_assets order by created_at desc limit 300`,
       sql`select id, title_id, asset_group, asset_type, version, language, codec, s3_key, processing_state, created_at from bridge_asset_versions order by created_at desc limit 300`,
