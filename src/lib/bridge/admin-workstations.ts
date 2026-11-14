@@ -62,23 +62,23 @@ export const reviewAdminTitle = createServerFn({ method: "POST" })
     return sql.transaction(async (tx) => {
       if (data.decision === "ACCEPT") {
         assertPermission(actor, "title.advance_upload");
-        const rows = await tx<{ id: string; status: string; master_key: string | null; poster_key: string | null }>\`
+        const rows = await tx<{ id: string; status: string; master_key: string | null; poster_key: string | null }>`
           select id, status, master_key, poster_key
-          from bridge_titles where id = \${data.titleId} for update
-        \`;
+          from bridge_titles where id = ${data.titleId} for update
+        `;
         const title = rows[0];
         if (!title) throw new Error("Title not found");
         if (title.status !== "PREPARING") throw new Error("Submission is not awaiting acceptance");
-        const assets = await tx<{ kind: string; s3_key: string }>\`
+        const assets = await tx<{ kind: string; s3_key: string }>`
           select kind, s3_key from bridge_assets
-          where title_id = \${title.id} and coalesce(byte_size, 0) > 0
-        \`;
+          where title_id = ${title.id} and coalesce(byte_size, 0) > 0
+        `;
         if (!hasVerifiedMasterAndArtwork(assets, title.master_key, title.poster_key)) {
           throw new Error("Verified current master and artwork are required before QC");
         }
-        await tx\`update bridge_titles set status = 'QC_REVIEW', updated_at = now() where id = \${title.id}\`;
-        await tx\`insert into bridge_title_events (title_id, from_status, to_status, actor_user_id, note)
-          values (\${title.id}, \${title.status}, 'QC_REVIEW', \${actor.userId}, \${data.notes ?? "Accepted for QC review"})\`;
+        await tx`update bridge_titles set status = 'QC_REVIEW', updated_at = now() where id = ${title.id}`;
+        await tx`insert into bridge_title_events (title_id, from_status, to_status, actor_user_id, note)
+          values (${title.id}, ${title.status}, 'QC_REVIEW', ${actor.userId}, ${data.notes ?? "Accepted for QC review"})`;
         await writeAudit({
           actorUserId: actor.userId,
           action: "submission.accept",
