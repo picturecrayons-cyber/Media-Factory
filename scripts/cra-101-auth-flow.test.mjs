@@ -13,8 +13,8 @@ test("CRA-101 confirmed-email callback establishes Supabase session before onboa
   assert.match(source, /supabase\.auth\.getSession\(\)/);
   assert.match(source, /supabase\.auth\.getUser\(\)/);
   assert.match(source, /syncSupabaseSessionUser\(\)/);
-  assert.match(source, /navigate\\(\\{ to: "\\/onboarding", replace: true \\}\\)/);
-  assert.match(source, /navigate\\(\\{ to: syncResult\\.home \\|\\| "\\/onboarding", replace: true \\}\\)/);
+  assert.match(source, /navigate\(\{ to: "\/onboarding", replace: true \}\)/);
+  assert.match(source, /navigate\(\{ to: syncResult\.home \|\| "\/onboarding", replace: true \}\)/);
 });
 
 test("CRA-101 onboarding waits for restored identity and scopes workspace cache by user", () => {
