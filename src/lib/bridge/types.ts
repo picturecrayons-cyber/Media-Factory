@@ -45,6 +45,7 @@ export type BridgeTitle = {
   ownerAccountType: AccountType;
   /** Canonical organization UUID used for Studio authorization. */
   ownerOrganizationId?: string | null;
+  archivedAt?: string | null;
   status: TitleStatus;
   synopsis: string;
   language: string;
