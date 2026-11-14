@@ -80,11 +80,11 @@ function WorkstationBody({ actor }: { actor: { userId: string; organizationId?: 
       ) : activeTab === "Concepts" ? (
         <StoryConceptDesk />
       ) : activeTab === "QC" ? (
-        <ReviewQueue title="QC Review" description="Review technical quality before rights review." titles={qcQueue}
-          actions={[["PASS", "Approve → Rights"], ["FAIL", "Fail QC"]]} mutation={review} />
+        <ReviewQueue stage="QC" title="QC Review" description="Review technical quality before rights review." titles={qcQueue}
+          actions={[["PASS", "Pass QC"], ["FAIL", "Return for rework"]]} mutation={review} />
       ) : activeTab === "Rights" ? (
-        <ReviewQueue title="Rights Review" description="Clear ownership, territory, language and window before licensing." titles={rightsQueue}
-          actions={[["APPROVE", "Approve → Licensing"], ["REJECT", "Reject"]]} mutation={review} />
+        <ReviewQueue stage="LEGAL" grants={data.rights} title="Rights Review" description="Select a saved draft rights agreement, then verify ownership, territory, language and window." titles={rightsQueue}
+          actions={[["APPROVE", "Approve rights"], ["REJECT", "Reject rights"]]} mutation={review} />
       ) : activeTab === "Assets" ? (
         <SimpleTable title="Assets" description={data.assets.length + " base assets · " + data.assetVersions.length + " versioned assets"}
           rows={data.assets} fields={["kind", "s3_key", "content_type", "byte_size"]} />
@@ -195,30 +195,56 @@ function SectionHeader({ title, description }: { title: string; description: str
 function ActionButton({ label, onClick, disabled }: { label: string; onClick: () => void; disabled?: boolean }) {
   return <Button size="sm" disabled={disabled} onClick={onClick}>{label}</Button>;
 }
-function ReviewQueue({ title, description, titles, actions, mutation }: { title: string; description: string; titles: any[]; actions: [string, string][]; mutation: any }) {
+function ReviewQueue({ stage, title, description, titles, actions, mutation, grants = [] }: {
+  stage: "QC" | "LEGAL";
+  title: string;
+  description: string;
+  titles: any[];
+  actions: [string, string][];
+  mutation: any;
+  grants?: any[];
+}) {
   const [notes, setNotes] = useState<Record<string, string>>({});
+  const [grantByTitle, setGrantByTitle] = useState<Record<string, string>>({});
   return (
     <section className="space-y-3">
       <SectionHeader title={title} description={description} />
-      {titles.length ? titles.map((item) => (
-        <article key={item.id} className="space-y-3 rounded-2xl border border-line p-4">
-          <div>
-            <p className="font-medium">{item.name}</p>
-            <p className="mt-1 text-xs text-muted">Owner: {item.owner_display_name || item.owner_user_id} · {item.owner_account_type}{item.owner_organization_name ? ` · ${item.owner_organization_name}` : ""}</p>
-          </div>
-          <label className="block space-y-1 text-xs text-muted">
-            <span>Review note (saved to the audit trail)</span>
-            <textarea value={notes[item.id] ?? ""} onChange={(event) => setNotes((current) => ({ ...current, [item.id]: event.target.value }))}
-              maxLength={4000} rows={2} className="w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm text-fg" placeholder="Record the reason for this decision…" />
-          </label>
-          <div className="flex flex-wrap gap-2">
-            {actions.map(([decision, label]) => (
-              <ActionButton key={decision} label={label} disabled={mutation.isPending}
-                onClick={() => mutation.mutate({ data: { titleId: item.id, decision, notes: notes[item.id]?.trim() || undefined } })} />
-            ))}
-          </div>
-        </article>
-      )) : <Empty text="Queue is clear." />}
+      {titles.length ? titles.map((item) => {
+        const draftGrants = grants.filter((grant) => grant.title_id === item.id && grant.status === "DRAFT");
+        const grantId = grantByTitle[item.id] ?? "";
+        const note = notes[item.id]?.trim() ?? "";
+        return (
+          <article key={item.id} className="space-y-3 rounded-2xl border border-line p-4">
+            <div>
+              <p className="font-medium">{item.name}</p>
+              <p className="mt-1 text-xs text-muted">Owner: {item.owner_display_name || item.owner_user_id} · {item.owner_account_type}{item.owner_organization_name ? \` · \${item.owner_organization_name}\` : ""}</p>
+            </div>
+            {stage === "LEGAL" ? (
+              <label className="block space-y-1 text-xs text-muted">
+                <span>Draft rights agreement</span>
+                <select value={grantId} onChange={(event) => setGrantByTitle((current) => ({ ...current, [item.id]: event.target.value }))}
+                  className="w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm text-fg">
+                  <option value="">Select a saved draft agreement</option>
+                  {draftGrants.map((grant) => <option key={grant.id} value={grant.id}>{grant.grant_type} · {(grant.territories ?? []).join(", ") || "Territory not set"} · {grant.window_end ? new Date(grant.window_end).toLocaleDateString() : "No end date"}</option>)}
+                </select>
+                {!draftGrants.length ? <span className="block">No draft rights agreement exists for this title. Legal approval remains blocked.</span> : null}
+              </label>
+            ) : null}
+            <label className="block space-y-1 text-xs text-muted">
+              <span>Review note (minimum 8 characters; saved to the audit trail)</span>
+              <textarea value={notes[item.id] ?? ""} onChange={(event) => setNotes((current) => ({ ...current, [item.id]: event.target.value }))}
+                maxLength={2000} rows={2} className="w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm text-fg" placeholder="Record the reason for this decision…" />
+            </label>
+            <div className="flex flex-wrap gap-2">
+              {actions.map(([decision, label]) => (
+                <ActionButton key={decision} label={label}
+                  disabled={mutation.isPending || note.length < 8 || (stage === "LEGAL" && (!grantId || !draftGrants.some((grant) => grant.id === grantId)))}
+                  onClick={() => mutation.mutate({ data: { titleId: item.id, decision, notes: note, ...(stage === "LEGAL" ? { grantId } : {}) } })} />
+              ))}
+            </div>
+          </article>
+        );
+      }) : <Empty text="Queue is clear." />}
     </section>
   );
 }
