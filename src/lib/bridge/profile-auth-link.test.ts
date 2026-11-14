@@ -24,6 +24,6 @@ test("internal role revocation is Super Admin-only, self-protected, and audited 
   assert.match(block, /CANONICAL_SUPER_ADMIN_EMAIL/);
   assert.match(block, /set internal_role = null, updated_at = now\(\)/);
   assert.match(block, /action: "users\.internal_role_revoked"/);
-  assert.match(block, /writeAudit\([\\s\\S]*?\}, tx\)/);
+  assert.match(block, /writeAudit\([\s\S]*?\}, tx\)/);
   assert.match(block, /for update/);
 });
