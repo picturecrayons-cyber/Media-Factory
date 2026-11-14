@@ -11,6 +11,7 @@ import * as policy from "./workflow-policy.ts";
 import * as rbac from "./rbac.ts";
 import * as assetRoles from "./asset-roles.ts";
 import { submitTitleForQc } from "./title-submission.ts";
+import { reviewWorkflow } from "./workflow.ts";
 import type { Sql } from "../db";
 
 type TestDb = {
@@ -376,6 +377,51 @@ test("Submit for QC advances PREPARING with the referenced vertical poster and w
         "select * from bridge_qc_cases where title_id='qc-submit-title'",
       )).length,
       0,
+    );
+  } finally {
+    await f.db.close();
+  }
+});
+
+
+test("QC and legal rejections return titles for rework and preserve the review trail", async () => {
+  const f = await fixture();
+  try {
+    await f.sql.transaction((tx) => reviewWorkflow(tx, qc, {
+      titleId: "title-123",
+      stage: "QC",
+      decision: "REJECT",
+      note: "Master needs correction",
+    }));
+    assert.equal(
+      (await f.sql.query<{ status: string }>("select status from bridge_titles where id='title-123'"))[0].status,
+      "PREPARING",
+    );
+    assert.equal(
+      (await f.sql.query<{ status: string }>("select status from bridge_qc_cases where title_id='title-123'"))[0].status,
+      "ACTION_REQUIRED",
+    );
+
+    await f.sql.query("update bridge_titles set status='RIGHTS_REVIEW' where id='title-123'");
+    const saved = (await f.sql.transaction((tx) => saveLoopLicense(tx, owner, license))) as { grantId: string };
+    await f.sql.transaction((tx) => reviewWorkflow(tx, legal, {
+      titleId: "title-123",
+      stage: "LEGAL",
+      decision: "REJECT",
+      note: "Territory evidence is incomplete",
+      grantId: saved.grantId,
+    }));
+    assert.equal(
+      (await f.sql.query<{ status: string }>("select status from bridge_titles where id='title-123'"))[0].status,
+      "PREPARING",
+    );
+    assert.equal(
+      (await f.sql.query<{ status: string }>("select status from bridge_rights_grants where id=$1", [saved.grantId]))[0].status,
+      "REVOKED",
+    );
+    assert.equal(
+      (await f.sql.query<{ status: string }>("select status from bridge_legal_cases where title_id='title-123'"))[0].status,
+      "REJECTED",
     );
   } finally {
     await f.db.close();
