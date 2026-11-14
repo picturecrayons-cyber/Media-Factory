@@ -89,6 +89,41 @@ describe("Buyer & Revenue Operations evidence gates", () => {
     assert.ok(result.blockers.includes("NO_EVIDENCED_BUYER_DEMAND"));
   });
 
+  it("does not classify a settled contract as cash received without verified demand", () => {
+    const result = assessBuyerRevenueReadiness({
+      ...base,
+      demandStatus: "DISCOVERY",
+      demandEvidenceReference: null,
+      demandReceivedAt: null,
+    });
+    assert.equal(result.contractEffective, true);
+    assert.equal(result.paymentSettled, true);
+    assert.equal(result.payeeVerified, true);
+    assert.equal(result.demandConfirmed, false);
+    assert.equal(result.revenueClassification, "CONTRACTED");
+    assert.ok(result.blockers.includes("NO_EVIDENCED_BUYER_DEMAND"));
+  });
+
+  it("does not classify settled payment as cash received without verified account and territory", () => {
+    const result = assessBuyerRevenueReadiness({
+      ...base,
+      accountStatus: "PENDING_REVIEW",
+      territories: [{
+        territory: "US",
+        status: "REQUESTED",
+        evidenceReference: null,
+        verifiedAt: null,
+      }],
+    });
+    assert.equal(result.contractEffective, true);
+    assert.equal(result.demandConfirmed, true);
+    assert.equal(result.paymentSettled, true);
+    assert.equal(result.payeeVerified, true);
+    assert.equal(result.revenueClassification, "CONTRACTED");
+    assert.ok(result.blockers.includes("BUYER_ACCOUNT_NOT_VERIFIED"));
+    assert.ok(result.blockers.includes("NO_VERIFIED_TERRITORY"));
+  });
+
   it("does not treat a draft or unsigned contract as contracted revenue", () => {
     const result = assessBuyerRevenueReadiness({
       ...base,
