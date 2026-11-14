@@ -404,13 +404,49 @@ export const getDitJobFiles = createServerFn({ method: "GET" })
     requireDitOperator(actor);
     await ownedDitJob(actor.userId, data.jobId);
     const sql = await getSql();
-    const [files, logs] = await Promise.all([
-      sql`select id, relative_path, file_name, detected_format, codec, byte_size, status, source_sha256,
+    const [fileRows, logRows] = await Promise.all([
+      sql<{
+        id: string;
+        relative_path: string;
+        file_name: string;
+        detected_format: string | null;
+        codec: string | null;
+        byte_size: number | string;
+        status: string;
+        source_sha256: string | null;
+        master_verified_at: Date | string | null;
+        backup_1_verified_at: Date | string | null;
+        backup_2_verified_at: Date | string | null;
+      }>`select id, relative_path, file_name, detected_format, codec, byte_size, status, source_sha256,
         master_verified_at, backup_1_verified_at, backup_2_verified_at
         from bridge_dit_job_files where job_id = ${data.jobId}::uuid order by created_at asc`,
-      sql`select id, file_id, level, event, details, created_at
+      sql<{
+        id: string;
+        file_id: string | null;
+        level: string;
+        event: string;
+        details: unknown;
+        created_at: Date | string;
+      }>`select id::text as id, file_id, level, event, details, created_at::text as created_at
         from bridge_dit_job_logs where job_id = ${data.jobId}::uuid order by created_at desc limit 100`,
     ]);
+    const toIso = (value: Date | string | null) =>
+      value === null ? null : value instanceof Date ? value.toISOString() : new Date(value).toISOString();
+    const files = fileRows.map((file) => ({
+      ...file,
+      byte_size: Number(file.byte_size),
+      master_verified_at: toIso(file.master_verified_at),
+      backup_1_verified_at: toIso(file.backup_1_verified_at),
+      backup_2_verified_at: toIso(file.backup_2_verified_at),
+    }));
+    const logs = logRows.map((log) => ({
+      id: log.id,
+      file_id: log.file_id,
+      level: log.level,
+      event: log.event,
+      details_json: JSON.stringify(log.details ?? {}),
+      created_at: toIso(log.created_at),
+    }));
     return { files, logs };
   });
 
