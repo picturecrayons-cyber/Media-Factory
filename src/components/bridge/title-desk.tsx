@@ -6,16 +6,43 @@ import { Button } from "@/components/ui/button";
 import { StatusChip } from "@/components/bridge/status-rail";
 import { createTitle, listTitles } from "@/lib/bridge/titles";
 import { BRIDGE_LOOP_LANES } from "@/lib/bridge/loop-lanes";
+import { listMyStoryConcepts } from "@/lib/bridge/story-concept-api";
 
-export function TitleList({ empty, query = "" }: { empty: string; query?: string }) {
+const TITLE_ACTION_LABEL: Record<string, string> = {
+  DRAFT: "Continue editing",
+  PENDING_REVIEW: "View submission",
+  UPLOADING: "View upload progress",
+  PREPARING: "View preparation status",
+  QC_REVIEW: "View issue",
+  RIGHTS_REVIEW: "View issue",
+};
+
+export function TitleList({ empty, query = "", excludeStoryConcepts = false }: { empty: string; query?: string; excludeStoryConcepts?: boolean }) {
   const titlesQ = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles() });
-  const titles = (titlesQ.data?.titles ?? []).filter((t) => !query || `${t.name} ${t.language} ${t.year ?? ""}`.toLowerCase().includes(query.toLowerCase()));
-  if (titlesQ.isPending) return <p className="text-sm text-muted">Loading titles…</p>;
+  const conceptsQ = useQuery({
+    queryKey: ["my-story-concepts"],
+    queryFn: () => listMyStoryConcepts(),
+    enabled: excludeStoryConcepts,
+  });
+  const conceptTitleIds = new Set((conceptsQ.data?.concepts ?? []).map((concept) => concept.title_id));
+  const titles = (titlesQ.data?.titles ?? []).filter((t) =>
+    (!excludeStoryConcepts || conceptsQ.isError || conceptsQ.isPending || !conceptTitleIds.has(t.id)) &&
+    (!query || `${t.name} ${t.language} ${t.year ?? ""}`.toLowerCase().includes(query.toLowerCase()))
+  );
+  if (titlesQ.isPending || (excludeStoryConcepts && conceptsQ.isPending)) return <p className="text-sm text-muted">Loading titles…</p>;
   if (titlesQ.isError) {
     return (
       <div role="alert" className="flex flex-wrap items-center gap-3 text-sm text-accent">
         <p>Could not load titles.</p>
         <Button type="button" onClick={() => void titlesQ.refetch()}>Retry</Button>
+      </div>
+    );
+  }
+  if (excludeStoryConcepts && conceptsQ.isError) {
+    return (
+      <div role="alert" className="flex flex-wrap items-center gap-3 text-sm text-accent">
+        <p>Could not verify story concepts. Finished films are hidden until this check succeeds.</p>
+        <Button type="button" onClick={() => void conceptsQ.refetch()}>Retry</Button>
       </div>
     );
   }
@@ -37,7 +64,10 @@ export function TitleList({ empty, query = "" }: { empty: string; query?: string
                 {t.year ? ` · ${t.year}` : ""}
               </p>
             </div>
-            <StatusChip status={t.status} />
+            <span className="flex items-center gap-3">
+              <StatusChip status={t.status} />
+              <span className="rounded-sm border border-line px-3 py-2 text-xs font-semibold">{TITLE_ACTION_LABEL[t.status] ?? "View title"}</span>
+            </span>
           </Link>
         </li>
       ))}
