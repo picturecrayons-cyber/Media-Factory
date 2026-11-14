@@ -118,63 +118,44 @@ export const createStoryConceptSubmission = createServerFn({ method: "POST" })
     const sql = await getSql();
 
     try {
-      await sql`
-        insert into bridge_titles (
-          id, slug, name, owner_user_id, owner_account_type, status,
-          synopsis, language, content_type, owner_organization_id, submission_type
-        ) values (
-          ${titleId},
-          ${slug},
-          ${data.titleName},
-          ${actor.userId},
-          ${actor.accountType},
-          ${"DRAFT"},
-          ${data.synopsis},
-          ${data.language},
-          ${"OTHER"},
-          ${actor.accountType === "studio" ? actor.organizationId ?? null : null},
-          ${"story_concept"}
-        )
-      `;
-
-      await sql`
-        insert into bridge_title_events (title_id, from_status, to_status, actor_user_id, note)
-        values (${titleId}, null, ${"DRAFT"}, ${actor.userId}, ${"story concept submission received"})
-      `;
-
-      const conceptRows = await sql<ConceptRow>`
-        insert into bridge_story_concept_submissions (
-          title_id, logline, synopsis, treatment_url, screenplay_url,
-          genre, estimated_budget_range, target_platforms, curation_status
-        ) values (
-          ${titleId},
-          ${data.logline},
-          ${data.synopsis},
-          ${data.treatmentUrl || null},
-          ${data.screenplayUrl || null},
-          ${data.genre},
-          ${data.estimatedBudgetRange ?? null},
-          ${data.targetPlatforms},
-          ${"PENDING"}
-        )
-        returning *
-      `;
-
-      const concept = conceptRows[0];
-      if (!concept) throw new Error("Story concept create failed");
-
-      await writeAudit({
-        actorUserId: actor.userId,
-        action: "story_concept.create",
-        entityType: "bridge_story_concept_submission",
-        entityId: concept.id,
-        metadata: { titleId },
+      return await sql.transaction(async (tx) => {
+        await tx`
+          insert into bridge_titles (
+            id, slug, name, owner_user_id, owner_account_type, status,
+            synopsis, language, content_type, owner_organization_id, submission_type
+          ) values (
+            ${titleId}, ${slug}, ${data.titleName}, ${actor.userId}, ${actor.accountType},
+            ${"DRAFT"}, ${data.synopsis}, ${data.language}, ${"OTHER"},
+            ${actor.accountType === "studio" ? actor.organizationId ?? null : null},
+            ${"story_concept"}
+          )
+        `;
+        await tx`
+          insert into bridge_title_events (title_id, from_status, to_status, actor_user_id, note)
+          values (${titleId}, null, ${"DRAFT"}, ${actor.userId}, ${"story concept submission received"})
+        `;
+        const conceptRows = await tx<ConceptRow>`
+          insert into bridge_story_concept_submissions (
+            title_id, logline, synopsis, treatment_url, screenplay_url,
+            genre, estimated_budget_range, target_platforms, curation_status
+          ) values (
+            ${titleId}, ${data.logline}, ${data.synopsis}, ${data.treatmentUrl || null},
+            ${data.screenplayUrl || null}, ${data.genre}, ${data.estimatedBudgetRange ?? null},
+            ${data.targetPlatforms}, ${"PENDING"}
+          )
+          returning *
+        `;
+        const concept = conceptRows[0];
+        if (!concept) throw new Error("Story concept create failed");
+        await writeAudit({
+          actorUserId: actor.userId,
+          action: "story_concept.create",
+          entityType: "bridge_story_concept_submission",
+          entityId: concept.id,
+          metadata: { titleId },
+        }, tx);
+        return { titleId, concept: mapConcept(concept) };
       });
-
-      return {
-        titleId,
-        concept: mapConcept(concept),
-      };
     } catch (err) {
       migrationHint(err);
     }
@@ -209,11 +190,7 @@ export const listMyStoryConcepts = createServerFn({ method: "GET" })
         })),
       };
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      if (/bridge_story_concept_submissions|does not exist|undefined_table/i.test(msg)) {
-        return { concepts: [] };
-      }
-      throw err;
+      migrationHint(err);
     }
   });
 

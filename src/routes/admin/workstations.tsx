@@ -7,6 +7,7 @@ import { BridgeShell } from "@/components/bridge/shell";
 import { StoryConceptDesk } from "@/components/bridge/story-concept-desk";
 import { listAdminWorkstations, reviewAdminTitle, setBuyerPublicationGate } from "@/lib/bridge/admin-workstations";
 import { listDuplicateReviews, openDuplicateReview, decideDuplicateReview } from "@/lib/bridge/duplicate-reconciliation";
+import { bridgeWorkspaceQueryKey } from "@/lib/bridge/query-scope";
 
 export const Route = createFileRoute("/admin/workstations")({ component: AdminWorkstations });
 
@@ -27,9 +28,10 @@ function AdminWorkstations() {
   );
 }
 
-function WorkstationBody({ actor }: { actor: { internalRole: string | null } }) {
+function WorkstationBody({ actor }: { actor: { userId: string; organizationId?: string | null; internalRole: string | null } }) {
   const qc = useQueryClient();
-  const query = useQuery({ queryKey: ["admin-workstations"], queryFn: () => listAdminWorkstations() });
+  const adminQueryKey = bridgeWorkspaceQueryKey("admin-workstations", actor);
+  const query = useQuery({ queryKey: adminQueryKey, queryFn: () => listAdminWorkstations() });
   const review = useMutation({
     mutationFn: reviewAdminTitle,
     onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-workstations"] }),
@@ -152,7 +154,7 @@ function SubmissionQueue({ submissions }: { submissions: any[] }) {
               <span>Authority: {item.authority_type}</span>
               <span>Evidence: {item.authorization_evidence_type}</span>
               <span>Owner confirmation: {item.authorization_confirmed ? "Submitted — review required" : "Not confirmed"}</span>
-              <span>Buyer channels: {(item.buyer_channels ?? []).join(", ") || "None specified"}</span>
+              <span>Buyer channels: {(Array.isArray(item.buyer_channels) ? item.buyer_channels.join(", ") : "") || "None specified"}</span>
               <span>Screener: {item.screener_mode}</span>
               <span>Submitted: {item.submitted_at ? new Date(item.submitted_at).toLocaleString() : "Unknown"}</span>
             </div>

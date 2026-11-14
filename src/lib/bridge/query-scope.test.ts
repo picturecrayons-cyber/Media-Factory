@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { bridgeWorkspaceQueryKey } from "./query-scope";
+import { bridgeWorkspaceQueryKey } from "./query-scope.ts";
 
 test("workspace query keys are stable for the same actor", () => {
   const actor = { userId: "creator-a", organizationId: null };

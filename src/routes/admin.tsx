@@ -7,6 +7,7 @@ import { listTitles, listAuditLogs } from "@/lib/bridge/titles";
 import { listLoopPublicationReadiness } from "@/lib/bridge/loop-publication";
 import { listAdminProfiles } from "@/lib/bridge/profiles";
 import { StreamVistaOrders } from "@/components/bridge/streamvista-orders";
+import { bridgeWorkspaceQueryKey } from "@/lib/bridge/query-scope";
 
 export const Route = createFileRoute("/admin")({
   head: () => ({ meta: [{ name: "robots", content: "noindex, nofollow" }] }),
@@ -35,10 +36,10 @@ function AdminControlPlane() {
 }
 
 function AdminBody({ actor }: { actor: any }) {
-  const titlesQ = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles() });
-  const auditQ = useQuery({ queryKey: ["bridge-audit"], queryFn: () => listAuditLogs() });
-  const distQ = useQuery({ queryKey: ["loop-publication-readiness"], queryFn: () => listLoopPublicationReadiness() });
-  const profilesQ = useQuery({ queryKey: ["bridge-admin-profiles"], queryFn: () => listAdminProfiles() });
+  const titlesQ = useQuery({ queryKey: bridgeWorkspaceQueryKey("bridge-titles", actor), queryFn: () => listTitles() });
+  const auditQ = useQuery({ queryKey: bridgeWorkspaceQueryKey("bridge-audit", actor), queryFn: () => listAuditLogs() });
+  const distQ = useQuery({ queryKey: bridgeWorkspaceQueryKey("loop-publication-readiness", actor), queryFn: () => listLoopPublicationReadiness() });
+  const profilesQ = useQuery({ queryKey: bridgeWorkspaceQueryKey("bridge-admin-profiles", actor), queryFn: () => listAdminProfiles() });
 
   const titles = titlesQ.data?.titles ?? [];
   const distribution = distQ.data?.titles ?? [];
