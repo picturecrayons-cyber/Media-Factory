@@ -519,8 +519,33 @@ export const signOffDitIngestSession = createServerFn({ method: "POST" })
         where session_id = ${data.sessionId}::uuid
       `;
       const verifiedTypes = new Set(copies.filter((copy) => copy.verified).map((copy) => copy.copy_type));
-      if (!verifiedTypes.has("PRIMARY") || !verifiedTypes.has("RECOVERY")) {
-        throw new Error("Primary Vault and Recovery Vault copies must both match the source manifest before sign-off");
+      const primaryBucket = bridgeEnv.ociBucket();
+      const recoveryBucket = bridgeEnv.ociRecoveryBucket();
+      if (!primaryBucket || !recoveryBucket || primaryBucket === recoveryBucket) {
+        throw new Error("Distinct OCI Primary and Recovery buckets are required before DIT sign-off");
+      }
+      const actualCopies = await tx<{ primary_count: number; recovery_count: number; source_count: number }>`
+        select
+          (select count(*)::int from bridge_dit_ingest_files f
+            join bridge_dit_storage_objects o on o.session_id=f.session_id and o.relative_path=f.relative_path
+            where f.session_id=${data.sessionId}::uuid and o.copy_type='PRIMARY'
+              and o.bucket_name=${primaryBucket} and o.status='VERIFIED'
+              and o.sha256=f.sha256 and o.byte_size=f.byte_size) as primary_count,
+          (select count(*)::int from bridge_dit_ingest_files f
+            join bridge_dit_storage_objects o on o.session_id=f.session_id and o.relative_path=f.relative_path
+            where f.session_id=${data.sessionId}::uuid and o.copy_type='RECOVERY'
+              and o.bucket_name=${recoveryBucket} and o.status='VERIFIED'
+              and o.sha256=f.sha256 and o.byte_size=f.byte_size) as recovery_count,
+          (select count(*)::int from bridge_dit_ingest_files f
+            where f.session_id=${data.sessionId}::uuid) as source_count
+      `;
+      const evidence = actualCopies[0];
+      const sourceCount = Number(evidence?.source_count ?? 0);
+      if (!verifiedTypes.has("PRIMARY") || !verifiedTypes.has("RECOVERY") ||
+          sourceCount === 0 ||
+          Number(evidence?.primary_count ?? 0) !== sourceCount ||
+          Number(evidence?.recovery_count ?? 0) !== sourceCount) {
+        throw new Error("Sign-off is blocked until every source file has matching OCI Primary and Recovery objects verified by SHA-256");
       }
       await tx`
         update bridge_dit_ingest_sessions set status = 'SIGNED_OFF', signoff_note = ${data.signoffNote},
