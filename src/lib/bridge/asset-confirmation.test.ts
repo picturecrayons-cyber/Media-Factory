@@ -157,3 +157,49 @@ test("title owner can confirm an upload when organization tables are absent", as
     await db.close();
   }
 });
+
+test("super-admin verified asset replacement is allowed in rights review and preserves the prior version", async () => {
+  const db = new PGlite();
+  try {
+    await db.waitReady;
+    await db.exec("create role anon; create role authenticated;");
+    await db.exec(readFileSync(join(process.cwd(), "migrations/0004_bridge.sql"), "utf8"));
+    await db.exec(readFileSync(join(process.cwd(), "migrations/0021_bridge_organizations.sql"), "utf8"));
+    await db.exec(`
+      insert into bridge_titles (id,slug,name,owner_user_id,owner_account_type,status)
+      values ('rights-title','rights-title','Rights Review title','creator','independent_creator','RIGHTS_REVIEW');
+      insert into bridge_assets (id,title_id,kind,s3_key,content_type,created_by,byte_size)
+      values ('old-master','rights-title','master','sealed/old-master.mp4','video/mp4','creator',120);
+      insert into bridge_assets (id,title_id,kind,s3_key,content_type,created_by)
+      values ('new-master','rights-title','master','source/new-master.mp4','video/mp4','super-admin');
+    `);
+    const sql = { query: async <T>(query: string, params: unknown[]) => (await db.query<T>(query, params)).rows };
+    const replacement = {
+      assetId: "new-master",
+      actorUserId: "super-admin",
+      internalActor: true,
+      titleId: "rights-title",
+      kind: "master",
+      byteSize: 240,
+      contentType: "video/mp4",
+      checksum: "etag-new",
+      sourceKey: "source/new-master.mp4",
+      sealedKey: "sealed/new-master.mp4",
+    };
+    assert.equal(await persistVerifiedAsset(sql, { ...replacement, internalActor: false }), false);
+    assert.equal(await persistVerifiedAsset(sql, replacement), true);
+    const rows = await db.query<{ id: string; byte_size: number | null; s3_key: string }>(
+      "select id, byte_size, s3_key from bridge_assets where id in ('old-master','new-master') order by id",
+    );
+    assert.deepEqual(rows.rows, [
+      { id: "new-master", byte_size: 240, s3_key: "sealed/new-master.mp4" },
+      { id: "old-master", byte_size: 120, s3_key: "sealed/old-master.mp4" },
+    ]);
+    const title = await db.query<{ master_key: string | null; status: string }>(
+      "select master_key, status from bridge_titles where id='rights-title'",
+    );
+    assert.deepEqual(title.rows[0], { master_key: "sealed/new-master.mp4", status: "RIGHTS_REVIEW" });
+  } finally {
+    await db.close();
+  }
+});
