@@ -4,16 +4,16 @@ import { getSql } from "@/lib/db";
 import {
   isValidHostingerBearer,
   parseHostingerIncomingPayload,
+  type HostingerIncomingMailRecord,
 } from "@/lib/bridge/hostinger-incoming";
+import { bridgeEnv } from "@/lib/bridge/env";
 
 const MAX_WEBHOOK_BYTES = 64 * 1024;
-const DEFAULT_INCOMING_MAILBOX = "abijithasokan@crayonspictures.com";
-
 export const Route = createFileRoute("/api/hostinger-incoming")({
   server: {
     handlers: {
       POST: async ({ request }) => {
-        const secret = process.env.HOSTINGER_INCOMING_WEBHOOK_SECRET?.trim();
+        const secret = bridgeEnv.hostingerIncomingWebhookSecret();
         if (!secret) {
           return Response.json({ error: "Incoming mail receiver is not configured" }, { status: 503 });
         }
@@ -44,10 +44,9 @@ export const Route = createFileRoute("/api/hostinger-incoming")({
           return Response.json({ error: "Invalid JSON" }, { status: 400 });
         }
 
-        let message;
+        let message: HostingerIncomingMailRecord;
         try {
-          const expectedMailbox = process.env.HOSTINGER_INCOMING_MAILBOX?.trim() ||
-            DEFAULT_INCOMING_MAILBOX;
+          const expectedMailbox = bridgeEnv.hostingerIncomingMailbox();
           message = parseHostingerIncomingPayload(payload, expectedMailbox);
         } catch {
           return Response.json({ error: "Invalid incoming mail event" }, { status: 400 });
