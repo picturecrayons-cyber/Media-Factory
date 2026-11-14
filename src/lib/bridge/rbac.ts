@@ -1,4 +1,4 @@
-import type { AccountType, InternalRole, Permission, TitleStatus } from "./types.ts";
+import { PERMISSIONS, type AccountType, type InternalRole, type Permission, type TitleStatus } from "./types.ts";
 
 const INTERNAL_PERMISSIONS: Record<InternalRole, readonly Permission[]> = {
   viewer: ["title.read_catalog", "audit.read"],
@@ -43,31 +43,8 @@ const INTERNAL_PERMISSIONS: Record<InternalRole, readonly Permission[]> = {
     "loop.revoke",
     "loop.certify_playback",
   ],
-  super_admin: [
-    "title.ingest_internal",
-    "title.create",
-    "title.read_catalog",
-    "title.archive_any",
-    "title.revision_review",
-    "title.advance_upload",
-    "title.qc_review",
-    "title.rights_review",
-    "title.license",
-    "title.negotiate",
-    "title.deliver",
-    "delivery.read",
-    "delivery.read_finance",
-    "asset.sign_download",
-    "entitlement.read_own",
-    "finance.read",
-    "finance.record_settlement",
-    "users.invite_internal",
-    "audit.read",
-    "loop.publish",
-    "loop.revoke",
-    "loop.certify_playback",
-    "asset.sign_upload",
-  ],
+  // Root operator receives every Bridge operational permission. Buyer checkout remains a buyer action.
+  super_admin: PERMISSIONS.filter((permission) => permission !== "payment.create_order"),
 };
 
 const ACCOUNT_PERMISSIONS: Record<AccountType, readonly Permission[]> = {
@@ -146,6 +123,12 @@ export function permissionsFor(actor: Actor): Set<Permission> {
 
 export function canAccessDashboard(actor: Actor): boolean {
   return actor.emailVerified && actor.internalRole === "super_admin";
+}
+
+/** A verified Super Admin with a Creator account may also open their own Creator desk. */
+export function canAccessCreatorDashboard(actor: Actor): boolean {
+  return actor.emailVerified && actor.accountType === "independent_creator" &&
+    (actor.internalRole === null || actor.internalRole === "super_admin");
 }
 
 /** Broad internal workstation datasets are restricted to verified Admin roles. */
