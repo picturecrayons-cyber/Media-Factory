@@ -11,7 +11,7 @@ import { loadTitle, recordTransition } from "./titles";
 import { writeAudit } from "./audit";
 import { assertBuyerPublishable } from "./buyer-visibility";
 import { assertNotDevUser } from "./guards";
-import { sendTransactionalEmail } from "./mail.server";
+import { formatBrandedEmailHtml, sendTransactionalEmail } from "./mail.server";
 
 function requireRazorpayKeys() {
   const keyId = bridgeEnv.razorpayKeyId();
@@ -60,19 +60,63 @@ async function sendLicenseReceiptEmail(
   if (!email) return;
   const titleName = titles[0]?.name ?? "your licensed title";
   const subject = `Crayons Bridge licence payment confirmed: ${titleName}`;
+  const textBody = `Payment received and licence entitlement recorded for ${titleName}. Payment reference: ${paymentId}. Open your Bridge buyer workspace: https://www.crayonspictures.in/buyer`;
+  const htmlBody = formatBrandedEmailHtml(
+    subject,
+    `<p>Payment received and licence entitlement recorded for <strong>${titleName}</strong>.</p><p>Payment reference: ${paymentId}</p>`,
+    { label: "Open buyer workspace", url: "https://www.crayonspictures.in/buyer" },
+  );
+  await sql`
+    insert into bridge_notification_outbox (
+      event_key, recipient_email, subject, text_body, html_body
+    ) values (
+      ${`bridge-license:${paymentId}`}, ${email}, ${subject}, ${textBody}, ${htmlBody}
+    ) on conflict (event_key) do nothing
+  `;
+  const claimed = await sql<{
+    id: string; recipient_email: string; subject: string; text_body: string; html_body: string | null;
+    attempts: number;
+  }>`
+    update bridge_notification_outbox
+    set status = 'sending', attempts = attempts + 1, processing_started_at = now(), updated_at = now()
+    where event_key = ${`bridge-license:${paymentId}`}
+      and next_attempt_at <= now()
+      and (
+        status in ('pending','failed')
+        or (status = 'sending' and processing_started_at < now() - interval '10 minutes')
+      )
+    returning id, recipient_email, subject, text_body, html_body, attempts
+  `;
+  const outbox = claimed[0];
+  if (!outbox) return;
   try {
-    await sendTransactionalEmail({
-      to: email,
-      subject,
-      text: `Payment received and licence entitlement recorded for ${titleName}. Payment reference: ${paymentId}. Open your Bridge buyer workspace: https://www.crayonspictures.in/buyer`,
-      category: "bridge_license_captured",
+    const result = await sendTransactionalEmail({
+      to: outbox.recipient_email,
+      subject: outbox.subject,
+      text: outbox.text_body,
+      html: outbox.html_body ?? undefined,
+      category: packageLicense ? "bridge_package_license_captured" : "bridge_license_captured",
     });
+    await sql`
+      update bridge_notification_outbox
+      set status = 'sent', sent_at = now(), provider_message_id = ${result.messageId ?? null},
+          last_error = null, processing_started_at = null, updated_at = now()
+      where id = ${outbox.id}::uuid
+    `;
   } catch (error) {
-    // Email delivery is retriable and must never undo a verified payment/entitlement.
-    console.warn("Bridge licence receipt email was not sent", {
+    const message = error instanceof Error ? error.message : "mail_delivery_failed";
+    await sql`
+      update bridge_notification_outbox
+      set status = 'failed',
+          last_error = ${message.slice(0, 500)},
+          next_attempt_at = now() + make_interval(mins => least(60, greatest(1, power(2, least(attempts, 6))::int))),
+          processing_started_at = null,
+          updated_at = now()
+      where id = ${outbox.id}::uuid
+    `;
+    console.warn("Bridge licence receipt notification queued for retry", {
       paymentId,
-      packageLicense,
-      error: error instanceof Error ? error.message : "mail_delivery_failed",
+      error: message,
     });
   }
 }
