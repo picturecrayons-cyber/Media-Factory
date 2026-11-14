@@ -7,6 +7,8 @@ import { requireVerifiedActor } from "./session";
 import { writeAudit } from "./audit";
 import { listIncomingSubmissions } from "./submission-queue";
 import { assertNotDevUser } from "./guards";
+import { hasVerifiedMasterAndArtwork } from "./asset-roles";
+import { reviewWorkflow } from "./workflow";
 
 async function actorFor(userId: string) {
   assertNotDevUser(userId);
@@ -45,7 +47,8 @@ export const listAdminWorkstations = createServerFn({ method: "GET" })
 const reviewInput = z.object({
   titleId: z.string().min(1),
   decision: z.enum(["ACCEPT", "PASS", "FAIL", "APPROVE", "REJECT"]),
-  notes: z.string().max(4000).optional(),
+  notes: z.string().trim().min(8).max(2000).optional(),
+  grantId: z.string().uuid().optional(),
 });
 
 export const reviewAdminTitle = createServerFn({ method: "POST" })
@@ -56,60 +59,48 @@ export const reviewAdminTitle = createServerFn({ method: "POST" })
     if (!actor.internalRole) throw new Error("Forbidden");
     const sql = await getSql();
 
-    // Lock and persist the review decision, title event and audit record atomically.
     return sql.transaction(async (tx) => {
-      const rows = await tx<{ id: string; status: string }>`
-        select id, status from bridge_titles where id = ${data.titleId} for update
-      `;
-      const title = rows[0];
-      if (!title) throw new Error("Title not found");
-      let next: string | null = null;
-      let action = "admin.review";
-
       if (data.decision === "ACCEPT") {
         assertPermission(actor, "title.advance_upload");
+        const rows = await tx<{ id: string; status: string; master_key: string | null; poster_key: string | null }>\`
+          select id, status, master_key, poster_key
+          from bridge_titles where id = \${data.titleId} for update
+        \`;
+        const title = rows[0];
+        if (!title) throw new Error("Title not found");
         if (title.status !== "PREPARING") throw new Error("Submission is not awaiting acceptance");
-        next = "QC_REVIEW";
-        action = "submission.accept";
-      } else if (data.decision === "PASS") {
-        assertPermission(actor, "title.qc_review");
-        if (title.status !== "QC_REVIEW") throw new Error("Title is not in QC review");
-        next = "RIGHTS_REVIEW";
-        action = "qc.pass";
-      } else if (data.decision === "FAIL") {
-        assertPermission(actor, "title.qc_review");
-        if (title.status !== "QC_REVIEW") throw new Error("Title is not in QC review");
-        await tx`insert into bridge_qc_cases (title_id, status, reviewer_findings, reviewed_by, reviewed_at)
-          values (${title.id}, 'FAILED', ${JSON.stringify(data.notes ? [{ note: data.notes }] : [])}::jsonb, ${actor.userId}, now())`;
-        await writeAudit({ actorUserId: actor.userId, action: "qc.fail", entityType: "bridge_title", entityId: title.id, metadata: { notes: data.notes ?? null } }, tx);
+        const assets = await tx<{ kind: string; s3_key: string }>\`
+          select kind, s3_key from bridge_assets
+          where title_id = \${title.id} and coalesce(byte_size, 0) > 0
+        \`;
+        if (!hasVerifiedMasterAndArtwork(assets, title.master_key, title.poster_key)) {
+          throw new Error("Verified current master and artwork are required before QC");
+        }
+        await tx\`update bridge_titles set status = 'QC_REVIEW', updated_at = now() where id = \${title.id}\`;
+        await tx\`insert into bridge_title_events (title_id, from_status, to_status, actor_user_id, note)
+          values (\${title.id}, \${title.status}, 'QC_REVIEW', \${actor.userId}, \${data.notes ?? "Accepted for QC review"})\`;
+        await writeAudit({
+          actorUserId: actor.userId,
+          action: "submission.accept",
+          entityType: "bridge_title",
+          entityId: title.id,
+          metadata: { from: title.status, to: "QC_REVIEW", notes: data.notes ?? null },
+        }, tx);
         return { ok: true, status: "QC_REVIEW" };
-      } else if (data.decision === "APPROVE") {
-        assertPermission(actor, "title.rights_review");
-        if (title.status !== "RIGHTS_REVIEW") throw new Error("Title is not in rights review");
-        next = "LICENSING_READY";
-        action = "rights.approve";
-      } else {
-        assertPermission(actor, "title.rights_review");
-        if (title.status !== "RIGHTS_REVIEW") throw new Error("Title is not in rights review");
-        await tx`insert into bridge_legal_cases (title_id, status, evidence, reviewed_by, reviewed_at)
-          values (${title.id}, 'REJECTED', ${JSON.stringify(data.notes ? [{ note: data.notes }] : [])}::jsonb, ${actor.userId}, now())`;
-        await writeAudit({ actorUserId: actor.userId, action: "rights.reject", entityType: "bridge_title", entityId: title.id, metadata: { notes: data.notes ?? null } }, tx);
-        return { ok: true, status: "RIGHTS_REVIEW" };
       }
 
-      await tx`update bridge_titles set status = ${next}, updated_at = now() where id = ${title.id}`;
-      await tx`insert into bridge_title_events (title_id, from_status, to_status, actor_user_id, note)
-        values (${title.id}, ${title.status}, ${next}, ${actor.userId}, ${data.notes ?? null})`;
-      if (data.decision === "PASS") {
-        await tx`insert into bridge_qc_cases (title_id, status, reviewer_findings, reviewed_by, reviewed_at)
-          values (${title.id}, 'PASSED', ${JSON.stringify(data.notes ? [{ note: data.notes }] : [])}::jsonb, ${actor.userId}, now())`;
-      }
-      if (data.decision === "APPROVE") {
-        await tx`insert into bridge_legal_cases (title_id, status, evidence, reviewed_by, reviewed_at)
-          values (${title.id}, 'APPROVED', ${JSON.stringify(data.notes ? [{ note: data.notes }] : [])}::jsonb, ${actor.userId}, now())`;
-      }
-      await writeAudit({ actorUserId: actor.userId, action, entityType: "bridge_title", entityId: title.id, metadata: { from: title.status, to: next, notes: data.notes ?? null } }, tx);
-      return { ok: true, status: next };
+      const stage = data.decision === "PASS" || data.decision === "FAIL" ? "QC" : "LEGAL";
+      const decision = data.decision === "PASS" || data.decision === "APPROVE" ? "APPROVE" : "REJECT";
+      if (!data.notes) throw new Error("A review note of at least 8 characters is required");
+      if (stage === "LEGAL" && !data.grantId) throw new Error("Select a draft rights agreement before legal review");
+      const result = await reviewWorkflow(tx, actor, {
+        titleId: data.titleId,
+        stage,
+        decision,
+        note: data.notes,
+        ...(data.grantId ? { grantId: data.grantId } : {}),
+      });
+      return { ok: true, status: result.status };
     });
   });
 
