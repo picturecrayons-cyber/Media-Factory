@@ -22,25 +22,42 @@ export function TitleList({ empty, query = "" }: { empty: string; query?: string
   if (!titles.length) return <p className="text-sm text-muted">{empty}</p>;
   return (
     <ul className="divide-y divide-line rounded-sm border border-line">
-      {titles.map((t) => (
-        <li key={t.id}>
-          <Link
-            to="/title/$id"
-            params={{ id: t.id }}
-            className="flex flex-wrap items-center justify-between gap-3 px-4 py-4 hover:bg-fg/5"
-          >
-            <div>
-              <p className="font-medium">{t.name}</p>
-              <p className="text-sm text-muted">
-                {t.contentType ? `${t.contentType} · ` : ""}
-                {t.language}
-                {t.year ? ` · ${t.year}` : ""}
-              </p>
-            </div>
-            <StatusChip status={t.status} />
-          </Link>
-        </li>
-      ))}
+      {titles.map((t) => {
+        const status = String(t.status ?? "").toUpperCase().replace(/[_-]+/g, " ");
+        const actionLabel = status.includes("DRAFT")
+          ? "Continue editing"
+          : status.includes("PENDING") || status.includes("SUBMITTED")
+            ? "View submission"
+            : status.includes("UPLOADING")
+              ? "View upload progress"
+              : status.includes("PREPARING")
+                ? "View preparation status"
+                : status.includes("QC") || status.includes("RIGHTS") || status.includes("HOLD")
+                  ? "View issue"
+                  : "View title";
+        return (
+          <li key={t.id}>
+            <Link
+              to="/title/$id"
+              params={{ id: t.id }}
+              className="flex flex-wrap items-center justify-between gap-3 px-4 py-4 hover:bg-fg/5"
+            >
+              <div>
+                <p className="font-medium">{t.name}</p>
+                <p className="text-sm text-muted">
+                  {t.contentType ? `${t.contentType} · ` : ""}
+                  {t.language}
+                  {t.year ? ` · ${t.year}` : ""}
+                </p>
+              </div>
+              <div className="flex items-center gap-3">
+                <StatusChip status={t.status} />
+                <span className="text-sm font-semibold text-accent">{actionLabel}</span>
+              </div>
+            </Link>
+          </li>
+        );
+      })}
     </ul>
   );
 }
