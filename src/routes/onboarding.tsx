@@ -112,8 +112,14 @@ function Onboarding() {
       try {
         await retryWorkspaceSession({
           checkUser: () => supabase.auth.getUser(),
-          refetch: async () => { const result = await sessionQ.refetch(); if (result.error) throw result.error; },
-          signIn: async () => { await supabase.auth.signOut({ scope: "local" }).catch(() => undefined); void navigate({ to: "/login", replace: true }); },
+          refetch: async () => {
+            const result = await sessionQ.refetch();
+            if (result.error) throw result.error;
+          },
+          signIn: async () => {
+            await supabase.auth.signOut({ scope: "local" }).catch(() => undefined);
+            void navigate({ to: "/login", replace: true });
+          },
         });
       } catch {
         setError("Bridge could not load onboarding. Please try again shortly.");
@@ -128,14 +134,12 @@ function Onboarding() {
           <h1 className="font-display text-2xl">Could not load Bridge</h1>
           <p className="text-sm leading-relaxed text-muted">Retry without clearing your session.</p>
           {error ? <p role="alert" className="text-sm text-accent">{error}</p> : null}
-          <Button type="button" disabled={retrying} className="w-full" onClick={() => void retrySession()}>{retrying ? "Checking…" : "Retry"}</Button>
+          <Button type="button" disabled={retrying} className="w-full" onClick={() => void retrySession()}>
+            {retrying ? "Checking…" : "Retry"}
+          </Button>
         </div>
       </main>
     );
-  }
-
-  function toggle(setter: (next: string[]) => void, current: string[], value: string, checked: boolean) {
-    setter(checked ? [...current, value] : current.filter((item) => item !== value));
   }
 
   async function onSubmit(e: FormEvent) {
@@ -151,7 +155,11 @@ function Onboarding() {
 
     try {
       let inviteToken: string | undefined;
-      try { inviteToken = sessionStorage.getItem("bridge-invite") ?? undefined; } catch { /* ignore */ }
+      try {
+        inviteToken = sessionStorage.getItem("bridge-invite") ?? undefined;
+      } catch {
+        // Ignore unavailable browser storage.
+      }
 
       const result = await completeOnboarding({
         data: {
@@ -162,16 +170,17 @@ function Onboarding() {
         },
       });
 
-      try { sessionStorage.removeItem("bridge-invite"); } catch { /* ignore */ }
-      // Account creation is complete at this point. Do not require a title,
-      // rights package, or legal attestation before opening the user's desk.
-      // Those are separate, optional workflows inside the Creator / Studio UI.
+      try {
+        sessionStorage.removeItem("bridge-invite");
+      } catch {
+        // Ignore unavailable browser storage.
+      }
+
       const destination = result.home || (
         accountType === "buyer" ? "/buyer" :
         accountType === "studio" ? "/studio" : "/creator"
       );
       void navigate({ to: destination as any, replace: true });
-      return;
     } catch (err) {
       setError(publicOnboardingError(err));
     } finally {
@@ -181,165 +190,98 @@ function Onboarding() {
   }
 
   return (
-    <main className="min-h-screen bg-bg p-5 sm:p-8">
-      <form onSubmit={(e) => void onSubmit(e)} className="mx-auto max-w-4xl space-y-6 rounded-2xl border border-line bg-surface p-6 sm:p-8">
-        <div className="flex items-start justify-between gap-5">
-          <div>
-            <BrandMark />
-            <h1 className="mt-5 font-display text-3xl font-semibold tracking-tight">Submit a title to Crayons Bridge</h1>
-            <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted">
-              Upload → Prepare → License → Earn. This intake captures the minimum structured information needed to start rights review and buyer preparation.
-            </p>
-          </div>
-          <span className="hidden rounded-full border border-line bg-elevated px-3 py-1 text-xs text-muted sm:inline-flex">StreamVista OPC Pvt Ltd.</span>
+    <main className="grid min-h-screen place-items-center bg-bg p-5 sm:p-8">
+      <form onSubmit={(e) => void onSubmit(e)} className="w-full max-w-xl space-y-6 rounded-2xl border border-line bg-surface p-6 sm:p-8">
+        <div className="text-center">
+          <BrandMark />
+          <h1 className="mt-5 font-display text-3xl font-semibold tracking-tight">Complete your Bridge account</h1>
+          <p className="mt-2 text-sm leading-relaxed text-muted">
+            Set up your workspace first. You can submit films, concepts, rights documents and assets after entering your dashboard.
+          </p>
         </div>
 
         <section className="space-y-4 rounded-2xl border border-line p-5">
           <div>
-            <h2 className="font-display text-xl font-semibold">1. Account</h2>
-            <p className="mt-1 text-xs text-muted">Legal owner: StreamVista OPC Pvt Ltd. Product: Crayons Bridge.</p>
+            <h2 className="font-display text-lg font-semibold">Account details</h2>
+            <p className="mt-1 text-xs text-muted">Your verified sign-in determines your identity. Your selected account type determines the public workspace requested during onboarding.</p>
           </div>
+
           {unsupportedSignupRole ? (
-            <div role="alert" className="mb-4 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-fg">
-              This signup link contains a role that is not available through public onboarding. No role has been granted. <Link to="/contact" className="font-semibold underline">Contact Bridge</Link> to request the correct workspace.
+            <div role="alert" className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-fg">
+              This signup link contains a role that is not available through public onboarding. No role has been granted.{" "}
+              <Link to="/contact" className="font-semibold underline">Contact Bridge</Link> to request the correct workspace.
             </div>
           ) : null}
-          <div className="grid gap-4 sm:grid-cols-2">
-            <label className="text-sm font-medium">Your name *
-              <input required value={displayName} onChange={(e) => setDisplayName(e.target.value)} autoComplete="name" className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5" />
-            </label>
-            <label className="text-sm font-medium">Account type *
-              <select value={accountType} onChange={(e) => setAccountType(e.target.value as PublicAccountType)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5">
-                {(Object.keys(ACCOUNT_LABELS) as PublicAccountType[]).map((type) => <option key={type} value={type}>{ACCOUNT_LABELS[type]}</option>)}
-              </select>
-            </label>
-          </div>
+
+          <label className="block text-sm font-medium">
+            Your name *
+            <input
+              required
+              maxLength={80}
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+              autoComplete="name"
+              className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5"
+            />
+          </label>
+
+          <label className="block text-sm font-medium">
+            Account type *
+            <select
+              value={accountType}
+              onChange={(e) => setAccountType(e.target.value as PublicAccountType)}
+              disabled={Boolean(signupAccountType)}
+              className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5"
+            >
+              {(Object.keys(ACCOUNT_LABELS) as PublicAccountType[]).map((type) => (
+                <option key={type} value={type}>{ACCOUNT_LABELS[type]}</option>
+              ))}
+            </select>
+            {signupAccountType ? (
+              <span className="mt-1 block text-xs text-muted">Using the account type selected during signup.</span>
+            ) : null}
+          </label>
+
           {accountType === "studio" ? (
-            <label className="block text-sm font-medium">Studio / company name *
-              <input required value={organizationName} onChange={(e) => setOrganizationName(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5" />
+            <label className="block text-sm font-medium">
+              Studio / company name *
+              <input
+                required
+                maxLength={120}
+                value={organizationName}
+                onChange={(e) => setOrganizationName(e.target.value)}
+                className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5"
+              />
             </label>
           ) : null}
         </section>
 
+        {accountType === "independent_creator" ? (
+          <div className="rounded-xl border border-line bg-elevated p-4 text-sm text-muted">
+            Your Creator dashboard opens after account setup. Finished Film submissions and Story / Concept proposals are separate workflows inside the dashboard.
+          </div>
+        ) : null}
+        {accountType === "studio" ? (
+          <div className="rounded-xl border border-line bg-elevated p-4 text-sm text-muted">
+            Your Studio dashboard opens after account setup. Production setup and title submissions can be completed from the Studio workspace.
+          </div>
+        ) : null}
         {accountType === "buyer" ? (
-          <section className="rounded-2xl border border-line bg-elevated p-5">
-            <h2 className="font-display text-xl font-semibold">Buyer access</h2>
-            <p className="mt-2 text-sm text-muted">Buyer accounts discover and license titles. Rights-holder submissions are limited to Independent Creator and Studio / Company accounts.</p>
-          </section>
-        ) : (
-          <>
-            <section className="space-y-4 rounded-2xl border border-line p-5">
-              <div><h2 className="font-display text-xl font-semibold">2. Title</h2><p className="mt-1 text-xs text-muted">Use structured fields; only the title synopsis remains free text.</p></div>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <label className="text-sm font-medium">Title name *
-                  <input required value={titleName} onChange={(e) => setTitleName(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5" />
-                </label>
-                <label className="text-sm font-medium">Original / local title
-                  <input value={originalTitle} onChange={(e) => setOriginalTitle(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5" />
-                </label>
-                <label className="text-sm font-medium">Content type *
-                  <select value={contentType} onChange={(e) => setContentType(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5">
-                    {BRIDGE_LOOP_LANES.map((lane) => <option key={lane.id} value={lane.loopType}>{lane.label}</option>)}
-                  </select>
-                </label>
-                <label className="text-sm font-medium">Original language *
-                  <select value={language} onChange={(e) => setLanguage(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5">{LANGUAGES.map((item) => <option key={item}>{item}</option>)}</select>
-                </label>
-                <label className="text-sm font-medium">Release year
-                  <input type="number" min="1895" max="2100" value={year} onChange={(e) => setYear(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5" />
-                </label>
-                <label className="text-sm font-medium">Runtime (minutes)
-                  <input type="number" min="1" max="600" value={runtimeMinutes} onChange={(e) => setRuntimeMinutes(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5" />
-                </label>
-              </div>
-              <CheckGroup label="Additional languages" values={LANGUAGES} selected={additionalLanguages} onChange={(v, c) => toggle(setAdditionalLanguages, additionalLanguages, v, c)} />
-              <label className="block text-sm font-medium">Synopsis *
-                <textarea required minLength={20} maxLength={4000} rows={5} value={synopsis} onChange={(e) => setSynopsis(e.target.value)} className="mt-1.5 w-full rounded-xl border border-line-strong bg-elevated px-3.5 py-3" />
-              </label>
-              <div className="grid gap-4 sm:grid-cols-3">
-                <label className="text-sm font-medium">Country of origin
-                  <input value={countryOfOrigin} onChange={(e) => setCountryOfOrigin(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5" />
-                </label>
-                <label className="text-sm font-medium">Release date
-                  <input type="date" value={releaseDate} onChange={(e) => setReleaseDate(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5" />
-                </label>
-                <label className="text-sm font-medium">Director
-                  <input value={director} onChange={(e) => setDirector(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5" />
-                </label>
-              </div>
-              <label className="block text-sm font-medium">Producer
-                <input value={producer} onChange={(e) => setProducer(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5" />
-              </label>
-            </section>
-
-            <section className="space-y-4 rounded-2xl border border-line p-5">
-              <div><h2 className="font-display text-xl font-semibold">3. Rights package</h2><p className="mt-1 text-xs text-muted">These controls define what a buyer may license. No open-ended rights description is accepted.</p></div>
-              <CheckGroup label="Territories" values={TERRITORIES} selected={territories} onChange={(v, c) => toggle(setTerritories, territories, v, c)} required />
-              <CheckGroup label="Rights languages" values={LANGUAGES} selected={rightsLanguages} onChange={(v, c) => toggle(setRightsLanguages, rightsLanguages, v, c)} required />
-              <CheckGroup label="Exploitation / media" values={MEDIA} selected={media} onChange={(v, c) => toggle(setMedia, media, v, c)} required />
-              <div className="grid gap-4 sm:grid-cols-2">
-                <label className="text-sm font-medium">Rights window starts *
-                  <input required type="datetime-local" value={windowStart} onChange={(e) => setWindowStart(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5" />
-                </label>
-                <label className="text-sm font-medium">Rights window ends *
-                  <input required type="datetime-local" value={windowEnd} onChange={(e) => setWindowEnd(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5" />
-                </label>
-              </div>
-              <div className="grid gap-4 sm:grid-cols-3">
-                <label className="text-sm font-medium">Exclusivity *
-                  <select value={exclusivity} onChange={(e) => setExclusivity(e.target.value as "EXCLUSIVE" | "NON_EXCLUSIVE")} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5"><option value="NON_EXCLUSIVE">Non-exclusive</option><option value="EXCLUSIVE">Exclusive</option></select>
-                </label>
-                <label className="text-sm font-medium">Sublicensing *
-                  <select value={String(sublicensingAllowed)} onChange={(e) => setSublicensingAllowed(e.target.value === "true")} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5"><option value="false">Not allowed</option><option value="true">Allowed</option></select>
-                </label>
-                <label className="text-sm font-medium">Promotional rights *
-                  <select value={String(promotionalRights)} onChange={(e) => setPromotionalRights(e.target.value === "true")} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5"><option value="true">Included</option><option value="false">Not included</option></select>
-                </label>
-              </div>
-            </section>
-
-            <section className="space-y-4 rounded-2xl border border-line p-5">
-              <div><h2 className="font-display text-xl font-semibold">4. Authorization & access</h2><p className="mt-1 text-xs text-muted">Attestation starts the legal review. It does not replace documentary evidence.</p></div>
-              <label className="text-sm font-medium">Rights basis *
-                <select value={rightsBasis} onChange={(e) => setRightsBasis(e.target.value as typeof rightsBasis)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5">
-                  <option value="OWNER">I am the rights owner</option>
-                  <option value="EXCLUSIVE_LICENSEE">Exclusive licensee</option>
-                  <option value="AUTHORIZED_DISTRIBUTOR">Authorized distributor</option>
-                  <option value="PRODUCER_AUTHORITY">Producer authority</option>
-                </select>
-              </label>
-              <label className="block text-sm font-medium">Authorization evidence to provide *
-                <select required value={authorizationEvidenceType} onChange={(e) => setAuthorizationEvidenceType(e.target.value as typeof authorizationEvidenceType)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5">
-                  <option value="">Choose evidence type</option>
-                  <option value="RIGHTS_AGREEMENT">Rights agreement</option>
-                  <option value="CHAIN_OF_TITLE">Chain-of-title documents</option>
-                  <option value="AUTHORIZATION_LETTER">Authorization letter</option>
-                  <option value="DISTRIBUTION_AGREEMENT">Distribution agreement</option>
-                  <option value="OTHER">Other supporting evidence</option>
-                </select>
-                <span className="mt-1 block text-xs text-muted">This records the evidence type you intend to provide; it does not mark the document as uploaded or verified.</span>
-              </label>
-              <label className="flex items-start gap-3 rounded-xl border border-line bg-elevated p-4 text-sm">
-                <input required type="checkbox" checked={authorizationAttested} onChange={(e) => setAuthorizationAttested(e.target.checked)} className="mt-0.5 accent-current" />
-                <span>I confirm that I am authorized to submit and license the selected rights. I understand Bridge will require supporting authorization / chain-of-title evidence before Licensing Ready.</span>
-              </label>
-              <label className="text-sm font-medium">Screener upload
-                <select value="SCREENER_PENDING" disabled className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5">
-                  <option value="SCREENER_PENDING">Upload after submission in the private title workspace</option>
-                </select>
-                <span className="mt-1 block text-xs text-muted">No screener file is uploaded by this form. The submission remains pending until a private asset is uploaded and verified.</span>
-              </label>
-              <CheckGroup label="Intended delivery destinations" values={DESTINATIONS} selected={destinations} onChange={(v, c) => toggle(setDestinations, destinations, v, c)} required />
-            </section>
-          </>
-        )}
+          <div className="rounded-xl border border-line bg-elevated p-4 text-sm text-muted">
+            Your Buyer dashboard opens after account setup. Only approved, buyer-visible titles and explicitly granted licenses will be available.
+          </div>
+        ) : null}
 
         {error ? <div role="alert" className="rounded-xl border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-600 dark:text-red-400">{error}</div> : null}
+
         <div className="flex flex-col gap-3 border-t border-line pt-5 sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-xs leading-relaxed text-muted">© 2026 StreamVista OPC Pvt Ltd. Crayons Bridge is the media supply chain, rights and licensing control plane.</p>
-          <Button type="submit" disabled={busy} className="h-11 rounded-full px-6 font-semibold">{busy ? "Submitting…" : accountType === "buyer" ? "Enter Bridge" : "Submit title for review"}</Button>
+          <p className="text-xs leading-relaxed text-muted">© 2026 StreamVista OPC Pvt Ltd. Crayons Bridge.</p>
+          <Button type="submit" disabled={busy || unsupportedSignupRole} className="h-11 rounded-full px-6 font-semibold">
+            {busy ? "Creating workspace…" : "Continue to dashboard"}
+          </Button>
         </div>
       </form>
     </main>
   );
+
 }
