@@ -183,6 +183,19 @@ export function canGrantInternalRole(actor: Actor, role: InternalRole): boolean 
   return ROLE_GRANTS[actor.internalRole].includes(role);
 }
 
+export const CANONICAL_SUPER_ADMIN_EMAIL = "picturecrayons@gmail.com";
+
+/** Super Admin invitations are restricted to the single canonical Bridge identity. */
+export function canGrantInternalRoleToEmail(
+  actor: Actor,
+  role: InternalRole,
+  recipientEmail: string,
+): boolean {
+  if (!canGrantInternalRole(actor, role)) return false;
+  if (role !== "super_admin") return true;
+  return recipientEmail.trim().toLowerCase() === CANONICAL_SUPER_ADMIN_EMAIL;
+}
+
 export function hasAccountPermission(actor: Actor, permission: Permission): boolean {
   return actor.emailVerified && !actor.internalRole && ACCOUNT_PERMISSIONS[actor.accountType].includes(permission);
 }
