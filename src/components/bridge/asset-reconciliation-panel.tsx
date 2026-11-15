@@ -40,7 +40,7 @@ export function ProductionAssetReconciliationPanel() {
         data: { limit: 1, queueAfterId, assetAfterId },
       }),
     onSuccess: (result) => {
-      setQueueAfterId(result.nextQueueAfterId);
+      setQueueAfterId(String(result.nextQueueAfterId));
       setAssetAfterId(result.nextAssetAfterId);
       setTotals((current) => ({
         batches: current.batches + 1,
