@@ -7,7 +7,6 @@ import { assertNotDevUser } from "./guards";
 import { requireVerifiedActor } from "./session";
 import { writeAudit } from "./audit";
 
-const UPLOADABLE = ["DRAFT", "UPLOADING", "PREPARING"] as const;
 const MIGRATION_KIND: Record<string, "master" | "poster" | "screener"> = {
   MASTER: "master",
   POSTER: "poster",
@@ -19,7 +18,7 @@ function errorMessage(error: unknown) {
 }
 
 function isMissingObject(error: unknown) {
-  return /OCI object verification failed \\(404\\)/i.test(errorMessage(error));
+  return /OCI object verification failed \(404\)/i.test(errorMessage(error));
 }
 
 export const reconcileProductionAssets = createServerFn({ method: "POST" })
@@ -70,7 +69,7 @@ export const reconcileProductionAssets = createServerFn({ method: "POST" })
       from loop_media_migration_queue q
       join bridge_titles t on t.id = q.title_id
       where q.id > ${data.queueAfterId}
-        and q.status in ('PENDING_REUPLOAD', 'MISSING_SOURCE_MEDIA')
+        and q.status in ('PENDING_REUPLOAD', 'MISSING_SOURCE_MEDIA', 'UPLOADED')
         and q.target_path is not null
         and t.status in ('DRAFT', 'UPLOADING', 'PREPARING')
         and t.merged_into_title_id is null
@@ -109,7 +108,7 @@ export const reconcileProductionAssets = createServerFn({ method: "POST" })
           throw new Error("Immutable OCI copy did not pass size and ETag verification");
         }
 
-        await sql.transaction(async (tx) => {
+        const linked = await sql.transaction(async (tx) => {
           const inserted = await tx<{ id: string }>`
             insert into bridge_assets (
               id, title_id, kind, s3_key, content_type, byte_size, created_by
@@ -127,7 +126,7 @@ export const reconcileProductionAssets = createServerFn({ method: "POST" })
               )
             returning id
           `;
-          if (!inserted[0]) return;
+          if (!inserted[0]) return false;
 
           await tx`
             update bridge_titles t set
@@ -171,8 +170,9 @@ export const reconcileProductionAssets = createServerFn({ method: "POST" })
             },
             tx,
           );
+          return true;
         });
-        summary.legacyAssetsLinked += 1;
+        if (linked) summary.legacyAssetsLinked += 1;
         nextQueueAfterId = row.id;
       } catch (error) {
         if (isMissingObject(error)) {
@@ -229,7 +229,7 @@ export const reconcileProductionAssets = createServerFn({ method: "POST" })
           throw new Error("Immutable OCI copy did not pass size and ETag verification");
         }
 
-        await sql.transaction(async (tx) => {
+        const verified = await sql.transaction(async (tx) => {
           const updated = await tx<{ id: string }>`
             update bridge_assets
             set byte_size = ${sealed.byteSize},
@@ -241,7 +241,7 @@ export const reconcileProductionAssets = createServerFn({ method: "POST" })
               and byte_size is null
             returning id
           `;
-          if (!updated[0]) return;
+          if (!updated[0]) return false;
 
           await tx`
             update bridge_titles t set
@@ -304,8 +304,9 @@ export const reconcileProductionAssets = createServerFn({ method: "POST" })
             },
             tx,
           );
+          return true;
         });
-        summary.existingAssetsVerified += 1;
+        if (verified) summary.existingAssetsVerified += 1;
         nextAssetAfterId = row.id;
       } catch (error) {
         if (isMissingObject(error)) {
@@ -324,7 +325,7 @@ export const reconcileProductionAssets = createServerFn({ method: "POST" })
       from loop_media_migration_queue q
       join bridge_titles t on t.id = q.title_id
       where q.id > ${nextQueueAfterId}
-        and q.status in ('PENDING_REUPLOAD', 'MISSING_SOURCE_MEDIA')
+        and q.status in ('PENDING_REUPLOAD', 'MISSING_SOURCE_MEDIA', 'UPLOADED')
         and q.target_path is not null
         and t.status in ('DRAFT', 'UPLOADING', 'PREPARING')
         and t.merged_into_title_id is null
