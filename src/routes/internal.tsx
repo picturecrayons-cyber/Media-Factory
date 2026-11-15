@@ -155,6 +155,7 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
   const [model] = useState<ExploitationModel>("TVOD");
   const [windowStart, setWindowStart] = useState("");
   const [windowEnd, setWindowEnd] = useState("");
+  const [consumerPrice] = useState("99");
   const [rightsOwnerShare, setRightsOwnerShare] = useState<string>("80");
   const [distributorShare, setDistributorShare] = useState<string>("20");
   const [extendTitleId, setExtendTitleId] = useState<string | null>(null);
@@ -176,6 +177,7 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
             .filter(Boolean),
           exploitationModels: [model],
           accessTier: "TVOD",
+          consumerPricePaise: consumerPrice ? Math.round(Number(consumerPrice) * 100) : undefined,
           windowStart: windowStart ? new Date(windowStart).toISOString() : null,
           windowEnd: windowEnd ? new Date(windowEnd).toISOString() : null,
           commercialTerms: {
@@ -255,7 +257,7 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
       case "Live":
         return pubStatus === "live" || pubStatus === "authorized";
       case "Suspended":
-        return pubStatus === "suspended";
+        return pubStatus === "suspended" || pubStatus === "hold";
       case "Expired":
         return pubStatus === "expired";
       case "Failed":
@@ -413,6 +415,21 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
                 onChange={(e) => setWindowStart(e.target.value)}
                 className="h-9 w-full rounded-xl border border-line bg-elevated px-3 text-fg focus:outline-none"
               />
+            </label>
+
+            <label className="block space-y-1">
+              <span className="font-semibold text-muted">TVOD Rental Price (INR)</span>
+              <input
+                type="number"
+                min="99"
+                max="99"
+                step="1"
+                required
+                readOnly
+                value={consumerPrice}
+                className="h-9 w-full rounded-xl border border-line bg-elevated px-3 text-fg focus:outline-none"
+              />
+              <span className="text-[11px] text-muted">Loop checkout is fixed at ₹99 for a 48-hour rental.</span>
             </label>
 
             <label className="block space-y-1">
