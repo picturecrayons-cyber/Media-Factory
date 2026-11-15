@@ -157,32 +157,28 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
           {stage === "Prepare" ? (
             <div className="space-y-3">
               <p>
-                {title.status === "PREPARING" || title.status === "UPLOADING" || title.status === "DRAFT"
-                  ? "Step 1: upload the main film. Step 2: keep the posters. Step 3: submit for QC. QC is not reviewed yet."
-                  : `Lifecycle: ${title.status}. QC: ${workflow.data?.qc?.status ?? "Not reviewed"}.`}
+                {title.status === "PREPARING"
+                  ? "Your full submission is received. Bridge Admin will review it before it moves to QC."
+                  : title.status === "UPLOADING" || title.status === "DRAFT"
+                    ? "Add the main film and required artwork. Once prepared, your submission will appear in the Admin review queue."
+                    : `Lifecycle: ${title.status}. QC: ${workflow.data?.qc?.status ?? "Not reviewed"}.`}
               </p>
               {canOperateOnTitle(actor, title, "title.advance_upload", "title.ingest_internal") &&
-              ["DRAFT", "UPLOADING", "PREPARING"].includes(title.status)
+              ["DRAFT", "UPLOADING"].includes(title.status)
                 ? button(
-                    title.status === "DRAFT"
-                      ? "Start ingest"
-                      : title.status === "UPLOADING"
-                        ? "Prepare package"
-                        : "Submit for QC",
+                    title.status === "DRAFT" ? "Start ingest" : "Prepare package",
                     () =>
                       advanceTitle({
                         data: {
                           id: title.id,
-                          to:
-                            title.status === "DRAFT"
-                              ? "UPLOADING"
-                              : title.status === "UPLOADING"
-                                ? "PREPARING"
-                                : "QC_REVIEW",
+                          to: title.status === "DRAFT" ? "UPLOADING" : "PREPARING",
                         },
                       }),
                   )
                 : null}
+              {title.status === "PREPARING" && actor.internalRole ? (
+                <p className="text-xs text-muted" role="status">Admin review action is available from the Admin work queue.</p>
+              ) : null}
               {title.status === "QC_REVIEW" && hasPermission(actor, "title.qc_review") ? (
                 <>
                   {input(
