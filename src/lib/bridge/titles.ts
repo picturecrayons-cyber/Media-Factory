@@ -361,9 +361,19 @@ export const listTitles = createServerFn({ method: "GET" })
       assertPermission(actor, "title.read_own");
       rows = await listOwned(sql, actor.userId, actor.accountType === "studio" ? actor.organizationId : null);
     }
+    const buyerView = actor.accountType === "buyer" && !actor.internalRole;
     return { titles: rows.flatMap((row) => {
       try {
-        return [mapTitle(row)];
+        const title = mapTitle(row);
+        if (!buyerView) return [title];
+        // Buyer catalogue responses must not expose OCI object keys or owner IDs.
+        return [{
+          ...title,
+          ownerUserId: "",
+          ownerOrganizationId: null,
+          posterKey: null,
+          masterKey: null,
+        }];
       } catch (error) {
         console.error("[bridge] skipped unreadable title", row?.id, error);
         return [];
