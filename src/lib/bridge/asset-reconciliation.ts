@@ -26,7 +26,7 @@ export const reconcileProductionAssets = createServerFn({ method: "POST" })
   .validator(
     z.object({
       limit: z.number().int().min(1).max(1).default(1),
-      queueAfterId: z.number().int().min(0).default(0),
+      queueAfterId: z.string().regex(/^\\d+$/).default("0"),
       assetAfterId: z.string().max(128).default(""),
     }),
   )
@@ -56,18 +56,18 @@ export const reconcileProductionAssets = createServerFn({ method: "POST" })
     // First reconcile legacy migration targets that already exist in OCI.
     // AWS source keys are never treated as OCI paths and are never copied by this action.
     const queueRows = await sql<{
-      id: number;
+      id: string;
       title_id: string;
       title_name: string;
       asset_kind: string;
       source_key: string | null;
       target_path: string;
     }>`
-      select q.id, q.title_id, t.name as title_name,
+      select q.id::text as id, q.title_id, t.name as title_name,
              q.asset_kind, q.source_key, q.target_path
       from loop_media_migration_queue q
       join bridge_titles t on t.id = q.title_id
-      where q.id > ${data.queueAfterId}
+      where q.id > ${data.queueAfterId}::bigint
         and q.status in ('PENDING_REUPLOAD', 'MISSING_SOURCE_MEDIA', 'UPLOADED')
         and q.target_path is not null
         and t.status in ('DRAFT', 'UPLOADING', 'PREPARING')
@@ -108,9 +108,9 @@ export const reconcileProductionAssets = createServerFn({ method: "POST" })
         }
 
         const linked = await sql.transaction(async (tx) => {
-          const [lockedQueue] = await tx<{ id: number }>`
+          const [lockedQueue] = await tx<{ id: string }>`
             select id from loop_media_migration_queue
-            where id = ${row.id}
+            where id = ${row.id}::bigint
               and status in ('PENDING_REUPLOAD', 'MISSING_SOURCE_MEDIA', 'UPLOADED')
             for update
           `;
@@ -191,7 +191,7 @@ export const reconcileProductionAssets = createServerFn({ method: "POST" })
           await tx`
             update loop_media_migration_queue
             set status = 'VERIFIED', target_path = ${sealedKey}, updated_at = now()
-            where id = ${row.id}
+            where id = ${row.id}::bigint
               and status in ('PENDING_REUPLOAD', 'MISSING_SOURCE_MEDIA', 'UPLOADED')
           `;
 
@@ -377,7 +377,7 @@ export const reconcileProductionAssets = createServerFn({ method: "POST" })
       select count(*)::int as n
       from loop_media_migration_queue q
       join bridge_titles t on t.id = q.title_id
-      where q.id > ${nextQueueAfterId}
+      where q.id > ${nextQueueAfterId}::bigint
         and q.status in ('PENDING_REUPLOAD', 'MISSING_SOURCE_MEDIA', 'UPLOADED')
         and q.target_path is not null
         and t.status in ('DRAFT', 'UPLOADING', 'PREPARING')
