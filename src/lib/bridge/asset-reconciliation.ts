@@ -25,7 +25,7 @@ export const reconcileProductionAssets = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(
     z.object({
-      limit: z.number().int().min(1).max(10).default(5),
+      limit: z.number().int().min(1).max(1).default(1),
       queueAfterId: z.number().int().min(0).default(0),
       assetAfterId: z.string().max(128).default(""),
     }),
@@ -108,6 +108,13 @@ export const reconcileProductionAssets = createServerFn({ method: "POST" })
         }
 
         const linked = await sql.transaction(async (tx) => {
+          const [lockedQueue] = await tx<{ id: number }>`
+            select id from loop_media_migration_queue
+            where id = ${row.id}
+              and status in ('PENDING_REUPLOAD', 'MISSING_SOURCE_MEDIA', 'UPLOADED')
+            for update
+          `;
+          if (!lockedQueue) return false;
           const [lockedTitle] = await tx<{ id: string }>`
             select id from bridge_titles
             where id = ${row.title_id}
@@ -129,7 +136,11 @@ export const reconcileProductionAssets = createServerFn({ method: "POST" })
               and t.merged_into_title_id is null
               and not exists (
                 select 1 from bridge_assets a
-                where a.title_id = t.id and a.s3_key = ${row.target_path}
+                where a.title_id = t.id
+                  and (
+                    a.s3_key = ${row.target_path}
+                    or position(${row.target_path} || '.verified/' in a.s3_key) = 1
+                  )
               )
             returning id
           `;
@@ -220,143 +231,146 @@ export const reconcileProductionAssets = createServerFn({ method: "POST" })
     // Then verify unconfirmed asset rows already associated with a production title.
     // A successful HEAD is not enough: the object is copied to an immutable key and
     // the database pointer, byte size and audit record are changed atomically.
-    const assetRows = await sql<{
-      id: string;
-      title_id: string;
-      title_name: string;
-      kind: string;
-      s3_key: string;
-      content_type: string | null;
-    }>`
-      select a.id, a.title_id, t.name as title_name, a.kind, a.s3_key, a.content_type
-      from bridge_assets a
-      join bridge_titles t on t.id = a.title_id
-      where a.id > ${data.assetAfterId}
-        and a.byte_size is null
-        and a.s3_key is not null
-        and t.status in ('DRAFT', 'UPLOADING', 'PREPARING')
-        and t.merged_into_title_id is null
-        and lower(t.name) not like 'test%'
-        and lower(t.name) not like '%internal test%'
-      order by a.id asc
-      limit ${data.limit}
-    `;
+    if (queueRows.length === 0) {
+      const assetRows = await sql<{
+        id: string;
+        title_id: string;
+        title_name: string;
+        kind: string;
+        s3_key: string;
+        content_type: string | null;
+      }>`
+        select a.id, a.title_id, t.name as title_name, a.kind, a.s3_key, a.content_type
+        from bridge_assets a
+        join bridge_titles t on t.id = a.title_id
+        where a.id > ${data.assetAfterId}
+          and a.byte_size is null
+          and a.s3_key is not null
+          and t.status in ('DRAFT', 'UPLOADING', 'PREPARING')
+          and t.merged_into_title_id is null
+          and lower(t.name) not like 'test%'
+          and lower(t.name) not like '%internal test%'
+        order by a.id asc
+        limit ${data.limit}
+      `;
 
-    for (const row of assetRows) {
-      try {
-        summary.existingAssetsScanned += 1;
-        const source = await verifyObject(row.s3_key, row.content_type);
-        if (!Number.isSafeInteger(source.byteSize) || source.byteSize <= 0 || !source.etag) {
-          throw new Error("OCI object did not return a positive size and ETag");
-        }
-        const sealedKey = `${row.s3_key}.verified/${row.id}`;
-        const sealed = await sealVerifiedObject(row.s3_key, sealedKey, source.etag);
-        if (
-          !Number.isSafeInteger(sealed.byteSize) ||
-          sealed.byteSize <= 0 ||
-          sealed.byteSize !== source.byteSize ||
-          !sealed.etag
-        ) {
-          throw new Error("Immutable OCI copy did not pass size and ETag verification");
-        }
+      for (const row of assetRows) {
+        try {
+          summary.existingAssetsScanned += 1;
+          const source = await verifyObject(row.s3_key, row.content_type);
+          if (!Number.isSafeInteger(source.byteSize) || source.byteSize <= 0 || !source.etag) {
+            throw new Error("OCI object did not return a positive size and ETag");
+          }
+          const sealedKey = `${row.s3_key}.verified/${row.id}`;
+          const sealed = await sealVerifiedObject(row.s3_key, sealedKey, source.etag);
+          if (
+            !Number.isSafeInteger(sealed.byteSize) ||
+            sealed.byteSize <= 0 ||
+            sealed.byteSize !== source.byteSize ||
+            !sealed.etag
+          ) {
+            throw new Error("Immutable OCI copy did not pass size and ETag verification");
+          }
 
-        const verified = await sql.transaction(async (tx) => {
-          const [lockedTitle] = await tx<{ id: string }>`
-            select id from bridge_titles
-            where id = ${row.title_id}
-              and status in ('DRAFT', 'UPLOADING', 'PREPARING')
-              and merged_into_title_id is null
-            for update
-          `;
-          if (!lockedTitle) return false;
-          const updated = await tx<{ id: string }>`
-            update bridge_assets
-            set byte_size = ${sealed.byteSize},
-                content_type = coalesce(${sealed.contentType}, content_type),
-                s3_key = ${sealedKey}
-            where id = ${row.id}
-              and title_id = ${row.title_id}
-              and s3_key = ${row.s3_key}
-              and byte_size is null
-            returning id
-          `;
-          if (!updated[0]) return false;
+          const verified = await sql.transaction(async (tx) => {
+            const [lockedTitle] = await tx<{ id: string }>`
+              select id from bridge_titles
+              where id = ${row.title_id}
+                and status in ('DRAFT', 'UPLOADING', 'PREPARING')
+                and merged_into_title_id is null
+              for update
+            `;
+            if (!lockedTitle) return false;
+            const updated = await tx<{ id: string }>`
+              update bridge_assets
+              set byte_size = ${sealed.byteSize},
+                  content_type = coalesce(${sealed.contentType}, content_type),
+                  s3_key = ${sealedKey}
+              where id = ${row.id}
+                and title_id = ${row.title_id}
+                and s3_key = ${row.s3_key}
+                and byte_size is null
+              returning id
+            `;
+            if (!updated[0]) return false;
 
-          await tx`
-            update bridge_titles t set
-              poster_key = case
-                when ${row.kind} in ('poster', 'poster_vertical')
-                  and t.poster_key = ${row.s3_key} then ${sealedKey}
-                when ${row.kind} in ('poster', 'poster_vertical')
-                  and t.poster_key is null
-                  and (
-                    select count(*) from bridge_assets p
-                    where p.title_id = t.id
-                      and p.kind in ('poster', 'poster_vertical')
-                      and p.byte_size > 0
-                  ) = 1 then ${sealedKey}
-                else t.poster_key
-              end,
-              master_key = case
-                when ${row.kind} = 'master' and t.master_key = ${row.s3_key} then ${sealedKey}
-                when ${row.kind} = 'master' and t.master_key is null
-                  and (
-                    select count(*) from bridge_assets m
-                    where m.title_id = t.id and m.kind = 'master' and m.byte_size > 0
-                  ) = 1 then ${sealedKey}
-                else t.master_key
-              end,
-              updated_at = now()
-            where t.id = ${row.title_id}
-              and t.status in ('DRAFT', 'UPLOADING', 'PREPARING')
-              and t.merged_into_title_id is null
-          `;
+            await tx`
+              update bridge_titles t set
+                poster_key = case
+                  when ${row.kind} in ('poster', 'poster_vertical')
+                    and t.poster_key = ${row.s3_key} then ${sealedKey}
+                  when ${row.kind} in ('poster', 'poster_vertical')
+                    and t.poster_key is null
+                    and (
+                      select count(*) from bridge_assets p
+                      where p.title_id = t.id
+                        and p.kind in ('poster', 'poster_vertical')
+                        and p.byte_size > 0
+                    ) = 1 then ${sealedKey}
+                  else t.poster_key
+                end,
+                master_key = case
+                  when ${row.kind} = 'master' and t.master_key = ${row.s3_key} then ${sealedKey}
+                  when ${row.kind} = 'master' and t.master_key is null
+                    and (
+                      select count(*) from bridge_assets m
+                      where m.title_id = t.id and m.kind = 'master' and m.byte_size > 0
+                    ) = 1 then ${sealedKey}
+                  else t.master_key
+                end,
+                updated_at = now()
+              where t.id = ${row.title_id}
+                and t.status in ('DRAFT', 'UPLOADING', 'PREPARING')
+                and t.merged_into_title_id is null
+            `;
 
-          const queueKind =
-            row.kind === "screener"
-              ? "TRAILER"
-              : row.kind === "poster" || row.kind === "poster_vertical"
-                ? "POSTER"
-                : row.kind.toUpperCase();
-          await tx`
-            update loop_media_migration_queue
-            set status = 'VERIFIED', target_path = ${sealedKey}, updated_at = now()
-            where title_id = ${row.title_id}
-              and asset_kind = ${queueKind}
-              and target_path = ${row.s3_key}
-              and status in ('PENDING_REUPLOAD', 'UPLOADED')
-          `;
+            const queueKind =
+              row.kind === "screener"
+                ? "TRAILER"
+                : row.kind === "poster" || row.kind === "poster_vertical"
+                  ? "POSTER"
+                  : row.kind.toUpperCase();
+            await tx`
+              update loop_media_migration_queue
+              set status = 'VERIFIED', target_path = ${sealedKey}, updated_at = now()
+              where title_id = ${row.title_id}
+                and asset_kind = ${queueKind}
+                and target_path = ${row.s3_key}
+                and status in ('PENDING_REUPLOAD', 'UPLOADED')
+            `;
 
-          await writeAudit(
-            {
-              actorUserId: actor.userId,
-              action: "asset.existing_asset_verified",
-              entityType: "bridge_asset",
-              entityId: row.id,
-              metadata: {
-                titleId: row.title_id,
-                titleName: row.title_name,
-                kind: row.kind,
-                byteSize: sealed.byteSize,
-                immutableOciCopyVerified: true,
+            await writeAudit(
+              {
+                actorUserId: actor.userId,
+                action: "asset.existing_asset_verified",
+                entityType: "bridge_asset",
+                entityId: row.id,
+                metadata: {
+                  titleId: row.title_id,
+                  titleName: row.title_name,
+                  kind: row.kind,
+                  byteSize: sealed.byteSize,
+                  immutableOciCopyVerified: true,
+                },
               },
-            },
-            tx,
-          );
-          return true;
-        });
-        if (verified) summary.existingAssetsVerified += 1;
-        nextAssetAfterId = row.id;
-      } catch (error) {
-        if (isMissingObject(error)) {
-          summary.missingInOci += 1;
+              tx,
+            );
+            return true;
+          });
+          if (verified) summary.existingAssetsVerified += 1;
           nextAssetAfterId = row.id;
-          continue;
+        } catch (error) {
+          if (isMissingObject(error)) {
+            summary.missingInOci += 1;
+            nextAssetAfterId = row.id;
+            continue;
+          }
+          summary.failed += 1;
+          summary.errors.push(`${row.title_name} / ${row.kind}: ${errorMessage(error)}`);
+          break;
         }
-        summary.failed += 1;
-        summary.errors.push(`${row.title_name} / ${row.kind}: ${errorMessage(error)}`);
-        break;
       }
+
     }
 
     const [queueRemaining] = await sql<{ n: number }>`
