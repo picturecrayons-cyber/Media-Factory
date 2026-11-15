@@ -146,6 +146,10 @@ function Onboarding() {
     if (signupAccountType) setAccountType(signupAccountType);
   }, [signupAccountType]);
 
+  useEffect(() => {
+    if (!displayName.trim() && user?.displayName) setDisplayName(user.displayName);
+  }, [displayName, user?.displayName]);
+
   const home = sessionQ.data?.profile ? sessionQ.data.home : null;
 
   useEffect(() => {
@@ -216,6 +220,40 @@ function Onboarding() {
 
   function toggle(setter: (next: string[]) => void, current: string[], value: string, checked: boolean) {
     setter(checked ? [...current, value] : current.filter((item) => item !== value));
+  }
+
+  async function onCreateWorkspaceOnly() {
+    if (unsupportedSignupRole) {
+      setError("This account type needs an invitation or support review. Please contact Crayons Bridge before continuing.");
+      return;
+    }
+    if (!displayName.trim()) {
+      setError("Enter your name to create your Creator workspace.");
+      return;
+    }
+    if (submitInFlight.current) return;
+    submitInFlight.current = true;
+    setBusy(true);
+    setError(null);
+    try {
+      let inviteToken: string | undefined;
+      try { inviteToken = sessionStorage.getItem("bridge-invite") ?? undefined; } catch { /* ignore */ }
+      await completeOnboarding({
+        data: {
+          displayName: displayName.trim(),
+          accountType,
+          organizationName: accountType === "studio" ? organizationName.trim() : undefined,
+          inviteToken,
+        },
+      });
+      try { sessionStorage.removeItem("bridge-invite"); } catch { /* ignore */ }
+      void navigate({ to: accountType === "buyer" ? "/buyer" : "/creator", replace: true });
+    } catch (err) {
+      setError(publicOnboardingError(err));
+    } finally {
+      submitInFlight.current = false;
+      setBusy(false);
+    }
   }
 
   async function onSubmit(e: FormEvent) {
@@ -455,6 +493,11 @@ function Onboarding() {
         {error ? <div role="alert" className="rounded-xl border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-600 dark:text-red-400">{error}</div> : null}
         <div className="flex flex-col gap-3 border-t border-line pt-5 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-xs leading-relaxed text-muted">© 2026 StreamVista OPC Pvt Ltd. Crayons Bridge is the media supply chain, rights and licensing control plane.</p>
+          {accountType !== "buyer" ? (
+            <Button type="button" variant="outline" disabled={busy} onClick={() => void onCreateWorkspaceOnly()} className="h-11 rounded-full px-6 font-semibold">
+              {busy ? "Creating…" : "Create workspace without submitting a title"}
+            </Button>
+          ) : null}
           <Button type="submit" disabled={busy} className="h-11 rounded-full px-6 font-semibold">{busy ? "Submitting…" : accountType === "buyer" ? "Enter Bridge" : "Submit title for review"}</Button>
         </div>
       </form>
