@@ -75,6 +75,22 @@ function Onboarding() {
     if (signupAccountType) setAccountType(signupAccountType);
   }, [signupAccountType]);
 
+  const home = sessionQ.data?.profile ? sessionQ.data.home : null;
+
+  useEffect(() => {
+    if (home) goHome(home, navigate);
+  }, [home, navigate]);
+
+  if (isPending || (user && sessionQ.isPending) || home) {
+    return (
+      <main className="grid min-h-screen place-items-center bg-bg p-6">
+        <p className="text-sm text-muted">{home ? "Opening workspace…" : "Loading Bridge…"}</p>
+      </main>
+    );
+  }
+
+  if (!user) return <RedirectToSignIn />;
+
 
   if (sessionQ.isError) {
     async function retrySession() {
