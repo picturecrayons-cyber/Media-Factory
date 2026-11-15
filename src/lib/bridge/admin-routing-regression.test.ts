@@ -14,13 +14,16 @@ test("missing Bridge profiles fall back to onboarding without granting access", 
 test("authenticated profiles route through the server-resolved workspace home", () => {
   const session = read("./session.ts");
   const onboarding = read("../../routes/onboarding.tsx");
+  const rbac = read("./rbac.ts");
   assert.match(session, /profile: actor, home: workspaceHome\(actor\)/);
   assert.match(onboarding, /queryKey:\s*\[["\x27]bridge-session["\x27],\s*user\?\.id\]/);
   assert.match(onboarding, /getBridgeSessionWithTimeout/);
   assert.match(onboarding, /const result = await completeOnboarding/);
   assert.match(onboarding, /const destination = result.home ||/);
-  assert.match(onboarding, /accountType === "studio" \\? "\/studio" : "\/creator"/);
-  assert.match(onboarding, /accountType === "buyer" \\? "\/buyer" :/);
+  assert.match(onboarding, /void navigate\(\{ to: destination as any, replace: true \}\)/);
+  assert.match(rbac, /if \(actor\.accountType === "independent_creator"\) return "\/creator"/);
+  assert.match(rbac, /if \(actor\.accountType === "studio"\) return "\/studio"/);
+  assert.match(rbac, /if \(actor\.accountType === "buyer"\) return "\/buyer"/);
   assert.match(onboarding, /const result = await completeOnboarding/);
   assert.match(onboarding, /result\.home/);
   assert.doesNotMatch(onboarding, /createTitle\(/);
@@ -37,6 +40,7 @@ test("dashboard access is enforced server-side for verified super admins", () =>
 
 test("public onboarding does not silently treat a missing profile as an admin session", () => {
   const onboarding = read("../../routes/onboarding.tsx");
+  const rbac = read("./rbac.ts");
   assert.match(onboarding, /enabled:\s*!isPending\s*&&\s*Boolean\(user\)/);
   assert.match(onboarding, /if \(unsupportedSignupRole\)/);
   assert.match(onboarding, /No role has been granted/);
@@ -54,6 +58,7 @@ test("public signup role selector is accessible and limited to supported public 
 
 test("onboarding preserves the signup-selected role and fails closed for unsupported roles", () => {
   const onboarding = read("../../routes/onboarding.tsx");
+  const rbac = read("./rbac.ts");
   assert.match(onboarding, /publicAccountTypeFrom\(signupAccountTypeHint\)/);
   assert.match(read("../../lib/auth/use-current-user.ts"), /signupAccountTypeHint/);
   assert.match(onboarding, /if \(signupAccountType\) setAccountType\(signupAccountType\)/);
