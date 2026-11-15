@@ -22,7 +22,7 @@ function harness(grants: unknown[], allowed = true, existing = false, hasRenditi
   const sql = async (strings: TemplateStringsArray, ...values: unknown[]) => {
     const query = strings.join("?");
     if (query.includes("from bridge_titles")) return [title];
-    if (query.includes("from bridge_playback_renditions")) return hasRendition ? [{ manifest_key: "renditions/title-1/master.m3u8" }] : [];
+    if (query.includes("from bridge_playback_renditions")) return hasRendition ? [{ manifest_key: "renditions/title-1/index.m3u8" }] : [];
     if (query.includes("select evidence from bridge_rights_grants"))
       return [
         { evidence: [{ commercialTerms: { rightsOwnerSharePct: 80, distributorSharePct: 20 } }] },
@@ -113,7 +113,7 @@ test("new and existing publications emit the status accepted by the Loop catalog
     assert.ok(publication.values.includes(data.windowEnd));
     const loopTitle = h.writes.find((write) => write.query.includes("insert into loop_titles"));
     assert.ok(loopTitle);
-    assert.equal(loopTitle.values[10], "renditions/title-1/master.m3u8");
+    assert.equal(loopTitle.values[10], "renditions/title-1/index.m3u8");
     assert.ok(!loopTitle.values.includes("sealed/master"));
   }
 });
