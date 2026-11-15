@@ -15,6 +15,8 @@ test("onboarding persists verified auth-to-Bridge identity binding", () => {
   assert.match(src, /where lower\(trim\(email\)\) = \$\{normalizedEmail\}/);
   assert.match(src, /limit 2[\s\S]*for update/);
   assert.match(src, /rows\.length !== 1/);
+  assert.match(src, /select account_type[\s\S]*where user_id = \$\{bridgeUserId\}[\s\S]*for update/);
+  assert.match(src, /account_type !== "independent_creator"/);
   assert.match(src, /where owner_user_id = \$\{legacyOwner\}/);
   assert.match(src, /creator\.legacy_titles_claimed/);
   assert.match(src, /claimLegacyCreatorIntake\(tx, email, bridgeUserId\)/);
