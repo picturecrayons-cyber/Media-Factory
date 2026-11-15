@@ -134,6 +134,7 @@ async function signedFetch(opts: {
   method: "GET" | "HEAD" | "POST" | "DELETE";
   path: string;
   body?: unknown;
+  timeoutMs?: number;
 }) {
   const url = new URL(opts.path, endpoint(opts.cfg.region));
   const body = opts.body === undefined ? undefined : JSON.stringify(opts.body);
@@ -153,7 +154,7 @@ async function signedFetch(opts: {
     method: opts.method,
     headers: safeHeaders,
     body,
-    signal: AbortSignal.timeout(15_000),
+    signal: AbortSignal.timeout(opts.timeoutMs ?? 15_000),
   });
 }
 
@@ -436,5 +437,8 @@ export async function fetchObjectResponse(key: string, bucket?: string) {
   const targetBucket = bucket?.trim() || cfg.bucket;
   const namespace = await resolveNamespace(cfg);
   const path = `/n/${encodeURIComponent(namespace)}/b/${encodeURIComponent(targetBucket)}/o/${encodedObjectName(key)}`;
-  return signedFetch({ cfg, method: "GET", path });
+  // The response body is streamed after fetch() resolves. Allow enough time
+  // for a large poster to finish instead of aborting the body at the default
+  // 15-second control-plane deadline.
+  return signedFetch({ cfg, method: "GET", path, timeoutMs: 120_000 });
 }
