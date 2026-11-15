@@ -366,18 +366,18 @@ export const listBuyerPosterArtwork = createServerFn({ method: "GET" })
       join bridge_assets a
         on a.title_id = t.id
        and a.s3_key = t.poster_key
-       and a.kind in ("poster", "poster_vertical")
+       and a.kind in ('poster', 'poster_vertical')
        and a.byte_size > 0
       where t.merged_into_title_id is null
-        and t.status in ("LIVE_FOR_BUYERS", "IN_NEGOTIATION", "LICENSED", "DELIVERED")
+        and t.status in ('LIVE_FOR_BUYERS', 'IN_NEGOTIATION', 'LICENSED', 'DELIVERED')
         and public.bridge_title_buyer_visibility(t.id)
         and exists (
           select 1
           from bridge_qc_cases q
           where q.title_id = t.id
-            and q.status = "PASSED"
-            and q.reviewer_findings->0->>"masterKey" = t.master_key
-            and q.reviewer_findings->0->>"posterKey" = t.poster_key
+            and q.status = 'PASSED'
+            and q.reviewer_findings->0->>'masterKey' = t.master_key
+            and q.reviewer_findings->0->>'posterKey' = t.poster_key
         )
       order by t.updated_at desc
       limit 200
