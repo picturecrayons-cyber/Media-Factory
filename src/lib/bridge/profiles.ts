@@ -26,26 +26,44 @@ async function mail(opts: { to: string; subject: string; text: string }) {
 
 
 
-async function claimLegacyCreatorIntake(sql: Sql, email: string, authUserId: string) {
+async function claimLegacyCreatorIntake(sql: Sql, email: string, bridgeUserId: string) {
+  const normalizedEmail = email.trim().toLowerCase();
+  if (!normalizedEmail) return { claimed: false, titleCount: 0, reason: "missing_email" as const };
+
+  // A verified mailbox may claim only one exact legacy intake record. Never
+  // pick an arbitrary row when duplicate legacy emails exist.
   const rows = await sql<{ legacy_user_id: number }>`
     select legacy_user_id
     from legacy_creator_intake
-    where lower(email) = lower(${email})
-    limit 1
+    where lower(trim(email)) = ${normalizedEmail}
+    order by legacy_user_id
+    limit 2
+    for update
   `;
-  const legacy = rows[0];
-  if (!legacy) return { claimed: false, titleCount: 0 };
+  if (rows.length === 0) return { claimed: false, titleCount: 0, reason: "no_match" as const };
+  if (rows.length !== 1) return { claimed: false, titleCount: 0, reason: "ambiguous_match" as const };
 
+  const legacy = rows[0]!;
   const legacyOwner = `legacy-user-${legacy.legacy_user_id}`;
   const updated = await sql<{ id: string }>`
     update bridge_titles
-    set owner_user_id = ${authUserId},
+    set owner_user_id = ${bridgeUserId},
         owner_account_type = 'independent_creator',
         updated_at = now()
     where owner_user_id = ${legacyOwner}
     returning id
   `;
-  return { claimed: true, titleCount: updated.length };
+
+  if (updated.length > 0) {
+    await writeAudit({
+      actorUserId: bridgeUserId,
+      action: "creator.legacy_titles_claimed",
+      entityType: "legacy_creator_intake",
+      entityId: String(legacy.legacy_user_id),
+      metadata: { titleCount: updated.length, verifiedEmail: normalizedEmail },
+    }, sql);
+  }
+  return { claimed: updated.length > 0, titleCount: updated.length, reason: updated.length ? "claimed" as const : "no_unclaimed_titles" as const };
 }
 
 async function persistSupabaseIdentityLink(sql: Sql, bridgeUserId: string, authUserId: string) {
@@ -78,7 +96,10 @@ export const syncSupabaseSessionUser = createServerFn({ method: "POST" })
     if (!context.emailConfirmedAt) throw new Error("Confirm your email before entering Bridge.");
 
     if (existing) {
-      await persistSupabaseIdentityLink(sql, existing.userId, context.userId);
+      await sql.transaction(async (tx) => {
+        await persistSupabaseIdentityLink(tx, existing.userId, context.userId);
+        await claimLegacyCreatorIntake(tx, email ?? existing.email, existing.userId);
+      });
       if (!existing.emailVerified) {
         await sql`update bridge_profiles set email_verified = true, updated_at = now() where user_id = ${existing.userId}`;
         const updated = await loadActor(context.userId);
@@ -106,7 +127,11 @@ export const completeOnboarding = createServerFn({ method: "POST" })
     const existing = await loadActor(context.userId);
     if (!context.emailConfirmedAt) throw new Error("Confirm your email before entering Bridge.");
     if (existing) {
-      await persistSupabaseIdentityLink(sql, existing.userId, context.userId);
+      const email = context.userEmail || existing.email;
+      await sql.transaction(async (tx) => {
+        await persistSupabaseIdentityLink(tx, existing.userId, context.userId);
+        await claimLegacyCreatorIntake(tx, email, existing.userId);
+      });
       return { home: workspaceHome(existing), profile: existing };
     }
 
@@ -250,6 +275,7 @@ export const completeOnboarding = createServerFn({ method: "POST" })
           }
         }
         await persistSupabaseIdentityLink(tx, bridgeUserId, context.userId);
+        await claimLegacyCreatorIntake(tx, email, bridgeUserId);
         const roleForTransaction: string | null = internalRole;
         return roleForTransaction;
       });
