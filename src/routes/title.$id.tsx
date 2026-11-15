@@ -1,4 +1,4 @@
-import { canOperateOnTitle } from "@/lib/bridge/rbac";
+import { canOperateOnTitle, canUploadTitleAsset } from "@/lib/bridge/rbac";
 import { getTitleWorkflow } from "@/lib/bridge/workflow";
 import { WorkflowDesk } from "@/components/bridge/workflow-desk";
 import { publicationIsActive } from "@/lib/bridge/workflow-policy";
@@ -267,7 +267,7 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
         <FilesPanel
           canUpload={
             canOperateOnTitle(actor, title, "asset.sign_upload", "title.ingest_internal") &&
-            ["DRAFT", "UPLOADING", "PREPARING"].includes(title.status)
+            canUploadTitleAsset(actor, title)
           }
           titleId={id}
           assets={assets}
@@ -915,20 +915,24 @@ function FileTypeCard({
           </p>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-2">
-          <label className={`cursor-pointer rounded-full px-3 py-1.5 text-xs font-semibold ${ready ? "border border-line bg-surface" : "bg-fg text-bg"} ${busy || locked || !canUpload ? "pointer-events-none opacity-50" : ""}`}>
-            {busy ? "Uploading…" : ready ? "Replace" : "Upload"}
-            <input
-              className="sr-only"
-              type="file"
-              accept={getOttIngestAccept(kind)}
-              disabled={busy || locked || !canUpload}
-              onChange={(e) => {
-                const file = e.currentTarget.files?.[0];
-                if (file) onFile(file);
-                e.currentTarget.value = "";
-              }}
-            />
-          </label>
+          {canUpload ? (
+            <label className={`cursor-pointer rounded-full px-3 py-1.5 text-xs font-semibold ${ready ? "border border-line bg-surface" : "bg-fg text-bg"} ${busy || locked ? "pointer-events-none opacity-50" : ""}`}>
+              {busy ? "Uploading…" : ready ? "Replace" : "Upload"}
+              <input
+                className="sr-only"
+                type="file"
+                accept={getOttIngestAccept(kind)}
+                disabled={busy || locked}
+                onChange={(e) => {
+                  const file = e.currentTarget.files?.[0];
+                  if (file) onFile(file);
+                  e.currentTarget.value = "";
+                }}
+              />
+            </label>
+          ) : ready ? (
+            <span className="rounded-full border border-line px-3 py-1.5 text-xs text-muted">Verified</span>
+          ) : null}
           {onDownload ? (
             <button type="button" onClick={onDownload} className="rounded-full border border-line bg-surface px-3 py-1.5 text-xs font-semibold">
               Download
