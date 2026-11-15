@@ -7,6 +7,7 @@ import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
+import { DeleteTitleButton } from "@/components/bridge/title-desk";
 import { getTitle, updateTitle } from "@/lib/bridge/titles";
 import { BRIDGE_LOOP_LANES, loopStageType } from "@/lib/bridge/loop-lanes";
 import {
@@ -198,7 +199,7 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
               ) : null}
             </div>
             {!buyerView ? (
-              <div className="mt-5">
+              <div className="mt-5 flex flex-wrap items-center gap-3">
                 <button
                   type="button"
                   onClick={() => setChosenTab("Files")}
@@ -206,6 +207,7 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
                 >
                   Upload Files
                 </button>
+                <DeleteTitleButton id={title.id} name={title.name} />
               </div>
             ) : null}
           </div>
