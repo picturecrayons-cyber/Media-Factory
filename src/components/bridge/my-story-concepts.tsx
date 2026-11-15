@@ -20,7 +20,6 @@ export function MyStoryConcepts() {
   const query = useQuery({
     queryKey: ["my-story-concepts"],
     queryFn: () => listMyStoryConcepts(),
-    enabled: STORY_CONCEPT_ENABLED,
   });
 
   if (query.isLoading) return <p className="text-sm text-muted">Loading concepts…</p>;
