@@ -7,16 +7,46 @@ import { StatusChip } from "@/components/bridge/status-rail";
 import { createTitle, listTitles } from "@/lib/bridge/titles";
 import { deleteTitle } from "@/lib/bridge/title-deletion";
 import { BRIDGE_LOOP_LANES } from "@/lib/bridge/loop-lanes";
+import { listMyStoryConcepts } from "@/lib/bridge/story-concept-api";
 
-export function TitleList({ empty, query = "" }: { empty: string; query?: string }) {
+const TITLE_NEXT_STEP: Record<string, string> = {
+  DRAFT: "Continue setup",
+  UPLOADING: "Continue upload",
+  PREPARING: "Waiting for Admin review",
+  QC_REVIEW: "QC review in progress",
+  RIGHTS_REVIEW: "Rights review in progress",
+  LICENSING_READY: "Ready for licensing",
+  LIVE_FOR_BUYERS: "Live for buyers",
+  IN_NEGOTIATION: "In negotiation",
+  LICENSED: "Licensed",
+  DELIVERED: "Delivered",
+};
+
+export function TitleList({ empty, query = "", excludeStoryConcepts = false }: {
+  empty: string;
+  query?: string;
+  excludeStoryConcepts?: boolean;
+}) {
   const titlesQ = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles() });
-  const titles = (titlesQ.data?.titles ?? []).filter((t) => !query || `${t.name} ${t.language} ${t.year ?? ""}`.toLowerCase().includes(query.toLowerCase()));
-  if (titlesQ.isPending) return <p className="text-sm text-muted">Loading titles…</p>;
-  if (titlesQ.isError) {
+  const conceptsQ = useQuery({
+    queryKey: ["my-story-concepts"],
+    queryFn: () => listMyStoryConcepts(),
+    enabled: excludeStoryConcepts,
+  });
+  const conceptTitleIds = new Set((conceptsQ.data?.concepts ?? []).map((concept) => concept.title_id));
+  const titles = (titlesQ.data?.titles ?? []).filter((t) =>
+    (!excludeStoryConcepts || !conceptTitleIds.has(t.id)) &&
+    (!query || `${t.name} ${t.language} ${t.year ?? ""}`.toLowerCase().includes(query.toLowerCase()))
+  );
+  if (titlesQ.isPending || (excludeStoryConcepts && conceptsQ.isPending)) return <p className="text-sm text-muted">Loading titles…</p>;
+  if (titlesQ.isError || (excludeStoryConcepts && conceptsQ.isError)) {
     return (
       <div role="alert" className="flex flex-wrap items-center gap-3 text-sm text-accent">
-        <p>Could not load titles.</p>
-        <Button type="button" onClick={() => void titlesQ.refetch()}>Retry</Button>
+        <p>{titlesQ.isError ? "Could not load titles." : "Could not separate Story / Concept submissions from films."}</p>
+        <Button type="button" onClick={() => {
+          void titlesQ.refetch();
+          if (excludeStoryConcepts) void conceptsQ.refetch();
+        }}>Retry</Button>
       </div>
     );
   }
@@ -36,10 +66,11 @@ export function TitleList({ empty, query = "" }: { empty: string; query?: string
               {t.language}
               {t.year ? ` · ${t.year}` : ""}
             </p>
+            <p className="mt-1 text-xs font-medium text-accent">{TITLE_NEXT_STEP[t.status] ?? "Open title"}</p>
           </Link>
           <div className="flex shrink-0 items-center gap-3">
             <StatusChip status={t.status} />
-            <DeleteTitleButton id={t.id} name={t.name} />
+            {t.status === "DRAFT" ? <DeleteTitleButton id={t.id} name={t.name} /> : null}
           </div>
         </li>
       ))}
