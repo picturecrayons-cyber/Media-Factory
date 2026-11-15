@@ -12,7 +12,7 @@ import { listDuplicateReviews, openDuplicateReview, decideDuplicateReview } from
 
 export const Route = createFileRoute("/admin/workstations")({ component: AdminWorkstations });
 
-const TABS = ["Titles", "Concepts", "QC", "Rights", "Assets", "Buyers", "Deliveries", "Audit"] as const;
+const TABS = ["Intake", "Reviews", "Distribution", "Records"] as const;
 type Tab = (typeof TABS)[number];
 
 const STATUS_LABELS: Record<string, string> = {
@@ -73,34 +73,36 @@ function WorkstationBody({ actor }: { actor: BridgeActor }) {
         ))}
       </nav>
 
-      {activeTab === "Titles" ? (
-        <TitleQueue titles={data.titles} review={review} />
-      ) : activeTab === "Concepts" ? (
-        <StoryConceptDesk />
-      ) : activeTab === "QC" ? (
-        <ReviewQueue title="QC Review" description="Review technical quality before rights review." titles={qcQueue}
-          canAct={hasPermission(actor, "title.qc_review")} actions={[["PASS", "Approve → Rights"], ["FAIL", "Fail QC"]]} mutation={review} />
-      ) : activeTab === "Rights" ? (
-        <ReviewQueue title="Rights Review" description="Clear ownership, territory, language and window before licensing." titles={rightsQueue}
-          canAct={hasPermission(actor, "title.rights_review")} actions={[["APPROVE", "Approve → Licensing"], ["REJECT", "Reject"]]} mutation={review} />
-      ) : activeTab === "Assets" ? (
-        <SimpleTable title="Assets" description={data.assets.length + " base assets · " + data.assetVersions.length + " versioned assets"}
-          rows={data.assets} fields={["kind", "s3_key", "content_type", "byte_size"]} />
-      ) : activeTab === "Buyers" ? (
-        <BuyerRelease titles={data.titles} canApprove={hasPermission(actor, "title.approve")}
-          onGate={(titleId, gateName) => gate.mutate({ data: { titleId, gate: gateName as "OTT", decision: "PASS" } })} />
-      ) : activeTab === "Deliveries" ? (
+      {activeTab === "Intake" ? (
         <div className="space-y-6">
-          <SimpleTable title="Licensing & Delivery" description={ready.length + " titles in the commercial pipeline"}
+          <TitleQueue titles={data.titles} review={review} canAccept={hasPermission(actor, "title.approve")} />
+          <StoryConceptDesk />
+        </div>
+      ) : activeTab === "Reviews" ? (
+        <div className="space-y-6">
+          <ReviewQueue title="QC Review" description="Technical approval before rights review." titles={qcQueue}
+            canAct={hasPermission(actor, "title.qc_review")} actions={[["PASS", "Approve → Rights"], ["FAIL", "Return for correction"]]} mutation={review} />
+          <ReviewQueue title="Rights Review" description="Ownership, territory, language and window approval." titles={rightsQueue}
+            canAct={hasPermission(actor, "title.rights_review")} actions={[["APPROVE", "Approve → Licensing"], ["REJECT", "Return for correction"]]} mutation={review} />
+        </div>
+      ) : activeTab === "Distribution" ? (
+        <div className="space-y-6">
+          <BuyerRelease titles={data.titles} canApprove={hasPermission(actor, "title.approve")}
+            onGate={(titleId, gateName) => gate.mutate({ data: { titleId, gate: gateName as "OTT", decision: "PASS" } })} />
+          <SimpleTable title="Licensing & delivery" description={ready.length + " titles in the commercial pipeline"}
             rows={ready} fields={["name", "status", "language", "licensing_fee_paise", "updated_at"]} />
-          <SimpleTable title="Destination Packages" description={data.packages.length + " persisted packages"}
+          <SimpleTable title="Destination packages" description={data.packages.length + " persisted packages"}
             rows={data.packages} fields={["destination", "package_version", "readiness_state", "commercial_model", "authorized_at"]} />
-          <SimpleTable title="Bridge Publications" description={data.publications.length + " persisted authorization records"}
+          <SimpleTable title="Loop publications" description={data.publications.length + " persisted authorization records"}
             rows={data.publications} titleName={titleName} fields={["bridge_title_id", "authorization_status", "territories", "languages", "window_end"]} />
         </div>
       ) : (
-        <SimpleTable title="Audit History" description="Persisted operator activity. No UI-only decisions."
-          rows={data.audit} fields={["action", "entity_type", "entity_id", "actor_user_id", "created_at"]} />
+        <div className="space-y-6">
+          <SimpleTable title="Assets" description={data.assets.length + " base assets · " + data.assetVersions.length + " versioned assets"}
+            rows={data.assets} fields={["kind", "s3_key", "content_type", "byte_size"]} />
+          <SimpleTable title="Audit history" description="Persisted operator activity. No UI-only decisions."
+            rows={data.audit} fields={["action", "entity_type", "entity_id", "actor_user_id", "created_at"]} />
+        </div>
       )}
 
       {review.isError || gate.isError ? <p className="rounded-xl border border-line p-4 text-sm">Action failed: {String(review.error ?? gate.error)}</p> : null}
@@ -108,7 +110,7 @@ function WorkstationBody({ actor }: { actor: BridgeActor }) {
   );
 }
 
-function TitleQueue({ titles, review }: { titles: any[]; review: any }) {
+function TitleQueue({ titles, review, canAccept }: { titles: any[]; review: any; canAccept: boolean }) {
   return (
     <section className="space-y-3">
       <SectionHeader title="Titles" description="One canonical Title ID from intake through delivery." />
@@ -120,7 +122,7 @@ function TitleQueue({ titles, review }: { titles: any[]; review: any }) {
               <p className="mt-1 text-xs text-muted">{STATUS_LABELS[title.status] ?? title.status} · {title.language}</p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              {title.status === "PREPARING" ? <ActionButton label="Accept → QC" onClick={() => review.mutate({ data: { titleId: title.id, decision: "ACCEPT" } })} disabled={review.isPending} /> : null}
+              {title.status === "PREPARING" && canAccept ? <ActionButton label="Accept submission → QC" onClick={() => review.mutate({ data: { titleId: title.id, decision: "ACCEPT" } })} disabled={review.isPending} /> : title.status === "PREPARING" ? <span className="text-xs text-muted">Awaiting authorized Admin</span> : null}
               <Link to="/title/$id" params={{ id: title.id }} className="rounded-full border border-line px-3.5 py-1.5 text-xs text-muted hover:border-line-strong hover:text-fg">Open</Link>
             </div>
           </div>
