@@ -19,7 +19,7 @@ create table if not exists public.bridge_playback_renditions (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   constraint bridge_playback_rendition_verified_requires_time
-    check (status <> 'VERIFIED' or verified_at is not null),
+    check (status <> 'VERIFIED' or (verified_at is not null and checksum_sha256 is not null)),
   constraint bridge_playback_rendition_checksum_format
     check (checksum_sha256 is null or checksum_sha256 ~ '^[a-fA-F0-9]{64}$')
 );
