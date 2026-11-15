@@ -62,6 +62,16 @@ export const deleteTitle = createServerFn({ method: "POST" })
           when exists (select 1 from bridge_assets a where a.title_id = ${title.id}
             and (a.legal_hold or a.commercial_hold or (a.retention_until is not null and a.retention_until > now())))
             then 'Storage is under legal, commercial, or retention hold.'
+          when exists (select 1 from bridge_legal_cases l where l.title_id = ${title.id})
+            then 'A legal review record must be retained.'
+          when exists (select 1 from bridge_qc_cases q where q.title_id = ${title.id})
+            then 'A QC review record must be retained.'
+          when exists (select 1 from bridge_rights_grants r where r.title_id = ${title.id})
+            then 'A rights grant record must be retained.'
+          when exists (select 1 from bridge_title_submission_intake i where i.title_id = ${title.id})
+            then 'A title submission record must be retained.'
+          when exists (select 1 from bridge_title_gate_certifications g where g.title_id = ${title.id})
+            then 'A title gate certification must be retained.'
           when exists (select 1 from bridge_deals d where d.title_id = ${title.id})
             then 'A licensing deal is linked to this title.'
           when exists (select 1 from bridge_package_entitlements e where e.title_id = ${title.id})
