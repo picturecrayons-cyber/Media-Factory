@@ -410,10 +410,11 @@ export async function verifyObjectSha256(
   return { key, bucket: targetBucket, byteSize, sha256, etag: res.headers.get("etag")?.replaceAll('"', "") ?? null, verified: true as const };
 }
 
-export async function deleteObject(key: string) {
+export async function deleteObject(key: string, bucket?: string) {
   const cfg = config();
   const namespace = await resolveNamespace(cfg);
-  const path = `/n/${encodeURIComponent(namespace)}/b/${encodeURIComponent(cfg.bucket)}/o/${encodedObjectName(key)}`;
+  const targetBucket = bucket?.trim() || cfg.bucket;
+  const path = `/n/${encodeURIComponent(namespace)}/b/${encodeURIComponent(targetBucket)}/o/${encodedObjectName(key)}`;
   const res = await signedFetch({ cfg, method: "DELETE", path });
   if (!res.ok && res.status !== 404) throw new Error(`OCI object deletion failed (${res.status})`);
   return { deleted: res.status !== 404, key };
