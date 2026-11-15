@@ -122,7 +122,7 @@ function TitleQueue({ titles, review, canAccept }: { titles: any[]; review: any;
               <p className="mt-1 text-xs text-muted">{STATUS_LABELS[title.status] ?? title.status} · {title.language}</p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              {title.status === "PREPARING" && canAccept ? <ActionButton label="Accept submission → QC" onClick={() => review.mutate({ data: { titleId: title.id, decision: "ACCEPT" } })} disabled={review.isPending} /> : title.status === "PREPARING" ? <span className="text-xs text-muted">Awaiting authorized Admin</span> : null}
+              {title.status === "PREPARING" && canAccept && title.submission_assets_ready ? <ActionButton label="Accept submission → QC" onClick={() => review.mutate({ data: { titleId: title.id, decision: "ACCEPT" } })} disabled={review.isPending} /> : title.status === "PREPARING" && canAccept ? <span className="text-xs text-muted">Waiting for verified master & poster</span> : title.status === "PREPARING" ? <span className="text-xs text-muted">Awaiting authorized Admin</span> : null}
               <Link to="/title/$id" params={{ id: title.id }} className="rounded-full border border-line px-3.5 py-1.5 text-xs text-muted hover:border-line-strong hover:text-fg">Open</Link>
             </div>
           </div>
