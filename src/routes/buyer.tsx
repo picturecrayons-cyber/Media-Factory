@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -6,6 +6,7 @@ import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { StatusChip } from "@/components/bridge/status-rail";
 import { Button } from "@/components/ui/button";
+import { getBearerToken } from "@/lib/auth/client";
 import { listTitles } from "@/lib/bridge/titles";
 import {
   createLicenseOrder,
@@ -62,6 +63,57 @@ function Buyer() {
   );
 }
 
+async function fetchBuyerPosterArtwork(
+  titleIds: string[],
+  signal: AbortSignal,
+): Promise<Map<string, string>> {
+  const token = await getBearerToken();
+  if (!token) throw new Error("A valid buyer session is required to load poster artwork.");
+
+  const posters = new Map<string, string>();
+  let nextIndex = 0;
+  const workerCount = Math.min(6, titleIds.length);
+
+  try {
+    await Promise.all(
+      Array.from({ length: workerCount }, async () => {
+        while (nextIndex < titleIds.length) {
+          if (signal.aborted) throw new DOMException("Poster loading was cancelled.", "AbortError");
+          const titleId = titleIds[nextIndex++];
+          const response = await fetch(
+            `/api/buyer/poster?titleId=${encodeURIComponent(titleId)}`,
+            {
+              method: "GET",
+              credentials: "same-origin",
+              headers: { Authorization: `Bearer ${token}` },
+              signal,
+            },
+          );
+          if (response.status === 404) continue;
+          if (response.status === 401 || response.status === 403) {
+            throw new Error("Buyer session is not authorized to load poster artwork.");
+          }
+          if (!response.ok) continue;
+
+          const contentType = (response.headers.get("content-type") ?? "")
+            .split(";")[0]
+            .trim()
+            .toLowerCase();
+          if (!["image/jpeg", "image/png", "image/webp", "image/avif"].includes(contentType)) continue;
+
+          const image = await response.blob();
+          if (!image.size || image.size > 20 * 1024 * 1024) continue;
+          posters.set(titleId, URL.createObjectURL(image));
+        }
+      }),
+    );
+    return posters;
+  } catch (error) {
+    posters.forEach((url) => URL.revokeObjectURL(url));
+    throw error;
+  }
+}
+
 async function withTimeout<T>(operation: Promise<T>, label: string, timeoutMs = 15_000): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
@@ -79,6 +131,7 @@ async function withTimeout<T>(operation: Promise<T>, label: string, timeoutMs = 
 function BuyerBody({ userId }: { userId: string }) {
   const qc = useQueryClient();
   const [tab, setTab] = useState<"discover" | "listing" | "licenses">("discover");
+  const [view, setView] = useState<"gallery" | "list">("gallery");
   const [query, setQuery] = useState("");
   // Buyer-sensitive responses must never share a React Query cache entry across accounts.
   const titlesKey = ["bridge-buyer-titles", userId] as const;
@@ -88,6 +141,20 @@ function BuyerBody({ userId }: { userId: string }) {
     queryFn: () => withTimeout(listTitles(), "Buyer catalogue"),
     retry: 1,
   });
+  const posterTitleIds = (titlesQ.data?.titles ?? []).map((title) => title.id);
+  const postersQ = useQuery({
+    queryKey: ["bridge-buyer-poster-artwork", userId, posterTitleIds],
+    queryFn: ({ signal }) =>
+      withTimeout(fetchBuyerPosterArtwork(posterTitleIds, signal), "Buyer artwork", 60_000),
+    enabled: posterTitleIds.length > 0,
+    retry: 1,
+  });
+  useEffect(() => {
+    const urls = postersQ.data;
+    return () => {
+      urls?.forEach((url) => URL.revokeObjectURL(url));
+    };
+  }, [postersQ.data]);
   const entQ = useQuery({
     queryKey: entitlementsKey,
     queryFn: () => withTimeout(listOwnEntitlements(), "Buyer licenses"),
@@ -137,6 +204,7 @@ function BuyerBody({ userId }: { userId: string }) {
   const needle = query.trim().toLowerCase();
   const visible = titles.filter((t) => !needle || `${t.name} ${t.language}`.toLowerCase().includes(needle));
   const licensed = visible.filter((t) => entitled.has(t.id));
+  const artworkByTitle = postersQ.data ?? new Map<string, string>();
   if (titlesQ.isPending || entQ.isPending) {
     return <p role="status" aria-live="polite">Loading your Buyer catalogue and licenses…</p>;
   }
@@ -172,17 +240,41 @@ function BuyerBody({ userId }: { userId: string }) {
         ))}
       </div>
       {tab !== "licenses" && (
-        <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search title or language" className="w-full max-w-md rounded-sm border border-line bg-transparent px-3 py-2 text-sm" />
+        <div className="flex flex-wrap items-center gap-3">
+          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search title or language" className="w-full max-w-md rounded-sm border border-line bg-transparent px-3 py-2 text-sm" />
+          <div className="inline-flex rounded-sm border border-line p-1" role="group" aria-label="Catalogue view">
+            <button type="button" onClick={() => setView("gallery")} aria-pressed={view === "gallery"} className={`rounded-sm px-3 py-1.5 text-sm ${view === "gallery" ? "bg-accent text-bg" : "text-muted hover:text-fg"}`}>
+              Gallery
+            </button>
+            <button type="button" onClick={() => setView("list")} aria-pressed={view === "list"} className={`rounded-sm px-3 py-1.5 text-sm ${view === "list" ? "bg-accent text-bg" : "text-muted hover:text-fg"}`}>
+              List
+            </button>
+          </div>
+        </div>
       )}
       {!titles.length ? (
-        <p className="text-sm text-muted">No live titles yet. Nothing is for sale until licensing-ready clears.</p>
+        <BuyerEmptyState />
       ) : tab === "licenses" ? (
         <TitleList titles={licensed} entitled={entitled} order={order} empty="No licenses yet. Discover a title and complete payment." />
+      ) : view === "gallery" ? (
+        <TitleGallery titles={visible} artworkByTitle={artworkByTitle} entitled={entitled} order={order} />
       ) : (
         <TitleList titles={visible} entitled={entitled} order={order} empty="No titles match this search." />
       )}
+      {tab !== "licenses" && postersQ.isError && titles.length > 0 ? (
+        <p role="status" className="text-xs text-muted">Poster artwork is temporarily unavailable. You can still open title details.</p>
+      ) : null}
     </div>
   );
+}
+
+function formatLicensingFeePaise(amountPaise: number): string {
+  return new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(amountPaise / 100);
 }
 
 function Stat({ label, value, note }: { label: string; value: string; note: string }) {
@@ -195,7 +287,110 @@ function Stat({ label, value, note }: { label: string; value: string; note: stri
   );
 }
 
-function TitleList({ titles, entitled, order, empty }: { titles: Array<{ id: string; name: string; language: string; licensingFeePaise: number; status: string }>; entitled: Set<string>; order: { isPending: boolean; mutate: (id: string) => void }; empty: string }) {
+type BuyerTitleCard = {
+  id: string;
+  name: string;
+  synopsis: string;
+  language: string;
+  year: number | null;
+  runtimeMinutes: number | null;
+  licensingFeePaise: number;
+  status: string;
+};
+
+function BuyerEmptyState() {
+  return (
+    <section className="rounded-sm border border-dashed border-line bg-surface px-6 py-12 text-center sm:px-10">
+      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">Buyer catalogue</p>
+      <h2 className="mt-3 font-display text-2xl font-semibold">No titles are live for licensing yet.</h2>
+      <p className="mx-auto mt-3 max-w-2xl text-sm leading-relaxed text-muted">
+        The gallery is ready. Titles and approved poster artwork appear here only after the required
+        QC, Legal, rights, packaging, curation and delivery checks pass and Bridge authorizes publication.
+      </p>
+    </section>
+  );
+}
+
+function TitleGallery({
+  titles,
+  artworkByTitle,
+  entitled,
+  order,
+}: {
+  titles: BuyerTitleCard[];
+  artworkByTitle: Map<string, string>;
+  entitled: Set<string>;
+  order: { isPending: boolean; mutate: (id: string) => void };
+}) {
+  if (!titles.length) return <p className="text-sm text-muted">No titles match this search.</p>;
+
+  return (
+    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+      {titles.map((title) => {
+        const posterUrl = artworkByTitle.get(title.id);
+        const details = [
+          title.language,
+          title.year ? String(title.year) : null,
+          title.runtimeMinutes ? `${title.runtimeMinutes} min` : null,
+        ].filter(Boolean).join(" · ");
+        return (
+          <article key={title.id} className="overflow-hidden rounded-sm border border-line bg-surface">
+            <div className="relative aspect-[2/3] overflow-hidden bg-gradient-to-br from-slate-950 via-slate-800 to-slate-950">
+              {posterUrl ? (
+                <img
+                  src={posterUrl}
+                  alt={`Poster artwork for ${title.name}`}
+                  loading="lazy"
+                  decoding="async"
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                <div className="flex h-full flex-col items-center justify-center px-6 text-center">
+                  <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-white/60">Crayons Bridge</span>
+                  <p className="mt-4 line-clamp-4 font-display text-2xl font-semibold text-white">{title.name}</p>
+                  <p className="mt-4 text-xs text-white/60">Poster artwork unavailable</p>
+                </div>
+              )}
+            </div>
+            <div className="space-y-3 p-4">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <Link to="/title/$id" params={{ id: title.id }} className="font-semibold leading-snug hover:text-accent">
+                    {title.name}
+                  </Link>
+                  <p className="mt-1 text-xs text-muted">{details || "Details pending"}</p>
+                </div>
+                <StatusChip status={title.status as never} />
+              </div>
+              {title.synopsis.trim() ? (
+                <p className="line-clamp-3 text-sm leading-relaxed text-muted">{title.synopsis}</p>
+              ) : null}
+              <div className="flex items-center justify-between gap-3 border-t border-line pt-3">
+                <p className="text-sm font-medium">
+                  {title.licensingFeePaise > 0
+                    ? `${formatLicensingFeePaise(title.licensingFeePaise)} licensing fee`
+                    : "Commercial terms on request"}
+                </p>
+                {entitled.has(title.id) ? (
+                  <span className="shrink-0 text-sm font-semibold text-accent">Licensed</span>
+                ) : (
+                  <Button
+                    disabled={order.isPending || title.licensingFeePaise <= 0}
+                    onClick={() => order.mutate(title.id)}
+                  >
+                    License
+                  </Button>
+                )}
+              </div>
+            </div>
+          </article>
+        );
+      })}
+    </div>
+  );
+}
+
+function TitleList({ titles, entitled, order, empty }: { titles: BuyerTitleCard[]; entitled: Set<string>; order: { isPending: boolean; mutate: (id: string) => void }; empty: string }) {
   if (!titles.length) return <p className="text-sm text-muted">{empty}</p>;
   return (
     <ul className="divide-y divide-line rounded-sm border border-line">
@@ -203,7 +398,7 @@ function TitleList({ titles, entitled, order, empty }: { titles: Array<{ id: str
         <li key={t.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-4">
           <div>
             <Link to="/title/$id" params={{ id: t.id }} className="font-medium hover:text-accent">{t.name}</Link>
-            <p className="text-sm text-muted">{t.language}{t.licensingFeePaise > 0 ? ` · ₹${(t.licensingFeePaise / 100).toFixed(0)}` : " · fee unset"}</p>
+            <p className="text-sm text-muted">{t.language}{t.licensingFeePaise > 0 ? ` · ${formatLicensingFeePaise(t.licensingFeePaise)}` : " · fee unset"}</p>
           </div>
           <div className="flex items-center gap-3">
             <StatusChip status={t.status as never} />
