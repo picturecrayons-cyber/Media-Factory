@@ -110,9 +110,9 @@ describe("PRD authorization matrix", () => {
     assert.equal(canUploadTitleAsset(creator(), { ...owned, status: "UPLOADING" }), true);
     assert.equal(canUploadTitleAsset(creator(), { ...owned, status: "PREPARING" }), true);
     assert.equal(canUploadTitleAsset(creator(), { ...owned, status: "QC_REVIEW" }), false);
-    assert.equal(permissionForTransition("PREPARING", "QC_REVIEW"), "title.approve");
-    assert.equal(hasPermission(creator(), "title.approve"), false);
-    assert.equal(hasPermission(admin(), "title.approve"), true);
+    assert.equal(permissionForTransition("PREPARING", "QC_REVIEW"), "title.accept_submission");
+    assert.equal(hasPermission(creator(), "title.accept_submission"), false);
+    assert.equal(hasPermission(admin(), "title.accept_submission"), true);
   });
 
   it("super admin can create canonical Bridge titles and use explicit internal upload powers", () => {
