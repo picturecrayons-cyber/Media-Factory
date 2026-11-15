@@ -68,7 +68,7 @@ export function ProductionAssetReconciliationPanel() {
   const hasRun = totals.batches > 0;
 
   function restart() {
-    setQueueAfterId(0);
+    setQueueAfterId("0");
     setAssetAfterId("");
     setTotals(initialTotals);
   }
