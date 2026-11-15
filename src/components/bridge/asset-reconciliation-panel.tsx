@@ -30,7 +30,7 @@ const initialTotals: Totals = {
 
 export function ProductionAssetReconciliationPanel() {
   const queryClient = useQueryClient();
-  const [queueAfterId, setQueueAfterId] = useState(0);
+  const [queueAfterId, setQueueAfterId] = useState("0");
   const [assetAfterId, setAssetAfterId] = useState("");
   const [totals, setTotals] = useState<Totals>(initialTotals);
 
