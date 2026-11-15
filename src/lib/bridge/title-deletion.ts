@@ -122,6 +122,15 @@ export const deleteTitle = createServerFn({ method: "POST" })
         await deleteObject(object.key, object.bucket ?? undefined);
       }
 
+      // DIT storage-object rows do not declare a foreign key to the ingest session
+      // in Production, so remove their metadata explicitly before the session cascade.
+      await tx`
+        delete from bridge_dit_storage_objects
+        where session_id in (
+          select id from bridge_dit_ingest_sessions where title_id = ${title.id}
+        )
+      `;
+
       await writeAudit({
         actorUserId: actor.userId,
         action: "title.permanently_deleted",
