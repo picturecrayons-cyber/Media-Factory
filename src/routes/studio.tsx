@@ -3,8 +3,6 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import {
   ArrowUpRight,
-  Building2,
-  CalendarDays,
   CheckCircle2,
   ChevronRight,
   Clapperboard,
@@ -13,7 +11,6 @@ import {
   Layers3,
   ShieldCheck,
   Users,
-  Wallet,
 } from "lucide-react";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
@@ -110,7 +107,7 @@ function StudioWorkspace({ actor }: { actor: BridgeActor }) {
           <HeroMetric icon={Film} label="Studio titles" value={titlesQuery.isError ? "—" : String(counts.total)} />
           <HeroMetric icon={HardDrive} label="Uploading" value={titlesQuery.isError ? "—" : String(counts.uploading)} />
           <HeroMetric icon={ShieldCheck} label="In review" value={titlesQuery.isError ? "—" : String(counts.review)} />
-          <HeroMetric icon={CheckCircle2} label="Review-cleared" value={titlesQuery.isError ? "—" : String(counts.cleared)} />
+          <HeroMetric icon={CheckCircle2} label="At release stage" value={titlesQuery.isError ? "—" : String(counts.cleared)} />
         </div>
         {titlesQuery.isError ? (
           <p className="mt-4 text-xs text-amber-200" role="status">Live title totals are unavailable. Open Titles to retry; no estimates are shown.</p>
@@ -153,7 +150,6 @@ function StudioWorkspace({ actor }: { actor: BridgeActor }) {
         <main className="min-w-0 space-y-6">
           {activeTab === "overview" ? (
             <OverviewPanel
-              actor={actor}
               counts={counts}
               nextActions={nextActions}
               titlesLoading={titlesQuery.isPending}
@@ -161,7 +157,7 @@ function StudioWorkspace({ actor }: { actor: BridgeActor }) {
               onNavigate={setActiveTab}
             />
           ) : null}
-          {activeTab === "productions" ? <ProductionPanel titles={titles} loading={titlesQuery.isPending} error={titlesQuery.isError} onRetry={() => void titlesQuery.refetch()} /> : null}
+          {activeTab === "productions" ? <ProductionPanel actor={actor} titles={titles} loading={titlesQuery.isPending} error={titlesQuery.isError} onRetry={() => void titlesQuery.refetch()} /> : null}
           {activeTab === "titles" ? <TitlesPanel /> : null}
           {activeTab === "dit" ? <DitPanel actor={actor} /> : null}
           {activeTab === "members" ? <MembersPanel /> : null}
@@ -181,14 +177,12 @@ function HeroMetric({ icon: Icon, label, value }: { icon: typeof Film; label: st
 }
 
 function OverviewPanel({
-  actor,
   counts,
   nextActions,
   titlesLoading,
   titlesError,
   onNavigate,
 }: {
-  actor: BridgeActor;
   counts: { total: number; draft: number; uploading: number; preparing: number; review: number; cleared: number };
   nextActions: Array<{ label: string; value: number; hint: string; tab: StudioTab }>;
   titlesLoading: boolean;
@@ -247,11 +241,13 @@ function QuickLink({ icon: Icon, title, description, onClick }: { icon: typeof F
 }
 
 function ProductionPanel({
+  actor,
   titles,
   loading,
   error,
   onRetry,
 }: {
+  actor: BridgeActor;
   titles: Array<{ id: string; name: string; status: string; language: string; year?: number | null; contentType?: string | null }>;
   loading: boolean;
   error: boolean;
@@ -279,16 +275,16 @@ function ProductionPanel({
         <div><h3 className="font-display text-lg font-semibold">Production assets</h3><p className="text-sm text-muted">Verified files connected to each title.</p></div>
         {loading ? <p className="text-sm text-muted">Loading production asset register…</p> : null}
         {!loading && !error && titles.length === 0 ? <p className="rounded-xl border border-dashed border-line p-5 text-sm text-muted">No production assets are available without a production title.</p> : null}
-        {!loading && !error ? <div className="space-y-3">{titles.slice(0, 20).map((title) => <ProductionAssetCard key={title.id} title={title} />)}</div> : null}
+        {!loading && !error ? <div className="space-y-3">{titles.slice(0, 20).map((title) => <ProductionAssetCard key={title.id} title={title} actor={actor} />)}</div> : null}
       </section>
       <p className="rounded-xl border border-line p-4 text-xs leading-5 text-muted">Bridge currently connects the production slate to canonical film titles and verified media references. A separate shoot calendar, crew call sheet and cost ledger are not yet connected; they are not represented as active tools here.</p>
     </div>
   );
 }
 
-function ProductionAssetCard({ title }: { title: { id: string; name: string; status: string } }) {
+function ProductionAssetCard({ title, actor }: { title: { id: string; name: string; status: string }; actor: BridgeActor }) {
   const query = useQuery({
-    queryKey: ["bridge-production-assets", title.id],
+    queryKey: ["bridge-production-assets", title.id, actor.userId, actor.internalRole ?? actor.accountType],
     queryFn: () => listProductionAssets({ data: { titleId: title.id } }),
   });
   const assets = query.data?.assets ?? [];
@@ -299,7 +295,7 @@ function ProductionAssetCard({ title }: { title: { id: string; name: string; sta
         <Link to="/title/$id" params={{ id: title.id }} className="inline-flex items-center gap-1 rounded-full border border-line px-3 py-1.5 text-xs font-semibold hover:border-accent">Open title <ArrowUpRight className="h-3.5 w-3.5" /></Link>
       </div>
       {query.isPending ? <p className="mt-3 text-xs text-muted">Loading verified media references…</p> : null}
-      {query.isError ? <p role="alert" className="mt-3 text-xs text-muted">Production asset register unavailable for this title.</p> : null}
+      {query.isError ? <div className="mt-3 flex items-center justify-between gap-3 text-xs text-muted" role="alert"><span>Production asset register unavailable for this title.</span><button type="button" onClick={() => void query.refetch()} className="font-semibold text-accent underline">Retry</button></div> : null}
       {!query.isPending && !query.isError ? (
         assets.length ? (
           <div className="mt-3 grid gap-2 sm:grid-cols-3">
