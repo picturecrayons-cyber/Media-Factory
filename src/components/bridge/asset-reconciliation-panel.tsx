@@ -37,7 +37,7 @@ export function ProductionAssetReconciliationPanel() {
   const mutation = useMutation({
     mutationFn: () =>
       reconcileProductionAssets({
-        data: { limit: 5, queueAfterId, assetAfterId },
+        data: { limit: 1, queueAfterId, assetAfterId },
       }),
     onSuccess: (result) => {
       setQueueAfterId(result.nextQueueAfterId);
