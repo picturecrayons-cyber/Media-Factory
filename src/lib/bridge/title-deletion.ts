@@ -7,6 +7,7 @@ import { canMutateTitle } from "@/lib/bridge/rbac";
 import { writeAudit } from "@/lib/bridge/audit";
 import { assertNotDevUser } from "@/lib/bridge/guards";
 import { deleteObject } from "@/lib/bridge/oci-object-storage.server";
+import { getTitleDeletionBlockReason } from "@/lib/bridge/title-deletion-policy";
 
 type DeletionTitle = {
   id: string;
@@ -53,9 +54,26 @@ export const deleteTitle = createServerFn({ method: "POST" })
       if (data.confirmation.trim() !== title.name) {
         throw new Error("Confirmation text does not match the title name.");
       }
-      if (!["DRAFT", "UPLOADING", "PREPARING"].includes(title.status)) {
-        throw new Error("This title has entered review or commercial workflow and cannot be permanently deleted.");
-      }
+
+      const [storageState] = await tx<{
+        asset_count: number;
+        asset_version_count: number;
+        dit_session_count: number;
+      }>`
+        select
+          (select count(*)::int from bridge_assets where title_id = ${title.id}) as asset_count,
+          (select count(*)::int from bridge_asset_versions where title_id = ${title.id}) as asset_version_count,
+          (select count(*)::int from bridge_dit_ingest_sessions where title_id = ${title.id}) as dit_session_count
+      `;
+      const deletionBlockReason = getTitleDeletionBlockReason({
+        status: title.status,
+        hasPosterKey: Boolean(title.poster_key),
+        hasMasterKey: Boolean(title.master_key),
+        assetCount: Number(storageState?.asset_count ?? 0),
+        assetVersionCount: Number(storageState?.asset_version_count ?? 0),
+        ditSessionCount: Number(storageState?.dit_session_count ?? 0),
+      });
+      if (deletionBlockReason) throw new Error(`Deletion blocked: ${deletionBlockReason}`);
 
       const [blocked] = await tx<{ reason: string | null }>`
         select case
@@ -125,9 +143,11 @@ export const deleteTitle = createServerFn({ method: "POST" })
       for (const row of versionRows) addObject(row.s3_key);
       for (const row of ditRows) addObject(row.object_key, row.bucket_name);
 
-      // Object deletion is idempotent (404 is treated as already deleted).
-      // If any object delete fails, the database transaction rolls back and the
-      // title remains available for a safe retry; already-deleted objects are 404 on retry.
+      // The eligibility checks above guarantee that only an empty DRAFT title
+      // reaches this point. Keep the object cleanup loop fail-closed as defense in depth.
+      if (objects.size > 0) {
+        throw new Error("Deletion blocked: storage objects are registered for this title.");
+      }
       for (const object of objects.values()) {
         await deleteObject(object.key, object.bucket ?? undefined);
       }
