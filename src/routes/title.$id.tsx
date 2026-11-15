@@ -207,7 +207,7 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
                 >
                   Upload Files
                 </button>
-                <DeleteTitleButton id={title.id} name={title.name} />
+                {title.status === "DRAFT" ? <DeleteTitleButton id={title.id} name={title.name} /> : null}
               </div>
             ) : null}
           </div>
