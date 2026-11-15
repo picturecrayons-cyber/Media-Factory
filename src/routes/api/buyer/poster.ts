@@ -55,8 +55,17 @@ export const Route = createFileRoute("/api/buyer/poster")({
              and a.byte_size > 0
              and a.byte_size <= ${MAX_POSTER_BYTES}
              and a.content_type is not null
-             and a.storage_business_state = 'ACTIVE'
-             and a.restore_state = 'READY'
+             -- These storage lifecycle columns are present in the deployed production
+             -- schema but are not part of the original base migration. Inspect the
+             -- row as JSON so the query also works on clean migration replays.
+             and (
+               not (to_jsonb(a) ? 'storage_business_state')
+               or to_jsonb(a)->>'storage_business_state' = 'ACTIVE'
+             )
+             and (
+               not (to_jsonb(a) ? 'restore_state')
+               or to_jsonb(a)->>'restore_state' = 'READY'
+             )
             where t.id = ${titleId}
               and t.merged_into_title_id is null
               and t.status in ('LIVE_FOR_BUYERS', 'IN_NEGOTIATION', 'LICENSED', 'DELIVERED')
