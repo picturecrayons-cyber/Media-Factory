@@ -1,7 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { listMyStoryConcepts } from "@/lib/bridge/story-concept-api";
-import { STORY_CONCEPT_ENABLED } from "@/lib/bridge/story-concept";
 
 const STATUS_LABEL: Record<string, string> = {
   PENDING: "Pending review",
@@ -24,7 +23,6 @@ export function MyStoryConcepts() {
     enabled: STORY_CONCEPT_ENABLED,
   });
 
-  if (!STORY_CONCEPT_ENABLED) return null;
   if (query.isLoading) return <p className="text-sm text-muted">Loading concepts…</p>;
   if (query.isError) return null;
 
