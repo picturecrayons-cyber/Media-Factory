@@ -39,7 +39,7 @@ export function TitleList({ empty, query = "" }: { empty: string; query?: string
           </Link>
           <div className="flex shrink-0 items-center gap-3">
             <StatusChip status={t.status} />
-            <DeleteTitleButton id={t.id} name={t.name} />
+            {t.status === "DRAFT" ? <DeleteTitleButton id={t.id} name={t.name} /> : null}
           </div>
         </li>
       ))}
@@ -53,7 +53,7 @@ export function DeleteTitleButton({ id, name }: { id: string; name: string }) {
   const deletion = useMutation({
     mutationFn: (confirmation: string) => deleteTitle({ data: { id, confirmation } }),
     onSuccess: () => {
-      toast("Title and linked storage objects deleted.");
+      toast("Empty draft title deleted.");
       void qc.invalidateQueries({ queryKey: ["bridge-titles"] });
       void qc.invalidateQueries({ queryKey: ["bridge-title", id] });
       void qc.invalidateQueries({ queryKey: ["bridge-assets", id] });
@@ -66,7 +66,7 @@ export function DeleteTitleButton({ id, name }: { id: string; name: string }) {
 
   function confirmDelete() {
     const confirmation = window.prompt(
-      `Permanent deletion removes the title and its OCI storage objects. Protected, licensed, reviewed, or financially linked titles are blocked. Type the exact title name to continue:\n\n${name}`,
+      `Only an empty DRAFT title with no registered media can be deleted. Titles with uploads, versions, posters, masters, DIT sessions, review, rights, or commercial records are protected. Type the exact title name to continue:\n\n${name}`,
     );
     if (confirmation === null) return;
     deletion.mutate(confirmation);
