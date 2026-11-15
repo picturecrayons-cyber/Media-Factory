@@ -43,7 +43,7 @@ stable
 security definer
 set search_path = public, pg_temp
 set row_security = off
-as $
+as $bridge_owner$
   select exists (
     select 1
     from public.bridge_titles t
@@ -52,7 +52,7 @@ as $
     where t.id = p_title_id
       and l.auth_user_id = (select auth.uid())
   );
-$;
+$bridge_owner$;
 
 revoke all on function public.bridge_is_title_owner(text) from public;
 grant execute on function public.bridge_is_title_owner(text) to authenticated;
