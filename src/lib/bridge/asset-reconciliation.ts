@@ -69,6 +69,7 @@ export const reconcileProductionAssets = createServerFn({ method: "POST" })
       join bridge_titles t on t.id = q.title_id
       where q.id > ${data.queueAfterId}::bigint
         and q.status in ('PENDING_REUPLOAD', 'MISSING_SOURCE_MEDIA', 'UPLOADED')
+        and q.target_provider = 'oci_object_storage'
         and q.target_path is not null
         and t.status in ('DRAFT', 'UPLOADING', 'PREPARING')
         and t.merged_into_title_id is null
@@ -237,10 +238,26 @@ export const reconcileProductionAssets = createServerFn({ method: "POST" })
         title_id: string;
         title_name: string;
         kind: string;
+        source_key: string | null;
         s3_key: string;
         content_type: string | null;
       }>`
-        select a.id, a.title_id, t.name as title_name, a.kind, a.s3_key, a.content_type
+        select a.id, a.title_id, t.name as title_name, a.kind,
+               a.s3_key, a.content_type,
+               (
+                 select q.source_key
+                 from loop_media_migration_queue q
+                 where q.title_id = a.title_id
+                   and q.target_path = a.s3_key
+                   and q.target_provider = 'oci_object_storage'
+                   and q.asset_kind = case
+                     when a.kind = 'screener' then 'TRAILER'
+                     when a.kind in ('poster', 'poster_vertical', 'poster_horizontal', 'thumbnail') then 'POSTER'
+                     else upper(a.kind)
+                   end
+                 order by q.id desc
+                 limit 1
+               ) as source_key
         from bridge_assets a
         join bridge_titles t on t.id = a.title_id
         where a.id > ${data.assetAfterId}
@@ -297,9 +314,9 @@ export const reconcileProductionAssets = createServerFn({ method: "POST" })
             await tx`
               update bridge_titles t set
                 poster_key = case
-                  when ${row.kind} in ('poster', 'poster_vertical')
-                    and t.poster_key = ${row.s3_key} then ${sealedKey}
-                  when ${row.kind} in ('poster', 'poster_vertical')
+                  when ${row.kind} in ('poster', 'poster_vertical', 'poster_horizontal', 'thumbnail')
+                    and (t.poster_key = ${row.s3_key} or t.poster_key = ${row.source_key}) then ${sealedKey}
+                  when ${row.kind} in ('poster', 'poster_vertical', 'poster_horizontal', 'thumbnail')
                     and t.poster_key is null
                     and (
                       select count(*) from bridge_assets p
@@ -310,7 +327,8 @@ export const reconcileProductionAssets = createServerFn({ method: "POST" })
                   else t.poster_key
                 end,
                 master_key = case
-                  when ${row.kind} = 'master' and t.master_key = ${row.s3_key} then ${sealedKey}
+                  when ${row.kind} = 'master'
+                    and (t.master_key = ${row.s3_key} or t.master_key = ${row.source_key}) then ${sealedKey}
                   when ${row.kind} = 'master' and t.master_key is null
                     and (
                       select count(*) from bridge_assets m
@@ -379,6 +397,7 @@ export const reconcileProductionAssets = createServerFn({ method: "POST" })
       join bridge_titles t on t.id = q.title_id
       where q.id > ${nextQueueAfterId}::bigint
         and q.status in ('PENDING_REUPLOAD', 'MISSING_SOURCE_MEDIA', 'UPLOADED')
+        and q.target_provider = 'oci_object_storage'
         and q.target_path is not null
         and t.status in ('DRAFT', 'UPLOADING', 'PREPARING')
         and t.merged_into_title_id is null
