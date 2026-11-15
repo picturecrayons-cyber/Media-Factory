@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -33,8 +33,9 @@ export function ProductionAssetReconciliationPanel() {
   const [queueAfterId, setQueueAfterId] = useState("0");
   const [assetAfterId, setAssetAfterId] = useState("");
   const [totals, setTotals] = useState<Totals>(initialTotals);
+  const [autoRun, setAutoRun] = useState(false);
 
-  const mutation = useMutation({
+  const { mutate, isPending } = useMutation({
     mutationFn: () =>
       reconcileProductionAssets({
         data: { limit: 1, queueAfterId, assetAfterId },
@@ -55,19 +56,27 @@ export function ProductionAssetReconciliationPanel() {
       }));
       void queryClient.invalidateQueries({ queryKey: ["bridge-titles"] });
       void queryClient.invalidateQueries({ queryKey: ["bridge-audit"] });
-      toast.success(
-        `Batch complete: ${result.legacyAssetsLinked + result.existingAssetsVerified} assets verified and linked`,
-      );
+
+      if (!result.queueHasMore && !result.assetsHaveMore) {
+        setAutoRun(false);
+        toast.success("Production asset reconciliation pass complete");
+      }
     },
     onError: (error) => {
+      setAutoRun(false);
       toast.error(error instanceof Error ? error.message : "Asset reconciliation failed");
     },
   });
+
+  useEffect(() => {
+    if (autoRun && !isPending) mutate();
+  }, [autoRun, isPending, queueAfterId, assetAfterId, mutate]);
 
   const hasMore = totals.queueHasMore || totals.assetsHaveMore;
   const hasRun = totals.batches > 0;
 
   function restart() {
+    setAutoRun(false);
     setQueueAfterId("0");
     setAssetAfterId("");
     setTotals(initialTotals);
@@ -125,23 +134,33 @@ export function ProductionAssetReconciliationPanel() {
       <div className="flex flex-wrap items-center gap-2">
         <Button
           type="button"
-          disabled={mutation.isPending || (!hasMore && hasRun)}
-          onClick={() => mutation.mutate()}
+          disabled={isPending || autoRun || (!hasMore && hasRun)}
+          onClick={() => setAutoRun(true)}
           className="rounded-full px-5 text-xs font-semibold"
         >
-          {mutation.isPending
-            ? "Verifying OCI assets…"
+          {isPending || autoRun
+            ? "Reconciliation running…"
             : hasRun && hasMore
               ? "Continue reconciliation"
               : hasRun
-                ? "Reconciliation batch complete"
+                ? "Reconciliation pass complete"
                 : "Start reconciliation"}
         </Button>
+        {autoRun ? (
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setAutoRun(false)}
+            className="rounded-full border-line text-xs"
+          >
+            Pause
+          </Button>
+        ) : null}
         {hasRun ? (
           <Button
             type="button"
             variant="outline"
-            disabled={mutation.isPending}
+            disabled={isPending || autoRun}
             onClick={restart}
             className="rounded-full border-line text-xs"
           >
@@ -150,8 +169,8 @@ export function ProductionAssetReconciliationPanel() {
         ) : null}
         <span className="text-xs text-muted">
           {hasRun
-            ? `${totals.batches} batches completed · ${hasMore ? "more records remain" : "current eligible records scanned"}`
-            : "Runs in small batches to avoid long production requests"}
+            ? `${totals.batches} objects checked · ${hasMore ? "eligible records remain" : "current eligible records scanned"}`
+            : "Runs in one-object requests. Keep this page open until the pass finishes."}
         </span>
       </div>
 
