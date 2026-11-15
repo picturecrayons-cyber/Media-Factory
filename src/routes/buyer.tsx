@@ -281,28 +281,30 @@ function BuyerBody({ userId }: { userId: string }) {
       ) : tab === "licenses" ? (
         <TitleList titles={licensed} entitled={entitled} order={order} empty="No licenses yet. Discover a title and complete payment." />
       ) : view === "gallery" ? (
-        <TitleGallery titles={pageTitles} artworkByTitle={artworkByTitle} entitled={entitled} order={order} />
-        {visible.length > BUYER_GALLERY_PAGE_SIZE ? (
-          <div className="flex items-center justify-between gap-3 border-t border-line pt-4">
-            <button
-              type="button"
-              className="rounded-sm border border-line px-3 py-2 text-sm disabled:opacity-40"
-              disabled={currentPage === 0}
-              onClick={() => setGalleryPage((page) => Math.max(0, page - 1))}
-            >
-              Previous
-            </button>
-            <span className="text-xs text-muted">Page {currentPage + 1} of {pageCount}</span>
-            <button
-              type="button"
-              className="rounded-sm border border-line px-3 py-2 text-sm disabled:opacity-40"
-              disabled={currentPage >= pageCount - 1}
-              onClick={() => setGalleryPage((page) => Math.min(pageCount - 1, page + 1))}
-            >
-              Next
-            </button>
-          </div>
-        ) : null}
+        <div className="space-y-4">
+          <TitleGallery titles={pageTitles} artworkByTitle={artworkByTitle} entitled={entitled} order={order} />
+          {visible.length > BUYER_GALLERY_PAGE_SIZE ? (
+            <div className="flex items-center justify-between gap-3 border-t border-line pt-4">
+              <button
+                type="button"
+                className="rounded-sm border border-line px-3 py-2 text-sm disabled:opacity-40"
+                disabled={currentPage === 0}
+                onClick={() => setGalleryPage((page) => Math.max(0, page - 1))}
+              >
+                Previous
+              </button>
+              <span className="text-xs text-muted">Page {currentPage + 1} of {pageCount}</span>
+              <button
+                type="button"
+                className="rounded-sm border border-line px-3 py-2 text-sm disabled:opacity-40"
+                disabled={currentPage >= pageCount - 1}
+                onClick={() => setGalleryPage((page) => Math.min(pageCount - 1, page + 1))}
+              >
+                Next
+              </button>
+            </div>
+          ) : null}
+        </div>
       ) : (
         <TitleList titles={visible} entitled={entitled} order={order} empty="No titles match this search." />
       )}
