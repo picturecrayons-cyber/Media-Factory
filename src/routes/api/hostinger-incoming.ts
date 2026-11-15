@@ -47,6 +47,7 @@ export const Route = createFileRoute("/api/hostinger-incoming")({
         try {
           payload = JSON.parse(raw);
         } catch {
+          console.warn("[hostinger-incoming] rejected invalid JSON body");
           return Response.json({ error: "Invalid JSON" }, { status: 400 });
         }
 
@@ -54,7 +55,11 @@ export const Route = createFileRoute("/api/hostinger-incoming")({
         try {
           const expectedMailbox = bridgeEnv.hostingerIncomingMailbox();
           message = parseHostingerIncomingPayload(payload, expectedMailbox);
-        } catch {
+        } catch (error) {
+          // Log only the parser's fixed validation reason; never log message content,
+          // sender addresses, mailbox values, bearer tokens, or the raw payload.
+          const reason = error instanceof Error ? error.message : "Unknown payload validation error";
+          console.warn("[hostinger-incoming] rejected Hostinger event payload", { reason });
           return Response.json({ error: "Invalid incoming mail event" }, { status: 400 });
         }
 
