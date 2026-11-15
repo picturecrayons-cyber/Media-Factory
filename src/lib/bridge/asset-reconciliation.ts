@@ -129,7 +129,7 @@ export const reconcileProductionAssets = createServerFn({ method: "POST" })
             )
             select
               ${assetId}, t.id, ${kind}, ${sealedKey},
-              ${sealed.contentType}, ${sealed.byteSize}, ${actor.userId}
+              ${sealed.contentType}, ${sealed.byteSize}, t.owner_user_id
             from bridge_titles t
             where t.id = ${row.title_id}
               and t.status in ('DRAFT', 'UPLOADING', 'PREPARING')
