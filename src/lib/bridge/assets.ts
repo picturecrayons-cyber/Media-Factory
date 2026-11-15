@@ -366,10 +366,8 @@ export const listProductionAssets = createServerFn({ method: "GET" })
       file_name: string;
       file_size: number | string;
       content_type: string | null;
-      source_asset_id: string | null;
       source_kind: string | null;
       verified_source: boolean;
-      created_at: string | Date;
     }>`
       select
         id,
@@ -377,13 +375,21 @@ export const listProductionAssets = createServerFn({ method: "GET" })
         file_name,
         file_size,
         content_type,
-        tags->>'source_asset_id' as source_asset_id,
         tags->>'source_kind' as source_kind,
-        coalesce(tags->>'verified_source', 'false') = 'true' as verified_source,
-        created_at
-      from bridge_production_assets
-      where title_id = ${title.id}
-      order by created_at desc, id
+        case
+          when nullif(tags->>'source_asset_id', '') is null then false
+          else coalesce(
+            source_asset.byte_size > 0
+            and source_asset.storage_business_state = 'ACTIVE'
+            and source_asset.restore_state = 'READY',
+            false
+          )
+        end as verified_source
+      from bridge_production_assets production_asset
+      left join bridge_assets source_asset
+        on source_asset.id = production_asset.tags->>'source_asset_id'
+      where production_asset.title_id = ${title.id}
+      order by production_asset.created_at desc, production_asset.id
       limit 500
     `;
 
@@ -394,10 +400,8 @@ export const listProductionAssets = createServerFn({ method: "GET" })
         fileName: row.file_name,
         fileSize: Number(row.file_size ?? 0),
         contentType: row.content_type,
-        sourceAssetId: row.source_asset_id,
         sourceKind: row.source_kind,
         verifiedSource: row.verified_source,
-        createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : String(row.created_at),
       })),
     };
   });
