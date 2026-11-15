@@ -66,11 +66,11 @@ function Buyer() {
 async function fetchBuyerPosterArtwork(
   titleIds: string[],
   signal: AbortSignal,
-): Promise<Map<string, string>> {
+): Promise<Map<string, Blob>> {
   const token = await getBearerToken();
   if (!token) throw new Error("A valid buyer session is required to load poster artwork.");
 
-  const posters = new Map<string, string>();
+  const posters = new Map<string, Blob>();
   let nextIndex = 0;
   const workerCount = Math.min(6, titleIds.length);
 
@@ -103,13 +103,12 @@ async function fetchBuyerPosterArtwork(
 
           const image = await response.blob();
           if (!image.size || image.size > 20 * 1024 * 1024) continue;
-          posters.set(titleId, URL.createObjectURL(image));
+          posters.set(titleId, image);
         }
       }),
     );
     return posters;
   } catch (error) {
-    posters.forEach((url) => URL.revokeObjectURL(url));
     throw error;
   }
 }
@@ -149,12 +148,6 @@ function BuyerBody({ userId }: { userId: string }) {
     enabled: posterTitleIds.length > 0,
     retry: 1,
   });
-  useEffect(() => {
-    const urls = postersQ.data;
-    return () => {
-      urls?.forEach((url) => URL.revokeObjectURL(url));
-    };
-  }, [postersQ.data]);
   const entQ = useQuery({
     queryKey: entitlementsKey,
     queryFn: () => withTimeout(listOwnEntitlements(), "Buyer licenses"),
@@ -204,7 +197,7 @@ function BuyerBody({ userId }: { userId: string }) {
   const needle = query.trim().toLowerCase();
   const visible = titles.filter((t) => !needle || `${t.name} ${t.language}`.toLowerCase().includes(needle));
   const licensed = visible.filter((t) => entitled.has(t.id));
-  const artworkByTitle = postersQ.data ?? new Map<string, string>();
+  const artworkByTitle = postersQ.data ?? new Map<string, Blob>();
   if (titlesQ.isPending || entQ.isPending) {
     return <p role="status" aria-live="polite">Loading your Buyer catalogue and licenses…</p>;
   }
@@ -318,7 +311,7 @@ function TitleGallery({
   order,
 }: {
   titles: BuyerTitleCard[];
-  artworkByTitle: Map<string, string>;
+  artworkByTitle: Map<string, Blob>;
   entitled: Set<string>;
   order: { isPending: boolean; mutate: (id: string) => void };
 }) {
@@ -327,7 +320,7 @@ function TitleGallery({
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
       {titles.map((title) => {
-        const posterUrl = artworkByTitle.get(title.id);
+        const posterBlob = artworkByTitle.get(title.id);
         const details = [
           title.language,
           title.year ? String(title.year) : null,
@@ -336,21 +329,7 @@ function TitleGallery({
         return (
           <article key={title.id} className="overflow-hidden rounded-sm border border-line bg-surface">
             <div className="relative aspect-[2/3] overflow-hidden bg-gradient-to-br from-slate-950 via-slate-800 to-slate-950">
-              {posterUrl ? (
-                <img
-                  src={posterUrl}
-                  alt={`Poster artwork for ${title.name}`}
-                  loading="lazy"
-                  decoding="async"
-                  className="h-full w-full object-cover"
-                />
-              ) : (
-                <div className="flex h-full flex-col items-center justify-center px-6 text-center">
-                  <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-white/60">Crayons Bridge</span>
-                  <p className="mt-4 line-clamp-4 font-display text-2xl font-semibold text-white">{title.name}</p>
-                  <p className="mt-4 text-xs text-white/60">Poster artwork unavailable</p>
-                </div>
-              )}
+              <BuyerPosterImage blob={posterBlob} title={title.name} />
             </div>
             <div className="space-y-3 p-4">
               <div className="flex items-start justify-between gap-2">
@@ -386,6 +365,41 @@ function TitleGallery({
           </article>
         );
       })}
+    </div>
+  );
+}
+
+function BuyerPosterImage({ blob, title }: { blob: Blob | undefined; title: string }) {
+  const [url, setUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!blob) {
+      setUrl(null);
+      return;
+    }
+
+    const objectUrl = URL.createObjectURL(blob);
+    setUrl(objectUrl);
+    return () => URL.revokeObjectURL(objectUrl);
+  }, [blob]);
+
+  if (url) {
+    return (
+      <img
+        src={url}
+        alt={`Poster artwork for ${title}`}
+        loading="lazy"
+        decoding="async"
+        className="h-full w-full object-cover"
+      />
+    );
+  }
+
+  return (
+    <div className="flex h-full flex-col items-center justify-center px-6 text-center">
+      <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-white/60">Crayons Bridge</span>
+      <p className="mt-4 line-clamp-4 font-display text-2xl font-semibold text-white">{title}</p>
+      <p className="mt-4 text-xs text-white/60">Poster artwork unavailable</p>
     </div>
   );
 }
