@@ -19,8 +19,12 @@ test("authenticated profiles route through the server-resolved workspace home", 
   assert.match(onboarding, /getBridgeSessionWithTimeout/);
   assert.match(onboarding, /const result = await completeOnboarding/);
   assert.match(onboarding, /const destination = result.home ||/);
-  assert.match(onboarding, /accountType === "studio" ? "\/studio"/);
-  assert.match(onboarding, /accountType === "buyer" ? "\/buyer"/);
+  assert.match(onboarding, /accountType === "studio" \\? "\/studio" : "\/creator"/);
+  assert.match(onboarding, /accountType === "buyer" \\? "\/buyer" :/);
+  assert.match(onboarding, /const result = await completeOnboarding/);
+  assert.match(onboarding, /result\.home/);
+  assert.doesNotMatch(onboarding, /createTitle\(/);
+  assert.doesNotMatch(onboarding, /authorizationAttested/);
 });
 
 test("dashboard access is enforced server-side for verified super admins", () => {
