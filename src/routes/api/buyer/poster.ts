@@ -54,6 +54,7 @@ export const Route = createFileRoute("/api/buyer/poster")({
              and a.kind in ('poster', 'poster_vertical')
              and a.byte_size > 0
              and a.byte_size <= ${MAX_POSTER_BYTES}
+             and a.content_type is not null
              and a.storage_business_state = 'ACTIVE'
              and a.restore_state = 'READY'
             where t.id = ${titleId}
