@@ -342,3 +342,61 @@ export const listTitleAssets = createServerFn({ method: "GET" })
         })),
     };
   });
+
+
+/**
+ * Return short-lived image URLs only for verified poster assets belonging to
+ * titles that already pass the canonical buyer publication gate. Object keys
+ * are never returned to the buyer browser.
+ */
+export const listBuyerPosterArtwork = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    if (actor.accountType !== "buyer" || actor.internalRole) {
+      throw new Error("Buyer catalogue access required");
+    }
+    assertPermission(actor, "title.read_catalog");
+
+    const sql = await getSql();
+    const rows = await sql<{ title_id: string; s3_key: string }>`
+      select t.id as title_id, a.s3_key
+      from bridge_titles t
+      join bridge_assets a
+        on a.title_id = t.id
+       and a.s3_key = t.poster_key
+       and a.kind in ("poster", "poster_vertical")
+       and a.byte_size > 0
+      where t.merged_into_title_id is null
+        and t.status in ("LIVE_FOR_BUYERS", "IN_NEGOTIATION", "LICENSED", "DELIVERED")
+        and public.bridge_title_buyer_visibility(t.id)
+        and exists (
+          select 1
+          from bridge_qc_cases q
+          where q.title_id = t.id
+            and q.status = "PASSED"
+            and q.reviewer_findings->0->>"masterKey" = t.master_key
+            and q.reviewer_findings->0->>"posterKey" = t.poster_key
+        )
+      order by t.updated_at desc
+      limit 200
+    `;
+
+    const { signDownload } = await import("./oci-object-storage.server");
+    const signed = await Promise.all(rows.map(async (row) => {
+      try {
+        const image = await signDownload({ key: row.s3_key, expiresIn: 900 });
+        return { titleId: row.title_id, url: image.url };
+      } catch (error) {
+        console.error("[bridge] buyer poster signing failed", row.title_id, error);
+        return null;
+      }
+    }));
+
+    return {
+      posters: signed.filter(
+        (poster): poster is { titleId: string; url: string } => poster !== null,
+      ),
+    };
+  });
