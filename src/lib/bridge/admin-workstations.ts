@@ -51,7 +51,7 @@ export const reviewAdminTitle = createServerFn({ method: "POST" })
     let next: string | null = null;
     let action = "admin.review";
     if (data.decision === "ACCEPT") {
-      assertPermission(actor, "title.approve");
+      assertPermission(actor, "title.accept_submission");
       if (title.status !== "PREPARING") throw new Error("Submission is not awaiting acceptance");
       next = "QC_REVIEW"; action = "submission.accept";
     } else if (data.decision === "PASS") {
