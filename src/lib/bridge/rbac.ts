@@ -18,6 +18,7 @@ const INTERNAL_PERMISSIONS: Record<InternalRole, readonly Permission[]> = {
   ],
   admin: [
     "title.read_catalog",
+    "title.accept_submission",
     "service.quote_create",
     "service.order_create",
     "service.fulfill",
@@ -44,6 +45,7 @@ const INTERNAL_PERMISSIONS: Record<InternalRole, readonly Permission[]> = {
     "title.rights_review",
     "title.license",
     "title.approve",
+    "title.accept_submission",
     "title.merge_duplicate",
     "title.negotiate",
     "title.deliver",
@@ -112,7 +114,7 @@ export type Actor = {
 const TRANSITION_PERMISSION: Record<string, Permission> = {
   "DRAFT->UPLOADING": "title.advance_upload",
   "UPLOADING->PREPARING": "title.advance_upload",
-  "PREPARING->QC_REVIEW": "title.approve",
+  "PREPARING->QC_REVIEW": "title.accept_submission",
   "QC_REVIEW->RIGHTS_REVIEW": "title.qc_review",
   "RIGHTS_REVIEW->LICENSING_READY": "title.rights_review",
   "LIVE_FOR_BUYERS->IN_NEGOTIATION": "title.negotiate",
