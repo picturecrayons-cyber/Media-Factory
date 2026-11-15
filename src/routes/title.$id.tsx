@@ -299,6 +299,13 @@ function Metric({ label, value }: { label: string; value: string }) {
   );
 }
 
+function formatProductionBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 ** 2) return `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes < 1024 ** 3) return `${(bytes / 1024 ** 2).toFixed(1)} MB`;
+  return `${(bytes / 1024 ** 3).toFixed(2)} GB`;
+}
+
 type ProductionAssetView = {
   id: string;
   category: string;
@@ -358,7 +365,7 @@ function ProductionAssetsPanel({
                         <div className="min-w-0">
                           <p className="break-all text-sm font-medium">{asset.fileName}</p>
                           <p className="mt-1 text-xs text-muted">
-                            {(asset.sourceKind || asset.category).replaceAll("_", " ")} · {formatBytes(asset.fileSize)}
+                            {(asset.sourceKind || asset.category).replaceAll("_", " ")} · {formatProductionBytes(asset.fileSize)}
                             {asset.contentType ? ` · ${asset.contentType}` : ""}
                           </p>
                         </div>
