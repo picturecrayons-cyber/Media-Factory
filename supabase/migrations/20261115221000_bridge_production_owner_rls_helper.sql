@@ -20,7 +20,7 @@ as $$
   );
 $$;
 
-revoke all on function public.bridge_is_title_owner(text) from public;
+revoke all on function public.bridge_is_title_owner(text) from public, anon;
 grant execute on function public.bridge_is_title_owner(text) to authenticated;
 
 drop policy if exists bridge_production_assets_owner_select
