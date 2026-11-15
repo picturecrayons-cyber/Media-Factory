@@ -314,7 +314,6 @@ type ProductionAssetView = {
   contentType: string | null;
   sourceKind: string | null;
   verifiedSource: boolean;
-  createdAt: string;
 };
 
 function ProductionAssetsPanel({
@@ -328,6 +327,7 @@ function ProductionAssetsPanel({
 }) {
   const videos = assets.filter((asset) => asset.category === "raw_video");
   const artwork = assets.filter((asset) => asset.category === "stills");
+  const other = assets.filter((asset) => !["raw_video", "stills"].includes(asset.category));
   return (
     <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -349,7 +349,11 @@ function ProductionAssetsPanel({
       ) : null}
       {!loading && !error && assets.length > 0 ? (
         <div className="mt-5 grid gap-5 lg:grid-cols-2">
-          {[{ label: "Video files", items: videos }, { label: "Artwork & stills", items: artwork }].map((group) => (
+          {[
+            { label: "Video files", items: videos },
+            { label: "Artwork & stills", items: artwork },
+            { label: "Other linked files", items: other },
+          ].map((group) => (
             <div key={group.label} className="space-y-3">
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-semibold">{group.label}</h3>
