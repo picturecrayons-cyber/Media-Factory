@@ -370,14 +370,14 @@ export const listProductionAssets = createServerFn({ method: "GET" })
       verified_source: boolean;
     }>`
       select
-        id,
-        category,
-        file_name,
-        file_size,
-        content_type,
-        tags->>'source_kind' as source_kind,
+        production_asset.id,
+        production_asset.category,
+        production_asset.file_name,
+        production_asset.file_size,
+        production_asset.content_type,
+        production_asset.tags->>'source_kind' as source_kind,
         case
-          when nullif(tags->>'source_asset_id', '') is null then false
+          when nullif(production_asset.tags->>'source_asset_id', '') is null then false
           else coalesce(
             source_asset.byte_size > 0
             and source_asset.storage_business_state = 'ACTIVE'
