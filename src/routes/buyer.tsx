@@ -74,43 +74,39 @@ async function fetchBuyerPosterArtwork(
   let nextIndex = 0;
   const workerCount = Math.min(6, titleIds.length);
 
-  try {
-    await Promise.all(
-      Array.from({ length: workerCount }, async () => {
-        while (nextIndex < titleIds.length) {
-          if (signal.aborted) throw new DOMException("Poster loading was cancelled.", "AbortError");
-          const titleId = titleIds[nextIndex++];
-          const response = await fetch(
-            `/api/buyer/poster?titleId=${encodeURIComponent(titleId)}`,
-            {
-              method: "GET",
-              credentials: "same-origin",
-              headers: { Authorization: `Bearer ${token}` },
-              signal,
-            },
-          );
-          if (response.status === 404) continue;
-          if (response.status === 401 || response.status === 403) {
-            throw new Error("Buyer session is not authorized to load poster artwork.");
-          }
-          if (!response.ok) continue;
-
-          const contentType = (response.headers.get("content-type") ?? "")
-            .split(";")[0]
-            .trim()
-            .toLowerCase();
-          if (!["image/jpeg", "image/png", "image/webp", "image/avif"].includes(contentType)) continue;
-
-          const image = await response.blob();
-          if (!image.size || image.size > 20 * 1024 * 1024) continue;
-          posters.set(titleId, image);
+  await Promise.all(
+    Array.from({ length: workerCount }, async () => {
+      while (nextIndex < titleIds.length) {
+        if (signal.aborted) throw new DOMException("Poster loading was cancelled.", "AbortError");
+        const titleId = titleIds[nextIndex++];
+        const response = await fetch(
+          `/api/buyer/poster?titleId=${encodeURIComponent(titleId)}`,
+          {
+            method: "GET",
+            credentials: "same-origin",
+            headers: { Authorization: `Bearer ${token}` },
+            signal,
+          },
+        );
+        if (response.status === 404) continue;
+        if (response.status === 401 || response.status === 403) {
+          throw new Error("Buyer session is not authorized to load poster artwork.");
         }
-      }),
-    );
-    return posters;
-  } catch (error) {
-    throw error;
-  }
+        if (!response.ok) continue;
+
+        const contentType = (response.headers.get("content-type") ?? "")
+          .split(";")[0]
+          .trim()
+          .toLowerCase();
+        if (!["image/jpeg", "image/png", "image/webp", "image/avif"].includes(contentType)) continue;
+
+        const image = await response.blob();
+        if (!image.size || image.size > 20 * 1024 * 1024) continue;
+        posters.set(titleId, image);
+      }
+    }),
+  );
+  return posters;
 }
 
 async function withTimeout<T>(operation: Promise<T>, label: string, timeoutMs = 15_000): Promise<T> {
