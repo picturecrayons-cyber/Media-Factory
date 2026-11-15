@@ -342,3 +342,62 @@ export const listTitleAssets = createServerFn({ method: "GET" })
         })),
     };
   });
+
+
+/**
+ * Lists the Production register for one title without returning OCI object keys.
+ * Each row is visibility-checked against the canonical Bridge title before it
+ * can be returned to an owner or an authorized internal reviewer.
+ */
+export const listProductionAssets = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .validator(z.object({ titleId: z.string().min(8) }))
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    if (actor.accountType === "buyer" && !actor.internalRole) throw new Error("Not found");
+    const title = await loadTitle(data.titleId);
+    if (!title || !canReadTitle(actor, title)) throw new Error("Not found");
+
+    const sql = await getSql();
+    const rows = await sql<{
+      id: string;
+      category: string;
+      file_name: string;
+      file_size: number | string;
+      content_type: string | null;
+      source_asset_id: string | null;
+      source_kind: string | null;
+      verified_source: boolean;
+      created_at: string | Date;
+    }>`
+      select
+        id,
+        category,
+        file_name,
+        file_size,
+        content_type,
+        tags->>'source_asset_id' as source_asset_id,
+        tags->>'source_kind' as source_kind,
+        coalesce(tags->>'verified_source', 'false') = 'true' as verified_source,
+        created_at
+      from bridge_production_assets
+      where title_id = ${title.id}
+      order by created_at desc, id
+      limit 500
+    `;
+
+    return {
+      assets: rows.map((row) => ({
+        id: row.id,
+        category: row.category,
+        fileName: row.file_name,
+        fileSize: Number(row.file_size ?? 0),
+        contentType: row.content_type,
+        sourceAssetId: row.source_asset_id,
+        sourceKind: row.source_kind,
+        verifiedSource: row.verified_source,
+        createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : String(row.created_at),
+      })),
+    };
+  });
