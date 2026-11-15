@@ -63,6 +63,8 @@ function Buyer() {
   );
 }
 
+const BUYER_GALLERY_PAGE_SIZE = 24;
+
 async function fetchBuyerPosterArtwork(
   titleIds: string[],
   signal: AbortSignal,
@@ -79,15 +81,22 @@ async function fetchBuyerPosterArtwork(
       while (nextIndex < titleIds.length) {
         if (signal.aborted) throw new DOMException("Poster loading was cancelled.", "AbortError");
         const titleId = titleIds[nextIndex++];
-        const response = await fetch(
-          `/api/buyer/poster?titleId=${encodeURIComponent(titleId)}`,
-          {
-            method: "GET",
-            credentials: "same-origin",
-            headers: { Authorization: `Bearer ${token}` },
-            signal,
-          },
-        );
+        let response: Response;
+        try {
+          response = await fetch(
+            `/api/buyer/poster?titleId=${encodeURIComponent(titleId)}`,
+            {
+              method: "GET",
+              credentials: "same-origin",
+              headers: { Authorization: `Bearer ${token}` },
+              signal,
+            },
+          );
+        } catch (error) {
+          if (signal.aborted) throw error;
+          continue;
+        }
+
         if (response.status === 404) continue;
         if (response.status === 401 || response.status === 403) {
           throw new Error("Buyer session is not authorized to load poster artwork.");
@@ -100,9 +109,13 @@ async function fetchBuyerPosterArtwork(
           .toLowerCase();
         if (!["image/jpeg", "image/png", "image/webp", "image/avif"].includes(contentType)) continue;
 
-        const image = await response.blob();
-        if (!image.size || image.size > 20 * 1024 * 1024) continue;
-        posters.set(titleId, image);
+        try {
+          const image = await response.blob();
+          if (image.size > 0 && image.size <= 20 * 1024 * 1024) posters.set(titleId, image);
+        } catch (error) {
+          if (signal.aborted) throw error;
+          // One failed poster must not discard successful artwork for other films.
+        }
       }
     }),
   );
@@ -128,6 +141,7 @@ function BuyerBody({ userId }: { userId: string }) {
   const [tab, setTab] = useState<"discover" | "listing" | "licenses">("discover");
   const [view, setView] = useState<"gallery" | "list">("gallery");
   const [query, setQuery] = useState("");
+  const [galleryPage, setGalleryPage] = useState(0);
   // Buyer-sensitive responses must never share a React Query cache entry across accounts.
   const titlesKey = ["bridge-buyer-titles", userId] as const;
   const entitlementsKey = ["bridge-buyer-entitlements", userId] as const;
@@ -136,12 +150,21 @@ function BuyerBody({ userId }: { userId: string }) {
     queryFn: () => withTimeout(listTitles(), "Buyer catalogue"),
     retry: 1,
   });
-  const posterTitleIds = (titlesQ.data?.titles ?? []).map((title) => title.id);
+  const titles = titlesQ.data?.titles ?? [];
+  const needle = query.trim().toLowerCase();
+  const visible = titles.filter((t) => !needle || `${t.name} ${t.language}`.toLowerCase().includes(needle));
+  const pageCount = Math.max(1, Math.ceil(visible.length / BUYER_GALLERY_PAGE_SIZE));
+  const currentPage = Math.min(galleryPage, pageCount - 1);
+  const pageTitles = visible.slice(
+    currentPage * BUYER_GALLERY_PAGE_SIZE,
+    (currentPage + 1) * BUYER_GALLERY_PAGE_SIZE,
+  );
+  const posterTitleIds = pageTitles.map((title) => title.id);
   const postersQ = useQuery({
     queryKey: ["bridge-buyer-poster-artwork", userId, posterTitleIds],
     queryFn: ({ signal }) =>
-      withTimeout(fetchBuyerPosterArtwork(posterTitleIds, signal), "Buyer artwork", 60_000),
-    enabled: posterTitleIds.length > 0,
+      withTimeout(fetchBuyerPosterArtwork(posterTitleIds, signal), "Buyer artwork", 120_000),
+    enabled: tab !== "licenses" && view === "gallery" && posterTitleIds.length > 0,
     retry: 1,
   });
   const entQ = useQuery({
@@ -189,9 +212,6 @@ function BuyerBody({ userId }: { userId: string }) {
     onError: (err) => toast(err instanceof Error ? err.message : "Payment did not complete"),
   });
 
-  const titles = titlesQ.data?.titles ?? [];
-  const needle = query.trim().toLowerCase();
-  const visible = titles.filter((t) => !needle || `${t.name} ${t.language}`.toLowerCase().includes(needle));
   const licensed = visible.filter((t) => entitled.has(t.id));
   const artworkByTitle = postersQ.data ?? new Map<string, Blob>();
   if (titlesQ.isPending || entQ.isPending) {
@@ -230,7 +250,7 @@ function BuyerBody({ userId }: { userId: string }) {
       </div>
       {tab !== "licenses" && (
         <div className="flex flex-wrap items-center gap-3">
-          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search title or language" className="w-full max-w-md rounded-sm border border-line bg-transparent px-3 py-2 text-sm" />
+          <input value={query} onChange={(e) => { setQuery(e.target.value); setGalleryPage(0); }} placeholder="Search title or language" className="w-full max-w-md rounded-sm border border-line bg-transparent px-3 py-2 text-sm" />
           <div className="inline-flex rounded-sm border border-line p-1" role="group" aria-label="Catalogue view">
             <button type="button" onClick={() => setView("gallery")} aria-pressed={view === "gallery"} className={`rounded-sm px-3 py-1.5 text-sm ${view === "gallery" ? "bg-accent text-bg" : "text-muted hover:text-fg"}`}>
               Gallery
@@ -246,7 +266,28 @@ function BuyerBody({ userId }: { userId: string }) {
       ) : tab === "licenses" ? (
         <TitleList titles={licensed} entitled={entitled} order={order} empty="No licenses yet. Discover a title and complete payment." />
       ) : view === "gallery" ? (
-        <TitleGallery titles={visible} artworkByTitle={artworkByTitle} entitled={entitled} order={order} />
+        <TitleGallery titles={pageTitles} artworkByTitle={artworkByTitle} entitled={entitled} order={order} />
+        {visible.length > BUYER_GALLERY_PAGE_SIZE ? (
+          <div className="flex items-center justify-between gap-3 border-t border-line pt-4">
+            <button
+              type="button"
+              className="rounded-sm border border-line px-3 py-2 text-sm disabled:opacity-40"
+              disabled={currentPage === 0}
+              onClick={() => setGalleryPage((page) => Math.max(0, page - 1))}
+            >
+              Previous
+            </button>
+            <span className="text-xs text-muted">Page {currentPage + 1} of {pageCount}</span>
+            <button
+              type="button"
+              className="rounded-sm border border-line px-3 py-2 text-sm disabled:opacity-40"
+              disabled={currentPage >= pageCount - 1}
+              onClick={() => setGalleryPage((page) => Math.min(pageCount - 1, page + 1))}
+            >
+              Next
+            </button>
+          </div>
+        ) : null}
       ) : (
         <TitleList titles={visible} entitled={entitled} order={order} empty="No titles match this search." />
       )}
