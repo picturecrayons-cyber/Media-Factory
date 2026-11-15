@@ -67,7 +67,7 @@ export const Route = createFileRoute("/api/buyer/poster")({
                or to_jsonb(a)->>'restore_state' = 'READY'
              )
             where t.id = ${titleId}
-              and t.merged_into_title_id is null
+              and to_jsonb(t)->>'merged_into_title_id' is null
               and t.status in ('LIVE_FOR_BUYERS', 'IN_NEGOTIATION', 'LICENSED', 'DELIVERED')
               and public.bridge_title_buyer_visibility(t.id)
               and exists (
