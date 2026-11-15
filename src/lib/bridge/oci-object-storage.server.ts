@@ -424,3 +424,17 @@ export function titleAssetKey(opts: { ownerUserId: string; titleId: string; kind
   const safe = opts.filename.replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 80);
   return `bridge/${opts.ownerUserId}/${opts.titleId}/${opts.kind}/${Date.now()}-${safe}`;
 }
+
+
+/**
+ * Fetch an Object Storage object through the server-side OCI request signer.
+ * The caller streams this response to an authorized client; no PAR URL or
+ * object path is returned to the browser.
+ */
+export async function fetchObjectResponse(key: string, bucket?: string) {
+  const cfg = config();
+  const targetBucket = bucket?.trim() || cfg.bucket;
+  const namespace = await resolveNamespace(cfg);
+  const path = `/n/${encodeURIComponent(namespace)}/b/${encodeURIComponent(targetBucket)}/o/${encodedObjectName(key)}`;
+  return signedFetch({ cfg, method: "GET", path });
+}
