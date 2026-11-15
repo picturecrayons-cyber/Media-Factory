@@ -30,6 +30,18 @@ async function claimLegacyCreatorIntake(sql: Sql, email: string, bridgeUserId: s
   const normalizedEmail = email.trim().toLowerCase();
   if (!normalizedEmail) return { claimed: false, titleCount: 0, reason: "missing_email" as const };
 
+  // Legacy creator intake must never convert an existing Buyer or Studio
+  // identity into a Creator or move its titles across account types.
+  const profiles = await sql<{ account_type: string }>`
+    select account_type
+    from bridge_profiles
+    where user_id = ${bridgeUserId}
+    for update
+  `;
+  if (profiles[0]?.account_type !== "independent_creator") {
+    return { claimed: false, titleCount: 0, reason: "account_type_mismatch" as const };
+  }
+
   // A verified mailbox may claim only one exact legacy intake record. Never
   // pick an arbitrary row when duplicate legacy emails exist.
   const rows = await sql<{ legacy_user_id: number }>`
