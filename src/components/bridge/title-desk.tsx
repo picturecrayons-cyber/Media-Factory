@@ -53,7 +53,7 @@ export function DeleteTitleButton({ id, name }: { id: string; name: string }) {
   const deletion = useMutation({
     mutationFn: (confirmation: string) => deleteTitle({ data: { id, confirmation } }),
     onSuccess: () => {
-      toast("Title and verified storage objects deleted.");
+      toast("Title and linked storage objects deleted.");
       void qc.invalidateQueries({ queryKey: ["bridge-titles"] });
       void qc.invalidateQueries({ queryKey: ["bridge-title", id] });
       void qc.invalidateQueries({ queryKey: ["bridge-assets", id] });
@@ -66,7 +66,7 @@ export function DeleteTitleButton({ id, name }: { id: string; name: string }) {
 
   function confirmDelete() {
     const confirmation = window.prompt(
-      `Permanent deletion removes the title and its OCI storage objects. Protected, licensed, reviewed, or financially linked titles are blocked. Type the exact title name to continue:\\n\\n${name}`,
+      `Permanent deletion removes the title and its OCI storage objects. Protected, licensed, reviewed, or financially linked titles are blocked. Type the exact title name to continue:\n\n${name}`,
     );
     if (confirmation === null) return;
     deletion.mutate(confirmation);
