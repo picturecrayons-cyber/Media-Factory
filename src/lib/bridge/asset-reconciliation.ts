@@ -26,7 +26,7 @@ export const reconcileProductionAssets = createServerFn({ method: "POST" })
   .validator(
     z.object({
       limit: z.number().int().min(1).max(1).default(1),
-      queueAfterId: z.string().regex(/^\\d+$/).default("0"),
+      queueAfterId: z.string().regex(/^[0-9]+$/).default("0"),
       assetAfterId: z.string().max(128).default(""),
     }),
   )
