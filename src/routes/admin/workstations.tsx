@@ -40,7 +40,7 @@ function WorkstationBody({ actor }: { actor: BridgeActor }) {
     mutationFn: setBuyerPublicationGate,
     onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-workstations"] }),
   });
-  const [activeTab, setActiveTab] = useState<Tab>("Titles");
+  const [activeTab, setActiveTab] = useState<Tab>("Intake");
 
   const data = query.data;
   if (query.isLoading) return <div className="p-8 text-sm text-muted">Loading Admin…</div>;
@@ -75,7 +75,7 @@ function WorkstationBody({ actor }: { actor: BridgeActor }) {
 
       {activeTab === "Intake" ? (
         <div className="space-y-6">
-          <TitleQueue titles={data.titles} review={review} canAccept={hasPermission(actor, "title.approve")} />
+          <TitleQueue titles={data.titles} review={review} canAccept={hasPermission(actor, "title.accept_submission")} />
           <StoryConceptDesk />
         </div>
       ) : activeTab === "Reviews" ? (
