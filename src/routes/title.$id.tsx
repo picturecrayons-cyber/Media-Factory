@@ -327,7 +327,8 @@ function ProductionAssetsPanel({
 }) {
   const videos = assets.filter((asset) => asset.category === "raw_video");
   const artwork = assets.filter((asset) => asset.category === "stills");
-  const other = assets.filter((asset) => !["raw_video", "stills"].includes(asset.category));
+  const documents = assets.filter((asset) => asset.category === "documents");
+  const other = assets.filter((asset) => !["raw_video", "stills", "documents"].includes(asset.category));
   return (
     <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -352,6 +353,7 @@ function ProductionAssetsPanel({
           {[
             { label: "Video files", items: videos },
             { label: "Artwork & stills", items: artwork },
+            { label: "Documents & subtitles", items: documents },
             { label: "Other linked files", items: other },
           ].map((group) => (
             <div key={group.label} className="space-y-3">
