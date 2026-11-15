@@ -64,6 +64,7 @@ function Buyer() {
 }
 
 const BUYER_GALLERY_PAGE_SIZE = 24;
+const MAX_POSTER_PAGE_BYTES = 40 * 1024 * 1024;
 
 async function fetchBuyerPosterArtwork(
   titleIds: string[],
@@ -74,6 +75,7 @@ async function fetchBuyerPosterArtwork(
 
   const posters = new Map<string, Blob>();
   let nextIndex = 0;
+  let reservedBytes = 0;
   const workerCount = Math.min(6, titleIds.length);
 
   await Promise.all(
@@ -109,10 +111,23 @@ async function fetchBuyerPosterArtwork(
           .toLowerCase();
         if (!["image/jpeg", "image/png", "image/webp", "image/avif"].includes(contentType)) continue;
 
+        const contentLength = Number(response.headers.get("content-length") ?? "");
+        if (
+          !Number.isFinite(contentLength) ||
+          contentLength <= 0 ||
+          contentLength > 20 * 1024 * 1024 ||
+          reservedBytes + contentLength > MAX_POSTER_PAGE_BYTES
+        ) {
+          continue;
+        }
+        reservedBytes += contentLength;
+
         try {
           const image = await response.blob();
-          if (image.size > 0 && image.size <= 20 * 1024 * 1024) posters.set(titleId, image);
+          if (image.size === contentLength) posters.set(titleId, image);
+          else reservedBytes -= contentLength;
         } catch (error) {
+          reservedBytes -= contentLength;
           if (signal.aborted) throw error;
           // One failed poster must not discard successful artwork for other films.
         }
