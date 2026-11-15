@@ -59,12 +59,11 @@ export const reconcileProductionAssets = createServerFn({ method: "POST" })
       id: number;
       title_id: string;
       title_name: string;
-      title_status: string;
       asset_kind: string;
       source_key: string | null;
       target_path: string;
     }>`
-      select q.id, q.title_id, t.name as title_name, t.status as title_status,
+      select q.id, q.title_id, t.name as title_name,
              q.asset_kind, q.source_key, q.target_path
       from loop_media_migration_queue q
       join bridge_titles t on t.id = q.title_id
@@ -109,6 +108,14 @@ export const reconcileProductionAssets = createServerFn({ method: "POST" })
         }
 
         const linked = await sql.transaction(async (tx) => {
+          const [lockedTitle] = await tx<{ id: string }>`
+            select id from bridge_titles
+            where id = ${row.title_id}
+              and status in ('DRAFT', 'UPLOADING', 'PREPARING')
+              and merged_into_title_id is null
+            for update
+          `;
+          if (!lockedTitle) return false;
           const inserted = await tx<{ id: string }>`
             insert into bridge_assets (
               id, title_id, kind, s3_key, content_type, byte_size, created_by
@@ -132,25 +139,49 @@ export const reconcileProductionAssets = createServerFn({ method: "POST" })
             update bridge_titles t set
               poster_key = case
                 when ${kind} = 'poster'
-                  and (t.poster_key = ${row.source_key} or t.poster_key = ${row.target_path})
-                  then ${sealedKey}
+                  and (
+                    t.poster_key = ${row.source_key}
+                    or t.poster_key = ${row.target_path}
+                    or (
+                      t.poster_key is null
+                      and (
+                        select count(*) from loop_media_migration_queue q2
+                        where q2.title_id = t.id
+                          and q2.asset_kind = 'POSTER'
+                          and q2.status in ('PENDING_REUPLOAD', 'MISSING_SOURCE_MEDIA', 'UPLOADED')
+                      ) = 1
+                    )
+                  ) then ${sealedKey}
                 else t.poster_key
               end,
               master_key = case
                 when ${kind} = 'master'
-                  and (t.master_key = ${row.source_key} or t.master_key = ${row.target_path})
-                  then ${sealedKey}
+                  and (
+                    t.master_key = ${row.source_key}
+                    or t.master_key = ${row.target_path}
+                    or (
+                      t.master_key is null
+                      and (
+                        select count(*) from loop_media_migration_queue q2
+                        where q2.title_id = t.id
+                          and q2.asset_kind = 'MASTER'
+                          and q2.status in ('PENDING_REUPLOAD', 'MISSING_SOURCE_MEDIA', 'UPLOADED')
+                      ) = 1
+                    )
+                  ) then ${sealedKey}
                 else t.master_key
               end,
               updated_at = now()
             where t.id = ${row.title_id}
+              and t.status in ('DRAFT', 'UPLOADING', 'PREPARING')
+              and t.merged_into_title_id is null
           `;
 
           await tx`
             update loop_media_migration_queue
             set status = 'VERIFIED', target_path = ${sealedKey}, updated_at = now()
             where id = ${row.id}
-              and status in ('PENDING_REUPLOAD', 'MISSING_SOURCE_MEDIA')
+              and status in ('PENDING_REUPLOAD', 'MISSING_SOURCE_MEDIA', 'UPLOADED')
           `;
 
           await writeAudit(
@@ -230,6 +261,14 @@ export const reconcileProductionAssets = createServerFn({ method: "POST" })
         }
 
         const verified = await sql.transaction(async (tx) => {
+          const [lockedTitle] = await tx<{ id: string }>`
+            select id from bridge_titles
+            where id = ${row.title_id}
+              and status in ('DRAFT', 'UPLOADING', 'PREPARING')
+              and merged_into_title_id is null
+            for update
+          `;
+          if (!lockedTitle) return false;
           const updated = await tx<{ id: string }>`
             update bridge_assets
             set byte_size = ${sealed.byteSize},
@@ -353,7 +392,7 @@ export const reconcileProductionAssets = createServerFn({ method: "POST" })
       select count(*)::int as n
       from loop_media_migration_queue q
       left join bridge_titles t on t.id = q.title_id
-      where t.id is null and q.status in ('PENDING_REUPLOAD', 'MISSING_SOURCE_MEDIA')
+      where t.id is null and q.status in ('PENDING_REUPLOAD', 'MISSING_SOURCE_MEDIA', 'UPLOADED')
     `;
 
     return {
