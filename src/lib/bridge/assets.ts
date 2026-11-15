@@ -342,3 +342,66 @@ export const listTitleAssets = createServerFn({ method: "GET" })
         })),
     };
   });
+
+
+/**
+ * Lists the Production register for one title without returning OCI object keys.
+ * Each row is visibility-checked against the canonical Bridge title before it
+ * can be returned to an owner or an authorized internal reviewer.
+ */
+export const listProductionAssets = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .validator(z.object({ titleId: z.string().min(8) }))
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    if (actor.accountType === "buyer" && !actor.internalRole) throw new Error("Not found");
+    const title = await loadTitle(data.titleId);
+    if (!title || !canReadTitle(actor, title)) throw new Error("Not found");
+
+    const sql = await getSql();
+    const rows = await sql<{
+      id: string;
+      category: string;
+      file_name: string;
+      file_size: number | string;
+      content_type: string | null;
+      source_kind: string | null;
+      verified_source: boolean;
+    }>`
+      select
+        production_asset.id,
+        production_asset.category,
+        production_asset.file_name,
+        production_asset.file_size,
+        production_asset.content_type,
+        production_asset.tags->>'source_kind' as source_kind,
+        case
+          when nullif(production_asset.tags->>'source_asset_id', '') is null then false
+          else coalesce(
+            source_asset.byte_size > 0
+            and source_asset.storage_business_state = 'ACTIVE'
+            and source_asset.restore_state = 'READY',
+            false
+          )
+        end as verified_source
+      from bridge_production_assets production_asset
+      left join bridge_assets source_asset
+        on source_asset.id = production_asset.tags->>'source_asset_id'
+      where production_asset.title_id = ${title.id}
+      order by production_asset.created_at desc, production_asset.id
+      limit 500
+    `;
+
+    return {
+      assets: rows.map((row) => ({
+        id: row.id,
+        category: row.category,
+        fileName: row.file_name,
+        fileSize: Number(row.file_size ?? 0),
+        contentType: row.content_type,
+        sourceKind: row.source_kind,
+        verifiedSource: row.verified_source,
+      })),
+    };
+  });

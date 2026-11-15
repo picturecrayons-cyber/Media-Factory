@@ -16,6 +16,7 @@ import {
   commitAssetMultipart,
   confirmAssetUpload,
   listTitleAssets,
+  listProductionAssets,
   requestAssetDownload,
   requestAssetUpload,
 } from "@/lib/bridge/assets";
@@ -45,7 +46,7 @@ export const Route = createFileRoute("/title/$id")({
   component: TitlePage,
 });
 
-const WORKSPACE_TABS = ["Overview", "Files"] as const;
+const WORKSPACE_TABS = ["Overview", "Files", "Production"] as const;
 type WorkspaceTab = (typeof WORKSPACE_TABS)[number];
 
 function LaneStore({ titleId, stored, locked }: { titleId: string; stored: string; locked: boolean }) {
@@ -107,6 +108,11 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
     queryFn: () => listTitleAssets({ data: { titleId: id } }),
     enabled: !buyerView,
   });
+  const productionAssetsQ = useQuery({
+    queryKey: ["bridge-production-assets", id, actor.userId, actor.internalRole ?? actor.accountType],
+    queryFn: () => listProductionAssets({ data: { titleId: id } }),
+    enabled: !buyerView,
+  });
   const pubQ = useQuery({
     queryKey: ["loop-pub", id, actor.userId],
     queryFn: () => getLoopPublication({ data: { bridgeTitleId: id } }),
@@ -120,6 +126,7 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
   });
   const title = titleQ.data?.title;
   const assets = assetsQ.data?.assets ?? [];
+  const productionAssets = productionAssetsQ.data?.assets ?? [];
   const pub = pubQ.data?.publication;
   const activeTab: WorkspaceTab = buyerView
     ? "Overview"
@@ -273,6 +280,12 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
           assets={assets}
           onAssetsChanged={() => assetsQ.refetch()}
         />
+      ) : activeTab === "Production" && !buyerView ? (
+        <ProductionAssetsPanel
+          assets={productionAssets}
+          loading={productionAssetsQ.isPending}
+          error={productionAssetsQ.error instanceof Error ? productionAssetsQ.error.message : null}
+        />
       ) : null}
     </div>
   );
@@ -283,6 +296,96 @@ function Metric({ label, value }: { label: string; value: string }) {
       <p className="text-xs text-muted">{label}</p>
       <p className="mt-1 text-sm font-semibold">{value}</p>
     </div>
+  );
+}
+
+function formatProductionBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 ** 2) return `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes < 1024 ** 3) return `${(bytes / 1024 ** 2).toFixed(1)} MB`;
+  return `${(bytes / 1024 ** 3).toFixed(2)} GB`;
+}
+
+type ProductionAssetView = {
+  id: string;
+  category: string;
+  fileName: string;
+  fileSize: number;
+  contentType: string | null;
+  sourceKind: string | null;
+  verifiedSource: boolean;
+};
+
+function ProductionAssetsPanel({
+  assets,
+  loading,
+  error,
+}: {
+  assets: ProductionAssetView[];
+  loading: boolean;
+  error: string | null;
+}) {
+  const videos = assets.filter((asset) => asset.category === "raw_video");
+  const artwork = assets.filter((asset) => asset.category === "stills");
+  const other = assets.filter((asset) => !["raw_video", "stills"].includes(asset.category));
+  return (
+    <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Production</p>
+          <h2 className="mt-1 font-display text-xl font-semibold">Linked production assets</h2>
+          <p className="mt-1 text-sm text-muted">References to verified files already stored in Bridge. Originals remain in their existing OCI locations.</p>
+        </div>
+        <span className="rounded-full border border-line px-3 py-1 text-xs font-semibold">
+          {assets.length} linked
+        </span>
+      </div>
+      {error ? <p role="alert" className="mt-4 text-sm text-red-600">Production assets unavailable: {error}</p> : null}
+      {loading ? <p className="mt-4 text-sm text-muted">Loading Production register…</p> : null}
+      {!loading && !error && assets.length === 0 ? (
+        <div className="mt-4 rounded-xl border border-dashed border-line p-5 text-sm text-muted">
+          No verified files are linked to the Production register for this title yet. Unverified uploads and legacy migration entries are not presented as ready assets.
+        </div>
+      ) : null}
+      {!loading && !error && assets.length > 0 ? (
+        <div className="mt-5 grid gap-5 lg:grid-cols-2">
+          {[
+            { label: "Video files", items: videos },
+            { label: "Artwork & stills", items: artwork },
+            { label: "Other linked files", items: other },
+          ].map((group) => (
+            <div key={group.label} className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-semibold">{group.label}</h3>
+                <span className="text-xs text-muted">{group.items.length} files</span>
+              </div>
+              {group.items.length === 0 ? (
+                <p className="rounded-lg border border-line p-3 text-xs text-muted">No files linked in this category.</p>
+              ) : (
+                <div className="space-y-2">
+                  {group.items.map((asset) => (
+                    <article key={asset.id} className="rounded-xl border border-line bg-elevated/30 p-3">
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="break-all text-sm font-medium">{asset.fileName}</p>
+                          <p className="mt-1 text-xs text-muted">
+                            {(asset.sourceKind || asset.category).replaceAll("_", " ")} · {formatProductionBytes(asset.fileSize)}
+                            {asset.contentType ? ` · ${asset.contentType}` : ""}
+                          </p>
+                        </div>
+                        <span className="rounded-full border border-line px-2 py-1 text-[10px] font-semibold">
+                          {asset.verifiedSource ? "Verified source" : "Reference"}
+                        </span>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </section>
   );
 }
 
