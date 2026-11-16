@@ -45,13 +45,22 @@ const manifestPath = resolve(
   "../docs/release/bridge-supabase-migration-reconciliation-2026-11-16.md",
 );
 const manifest = await readFile(manifestPath, "utf8");
-const manifestRows = new Map(
-  [...manifest.matchAll(/^\\|\\s*(\\d{14})\\s*\\|\\s*([a-z0-9_]+)\\s*\\|\\s*(\\d+)\\s*\\|\\s*`([a-f0-9]{64})`\\s*\\|$/gm)]
-    .map((match) => [
-      `${match[1]}_${match[2]}.sql`,
-      { bytes: Number(match[3]), sha256: match[4] },
-    ]),
-);
+const manifestRows = new Map();
+for (const line of manifest.split(/\\r?\\n/)) {
+  const cells = line.split("|").map((cell) => cell.trim());
+  if (cells.length !== 6) continue;
+  const [, version, migrationName, byteText, hashText] = cells;
+  if (!/^\\d{14}$/.test(version)) continue;
+  const sha256 = hashText.replace(/^`|`$/g, "");
+  if (!/^[a-f0-9]{64}$/.test(sha256)) {
+    throw new Error(`Invalid SHA-256 entry for ${version}`);
+  }
+  const bytes = Number(byteText);
+  if (!Number.isSafeInteger(bytes) || bytes < 1) {
+    throw new Error(`Invalid byte count for ${version}`);
+  }
+  manifestRows.set(`${version}_${migrationName}.sql`, { bytes, sha256 });
+}
 if (manifestRows.size !== EXPECTED_MIGRATIONS) {
   throw new Error(
     `Expected ${EXPECTED_MIGRATIONS} manifest rows; found ${manifestRows.size}`,
