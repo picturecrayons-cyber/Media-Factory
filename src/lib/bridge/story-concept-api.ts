@@ -233,7 +233,7 @@ export const listPendingStoryConcepts = createServerFn({ method: "GET" })
         select c.*, t.name as title_name, t.owner_user_id
         from bridge_story_concept_submissions c
         join bridge_titles t on t.id = c.title_id
-        where c.curation_status in ('PENDING', 'UNDER_REVIEW', 'APPROVED')
+        where t.archived_at is null and c.curation_status in ('PENDING', 'UNDER_REVIEW', 'APPROVED')
         order by c.created_at asc
         limit 200
       `;
