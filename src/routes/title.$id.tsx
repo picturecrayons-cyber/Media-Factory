@@ -446,6 +446,8 @@ function FilesPanel({
   onAssetsChanged: () => Promise<unknown> | unknown;
 }) {
   const [uploading, setUploading] = useState<SimpleAssetKind | null>(null);
+  const [replacement, setReplacement] = useState<{ kind: SimpleAssetKind; file: File; targetAssetId: string } | null>(null);
+  const [replacementReason, setReplacementReason] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [messageKind, setMessageKind] = useState<"status" | "success" | "error">("status");
   const [notificationPermission, setNotificationPermission] = useState<"default" | "granted" | "denied" | "unsupported">(() =>
@@ -584,7 +586,7 @@ function FilesPanel({
     });
   }
 
-  async function runMultipart(kind: SimpleAssetKind, file: File, contentType: string, assertAttemptActive: () => void) {
+  async function runMultipart(kind: SimpleAssetKind, file: File, contentType: string, assertAttemptActive: () => void, replacementTarget?: { assetId: string; reason: string }) {
     const existing = readUploadSession(titleId, kind);
     if (existing && !sameUploadFile(existing, file)) {
       throw new Error(`A paused ${kindLabel(kind)} upload is waiting for ${existing.fileName}. Choose that file to continue, or cancel it first.`);
@@ -592,7 +594,13 @@ function FilesPanel({
     let session = existing;
     if (!session) {
       const signed = await withTimeout(
-        requestAssetUpload({ data: { titleId, kind, filename: asciiUploadName(file.name), contentType, byteSize: file.size } }),
+        replacementTarget
+          ? requestAssetReplacement({ data: {
+              titleId, kind, targetAssetId: replacementTarget.assetId,
+              filename: asciiUploadName(file.name), contentType, byteSize: file.size,
+              reason: replacementTarget.reason,
+            } })
+          : requestAssetUpload({ data: { titleId, kind, filename: asciiUploadName(file.name), contentType, byteSize: file.size } }),
         20_000,
         "Upload URL preparation",
       );
@@ -679,7 +687,7 @@ function FilesPanel({
     return session.assetId;
   }
 
-  async function uploadFile(kind: SimpleAssetKind, file: File) {
+  async function uploadFile(kind: SimpleAssetKind, file: File, replacementTarget?: { assetId: string; reason: string }) {
     if (uploading) return;
     const filename = asciiUploadName(file.name);
     const contentType = file.type || "application/octet-stream";
@@ -702,10 +710,16 @@ function FilesPanel({
     try {
       let assetId: string;
       if (file.size > MULTIPART_MIN_FILE) {
-        assetId = await runMultipart(kind, file, contentType, assertAttemptActive);
+        assetId = await runMultipart(kind, file, contentType, assertAttemptActive, replacementTarget);
       } else {
       const signed = await withTimeout(
-        requestAssetUpload({ data: { titleId, kind, filename, contentType, byteSize: file.size } }),
+        replacementTarget
+          ? requestAssetReplacement({ data: {
+              titleId, kind, targetAssetId: replacementTarget.assetId,
+              filename, contentType, byteSize: file.size,
+              reason: replacementTarget.reason,
+            } })
+          : requestAssetUpload({ data: { titleId, kind, filename, contentType, byteSize: file.size } }),
         20_000,
         "Upload URL preparation",
       );
