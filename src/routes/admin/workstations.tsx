@@ -88,7 +88,7 @@ function WorkstationBody({ actor }: { actor: BridgeActor }) {
           rows={data.assets} fields={["kind", "s3_key", "content_type", "byte_size"]} />
       ) : activeTab === "Buyers" ? (
         <BuyerRelease titles={data.titles} gateRows={data.gates} canApprove={hasPermission(actor, "title.approve")} pending={gate.isPending}
-          onGate={(titleId, gateName) => gate.mutate({ data: { titleId, gate: gateName, decision: "PASS" } })} />
+          onGate={(titleId, gateName, notes) => gate.mutate({ data: { titleId, gate: gateName, decision: "PASS", notes } })} />
       ) : activeTab === "Deliveries" ? (
         <div className="space-y-6">
           <SimpleTable title="Licensing & Delivery" description={ready.length + " titles in the commercial pipeline"}
@@ -165,7 +165,8 @@ function ReviewQueue({ title, description, titles, canAct, actions, mutation }: 
 function SimpleTable({ title, description, rows, fields, titleName }: { title: string; description: string; rows: any[]; fields: string[]; titleName?: Map<any, any> }) {
   return <section className="space-y-3"><SectionHeader title={title} description={description} /><RecordTable rows={rows} fields={fields} titleName={titleName ?? new Map()} /></section>;
 }
-function BuyerRelease({ titles, canApprove, gateRows, pending, onGate }: { titles: any[]; canApprove: boolean; gateRows: any[]; pending: boolean; onGate: (titleId: string, gateName: "OTT" | "PACKAGING" | "CURATION" | "DELIVERY") => void }) {
+function BuyerRelease({ titles, canApprove, gateRows, pending, onGate }: { titles: any[]; canApprove: boolean; gateRows: any[]; pending: boolean; onGate: (titleId: string, gateName: "OTT" | "PACKAGING" | "CURATION" | "DELIVERY", notes: string) => void }) {
+  const [notes, setNotes] = useState<Record<string, string>>({});
   const gates = [
     ["OTT", "OTT preparation", "ott_preparation_status", "READY"],
     ["PACKAGING", "Packaging", "packaging_status", "COMPLETE"],
@@ -173,17 +174,22 @@ function BuyerRelease({ titles, canApprove, gateRows, pending, onGate }: { title
     ["DELIVERY", "Delivery", "delivery_status", "READY"],
   ] as const;
   return <section className="space-y-3">
-    <SectionHeader title="Buyer release" description="Review evidence before passing each gate. Buyer visibility remains blocked until every required certification and destination package is ready." />
+    <SectionHeader title="Buyer release" description="Each PASS requires verified source evidence and a review rationale. Missing evidence keeps the gate on HOLD." />
     {titles.map((t) => {
       const row = gateRows.find((g) => g.title_id === t.id);
       return <div key={t.id} className="rounded-2xl border border-line p-4 space-y-3">
         <p className="font-medium">{t.name}</p>
-        <div className="grid gap-2 sm:grid-cols-2">
+        <div className="grid gap-3 sm:grid-cols-2">
           {gates.map(([gateName, label, field, passedValue]) => {
             const status = row?.[field] ?? "HOLD";
-            return <div key={gateName} className="flex items-center justify-between gap-3 rounded-xl bg-elevated p-3">
-              <span className="text-sm">{label}: <strong>{status}</strong></span>
-              {canApprove ? <ActionButton label={status === passedValue ? "Passed" : "Pass"} disabled={status === passedValue || pending} onClick={() => onGate(t.id, gateName)} /> : null}
+            const key = t.id + ":" + gateName;
+            const rationale = notes[key] ?? "";
+            return <div key={gateName} className="rounded-xl bg-elevated p-3 space-y-2">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-sm">{label}: <strong>{status}</strong></span>
+                {canApprove ? <ActionButton label={status === passedValue ? "Passed" : "Verify & pass"} disabled={status === passedValue || pending || rationale.trim().length < 10} onClick={() => onGate(t.id, gateName, rationale.trim())} /> : null}
+              </div>
+              {canApprove ? <textarea aria-label={label + " review rationale"} value={rationale} onChange={(event) => setNotes((current) => ({ ...current, [key]: event.target.value }))} placeholder="Required review rationale (minimum 10 characters)" rows={2} className="w-full rounded-lg border border-line bg-surface px-3 py-2 text-xs text-fg placeholder:text-muted" /> : null}
             </div>;
           })}
         </div>
