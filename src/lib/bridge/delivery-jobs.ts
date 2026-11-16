@@ -133,6 +133,13 @@ export const assignBridgeDeliveryJob = createServerFn({ method: "POST" })
     const actor = await actorFor(context.userId);
     assertPermission(actor, "title.deliver");
     const sql = await getSql();
+    const target = await sql<{title_id: string; control_state: "CLEAR" | "HOLD" | "BLOCK"}>`
+      select j.title_id, coalesce(c.control_state,'CLEAR') as control_state
+      from bridge_delivery_jobs j left join public.bridge_title_controls c on c.title_id=j.title_id
+      where j.id=${data.jobId}::uuid
+    `;
+    if (!target[0]) throw new Error("Delivery job not found");
+    assertTitleControlClear(target[0].control_state);
     const rows = await sql<{ id: string }>`
       update bridge_delivery_jobs set status='in_progress', assigned_vendor=${data.vendor}, updated_at=now()
       where id=${data.jobId}::uuid and status='requested' returning id
@@ -151,6 +158,13 @@ export const completeBridgeDeliveryJob = createServerFn({ method: "POST" })
     const url = new URL(data.receiptUrl);
     if (url.protocol !== "https:") throw new Error("Delivery receipt must use HTTPS");
     const sql = await getSql();
+    const target = await sql<{title_id: string; control_state: "CLEAR" | "HOLD" | "BLOCK"}>`
+      select j.title_id, coalesce(c.control_state,'CLEAR') as control_state
+      from bridge_delivery_jobs j left join public.bridge_title_controls c on c.title_id=j.title_id
+      where j.id=${data.jobId}::uuid
+    `;
+    if (!target[0]) throw new Error("Delivery job not found");
+    assertTitleControlClear(target[0].control_state);
     const rows = await sql<{ id: string }>`
       update bridge_delivery_jobs set status='completed', delivery_receipt_url=${url.toString()}, updated_at=now()
       where id=${data.jobId}::uuid and status='in_progress' returning id
@@ -167,6 +181,13 @@ export const approveBridgeDeliveryJob = createServerFn({ method: "POST" })
     const actor = await actorFor(context.userId);
     assertPermission(actor, "loop.publish");
     const sql = await getSql();
+    const target = await sql<{title_id: string; control_state: "CLEAR" | "HOLD" | "BLOCK"}>`
+      select j.title_id, coalesce(c.control_state,'CLEAR') as control_state
+      from bridge_delivery_jobs j left join public.bridge_title_controls c on c.title_id=j.title_id
+      where j.id=${data.jobId}::uuid
+    `;
+    if (!target[0]) throw new Error("Delivery job not found");
+    assertTitleControlClear(target[0].control_state);
     const rows = await sql<{ id: string; title_id: string }>`
       update bridge_delivery_jobs set status='approved', admin_sign_off=true, updated_at=now()
       where id=${data.jobId}::uuid and status='completed' and delivery_receipt_url is not null
