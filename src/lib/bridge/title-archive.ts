@@ -1,7 +1,6 @@
 import type { Sql } from "@/lib/db";
 import type { BridgeTitle } from "./types";
 import type { Actor } from "./rbac";
-import { canMutateTitle } from "./rbac";
 
 export function assertDraftCanBeArchived(input: {
   status: string;
@@ -71,8 +70,7 @@ function assertActorMayManage(actor: Actor, title: BridgeTitle) {
   // owner_organization_id=NULL. Allow only the exact verified owner account,
   // never other members of that Studio, to manage those legacy rows.
   const exactLegacyOwner = title.ownerUserId === actor.userId;
-  if (!["independent_creator", "studio"].includes(actor.accountType) ||
-      (!exactLegacyOwner && !canMutateTitle(actor, title, "title.update_own", "title.license"))) {
+  if (!["independent_creator", "studio"].includes(actor.accountType) || !exactLegacyOwner) {
     throw new Error("Only the verified owner or an active member of the owning Studio can manage this draft.");
   }
 }
