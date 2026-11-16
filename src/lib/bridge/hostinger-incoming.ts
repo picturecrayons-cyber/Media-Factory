@@ -53,6 +53,37 @@ export function isValidHostingerBearer(
     timingSafeEqual(suppliedBytes, expectedBytes);
 }
 
+/**
+ * Hostinger's webhook Test action can deliver an authenticated event envelope
+ * without a real message object. A no-op acknowledgement lets operators
+ * verify connectivity without inserting synthetic mail into the inbox ledger.
+ *
+ * Real message.received events continue through the strict parser below.
+ */
+export function isHostingerTestDeliveryPayload(
+  value: unknown,
+  expectedMailbox: string,
+): boolean {
+  const payload = asRecord(value);
+  if (!payload || payload.event !== "message.received") return false;
+  if (payload.message !== undefined && payload.message !== null) return false;
+  if (!expectedMailbox.trim()) throw new Error("Missing mailbox configuration");
+
+  const rawMailbox = payload.mailbox;
+  const mailboxValue = typeof rawMailbox === "string"
+    ? rawMailbox
+    : asRecord(rawMailbox)?.address;
+
+  if (rawMailbox !== undefined && rawMailbox !== null) {
+    if (typeof mailboxValue !== "string") throw new Error("Missing mailbox");
+    if (mailboxValue.trim().toLowerCase() !== expectedMailbox.trim().toLowerCase()) {
+      throw new Error("Unexpected mailbox");
+    }
+  }
+
+  return true;
+}
+
 export function parseHostingerIncomingPayload(
   value: unknown,
   expectedMailbox: string,
