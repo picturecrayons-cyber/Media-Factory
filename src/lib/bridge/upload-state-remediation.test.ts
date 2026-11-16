@@ -224,15 +224,20 @@ test("verification timeout warns that server-side work may still complete and re
 
 test("persistence failure does not advance migration queue state", async () => {
   const assets = readFileSync(join(process.cwd(), "src/lib/bridge/assets.ts"), "utf8");
-  const persistAt = assets.indexOf("const confirmed = await persistVerifiedAsset(sql, {");
-  const uploadedAt = assets.indexOf("set status = 'UPLOADED'", persistAt);
-  const verifiedAt = assets.indexOf("set status = 'VERIFIED'", persistAt);
-  const failureBranchAt = assets.indexOf("if (!confirmed)", persistAt);
-  assert.ok(persistAt >= 0, "confirmation persistence call must exist");
-  assert.ok(uploadedAt > persistAt, "UPLOADED transition must occur after persistence");
+  const confirmStart = assets.indexOf("export const confirmAssetUpload");
+  const replacementPersistAt = assets.indexOf("persistVerifiedAssetReplacement(sql, {", confirmStart);
+  const normalPersistAt = assets.indexOf("persistVerifiedAsset(sql, {", confirmStart);
+  const successBranchAt = assets.indexOf("if (confirmed && !replacementUpload)", confirmStart);
+  const uploadedAt = assets.indexOf("set status = 'UPLOADED'", confirmStart);
+  const verifiedAt = assets.indexOf("set status = 'VERIFIED'", confirmStart);
+  const failureBranchAt = assets.indexOf("if (!confirmed)", confirmStart);
+  assert.ok(replacementPersistAt > confirmStart, "replacement confirmation persistence must exist");
+  assert.ok(normalPersistAt > replacementPersistAt, "normal upload persistence must remain as the non-replacement branch");
+  assert.ok(successBranchAt > normalPersistAt, "migration queue transitions must be gated to normal uploads");
+  assert.ok(uploadedAt > successBranchAt, "UPLOADED transition must occur after normal upload persistence");
   assert.ok(verifiedAt > uploadedAt, "VERIFIED transition must follow UPLOADED");
-  assert.ok(failureBranchAt > verifiedAt, "failure handling must be after the success-only queue transitions");
-  const successBlock = assets.slice(assets.indexOf("if (confirmed)", persistAt), failureBranchAt);
+  assert.ok(failureBranchAt > verifiedAt, "failure handling must follow success-only queue transitions");
+  const successBlock = assets.slice(successBranchAt, failureBranchAt);
   assert.match(successBlock, /set status = 'UPLOADED'/);
   assert.match(successBlock, /set status = 'VERIFIED'/);
 });
