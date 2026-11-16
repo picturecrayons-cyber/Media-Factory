@@ -322,7 +322,6 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
           </section>
         </div>
       ) : null}
-      ) : null}
     </div>
   );
 }
