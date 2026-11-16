@@ -183,8 +183,14 @@ export async function grantFromCapturedPayment(opts: {
   }
 
   if (payment.package_id) {
-    const pkg = await sql<{ id: string; title_id: string; status: string; delivery_status: string }>`
-      select id, title_id, status, delivery_status
+    const pkg = await sql<{
+      id: string;
+      title_id: string;
+      status: string;
+      delivery_status: string;
+      buyer_user_id: string | null;
+    }>`
+      select id, title_id, status, delivery_status, buyer_user_id
       from bridge_license_packages
       where id = ${payment.package_id} and title_id = ${payment.title_id}
       limit 1
@@ -192,6 +198,9 @@ export async function grantFromCapturedPayment(opts: {
     if (!pkg[0]) throw new Error("License package not found");
     if (!["IN_NEGOTIATION", "LICENSED"].includes(pkg[0].status)) {
       throw new Error("License package is not in an active buyer negotiation");
+    }
+    if (pkg[0].buyer_user_id !== payment.user_id) {
+      throw new Error("License package is reserved by another buyer");
     }
     await sql`
       update bridge_payments
@@ -203,11 +212,17 @@ export async function grantFromCapturedPayment(opts: {
       values (${pkg[0].id}, ${payment.title_id}, ${payment.user_id}, ${payment.id})
       on conflict (package_id, buyer_user_id) do nothing
     `;
-    await sql`
+    const licensedPackage = await sql<{ id: string }>`
       update bridge_license_packages
-      set status = 'LICENSED', buyer_user_id = ${payment.user_id}, payment_id = ${payment.id}, updated_at = now()
+      set status = 'LICENSED', payment_id = ${payment.id}, updated_at = now()
       where id = ${pkg[0].id}
+        and buyer_user_id = ${payment.user_id}
+        and status in ('IN_NEGOTIATION', 'LICENSED')
+      returning id
     `;
+    if (!licensedPackage[0]) {
+      throw new Error("License package reservation changed before entitlement finalization");
+    }
     await writeAudit({
       actorUserId: opts.actorUserId ?? payment.user_id,
       action: "licensing.language_package_licensed",
