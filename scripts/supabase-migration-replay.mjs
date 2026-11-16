@@ -7,6 +7,7 @@
  * verified, unmapped Studio profile. Inject a synthetic fixture only in this
  * disposable replay database, in the same transaction as that migration.
  */
+import { createHash } from "node:crypto";
 import { readdir, readFile } from "node:fs/promises";
 import { dirname, resolve, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -37,6 +38,37 @@ if (names.length !== EXPECTED_MIGRATIONS) {
 }
 if (new Set(names).size !== names.length) {
   throw new Error("Duplicate migration filenames detected");
+}
+
+const manifestPath = resolve(
+  SCRIPT_DIR,
+  "../docs/release/bridge-supabase-migration-reconciliation-2026-11-16.md",
+);
+const manifest = await readFile(manifestPath, "utf8");
+const manifestRows = new Map(
+  [...manifest.matchAll(/^\\|\\s*(\\d{14})\\s*\\|\\s*([a-z0-9_]+)\\s*\\|\\s*(\\d+)\\s*\\|\\s*`([a-f0-9]{64})`\\s*\\|$/gm)]
+    .map((match) => [
+      `${match[1]}_${match[2]}.sql`,
+      { bytes: Number(match[3]), sha256: match[4] },
+    ]),
+);
+if (manifestRows.size !== EXPECTED_MIGRATIONS) {
+  throw new Error(
+    `Expected ${EXPECTED_MIGRATIONS} manifest rows; found ${manifestRows.size}`,
+  );
+}
+
+for (const name of names) {
+  const contents = await readFile(join(MIGRATIONS_DIR, name));
+  const expected = manifestRows.get(name);
+  if (!expected) throw new Error(`Migration missing from manifest: ${name}`);
+  const actualBytes = contents.byteLength;
+  const actualSha256 = createHash("sha256").update(contents).digest("hex");
+  if (actualBytes !== expected.bytes || actualSha256 !== expected.sha256) {
+    throw new Error(
+      `Source integrity mismatch for ${name}: ${actualBytes} bytes / ${actualSha256}`,
+    );
+  }
 }
 
 const pool = new Pool({
