@@ -48,7 +48,7 @@ Deno.serve(async (request: Request) => {
         typeof row.bridge_title_id === "string" &&
         typeof row.slug === "string" &&
         typeof row.title === "string" &&
-        String(row.status || "").toLowerCase() === "approved" &&
+        ["approved", "published"].includes(String(row.status || "").toLowerCase()) &&
         row.listed === true &&
         row.published === true
       )
