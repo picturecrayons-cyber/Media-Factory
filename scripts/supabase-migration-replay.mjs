@@ -142,6 +142,54 @@ try {
     const sql = await readFile(join(MIGRATIONS_DIR, name), "utf8");
     await client.query("BEGIN");
     try {
+      // Production contains this legacy trigger helper, but it is not part
+      // of the 69-row migration ledger (it predates the recorded history).
+      // Recreate that verified baseline object only in the disposable replay DB
+      // before the historical migration alters its search_path.
+      if (name === "20261006154551_harden_authz_server_only_surfaces_20261006.sql") {
+        const baselineHelper = await client.query(`
+          select
+            to_regclass('public.loop_parental_controls') is not null as table_exists,
+            to_regprocedure('public.loop_parental_controls_set_updated_at()') is not null as function_exists
+        `);
+        if (!baselineHelper.rows[0].table_exists) {
+          throw new Error("Production baseline prerequisite missing: public.loop_parental_controls");
+        }
+        if (!baselineHelper.rows[0].function_exists) {
+          await client.query(`
+            create function public.loop_parental_controls_set_updated_at()
+            returns trigger
+            language plpgsql
+            set search_path to 'public', 'pg_temp'
+            as $function$
+            begin
+              new.updated_at = now();
+              return new;
+            end;
+            $function$;
+          `);
+        }
+        await client.query(`
+          do $replay$
+          begin
+            if not exists (
+              select 1
+              from pg_trigger
+              where tgrelid = 'public.loop_parental_controls'::regclass
+                and tgname = 'loop_parental_controls_set_updated_at'
+                and not tgisinternal
+            ) then
+              create trigger loop_parental_controls_set_updated_at
+                before update on public.loop_parental_controls
+                for each row
+                execute function public.loop_parental_controls_set_updated_at();
+            end if;
+          end
+          $replay$;
+        `);
+        console.log("[migration-replay] restored verified pre-ledger parental-controls trigger helper in local replay DB");
+      }
+
       if (name === FIXTURE_MIGRATION) {
         const current = await client.query(`
           select count(*)::int as count
