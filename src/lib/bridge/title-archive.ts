@@ -52,8 +52,8 @@ async function hasDependency(tx: Sql, titleId: string): Promise<boolean> {
       exists(select 1 from bridge_desk_notes where title_id = ${titleId}) or
       exists(select 1 from bridge_buyer_title_access where title_id = ${titleId}) or
       exists(select 1 from bridge_title_investors where title_id = ${titleId}) or
-      exists(select 1 from bridge_title_merge_aliases where canonical_title_id = ${titleId}) or
-      exists(select 1 from bridge_title_merge_audits where canonical_title_id = ${titleId}) or
+      exists(select 1 from bridge_title_merge_aliases where canonical_title_id = ${titleId} or retiring_title_id = ${titleId}) or
+      exists(select 1 from bridge_title_merge_audits where canonical_title_id = ${titleId} or retiring_title_id = ${titleId}) or
       exists(select 1 from loop_titles where bridge_title_id = ${titleId}) or
       exists(select 1 from streamvista_legacy_links where bridge_title_id = ${titleId}) or
       exists(select 1 from streamvista_orders where bridge_title_id = ${titleId}) as blocked
@@ -104,8 +104,8 @@ export async function canArchiveDraftTitle(tx: Sql, actor: Actor, title: BridgeT
         exists(select 1 from bridge_desk_notes where title_id = ${title.id}) or
         exists(select 1 from bridge_buyer_title_access where title_id = ${title.id}) or
         exists(select 1 from bridge_title_investors where title_id = ${title.id}) or
-        exists(select 1 from bridge_title_merge_aliases where canonical_title_id = ${title.id}) or
-        exists(select 1 from bridge_title_merge_audits where canonical_title_id = ${title.id}) or
+        exists(select 1 from bridge_title_merge_aliases where canonical_title_id = ${title.id} or retiring_title_id = ${title.id}) or
+        exists(select 1 from bridge_title_merge_audits where canonical_title_id = ${title.id} or retiring_title_id = ${title.id}) or
         exists(select 1 from loop_titles where bridge_title_id = ${title.id}) or
         exists(select 1 from streamvista_legacy_links where bridge_title_id = ${title.id}) or
         exists(select 1 from streamvista_orders where bridge_title_id = ${title.id}) as blocked
@@ -120,15 +120,22 @@ export async function archiveDraftTitle(tx: Sql, actor: Actor, title: BridgeTitl
   assertActorMayManage(actor, title);
   const locked = await tx<{
     id: string; status: string; archived_at: string | null;
+    owner_user_id: string; owner_account_type: string; owner_organization_id: string | null;
     poster_key: string | null; master_key: string | null;
   }>`
-    select id, status, archived_at, poster_key, master_key
+    select id, status, archived_at, owner_user_id, owner_account_type, owner_organization_id, poster_key, master_key
     from bridge_titles where id = ${title.id} for update
   `;
   const row = locked[0];
   if (!row || row.status !== "DRAFT" || row.archived_at) {
     throw new Error("Title changed or is already archived. Refresh and try again.");
   }
+  assertActorMayManage(actor, {
+    ...title,
+    ownerUserId: row.owner_user_id,
+    ownerAccountType: row.owner_account_type as BridgeTitle["ownerAccountType"],
+    ownerOrganizationId: row.owner_organization_id,
+  });
   const blocked = await hasDependency(tx, title.id);
   assertDraftCanBeArchived({
     status: row.status,
@@ -153,12 +160,22 @@ export async function archiveDraftTitle(tx: Sql, actor: Actor, title: BridgeTitl
 
 export async function restoreArchivedDraft(tx: Sql, actor: Actor, title: BridgeTitle) {
   assertActorMayManage(actor, title);
-  const locked = await tx<{ id: string; status: string; archived_at: string | null }>`
-    select id, status, archived_at from bridge_titles where id = ${title.id} for update
+  const locked = await tx<{
+    id: string; status: string; archived_at: string | null;
+    owner_user_id: string; owner_account_type: string; owner_organization_id: string | null;
+  }>`
+    select id, status, archived_at, owner_user_id, owner_account_type, owner_organization_id
+    from bridge_titles where id = ${title.id} for update
   `;
   if (!locked[0] || locked[0].status !== "DRAFT" || !locked[0].archived_at) {
     throw new Error("Archived draft is not available to restore.");
   }
+  assertActorMayManage(actor, {
+    ...title,
+    ownerUserId: locked[0].owner_user_id,
+    ownerAccountType: locked[0].owner_account_type as BridgeTitle["ownerAccountType"],
+    ownerOrganizationId: locked[0].owner_organization_id,
+  });
   const updated = await tx<{ id: string }>`
     update bridge_titles
     set archived_at = null, archived_by = null, archive_reason = null, updated_at = now()
