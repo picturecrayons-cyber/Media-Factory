@@ -86,14 +86,15 @@ function hasExpiredWindow(windowEnd: string | Date | null, now = new Date()) {
 export async function verifyDistributionPreflight(
   sql: Sql,
   titleId: string,
-  rightsRequest?: {
+  rightsRequest: {
     destination: "CRAYONS_LOOP";
     territories: string[];
     languages: string[];
     exploitationModels: string[];
     windowStart?: string | null;
     windowEnd?: string | null;
-  },
+  } | undefined,
+  finalApproverUserId: string,
 ) {
   const titles = await sql<{
     id: string;
@@ -169,8 +170,18 @@ export async function verifyDistributionPreflight(
     select exists(select 1 from bridge_qc_cases q where q.title_id=${titleId} and q.status='PASSED'
       and q.reviewer_findings->0->>'masterKey'=${title.master_key}
       and q.reviewer_findings->0->>'posterKey'=${title.poster_key}) as qc_ok,
-    exists(select 1 from bridge_legal_cases l where l.title_id=${titleId} and l.status='APPROVED'
-      and l.evidence->0->>'grantId'=${rightsGrantId}) as legal_ok
+    exists(
+      select 1
+      from bridge_legal_cases l
+      join bridge_profiles reviewer on reviewer.user_id = l.reviewed_by
+      where l.title_id=${titleId}
+        and l.status='APPROVED'
+        and l.evidence->0->>'grantId'=${rightsGrantId}
+        and l.reviewed_at is not null
+        and l.reviewed_by <> ${finalApproverUserId}
+        and reviewer.internal_role = 'legal_reviewer'
+        and reviewer.email_verified is true
+    ) as legal_ok
   `;
   if (!reviews[0]?.qc_ok) reasons.push("Recorded QC approval for the current assets is required.");
   if (!reviews[0]?.legal_ok) reasons.push("Recorded legal approval for this license is required.");
@@ -418,7 +429,7 @@ export const authorizeLoopPublication = createServerFn({ method: "POST" })
         exploitationModels: data.exploitationModels,
         windowStart: data.windowStart,
         windowEnd: data.windowEnd,
-      });
+      }, actor.userId);
       if (!preflight.eligible || !preflight.title) {
         throw new Error(`Distribution Authorization Blocked: ${preflight.reasons.join(" · ")}`);
       }
@@ -624,7 +635,7 @@ export const extendDistributionWindow = createServerFn({ method: "POST" })
         exploitationModels: publication.exploitation_models,
         windowStart: iso(publication.window_start),
         windowEnd: data.newWindowEnd,
-      });
+      }, actor.userId);
       if (!preflight.eligible) {
         throw new Error(`Distribution Extension Blocked: ${preflight.reasons.join(" · ")}`);
       }
