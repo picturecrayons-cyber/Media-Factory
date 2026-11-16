@@ -36,3 +36,23 @@ alter table public.bridge_title_controls enable row level security;
 alter table public.bridge_title_control_events enable row level security;
 revoke all on public.bridge_title_controls from anon, authenticated;
 revoke all on public.bridge_title_control_events from anon, authenticated;
+
+
+-- Prevent mutation or deletion of control history. New events are append-only.
+create or replace function public.bridge_reject_title_control_event_mutation()
+returns trigger
+language plpgsql
+set search_path = pg_catalog
+as $function$
+begin
+  raise exception 'bridge_title_control_events is append-only';
+end;
+$function$;
+
+drop trigger if exists bridge_title_control_events_no_mutation
+  on public.bridge_title_control_events;
+create trigger bridge_title_control_events_no_mutation
+  before update or delete on public.bridge_title_control_events
+  for each row execute function public.bridge_reject_title_control_event_mutation();
+
+revoke all on function public.bridge_reject_title_control_event_mutation() from public, anon, authenticated;
