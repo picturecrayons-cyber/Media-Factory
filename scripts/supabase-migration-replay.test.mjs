@@ -12,8 +12,8 @@ const rejectedTargets = [
   ["remote database IP", "postgresql://postgres:secret@203.0.113.10:5432/postgres"],
   ["local default port", "postgresql://postgres:postgres@127.0.0.1:54322/postgres"],
   ["wrong local port", "postgresql://postgres:postgres@localhost:5432/postgres"],
-  ["non-Postgres protocol", "https://localhost:54332/postgres"],
-  ["local URL with query parameters", "postgresql://postgres:postgres@127.0.0.1:54332/postgres?sslmode=require"],
+  ["non-Postgres protocol", "https://localhost:55432/postgres"],
+  ["local URL with query parameters", "postgresql://postgres:postgres@127.0.0.1:55432/postgres?sslmode=require"],
 ];
 
 for (const [label, databaseUrl] of rejectedTargets) {
