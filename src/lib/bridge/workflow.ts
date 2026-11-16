@@ -38,7 +38,7 @@ export async function saveLoopLicense(
     )
   )
     throw new Error("Forbidden");
-  const [control] = await tx<{control_state: "CLEAR" | "HOLD" | "BLOCK"}>`select control_state from public.bridge_title_controls where title_id=${data.titleId}`;
+  const [control] = await tx<{control_state: "CLEAR" | "HOLD" | "BLOCK"}>`select control_state from public.bridge_title_controls where title_id=${data.titleId} for update`;
   assertTitleControlClear(control?.control_state);
   if (new Date(data.windowEnd) <= new Date()) throw new Error("License window has expired");
   const [grant] = await tx<{ id: string }>`insert into bridge_rights_grants
