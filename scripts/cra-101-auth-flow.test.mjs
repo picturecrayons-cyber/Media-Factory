@@ -45,7 +45,7 @@ test("CRA-101 expired or missing auth redirects once without retry loop", () => 
 test("CRA-101 Creator onboarding creates the profile and opens the Creator dashboard without title intake", () => {
   const source = read("src/routes/onboarding.tsx");
   assert.match(source, /publicAccountTypeFrom\(signupAccountTypeHint\)/);
-  assert.match(source, /accountType: accountType,/);
+  assert.match(source, /accountType,/);
   assert.match(source, /await completeOnboarding\(/);
   assert.match(source, /result\.home/);
   assert.match(source, /accountType === "buyer" \? "\/buyer"/);
@@ -58,7 +58,7 @@ test("CRA-101 independent Creator completes account onboarding without submittin
   const source = read("src/routes/onboarding.tsx");
   assert.match(source, /signupAccountTypeHint/);
   assert.match(source, /publicAccountTypeFrom\(signupAccountTypeHint\)/);
-  assert.match(source, /accountType: accountType,/);
+  assert.match(source, /accountType,/);
   assert.match(source, /completeOnboarding\(/);
   assert.match(source, /result\.home/);
   assert.match(source, /accountType === "studio" \? "\/studio" : "\/creator"/);
