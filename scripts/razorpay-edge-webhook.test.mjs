@@ -94,6 +94,14 @@ test("direct payment verification cannot reassign a package to another buyer", a
   assert.match(grant, /if \(!licensedPackage\[0\]\)/);
 });
 
+test("Razorpay webhook requires an exact reserved package buyer", () => {
+  assert.match(source, /data\.buyer_user_id !== localPayment\.user_id/);
+  assert.doesNotMatch(source, /data\.buyer_user_id && data\.buyer_user_id !== localPayment\.user_id/);
+  const packageLookup = source.slice(source.indexOf('from("bridge_license_packages")'));
+  assert.match(packageLookup, /buyer_user_id/);
+  assert.match(packageLookup, /Language licence package belongs to another buyer/);
+});
+
 test("package checkout reuses an existing buyer order before claiming the package", async () => {
   const paymentSource = await readFile(new URL("../src/lib/bridge/payments.ts", import.meta.url), "utf8");
   const start = paymentSource.indexOf("export const createLicenseOrder");
