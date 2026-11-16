@@ -94,6 +94,26 @@ describe("Hostinger incoming mail webhook", () => {
   });
 
   it("rejects unsupported events, mailbox mismatches, and invalid senders", () => {
+  it("rejects sender values with junk around an otherwise valid bracketed address", () => {
+    assert.throws(() => parseHostingerIncomingPayload({
+      event: "message.received",
+      mailbox,
+      message: { from: "garbage <producer@example.com> trailing junk" },
+    }, mailbox), /Invalid sender/);
+
+    assert.throws(() => parseHostingerIncomingPayload({
+      event: "message.received",
+      mailbox,
+      message: { from: "garbage producer@example.com" },
+    }, mailbox), /Invalid sender/);
+
+    assert.equal(parseHostingerIncomingPayload({
+      event: "message.received",
+      mailbox,
+      message: { from: "Producer <producer@example.com>" },
+    }, mailbox).sender, "Producer <producer@example.com>");
+  });
+
     assert.throws(() => parseHostingerIncomingPayload({
       event: "message.deleted",
       mailbox,
