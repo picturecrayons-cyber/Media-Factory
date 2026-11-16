@@ -71,8 +71,7 @@ function CreatorDashboard({
       </header>
 
       <nav aria-label="Creator workspace navigation" className="flex flex-wrap gap-2">
-        {[
-          ["Overview", "#overview"], ["My titles", "#my-titles"],
+        {[["Overview", "#overview"], ["My titles", "#my-titles"],
           ["Add title", "#add-title"], ["More", "#workspace-tools"],
         ].map(([label, href]) => (
           <a key={href} href={href} className="rounded-full border border-line px-3 py-2 text-xs font-medium text-muted transition hover:border-accent hover:text-fg">
