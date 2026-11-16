@@ -19,6 +19,7 @@ import { NewSubmissionPanel } from "@/components/bridge/new-submission-panel";
 import { StudioMemberDesk } from "@/components/bridge/studio-member-desk";
 import { DitAgentDesk } from "@/components/bridge/dit-agent-desk";
 import { listTitles } from "@/lib/bridge/titles";
+import { listMyStoryConcepts } from "@/lib/bridge/story-concept-api";
 import { listProductionAssets } from "@/lib/bridge/assets";
 import type { BridgeActor } from "@/lib/bridge/session";
 
@@ -52,7 +53,12 @@ function StudioWorkspace({ actor }: { actor: BridgeActor }) {
     queryKey: ["bridge-titles", actor.userId, actor.organizationId ?? null, actor.accountType, actor.internalRole ?? null],
     queryFn: () => listTitles(),
   });
-  const titles = titlesQuery.data?.titles ?? [];
+  const conceptsQuery = useQuery({ queryKey: ["my-story-concepts"], queryFn: () => listMyStoryConcepts() });
+  const conceptTitleIds = new Set((conceptsQuery.data?.concepts ?? []).map((concept) => concept.title_id));
+  // Keep Story / Concept records out of the finished-film production slate.
+  const titles = conceptsQuery.isSuccess ? (titlesQuery.data?.titles ?? []).filter((title) => !conceptTitleIds.has(title.id)) : [];
+  const titlesLoading = titlesQuery.isPending || conceptsQuery.isPending;
+  const titlesError = titlesQuery.isError || conceptsQuery.isError;
   const counts = useMemo(() => {
     return titles.reduce(
       (result, title) => {
@@ -142,13 +148,13 @@ function StudioWorkspace({ actor }: { actor: BridgeActor }) {
             <OverviewPanel
               counts={counts}
               nextActions={nextActions}
-              titlesLoading={titlesQuery.isPending}
-              titlesError={titlesQuery.isError}
+              titlesLoading={titlesLoading}
+              titlesError={titlesError}
               onNavigate={setActiveTab}
             />
           ) : null}
-          {activeTab === "productions" ? <ProductionPanel actor={actor} titles={titles} loading={titlesQuery.isPending} error={titlesQuery.isError} /> : null}
-          {activeTab === "titles" ? <TitlesPanel /> : null}
+          {activeTab === "productions" ? <ProductionPanel actor={actor} titles={titles} loading={titlesLoading} error={titlesError} /> : null}
+          {activeTab === "titles" ? <TitlesPanel conceptTitleIds={Array.from(conceptTitleIds)} conceptsLoading={conceptsQuery.isPending} conceptsError={conceptsQuery.isError} /> : null}
           {activeTab === "dit" ? <DitPanel actor={actor} /> : null}
           {activeTab === "members" ? <MembersPanel /> : null}
         </main>
@@ -258,11 +264,11 @@ function AssetCount({ label, value }: { label: string; value: number }) {
   return <div className="rounded-xl bg-elevated/60 p-3"><span className="block text-[11px] text-muted">{label}</span><strong className="mt-1 block text-lg tabular-nums">{value}</strong></div>;
 }
 
-function TitlesPanel() {
+function TitlesPanel({ conceptTitleIds, conceptsLoading, conceptsError }: { conceptTitleIds: string[]; conceptsLoading: boolean; conceptsError: boolean }) {
   return (
     <div className="space-y-6">
       <header><p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-accent">Catalogue management</p><h2 className="mt-1 font-display text-2xl font-semibold">Titles & concepts</h2><p className="mt-1 text-sm text-muted">Keep completed-film submissions separate from original story and concept submissions.</p></header>
-      <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6"><div className="flex flex-wrap items-center justify-between gap-3"><div><h3 className="font-display text-lg font-semibold">Finished films</h3><p className="mt-1 text-xs text-muted">Open a title to manage metadata, verified files and workflow status.</p></div><NewSubmissionPanel /></div><div className="mt-4"><TitleList empty="No finished-film submissions are available for this Studio organization yet." /></div></section>
+      <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6"><div className="flex flex-wrap items-center justify-between gap-3"><div><h3 className="font-display text-lg font-semibold">Finished films</h3><p className="mt-1 text-xs text-muted">Open a title to manage metadata, verified files and workflow status.</p></div><NewSubmissionPanel /></div><div className="mt-4">{conceptsLoading ? <p className="text-sm text-muted">Checking submission types…</p> : conceptsError ? <p role="alert" className="text-sm text-muted">Finished-film records are hidden because Story / Concept classification could not be verified.</p> : <TitleList empty="No finished-film submissions are available for this Studio organization yet." excludeIds={conceptTitleIds} />}</div></section>
       <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6"><MyStoryConcepts /></section>
     </div>
   );
