@@ -109,6 +109,19 @@ Deno.serve(async (req: Request) => {
       if (lookupError) return await failEvent(supabase, id, claimToken, "Bridge payment lookup failed");
       if (localPayment) surface = "bridge";
 
+      // An order may be captured before the Bridge payment row is committed,
+      // and Razorpay does not reliably copy order notes onto payment entities.
+      // Never acknowledge an unclassified capture as processed: return 503 so
+      // the provider retries after the authoritative local order row is visible.
+      if (surface === "unknown") {
+        return await failEvent(
+          supabase,
+          id,
+          claimToken,
+          "Captured payment surface is unresolved; retry after order persistence",
+        );
+      }
+
       if (surface === "bridge") {
         // CRA-165 remains a hard fulfillment gate. Do not call Razorpay,
         // update Bridge payment state, grant entitlements, or transition titles

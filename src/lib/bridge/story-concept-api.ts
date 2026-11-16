@@ -12,6 +12,7 @@ import { requireVerifiedActor } from "./session";
 import { assertPermission } from "./rbac";
 import { writeAudit } from "./audit";
 import { assertNotDevUser } from "./guards";
+import { storyConceptOrganizationScope, storyConceptOwnerUserScope } from "./story-concept-access";
 import {
   STORY_CONCEPT_ENABLED,
   CURATION_TRANSITIONS,
@@ -185,6 +186,9 @@ export const listMyStoryConcepts = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
+    // Buyer membership is not Studio creator-workspace authority.
+    const organizationScope = storyConceptOrganizationScope(actor);
+    const ownerUserScope = storyConceptOwnerUserScope(actor);
     const sql = await getSql();
 
     try {
@@ -192,11 +196,15 @@ export const listMyStoryConcepts = createServerFn({ method: "GET" })
         select c.*, t.name as title_name
         from bridge_story_concept_submissions c
         join bridge_titles t on t.id = c.title_id
-        where t.owner_user_id = ${actor.userId}
+        where (
+             ${ownerUserScope !== null}
+             and t.owner_user_id = ${ownerUserScope}
+           )
            or (
-             t.owner_account_type = 'studio'
+             ${organizationScope !== null}
+             and t.owner_account_type = 'studio'
              and t.owner_organization_id is not null
-             and t.owner_organization_id = ${actor.organizationId ?? null}
+             and t.owner_organization_id = ${organizationScope}
            )
         order by c.created_at desc
         limit 100

@@ -12,6 +12,7 @@ import { bridgeEnv } from "./env";
 import { bridgeInvitationUrl, bridgeVerificationUrl } from "./origin";
 import { assertNotDevUser } from "./guards";
 import { ONBOARDING_EMAIL_CONFLICT_MESSAGE, isBridgeProfileEmailConflict } from "./onboarding-errors";
+import { assertInternalRoleGrantBlocked } from "./authorization-guards";
 
 function tokenPair() {
   const token = randomBytes(32).toString("hex");
@@ -404,6 +405,8 @@ export const inviteInternalRole = createServerFn({ method: "POST" })
     if (!canGrantInternalRole(actor, data.role)) {
       throw new Error("Role grant is not permitted");
     }
+    // No durable second-approver record exists yet. Block before DB writes or mail.
+    assertInternalRoleGrantBlocked();
     const sql = await getSql();
     const { token, hash } = tokenPair();
     const id = randomBytes(16).toString("hex");

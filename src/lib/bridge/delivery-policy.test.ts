@@ -12,7 +12,7 @@ describe("master download denial", () => {
       hasLicenseEntitlement: true,
     });
     assert.equal(decision.allow, false);
-    assert.match(decision.reason, /does not authorize a master/);
+    assert.match(decision.reason, /Buyer accounts cannot download/);
   });
 
   it("never lets a buyer entitlement download a technical package", () => {
@@ -24,14 +24,24 @@ describe("master download denial", () => {
       hasLicenseEntitlement: true,
     });
     assert.equal(decision.allow, false);
-    assert.match(decision.reason, /does not authorize technical package downloads/);
+    assert.match(decision.reason, /Buyer accounts cannot download/);
   });
 
-  it("lets internal reviewers with buyer accounts download a master", () => {
-    assert.equal(downloadDecision({ kind: "master", actorIsOwner: false, actorIsInternal: true, accountType: "buyer", hasLicenseEntitlement: false }).allow, true);
+  it("does not let an internal-role Buyer download master, technical, or censor-certificate assets", () => {
+    for (const kind of ["master", "technical", "censor_certificate"]) {
+      const decision = downloadDecision({
+        kind,
+        actorIsOwner: false,
+        actorIsInternal: true,
+        accountType: "buyer",
+        hasLicenseEntitlement: false,
+      });
+      assert.equal(decision.allow, false, `unexpected Buyer access to ${kind}`);
+      assert.match(decision.reason, /Buyer accounts cannot download/);
+    }
   });
 
-  it("lets the owner download a master and a buyer download only a screener", () => {
+  it("lets an authorized non-Buyer owner download a master and a Buyer download only an entitled screener", () => {
     assert.equal(downloadDecision({
       kind: "master",
       actorIsOwner: true,

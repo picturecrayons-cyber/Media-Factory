@@ -42,7 +42,7 @@ function mapRow(r: BridgeProfileRow): BridgeActor {
 async function loadActorByBridgeUserId(userId: string): Promise<BridgeActor | null> {
   const sql = await getSql();
 
-  // Profile resolution must not depend on optional Studio organization schema.
+  // Keep the base profile lookup independent of optional organization schema.
   // In particular, the production super-admin profile is an independent_creator.
   const rows = await sql<BridgeProfileRow>`
     select bp.user_id, bp.email, bp.display_name, bp.account_type, bp.organization_name,
@@ -52,18 +52,19 @@ async function loadActorByBridgeUserId(userId: string): Promise<BridgeActor | nu
   if (!rows[0]) return null;
 
   const actor = mapRow(rows[0]);
-  if (actor.accountType !== "studio" || !actor.emailVerified) return actor;
+  if (!["studio", "buyer"].includes(actor.accountType) || !actor.emailVerified) return actor;
 
-  // Organization scope is an optional, server-resolved capability. If its
-  // schema is absent, keep the profile available but do not grant organization
-  // scope. Never infer an ID from organization_name or use another environment's ID.
+  // Studio and Buyer organization scope is server-resolved from an explicit,
+  // active membership and active legal organization. The profile pointer must
+  // agree with the membership; display names are never identity or authority.
+  // If this optional schema is absent, retain the profile but grant no org scope.
   try {
     const memberships = await sql<{ organization_id: string }>`
-      select bp.organization_id
+      select m.organization_id::text as organization_id
       from bridge_profiles bp
       join bridge_organization_memberships m
-        on m.organization_id = bp.organization_id
-       and m.user_id = bp.user_id
+        on m.user_id = bp.user_id
+       and m.organization_id = bp.organization_id
        and m.status = 'active'
       join bridge_organizations o
         on o.id = m.organization_id
@@ -83,7 +84,7 @@ async function loadActorByBridgeUserId(userId: string): Promise<BridgeActor | nu
   return actor;
 }
 
-export async function resolveBridgeUserId(authUserId: string): Promise<string> {
+export async function resolveBridgeUserId(authUserId: string): Promise<string | null> {
   assertNotDevUser(authUserId);
   const sql = await getSql();
   const direct = await sql<{ user_id: string }>`
@@ -97,24 +98,15 @@ export async function resolveBridgeUserId(authUserId: string): Promise<string> {
     where auth_user_id = ${authUserId}::uuid
     limit 1
   `;
-  if (linked[0]?.bridge_user_id) return linked[0].bridge_user_id;
-
-  // Legacy Bridge profiles may predate the Supabase identity-link table.
-  // Recover the mapping only when the authenticated Supabase user's verified
-  // email exactly matches the existing Bridge profile email.
-  const byEmail = await sql<{ bridge_user_id: string }>`
-    select bp.user_id as bridge_user_id
-    from bridge_profiles bp
-    join auth.users au on lower(au.email) = lower(bp.email)
-    where au.id = ${authUserId}::uuid
-      and au.email_confirmed_at is not null
-    limit 1
-  `;
-  return byEmail[0]?.bridge_user_id ?? authUserId;
+  // Identity is accepted only through a direct immutable subject match or an
+  // explicit identity-link record. Email equality is not an identity proof.
+  // Missing/ambiguous identity denies; never return the raw Auth subject.
+  return linked[0]?.bridge_user_id ?? null;
 }
 
 export async function loadActor(authUserId: string): Promise<BridgeActor | null> {
   const bridgeUserId = await resolveBridgeUserId(authUserId);
+  if (!bridgeUserId) return null;
   return loadActorByBridgeUserId(bridgeUserId);
 }
 

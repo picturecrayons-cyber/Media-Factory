@@ -171,8 +171,8 @@ const ROLE_GRANTS: Record<InternalRole, readonly InternalRole[]> = {
   qc_reviewer: [],
   legal_reviewer: [],
   finance: [],
-  admin: ["viewer", "qc_reviewer", "legal_reviewer", "finance", "admin"],
-  super_admin: ["viewer", "qc_reviewer", "legal_reviewer", "finance", "admin", "super_admin"],
+  admin: ["viewer", "qc_reviewer", "legal_reviewer", "finance"],
+  super_admin: ["viewer", "qc_reviewer", "legal_reviewer", "finance", "admin"],
 };
 
 export function canGrantInternalRole(actor: Actor, role: InternalRole): boolean {

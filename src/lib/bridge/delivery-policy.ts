@@ -2,8 +2,8 @@ export type DownloadDecision = { allow: boolean; reason: string };
 
 /**
  * A buyer catalog or screener grant never authorizes a source master.
- * Owners and internal reviewers may download a master. Everyone else needs
- * an entitlement, and that entitlement only covers screener or subtitle files.
+ * Buyer account type is a hard boundary: an internalRole flag must not turn
+ * a Buyer account into staff for master, technical, or censor-certificate files.
  */
 export function downloadDecision(opts: {
   kind: string;
@@ -12,6 +12,15 @@ export function downloadDecision(opts: {
   accountType: string;
   hasLicenseEntitlement: boolean;
 }): DownloadDecision {
+  if (
+    opts.accountType === "buyer" &&
+    ["master", "technical", "censor_certificate"].includes(opts.kind)
+  ) {
+    return {
+      allow: false,
+      reason: "Buyer accounts cannot download master, technical, or censor-certificate assets",
+    };
+  }
   if (opts.kind === "master") {
     if (!opts.actorIsOwner && !opts.actorIsInternal) {
       return {
