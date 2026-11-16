@@ -175,15 +175,33 @@ async function openUploadAsset(userId: string, assetId: string) {
     s3_key: string;
     content_type: string | null;
     byte_size: number | null;
+    supersedes_asset_id: string | null;
   }>`
-    select id, title_id, s3_key, content_type, byte_size
+    select id, title_id, s3_key, content_type, byte_size, supersedes_asset_id
     from bridge_assets where id = ${assetId} limit 1
   `;
   const asset = rows[0];
   if (!asset) throw new Error("Asset not found");
   const title = await loadTitle(asset.title_id);
-  if (!title || !canOperateOnTitle(actor, title, "asset.sign_upload", "asset.sign_upload") || !UPLOADABLE.has(title.status)) {
+  const replacementUpload = Boolean(asset.supersedes_asset_id);
+  if (!title || !canOperateOnTitle(actor, title, "asset.sign_upload", "asset.sign_upload")) {
     throw new Error("Upload confirmation is closed for this title");
+  }
+  if (replacementUpload) {
+    if (actor.internalRole !== "super_admin")
+      throw new Error("Forbidden: Super Admin replacement only");
+    const target = await sql<{ id: string }>`
+      select id from bridge_assets
+      where id = ${asset.supersedes_asset_id}
+        and title_id = ${asset.title_id}
+        and kind = (select kind from bridge_assets where id = ${asset.id})
+        and byte_size > 0
+        and superseded_at is null
+      limit 1
+    `;
+    if (!target[0]) throw new Error("The asset selected for replacement is no longer current");
+  } else if (!UPLOADABLE.has(title.status)) {
+    throw new Error("Uploads are closed for this status");
   }
   return asset;
 }
