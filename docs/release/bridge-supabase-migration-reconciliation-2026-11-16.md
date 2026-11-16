@@ -124,10 +124,13 @@ Seven files did not match a Production ledger statement and remain archived for 
 
 ## Verified pre-ledger baseline fixtures used only for local replay
 
-Production contains three server-only tables that are not created by any of the 69 recorded ledger statements, but are referenced by later historical migrations. Their empty schemas are recreated **only inside the disposable local Supabase CI database** before the respective historical migration is replayed:
+Production contains five pre-ledger tables that are not created by any of the 69 recorded ledger statements, but are referenced by later historical migrations. Their empty schemas are recreated **only inside the disposable local Supabase CI database** before the respective historical migration is replayed:
 
 - `public.loop_parental_controls`: exact Production columns, UUID primary key/FK to `auth.users`, 0–5 failed-attempt check, `locked_until` index, RLS enabled. The replay runner also recreates the verified updated-at trigger function and trigger. Its deny policy is deliberately left to migration `20261006231321`.
 - `public.bridge_creator_notifications`: exact Production columns, `bigserial` primary key, status check, RLS enabled; no rows and no policy before the historical deep-clean migration.
 - `public.loop_media_migration_queue`: exact Production columns, primary/unique constraints and enum checks, RLS enabled; no rows and no policy before the historical deep-clean migration.
 
-The replay runner inserts no live data and uses no remote Supabase credentials. It validates that all three tables have RLS enabled and receive the historical `deny_client_access` policies after the 69 migrations replay. These fixtures do not create a new Production migration and do not change the Production schema.
+- `public.bridge_story_concept_submissions`: exact Production columns, UUID primary key, unique title FK, curation-state check/index, RLS with the verified anonymous-deny and authenticated-owner policies. Production has three rows; none are copied into CI.
+- `public.bridge_buyer_interest`: exact Production columns, UUID primary key, submission FK, interest-state check/index, RLS enabled with no client policies. Production has zero rows; none are copied into CI.
+
+The replay runner recreates all five empty pre-ledger table schemas and their verified baseline access settings only in the fresh local database; it inserts no live data and uses no remote Supabase credentials. The local stack uses dedicated Postgres/API ports 55432/55431 to avoid collisions with parallel CI jobs. It validates that all three tables have RLS enabled and receive the historical `deny_client_access` policies after the 69 migrations replay. These fixtures do not create a new Production migration and do not change the Production schema.
