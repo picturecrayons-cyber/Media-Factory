@@ -62,6 +62,16 @@ describe("Hostinger incoming mail webhook", () => {
     assert.equal(isHostingerTestDeliveryEnvelope({ ...sample, extra: "no" }), false);
     assert.equal(isHostingerTestDeliveryEnvelope({ ...sample, mailbox }), false);
     assert.equal(isHostingerTestDeliveryEnvelope({ ...sample, timestamp: "invalid" }), false);
+    assert.equal(isHostingerTestDeliveryEnvelope({ ...sample, timestamp: "1" }), false);
+    assert.equal(isHostingerTestDeliveryEnvelope({ ...sample, timestamp: "2026-02-30T00:00:00Z" }), false);
+    assert.equal(isHostingerTestDeliveryEnvelope({
+      ...sample,
+      data: { ...sample.data, date: "2026-02-30T00:00:00Z" },
+    }), false);
+    assert.equal(isHostingerTestDeliveryEnvelope({
+      ...sample,
+      data: { ...sample.data, date: "1" },
+    }), false);
     assert.equal(isHostingerTestDeliveryEnvelope({
       ...sample,
       data: { ...sample.data, from: "not-an-email" },
