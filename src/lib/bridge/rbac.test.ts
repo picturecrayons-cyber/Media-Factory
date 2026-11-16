@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { assertPermission, canAccessAdminWorkstations, canAccessDashboard, canAccessTitleWorkspace, canGrantInternalRole, canMutateTitle, canOperateOnTitle, canReadTitle, hasPermission, hasStaffPermission, permissionForTransition, workspaceHome } from "./rbac.ts";
+import { assertPermission, canAccessAdminWorkstations, canAccessDashboard, canAccessTitleWorkspace, canGrantInternalRole, canMutateTitle, canOperateOnTitle, canReadTitle, canReplaceTitleAssets, hasPermission, hasStaffPermission, permissionForTransition, workspaceHome } from "./rbac.ts";
 import type { Actor } from "./rbac.ts";
 import { PERMISSIONS } from "./types.ts";
 
@@ -111,6 +111,17 @@ describe("PRD authorization matrix", () => {
     assert.equal(hasPermission(a, "asset.sign_upload"), true);
     assert.equal(hasPermission(a, "users.invite_internal"), true);
     assert.equal(hasPermission(a, "title.license"), true);
+  });
+
+  it("only verified Super Admin can replace assets after QC or later lifecycle stages", () => {
+    assert.equal(canReplaceTitleAssets(superAdmin()), true);
+    assert.equal(canReplaceTitleAssets(actor("unverified-super", "independent_creator", "super_admin", false)), false);
+    for (const staff of [admin(), viewer(), qc, legal, finance]) {
+      assert.equal(canReplaceTitleAssets(staff), false);
+    }
+    for (const owner of [creator(), studio(), buyer()]) {
+      assert.equal(canReplaceTitleAssets(owner), false);
+    }
   });
 
   it("viewer, reviewer and finance roles cannot inherit creator mutation powers from account type", () => {
@@ -267,4 +278,42 @@ it("reserves final approval, duplicate merge, and Loop publication to Super Admi
   assert.equal(hasPermission(admin(), "title.rights_review"), false);
   assert.equal(hasPermission(qc, "title.rights_review"), false);
   assert.equal(hasPermission(legal, "title.qc_review"), false);
+});
+
+
+it("allows only verified Super Admin to approve their own legal draft", async () => {
+  const { canReviewLicenseDraft } = await import("./rbac.ts");
+  assert.equal(canReviewLicenseDraft(superAdmin(), superAdmin().userId), true);
+  assert.equal(canReviewLicenseDraft(admin(), admin().userId), false);
+  assert.equal(canReviewLicenseDraft(legal, legal.userId), false);
+  assert.equal(canReviewLicenseDraft(actor("unverified-super", "independent_creator", "super_admin", false), "creator-a"), false);
+  assert.equal(canReviewLicenseDraft(legal, "creator-a"), true);
+});
+
+
+it("grants verified Super Admin all existing QC, rights, licensing, publishing and release decisions", () => {
+  const permissions = [
+    "title.qc_review",
+    "title.rights_review",
+    "title.license",
+    "title.approve",
+    "title.negotiate",
+    "title.deliver",
+    "loop.publish",
+    "loop.revoke",
+    "loop.certify_playback",
+  ] as const;
+  const adminPermissions = new Set(["title.license", "title.negotiate", "title.deliver"]);
+  for (const permission of permissions) {
+    assert.equal(hasPermission(superAdmin(), permission), true, `Super Admin missing ${permission}`);
+    assert.equal(hasPermission(admin(), permission), adminPermissions.has(permission), `Admin permission mismatch for ${permission}`);
+    assert.equal(hasPermission(qc, permission), permission === "title.qc_review");
+    assert.equal(hasPermission(legal, permission), permission === "title.rights_review");
+  }
+  assert.equal(hasPermission(admin(), "title.qc_review"), false);
+  assert.equal(hasPermission(admin(), "title.rights_review"), false);
+  assert.equal(hasPermission(admin(), "title.approve"), false);
+  assert.equal(hasPermission(admin(), "loop.publish"), false);
+  const unverified = actor("unverified-super", "independent_creator", "super_admin", false);
+  for (const permission of permissions) assert.equal(hasPermission(unverified, permission), false);
 });

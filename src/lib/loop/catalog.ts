@@ -90,6 +90,7 @@ export const getLoopCatalog = createServerFn({ method: "GET" })
         and l.published = true
         and l.listed = true
         and l.status = 'approved'
+        and public.bridge_title_buyer_visibility(p.bridge_title_id)
         and (p.window_start is null or p.window_start <= now())
         and (p.window_end is null or p.window_end >= now())
       order by l.featured desc, l.created_at desc
@@ -185,6 +186,7 @@ export const getLoopTitleDetails = createServerFn({ method: "GET" })
         and p.authorization_status = 'authorized'
         and l.published = true
         and l.status = 'approved'
+        and public.bridge_title_buyer_visibility(p.bridge_title_id)
       limit 1
     `;
 
@@ -209,6 +211,7 @@ export const getLoopTitleDetails = createServerFn({ method: "GET" })
       where l.id != ${title.id}
         and p.authorization_status = 'authorized'
         and l.published = true
+        and public.bridge_title_buyer_visibility(p.bridge_title_id)
       limit 6
     `;
 
@@ -229,11 +232,17 @@ export const checkPlaybackEntitlement = createServerFn({ method: "GET" })
     const sql = await getSql();
 
     // Check title access tier
-    const titles = await sql<{ id: string; access_tier: string }>`
-      select id, access_tier from loop_titles where id = ${data.loopTitleId} limit 1
+    const titles = await sql<{ id: string; access_tier: string; control_state: string }>`
+      select l.id, l.access_tier, coalesce(c.control_state,'CLEAR') as control_state
+      from loop_titles l left join public.bridge_title_controls c on c.title_id=l.bridge_title_id
+      where l.id = ${data.loopTitleId} limit 1
     `;
     const title = titles[0];
     if (!title) {
+      return { loopTitleId: data.loopTitleId, accessType: "FREE", expiresAt: null, canPlay: false };
+    }
+
+    if (title.control_state === "HOLD" || title.control_state === "BLOCK") {
       return { loopTitleId: data.loopTitleId, accessType: "FREE", expiresAt: null, canPlay: false };
     }
 

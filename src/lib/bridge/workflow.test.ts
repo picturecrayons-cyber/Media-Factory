@@ -8,6 +8,7 @@ import { Pool } from "pg";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import * as policy from "./workflow-policy.ts";
+import * as titleControlPolicy from "./title-controls-policy.ts";
 import * as rbac from "./rbac.ts";
 import * as assetRoles from "./asset-roles.ts";
 import { submitTitleForQc } from "./title-submission.ts";
@@ -85,7 +86,8 @@ async function fixture() {
     );
     create table bridge_assets(id text,title_id text,kind text,s3_key text,byte_size bigint);
     create table bridge_title_events(title_id text,from_status text,to_status text,actor_user_id text,note text);
-    create table bridge_audit_logs(actor_user_id text,action text,entity_type text,entity_id text,metadata text);`);
+    create table bridge_audit_logs(actor_user_id text,action text,entity_type text,entity_id text,metadata text);
+    create table bridge_title_controls(title_id text primary key, control_state text not null default 'CLEAR' check (control_state in ('CLEAR','HOLD','BLOCK')), reason text, set_by text, set_at timestamptz, released_by text, released_at timestamptz, release_reason text, updated_at timestamptz not null default now());`);
     await db.exec(
       readFileSync(
         new URL("../../../migrations/0010_bridge_prd_phase1.sql", import.meta.url),
@@ -127,6 +129,7 @@ async function fixture() {
       "./titles": {},
     "./env": {bridgeEnv:{}},
       "./workflow-policy": policy,
+      "./title-controls-policy": titleControlPolicy,
     };
     const exports: Record<string, (...args: unknown[]) => Promise<unknown>> = {};
     const source = readFileSync(new URL("./workflow.ts", import.meta.url), "utf8");
@@ -321,7 +324,7 @@ test("license author cannot approve their own agreement", async () => {
           grantId: saved.grantId,
         }),
       ),
-      /Another legal reviewer/,
+      /Another authorised legal reviewer or verified Super Admin/,
     );
     assert.equal(
       (await f.sql.query<{ status: string }>("select status from bridge_rights_grants"))[0].status,
@@ -380,5 +383,27 @@ test("Submit for QC advances PREPARING with the referenced vertical poster and w
     );
   } finally {
     await f.db.close();
+  }
+});
+
+test("HOLD and BLOCK prevent submission for QC without changing title lifecycle", async () => {
+  for (const state of ["HOLD", "BLOCK"] as const) {
+    const f = await fixture();
+    try {
+      const id = "qc-" + state.toLowerCase() + "-title";
+      await f.sql.query("insert into bridge_titles(id,owner_user_id,status,master_key,poster_key,updated_at) values ($1,'owner','PREPARING','sealed/master','sealed/poster',now())", [id]);
+      await f.sql.query("insert into bridge_assets values ($1,$2,'master','sealed/master',4096),($3,$2,'poster_vertical','sealed/poster',1024)", [id + "-master", id, id + "-poster"]);
+      await f.sql.query("insert into bridge_title_controls(title_id,control_state,reason,set_by,set_at) values ($1,$2,$3,'super',now())", [id, state, "Release gate " + state.toLowerCase() + " pending"]);
+      await assert.rejects(
+        submitTitleForQc(f.sql, { id, status: "PREPARING", masterKey: "sealed/master", posterKey: "sealed/poster" }, "owner", "Submit title for QC"),
+        state === "HOLD" ? /TITLE_ON_HOLD/ : /TITLE_BLOCKED/,
+      );
+      const status = await f.sql.query<{ status: string }>("select status from bridge_titles where id=$1", [id]);
+      const events = await f.sql.query("select * from bridge_title_events where title_id=$1", [id]);
+      assert.equal(status[0]?.status, "PREPARING");
+      assert.equal(events.length, 0);
+    } finally {
+      await f.db.close();
+    }
   }
 });

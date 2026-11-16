@@ -1,6 +1,7 @@
 import type { Sql } from "@/lib/db";
 import type { BridgeTitle, TitleStatus } from "./types";
 import { hasVerifiedMasterAndArtwork } from "./asset-roles.ts";
+import { assertTitleControlClear } from "./title-controls-policy.ts";
 
 /**
  * Executes the real Submit-for-QC database path. Authentication and permission
@@ -30,6 +31,8 @@ export async function submitTitleForQc(
     if (!locked || locked.status !== title.status) {
       throw new Error("Title changed; refresh before retrying");
     }
+    const [control] = await tx<{ control_state: "CLEAR" | "HOLD" | "BLOCK" }>`select control_state from bridge_title_controls where title_id=${title.id} for update`;
+    assertTitleControlClear(control?.control_state);
     await tx`
       update bridge_titles set status = 'QC_REVIEW', updated_at = now()
       where id = ${title.id}

@@ -20,6 +20,7 @@ import {
   requestAssetUpload,
 } from "@/lib/bridge/assets";
 import { getLoopPublication } from "@/lib/bridge/loop-publication";
+import { getTitleControl, setTitleControl, releaseTitleControl } from "@/lib/bridge/title-controls";
 import type { BridgeActor } from "@/lib/bridge/session";
 import {
   OTT_INGEST_SPEC,
@@ -45,7 +46,7 @@ export const Route = createFileRoute("/title/$id")({
   component: TitlePage,
 });
 
-const WORKSPACE_TABS = ["Overview", "Files", "Production"] as const;
+const WORKSPACE_TABS = ["Overview", "Assets", "Production", "Metadata", "Rights"] as const;
 type WorkspaceTab = (typeof WORKSPACE_TABS)[number];
 
 function LaneStore({ titleId, stored, locked }: { titleId: string; stored: string; locked: boolean }) {
@@ -96,6 +97,7 @@ function TitlePage() {
 function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
   const [chosenTab, setChosenTab] = useState<WorkspaceTab | null>(null);
   const buyerView = actor.accountType === "buyer" && !actor.internalRole;
+  const qc = useQueryClient();
 
   const titleQ = useQuery({
     // The same title has a redacted Buyer DTO and a full internal DTO.
@@ -123,13 +125,36 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
     queryFn: () => getTitleWorkflow({ data: { titleId: id } }),
     enabled: !buyerView,
   });
+
+  const controlQ = useQuery({
+    queryKey: ["title-control", id],
+    queryFn: () => getTitleControl({ data: { titleId: id } }),
+    enabled: !buyerView && actor.internalRole === "super_admin",
+  });
+  const [controlReason, setControlReason] = useState("");
+  const [controlActionError, setControlActionError] = useState("");
+  const controlMutation = useMutation<
+    { titleId: string; state: "CLEAR" | "HOLD" | "BLOCK"; action?: string },
+    Error,
+    "HOLD" | "BLOCK" | "RELEASE"
+  >({
+    mutationFn: (action) => action === "RELEASE"
+      ? releaseTitleControl({ data: { titleId: id, reason: controlReason } })
+      : setTitleControl({ data: { titleId: id, state: action, reason: controlReason } }),
+    onSuccess: async () => {
+      setControlReason(""); setControlActionError("");
+      await Promise.all([controlQ.refetch(), titleQ.refetch(), qc.invalidateQueries({ queryKey: ["title-workflow", id] })]);
+    },
+    onError: (error) => setControlActionError(error instanceof Error ? error.message : "Control action failed"),
+  });
+
   const title = titleQ.data?.title;
   const assets = assetsQ.data?.assets ?? [];
   const productionAssets = productionAssetsQ.data?.assets ?? [];
   const pub = pubQ.data?.publication;
   const activeTab: WorkspaceTab = buyerView
     ? "Overview"
-    : chosenTab ?? (title && ["DRAFT", "UPLOADING", "PREPARING"].includes(title.status) ? "Files" : "Overview");
+    : chosenTab ?? (title && ["DRAFT", "UPLOADING", "PREPARING"].includes(title.status) ? "Assets" : "Overview");
   const visibleTabs = buyerView ? (["Overview"] as const) : WORKSPACE_TABS;
 
   if (titleQ.isPending) return <p className="text-sm text-muted">Loading title workspace…</p>;
@@ -157,7 +182,6 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
 
   return (
     <div className="space-y-5">
-      <WorkflowDesk title={title} actor={actor} />
       {assetsQ.isError ? <p role="alert">Assets unavailable: {assetsQ.error.message}</p> : null}
       <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
         <div className="grid gap-5 md:grid-cols-[180px_1fr]">
@@ -208,7 +232,7 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
               <div className="mt-5 flex flex-wrap items-center gap-3">
                 <button
                   type="button"
-                  onClick={() => setChosenTab("Files")}
+                  onClick={() => setChosenTab("Assets")}
                   className="rounded-full bg-fg px-5 py-2.5 text-sm font-semibold text-bg"
                 >
                   Upload Files
@@ -238,12 +262,49 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
 
       {activeTab === "Overview" ? (
         <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
-          <div className="flex items-center justify-between gap-3">
+          <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Metadata</p>
-              <h2 className="mt-1 font-display text-xl font-semibold">OTT title details</h2>
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Release readiness</p>
+              <h2 className="mt-1 font-display text-xl font-semibold">Title approval tracker</h2>
+              <p className="mt-1 text-sm text-muted">Approval gates remain separate. A READY indicator is not a substitute for evidence or formal approval.</p>
             </div>
             <span className="rounded-full border border-line px-3 py-1 text-xs font-semibold">{title.status}</span>
+          </div>
+          <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <Metric label="QC review" value={qcReady ? "READY" : "PENDING"} />
+            <Metric label="Rights approval" value={rightsReady ? "READY" : "PENDING"} />
+            <Metric label="Licensing" value={legalReady ? "READY" : "PENDING"} />
+            <Metric label="Publishing" value={distributionReady ? "LIVE" : packageReady ? "READY" : "PENDING"} />
+          </div>
+          <div className="mt-5 rounded-xl border border-line bg-elevated/40 p-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted">Next blocker</p>
+            <p className="mt-1 text-sm font-medium">{!qcReady ? "QC approval and verified master/artwork" : !rightsReady ? "Valid rights evidence and legal approval" : !legalReady ? "Licensing readiness" : !distributionReady ? "Publishing authorization" : "No outstanding readiness blocker detected"}</p>
+          </div>
+        </section>
+      ) : activeTab === "Assets" && !buyerView ? (
+        <FilesPanel
+          canUpload={
+            canOperateOnTitle(actor, title, "asset.sign_upload", "title.ingest_internal") &&
+            (actor.internalRole === "super_admin" || ["DRAFT", "UPLOADING", "PREPARING"].includes(title.status))
+          }
+          allowLockedTitleReplacement={actor.internalRole === "super_admin"}
+          titleId={id}
+          assets={assets}
+          onAssetsChanged={async () => {
+            await Promise.all([assetsQ.refetch(), titleQ.refetch(), reviewQ.refetch()]);
+          }}
+        />
+      ) : activeTab === "Production" && !buyerView ? (
+        <ProductionAssetsPanel
+          assets={productionAssets}
+          loading={productionAssetsQ.isPending}
+          error={productionAssetsQ.error instanceof Error ? productionAssetsQ.error.message : null}
+        />
+      ) : activeTab === "Metadata" && !buyerView ? (
+        <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Metadata</p>
+            <h2 className="mt-1 font-display text-xl font-semibold">OTT title details</h2>
           </div>
           <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <Metric label="Original title" value={title.nameMl || "—"} />
@@ -256,35 +317,63 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
             <Metric label="Director" value={title.credits?.filter((c) => c.role === "Director").map((c) => c.name).join(", ") || "—"} />
             <Metric label="Producer" value={title.credits?.filter((c) => c.role === "Producer").map((c) => c.name).join(", ") || "—"} />
           </div>
-          {!buyerView ? (
-            <>
-              <LaneStore key={title.contentType} titleId={title.id} stored={loopStageType(title.contentType)} locked={!actor.internalRole && !["DRAFT", "UPLOADING", "PREPARING"].includes(title.status)} />
-              {title.synopsis ? <p className="mt-4 text-sm leading-6 text-muted">{title.synopsis}</p> : null}
-              <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                <Metric label="QC" value={qcReady ? "READY" : "PENDING"} />
-                <Metric label="Rights" value={rightsReady ? "READY" : "PENDING"} />
-                <Metric label="Licensing" value={legalReady ? "READY" : "PENDING"} />
-                <Metric label="Publish" value={distributionReady ? "LIVE" : packageReady ? "READY" : "PENDING"} />
-              </div>
-            </>
-          ) : null}
+          <LaneStore key={title.contentType} titleId={title.id} stored={loopStageType(title.contentType)} locked={!actor.internalRole && !["DRAFT", "UPLOADING", "PREPARING"].includes(title.status)} />
+          {title.synopsis ? <p className="mt-4 text-sm leading-6 text-muted">{title.synopsis}</p> : null}
         </section>
-      ) : activeTab === "Files" && !buyerView ? (
-        <FilesPanel
-          canUpload={
-            canOperateOnTitle(actor, title, "asset.sign_upload", "title.ingest_internal") &&
-            ["DRAFT", "UPLOADING", "PREPARING"].includes(title.status)
-          }
-          titleId={id}
-          assets={assets}
-          onAssetsChanged={() => assetsQ.refetch()}
-        />
-      ) : activeTab === "Production" && !buyerView ? (
-        <ProductionAssetsPanel
-          assets={productionAssets}
-          loading={productionAssetsQ.isPending}
-          error={productionAssetsQ.error instanceof Error ? productionAssetsQ.error.message : null}
-        />
+      ) : activeTab === "Rights" && !buyerView ? (
+        <div className="space-y-4">
+          {actor.internalRole === "super_admin" ? (
+            <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Operational control</p>
+              <h2 className="mt-1 font-display text-xl font-semibold">Title HOLD / BLOCK</h2>
+              <p className="mt-2 text-sm text-muted">HOLD pauses operational processing. BLOCK prevents approval and release. Both preserve the title lifecycle status and require a reasoned Super Admin release action.</p>
+              <p className="mt-3 text-sm font-semibold">Current state: {controlQ.data?.control.state ?? (controlQ.isLoading ? "Loading…" : "Unavailable")}</p>
+              {controlQ.data?.control.reason ? <p className="mt-1 text-sm text-muted">Reason: {controlQ.data.control.reason}</p> : null}
+              <label className="mt-4 grid gap-1 text-sm">Reason (minimum 8 characters)
+                <textarea value={controlReason} onChange={(event) => setControlReason(event.target.value)} maxLength={2000} rows={3} className="rounded-lg border border-line bg-elevated p-3" />
+              </label>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button type="button" disabled={controlMutation.isPending || controlReason.trim().length < 8 || controlQ.data?.control.state === "BLOCK"} onClick={() => controlMutation.mutate("HOLD")} className="rounded-lg border border-line px-4 py-2 text-sm disabled:opacity-50">Set HOLD</button>
+                <button type="button" disabled={controlMutation.isPending || controlReason.trim().length < 8 || controlQ.data?.control.state === "BLOCK"} onClick={() => controlMutation.mutate("BLOCK")} className="rounded-lg border border-line px-4 py-2 text-sm disabled:opacity-50">Set BLOCK</button>
+                <button type="button" disabled={controlMutation.isPending || controlReason.trim().length < 8 || controlQ.data?.control.state === "CLEAR" || !controlQ.data} onClick={() => controlMutation.mutate("RELEASE")} className="rounded-lg border border-line px-4 py-2 text-sm disabled:opacity-50">Release / Unblock</button>
+              </div>
+              {controlActionError ? <p role="alert" className="mt-3 text-sm text-red-600">{controlActionError}</p> : null}
+              {controlQ.data?.events.length ? <div className="mt-5 space-y-2">
+                <h3 className="text-sm font-semibold">Control audit history</h3>
+                {controlQ.data.events.map((event) => <article key={event.id} className="rounded-lg border border-line p-3 text-xs">
+                  <p className="font-semibold">{event.action.replaceAll("_", " ")} · {event.state}</p>
+                  <p className="mt-1 text-muted">{event.reason} · {event.actorUserId} · {new Date(event.createdAt).toLocaleString()}</p>
+                </article>)}
+              </div> : null}
+            </section>
+          ) : null}
+          <WorkflowDesk title={title} actor={actor} />
+          <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Rights register</p>
+                <h2 className="mt-1 font-display text-xl font-semibold">License records</h2>
+              </div>
+              <span className="text-xs text-muted">{reviewQ.data?.grants.length ?? 0} records</span>
+            </div>
+            {reviewQ.isPending ? <p className="mt-4 text-sm text-muted">Loading rights records…</p> : null}
+            {reviewQ.isError ? <p role="alert" className="mt-4 text-sm text-red-600">Rights records unavailable: {reviewQ.error.message}</p> : null}
+            <div className="mt-4 space-y-2">
+              {(reviewQ.data?.grants ?? []).map((grant) => (
+                <article key={grant.id} className="rounded-xl border border-line p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-sm font-semibold">License record · {grant.id.slice(0, 8)}</p>
+                    <span className="rounded-full border border-line px-2 py-1 text-xs">{grant.status}</span>
+                  </div>
+                  <p className="mt-2 text-xs text-muted">Territories: {grant.territories.join(", ") || "Not recorded"} · Languages: {grant.languages.join(", ") || "Not recorded"}</p>
+                  <p className="mt-1 text-xs text-muted">Validity: {grant.window_start ? new Date(grant.window_start).toLocaleDateString() : "—"} to {grant.window_end ? new Date(grant.window_end).toLocaleDateString() : "—"} · Exclusivity: {grant.exclusivity}</p>
+                </article>
+              ))}
+              {!reviewQ.isPending && !reviewQ.isError && (reviewQ.data?.grants.length ?? 0) === 0 ? <p className="rounded-xl border border-dashed border-line p-4 text-sm text-muted">No license records are registered for this title.</p> : null}
+            </div>
+            <p className="mt-4 text-xs text-muted">Decisions and publishing controls remain subject to their existing approval services, evidence requirements and audit history.</p>
+          </section>
+        </div>
       ) : null}
     </div>
   );
@@ -426,8 +515,10 @@ function FilesPanel({
   assets,
   onAssetsChanged,
   canUpload,
+  allowLockedTitleReplacement,
 }: {
   canUpload: boolean;
+  allowLockedTitleReplacement: boolean;
   titleId: string;
   assets: Array<{
     id: string;
@@ -871,6 +962,11 @@ function FilesPanel({
         </div>
       ) : null}
 
+      {allowLockedTitleReplacement ? (
+        <p className="mt-4 rounded-lg border border-line bg-elevated/40 px-3 py-2 text-sm text-muted">
+          Super Admin replacement is available after QC and later lifecycle stages. Each replacement is stored as a new verified asset and recorded in the audit log. Replacing the main film makes the previous QC result no longer current; QC must be completed again before release.
+        </p>
+      ) : null}
       <div className="mt-6 space-y-6">
         {groups.map((group) => (
           <div key={group.title}>

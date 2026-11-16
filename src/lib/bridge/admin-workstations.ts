@@ -6,6 +6,7 @@ import { assertPermission, canAccessAdminWorkstations } from "./rbac";
 import { requireVerifiedActor } from "./session";
 import { writeAudit } from "./audit";
 import { assertNotDevUser } from "./guards";
+import { assertTitleControlClear } from "./title-controls-policy";
 
 async function actorFor(userId: string) {
   assertNotDevUser(userId);
@@ -44,10 +45,13 @@ export const reviewAdminTitle = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     const actor = await actorFor(context.userId);
     if (!actor.internalRole) throw new Error("Forbidden");
-    const sql = await getSql();
-    const rows = await sql<{ id: string; status: string }>`select id, status from bridge_titles where id = ${data.titleId} limit 1`;
+    const db = await getSql();
+    return db.transaction(async (sql) => {
+    const rows = await sql<{ id: string; status: string }>`select id, status from bridge_titles where id = ${data.titleId} for update`;
     const title = rows[0];
     if (!title) throw new Error("Title not found");
+    const [control] = await sql<{control_state: "CLEAR" | "HOLD" | "BLOCK"}>`select control_state from public.bridge_title_controls where title_id=${title.id} for update`;
+    assertTitleControlClear(control?.control_state);
     let next: string | null = null;
     let action = "admin.review";
     if (data.decision === "ACCEPT") {
@@ -62,7 +66,7 @@ export const reviewAdminTitle = createServerFn({ method: "POST" })
       assertPermission(actor, "title.qc_review");
       if (title.status !== "QC_REVIEW") throw new Error("Title is not in QC review");
       await sql`insert into bridge_qc_cases (title_id, status, reviewer_findings, reviewed_by, reviewed_at) values (${title.id}, 'FAILED', ${JSON.stringify(data.notes ? [{ note: data.notes }] : [])}::jsonb, ${actor.userId}, now())`;
-      await writeAudit({ actorUserId: actor.userId, action: "qc.fail", entityType: "bridge_title", entityId: title.id, metadata: { notes: data.notes ?? null } });
+      await writeAudit({ actorUserId: actor.userId, action: "qc.fail", entityType: "bridge_title", entityId: title.id, metadata: { notes: data.notes ?? null } }, sql);
       return { ok: true, status: "QC_REVIEW" };
     } else if (data.decision === "APPROVE") {
       assertPermission(actor, "title.rights_review");
@@ -72,15 +76,16 @@ export const reviewAdminTitle = createServerFn({ method: "POST" })
       assertPermission(actor, "title.rights_review");
       if (title.status !== "RIGHTS_REVIEW") throw new Error("Title is not in rights review");
       await sql`insert into bridge_legal_cases (title_id, status, evidence, reviewed_by, reviewed_at) values (${title.id}, 'REJECTED', ${JSON.stringify(data.notes ? [{ note: data.notes }] : [])}::jsonb, ${actor.userId}, now())`;
-      await writeAudit({ actorUserId: actor.userId, action: "rights.reject", entityType: "bridge_title", entityId: title.id, metadata: { notes: data.notes ?? null } });
+      await writeAudit({ actorUserId: actor.userId, action: "rights.reject", entityType: "bridge_title", entityId: title.id, metadata: { notes: data.notes ?? null } }, sql);
       return { ok: true, status: "RIGHTS_REVIEW" };
     }
     await sql`update bridge_titles set status = ${next}, updated_at = now() where id = ${title.id}`;
     await sql`insert into bridge_title_events (title_id, from_status, to_status, actor_user_id, note) values (${title.id}, ${title.status}, ${next}, ${actor.userId}, ${data.notes ?? null})`;
     if (data.decision === "PASS") await sql`insert into bridge_qc_cases (title_id, status, reviewer_findings, reviewed_by, reviewed_at) values (${title.id}, 'PASSED', ${JSON.stringify(data.notes ? [{ note: data.notes }] : [])}::jsonb, ${actor.userId}, now())`;
     if (data.decision === "APPROVE") await sql`insert into bridge_legal_cases (title_id, status, evidence, reviewed_by, reviewed_at) values (${title.id}, 'APPROVED', ${JSON.stringify(data.notes ? [{ note: data.notes }] : [])}::jsonb, ${actor.userId}, now())`;
-    await writeAudit({ actorUserId: actor.userId, action, entityType: "bridge_title", entityId: title.id, metadata: { from: title.status, to: next, notes: data.notes ?? null } });
+    await writeAudit({ actorUserId: actor.userId, action, entityType: "bridge_title", entityId: title.id, metadata: { from: title.status, to: next, notes: data.notes ?? null } }, sql);
     return { ok: true, status: next };
+    });
   });
 
 const gateInput = z.object({
@@ -97,9 +102,12 @@ export const setBuyerPublicationGate = createServerFn({ method: "POST" })
     const actor = await actorFor(context.userId);
     if (!actor.internalRole) throw new Error("Forbidden");
     assertPermission(actor, "title.approve");
-    const sql = await getSql();
-    const rows = await sql<{ id: string }>`select id from bridge_titles where id = ${data.titleId} limit 1`;
+    const db = await getSql();
+    return db.transaction(async (sql) => {
+    const rows = await sql<{ id: string }>`select id from bridge_titles where id = ${data.titleId} for update`;
     if (!rows[0]) throw new Error("Title not found");
+    const [control] = await sql<{control_state: "CLEAR" | "HOLD" | "BLOCK"}>`select control_state from public.bridge_title_controls where title_id=${data.titleId} for update`;
+    assertTitleControlClear(control?.control_state);
 
     const value = data.decision === "PASS"
       ? ({OTT:"READY",PACKAGING:"COMPLETE",CURATION:"APPROVED",DELIVERY:"READY"} as const)[data.gate]
@@ -140,7 +148,8 @@ export const setBuyerPublicationGate = createServerFn({ method: "POST" })
             evidence=evidence || ${gateEvidence}::jsonb, updated_at=now()
         where title_id=${data.titleId}`;
     }
-    await writeAudit({actorUserId:actor.userId,action:`buyer_gate.${data.gate.toLowerCase()}.${data.decision.toLowerCase()}`,entityType:"bridge_title",entityId:data.titleId,metadata:{gate:data.gate,decision:data.decision,notes:data.notes??null}});
+    await writeAudit({actorUserId:actor.userId,action:`buyer_gate.${data.gate.toLowerCase()}.${data.decision.toLowerCase()}`,entityType:"bridge_title",entityId:data.titleId,metadata:{gate:data.gate,decision:data.decision,notes:data.notes??null}},sql);
     const result=await sql<{ok:boolean}>`select public.bridge_title_buyer_visibility(${data.titleId}) as ok`;
     return {ok:true,gate:data.gate,decision:data.decision,publishable:result[0]?.ok===true};
+    });
   });

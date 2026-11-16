@@ -18,6 +18,7 @@ const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const MIGRATIONS_DIR = resolve(SCRIPT_DIR, "../supabase/migrations");
 const DATABASE_URL = process.env.SUPABASE_REPLAY_DATABASE_URL?.trim();
 const EXPECTED_MIGRATIONS = 69;
+const RELEASE_CANDIDATE_MIGRATION = "20261117120000_bridge_title_hold_block_controls.sql";
 const FIXTURE_MIGRATION =
   "20261113090535_map_verified_streamvista_studio_owner_20261113.sql";
 const FIXTURE_USER_ID = "bridge-migration-replay-fixture";
@@ -50,9 +51,13 @@ if (
   );
 }
 
-const names = (await readdir(MIGRATIONS_DIR))
+const allNames = (await readdir(MIGRATIONS_DIR))
   .filter((name) => /^\d{14}_[a-z0-9_]+\.sql$/.test(name))
   .sort((a, b) => a.localeCompare(b));
+if (!allNames.includes(RELEASE_CANDIDATE_MIGRATION)) {
+  throw new Error(`Release candidate migration is missing: ${RELEASE_CANDIDATE_MIGRATION}`);
+}
+const names = allNames.filter((name) => name !== RELEASE_CANDIDATE_MIGRATION);
 
 if (names.length !== EXPECTED_MIGRATIONS) {
   throw new Error(
@@ -447,6 +452,20 @@ try {
     console.log(`[migration-replay] applied ${name}`);
   }
 
+  // Apply the new release-candidate migration separately from the recovered
+  // 69-row Production ledger. It is validated here but is not represented as
+  // an already-applied Production migration.
+  const candidateSql = await readFile(join(MIGRATIONS_DIR, RELEASE_CANDIDATE_MIGRATION), "utf8");
+  await client.query("BEGIN");
+  try {
+    await client.query(candidateSql);
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw new Error(`Release-candidate migration failed: ${RELEASE_CANDIDATE_MIGRATION}: ${error?.message || error}`);
+  }
+  console.log(`[migration-replay] applied release candidate ${RELEASE_CANDIDATE_MIGRATION}`);
+
   // Production's current Bridge Data API security baseline is not fully
   // represented by the 69-row migration ledger. Recreate it locally after
   // replay from read-only Production catalog evidence only.
@@ -627,6 +646,8 @@ try {
 
   const expectedTables = [
     "public.bridge_titles",
+    "public.bridge_title_controls",
+    "public.bridge_title_control_events",
     "public.bridge_assets",
     "public.bridge_payments",
     "public.bridge_webhook_events",
@@ -648,6 +669,13 @@ try {
       "Missing expected tables after replay: " +
         missingTables.map((row) => row.name).join(", "),
     );
+  }
+
+  const visibilityDefinition = await client.query(
+    "select pg_get_functiondef('public.bridge_title_buyer_visibility(text)'::regprocedure) as definition",
+  );
+  if (!visibilityDefinition.rows[0]?.definition?.includes("bridge_title_controls")) {
+    throw new Error("Buyer visibility function does not enforce title HOLD/BLOCK controls");
   }
 
   const baselineRls = await client.query(`

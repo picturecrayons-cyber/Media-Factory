@@ -3,11 +3,12 @@ import { z } from "zod";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql, type Sql } from "@/lib/db";
 import { requireVerifiedActor } from "./session";
-import { assertPermission, canReadTitle, canOperateOnTitle, type Actor } from "./rbac";
+import { assertPermission, canReadTitle, canOperateOnTitle, canReviewLicenseDraft, type Actor } from "./rbac";
 import { loadTitle } from "./titles";
 import { loopLicenseInput, producerSharePaise } from "./workflow-policy";
 import { bridgeEnv } from "./env";
 import { hasVerifiedMasterAndArtwork } from "./asset-roles";
+import { assertTitleControlClear } from "./title-controls-policy";
 
 async function audit(tx: Sql, user: string, title: string, action: string, metadata: object) {
   await tx`insert into bridge_audit_logs(actor_user_id,action,entity_type,entity_id,metadata)
@@ -37,6 +38,8 @@ export async function saveLoopLicense(
     )
   )
     throw new Error("Forbidden");
+  const [control] = await tx<{control_state: "CLEAR" | "HOLD" | "BLOCK"}>`select control_state from bridge_title_controls where title_id=${data.titleId} for update`;
+  assertTitleControlClear(control?.control_state);
   if (new Date(data.windowEnd) <= new Date()) throw new Error("License window has expired");
   const [grant] = await tx<{ id: string }>`insert into bridge_rights_grants
     (title_id,grant_type,territories,languages,media,window_start,window_end,exclusivity,evidence,status,created_by)
@@ -81,6 +84,8 @@ export async function reviewWorkflow(tx: Sql, actor: Actor, data: z.infer<typeof
     poster_key: string | null;
   }>`select status,master_key,poster_key from bridge_titles where id=${data.titleId} for update`;
   if (!title) throw new Error("Not found");
+  const [control] = await tx<{control_state: "CLEAR" | "HOLD" | "BLOCK"}>`select control_state from bridge_title_controls where title_id=${data.titleId}`;
+  assertTitleControlClear(control?.control_state);
   const expected = data.stage === "QC" ? "QC_REVIEW" : "RIGHTS_REVIEW";
   if (title.status !== expected) throw new Error(`Title must be in ${expected}`);
   if (data.stage === "QC") {
@@ -104,8 +109,8 @@ export async function reviewWorkflow(tx: Sql, actor: Actor, data: z.infer<typeof
       created_by: string;
     }>`select status,window_end,created_by from bridge_rights_grants where id=${data.grantId} and title_id=${data.titleId} for update`;
     if (!grant || grant.status !== "DRAFT") throw new Error("License draft is unavailable");
-    if (grant.created_by === actor.userId)
-      throw new Error("Another legal reviewer must approve this license");
+    if (!canReviewLicenseDraft(actor, grant.created_by))
+      throw new Error("Another authorised legal reviewer or verified Super Admin must approve this license");
     if (data.decision === "APPROVE" && new Date(grant.window_end) <= new Date())
       throw new Error("License has expired");
     await tx`insert into bridge_legal_cases(title_id,status,evidence,reviewed_by,reviewed_at)

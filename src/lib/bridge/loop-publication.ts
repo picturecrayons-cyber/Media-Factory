@@ -9,6 +9,7 @@ import { requireVerifiedActor } from "./session";
 import { assertNotDevUser } from "./guards";
 import { writeAudit } from "./audit";
 import { assertPublicationCanExtend, findCoveringRightsGrant, type BridgeRightsGrant } from "./rights-coverage";
+import { assertTitleControlClear } from "./title-controls-policy";
 
 export type DistributionAuthorizationStatus =
   | "DRAFT"
@@ -414,6 +415,8 @@ export const authorizeLoopPublication = createServerFn({ method: "POST" })
     }
     return (await getSql()).transaction(async (sql) => {
       await sql`select id from bridge_titles where id=${data.bridgeTitleId} for update`;
+      const [control] = await sql<{control_state: "CLEAR" | "HOLD" | "BLOCK"}>`select control_state from public.bridge_title_controls where title_id=${data.bridgeTitleId} for update`;
+      assertTitleControlClear(control?.control_state);
       const preflight = await verifyDistributionPreflight(sql, data.bridgeTitleId, {
         destination: data.destination,
         territories: data.territories,
@@ -603,6 +606,9 @@ export const extendDistributionWindow = createServerFn({ method: "POST" })
     const actor = await requireVerifiedActor(context.userId);
     assertPermission(actor, "loop.publish");
     return (await getSql()).transaction(async (sql) => {
+      await sql`select id from bridge_titles where id=${data.bridgeTitleId} for update`;
+      const [control] = await sql<{control_state: "CLEAR" | "HOLD" | "BLOCK"}>`select control_state from public.bridge_title_controls where title_id=${data.bridgeTitleId} for update`;
+      assertTitleControlClear(control?.control_state);
       const pubs = await sql<{
         loop_title_id: string;
         window_start: string | Date | null;

@@ -35,12 +35,14 @@ import { Route as TermsRouteImport } from './routes/terms'
 import { Route as VerifyEmailRouteImport } from './routes/verify-email'
 import { Route as WorkspaceRouteImport } from './routes/workspace'
 import { Route as AdminWorkstationsRouteImport } from './routes/admin/workstations'
+import { Route as ApiHostingerIncomingRouteImport } from './routes/api/hostinger-incoming'
 import { Route as AuthCallbackRouteImport } from './routes/auth/callback'
 import { Route as AuthConfirmRouteImport } from './routes/auth/confirm'
 import { Route as TitleIdRouteImport } from './routes/title.$id'
 import { Route as ApiA2aIndexRouteImport } from './routes/api/a2a/index'
 import { Route as ApiA2aAgentCardRouteImport } from './routes/api/a2a/agent-card'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
+import { Route as ApiBuyerPosterRouteImport } from './routes/api/buyer/poster'
 import { Route as ApiRazorpayWebhookRouteImport } from './routes/api/razorpay/webhook'
 
 const IndexRoute = IndexRouteImport.update({
@@ -173,6 +175,11 @@ const AdminWorkstationsRoute = AdminWorkstationsRouteImport.update({
   path: '/workstations',
   getParentRoute: () => AdminRoute,
 } as any)
+const ApiHostingerIncomingRoute = ApiHostingerIncomingRouteImport.update({
+  id: '/api/hostinger-incoming',
+  path: '/api/hostinger-incoming',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AuthCallbackRoute = AuthCallbackRouteImport.update({
   id: '/auth/callback',
   path: '/auth/callback',
@@ -201,6 +208,11 @@ const ApiA2aAgentCardRoute = ApiA2aAgentCardRouteImport.update({
 const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   id: '/api/auth/$',
   path: '/api/auth/$',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiBuyerPosterRoute = ApiBuyerPosterRouteImport.update({
+  id: '/api/buyer/poster',
+  path: '/api/buyer/poster',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiRazorpayWebhookRoute = ApiRazorpayWebhookRouteImport.update({
@@ -236,11 +248,13 @@ export interface FileRoutesByFullPath {
   '/verify-email': typeof VerifyEmailRoute
   '/workspace': typeof WorkspaceRoute
   '/admin/workstations': typeof AdminWorkstationsRoute
+  '/api/hostinger-incoming': typeof ApiHostingerIncomingRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/auth/confirm': typeof AuthConfirmRoute
   '/title/$id': typeof TitleIdRoute
   '/api/a2a/agent-card': typeof ApiA2aAgentCardRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/buyer/poster': typeof ApiBuyerPosterRoute
   '/api/razorpay/webhook': typeof ApiRazorpayWebhookRoute
   '/api/a2a/': typeof ApiA2aIndexRoute
 }
@@ -271,11 +285,13 @@ export interface FileRoutesByTo {
   '/verify-email': typeof VerifyEmailRoute
   '/workspace': typeof WorkspaceRoute
   '/admin/workstations': typeof AdminWorkstationsRoute
+  '/api/hostinger-incoming': typeof ApiHostingerIncomingRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/auth/confirm': typeof AuthConfirmRoute
   '/title/$id': typeof TitleIdRoute
   '/api/a2a/agent-card': typeof ApiA2aAgentCardRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/buyer/poster': typeof ApiBuyerPosterRoute
   '/api/razorpay/webhook': typeof ApiRazorpayWebhookRoute
   '/api/a2a': typeof ApiA2aIndexRoute
 }
@@ -307,11 +323,13 @@ export interface FileRoutesById {
   '/verify-email': typeof VerifyEmailRoute
   '/workspace': typeof WorkspaceRoute
   '/admin/workstations': typeof AdminWorkstationsRoute
+  '/api/hostinger-incoming': typeof ApiHostingerIncomingRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/auth/confirm': typeof AuthConfirmRoute
   '/title/$id': typeof TitleIdRoute
   '/api/a2a/agent-card': typeof ApiA2aAgentCardRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/buyer/poster': typeof ApiBuyerPosterRoute
   '/api/razorpay/webhook': typeof ApiRazorpayWebhookRoute
   '/api/a2a/': typeof ApiA2aIndexRoute
 }
@@ -344,11 +362,13 @@ export interface FileRouteTypes {
     | '/verify-email'
     | '/workspace'
     | '/admin/workstations'
+    | '/api/hostinger-incoming'
     | '/auth/callback'
     | '/auth/confirm'
     | '/title/$id'
     | '/api/a2a/agent-card'
     | '/api/auth/$'
+    | '/api/buyer/poster'
     | '/api/razorpay/webhook'
     | '/api/a2a/'
   fileRoutesByTo: FileRoutesByTo
@@ -379,11 +399,13 @@ export interface FileRouteTypes {
     | '/verify-email'
     | '/workspace'
     | '/admin/workstations'
+    | '/api/hostinger-incoming'
     | '/auth/callback'
     | '/auth/confirm'
     | '/title/$id'
     | '/api/a2a/agent-card'
     | '/api/auth/$'
+    | '/api/buyer/poster'
     | '/api/razorpay/webhook'
     | '/api/a2a'
   id:
@@ -414,11 +436,13 @@ export interface FileRouteTypes {
     | '/verify-email'
     | '/workspace'
     | '/admin/workstations'
+    | '/api/hostinger-incoming'
     | '/auth/callback'
     | '/auth/confirm'
     | '/title/$id'
     | '/api/a2a/agent-card'
     | '/api/auth/$'
+    | '/api/buyer/poster'
     | '/api/razorpay/webhook'
     | '/api/a2a/'
   fileRoutesById: FileRoutesById
@@ -449,11 +473,13 @@ export interface RootRouteChildren {
   TermsRoute: typeof TermsRoute
   VerifyEmailRoute: typeof VerifyEmailRoute
   WorkspaceRoute: typeof WorkspaceRoute
+  ApiHostingerIncomingRoute: typeof ApiHostingerIncomingRoute
   AuthCallbackRoute: typeof AuthCallbackRoute
   AuthConfirmRoute: typeof AuthConfirmRoute
   TitleIdRoute: typeof TitleIdRoute
   ApiA2aAgentCardRoute: typeof ApiA2aAgentCardRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
+  ApiBuyerPosterRoute: typeof ApiBuyerPosterRoute
   ApiRazorpayWebhookRoute: typeof ApiRazorpayWebhookRoute
   ApiA2aIndexRoute: typeof ApiA2aIndexRoute
 }
@@ -642,6 +668,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminWorkstationsRouteImport
       parentRoute: typeof AdminRoute
     }
+    '/api/hostinger-incoming': {
+      id: '/api/hostinger-incoming'
+      path: '/api/hostinger-incoming'
+      fullPath: '/api/hostinger-incoming'
+      preLoaderRoute: typeof ApiHostingerIncomingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/auth/callback': {
       id: '/auth/callback'
       path: '/auth/callback'
@@ -682,6 +715,13 @@ declare module '@tanstack/react-router' {
       path: '/api/auth/$'
       fullPath: '/api/auth/$'
       preLoaderRoute: typeof ApiAuthSplatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/buyer/poster': {
+      id: '/api/buyer/poster'
+      path: '/api/buyer/poster'
+      fullPath: '/api/buyer/poster'
+      preLoaderRoute: typeof ApiBuyerPosterRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/razorpay/webhook': {
@@ -730,11 +770,13 @@ const rootRouteChildren: RootRouteChildren = {
   TermsRoute: TermsRoute,
   VerifyEmailRoute: VerifyEmailRoute,
   WorkspaceRoute: WorkspaceRoute,
+  ApiHostingerIncomingRoute: ApiHostingerIncomingRoute,
   AuthCallbackRoute: AuthCallbackRoute,
   AuthConfirmRoute: AuthConfirmRoute,
   TitleIdRoute: TitleIdRoute,
   ApiA2aAgentCardRoute: ApiA2aAgentCardRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
+  ApiBuyerPosterRoute: ApiBuyerPosterRoute,
   ApiRazorpayWebhookRoute: ApiRazorpayWebhookRoute,
   ApiA2aIndexRoute: ApiA2aIndexRoute,
 }

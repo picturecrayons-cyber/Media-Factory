@@ -11,6 +11,7 @@ import { loadTitle, recordTransition } from "./titles";
 import { writeAudit } from "./audit";
 import { assertBuyerPublishable } from "./buyer-visibility";
 import { assertNotDevUser } from "./guards";
+import { assertTitleControlClear } from "./title-controls-policy";
 
 
 function requireRazorpayKeys() {
@@ -176,11 +177,28 @@ export async function grantFromCapturedPayment(opts: {
     throw new Error("Payment is not a Bridge title-licensing order");
   }
 
-  // Re-check buyer visibility immediately before granting a new title entitlement.
-  // A retry after our own capture can finish an interrupted idempotent grant.
-  if (payment.status !== "captured") {
-    await assertBuyerPublishable(payment.title_id);
+  // A captured payment must not create a new entitlement while a Super Admin control is active.
+  const [control] = await sql<{control_state: "CLEAR" | "HOLD" | "BLOCK"}>`select control_state from public.bridge_title_controls where title_id=${payment.title_id}`;
+  if (control && control.control_state !== "CLEAR") {
+    const existing = payment.package_id
+      ? await sql<{id:string}>`select id from bridge_package_entitlements where package_id=${payment.package_id} and buyer_user_id=${payment.user_id} limit 1`
+      : await sql<{id:string}>`select id from bridge_entitlements where user_id=${payment.user_id} and title_id=${payment.title_id} and access_type='license' limit 1`;
+    if (existing[0]) return { paymentId: payment.id, entitled: true, titleId: payment.title_id, pendingControl: false };
+    if (payment.status !== "captured") {
+      await sql`update bridge_payments set status = 'captured', provider_payment_id = ${opts.paymentId}, verified_at = coalesce(verified_at, now()) where id = ${payment.id}`;
+      await writeAudit({
+        actorUserId: opts.actorUserId ?? payment.user_id,
+        action: "payment.captured_entitlement_held",
+        entityType: "bridge_payment",
+        entityId: payment.id,
+        metadata: { titleId: payment.title_id, controlState: control.control_state },
+      });
+    }
+    return { paymentId: payment.id, entitled: false, titleId: payment.title_id, pendingControl: control.control_state };
   }
+
+  // Preserve the existing idempotent retry behavior after a captured payment.
+  if (payment.status !== "captured") await assertBuyerPublishable(payment.title_id);
 
   if (payment.package_id) {
     const pkg = await sql<{ id: string; title_id: string; status: string; delivery_status: string }>`
@@ -277,6 +295,8 @@ export const createLicenseOrder = createServerFn({ method: "POST" })
     assertPermission(actor, "payment.create_order");
     const title = await loadTitle(data.titleId);
     if (!title || (!canReadTitle(actor, title) && actor.accountType !== "buyer")) throw new Error("Not found");
+    const controlRows = await (await getSql())<{control_state: "CLEAR" | "HOLD" | "BLOCK"}>`select control_state from public.bridge_title_controls where title_id=${title.id}`;
+    assertTitleControlClear(controlRows[0]?.control_state);
     await assertBuyerPublishable(title.id);
     const sql = await getSql();
     if (title.status !== "LIVE_FOR_BUYERS" && title.status !== "IN_NEGOTIATION" && title.status !== "LICENSED" && title.status !== "DELIVERED") {

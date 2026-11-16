@@ -71,20 +71,23 @@ export function AssetPreviewGallery({ assets }: { assets: PreviewAsset[] }) {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [failedId, setFailedId] = useState<string | null>(null);
+  const [failureMessage, setFailureMessage] = useState<string | null>(null);
 
   async function openPreview(asset: PreviewAsset) {
     if (!asset.verified || loadingId) return;
     setSelected(asset);
     setPreviewUrl(null);
     setFailedId(null);
+    setFailureMessage(null);
     setLoadingId(asset.id);
     try {
       // Resolve an expiring, server-authorized URL only after the user requests a preview.
       const signed = await requestAssetDownload({ data: { assetId: asset.id } });
       if (!signed?.url) throw new Error("Preview URL unavailable");
       setPreviewUrl(previewUrlFor(signed.url, asset.kind, asset.contentType));
-    } catch {
+    } catch (error) {
       setFailedId(asset.id);
+      setFailureMessage(error instanceof Error ? error.message : "Could not create a secure preview link.");
     } finally {
       setLoadingId(null);
     }
@@ -94,6 +97,7 @@ export function AssetPreviewGallery({ assets }: { assets: PreviewAsset[] }) {
     setSelected(null);
     setPreviewUrl(null);
     setFailedId(null);
+    setFailureMessage(null);
     setLoadingId(null);
   }
 
@@ -169,16 +173,24 @@ export function AssetPreviewGallery({ assets }: { assets: PreviewAsset[] }) {
               ) : failedId === selected.id ? (
                 <div className="text-center text-white">
                   <p className="text-sm font-semibold">Preview unavailable</p>
-                  <p className="mt-1 text-xs text-white/70">In-page playback failed. The stored file was not uploaded again.</p>
-                  <button type="button" onClick={() => void openPreview(selected)} className="mt-4 rounded-full bg-white px-4 py-2 text-sm font-semibold text-black">
-                    Retry preview
-                  </button>
+                  <p className="mt-1 text-xs text-white/70">{failureMessage || "In-page playback failed. The stored file was not uploaded again."}</p>
+                  <div className="mt-4 flex flex-wrap justify-center gap-2">
+                    <button type="button" onClick={() => void openPreview(selected)} className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-black">
+                      Retry preview
+                    </button>
+                    {previewUrl ? (
+                      <a href={previewUrl} target="_blank" rel="noreferrer" className="rounded-full border border-white/50 px-4 py-2 text-sm font-semibold text-white">
+                        Open original in new tab
+                      </a>
+                    ) : null}
+                  </div>
                 </div>
               ) : previewUrl && isVideo(selected) ? (
                 <video
                   key={previewUrl}
                   src={previewUrl}
                   controls
+                  autoPlay
                   playsInline
                   preload="metadata"
                   className="max-h-[75vh] w-full"

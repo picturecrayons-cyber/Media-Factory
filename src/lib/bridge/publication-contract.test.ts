@@ -5,6 +5,7 @@ import { runInNewContext } from "node:vm";
 import { transpileModule, ModuleKind } from "typescript";
 import { z } from "zod";
 import * as rights from "./rights-coverage.ts";
+import { assertTitleControlClear } from "./title-controls-policy.ts";
 
 // Execute the real server handler with isolated transport/database dependencies.
 // No database or AWS requests are made by this harness.
@@ -18,6 +19,7 @@ function harness(
     curation_status: "APPROVED",
     delivery_status: "READY",
   },
+  controlState: "CLEAR" | "HOLD" | "BLOCK" = "CLEAR",
 ) {
   const writes: { query: string; values: unknown[] }[] = [];
   const title = {
@@ -31,6 +33,8 @@ function harness(
   };
   const sql = async (strings: TemplateStringsArray, ...values: unknown[]) => {
     const query = strings.join("?");
+    if (query.includes("select control_state from public.bridge_title_controls"))
+      return [{ control_state: controlState }];
     if (query.includes("from bridge_titles")) return [title];
     if (query.includes("select evidence from bridge_rights_grants"))
       return [
@@ -66,6 +70,7 @@ function harness(
     "./guards": { assertNotDevUser: () => {} },
     "./audit": { writeAudit: async () => {} },
     "./rights-coverage": rights,
+    "./title-controls-policy": { assertTitleControlClear },
     "@/lib/bridge/loop-lanes": {
       loopStageType: (raw: string | null | undefined) =>
         (raw || "").toLowerCase().includes("series") ? "Series" : "Film",
@@ -149,6 +154,14 @@ test("publication requires all four release certifications", async () => {
   for (const gates of incompleteGateSets) {
     const h = harness([grant], true, false, gates);
     await assert.rejects(h.authorize({ context, data }), /Distribution Authorization Blocked/);
+    assert.equal(h.writes.length, 0);
+  }
+});
+
+test("HOLD and BLOCK prevent Loop publication before any write", async () => {
+  for (const state of ["HOLD", "BLOCK"] as const) {
+    const h = harness([grant], true, false, undefined, state);
+    await assert.rejects(h.authorize({ context, data }), state === "HOLD" ? /TITLE_ON_HOLD/ : /TITLE_BLOCKED/);
     assert.equal(h.writes.length, 0);
   }
 });

@@ -13,6 +13,7 @@ import { assertNotDevUser } from "./guards";
 import { loopStageType } from "./loop-lanes";
 import { assertBuyerPublishable, getBuyerGateStatus } from "./buyer-visibility";
 import { submitTitleForQc } from "./title-submission";
+import { assertTitleControlClear } from "./title-controls-policy";
 
 type TitleRow = {
   id: string;
@@ -450,7 +451,12 @@ export const updateTitle = createServerFn({ method: "POST" })
       throw new Error("Title is locked after prepare");
     }
     const sql = await getSql();
-    await sql`
+    await sql.transaction(async (tx) => {
+      const [locked] = await tx<{ status: string }>`select status from bridge_titles where id=${title.id} for update`;
+      if (!locked || locked.status !== title.status) throw new Error("Title changed; refresh before retrying");
+      const [control] = await tx<{control_state: "CLEAR" | "HOLD" | "BLOCK"}>`select control_state from bridge_title_controls where title_id=${title.id} for update`;
+      assertTitleControlClear(control?.control_state);
+      await tx`
       update bridge_titles set
         name = ${data.name ?? title.name},
         name_ml = ${data.nameMl ?? title.nameMl},
@@ -463,11 +469,12 @@ export const updateTitle = createServerFn({ method: "POST" })
         updated_at = now()
       where id = ${title.id}
     `;
-    await writeAudit({
-      actorUserId: actor.userId,
-      action: "title.update",
-      entityType: "bridge_title",
-      entityId: title.id,
+      await writeAudit({
+        actorUserId: actor.userId,
+        action: "title.update",
+        entityType: "bridge_title",
+        entityId: title.id,
+      }, tx);
     });
     const next = await loadTitle(title.id);
     return { title: next };
@@ -610,6 +617,8 @@ export const advanceTitle = createServerFn({ method: "POST" })
     const expected = nextStatus(title.status);
     if (expected !== data.to) throw new Error("Illegal title transition");
     const sql = await getSql();
+    const [control] = await sql<{control_state: "CLEAR" | "HOLD" | "BLOCK"}>`select control_state from public.bridge_title_controls where title_id=${title.id}`;
+    assertTitleControlClear(control?.control_state);
     if (data.to === "QC_REVIEW") {
       return submitTitleForQc(sql, title, actor.userId, data.note);
     }
@@ -619,6 +628,8 @@ export const advanceTitle = createServerFn({ method: "POST" })
       }>`select status from bridge_titles where id=${title.id} for update`;
       if (!locked || locked.status !== title.status)
         throw new Error("Title changed; refresh before retrying");
+      const [control] = await tx<{control_state: "CLEAR" | "HOLD" | "BLOCK"}>`select control_state from bridge_title_controls where title_id=${title.id} for update`;
+      assertTitleControlClear(control?.control_state);
       await recordTransition(
         {
           titleId: title.id,
