@@ -162,6 +162,6 @@ test("publication requires all four release certifications", async () => {
 test("publication readiness GET is read-only and never reconciles expired rows", async () => {
   const h = harness([grant]);
   const result = await h.readiness({ context });
-  assert.deepEqual((result as { titles: unknown[] }).titles, []);
+  assert.equal((result as { titles: unknown[] }).titles.length, 0);
   assert.equal(h.writes.length, 0);
 });
