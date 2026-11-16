@@ -72,6 +72,8 @@ export const setTitleControl = createServerFn({ method: "POST" })
     return sql.transaction(async (tx) => {
       const [title] = await tx<{ id: string }>`select id from public.bridge_titles where id=${data.titleId} for update`;
       if (!title) throw new Error("Title not found");
+      const [current] = await tx<{control_state: string}>`select control_state from public.bridge_title_controls where title_id=${data.titleId} for update`;
+      if (current?.control_state === "BLOCK") throw new Error("Unblock this title before changing its operational control");
       const action = data.state === "HOLD" ? "SET_HOLD" : "SET_BLOCK";
       await tx`insert into public.bridge_title_controls(title_id,control_state,reason,set_by,set_at,released_by,released_at,release_reason,updated_at)
         values (${data.titleId},${data.state},${data.reason},${actor.userId},now(),null,null,null,now())
