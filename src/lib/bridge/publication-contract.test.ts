@@ -83,7 +83,11 @@ function harness(
       return modules[name];
     },
   });
-  return { authorize: exports.authorizeLoopPublication, writes };
+  return {
+    authorize: exports.authorizeLoopPublication,
+    listReadiness: exports.listLoopPublicationReadiness,
+    writes,
+  };
 }
 
 const grant = {
@@ -151,4 +155,15 @@ test("publication requires all four release certifications", async () => {
     await assert.rejects(h.authorize({ context, data }), /Distribution Authorization Blocked/);
     assert.equal(h.writes.length, 0);
   }
+});
+
+
+test("publication readiness GET performs no database writes", async () => {
+  const h = harness([grant]);
+  await h.listReadiness({ context });
+  assert.equal(
+    h.writes.length,
+    0,
+    "read-only readiness inspection must not update publication or Loop title rows",
+  );
 });
