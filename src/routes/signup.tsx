@@ -25,6 +25,8 @@ function Signup() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [accountType, setAccountType] = useState<AccountChoice>(initialChoice);
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
+  const [acceptedPrivacy, setAcceptedPrivacy] = useState(false);
 
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -46,6 +48,11 @@ function Signup() {
 
     if (password.length < 8) {
       setError("Password must be at least 8 characters long.");
+      return;
+    }
+
+    if (!acceptedTerms || !acceptedPrivacy) {
+      setError("Please read and accept both the Terms & Conditions and Privacy Policy.");
       return;
     }
 
@@ -161,6 +168,18 @@ function Signup() {
               {resendStatus}
             </div>
           ) : null}
+
+          <fieldset className="space-y-3 rounded-xl border border-line p-3">
+            <legend className="px-1 text-sm font-semibold text-fg">Required agreements</legend>
+            <label className="flex items-start gap-2.5 text-sm leading-6 text-muted">
+              <input type="checkbox" required checked={acceptedTerms} onChange={(e) => setAcceptedTerms(e.target.checked)} className="mt-1 h-4 w-4 accent-current" />
+              <span>I have read and agree to the <Link to="/terms" target="_blank" className="font-semibold text-accent underline">Terms &amp; Conditions</Link>.</span>
+            </label>
+            <label className="flex items-start gap-2.5 text-sm leading-6 text-muted">
+              <input type="checkbox" required checked={acceptedPrivacy} onChange={(e) => setAcceptedPrivacy(e.target.checked)} className="mt-1 h-4 w-4 accent-current" />
+              <span>I have read and acknowledge the <Link to="/privacy" target="_blank" className="font-semibold text-accent underline">Privacy Policy</Link>.</span>
+            </label>
+          </fieldset>
 
           {error ? (
             <div
