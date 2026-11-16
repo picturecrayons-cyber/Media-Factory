@@ -243,7 +243,7 @@ export const publishTitleToBuyers = createServerFn({ method: "POST" })
               and rg.window_start is not null and rg.window_start <= now()
               and rg.window_end is not null and rg.window_end > now()
               and exists (
-                select 1 from jsonb_array_elements(l.evidence) le
+                select 1 from jsonb_array_elements(case when jsonb_typeof(l.evidence)='array' then l.evidence else '[]'::jsonb end) le
                 where le->>'grantId'=rg.id::text
               )
           ) as legal_ok,
@@ -266,11 +266,18 @@ export const publishTitleToBuyers = createServerFn({ method: "POST" })
               and coalesce(g.evidence->'releaseControl'->>'status','CLEAR')='CLEAR'
           ) as gates_ok,
           exists(
-            select 1 from bridge_destination_packages p
+            select 1
+            from bridge_destination_packages p
             join bridge_rights_grants rg on rg.id=p.rights_grant_id
+            join bridge_legal_cases l on l.title_id=rg.title_id and l.status='APPROVED'
             where p.title_id=t.id
               and p.readiness_state in ('READY','AUTHORIZED','DELIVERED')
               and rg.status='VALID'
+              and exists (
+                select 1
+                from jsonb_array_elements(case when jsonb_typeof(l.evidence)='array' then l.evidence else '[]'::jsonb end) le
+                where le->>'grantId'=rg.id::text
+              )
           ) as package_ok,
           not exists(
             select 1 from bridge_title_gate_certifications g
