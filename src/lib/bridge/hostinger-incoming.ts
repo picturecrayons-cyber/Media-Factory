@@ -66,6 +66,14 @@ export function isHostingerTestDeliveryPayload(
 ): boolean {
   const payload = asRecord(value);
   if (!payload || payload.event !== "message.received") return false;
+
+  // The Test action's no-message envelope is deliberately narrow. Reject
+  // extra top-level delivery metadata instead of silently dropping a partial
+  // real message. Hostinger's known envelope contains only event + mailbox,
+  // with an optional explicit null message.
+  const allowedKeys = new Set(["event", "mailbox", "message"]);
+  if (Object.keys(payload).some((key) => !allowedKeys.has(key))) return false;
+  if (!Object.prototype.hasOwnProperty.call(payload, "mailbox")) return false;
   if (payload.message !== undefined && payload.message !== null) return false;
   if (!expectedMailbox.trim()) throw new Error("Missing mailbox configuration");
 
@@ -74,14 +82,29 @@ export function isHostingerTestDeliveryPayload(
     ? rawMailbox
     : asRecord(rawMailbox)?.address;
 
-  if (rawMailbox !== undefined && rawMailbox !== null) {
-    if (typeof mailboxValue !== "string") throw new Error("Missing mailbox");
-    if (mailboxValue.trim().toLowerCase() !== expectedMailbox.trim().toLowerCase()) {
-      throw new Error("Unexpected mailbox");
-    }
+  if (typeof mailboxValue !== "string" || !mailboxValue.trim()) return false;
+  if (mailboxValue.trim().toLowerCase() !== expectedMailbox.trim().toLowerCase()) {
+    throw new Error("Unexpected mailbox");
   }
 
   return true;
+}
+
+/**
+ * Combined auth + envelope check for the no-op Test action. The route still
+ * authenticates before reading the body; this helper keeps the exact
+ * authenticated test path directly covered by regression tests.
+ */
+export function isAuthenticatedHostingerTestDeliveryRequest(
+  request: Pick<Request, "headers">,
+  value: unknown,
+  expectedSecret: string,
+  expectedMailbox: string,
+): boolean {
+  return isValidHostingerBearer(
+    request.headers.get("authorization"),
+    expectedSecret,
+  ) && isHostingerTestDeliveryPayload(value, expectedMailbox);
 }
 
 export function parseHostingerIncomingPayload(

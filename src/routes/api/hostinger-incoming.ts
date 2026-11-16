@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { createFileRoute } from "@tanstack/react-router";
 import {
-  isHostingerTestDeliveryPayload,
+  isAuthenticatedHostingerTestDeliveryRequest,
   isValidHostingerBearer,
   parseHostingerIncomingPayload,
   readLimitedRequestBody,
@@ -54,7 +54,14 @@ export const Route = createFileRoute("/api/hostinger-incoming")({
         let message: HostingerIncomingMailRecord;
         try {
           const expectedMailbox = bridgeEnv.hostingerIncomingMailbox();
-          if (isHostingerTestDeliveryPayload(payload, expectedMailbox)) {
+          if (
+            isAuthenticatedHostingerTestDeliveryRequest(
+              request,
+              payload,
+              secret,
+              expectedMailbox,
+            )
+          ) {
             // Hostinger's Test action has no message metadata. Acknowledge the
             // connectivity probe without storing a synthetic message.
             return Response.json({ ok: true, test: true, stored: false });
