@@ -53,59 +53,6 @@ export function isValidHostingerBearer(
     timingSafeEqual(suppliedBytes, expectedBytes);
 }
 
-/**
- * Hostinger's webhook Test action can deliver an authenticated event envelope
- * without a real message object. A no-op acknowledgement lets operators
- * verify connectivity without inserting synthetic mail into the inbox ledger.
- *
- * Real message.received events continue through the strict parser below.
- */
-export function isHostingerTestDeliveryPayload(
-  value: unknown,
-  expectedMailbox: string,
-): boolean {
-  const payload = asRecord(value);
-  if (!payload || payload.event !== "message.received") return false;
-
-  // Hostinger's webhook Test action sends a synthetic no-message event. Accept
-  // only the exact event-only envelope, or that envelope with a matching
-  // mailbox and/or explicit null message. Reject any other top-level fields.
-  const allowedKeys = new Set(["event", "mailbox", "message"]);
-  if (Object.keys(payload).some((key) => !allowedKeys.has(key))) return false;
-  if (payload.message !== undefined && payload.message !== null) return false;
-
-  if (Object.prototype.hasOwnProperty.call(payload, "mailbox")) {
-    if (!expectedMailbox.trim()) throw new Error("Missing mailbox configuration");
-    const rawMailbox = payload.mailbox;
-    const mailboxValue = typeof rawMailbox === "string"
-      ? rawMailbox
-      : asRecord(rawMailbox)?.address;
-    if (typeof mailboxValue !== "string" || !mailboxValue.trim()) return false;
-    if (mailboxValue.trim().toLowerCase() !== expectedMailbox.trim().toLowerCase()) {
-      throw new Error("Unexpected mailbox");
-    }
-  }
-
-  return true;
-}
-
-/**
- * Combined auth + envelope check for the no-op Test action. The route still
- * authenticates before reading the body; this helper keeps the exact
- * authenticated test path directly covered by regression tests.
- */
-export function isAuthenticatedHostingerTestDeliveryRequest(
-  request: Pick<Request, "headers">,
-  value: unknown,
-  expectedSecret: string,
-  expectedMailbox: string,
-): boolean {
-  return isValidHostingerBearer(
-    request.headers.get("authorization"),
-    expectedSecret,
-  ) && isHostingerTestDeliveryPayload(value, expectedMailbox);
-}
-
 export function parseHostingerIncomingPayload(
   value: unknown,
   expectedMailbox: string,

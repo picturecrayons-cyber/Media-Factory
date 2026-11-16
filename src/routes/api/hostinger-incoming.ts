@@ -1,7 +1,6 @@
 import { createHash } from "node:crypto";
 import { createFileRoute } from "@tanstack/react-router";
 import {
-  isAuthenticatedHostingerTestDeliveryRequest,
   isValidHostingerBearer,
   parseHostingerIncomingPayload,
   readLimitedRequestBody,
@@ -10,6 +9,31 @@ import {
 import { bridgeEnv } from "@/lib/bridge/env";
 
 const MAX_WEBHOOK_BYTES = 64 * 1024;
+
+function safePayloadShape(value: unknown): Record<string, unknown> {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    return { payloadType: value === null ? "null" : Array.isArray(value) ? "array" : typeof value };
+  }
+  const payload = value as Record<string, unknown>;
+  const message = payload.message;
+  const mailbox = payload.mailbox;
+  const safeKeys = (record: unknown): string[] => {
+    if (record === null || typeof record !== "object" || Array.isArray(record)) return [];
+    return Object.keys(record as Record<string, unknown>)
+      .slice(0, 30)
+      .map((key) => key.replace(/[^a-zA-Z0-9_.-]/g, "").slice(0, 48))
+      .sort();
+  };
+  return {
+    topLevelKeys: safeKeys(payload),
+    eventType: typeof payload.event,
+    mailboxType: mailbox === null ? "null" : Array.isArray(mailbox) ? "array" : typeof mailbox,
+    mailboxKeys: safeKeys(mailbox),
+    messageType: message === null ? "null" : Array.isArray(message) ? "array" : typeof message,
+    messageKeys: safeKeys(message),
+  };
+}
+
 export const Route = createFileRoute("/api/hostinger-incoming")({
   server: {
     handlers: {
@@ -54,24 +78,20 @@ export const Route = createFileRoute("/api/hostinger-incoming")({
         let message: HostingerIncomingMailRecord;
         try {
           const expectedMailbox = bridgeEnv.hostingerIncomingMailbox();
-          if (
-            isAuthenticatedHostingerTestDeliveryRequest(
-              request,
-              payload,
-              secret,
-              expectedMailbox,
-            )
-          ) {
-            // Hostinger's Test action has no message metadata. Acknowledge the
-            // connectivity probe without storing a synthetic message.
-            return Response.json({ ok: true, test: true, stored: false });
-          }
           message = parseHostingerIncomingPayload(payload, expectedMailbox);
         } catch (error) {
           // Log only the parser's fixed validation reason; never log message content,
           // sender addresses, mailbox values, bearer tokens, or the raw payload.
           const reason = error instanceof Error ? error.message : "Unknown payload validation error";
-          console.warn("[hostinger-incoming] rejected Hostinger event payload", { reason });
+          if (reason === "Missing message metadata") {
+            // Log only property names and JSON value types; never content.
+            console.warn("[hostinger-incoming] missing message metadata; payload shape", {
+              reason,
+              shape: safePayloadShape(payload),
+            });
+          } else {
+            console.warn("[hostinger-incoming] rejected Hostinger event payload", { reason });
+          }
           return Response.json({ error: "Invalid incoming mail event" }, { status: 400 });
         }
 
