@@ -701,20 +701,10 @@ try {
               and p.polcmd = '*'
               and p.polpermissive
               and p.polroles = ARRAY[(select oid from pg_roles where rolname = 'authenticated')]
-              and position('auth.uid()' in coalesce(pg_get_expr(p.polqual, p.polrelid), '')) > 0
-              and position('bridge_titles' in coalesce(pg_get_expr(p.polqual, p.polrelid), '')) > 0
-              and position('bridge_loop_identity_links' in coalesce(pg_get_expr(p.polqual, p.polrelid), '')) > 0
-              and position('owner_user_id' in coalesce(pg_get_expr(p.polqual, p.polrelid), '')) > 0
-              and position('title_id' in coalesce(pg_get_expr(p.polqual, p.polrelid), '')) > 0
-              and position('auth_user_id' in coalesce(pg_get_expr(p.polqual, p.polrelid), '')) > 0
-              and position('bridge_user_id' in coalesce(pg_get_expr(p.polqual, p.polrelid), '')) > 0
-              and position('auth.uid()' in coalesce(pg_get_expr(p.polwithcheck, p.polrelid), '')) > 0
-              and position('bridge_titles' in coalesce(pg_get_expr(p.polwithcheck, p.polrelid), '')) > 0
-              and position('bridge_loop_identity_links' in coalesce(pg_get_expr(p.polwithcheck, p.polrelid), '')) > 0
-              and position('owner_user_id' in coalesce(pg_get_expr(p.polwithcheck, p.polrelid), '')) > 0
-              and position('title_id' in coalesce(pg_get_expr(p.polwithcheck, p.polrelid), '')) > 0
-              and position('auth_user_id' in coalesce(pg_get_expr(p.polwithcheck, p.polrelid), '')) > 0
-              and position('bridge_user_id' in coalesce(pg_get_expr(p.polwithcheck, p.polrelid), '')) > 0
+              and pg_get_expr(p.polqual, p.polrelid) =
+                '(EXISTS ( SELECT 1 FROM (bridge_titles t JOIN bridge_loop_identity_links l ON ((l.bridge_user_id = t.owner_user_id))) WHERE ((t.id = bridge_story_concept_submissions.title_id) AND (l.auth_user_id = ( SELECT auth.uid() AS uid)))))'
+              and pg_get_expr(p.polwithcheck, p.polrelid) =
+                '(EXISTS ( SELECT 1 FROM (bridge_titles t JOIN bridge_loop_identity_links l ON ((l.bridge_user_id = t.owner_user_id))) WHERE ((t.id = bridge_story_concept_submissions.title_id) AND (l.auth_user_id = ( SELECT auth.uid() AS uid)))))'
           )
         )
         when c.relname = 'bridge_buyer_interest' then (
@@ -727,6 +717,14 @@ try {
           and not has_table_privilege('authenticated', c.oid, 'INSERT')
           and not has_table_privilege('authenticated', c.oid, 'UPDATE')
           and not has_table_privilege('authenticated', c.oid, 'DELETE')
+          and not has_table_privilege('anon', c.oid, 'TRUNCATE')
+          and not has_table_privilege('anon', c.oid, 'REFERENCES')
+          and not has_table_privilege('anon', c.oid, 'TRIGGER')
+          and not has_table_privilege('authenticated', c.oid, 'TRUNCATE')
+          and not has_table_privilege('authenticated', c.oid, 'REFERENCES')
+          and not has_table_privilege('authenticated', c.oid, 'TRIGGER')
+          and not has_table_privilege('anon', c.oid, 'MAINTAIN')
+          and not has_table_privilege('authenticated', c.oid, 'MAINTAIN')
         )
         when c.relname = 'bridge_delivery_jobs' then (
           (select count(*) from pg_policy x where x.polrelid = c.oid) = 1
@@ -737,9 +735,10 @@ try {
               and p.polcmd = '*'
               and p.polpermissive
               and p.polroles = ARRAY[(select oid from pg_roles where rolname = 'authenticated')]
-              and position('private.bridge_is_internal' in coalesce(pg_get_expr(p.polqual, p.polrelid), '')) > 0
-              and position('private.bridge_is_internal' in coalesce(pg_get_expr(p.polwithcheck, p.polrelid), '')) > 0
-              and pg_get_expr(p.polqual, p.polrelid) = pg_get_expr(p.polwithcheck, p.polrelid)
+              and pg_get_expr(p.polqual, p.polrelid) =
+                '( SELECT private.bridge_is_internal() AS bridge_is_internal)'
+              and pg_get_expr(p.polwithcheck, p.polrelid) =
+                '( SELECT private.bridge_is_internal() AS bridge_is_internal)'
           )
         )
         else false
