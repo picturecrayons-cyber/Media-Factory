@@ -62,7 +62,9 @@ for (const [label, databaseUrl] of rejectedTargets) {
 }
 
 test("feature archive migration is checked after the 69-row recovered baseline", () => {
-  assert.match(replaySource, /const EXPECTED_MIGRATIONS = 69/);
+  assert.match(replaySource, /const EXPECTED_BASELINE_MIGRATIONS = 69/);
+  assert.match(replaySource, /baselineNames\.length !== EXPECTED_BASELINE_MIGRATIONS/);
+  assert.match(replaySource, /!names\.includes\(FEATURE_MIGRATION\)/);
   assert.ok(replaySource.includes('const FEATURE_MIGRATION = "20261116150000_bridge_title_archive_restore.sql";'));
   assert.match(replaySource, /FEATURE_MIGRATION_BYTES = 1117/);
   assert.match(replaySource, /FEATURE_MIGRATION_SHA256 = "3669b65c17642c2867c6efb7f8505943e8397756890fb6748bb6eb6ced9449bc"/);
