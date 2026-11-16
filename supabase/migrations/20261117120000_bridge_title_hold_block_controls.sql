@@ -33,6 +33,28 @@ create index if not exists bridge_title_control_events_title_created_idx
   on public.bridge_title_control_events(title_id, created_at desc);
 
 alter table public.bridge_title_controls enable row level security;
+-- Existing buyer catalogue, poster and direct-listing queries all use this function.
+-- Exclude controlled titles centrally so HOLD/BLOCK also suspend existing listings.
+create or replace function public.bridge_title_buyer_visibility(p_title_id text)
+returns boolean language sql stable as $function$
+  select exists (
+    select 1 from public.bridge_titles t
+    join public.bridge_title_gate_certifications g on g.title_id=t.id
+    where t.id=p_title_id
+      and t.status in ('LIVE_FOR_BUYERS','IN_NEGOTIATION','LICENSED','DELIVERED')
+      and not exists (
+        select 1 from public.bridge_title_controls c
+        where c.title_id=t.id and c.control_state in ('HOLD','BLOCK')
+      )
+      and exists (select 1 from public.bridge_qc_cases q where q.title_id=t.id and q.status='PASSED')
+      and exists (select 1 from public.bridge_legal_cases l where l.title_id=t.id and l.status='APPROVED')
+      and g.ott_preparation_status='READY'
+      and g.packaging_status='COMPLETE'
+      and g.curation_status='APPROVED'
+      and g.delivery_status='READY'
+      and exists (select 1 from public.bridge_destination_packages p where p.title_id=t.id and p.readiness_state in ('READY','AUTHORIZED','DELIVERED'))
+  );
+$function$;
 alter table public.bridge_title_control_events enable row level security;
 revoke all on public.bridge_title_controls from anon, authenticated;
 revoke all on public.bridge_title_control_events from anon, authenticated;
