@@ -94,7 +94,18 @@ describe("PRD authorization matrix", () => {
     assert.equal(canMutateTitle(viewer(), foreign, "title.update_own", "title.qc_review"), false);
   });
 
-  it("Super Admin receives every registered permission while remaining email-verified", () => {\n    const privileged = superAdmin();\n    for (const permission of PERMISSIONS) assert.equal(hasPermission(privileged, permission), true, `missing ${permission}`);\n    const unverified = actor("unverified-super", "independent_creator", "super_admin", false);\n    for (const permission of PERMISSIONS) assert.equal(hasPermission(unverified, permission), false, `unverified received ${permission}`);\n  });\n\n  it("super admin can create canonical Bridge titles and use explicit internal upload powers", () => {
+  it("Super Admin receives every registered permission while remaining email-verified", () => {
+    const privileged = superAdmin();
+    for (const permission of PERMISSIONS) {
+      assert.equal(hasPermission(privileged, permission), true, `missing ${permission}`);
+    }
+    const unverified = actor("unverified-super", "independent_creator", "super_admin", false);
+    for (const permission of PERMISSIONS) {
+      assert.equal(hasPermission(unverified, permission), false, `unverified received ${permission}`);
+    }
+  });
+
+  it("super admin can create canonical Bridge titles and use explicit internal upload powers", () => {
     const a = superAdmin();
     assert.equal(hasPermission(a, "title.create"), true);
     assert.equal(hasPermission(a, "asset.sign_upload"), true);
