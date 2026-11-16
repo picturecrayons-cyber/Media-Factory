@@ -9,15 +9,18 @@ import { canMutateTitle } from "./rbac";
 import { loadTitle } from "./titles";
 import { archiveDraftTitle, restoreArchivedDraft } from "./title-archive";
 
-async function mutateOwnedDraft(userId: string, id: string, restore: boolean) {
+async function mutateDraft(userId: string, id: string, restore: boolean) {
   assertNotDevUser(userId);
   const actor = await requireVerifiedActor(userId);
-  if (actor.internalRole || !["independent_creator", "studio"].includes(actor.accountType)) {
+  if (actor.internalRole && actor.internalRole !== "super_admin") {
+    throw new Error("Only Super Admin may manage another account's archived drafts.");
+  }
+  if (!actor.internalRole && !["independent_creator", "studio"].includes(actor.accountType)) {
     throw new Error("Only verified Creator or Studio accounts can manage their own drafts.");
   }
   const title = await loadTitle(id);
   if (!title) throw new Error("Title not found.");
-  if (!canMutateTitle(actor, title, "title.update_own", "title.license")) {
+  if (!actor.internalRole && !canMutateTitle(actor, title, "title.update_own", "title.license")) {
     throw new Error("You do not have permission to manage this title.");
   }
   const sql = await getSql();
@@ -30,7 +33,7 @@ async function mutateOwnedDraft(userId: string, id: string, restore: boolean) {
       action: restore ? "title.draft_restored" : "title.draft_archived",
       entityType: "bridge_title",
       entityId: targetId,
-      metadata: { titleStatus: "DRAFT" },
+      metadata: { titleStatus: "DRAFT", globalAdminAction: actor.internalRole === "super_admin" },
     }, tx);
     return { id: targetId };
   });
@@ -39,22 +42,26 @@ async function mutateOwnedDraft(userId: string, id: string, restore: boolean) {
 export const archiveDraftTitleAction = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(z.object({ id: z.string().min(8).max(160) }))
-  .handler(async ({ context, data }) => mutateOwnedDraft(context.userId, data.id, false));
+  .handler(async ({ context, data }) => mutateDraft(context.userId, data.id, false));
 
 export const restoreArchivedDraftAction = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(z.object({ id: z.string().min(8).max(160) }))
-  .handler(async ({ context, data }) => mutateOwnedDraft(context.userId, data.id, true));
+  .handler(async ({ context, data }) => mutateDraft(context.userId, data.id, true));
 
 export const listMyArchivedDrafts = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
-    if (actor.internalRole || !["independent_creator", "studio"].includes(actor.accountType)) {
+    if (actor.internalRole && actor.internalRole !== "super_admin") {
+      throw new Error("Only Super Admin may view cross-account archived drafts.");
+    }
+    if (!actor.internalRole && !["independent_creator", "studio"].includes(actor.accountType)) {
       throw new Error("Only verified Creator or Studio accounts can view archived drafts.");
     }
     const sql = await getSql();
+    const allTenants = actor.internalRole === "super_admin";
     const rows = await sql<{
       id: string; name: string; language: string; year: number | null;
       submission_type: string; archived_at: string | Date;
@@ -64,7 +71,8 @@ export const listMyArchivedDrafts = createServerFn({ method: "GET" })
       where t.status = 'DRAFT'
         and t.archived_at is not null
         and (
-          (t.owner_user_id = ${actor.userId})
+          ${allTenants}::boolean
+          or t.owner_user_id = ${actor.userId}
           or (
             ${actor.accountType === "studio"}::boolean
             and t.owner_account_type = 'studio'
@@ -78,7 +86,7 @@ export const listMyArchivedDrafts = createServerFn({ method: "GET" })
           )
         )
       order by t.archived_at desc
-      limit 100
+      limit 200
     `;
     return {
       titles: rows.map((row) => ({
