@@ -19,7 +19,7 @@ This is a documentation-only reconciliation. No SQL writes, migrations, `migrati
 
 The 69-entry manifest in `docs/release/bridge-supabase-migration-reconciliation-2026-11-16.md` is explicitly sourced from Production project `mlmgugivsyoxzdgwkbpu`. It must not be treated as the expected applied migration list for STAGING. STAGING has a separate test-specific migration history with different version identifiers and migration names. Zero matching versions does not prove schema divergence by itself; it proves that a direct version-ledger reconciliation cannot be declared PASS.
 
-**Do not run `supabase db push`, `supabase migration repair`, or apply any Production-source migration to STAGING based on this comparison.** First build a semantic schema/object reconciliation from the current STAGING catalog, the 57 recorded STAGING migration SQL bodies, and the intended STAGING target contract.
+**Do not run `supabase db push`, `supabase migration repair`, or apply any Production-source migration to STAGING based on this comparison.** First build a semantic schema/object reconciliation from the current STAGING catalog, the 55 recorded STAGING migration SQL bodies, and the intended STAGING target contract.
 
 ## STAGING ledger — exact current entries
 
@@ -100,10 +100,10 @@ The table inventory confirms RLS is enabled on listed public relations, but this
 
 ## Blockers before a PASS
 
-1. Pin the exact STAGING migration source branch/commit and retrieve all 57 SQL bodies byte-for-byte.
+1. Pin the exact STAGING migration source branch/commit and retrieve all 55 SQL bodies byte-for-byte.
 2. Obtain the authoritative intended STAGING schema contract; do not use the Production manifest as a substitute.
 3. Produce a catalog inventory for tables/columns/types/defaults/constraints/FKs/indexes/views/functions/triggers/policies/grants/default ACLs/storage buckets and policies.
-4. Map each of the 57 applied STAGING entries to a source SQL body and its SHA-256; identify any missing, altered, duplicate, or untracked migration.
+4. Map each of the 55 applied STAGING entries to a source SQL body and its SHA-256; identify any missing, altered, duplicate, or untracked migration.
 5. Compare the catalog to a disposable local replay of the STAGING migration set, not to Production.
 6. Reconcile current object state against migration effects; separately identify intentional test fixtures and drift.
 7. Review security advisor findings and test-only functions/policies.
