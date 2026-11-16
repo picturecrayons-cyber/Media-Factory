@@ -340,6 +340,8 @@ export const verifyDitFileUpload = createServerFn({ method: "POST" })
     const actor = await requireDitOperator(context.userId);
     const sql = await getSql();
     const session = await requireSession(sql, data.sessionId, actor.organizationId!);
+    const [control] = await sql<{ control_state: "CLEAR" | "HOLD" | "BLOCK" }>`select control_state from public.bridge_title_controls where title_id=${session.title_id}`;
+    assertTitleControlClear(control?.control_state);
     if (session.status === "SIGNED_OFF") throw new Error("A signed-off DIT session is locked");
 
     const { bridgeEnv, verifyObject, verifyObjectSha256, sealVerifiedObject } = await loadDitOciStorage();
@@ -448,6 +450,8 @@ export const recordDitCopyVerification = createServerFn({ method: "POST" })
     const actor = await requireDitOperator(context.userId);
     const sql = await getSql();
     const session = await requireSession(sql, data.sessionId, actor.organizationId!);
+    const [control] = await sql<{ control_state: "CLEAR" | "HOLD" | "BLOCK" }>`select control_state from public.bridge_title_controls where title_id=${session.title_id}`;
+    assertTitleControlClear(control?.control_state);
     if (session.status === "SIGNED_OFF") throw new Error("A signed-off DIT session is locked");
     const files = normalizeDitFiles(data.manifest.files);
     const digest = ditManifestDigest(files);
@@ -526,6 +530,8 @@ export const signOffDitIngestSession = createServerFn({ method: "POST" })
         for update
       `;
       if (!rows[0]) throw new Error("DIT ingest session was not found");
+      const [control] = await tx<{ control_state: "CLEAR" | "HOLD" | "BLOCK" }>`select control_state from public.bridge_title_controls where title_id=${rows[0].title_id} for update`;
+      assertTitleControlClear(control?.control_state);
       if (rows[0].status === "SIGNED_OFF") throw new Error("DIT ingest session is already signed off");
       const copies = await tx<{ copy_type: string; verified: boolean }>`
         select copy_type, verified from bridge_dit_copy_verifications
