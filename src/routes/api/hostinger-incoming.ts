@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { createFileRoute } from "@tanstack/react-router";
 import {
+  isHostingerSyntheticTestEnvelope,
   isValidHostingerBearer,
   parseHostingerIncomingPayload,
   readLimitedRequestBody,
@@ -98,6 +99,13 @@ export const Route = createFileRoute("/api/hostinger-incoming")({
         } catch {
           console.warn("[hostinger-incoming] rejected invalid JSON body");
           return Response.json({ error: "Invalid JSON" }, { status: 400 });
+        }
+
+        // Hostinger's authenticated Test action has a separately observed,
+        // exact synthetic envelope. Acknowledge it without inserting a mail
+        // event; the real delivery parser below remains strict.
+        if (isHostingerSyntheticTestEnvelope(payload)) {
+          return Response.json({ ok: true });
         }
 
         let message: HostingerIncomingMailRecord;
