@@ -282,27 +282,6 @@ export const createLicenseOrder = createServerFn({ method: "POST" })
     if (title.status !== "LIVE_FOR_BUYERS" && title.status !== "IN_NEGOTIATION" && title.status !== "LICENSED" && title.status !== "DELIVERED") {
       throw new Error("Title is not open for a new license order");
     }
-    let amountPaise = title.licensingFeePaise;
-    if (data.packageId) {
-      // Reserve the package atomically for the first buyer before creating
-      // a provider order. A competing buyer cannot replace buyer_user_id after
-      // this UPDATE has acquired the row lock. The same buyer may safely retry
-      // if provider order creation or the client request needs to be repeated.
-      const pkg = await sql<{ id: string; title_id: string; price_paise: number; status: string; buyer_user_id: string | null }>`
-        update bridge_license_packages
-        set status = 'IN_NEGOTIATION',
-            buyer_user_id = ${actor.userId},
-            updated_at = now()
-        where id = ${data.packageId}
-          and title_id = ${title.id}
-          and status in ('READY', 'IN_NEGOTIATION')
-          and (buyer_user_id is null or buyer_user_id = ${actor.userId})
-        returning id, title_id, price_paise, status, buyer_user_id
-      `;
-      if (!pkg[0]) throw new Error("License package is reserved by another buyer or is not available");
-      amountPaise = Number(pkg[0].price_paise);
-    }
-    if (amountPaise <= 0) throw new Error("Licensing price is not set");
     const { keyId } = requireRazorpayKeys();
     const existing = await sql<{
       id: string;
@@ -329,7 +308,85 @@ export const createLicenseOrder = createServerFn({ method: "POST" })
         paymentRecordId: existing[0].id,
       };
     }
+    if (existing[0]) {
+      throw new Error("A previous license order request is still being finalized; retry shortly");
+    }
 
+    let amountPaise = title.licensingFeePaise;
+    let reservedPackageId: string | null = null;
+    if (data.packageId) {
+      // Reuse a persisted order for this buyer/package even when the browser
+      // supplies a new idempotency key. Never create a second payable order.
+      const packageOrder = await sql<{
+        id: string;
+        provider_order_id: string;
+        amount_paise: number;
+        title_id: string | null;
+      }>`
+        select id, provider_order_id, amount_paise, title_id
+        from bridge_payments
+        where user_id = ${actor.userId}
+          and package_id = ${data.packageId}
+          and purpose = ${"title_license"}
+          and provider_order_id is not null
+          and status <> 'failed'
+        order by created_at desc
+        limit 1
+      `;
+      if (packageOrder[0]) {
+        if (packageOrder[0].title_id !== title.id) {
+          throw new Error("Existing package order belongs to another title");
+        }
+        return {
+          orderId: packageOrder[0].provider_order_id,
+          amountPaise: packageOrder[0].amount_paise,
+          currency: "INR",
+          keyId,
+          paymentRecordId: packageOrder[0].id,
+        };
+      }
+
+      // Only one request may claim a READY package. A same-buyer reservation
+      // can be reclaimed after ten minutes only when no payment order exists;
+      // this recovers safely from a crashed request without racing a live one.
+      const pkg = await sql<{
+        id: string;
+        title_id: string;
+        price_paise: number;
+        status: string;
+        buyer_user_id: string | null;
+      }>`
+        update bridge_license_packages
+        set status = 'IN_NEGOTIATION',
+            buyer_user_id = ${actor.userId},
+            updated_at = now()
+        where id = ${data.packageId}
+          and title_id = ${title.id}
+          and (
+            (status = 'READY' and buyer_user_id is null)
+            or (
+              status = 'IN_NEGOTIATION'
+              and buyer_user_id = ${actor.userId}
+              and updated_at < now() - interval '10 minutes'
+              and not exists (
+                select 1 from bridge_payments payment
+                where payment.package_id = bridge_license_packages.id
+                  and payment.purpose = 'title_license'
+                  and payment.status <> 'failed'
+              )
+            )
+          )
+        returning id, title_id, price_paise, status, buyer_user_id
+      `;
+      if (!pkg[0]) {
+        throw new Error("License package is reserved by another buyer or checkout is already in progress");
+      }
+      reservedPackageId = pkg[0].id;
+      amountPaise = Number(pkg[0].price_paise);
+    }
+
+    try {
+      if (amountPaise <= 0) throw new Error("Licensing price is not set");
     const rz = await razorpayFetch<{ id: string; amount: number; currency: string }>("/orders", {
       method: "POST",
       body: JSON.stringify({
@@ -394,6 +451,30 @@ export const createLicenseOrder = createServerFn({ method: "POST" })
       keyId,
       paymentRecordId: id,
     };
+    } catch (error) {
+      // A failed provider request or persistence write must not strand a package.
+      // Keep the reservation only when a durable Bridge payment now owns it.
+      if (reservedPackageId) {
+        try {
+          await sql`
+            update bridge_license_packages
+            set status = 'READY', buyer_user_id = null, updated_at = now()
+            where id = ${reservedPackageId}
+              and status = 'IN_NEGOTIATION'
+              and buyer_user_id = ${actor.userId}
+              and not exists (
+                select 1 from bridge_payments payment
+                where payment.package_id = ${reservedPackageId}
+                  and payment.purpose = 'title_license'
+                  and payment.status <> 'failed'
+              )
+          `;
+        } catch (releaseError) {
+          console.error("Failed to release unpersisted Bridge package reservation", releaseError);
+        }
+      }
+      throw error;
+    }
   });
 
 export const verifyLicensePayment = createServerFn({ method: "POST" })
