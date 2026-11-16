@@ -182,6 +182,22 @@ Deno.serve(async (req: Request) => {
             if (data.buyer_user_id !== localPayment.user_id) {
               return await failEvent(supabase, id, token, "Language licence package belongs to another buyer");
             }
+            // Claim the licensed state with a conditional update before recording
+            // payment capture or creating the entitlement. This compare-and-set
+            // prevents a stale payment from overwriting another buyer/payment.
+            const { data: licensedPackage, error: packageClaimError } = await supabase
+              .from("bridge_license_packages")
+              .update({ status: "LICENSED", payment_id: localPayment.id, updated_at: new Date().toISOString() })
+              .eq("id", data.id)
+              .eq("title_id", localPayment.title_id)
+              .eq("buyer_user_id", localPayment.user_id)
+              .in("status", ["IN_NEGOTIATION", "LICENSED"])
+              .or(`payment_id.is.null,payment_id.eq.${localPayment.id}`)
+              .select("id")
+              .maybeSingle();
+            if (packageClaimError || !licensedPackage) {
+              return await failEvent(supabase, id, token, "Language licence package reservation changed or another payment already licensed it");
+            }
             packageRecord = data;
           }
 
@@ -200,10 +216,6 @@ Deno.serve(async (req: Request) => {
             }, { onConflict: "package_id,buyer_user_id", ignoreDuplicates: true });
             if (entitlementError) return await failEvent(supabase, id, token, "Bridge language package entitlement grant failed");
 
-            const { error: packageUpdateError } = await supabase.from("bridge_license_packages").update({
-              status: "LICENSED", buyer_user_id: localPayment.user_id, payment_id: localPayment.id, updated_at: now,
-            }).eq("id", packageRecord.id);
-            if (packageUpdateError) return await failEvent(supabase, id, token, "Bridge language package status update failed");
           } else {
             const { error: entitlementError } = await supabase.from("bridge_entitlements").upsert({
               user_id: localPayment.user_id, title_id: localPayment.title_id,
