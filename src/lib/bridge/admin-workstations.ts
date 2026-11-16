@@ -3,6 +3,8 @@ import { z } from "zod";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import { assertPermission, canAccessAdminWorkstations } from "./rbac";
+import { submitTitleForQc } from "./title-submission";
+import type { TitleStatus } from "./types";
 import { requireVerifiedActor } from "./session";
 import { writeAudit } from "./audit";
 import { assertNotDevUser } from "./guards";
@@ -19,7 +21,26 @@ export const listAdminWorkstations = createServerFn({ method: "GET" })
     if (!canAccessAdminWorkstations(actor)) throw new Error("Forbidden");
     const sql = await getSql();
     const [titles, assets, assetVersions, qc, legal, rights, packages, publications, audit] = await Promise.all([
-      sql`select id, name, owner_user_id, owner_account_type, status, language, updated_at from bridge_titles order by updated_at desc limit 200`,
+      sql`
+        select t.id, t.name, t.owner_user_id, t.owner_account_type, t.status, t.language, t.updated_at,
+          (
+            t.master_key is not null
+            and t.poster_key is not null
+            and exists (
+              select 1 from bridge_assets a
+              where a.title_id = t.id and a.kind = 'master'
+                and a.s3_key = t.master_key and coalesce(a.byte_size, 0) > 0
+            )
+            and exists (
+              select 1 from bridge_assets a
+              where a.title_id = t.id and a.kind in ('poster', 'poster_vertical')
+                and a.s3_key = t.poster_key and coalesce(a.byte_size, 0) > 0
+            )
+          ) as submission_assets_ready
+        from bridge_titles t
+        order by t.updated_at desc
+        limit 200
+      `,
       sql`select id, title_id, kind, s3_key, content_type, byte_size, created_at from bridge_assets order by created_at desc limit 300`,
       sql`select id, title_id, asset_group, asset_type, version, language, codec, s3_key, processing_state, created_at from bridge_asset_versions order by created_at desc limit 300`,
       sql`select id, title_id, asset_version_id, status, automated_findings, reviewer_findings, reviewed_by, reviewed_at, created_at from bridge_qc_cases order by created_at desc limit 200`,
@@ -45,16 +66,28 @@ export const reviewAdminTitle = createServerFn({ method: "POST" })
     const actor = await actorFor(context.userId);
     if (!actor.internalRole) throw new Error("Forbidden");
     const sql = await getSql();
-    const rows = await sql<{ id: string; status: string }>`select id, status from bridge_titles where id = ${data.titleId} limit 1`;
+    const rows = await sql<{ id: string; status: TitleStatus; master_key: string | null; poster_key: string | null }>`
+      select id, status, master_key, poster_key
+      from bridge_titles
+      where id = ${data.titleId}
+      limit 1
+    `;
     const title = rows[0];
     if (!title) throw new Error("Title not found");
+    if (data.decision === "ACCEPT") {
+      assertPermission(actor, "title.accept_submission");
+      if (title.status !== "PREPARING") throw new Error("Submission is not awaiting acceptance");
+      return submitTitleForQc(sql, {
+        id: title.id,
+        status: title.status,
+        masterKey: title.master_key,
+        posterKey: title.poster_key,
+      }, actor.userId, data.notes);
+    }
+
     let next: string | null = null;
     let action = "admin.review";
-    if (data.decision === "ACCEPT") {
-      assertPermission(actor, "title.advance_upload");
-      if (title.status !== "PREPARING") throw new Error("Submission is not awaiting acceptance");
-      next = "QC_REVIEW"; action = "submission.accept";
-    } else if (data.decision === "PASS") {
+    if (data.decision === "PASS") {
       assertPermission(actor, "title.qc_review");
       if (title.status !== "QC_REVIEW") throw new Error("Title is not in QC review");
       next = "RIGHTS_REVIEW"; action = "qc.pass";

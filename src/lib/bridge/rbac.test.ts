@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { assertPermission, canAccessAdminWorkstations, canAccessDashboard, canAccessTitleWorkspace, canGrantInternalRole, canMutateTitle, canOperateOnTitle, canReadTitle, hasPermission, hasStaffPermission, permissionForTransition, workspaceHome } from "./rbac.ts";
+import { assertPermission, canAccessAdminWorkstations, canAccessDashboard, canAccessTitleWorkspace, canGrantInternalRole, canMutateTitle, canOperateOnTitle, canReadTitle, canUploadTitleAsset, hasPermission, hasStaffPermission, permissionForTransition, workspaceHome } from "./rbac.ts";
 import type { Actor } from "./rbac.ts";
 
 const actor = (
@@ -91,6 +91,28 @@ describe("PRD authorization matrix", () => {
     assert.equal(canOperateOnTitle(qc, foreign, "asset.sign_upload"), false);
     assert.equal(canMutateTitle(qc, foreign, "title.update_own", "title.qc_review"), true);
     assert.equal(canMutateTitle(viewer(), foreign, "title.update_own", "title.qc_review"), false);
+  });
+
+  it("allows only Super Admin to replace Malayalakkara Residency during RIGHTS_REVIEW", () => {
+    const target = { id: "858f0ec5a11bc9acd2e9c20266541a3a", ownerUserId: "third-party-owner", status: "RIGHTS_REVIEW" };
+    assert.equal(canUploadTitleAsset(superAdmin(), target), true);
+    assert.equal(canUploadTitleAsset(admin(), target), false);
+    assert.equal(canUploadTitleAsset(qc, target), false);
+    assert.equal(canUploadTitleAsset(creator(), target), false);
+    assert.equal(canUploadTitleAsset(superAdmin(), { ...target, id: "another-title" }), false);
+    assert.equal(canUploadTitleAsset(superAdmin(), { ...target, status: "LICENSED" }), false);
+    assert.equal(canUploadTitleAsset(actor("unverified", "independent_creator", "super_admin", false), target), false);
+  });
+
+  it("keeps owner upload stages but requires Admin approval for the full submission handoff", () => {
+    const owned = { id: "owned-title", ownerUserId: creator().userId, status: "DRAFT" };
+    assert.equal(canUploadTitleAsset(creator(), owned), true);
+    assert.equal(canUploadTitleAsset(creator(), { ...owned, status: "UPLOADING" }), true);
+    assert.equal(canUploadTitleAsset(creator(), { ...owned, status: "PREPARING" }), true);
+    assert.equal(canUploadTitleAsset(creator(), { ...owned, status: "QC_REVIEW" }), false);
+    assert.equal(permissionForTransition("PREPARING", "QC_REVIEW"), "title.accept_submission");
+    assert.equal(hasPermission(creator(), "title.accept_submission"), false);
+    assert.equal(hasPermission(admin(), "title.accept_submission"), true);
   });
 
   it("super admin can create canonical Bridge titles and use explicit internal upload powers", () => {
