@@ -231,9 +231,10 @@ export const listLicensePackages = createServerFn({ method: "GET" })
       id: string; title_id: string; name: string; language_right_ids: unknown; territories: unknown;
       media: unknown; window_start: string | Date | null; window_end: string | Date | null;
       exclusivity: string; price_paise: number; status: string; delivery_status: string;
+      buyer_user_id: string | null;
     }>`
       select id, title_id, name, language_right_ids, territories, media, window_start, window_end,
-             exclusivity, price_paise, status, delivery_status
+             exclusivity, price_paise, status, delivery_status, buyer_user_id
       from bridge_license_packages
       where title_id = ${data.titleId}
       order by created_at desc
@@ -253,6 +254,11 @@ export const listLicensePackages = createServerFn({ method: "GET" })
       windowEnd: r.window_end ? String(r.window_end) : null,
       exclusivity: r.exclusivity, pricePaise: Number(r.price_paise ?? 0),
       status: r.status, deliveryStatus: r.delivery_status,
+      // Do not expose the buyer identity; return only this caller's checkout capability.
+      canCheckout: actor.accountType === "buyer" && (
+        (r.status === "READY" && r.buyer_user_id === null) ||
+        (r.status === "IN_NEGOTIATION" && r.buyer_user_id === actor.userId)
+      ),
     })) };
   });
 
