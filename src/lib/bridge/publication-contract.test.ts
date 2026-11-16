@@ -18,6 +18,8 @@ function harness(
     curation_status: "APPROVED",
     delivery_status: "READY",
   },
+  legalReviewerRole = "legal_reviewer",
+  legalReviewerUserId = "independent-reviewer",
 ) {
   const writes: { query: string; values: unknown[] }[] = [];
   const title = {
@@ -37,7 +39,14 @@ function harness(
         { evidence: [{ commercialTerms: { rightsOwnerSharePct: 80, distributorSharePct: 20 } }] },
       ];
     if (query.includes("from bridge_rights_grants")) return grants;
-    if (query.includes("as qc_ok")) return [{ qc_ok: true, legal_ok: true }];
+    if (query.includes("as qc_ok")) {
+      return [{
+        qc_ok: true,
+        legal_ok:
+          legalReviewerRole === "legal_reviewer" &&
+          legalReviewerUserId !== values[values.length - 1],
+      }];
+    }
     if (query.includes("from bridge_title_gate_certifications")) return [gates];
     if (query.includes("select id from bridge_titles")) return [title];
     if (query.includes("select id from loop_titles"))
@@ -166,4 +175,17 @@ test("publication readiness GET performs no database writes", async () => {
     0,
     "read-only readiness inspection must not update publication or Loop title rows",
   );
+});
+
+
+test("publication requires an independent verified Legal Reviewer", async () => {
+  const scenarios = [
+    { role: "super_admin", reviewer: "independent-reviewer" },
+    { role: "legal_reviewer", reviewer: "operator" },
+  ];
+  for (const scenario of scenarios) {
+    const h = harness([grant], true, false, undefined, scenario.role, scenario.reviewer);
+    await assert.rejects(h.authorize({ context, data }), /Distribution Authorization Blocked/);
+    assert.equal(h.writes.length, 0);
+  }
 });
