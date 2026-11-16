@@ -11,37 +11,20 @@ const emptyDraft = {
   ditSessionCount: 0,
 };
 
-test("an empty DRAFT title is the only deletion-eligible state", () => {
-  assert.equal(getTitleDeletionBlockReason(emptyDraft), null);
+test("even an empty DRAFT remains protected while deletion is disabled", () => {
+  assert.match(getTitleDeletionBlockReason(emptyDraft), /deletion is disabled/);
 });
 
-test("UPLOADING titles are protected", () => {
-  assert.match(
-    getTitleDeletionBlockReason({ ...emptyDraft, status: "UPLOADING" }) ?? "",
-    /Only DRAFT titles can be deleted/,
-  );
-});
-
-test("PREPARING titles are protected", () => {
-  assert.match(
-    getTitleDeletionBlockReason({ ...emptyDraft, status: "PREPARING" }) ?? "",
-    /Only DRAFT titles can be deleted/,
-  );
-});
-
-test("poster and master object pointers block deletion", () => {
-  assert.match(
-    getTitleDeletionBlockReason({ ...emptyDraft, hasPosterKey: true }) ?? "",
-    /poster or master is registered/,
-  );
-  assert.match(
-    getTitleDeletionBlockReason({ ...emptyDraft, hasMasterKey: true }) ?? "",
-    /poster or master is registered/,
-  );
-});
-
-test("registered assets, asset versions, and DIT sessions block deletion", () => {
-  assert.match(getTitleDeletionBlockReason({ ...emptyDraft, assetCount: 1 }) ?? "", /Registered title assets exist/);
-  assert.match(getTitleDeletionBlockReason({ ...emptyDraft, assetVersionCount: 1 }) ?? "", /Asset versions exist/);
-  assert.match(getTitleDeletionBlockReason({ ...emptyDraft, ditSessionCount: 1 }) ?? "", /DIT ingest session exists/);
+test("UPLOADING, PREPARING, and media-bearing titles remain protected", () => {
+  for (const state of [
+    { ...emptyDraft, status: "UPLOADING" },
+    { ...emptyDraft, status: "PREPARING" },
+    { ...emptyDraft, hasPosterKey: true },
+    { ...emptyDraft, hasMasterKey: true },
+    { ...emptyDraft, assetCount: 1 },
+    { ...emptyDraft, assetVersionCount: 1 },
+    { ...emptyDraft, ditSessionCount: 1 },
+  ]) {
+    assert.match(getTitleDeletionBlockReason(state), /deletion is disabled/);
+  }
 });
