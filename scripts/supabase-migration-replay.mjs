@@ -27,6 +27,29 @@ if (!DATABASE_URL) {
   throw new Error("SUPABASE_REPLAY_DATABASE_URL is required");
 }
 
+// The replay runner must never be able to connect to a hosted database.
+// Limit it to the standard local Supabase Postgres endpoint only.
+let replayUrl;
+try {
+  replayUrl = new URL(DATABASE_URL);
+} catch {
+  throw new Error("SUPABASE_REPLAY_DATABASE_URL must be a valid local PostgreSQL URL");
+}
+const localReplayHosts = new Set(["localhost", "127.0.0.1", "[::1]"]);
+if (
+  !["postgres:", "postgresql:"].includes(replayUrl.protocol) ||
+  !localReplayHosts.has(replayUrl.hostname) ||
+  replayUrl.port !== "54322" ||
+  replayUrl.pathname !== "/postgres" ||
+  decodeURIComponent(replayUrl.username) !== "postgres" ||
+  replayUrl.search !== "" ||
+  replayUrl.hash !== ""
+) {
+  throw new Error(
+    "Migration replay is restricted to local Supabase Postgres at localhost:54322/postgres; remote databases are forbidden",
+  );
+}
+
 const names = (await readdir(MIGRATIONS_DIR))
   .filter((name) => /^\d{14}_[a-z0-9_]+\.sql$/.test(name))
   .sort((a, b) => a.localeCompare(b));
