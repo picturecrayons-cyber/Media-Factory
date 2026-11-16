@@ -1,4 +1,5 @@
 -- Preserve unresolved legacy source references without inventing a title/order target.
+-- Safe for both a fresh table and the existing Production-shaped table.
 -- Browser roles receive no access; server-side service_role only.
 create table if not exists public.streamvista_legacy_links (
   source_table text not null,
@@ -39,16 +40,19 @@ begin
     alter table public.streamvista_legacy_links add constraint streamvista_legacy_links_resolution_status_check
       check (resolution_status = any (array['resolved','unresolved','rejected']::text[]));
   end if;
-  if not exists (select 1 from pg_constraint where conname='streamvista_link_target'
-                 and conrelid='public.streamvista_legacy_links'::regclass) then
-    alter table public.streamvista_legacy_links add constraint streamvista_link_target
-      check (
-        (resolution_status = 'resolved' and (order_id is not null or bridge_title_id is not null))
-        or (resolution_status = 'unresolved' and review_status = 'pending' and order_id is null and bridge_title_id is null)
-        or (resolution_status = 'rejected' and review_status = 'rejected')
-      );
-  end if;
 end $$;
+
+-- Replace the old target constraint, which required a target for every row.
+alter table public.streamvista_legacy_links
+  drop constraint if exists streamvista_link_target;
+
+alter table public.streamvista_legacy_links
+  add constraint streamvista_link_target
+  check (
+    (resolution_status = 'resolved' and (order_id is not null or bridge_title_id is not null))
+    or (resolution_status = 'unresolved' and review_status = 'pending' and order_id is null and bridge_title_id is null)
+    or (resolution_status = 'rejected' and review_status = 'rejected')
+  );
 
 alter table public.streamvista_legacy_links enable row level security;
 revoke all on table public.streamvista_legacy_links from public, anon, authenticated;
