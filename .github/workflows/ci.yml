@@ -61,3 +61,51 @@ jobs:
       - run: npm run test:workflow
         env:
           BRIDGE_WORKFLOW_TEST_DATABASE_URL: postgres://workflow_test:workflow_test@127.0.0.1:5432/bridge_workflow_test
+
+  supabase-migration-replay:
+    needs: gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+
+      - run: npm ci
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      # Supabase CLI automatically applies files in supabase/migrations during
+      # start. Hide the recovered ledger temporarily so the custom replay can
+      # inject its verified local-only fixtures before applying each migration.
+      - name: Quarantine recovered migrations before starting local Supabase
+        run: |
+          test -d supabase/migrations
+          test ! -e "$RUNNER_TEMP/bridge-production-ledger-migrations"
+          mv supabase/migrations "$RUNNER_TEMP/bridge-production-ledger-migrations"
+          mkdir -p supabase/migrations
+
+      - name: Start an isolated local Supabase stack without auto-applying the ledger
+        run: supabase start -x studio,imgproxy,edge-runtime,logflare,vector
+
+      - name: Restore recovered migrations for controlled replay
+        if: always()
+        run: |
+          if [ -d "$RUNNER_TEMP/bridge-production-ledger-migrations" ]; then
+            rm -rf supabase/migrations
+            mv "$RUNNER_TEMP/bridge-production-ledger-migrations" supabase/migrations
+          fi
+
+      - name: Replay all recovered Production-ledger migrations
+        run: node scripts/supabase-migration-replay.mjs
+        env:
+          SUPABASE_REPLAY_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:55432/postgres
+
+      - name: Stop isolated Supabase stack
+        if: always()
+        run: supabase stop --no-backup
