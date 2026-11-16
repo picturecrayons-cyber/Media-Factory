@@ -1,36 +1,26 @@
 import type { Sql } from "@/lib/db";
 import type { BridgeTitle } from "./types";
+import type { Actor } from "./rbac";
 import { canMutateTitle } from "./rbac";
-
-export const ARCHIVE_BLOCKED_STATUSES = [
-  "UPLOADING", "PREPARING", "QC_REVIEW", "RIGHTS_REVIEW",
-  "LICENSING_READY", "LIVE_FOR_BUYERS", "IN_NEGOTIATION",
-  "LICENSED", "DELIVERED",
-] as const;
 
 export function assertDraftCanBeArchived(input: {
   status: string;
   hasAssets: boolean;
   hasMaster: boolean;
   hasPoster: boolean;
-  hasActiveDitSession: boolean;
-  hasRightsRecords: boolean;
-  hasQcRecords: boolean;
-  hasLegalRecords: boolean;
-  hasFinancialOrCommercialRecords: boolean;
+  hasDitSession: boolean;
+  hasRights: boolean;
+  hasReview: boolean;
+  hasCommercial: boolean;
 }) {
   if (input.status !== "DRAFT") throw new Error("Only untouched DRAFT titles can be archived.");
-  if (
-    input.hasAssets || input.hasMaster || input.hasPoster ||
-    input.hasActiveDitSession || input.hasRightsRecords ||
-    input.hasQcRecords || input.hasLegalRecords ||
-    input.hasFinancialOrCommercialRecords
-  ) {
-    throw new Error("This draft has linked assets, ingest, review, rights or commercial records and cannot be archived.");
+  if (input.hasAssets || input.hasMaster || input.hasPoster || input.hasDitSession ||
+      input.hasRights || input.hasReview || input.hasCommercial) {
+    throw new Error("This draft has linked media, ingest, review, rights or commercial records and cannot be archived.");
   }
 }
 
-async function getArchiveDependencies(tx: Sql, titleId: string) {
+async function hasDependency(tx: Sql, titleId: string): Promise<boolean> {
   const rows = await tx<{ blocked: boolean }>`
     select
       exists(select 1 from bridge_assets where title_id = ${titleId}) or
@@ -48,14 +38,18 @@ async function getArchiveDependencies(tx: Sql, titleId: string) {
       exists(select 1 from bridge_payments where title_id = ${titleId}) or
       exists(select 1 from bridge_entitlements where title_id = ${titleId}) or
       exists(select 1 from bridge_package_entitlements where title_id = ${titleId}) or
+      exists(select 1 from bridge_license_packages where title_id = ${titleId}) or
       exists(select 1 from bridge_loop_publications where bridge_title_id = ${titleId}) or
       exists(select 1 from bridge_service_orders where title_id = ${titleId}) or
       exists(select 1 from bridge_service_quotes where title_id = ${titleId}) or
+      exists(select 1 from bridge_service_settlement_rules where title_id = ${titleId}) or
+      exists(select 1 from bridge_title_settlements where title_id = ${titleId}) or
       exists(select 1 from bridge_destination_packages where title_id = ${titleId}) or
-      exists(select 1 from bridge_title_merge_aliases where canonical_title_id = ${titleId} or retiring_title_id = ${titleId}) or
-      exists(select 1 from bridge_title_merge_audits where canonical_title_id = ${titleId} or retiring_title_id = ${titleId}) or
       exists(select 1 from bridge_delivery_jobs where title_id = ${titleId}) or
       exists(select 1 from bridge_desk_notes where title_id = ${titleId}) or
+      exists(select 1 from bridge_buyer_title_access where title_id = ${titleId}) or
+      exists(select 1 from bridge_title_merge_aliases where canonical_title_id = ${titleId} or retiring_title_id = ${titleId}) or
+      exists(select 1 from bridge_title_merge_audits where canonical_title_id = ${titleId} or retiring_title_id = ${titleId}) or
       exists(select 1 from loop_titles where bridge_title_id = ${titleId}) or
       exists(select 1 from streamvista_legacy_links where bridge_title_id = ${titleId}) or
       exists(select 1 from streamvista_orders where bridge_title_id = ${titleId}) as blocked
@@ -63,42 +57,41 @@ async function getArchiveDependencies(tx: Sql, titleId: string) {
   return Boolean(rows[0]?.blocked);
 }
 
-function assertOwnerOrStudioMember(actor: Parameters<typeof canMutateTitle>[0], title: BridgeTitle) {
-  if (!canMutateTitle(actor, title, "title.update_own", "title.license")) {
-    throw new Error("You do not have permission to manage this title.");
+function assertSelfServiceOwner(actor: Actor, title: BridgeTitle) {
+  if (actor.internalRole ||
+      !canMutateTitle(actor, title, "title.update_own", "title.license")) {
+    throw new Error("Only the verified owner or an active member of the owning Studio can manage this draft.");
   }
 }
 
-export async function archiveDraftTitle(
-  tx: Sql,
-  actor: Parameters<typeof canMutateTitle>[0],
-  title: BridgeTitle,
-) {
-  assertOwnerOrStudioMember(actor, title);
-  const locked = await tx<{ status: string; archived_at: string | null; poster_key: string | null; master_key: string | null }>`
-    select status, archived_at, poster_key, master_key
+export async function archiveDraftTitle(tx: Sql, actor: Actor, title: BridgeTitle) {
+  assertSelfServiceOwner(actor, title);
+  const locked = await tx<{
+    id: string; status: string; archived_at: string | null;
+    poster_key: string | null; master_key: string | null;
+  }>`
+    select id, status, archived_at, poster_key, master_key
     from bridge_titles where id = ${title.id} for update
   `;
   const row = locked[0];
   if (!row || row.status !== "DRAFT" || row.archived_at) {
     throw new Error("Title changed. Refresh and try again.");
   }
-  const hasDeps = await getArchiveDependencies(tx, title.id);
+  const blocked = await hasDependency(tx, title.id);
   assertDraftCanBeArchived({
     status: row.status,
-    hasAssets: hasDeps,
+    hasAssets: blocked,
     hasMaster: Boolean(row.master_key),
     hasPoster: Boolean(row.poster_key),
-    hasActiveDitSession: hasDeps,
-    hasRightsRecords: hasDeps,
-    hasQcRecords: hasDeps,
-    hasLegalRecords: hasDeps,
-    hasFinancialOrCommercialRecords: hasDeps,
+    hasDitSession: blocked,
+    hasRights: blocked,
+    hasReview: blocked,
+    hasCommercial: blocked,
   });
   const updated = await tx<{ id: string }>`
     update bridge_titles
-    set archived_at = now(), archived_by = ${actor.userId}, archive_reason = 'OWNER_ARCHIVE',
-        updated_at = now()
+    set archived_at = now(), archived_by = ${actor.userId},
+        archive_reason = 'OWNER_ARCHIVE', updated_at = now()
     where id = ${title.id} and status = 'DRAFT' and archived_at is null
     returning id
   `;
@@ -106,17 +99,12 @@ export async function archiveDraftTitle(
   return updated[0].id;
 }
 
-export async function restoreArchivedDraft(
-  tx: Sql,
-  actor: Parameters<typeof canMutateTitle>[0],
-  title: BridgeTitle,
-) {
-  assertOwnerOrStudioMember(actor, title);
-  const rows = await tx<{ id: string; status: string; archived_at: string | null }>`
+export async function restoreArchivedDraft(tx: Sql, actor: Actor, title: BridgeTitle) {
+  assertSelfServiceOwner(actor, title);
+  const locked = await tx<{ id: string; status: string; archived_at: string | null }>`
     select id, status, archived_at from bridge_titles where id = ${title.id} for update
   `;
-  const row = rows[0];
-  if (!row || row.status !== "DRAFT" || !row.archived_at) {
+  if (!locked[0] || locked[0].status !== "DRAFT" || !locked[0].archived_at) {
     throw new Error("Archived draft is not available to restore.");
   }
   const updated = await tx<{ id: string }>`
