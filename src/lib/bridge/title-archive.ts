@@ -1,23 +1,9 @@
 import type { Sql } from "@/lib/db";
+import { assertDraftCanBeArchived } from "./title-archive-policy";
 import type { BridgeTitle } from "./types";
 import type { Actor } from "./rbac";
+import { canMutateTitle } from "./rbac";
 
-export function assertDraftCanBeArchived(input: {
-  status: string;
-  hasAssets: boolean;
-  hasMaster: boolean;
-  hasPoster: boolean;
-  hasDitSession: boolean;
-  hasRights: boolean;
-  hasReview: boolean;
-  hasCommercial: boolean;
-}) {
-  if (input.status !== "DRAFT") throw new Error("Only DRAFT titles can be archived.");
-  if (input.hasAssets || input.hasMaster || input.hasPoster || input.hasDitSession ||
-      input.hasRights || input.hasReview || input.hasCommercial) {
-    throw new Error("This draft has linked media, ingest, review, rights or commercial records and cannot be archived.");
-  }
-}
 
 async function hasDependency(tx: Sql, titleId: string): Promise<boolean> {
   // These names and FK columns were verified against the live Crayons Bridge
@@ -70,7 +56,8 @@ function assertActorMayManage(actor: Actor, title: BridgeTitle) {
   // owner_organization_id=NULL. Allow only the exact verified owner account,
   // never other members of that Studio, to manage those legacy rows.
   const exactLegacyOwner = title.ownerUserId === actor.userId;
-  if (!["independent_creator", "studio"].includes(actor.accountType) || !exactLegacyOwner) {
+  if (!["independent_creator", "studio"].includes(actor.accountType) ||
+      (!exactLegacyOwner && !canMutateTitle(actor, title, "title.update_own", "title.license"))) {
     throw new Error("Only the verified owner or an active member of the owning Studio can manage this draft.");
   }
 }
