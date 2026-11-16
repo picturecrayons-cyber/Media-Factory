@@ -67,24 +67,23 @@ export function isHostingerTestDeliveryPayload(
   const payload = asRecord(value);
   if (!payload || payload.event !== "message.received") return false;
 
-  // The Test action's no-message envelope is deliberately narrow. Reject
-  // extra top-level delivery metadata instead of silently dropping a partial
-  // real message. Hostinger's known envelope contains only event + mailbox,
-  // with an optional explicit null message.
+  // Hostinger's webhook Test action sends a synthetic no-message event. Accept
+  // only the exact event-only envelope, or that envelope with a matching
+  // mailbox and/or explicit null message. Reject any other top-level fields.
   const allowedKeys = new Set(["event", "mailbox", "message"]);
   if (Object.keys(payload).some((key) => !allowedKeys.has(key))) return false;
-  if (!Object.prototype.hasOwnProperty.call(payload, "mailbox")) return false;
   if (payload.message !== undefined && payload.message !== null) return false;
-  if (!expectedMailbox.trim()) throw new Error("Missing mailbox configuration");
 
-  const rawMailbox = payload.mailbox;
-  const mailboxValue = typeof rawMailbox === "string"
-    ? rawMailbox
-    : asRecord(rawMailbox)?.address;
-
-  if (typeof mailboxValue !== "string" || !mailboxValue.trim()) return false;
-  if (mailboxValue.trim().toLowerCase() !== expectedMailbox.trim().toLowerCase()) {
-    throw new Error("Unexpected mailbox");
+  if (Object.prototype.hasOwnProperty.call(payload, "mailbox")) {
+    if (!expectedMailbox.trim()) throw new Error("Missing mailbox configuration");
+    const rawMailbox = payload.mailbox;
+    const mailboxValue = typeof rawMailbox === "string"
+      ? rawMailbox
+      : asRecord(rawMailbox)?.address;
+    if (typeof mailboxValue !== "string" || !mailboxValue.trim()) return false;
+    if (mailboxValue.trim().toLowerCase() !== expectedMailbox.trim().toLowerCase()) {
+      throw new Error("Unexpected mailbox");
+    }
   }
 
   return true;

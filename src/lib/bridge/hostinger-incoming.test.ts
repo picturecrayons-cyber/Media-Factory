@@ -43,9 +43,10 @@ describe("Hostinger incoming mail webhook", () => {
       message: null,
     }, mailbox), true);
 
+    // Hostinger's synthetic Test request can be the exact event-only envelope.
     assert.equal(isHostingerTestDeliveryPayload({
       event: "message.received",
-    }, mailbox), false);
+    }, mailbox), true);
 
     assert.equal(isHostingerTestDeliveryPayload({
       event: "message.received",
