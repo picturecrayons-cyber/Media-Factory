@@ -250,7 +250,26 @@ function BuyerBody({ userId }: { userId: string }) {
   }
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-8 pb-10">
+      <section className="relative isolate overflow-hidden rounded-[1.75rem] border border-cyan-300/15 bg-[#08131f] px-6 py-8 text-white shadow-[0_24px_80px_-36px_rgba(6,182,212,0.45)] sm:px-9 sm:py-10">
+        <div aria-hidden="true" className="pointer-events-none absolute -right-20 -top-24 h-80 w-80 rounded-full bg-cyan-400/15 blur-3xl" />
+        <div aria-hidden="true" className="pointer-events-none absolute -bottom-36 left-1/3 h-72 w-72 rounded-full bg-blue-500/15 blur-3xl" />
+        <div className="relative max-w-3xl">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-cyan-200">Crayons Bridge · Private licensing marketplace</p>
+          <h2 className="mt-4 max-w-2xl font-display text-3xl font-semibold tracking-tight sm:text-5xl">Stories worth bringing to your audience.</h2>
+          <p className="mt-4 max-w-xl text-sm leading-6 text-white/70 sm:text-base">Discover curated film and series opportunities, review approved listing details, and manage captured licenses in one secure workspace.</p>
+          <div className="mt-7 flex flex-wrap items-center gap-3">
+            <a href="#buyer-catalogue" className="inline-flex items-center rounded-full bg-cyan-300 px-5 py-2.5 text-sm font-semibold text-[#07131e] transition hover:bg-cyan-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-200">Explore catalogue <span className="ml-2" aria-hidden="true">↘</span></a>
+            <span className="text-xs text-white/55">Only Bridge-authorized listings are shown</span>
+          </div>
+        </div>
+        <div className="relative mt-8 grid max-w-2xl grid-cols-3 gap-3 border-t border-white/15 pt-5 sm:mt-10">
+          <HeroStat value={String(titles.length)} label="Live listings" />
+          <HeroStat value={String(visible.length)} label="Search matches" />
+          <HeroStat value={String(licensed.length)} label="Your licenses" />
+        </div>
+      </section>
+      <div id="buyer-catalogue" className="scroll-mt-6 space-y-5">
       <div className="grid gap-3 sm:grid-cols-3">
         <Stat label="Discover" value={String(titles.length)} note="Live for buyers" />
         <Stat label="Listing" value={String(visible.length)} note="Matching this search" />
@@ -258,14 +277,14 @@ function BuyerBody({ userId }: { userId: string }) {
       </div>
       <div className="flex flex-wrap gap-2">
         {(["discover", "listing", "licenses"] as const).map((id) => (
-          <button key={id} type="button" onClick={() => setTab(id)} className={`rounded-sm border px-3 py-1.5 text-sm capitalize ${tab === id ? "border-accent text-accent" : "border-line text-muted"}`}>
+          <button key={id} type="button" onClick={() => setTab(id)} className={`rounded-full border px-4 py-2 text-sm capitalize transition ${tab === id ? "border-cyan-300/50 bg-cyan-300/10 text-cyan-200 shadow-sm" : "border-line text-muted hover:border-accent/50 hover:text-fg"}`}>
             {id}
           </button>
         ))}
       </div>
       {tab !== "licenses" && (
         <div className="flex flex-wrap items-center gap-3">
-          <input value={query} onChange={(e) => { setQuery(e.target.value); setGalleryPage(0); }} placeholder="Search title or language" className="w-full max-w-md rounded-sm border border-line bg-transparent px-3 py-2 text-sm" />
+          <label className="flex w-full max-w-xl items-center gap-3 rounded-2xl border border-line bg-panel px-4 py-3 shadow-sm focus-within:border-accent/60"><span aria-hidden="true" className="text-lg text-muted">⌕</span><span className="sr-only">Search title or language</span><input value={query} onChange={(e) => { setQuery(e.target.value); setGalleryPage(0); }} placeholder="Search titles, languages…" className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted" /></label>
           <div className="inline-flex rounded-sm border border-line p-1" role="group" aria-label="Catalogue view">
             <button type="button" onClick={() => setView("gallery")} aria-pressed={view === "gallery"} className={`rounded-sm px-3 py-1.5 text-sm ${view === "gallery" ? "bg-accent text-bg" : "text-muted hover:text-fg"}`}>
               Gallery
@@ -308,6 +327,7 @@ function BuyerBody({ userId }: { userId: string }) {
       ) : (
         <TitleList titles={visible} entitled={entitled} order={order} empty="No titles match this search." />
       )}
+      </div>
       {tab !== "licenses" && postersQ.isError && titles.length > 0 ? (
         <p role="status" className="text-xs text-muted">Poster artwork is temporarily unavailable. You can still open title details.</p>
       ) : null}
@@ -324,9 +344,18 @@ function formatLicensingFeePaise(amountPaise: number): string {
   }).format(amountPaise / 100);
 }
 
+function HeroStat({ value, label }: { value: string; label: string }) {
+  return (
+    <div className="min-w-0">
+      <div className="text-2xl font-semibold tracking-tight text-white sm:text-3xl">{value}</div>
+      <div className="mt-1 text-[10px] font-medium uppercase tracking-[0.16em] text-cyan-100/60 sm:text-xs">{label}</div>
+    </div>
+  );
+}
+
 function Stat({ label, value, note }: { label: string; value: string; note: string }) {
   return (
-    <div className="rounded-sm border border-line px-4 py-3">
+    <div className="rounded-2xl border border-line/80 bg-panel/70 px-5 py-4 shadow-sm transition hover:border-accent/40">
       <div className="text-xs uppercase tracking-widest text-muted">{label}</div>
       <div className="mt-1 text-2xl font-semibold">{value}</div>
       <div className="text-xs text-muted">{note}</div>
@@ -347,7 +376,7 @@ type BuyerTitleCard = {
 
 function BuyerEmptyState() {
   return (
-    <section className="rounded-sm border border-dashed border-line bg-surface px-6 py-12 text-center sm:px-10">
+    <section className="rounded-3xl border border-dashed border-cyan-300/25 bg-gradient-to-br from-cyan-400/[0.06] via-surface to-blue-500/[0.05] px-6 py-14 text-center shadow-inner sm:px-10">
       <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">Buyer catalogue</p>
       <h2 className="mt-3 font-display text-2xl font-semibold">No titles are live for licensing yet.</h2>
       <p className="mx-auto mt-3 max-w-2xl text-sm leading-relaxed text-muted">
@@ -381,7 +410,7 @@ function TitleGallery({
           title.runtimeMinutes ? `${title.runtimeMinutes} min` : null,
         ].filter(Boolean).join(" · ");
         return (
-          <article key={title.id} className="overflow-hidden rounded-sm border border-line bg-surface">
+          <article key={title.id} className="group overflow-hidden rounded-2xl border border-line/80 bg-surface shadow-sm transition duration-300 hover:-translate-y-1 hover:border-accent/50 hover:shadow-xl">
             <div className="relative aspect-[2/3] overflow-hidden bg-gradient-to-br from-slate-950 via-slate-800 to-slate-950">
               <BuyerPosterImage blob={posterBlob} title={title.name} />
             </div>
