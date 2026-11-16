@@ -20,13 +20,14 @@ function harness(
   },
   legalReviewerRole = "legal_reviewer",
   legalReviewerUserId = "independent-reviewer",
+  titleStatus = "LICENSED",
 ) {
   const writes: { query: string; values: unknown[] }[] = [];
   const title = {
     id: "title-1",
     slug: "film",
     name: "Film",
-    status: "LICENSED",
+    status: titleStatus,
     language: "Malayalam",
     master_key: "sealed/master",
     poster_key: "sealed/poster",
@@ -188,4 +189,11 @@ test("publication requires an independent verified Legal Reviewer", async () => 
     await assert.rejects(h.authorize({ context, data }), /Distribution Authorization Blocked/);
     assert.equal(h.writes.length, 0);
   }
+});
+
+
+test("publication is blocked while title is only in negotiation", async () => {
+  const h = harness([grant], true, false, undefined, "legal_reviewer", "independent-reviewer", "IN_NEGOTIATION");
+  await assert.rejects(h.authorize({ context, data }), /Distribution Authorization Blocked/);
+  assert.equal(h.writes.length, 0);
 });
