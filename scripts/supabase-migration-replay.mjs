@@ -46,13 +46,15 @@ const manifestPath = resolve(
 );
 const manifest = await readFile(manifestPath, "utf8");
 const manifestRows = new Map();
-for (const line of manifest.split(/\\r?\\n/)) {
+for (const line of manifest.split(String.fromCharCode(10))) {
   const cells = line.split("|").map((cell) => cell.trim());
   if (cells.length !== 6) continue;
   const [, version, migrationName, byteText, hashText] = cells;
-  if (!/^\\d{14}$/.test(version)) continue;
-  const sha256 = hashText.replace(/^`|`$/g, "");
-  if (!/^[a-f0-9]{64}$/.test(sha256)) {
+  if (version.length !== 14 || [...version].some((char) => char < "0" || char > "9")) continue;
+  const sha256 = hashText.startsWith("`") && hashText.endsWith("`")
+    ? hashText.slice(1, -1)
+    : hashText;
+  if (sha256.length !== 64 || [...sha256].some((char) => !"0123456789abcdef".includes(char))) {
     throw new Error(`Invalid SHA-256 entry for ${version}`);
   }
   const bytes = Number(byteText);
