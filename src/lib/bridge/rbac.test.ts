@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { assertPermission, canAccessAdminWorkstations, canAccessDashboard, canAccessTitleWorkspace, canGrantInternalRole, canMutateTitle, canOperateOnTitle, canReadTitle, hasPermission, hasStaffPermission, permissionForTransition, workspaceHome } from "./rbac.ts";
+import { assertPermission, canAccessAdminWorkstations, canAccessDashboard, canAccessTitleWorkspace, canGrantInternalRole, canMutateTitle, canOperateOnTitle, canReadTitle, canReplaceTitleAssets, hasPermission, hasStaffPermission, permissionForTransition, workspaceHome } from "./rbac.ts";
 import type { Actor } from "./rbac.ts";
 
 const actor = (
@@ -99,6 +99,17 @@ describe("PRD authorization matrix", () => {
     assert.equal(hasPermission(a, "asset.sign_upload"), true);
     assert.equal(hasPermission(a, "users.invite_internal"), true);
     assert.equal(hasPermission(a, "title.license"), true);
+  });
+
+  it("only verified Super Admin can replace assets after QC or later lifecycle stages", () => {
+    assert.equal(canReplaceTitleAssets(superAdmin()), true);
+    assert.equal(canReplaceTitleAssets(actor("unverified-super", "independent_creator", "super_admin", false)), false);
+    for (const staff of [admin(), viewer(), qc, legal, finance]) {
+      assert.equal(canReplaceTitleAssets(staff), false);
+    }
+    for (const owner of [creator(), studio(), buyer()]) {
+      assert.equal(canReplaceTitleAssets(owner), false);
+    }
   });
 
   it("viewer, reviewer and finance roles cannot inherit creator mutation powers from account type", () => {
