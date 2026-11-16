@@ -618,6 +618,7 @@ function FilesPanel({
         titleId,
         kind,
         assetId: signed.assetId,
+        storageScope: sessionScope,
         uploadId: started.uploadId,
         partBaseUrl: started.partBaseUrl,
         fileName: file.name,
@@ -855,7 +856,7 @@ function FilesPanel({
                 const session = activeMultipart.current;
                 activeMultipart.current = null;
                 if (session) {
-                  clearUploadSession(session.titleId, session.kind);
+                  clearUploadSession(session.titleId, session.kind, session.storageScope);
                   void abortAssetMultipart({ data: { assetId: session.assetId, partBaseUrl: session.partBaseUrl } }).catch(() => undefined);
                 }
                 setProgress(null);
