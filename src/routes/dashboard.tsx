@@ -71,7 +71,6 @@ function DashboardBody() {
   const titlesQ = useQuery({
     queryKey: ["bridge-titles"],
     queryFn: () => listTitles(),
-    enabled: dashboardQ.isSuccess,
     retry: 1,
   });
 
