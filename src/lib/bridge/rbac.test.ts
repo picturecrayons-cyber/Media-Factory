@@ -282,7 +282,7 @@ it("grants verified Super Admin all existing QC, rights, licensing, publishing a
   ] as const;
   for (const permission of permissions) {
     assert.equal(hasPermission(superAdmin(), permission), true, `Super Admin missing ${permission}`);
-    assert.equal(hasPermission(admin(), permission), false, `Admin unexpectedly received ${permission}`);
+    assert.equal(hasPermission(admin(), permission), permission === "title.license" || permission === "title.negotiate" || permission === "title.deliver", `Admin permission mismatch for ${permission}`);
     assert.equal(hasPermission(qc, permission), permission === "title.qc_review");
     assert.equal(hasPermission(legal, permission), permission === "title.rights_review");
   }
