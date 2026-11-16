@@ -50,7 +50,7 @@ function Studio() {
 function StudioWorkspace({ actor }: { actor: BridgeActor }) {
   const [activeTab, setActiveTab] = useState<StudioTab>("overview");
   const titlesQuery = useQuery({
-    queryKey: ["bridge-titles"],
+    queryKey: ["bridge-titles", actor.userId, actor.organizationId ?? null, actor.accountType, actor.internalRole ?? null],
     queryFn: () => listTitles(),
   });
   const titles = titlesQuery.data?.titles ?? [];
@@ -103,13 +103,7 @@ function StudioWorkspace({ actor }: { actor: BridgeActor }) {
             </Link>
           </div>
         </div>
-        <div className="mt-8 grid gap-3 border-t border-white/10 pt-5 sm:grid-cols-2 xl:grid-cols-4">
-          <HeroMetric icon={Film} label="Studio titles" value={titlesQuery.isError ? "—" : String(counts.total)} />
-          <HeroMetric icon={HardDrive} label="Uploading" value={titlesQuery.isError ? "—" : String(counts.uploading)} />
-          <HeroMetric icon={ShieldCheck} label="In review" value={titlesQuery.isError ? "—" : String(counts.review)} />
-          <HeroMetric icon={CheckCircle2} label="At release stage" value={titlesQuery.isError ? "—" : String(counts.cleared)} />
-        </div>
-        {titlesQuery.isError ? (
+          {titlesQuery.isError ? (
           <p className="mt-4 text-xs text-amber-200" role="status">Live title totals are unavailable. Open Titles to retry; no estimates are shown.</p>
         ) : null}
       </header>
@@ -167,15 +161,6 @@ function StudioWorkspace({ actor }: { actor: BridgeActor }) {
   );
 }
 
-function HeroMetric({ icon: Icon, label, value }: { icon: typeof Film; label: string; value: string }) {
-  return (
-    <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.055] p-3.5">
-      <span className="rounded-xl bg-white/10 p-2.5 text-[#dfc48e]"><Icon className="h-5 w-5" aria-hidden="true" /></span>
-      <span><span className="block text-xs text-slate-400">{label}</span><strong className="mt-0.5 block text-xl font-semibold tabular-nums text-white">{value}</strong></span>
-    </div>
-  );
-}
-
 function OverviewPanel({
   counts,
   nextActions,
@@ -197,7 +182,6 @@ function OverviewPanel({
           <h2 className="mt-1 font-display text-2xl font-semibold">Studio overview</h2>
           <p className="mt-1 text-sm text-muted">A clear view of titles, media handover and the work that needs attention.</p>
         </div>
-        <div className="sm:min-w-[250px]"><NewSubmissionPanel /></div>
       </section>
 
       <section className="grid gap-3 lg:grid-cols-3" aria-label="Next actions">
@@ -211,32 +195,10 @@ function OverviewPanel({
         ))}
       </section>
 
-      <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div><p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-accent">Your slate</p><h3 className="mt-1 font-display text-xl font-semibold">Recent studio titles</h3></div>
-          <button type="button" onClick={() => onNavigate("productions")} className="text-sm font-semibold text-accent hover:underline">View production slate</button>
-        </div>
-        <div className="mt-4"><TitleList empty="No finished-film submissions are available for this Studio organization yet." /></div>
-      </section>
-
-      <section className="grid gap-3 lg:grid-cols-2">
-        <QuickLink icon={Clapperboard} title="Production & media" description="View film-linked production assets, storage verification and the handover desk." onClick={() => onNavigate("productions")} />
-        <QuickLink icon={Users} title="Studio team" description="View the verified organization roster and current membership roles." onClick={() => onNavigate("members")} />
-      </section>
-
-      <p className="rounded-xl border border-line bg-elevated/40 p-4 text-xs leading-5 text-muted">
-        Member visibility and title access are checked by Bridge on the server. Counts above reflect records returned to this signed-in account; missing or unavailable data is never replaced with estimates.
+      <p className="text-xs leading-5 text-muted">
+        Studio titles and member visibility are authorized by Bridge on the server. Unavailable data is never replaced with estimates.
       </p>
     </div>
-  );
-}
-
-function QuickLink({ icon: Icon, title, description, onClick }: { icon: typeof Film; title: string; description: string; onClick: () => void }) {
-  return (
-    <button type="button" onClick={onClick} className="flex items-start gap-3 rounded-2xl border border-line bg-surface p-4 text-left transition hover:border-accent hover:shadow-sm">
-      <span className="rounded-xl bg-accent-soft p-3 text-accent"><Icon className="h-5 w-5" aria-hidden="true" /></span>
-      <span><strong className="block text-sm">{title}</strong><span className="mt-1 block text-xs leading-5 text-muted">{description}</span></span>
-    </button>
   );
 }
 
@@ -260,17 +222,6 @@ function ProductionPanel({
         <h2 className="mt-1 font-display text-2xl font-semibold">Your production slate</h2>
         <p className="mt-1 max-w-2xl text-sm leading-6 text-muted">Each finished-film title is the canonical production record. Verified media assets stay linked to that title; originals remain in their existing OCI locations.</p>
       </header>
-      <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div><h3 className="font-display text-lg font-semibold">Productions & titles</h3><p className="mt-1 text-xs text-muted">Live title records returned by Bridge for this account.</p></div>
-          <button type="button" onClick={onRetry} className="rounded-full border border-line px-4 py-2 text-xs font-semibold hover:border-accent">Refresh</button>
-        </div>
-        <div className="mt-4">
-          {loading ? <p className="text-sm text-muted">Loading production slate…</p> : null}
-          {error ? <div role="alert" className="flex items-center gap-3 text-sm text-muted"><span>Production slate unavailable.</span><button type="button" onClick={onRetry} className="font-semibold text-accent underline">Retry</button></div> : null}
-          {!loading && !error ? <TitleList empty="No production titles are returned for this account yet." /> : null}
-        </div>
-      </section>
       <section className="space-y-3">
         <div><h3 className="font-display text-lg font-semibold">Production assets</h3><p className="text-sm text-muted">Verified files connected to each title.</p></div>
         {loading ? <p className="text-sm text-muted">Loading production asset register…</p> : null}
