@@ -157,3 +157,56 @@ test("title owner can confirm an upload when organization tables are absent", as
     await db.close();
   }
 });
+
+test("authorized internal confirmation can verify a title-scoped legacy asset from another uploader", async () => {
+  const db = new PGlite();
+  try {
+    await db.waitReady;
+    await db.exec("create role anon; create role authenticated;");
+    await db.exec(readFileSync(join(process.cwd(), "migrations/0004_bridge.sql"), "utf8"));
+    await db.exec(`
+      insert into bridge_titles (id,slug,name,owner_user_id,owner_account_type,status)
+      values
+        ('title-internal','internal-title','Internal title','studio-owner','studio','PREPARING'),
+        ('title-other','other-title','Other title','other-owner','independent_creator','PREPARING');
+      insert into bridge_assets (id,title_id,kind,s3_key,content_type,created_by)
+      values
+        ('asset-legacy','title-internal','master','source/legacy-master.mp4','video/mp4','legacy-uploader');
+    `);
+    const sql = { query: async <T>(query: string, params: unknown[]) => (await db.query<T>(query, params)).rows };
+    const args = {
+      assetId: "asset-legacy",
+      actorUserId: "bridge-super-admin",
+      internalActor: false,
+      titleId: "title-internal",
+      kind: "master",
+      byteSize: 240,
+      contentType: "video/mp4",
+      checksum: "etag-internal-test",
+      sourceKey: "source/legacy-master.mp4",
+      sealedKey: "source/legacy-master.mp4.verified/asset-legacy",
+    };
+    // A non-internal actor who did not create the asset cannot claim it.
+    assert.equal(await persistVerifiedAsset(sql, args), false);
+    // The server marks internalActor only after the super-admin ingest permission check.
+    assert.equal(await persistVerifiedAsset(sql, { ...args, internalActor: true }), true);
+    const state = await db.query<{ master_key: string | null; byte_size: number | null }>(`
+      select t.master_key,a.byte_size
+      from bridge_titles t join bridge_assets a on a.title_id=t.id
+      where a.id='asset-legacy'
+    `);
+    assert.deepEqual(state.rows[0], {
+      master_key: "source/legacy-master.mp4.verified/asset-legacy",
+      byte_size: 240,
+    });
+    // Internal confirmation still cannot bind an asset to a different title.
+    assert.equal(await persistVerifiedAsset(sql, {
+      ...args,
+      internalActor: true,
+      titleId: "title-other",
+      byteSize: 241,
+    }), false);
+  } finally {
+    await db.close();
+  }
+});
