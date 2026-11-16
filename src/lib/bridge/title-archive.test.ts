@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { assertDraftCanBeArchived } from "./title-archive.ts";
+import { assertDraftCanBeArchived } from "./title-archive-policy.ts";
 
 const clean = {
   status: "DRAFT", hasAssets: false, hasMaster: false, hasPoster: false,
