@@ -55,5 +55,5 @@ alter table public.streamvista_legacy_links
   );
 
 alter table public.streamvista_legacy_links enable row level security;
-revoke all on table public.streamvista_legacy_links from public, anon, authenticated;
-grant all on table public.streamvista_legacy_links to service_role;
+revoke all on table public.streamvista_legacy_links from public, anon, authenticated, service_role;
+grant select, insert, update, delete on table public.streamvista_legacy_links to service_role;
