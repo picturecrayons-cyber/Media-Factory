@@ -7,6 +7,7 @@ import { assertPermission } from "./rbac";
 import { requireVerifiedActor } from "./session";
 import { assertNotDevUser } from "./guards";
 import { writeAudit } from "./audit";
+import { assertTitleControlClear } from "./title-controls-policy";
 
 export type MergeDecision = "SAFE" | "HOLD" | "BLOCK";
 
@@ -255,6 +256,12 @@ export const mergeDuplicateTitle = createServerFn({ method: "POST" })
 
     const sql = await getSql();
     return sql.transaction(async (tx) => {
+      await tx`select id from public.bridge_titles where id in (${data.canonicalTitleId},${data.retiringTitleId}) order by id for update`;
+      const controls = await tx<{title_id: string; control_state: "CLEAR" | "HOLD" | "BLOCK"}>`
+        select title_id,control_state from public.bridge_title_controls
+        where title_id in (${data.canonicalTitleId},${data.retiringTitleId}) order by title_id for update
+      `;
+      for (const control of controls) assertTitleControlClear(control.control_state);
       const canonical = await loadMergeState(tx, data.canonicalTitleId);
       const retiring = await loadMergeState(tx, data.retiringTitleId);
       if (!canonical.title || !retiring.title) throw new Error("Both title records must exist.");
@@ -342,7 +349,7 @@ export const mergeDuplicateTitle = createServerFn({ method: "POST" })
         entityType: "bridge_title",
         entityId: data.canonicalTitleId,
         metadata: { mergeId, retiringTitleId: data.retiringTitleId, decision },
-      });
+      }, tx);
 
       return { ok: true, mergeId, canonicalTitleId: data.canonicalTitleId };
     });
@@ -424,7 +431,7 @@ export const rollbackDuplicateTitleMerge = createServerFn({ method: "POST" })
         entityType: "bridge_title",
         entityId: audit.canonical_title_id,
         metadata: { mergeId: data.mergeId, retiringTitleId: audit.retiring_title_id },
-      });
+      }, tx);
 
       return { ok: true, mergeId: data.mergeId, restoredTitleId: audit.retiring_title_id };
     });
