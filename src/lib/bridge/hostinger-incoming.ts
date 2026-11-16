@@ -64,7 +64,7 @@ function isStrictHostingerTimestamp(value: unknown): value is string {
   // Hostinger timestamps are RFC 3339 / ISO-8601 with an explicit timezone.
   // Validate component ranges and calendar values before Date.parse so values
   // such as "1" or 2026-02-30 are never normalized into valid test pings.
-  const match = /^(\\d{4})-(\\d{2})-(\\d{2})T(\\d{2}):(\\d{2}):(\\d{2})(?:\\.(\\d{1,9}))?(Z|[+-](?:0\\d|1\\d|2[0-3]):[0-5]\\d)$/.exec(value);
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,9}))?(Z|[+-](?:0\d|1\d|2[0-3]):[0-5]\d)$/.exec(value);
   if (!match) return false;
 
   const [, yearText, monthText, dayText, hourText, minuteText, secondText] = match;
