@@ -67,8 +67,12 @@ function assertActorMayManage(actor: Actor, title: BridgeTitle) {
     if (actor.internalRole !== "super_admin") throw new Error("Only Super Admin can manage another account's archived drafts.");
     return;
   }
+  // Legacy titles created before the Studio organization backfill may have
+  // owner_organization_id=NULL. Allow only the exact verified owner account,
+  // never other members of that Studio, to manage those legacy rows.
+  const exactLegacyOwner = title.ownerUserId === actor.userId;
   if (!["independent_creator", "studio"].includes(actor.accountType) ||
-      !canMutateTitle(actor, title, "title.update_own", "title.license")) {
+      (!exactLegacyOwner && !canMutateTitle(actor, title, "title.update_own", "title.license"))) {
     throw new Error("Only the verified owner or an active member of the owning Studio can manage this draft.");
   }
 }
