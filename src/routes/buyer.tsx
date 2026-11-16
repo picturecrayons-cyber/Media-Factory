@@ -270,11 +270,6 @@ function BuyerBody({ userId }: { userId: string }) {
         </div>
       </section>
       <div id="buyer-catalogue" className="scroll-mt-6 space-y-5">
-      <div className="grid gap-3 sm:grid-cols-3">
-        <Stat label="Discover" value={String(titles.length)} note="Live for buyers" />
-        <Stat label="Listing" value={String(visible.length)} note="Matching this search" />
-        <Stat label="Licenses" value={String(licensed.length)} note="Captured entitlements" />
-      </div>
       <div className="flex flex-wrap gap-2">
         {(["discover", "listing", "licenses"] as const).map((id) => (
           <button key={id} type="button" onClick={() => setTab(id)} className={`rounded-full border px-4 py-2 text-sm capitalize transition ${tab === id ? "border-cyan-300/50 bg-cyan-300/10 text-cyan-200 shadow-sm" : "border-line text-muted hover:border-accent/50 hover:text-fg"}`}>
@@ -349,16 +344,6 @@ function HeroStat({ value, label }: { value: string; label: string }) {
     <div className="min-w-0">
       <div className="text-2xl font-semibold tracking-tight text-white sm:text-3xl">{value}</div>
       <div className="mt-1 text-[10px] font-medium uppercase tracking-[0.16em] text-cyan-100/60 sm:text-xs">{label}</div>
-    </div>
-  );
-}
-
-function Stat({ label, value, note }: { label: string; value: string; note: string }) {
-  return (
-    <div className="rounded-2xl border border-line/80 bg-panel/70 px-5 py-4 shadow-sm transition hover:border-accent/40">
-      <div className="text-xs uppercase tracking-widest text-muted">{label}</div>
-      <div className="mt-1 text-2xl font-semibold">{value}</div>
-      <div className="text-xs text-muted">{note}</div>
     </div>
   );
 }
