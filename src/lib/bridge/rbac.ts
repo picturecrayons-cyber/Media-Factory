@@ -258,6 +258,14 @@ export function canOperateOnTitle(
   );
 }
 
+/** Only a verified Super Admin may replace title assets after the normal ingest lifecycle closes. */
+export function canReplaceTitleAssets(actor: Actor): boolean {
+  return actor.emailVerified &&
+    actor.internalRole === "super_admin" &&
+    hasPermission(actor, "title.ingest_internal") &&
+    hasPermission(actor, "asset.sign_upload");
+}
+
 export function workspaceHome(actor: Actor): string {
   // Resolve the post-auth destination from the server-backed Bridge profile.
   // Signup query parameters are intent only and never grant privileges.
