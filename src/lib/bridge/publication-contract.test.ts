@@ -173,6 +173,7 @@ test("missing release certification row fails closed", async () => {
 test("publication readiness GET performs no database writes", async () => {
   const h = harness([grant]);
   const result = await h.readiness({ context });
-  assert.deepEqual(result, { titles: [] });
+  // The handler executes in a VM realm; compare its JSON response shape, not cross-realm prototypes.
+  assert.equal(JSON.stringify(result), JSON.stringify({ titles: [] }));
   assert.equal(h.writes.length, 0);
 });
