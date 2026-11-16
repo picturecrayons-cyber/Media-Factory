@@ -39,7 +39,7 @@ const localReplayHosts = new Set(["localhost", "127.0.0.1", "[::1]"]);
 if (
   !["postgres:", "postgresql:"].includes(replayUrl.protocol) ||
   !localReplayHosts.has(replayUrl.hostname) ||
-  replayUrl.port !== "54322" ||
+  replayUrl.port !== "54332" ||
   replayUrl.pathname !== "/postgres" ||
   decodeURIComponent(replayUrl.username) !== "postgres" ||
   replayUrl.search !== "" ||
