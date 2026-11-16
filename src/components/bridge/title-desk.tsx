@@ -4,10 +4,12 @@ import { useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { StatusChip } from "@/components/bridge/status-rail";
-import { createTitle, listTitles } from "@/lib/bridge/titles";
+import { createTitle, listTitles, updateTitle } from "@/lib/bridge/titles";
+import type { Actor } from "@/lib/bridge/rbac";
+import type { BridgeTitle } from "@/lib/bridge/types";
 import { BRIDGE_LOOP_LANES } from "@/lib/bridge/loop-lanes";
 
-export function TitleList({ empty, query = "" }: { empty: string; query?: string }) {
+export function TitleList({ empty, query = "", actor }: { empty: string; query?: string; actor: Actor }) {
   const titlesQ = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles() });
   const titles = (titlesQ.data?.titles ?? []).filter((t) => !query || `${t.name} ${t.language} ${t.year ?? ""}`.toLowerCase().includes(query.toLowerCase()));
   if (titlesQ.isPending) return <p className="text-sm text-muted">Loading titles…</p>;
@@ -38,11 +40,58 @@ export function TitleList({ empty, query = "" }: { empty: string; query?: string
           </Link>
           <div className="flex shrink-0 items-center gap-3">
             <StatusChip status={t.status} />
-            
+            {actor.internalRole === "super_admin" ? <AdminTitleActions title={t} /> : null}
           </div>
         </li>
       ))}
     </ul>
+  );
+}
+
+
+function AdminTitleActions({ title }: { title: BridgeTitle }) {
+  const qc = useQueryClient();
+  const [editing, setEditing] = useState(false);
+  const [name, setName] = useState(title.name);
+  const [nameMl, setNameMl] = useState(title.nameMl ?? "");
+  const [synopsis, setSynopsis] = useState(title.synopsis ?? "");
+  const [language, setLanguage] = useState(title.language);
+  const [year, setYear] = useState(title.year?.toString() ?? "");
+  const [runtime, setRuntime] = useState(title.runtimeMinutes?.toString() ?? "");
+  const [fee, setFee] = useState((title.licensingFeePaise / 100).toString());
+  const mut = useMutation({
+    mutationFn: () => updateTitle({ data: {
+      id: title.id, name, nameMl, synopsis, language,
+      year: year ? Number(year) : null,
+      runtimeMinutes: runtime ? Number(runtime) : null,
+      licensingFeePaise: fee ? Math.round(Number(fee) * 100) : 0,
+    } }),
+    onSuccess: () => {
+      toast("Title metadata updated");
+      setEditing(false);
+      void qc.invalidateQueries({ queryKey: ["bridge-titles"] });
+    },
+    onError: (error) => toast(error instanceof Error ? error.message : "Could not update title"),
+  });
+  if (!editing) {
+    return <Button type="button" variant="outline" size="sm" onClick={() => setEditing(true)}>Edit</Button>;
+  }
+  return (
+    <div className="w-full rounded-lg border border-line bg-elevated p-3">
+      <form className="grid gap-2 sm:grid-cols-2" onSubmit={(event) => { event.preventDefault(); mut.mutate(); }}>
+        <label className="text-xs">Title<input required maxLength={160} value={name} onChange={(event) => setName(event.target.value)} className="mt-1 h-9 w-full rounded-md border border-line-strong bg-surface px-2 text-sm" /></label>
+        <label className="text-xs">Malayalam title<input maxLength={160} value={nameMl} onChange={(event) => setNameMl(event.target.value)} className="mt-1 h-9 w-full rounded-md border border-line-strong bg-surface px-2 text-sm" /></label>
+        <label className="text-xs">Language<input required maxLength={40} value={language} onChange={(event) => setLanguage(event.target.value)} className="mt-1 h-9 w-full rounded-md border border-line-strong bg-surface px-2 text-sm" /></label>
+        <label className="text-xs">Year<input type="number" min={1895} max={2100} value={year} onChange={(event) => setYear(event.target.value)} className="mt-1 h-9 w-full rounded-md border border-line-strong bg-surface px-2 text-sm" /></label>
+        <label className="text-xs">Runtime (minutes)<input type="number" min={1} max={600} value={runtime} onChange={(event) => setRuntime(event.target.value)} className="mt-1 h-9 w-full rounded-md border border-line-strong bg-surface px-2 text-sm" /></label>
+        <label className="text-xs">Licence fee (INR)<input type="number" min={0} max={20000000} step="0.01" value={fee} onChange={(event) => setFee(event.target.value)} className="mt-1 h-9 w-full rounded-md border border-line-strong bg-surface px-2 text-sm" /></label>
+        <label className="text-xs sm:col-span-2">Synopsis<textarea maxLength={4000} rows={3} value={synopsis} onChange={(event) => setSynopsis(event.target.value)} className="mt-1 w-full rounded-md border border-line-strong bg-surface px-2 py-2 text-sm" /></label>
+        <div className="flex gap-2 sm:col-span-2">
+          <Button type="submit" size="sm" disabled={mut.isPending}>{mut.isPending ? "Saving…" : "Save metadata"}</Button>
+          <Button type="button" size="sm" variant="outline" onClick={() => setEditing(false)} disabled={mut.isPending}>Cancel</Button>
+        </div>
+      </form>
+    </div>
   );
 }
 
