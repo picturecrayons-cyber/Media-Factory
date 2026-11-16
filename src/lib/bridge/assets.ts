@@ -43,6 +43,9 @@ export const requestAssetUpload = createServerFn({ method: "POST" })
     assertPermission(actor, actor.internalRole ? "title.ingest_internal" : "asset.sign_upload");
     const title = await loadTitle(data.titleId);
     if (!title) throw new Error("Not found");
+    const sql = await getSql();
+    const [control] = await sql<{control_state: "CLEAR" | "HOLD" | "BLOCK"}>`select control_state from public.bridge_title_controls where title_id=${title.id}`;
+    assertTitleControlClear(control?.control_state);
     if (!canOperateOnTitle(actor, title, "asset.sign_upload", "asset.sign_upload")) throw new Error("Forbidden");
     if (!UPLOADABLE.has(title.status)) throw new Error("Uploads are closed for this status");
     if (!["master", "poster", "poster_vertical", "poster_horizontal", "thumbnail", "subtitle", "screener", "technical", "censor_certificate"].includes(data.kind))
@@ -66,7 +69,6 @@ export const requestAssetUpload = createServerFn({ method: "POST" })
       expiresIn: uploadUrlLifetimeSeconds(data.byteSize),
     });
     const id = randomBytes(16).toString("hex");
-    const sql = await getSql();
     await sql`
       insert into bridge_assets (id, title_id, kind, s3_key, content_type, created_by)
       values (${id}, ${title.id}, ${data.kind}, ${key}, ${data.contentType}, ${actor.userId})
