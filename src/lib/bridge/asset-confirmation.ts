@@ -153,6 +153,8 @@ export async function persistVerifiedAssetReplacement(
         and a.byte_size > 0
         and a.superseded_at is null
         and a.kind = $4
+        and (a.kind <> 'master' or t.master_key = a.s3_key)
+        and (a.kind not in ('poster','poster_vertical') or t.poster_key = a.s3_key)
       for update
     ), new_asset as (
       update bridge_assets n
