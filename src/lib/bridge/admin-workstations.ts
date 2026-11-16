@@ -94,35 +94,33 @@ const gateInput = z.object({
   path: ["gate"],
 });
 
-type GateEvidence = { source: string; records: Array<Record<string, unknown>>; verifiedAt: string };
+type GateEvidence = { source: string; recordIds: string[]; verifiedAt: string };
 
 async function verifyBuyerGateEvidence(
   sql: Awaited<ReturnType<typeof getSql>>,
   titleId: string,
   gate: z.infer<typeof gateInput>["gate"],
 ): Promise<GateEvidence> {
-  let records: Array<Record<string, unknown>> = [];
+  let records: Array<{ id: string }> = [];
   if (gate === "OTT") {
-    records = await sql<Record<string, unknown>>`select id, asset_group, asset_type, version, s3_key, checksum_sha256, processing_state
+    records = await sql<Record<string, unknown>>`select id
       from bridge_asset_versions where title_id = ${titleId} and asset_group = 'VIDEO'
         and processing_state = 'PASSED' and checksum_sha256 is not null and length(checksum_sha256) = 64
         and length(trim(s3_key)) > 0 order by version desc, created_at desc limit 1`;
     if (!records.length) throw new Error("OTT gate blocked: no checksum-verified, PASSED video master asset version exists");
-    return { source: "bridge_asset_versions", records, verifiedAt: new Date().toISOString() };
+    return { source: "bridge_asset_versions", recordIds: records.map((record) => record.id), verifiedAt: new Date().toISOString() };
   }
   if (gate === "PACKAGING") {
-    records = await sql<Record<string, unknown>>`select id, destination, package_version, readiness_state,
-        rights_grant_id, qc_case_id, legal_case_id, asset_version_ids
+    records = await sql<Record<string, unknown>>`select id
       from bridge_destination_packages where title_id = ${titleId} and readiness_state = 'READY'
         and rights_grant_id is not null and qc_case_id is not null and legal_case_id is not null
         and jsonb_array_length(case when jsonb_typeof(asset_version_ids) = 'array' then asset_version_ids else '[]'::jsonb end) > 0
       order by created_at desc limit 1`;
     if (!records.length) throw new Error("Packaging gate blocked: no READY destination package with rights, QC, legal and asset references exists");
-    return { source: "bridge_destination_packages", records, verifiedAt: new Date().toISOString() };
+    return { source: "bridge_destination_packages", recordIds: records.map((record) => record.id), verifiedAt: new Date().toISOString() };
   }
   if (gate === "CURATION") {
-    records = await sql<Record<string, unknown>>`select t.id as title_id, t.name, t.language, t.poster_key,
-        a.id as artwork_asset_id, a.kind, a.s3_key, a.content_type, a.byte_size
+    records = await sql<Record<string, unknown>>`select a.id
       from bridge_titles t join bridge_assets a on a.title_id = t.id and a.s3_key = t.poster_key
         and a.kind in ('poster', 'poster_vertical')
       where t.id = ${titleId} and length(trim(coalesce(t.name, ''))) > 0
@@ -130,7 +128,7 @@ async function verifyBuyerGateEvidence(
         and length(trim(t.poster_key)) > 0 and coalesce(a.byte_size, 0) > 0
         and a.content_type like 'image/%' order by a.created_at desc limit 1`;
     if (!records.length) throw new Error("Curation gate blocked: verified poster artwork and required title metadata are missing");
-    return { source: "bridge_titles+bridge_assets", records, verifiedAt: new Date().toISOString() };
+    return { source: "bridge_titles+bridge_assets", recordIds: records.map((record) => record.id), verifiedAt: new Date().toISOString() };
   }
   records = await sql<Record<string, unknown>>`select id, destination, package_version, readiness_state, authorized_by, authorized_at
     from bridge_destination_packages where title_id = ${titleId} and readiness_state = 'DELIVERED'
