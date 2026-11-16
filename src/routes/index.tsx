@@ -5,9 +5,35 @@ import { Button } from "@/components/ui/button";
 import { SignedOut } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { getBridgeSession } from "@/lib/bridge/session";
+import { DEFAULT_BRIDGE_SITE_CONTENT, getPublicSiteContent } from "@/lib/bridge/site-content";
 
 
-export const Route = createFileRoute("/")({ component: Home });
+export const Route = createFileRoute("/")({
+  loader: async () => {
+    try {
+      return await getPublicSiteContent();
+    } catch {
+      return { ...DEFAULT_BRIDGE_SITE_CONTENT, updatedAt: null };
+    }
+  },
+  head: ({ loaderData }) => {
+    const title = loaderData?.heroTitle || DEFAULT_BRIDGE_SITE_CONTENT.heroTitle;
+    const description = loaderData?.heroBody || DEFAULT_BRIDGE_SITE_CONTENT.heroBody;
+    return {
+      meta: [
+        { title: `Crayons Bridge | ${title}` },
+        { name: "description", content: description },
+        { property: "og:title", content: `Crayons Bridge | ${title}` },
+        { property: "og:description", content: description },
+        { property: "og:url", content: "https://crayonspictures.in/" },
+        { name: "twitter:title", content: `Crayons Bridge | ${title}` },
+        { name: "twitter:description", content: description },
+      ],
+      links: [{ rel: "canonical", href: "https://crayonspictures.in/" }],
+    };
+  },
+  component: Home,
+});
 
 const WORKFLOW_STEPS = [
   {
@@ -43,6 +69,7 @@ const WORKFLOW_STEPS = [
 ];
 
 function Home() {
+  const content = Route.useLoaderData();
   const { user, isPending } = useCurrentUserState();
   const sessionQ = useQuery({
     queryKey: ["bridge-session", user?.id],
@@ -51,15 +78,7 @@ function Home() {
     retry: false,
   });
 
-  if (isPending || (user && sessionQ.isPending)) {
-    return (
-      <main className="grid min-h-screen place-items-center bg-bg p-6">
-        <p className="text-sm text-muted">Opening workspace…</p>
-      </main>
-    );
-  }
-
-  if (user) {
+  if (!isPending && user && !sessionQ.isPending) {
     if (sessionQ.data?.home) return <Navigate to={sessionQ.data.home as any} replace />;
     if (!sessionQ.data?.profile) return <Navigate to="/onboarding" replace />;
   }
@@ -92,10 +111,13 @@ function Home() {
                 <BrandMark className="text-3xl sm:text-4xl lg:text-5xl" />
               </div>
               <h1 className="bridge-hero-copy mx-auto mt-8 max-w-4xl font-display text-[2.45rem] font-semibold leading-[1.02] tracking-[-0.04em] text-fg sm:text-5xl lg:text-[3.9rem]">
-                One bridge from content to market.
+                {content.heroTitle}
               </h1>
               <p className="bridge-hero-subcopy mx-auto mt-4 max-w-2xl text-base leading-7 text-muted sm:text-lg">
                 Prepare. Protect. License. Deliver.
+              </p>
+              <p className="bridge-hero-description mx-auto mt-3 max-w-2xl text-sm leading-6 text-muted sm:text-base">
+                {content.heroBody}
               </p>
 
               <div className="bridge-hero-actions mt-7 flex flex-wrap items-center justify-center gap-3 sm:mt-8">
@@ -114,7 +136,7 @@ function Home() {
           <div className="mx-auto max-w-7xl px-4 sm:px-6">
             <div className="max-w-2xl">
               <h2 className="font-display text-3xl font-semibold tracking-tight text-fg sm:text-4xl">
-                From upload to delivery.
+                {content.workflowHeading}
               </h2>
             </div>
 
@@ -146,7 +168,7 @@ function Home() {
           <div className="mx-auto max-w-7xl px-4 sm:px-6">
             <div className="max-w-2xl">
               <h2 className="font-display text-3xl font-semibold tracking-tight text-fg sm:text-4xl">
-                Built for the media business.
+                {content.audienceHeading}
               </h2>
             </div>
 
@@ -262,7 +284,7 @@ function Home() {
           <div className="mx-auto max-w-7xl px-4 sm:px-6">
             <div className="mx-auto max-w-2xl text-center">
               <h2 className="font-display text-3xl font-semibold tracking-tight text-fg sm:text-4xl">
-                Ready to move your content forward?
+                {content.finalCtaHeading}
               </h2>
               <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
                 <Link to="/signup">
