@@ -8,7 +8,17 @@ import * as rights from "./rights-coverage.ts";
 
 // Execute the real server handler with isolated transport/database dependencies.
 // No database or AWS requests are made by this harness.
-function harness(grants: unknown[], allowed = true, existing = false) {
+function harness(
+  grants: unknown[],
+  allowed = true,
+  existing = false,
+  gates = {
+    ott_preparation_status: "READY",
+    packaging_status: "COMPLETE",
+    curation_status: "APPROVED",
+    delivery_status: "READY",
+  },
+) {
   const writes: { query: string; values: unknown[] }[] = [];
   const title = {
     id: "title-1",
@@ -28,6 +38,7 @@ function harness(grants: unknown[], allowed = true, existing = false) {
       ];
     if (query.includes("from bridge_rights_grants")) return grants;
     if (query.includes("as qc_ok")) return [{ qc_ok: true, legal_ok: true }];
+    if (query.includes("from bridge_title_gate_certifications")) return [gates];
     if (query.includes("select id from bridge_titles")) return [title];
     if (query.includes("select id from loop_titles"))
       return existing ? [{ id: "loop-existing" }] : [];
@@ -123,6 +134,21 @@ test("status alignment never bypasses operator, rights or commercial coverage", 
   ]) {
     const h = harness(scenario.grants, scenario.allowed);
     await assert.rejects(h.authorize({ context, data: scenario.data }));
+    assert.equal(h.writes.length, 0);
+  }
+});
+
+
+test("publication requires all four release certifications", async () => {
+  const incompleteGateSets = [
+    { ott_preparation_status: "PENDING", packaging_status: "COMPLETE", curation_status: "APPROVED", delivery_status: "READY" },
+    { ott_preparation_status: "READY", packaging_status: "PENDING", curation_status: "APPROVED", delivery_status: "READY" },
+    { ott_preparation_status: "READY", packaging_status: "COMPLETE", curation_status: "PENDING", delivery_status: "READY" },
+    { ott_preparation_status: "READY", packaging_status: "COMPLETE", curation_status: "APPROVED", delivery_status: "PENDING" },
+  ];
+  for (const gates of incompleteGateSets) {
+    const h = harness([grant], true, false, gates);
+    await assert.rejects(h.authorize({ context, data }), /Distribution Authorization Blocked/);
     assert.equal(h.writes.length, 0);
   }
 });
