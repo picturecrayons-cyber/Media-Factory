@@ -58,9 +58,9 @@ export function TitleList({ empty, query = "" }: { empty: string; query?: string
     <section className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm text-muted">Only untouched drafts with no linked media or workflow records can be archived.</p>
-        <Button type="button" variant="outline" onClick={() => setShowArchived((value) => !value)}>
+        {eligibleQ.data?.canManage && <Button type="button" variant="outline" onClick={() => setShowArchived((value) => !value)}>
           {showArchived ? "Hide archived" : "Archived drafts"}
-        </Button>
+        </Button>}
       </div>
       {showArchived && (
         <div className="rounded-lg border border-line p-3">
