@@ -4,7 +4,7 @@ import { randomBytes } from "node:crypto";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import { ASSET_KINDS } from "./types";
-import { assertPermission, canOperateOnTitle, canReadTitle, hasStaffPermission } from "./rbac";
+import { assertPermission, canOperateOnTitle, canReadTitle, canReplaceTitleAssets, hasStaffPermission } from "./rbac";
 import { requireVerifiedActor } from "./session";
 import { loadTitle } from "./titles";
 import { writeAudit } from "./audit";
@@ -47,7 +47,7 @@ export const requestAssetUpload = createServerFn({ method: "POST" })
     const [control] = await sql<{control_state: "CLEAR" | "HOLD" | "BLOCK"}>`select control_state from public.bridge_title_controls where title_id=${title.id}`;
     assertTitleControlClear(control?.control_state);
     if (!canOperateOnTitle(actor, title, "asset.sign_upload", "asset.sign_upload")) throw new Error("Forbidden");
-    if (!UPLOADABLE.has(title.status)) throw new Error("Uploads are closed for this status");
+    if (!UPLOADABLE.has(title.status) && !canReplaceTitleAssets(actor)) throw new Error("Uploads are closed for this status");
     if (!["master", "poster", "poster_vertical", "poster_horizontal", "thumbnail", "subtitle", "screener", "technical", "censor_certificate"].includes(data.kind))
       throw new Error("This asset kind is not supported by the OTT ingest uploader");
     const ingestValidation = validateOttIngestFile({
@@ -101,7 +101,7 @@ async function openUploadAsset(userId: string, assetId: string) {
   const asset = rows[0];
   if (!asset) throw new Error("Asset not found");
   const title = await loadTitle(asset.title_id);
-  if (!title || !canOperateOnTitle(actor, title, "asset.sign_upload", "asset.sign_upload") || !UPLOADABLE.has(title.status)) {
+  if (!title || !canOperateOnTitle(actor, title, "asset.sign_upload", "asset.sign_upload") || (!UPLOADABLE.has(title.status) && !canReplaceTitleAssets(actor))) {
     throw new Error("Upload confirmation is closed for this title");
   }
   const [control] = await sql<{control_state: "CLEAR" | "HOLD" | "BLOCK"}>`select control_state from public.bridge_title_controls where title_id=${title.id}`;
@@ -183,7 +183,7 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
     const asset = rows[0];
     if (!asset) throw new Error("Asset not found");
     const title = await loadTitle(asset.title_id);
-    if (!title || !canOperateOnTitle(actor, title, "asset.sign_upload", "asset.sign_upload") || !UPLOADABLE.has(title.status)) {
+    if (!title || !canOperateOnTitle(actor, title, "asset.sign_upload", "asset.sign_upload") || (!UPLOADABLE.has(title.status) && !canReplaceTitleAssets(actor))) {
       throw new Error("Upload confirmation is closed for this title");
     }
     const [control] = await sql<{control_state: "CLEAR" | "HOLD" | "BLOCK"}>`select control_state from public.bridge_title_controls where title_id=${title.id}`;
@@ -211,6 +211,7 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
       assetId: asset.id,
       actorUserId: actor.userId,
       internalActor: Boolean(actor.internalRole),
+      allowLockedTitleReplacement: canReplaceTitleAssets(actor),
       titleId: title.id,
       kind: asset.kind,
       byteSize: sealed.byteSize,
