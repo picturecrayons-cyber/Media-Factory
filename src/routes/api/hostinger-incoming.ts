@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { createFileRoute } from "@tanstack/react-router";
 import {
   isValidHostingerBearer,
+  isHostingerTestDeliveryEnvelope,
   parseHostingerIncomingPayload,
   readLimitedRequestBody,
   type HostingerIncomingMailRecord,
@@ -98,6 +99,13 @@ export const Route = createFileRoute("/api/hostinger-incoming")({
         } catch {
           console.warn("[hostinger-incoming] rejected invalid JSON body");
           return Response.json({ error: "Invalid JSON" }, { status: 400 });
+        }
+
+        // Hostinger's Test button sends a metadata-only envelope, not a real
+        // mailbox message. Acknowledge only the exact known schema after bearer
+        // authentication, and never persist this synthetic delivery.
+        if (isHostingerTestDeliveryEnvelope(payload)) {
+          return Response.json({ ok: true, test: true });
         }
 
         let message: HostingerIncomingMailRecord;
