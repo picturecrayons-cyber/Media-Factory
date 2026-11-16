@@ -99,7 +99,10 @@ Deno.serve(async (req: Request) => {
   if (existing.payload_hash !== hash) return new Response("Event collision", { status: 409 });
   if (existing.status === "processed") return Response.json({ ok: true, duplicate: true });
 
-  const staleBefore = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+  // Supabase Edge Functions have a hard 400s wall-clock maximum on paid
+  // plans (150s on free). A 10-minute lease therefore outlives any live worker:
+  // a retry cannot reclaim a claim while the prior invocation can still write.
+  const staleBefore = new Date(Date.now() - 10 * 60 * 1000).toISOString();
   const token = crypto.randomUUID();
   const { data: claimed, error: claimError } = await supabase.from("bridge_webhook_events")
     .update({
