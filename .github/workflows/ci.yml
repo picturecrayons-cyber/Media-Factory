@@ -80,8 +80,26 @@ jobs:
         with:
           version: latest
 
-      - name: Start an isolated local Supabase stack
+      # Supabase CLI automatically applies files in supabase/migrations during
+      # start. Hide the recovered ledger temporarily so the custom replay can
+      # inject its verified local-only fixtures before applying each migration.
+      - name: Quarantine recovered migrations before starting local Supabase
+        run: |
+          test -d supabase/migrations
+          test ! -e "$RUNNER_TEMP/bridge-production-ledger-migrations"
+          mv supabase/migrations "$RUNNER_TEMP/bridge-production-ledger-migrations"
+          mkdir -p supabase/migrations
+
+      - name: Start an isolated local Supabase stack without auto-applying the ledger
         run: supabase start -x studio,imgproxy,edge-runtime,logflare,vector
+
+      - name: Restore recovered migrations for controlled replay
+        if: always()
+        run: |
+          if [ -d "$RUNNER_TEMP/bridge-production-ledger-migrations" ]; then
+            rm -rf supabase/migrations
+            mv "$RUNNER_TEMP/bridge-production-ledger-migrations" supabase/migrations
+          fi
 
       - name: Replay all recovered Production-ledger migrations
         run: node scripts/supabase-migration-replay.mjs
