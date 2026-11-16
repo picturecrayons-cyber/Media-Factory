@@ -353,6 +353,13 @@ test("license author cannot approve their own agreement", async () => {
           decision: "APPROVE",
           note: "Agreement checked",
           grantId: saved.grantId,
+          rightsScope: [
+            { category: "THEATRICAL", available: true, verified: true, evidenceReference: "theatrical-agreement-001" },
+            { category: "NON_THEATRICAL", available: false, verified: true, evidenceReference: "non-theatrical-exclusion-001" },
+            { category: "LINEAR", available: true, verified: true, evidenceReference: "linear-assignment-001" },
+            { category: "NON_LINEAR", available: true, verified: true, evidenceReference: "non-linear-agreement-001" },
+            { category: "ANCILLARY", available: false, verified: true, evidenceReference: "ancillary-rights-reserved-001" },
+          ],
         }),
       ),
       /Another legal reviewer/,
