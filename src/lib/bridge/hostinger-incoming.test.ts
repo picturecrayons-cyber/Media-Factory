@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  isAuthenticatedHostingerTestDeliveryRequest,
+  isHostingerTestDeliveryPayload,
   isValidHostingerBearer,
   parseHostingerIncomingPayload,
   readLimitedRequestBody,
@@ -27,6 +29,77 @@ describe("Hostinger incoming mail webhook", () => {
     assert.equal(isValidHostingerBearer("Bearer wrong-token", "secret-token"), false);
     assert.equal(isValidHostingerBearer("secret-token", "secret-token"), false);
     assert.equal(isValidHostingerBearer("Bearer secret-token", ""), false);
+  });
+
+  it("acknowledges only the exact metadata-free Hostinger test envelope", () => {
+    assert.equal(isHostingerTestDeliveryPayload({
+      event: "message.received",
+      mailbox,
+    }, mailbox), true);
+
+    assert.equal(isHostingerTestDeliveryPayload({
+      event: "message.received",
+      mailbox,
+      message: null,
+    }, mailbox), true);
+
+    assert.equal(isHostingerTestDeliveryPayload({
+      event: "message.received",
+    }, mailbox), false);
+
+    assert.equal(isHostingerTestDeliveryPayload({
+      event: "message.received",
+      mailbox,
+      message: {},
+    }, mailbox), false);
+
+    assert.equal(isHostingerTestDeliveryPayload({
+      event: "message.received",
+      mailbox,
+      from: "producer@example.com",
+    }, mailbox), false);
+
+    assert.equal(isHostingerTestDeliveryPayload({
+      event: "message.received",
+      mailbox,
+      subject: "partial real delivery",
+    }, mailbox), false);
+
+    assert.equal(isHostingerTestDeliveryPayload({
+      event: "message.received",
+      mailbox,
+      webhook_id: "test",
+    }, mailbox), false);
+
+    assert.equal(isHostingerTestDeliveryPayload({
+      event: "message.deleted",
+      mailbox,
+    }, mailbox), false);
+
+    assert.throws(() => isHostingerTestDeliveryPayload({
+      event: "message.received",
+      mailbox: "other@example.com",
+    }, mailbox), /Unexpected mailbox/);
+  });
+
+  it("authenticates the Hostinger Test envelope with the configured Bearer token", () => {
+    const request = new Request("https://example.test/api/hostinger-incoming", {
+      method: "POST",
+      headers: { authorization: "Bearer preview-secret" },
+    });
+    const payload = { event: "message.received", mailbox };
+    assert.equal(
+      isAuthenticatedHostingerTestDeliveryRequest(
+        request, payload, "preview-secret", mailbox,
+      ),
+      true,
+    );
+    assert.equal(
+      isAuthenticatedHostingerTestDeliveryRequest(
+        request, payload, "different-secret", mailbox,
+      ),
+      false,
+    );
   });
 
   it("accepts a valid message.received event for the configured mailbox", () => {
