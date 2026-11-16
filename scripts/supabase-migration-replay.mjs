@@ -458,6 +458,7 @@ try {
     "public.bridge_dit_copy_verifications",
     "private.bridge_inbound_mail_events",
     "public.bridge_production_assets",
+    "public.bridge_delivery_jobs",
   ];
   const tableCheck = await client.query(
     "select name, to_regclass(name) is not null as exists from unnest($1::text[]) as t(name)",
@@ -498,6 +499,11 @@ try {
         when c.relname = 'bridge_buyer_interest' then not exists (
           select 1 from pg_policy p where p.polrelid = c.oid
         )
+        when c.relname = 'bridge_delivery_jobs' then exists (
+          select 1 from pg_policy p
+          where p.polrelid = c.oid and p.polname = 'bridge_delivery_jobs_internal_only'
+            and p.polcmd = '*'
+        )
         else false
       end as policy_state_valid
     from pg_class c
@@ -511,9 +517,10 @@ try {
     "bridge_buyer_interest",
     "loop_media_migration_queue",
     "loop_parental_controls",
+    "bridge_delivery_jobs",
   ]]);
   if (
-    baselineRls.rows.length !== 5 ||
+    baselineRls.rows.length !== 6 ||
     baselineRls.rows.some((row) => !row.rls_enabled || !row.policy_state_valid)
   ) {
     throw new Error(
