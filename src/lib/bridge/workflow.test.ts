@@ -189,6 +189,13 @@ test("real SQL services persist QC, independently approved license, lifecycle an
         decision: "APPROVE",
         note: "Ownership and agreement verified",
         grantId: saved.grantId,
+        rightsScope: [
+          { category: "THEATRICAL", available: true, verified: true, evidenceReference: "theatrical-agreement-001" },
+          { category: "NON_THEATRICAL", available: false, verified: true, evidenceReference: "non-theatrical-exclusion-001" },
+          { category: "LINEAR", available: true, verified: true, evidenceReference: "linear-assignment-001" },
+          { category: "NON_LINEAR", available: true, verified: true, evidenceReference: "non-linear-agreement-001" },
+          { category: "ANCILLARY", available: false, verified: true, evidenceReference: "ancillary-rights-reserved-001" },
+        ],
       }),
     );
     assert.equal(
