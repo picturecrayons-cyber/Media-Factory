@@ -102,7 +102,7 @@ async function openUploadAsset(userId: string, assetId: string) {
     throw new Error("Upload confirmation is closed for this title");
   }
   const sql = await getSql();
-  const [control] = await sql<{control_state: "CLEAR" | "HOLD" | "BLOCK"}>`select control_state from public.bridge_title_controls where title_id=${title.id}`;
+  const [control] = await sql<{control_state: "CLEAR" | "HOLD" | "BLOCK"}>`select control_state from public.bridge_title_controls where title_id=${title.id} for update`;
   assertTitleControlClear(control?.control_state);
   return asset;
 }
