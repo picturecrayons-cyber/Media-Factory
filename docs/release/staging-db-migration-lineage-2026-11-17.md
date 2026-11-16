@@ -15,8 +15,8 @@ The STAGING database has a separate, test-specific migration history, including 
 
 ## Verified STAGING ledger observations
 
-- A fresh READ-ONLY query on 2026-11-17 returned **56 records** from `supabase_migrations.schema_migrations`; this supersedes the earlier 55-record observation in this document's initial revision and in the PR's original description.
-- Latest observed record: `20261116210822 / bridge_title_hold_block_controls`.
+- A fresh READ-ONLY query on 2026-11-17 returned **56 records** from `supabase_migrations.schema_migrations`; this supersedes the earlier 55-record observation in this document's initial revision and in the PR's original description. A later same-day recheck still returned 56 rows but showed two additional latest records compared with the earlier inventory.
+- Latest observed records in the recheck: `20261116224138 / loop_viewer_profiles_20261117` and `20261116224140 / loop_watchlists_20261117` (latest). The earlier `20261116210822 / bridge_title_hold_block_controls` was no longer the latest row.
 - Every one of the 56 records has one stored `statements` array item and an empty `rollback` array (zero rollback entries).
 - A metadata inventory was captured per row: version, name, statement count, byte length, MD5 fingerprint, and preliminary name/SQL-pattern triage class. This is not full SQL-content recovery or final security classification.
 - The duplicate logical name `20261106_story_concept_buyer_mandates` appears at versions `20261106083617` and `20261106084908`.
@@ -37,6 +37,15 @@ The STAGING database has a separate, test-specific migration history, including 
 7. Prepare forward-fix and restore/recovery plans for every non-transactional or destructive operation. Do not infer rollback from an empty `rollback` array.
 8. Run replay only against a fresh local disposable PostgreSQL/Supabase instance. Never point the replay runner at STAGING or PRODUCTION.
 9. Request independent review and a separate, explicit STAGING WRITE approval before any hosted migration.
+
+## Ledger freshness recheck — 2026-11-17
+
+A further READ-ONLY query of all ledger metadata returned 56 rows, each with one statement item and zero rollback items. The latest two rows now observed are:
+
+- `20261116224138 / loop_viewer_profiles_20261117` — 1 statement item, 0 rollback items, 1,704 statement bytes, MD5 `2f36c875d5efc3cef79269bc349f6e5b`.
+- `20261116224140 / loop_watchlists_20261117` — 1 statement item, 0 rollback items, 1,310 statement bytes, MD5 `fc527f3c6f07593e070f488dde59dbc1`.
+
+This recheck supersedes the earlier latest-version observation `20261116210822 / bridge_title_hold_block_controls`. The total remains 56 in the query result; source recovery and replay remain incomplete. These two latest SQL payloads still require the same exact-source, dependency, security and disposable-replay review as the other records.
 
 ## Follow-up READ-ONLY SQL command inventory — 2026-11-17
 
