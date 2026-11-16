@@ -97,20 +97,57 @@ export async function reviewWorkflow(tx: Sql, actor: Actor, data: z.infer<typeof
       values (${data.titleId},${data.decision === "APPROVE" ? "PASSED" : "ACTION_REQUIRED"},
       ${JSON.stringify([{ note: data.note, masterKey: title.master_key, posterKey: title.poster_key }])}::jsonb,${actor.userId},now())`;
   } else {
-    if (!data.grantId) throw new Error("Select a license draft");
+    if (!data.grantId) throw new Error("Select a specific rights draft before legal review");
     const [grant] = await tx<{
+      id: string;
       status: string;
-      window_end: string;
+      grant_type: string;
+      territories: unknown;
+      languages: unknown;
+      media: unknown;
+      window_start: string | Date | null;
+      window_end: string | Date | null;
+      exclusivity: string;
+      evidence: unknown;
       created_by: string;
-    }>`select status,window_end,created_by from bridge_rights_grants where id=${data.grantId} and title_id=${data.titleId} for update`;
-    if (!grant || grant.status !== "DRAFT") throw new Error("License draft is unavailable");
+    }>`select id,status,grant_type,territories,languages,media,window_start,window_end,exclusivity,evidence,created_by
+      from bridge_rights_grants where id=${data.grantId} and title_id=${data.titleId} for update`;
+    if (!grant || grant.status !== "DRAFT") throw new Error("Selected rights draft is unavailable");
     if (grant.created_by === actor.userId)
-      throw new Error("Another legal reviewer must approve this license");
-    if (data.decision === "APPROVE" && new Date(grant.window_end) <= new Date())
-      throw new Error("License has expired");
+      throw new Error("Another authorized legal reviewer must review this rights submission");
+
+    const nonEmpty = (value: unknown) =>
+      Array.isArray(value) && value.length > 0 && value.every((entry) => typeof entry === "string" && entry.trim().length > 0);
+    const evidenceRows = Array.isArray(grant.evidence) ? grant.evidence : [];
+    const evidenceComplete = evidenceRows.some((entry) => {
+      if (!entry || typeof entry !== "object" || Array.isArray(entry)) return false;
+      const item = entry as Record<string, unknown>;
+      const hasReference = Object.entries(item).some(([key, value]) =>
+        /(agreement|ownership|authorization|producer|chain|document|evidence)/i.test(key) &&
+        typeof value === "string" && value.trim().length >= 3,
+      );
+      return hasReference;
+    });
+    if (data.decision === "APPROVE") {
+      if (!nonEmpty(grant.territories)) throw new Error("Rights grant must specify at least one territory");
+      if (!nonEmpty(grant.languages)) throw new Error("Rights grant must specify at least one language");
+      if (!nonEmpty(grant.media)) throw new Error("Rights grant must specify at least one media/platform right");
+      if (!grant.window_start || !grant.window_end) throw new Error("Rights grant must have both start and expiry dates");
+      const startsAt = new Date(grant.window_start).getTime();
+      const endsAt = new Date(grant.window_end).getTime();
+      const now = Date.now();
+      if (!Number.isFinite(startsAt) || !Number.isFinite(endsAt) || endsAt <= startsAt)
+        throw new Error("Rights period is invalid");
+      if (startsAt > now) throw new Error("Rights period has not started yet");
+      if (endsAt <= now) throw new Error("Rights period has expired");
+      if (!evidenceComplete) throw new Error("Attach a producer agreement, chain-of-title or authorization document reference before approval");
+      if (!grant.exclusivity || !["EXCLUSIVE", "NON_EXCLUSIVE"].includes(grant.exclusivity))
+        throw new Error("Rights exclusivity must be explicitly recorded");
+      if (!grant.grant_type) throw new Error("Rights type is missing");
+    }
     await tx`insert into bridge_legal_cases(title_id,status,evidence,reviewed_by,reviewed_at)
       values (${data.titleId},${data.decision === "APPROVE" ? "APPROVED" : "REJECTED"},
-      ${JSON.stringify([{ grantId: data.grantId, note: data.note }])}::jsonb,${actor.userId},now())`;
+      ${JSON.stringify([{ grantId: data.grantId, note: data.note, evidenceReviewed: evidenceComplete }])}::jsonb,${actor.userId},now())`;
     await tx`update bridge_rights_grants set status=${data.decision === "APPROVE" ? "VALID" : "REVOKED"} where id=${data.grantId}`;
   }
   const next =
