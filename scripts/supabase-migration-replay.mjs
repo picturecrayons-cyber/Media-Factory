@@ -17,7 +17,7 @@ const { Pool } = pg;
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const MIGRATIONS_DIR = resolve(SCRIPT_DIR, "../supabase/migrations");
 const DATABASE_URL = process.env.SUPABASE_REPLAY_DATABASE_URL?.trim();
-const EXPECTED_MIGRATIONS = 69;
+const EXPECTED_BASELINE_MIGRATIONS = 69;
 const FEATURE_MIGRATION = "20261116150000_bridge_title_archive_restore.sql";
 const FEATURE_MIGRATION_BYTES = 1117;
 const FEATURE_MIGRATION_SHA256 = "3669b65c17642c2867c6efb7f8505943e8397756890fb6748bb6eb6ced9449bc";
@@ -57,9 +57,10 @@ const names = (await readdir(MIGRATIONS_DIR))
   .filter((name) => /^\d{14}_[a-z0-9_]+\.sql$/.test(name))
   .sort((a, b) => a.localeCompare(b));
 
-if (names.length !== EXPECTED_MIGRATIONS) {
+const baselineNames = names.filter((name) => name !== FEATURE_MIGRATION);
+if (baselineNames.length !== EXPECTED_BASELINE_MIGRATIONS || !names.includes(FEATURE_MIGRATION)) {
   throw new Error(
-    `Expected ${EXPECTED_MIGRATIONS} versioned migrations; found ${names.length}`,
+    `Expected ${EXPECTED_BASELINE_MIGRATIONS} baseline migrations plus ${FEATURE_MIGRATION}; found ${baselineNames.length} baseline and feature=${names.includes(FEATURE_MIGRATION)}`,
   );
 }
 if (new Set(names).size !== names.length) {
@@ -89,9 +90,9 @@ for (const line of manifest.split(String.fromCharCode(10))) {
   }
   manifestRows.set(`${version}_${migrationName}.sql`, { bytes, sha256 });
 }
-if (manifestRows.size !== EXPECTED_MIGRATIONS) {
+if (manifestRows.size !== EXPECTED_BASELINE_MIGRATIONS) {
   throw new Error(
-    `Expected ${EXPECTED_MIGRATIONS} manifest rows; found ${manifestRows.size}`,
+    `Expected ${EXPECTED_BASELINE_MIGRATIONS} immutable baseline manifest rows; found ${manifestRows.size}`,
   );
 }
 
@@ -108,7 +109,7 @@ if (
   );
 }
 
-for (const name of names) {
+for (const name of baselineNames) {
   const contents = await readFile(join(MIGRATIONS_DIR, name));
   const expected = manifestRows.get(name);
   if (!expected) throw new Error(`Migration missing from manifest: ${name}`);
@@ -789,7 +790,7 @@ try {
     throw new Error("Draft archive feature migration schema verification failed");
   }
   console.log(
-    `[migration-replay] PASS: ${names.length} immutable baseline migrations plus feature migration ${FEATURE_MIGRATION} verified in disposable local Supabase.`,
+    `[migration-replay] PASS: ${baselineNames.length} immutable baseline migrations plus feature migration ${FEATURE_MIGRATION} verified in disposable local Supabase.`,
   );
 } finally {
   client.release();
