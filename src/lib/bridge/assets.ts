@@ -111,19 +111,6 @@ export const requestAssetReplacement = createServerFn({ method: "POST" })
     if (!ingestValidation.ok) throw new Error(ingestValidation.message);
 
     const sql = await getSql();
-    const current = await sql<{
-      id: string; title_id: string; kind: string; s3_key: string; byte_size: number | null; superseded_at: string | null;
-    }>`
-      select id, title_id, kind, s3_key, byte_size, superseded_at
-      from bridge_assets
-      where id = ${data.targetAssetId} and title_id = ${title.id}
-      limit 1
-      for update
-    `;
-    const previous = current[0];
-    if (!previous || previous.kind !== data.kind || Number(previous.byte_size ?? 0) <= 0 || previous.superseded_at)
-      throw new Error("The selected verified asset is no longer the current replaceable version");
-
     const id = randomBytes(16).toString("hex");
     const { signUpload, titleAssetKey } = await import("./oci-object-storage.server");
     // Append the new immutable asset ID before signing so identical filenames
@@ -140,15 +127,39 @@ export const requestAssetReplacement = createServerFn({ method: "POST" })
       contentType: data.contentType,
       expiresIn: uploadUrlLifetimeSeconds(data.byteSize),
     });
-    await sql`
-      insert into bridge_assets (
-        id, title_id, kind, s3_key, content_type, created_by,
-        supersedes_asset_id, replacement_reason, replacement_initiated_by
-      ) values (
-        ${id}, ${title.id}, ${data.kind}, ${key}, ${data.contentType}, ${actor.userId},
-        ${previous.id}, ${data.reason.trim()}, ${actor.userId}
-      )
-    `;
+    const previous = await sql.transaction(async (tx) => {
+      const locked = await tx.query<{
+        id: string; title_id: string; kind: string; s3_key: string; byte_size: number | null; superseded_at: string | null;
+      }>(
+        `select id, title_id, kind, s3_key, byte_size, superseded_at
+         from bridge_assets where id=$1 and title_id=$2 for update`,
+        [data.targetAssetId, title.id],
+      );
+      const old = locked[0];
+      if (!old || old.kind !== data.kind || Number(old.byte_size ?? 0) <= 0 || old.superseded_at)
+        throw new Error("The selected verified asset is no longer the current replaceable version");
+      if (old.kind === "master" && title.masterKey && title.masterKey !== old.s3_key)
+        throw new Error("The selected master is not the current title master");
+      if (["poster","poster_vertical"].includes(old.kind) && title.posterKey && title.posterKey !== old.s3_key)
+        throw new Error("The selected poster is not the current title artwork");
+      const alreadyPending = await tx.query<{ id: string }>(
+        `select id from bridge_assets
+         where supersedes_asset_id=$1 and byte_size is null
+         limit 1`,
+        [old.id],
+      );
+      if (alreadyPending[0]) throw new Error("A replacement upload is already in progress for this asset");
+      await tx`
+        insert into bridge_assets (
+          id, title_id, kind, s3_key, content_type, created_by,
+          supersedes_asset_id, replacement_reason, replacement_initiated_by
+        ) values (
+          ${id}, ${title.id}, ${data.kind}, ${key}, ${data.contentType}, ${actor.userId},
+          ${old.id}, ${data.reason.trim()}, ${actor.userId}
+        )
+      `;
+      return old;
+    });
     await writeAudit({
       actorUserId: actor.userId,
       action: "asset.replacement_upload_signed",
