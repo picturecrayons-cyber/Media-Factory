@@ -163,7 +163,29 @@ try {
             to_regprocedure('public.loop_parental_controls_set_updated_at()') is not null as function_exists
         `);
         if (!baselineHelper.rows[0].table_exists) {
-          throw new Error("Production baseline prerequisite missing: public.loop_parental_controls");
+          // Rebuild the verified pre-ledger Production table baseline in this
+          // disposable local database only. Never copy the single live row.
+          await client.query(`
+            create table public.loop_parental_controls (
+              user_id uuid primary key references auth.users(id) on delete cascade,
+              pin_hash text not null,
+              pin_salt text not null,
+              failed_attempts integer not null default 0
+                constraint loop_parental_controls_failed_attempts_check
+                check (failed_attempts >= 0 and failed_attempts <= 5),
+              locked_until timestamptz,
+              created_at timestamptz not null default now(),
+              updated_at timestamptz not null default now()
+            );
+            create index loop_parental_controls_locked_until_idx
+              on public.loop_parental_controls (locked_until);
+            alter table public.loop_parental_controls enable row level security;
+            create policy deny_client_access
+              on public.loop_parental_controls
+              for all using (false) with check (false);
+            revoke all on table public.loop_parental_controls from public, anon, authenticated;
+            grant all on table public.loop_parental_controls to postgres, service_role;
+          `);
         }
         if (!baselineHelper.rows[0].function_exists) {
           await client.query(`
