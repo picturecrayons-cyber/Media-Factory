@@ -168,6 +168,29 @@ export async function verifyDistributionPreflight(
   `;
   if (!reviews[0]?.qc_ok) reasons.push("Recorded QC approval for the current assets is required.");
   if (!reviews[0]?.legal_ok) reasons.push("Recorded legal approval for this license is required.");
+
+  // Publication is blocked until every explicit consumer-release certification is recorded.
+  const gateRows = await sql<{
+    ott_preparation_status: string | null;
+    packaging_status: string | null;
+    curation_status: string | null;
+    delivery_status: string | null;
+  }>`
+    select ott_preparation_status, packaging_status, curation_status, delivery_status
+    from bridge_title_gate_certifications
+    where title_id = ${titleId}
+    limit 1
+  `;
+  const gates = gateRows[0];
+  if (gates?.ott_preparation_status !== "READY")
+    reasons.push("OTT preparation must be certified READY.");
+  if (gates?.packaging_status !== "COMPLETE")
+    reasons.push("Consumer packaging must be certified COMPLETE.");
+  if (gates?.curation_status !== "APPROVED")
+    reasons.push("Editorial curation must be APPROVED.");
+  if (gates?.delivery_status !== "READY")
+    reasons.push("Final delivery must be certified READY.");
+
   const licenses = rightsGrantId
     ? await sql<{ evidence: Array<{ commercialTerms?: CommercialTermsSummary }> }>`
     select evidence from bridge_rights_grants where id=${rightsGrantId}
@@ -241,15 +264,34 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
       listed: boolean | null;
       published: boolean | null;
       playback_path: string | null;
+      qc_approved: boolean;
+      legal_grant_ids: string[] | null;
+      ott_preparation_status: string | null;
+      packaging_status: string | null;
+      curation_status: string | null;
+      delivery_status: string | null;
     }>`
       select b.id, b.slug, b.name, b.status, b.language, b.master_key, b.poster_key,
              b.synopsis, b.year, b.runtime_minutes,
              p.loop_title_id, p.authorization_status, p.window_start, p.window_end,
              p.territories, p.languages, p.exploitation_models,
-             l.status as loop_status, l.listed, l.published, l.playback_path
+             l.status as loop_status, l.listed, l.published, l.playback_path,
+             exists(
+               select 1 from bridge_qc_cases q
+               where q.title_id=b.id and q.status='PASSED'
+                 and q.reviewer_findings->0->>'masterKey'=b.master_key
+                 and q.reviewer_findings->0->>'posterKey'=b.poster_key
+             ) as qc_approved,
+             coalesce((
+               select jsonb_agg(lc.evidence->0->>'grantId')
+               from bridge_legal_cases lc
+               where lc.title_id=b.id and lc.status='APPROVED'
+             ), '[]'::jsonb) as legal_grant_ids,
+             g.ott_preparation_status, g.packaging_status, g.curation_status, g.delivery_status
       from bridge_titles b
       left join bridge_loop_publications p on p.bridge_title_id = b.id
       left join loop_titles l on l.id = p.loop_title_id
+      left join bridge_title_gate_certifications g on g.title_id = b.id
       order by b.updated_at desc
       limit 200
     `;
@@ -274,8 +316,18 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
               },
             )
           : null;
+        const legalGrantIds = Array.isArray(r.legal_grant_ids) ? r.legal_grant_ids : [];
+        const legalApproved = Boolean(coveringGrant && legalGrantIds.includes(coveringGrant.id));
+        const gatesReady =
+          r.ott_preparation_status === "READY" &&
+          r.packaging_status === "COMPLETE" &&
+          r.curation_status === "APPROVED" &&
+          r.delivery_status === "READY";
         const isReady =
           Boolean(coveringGrant) &&
+          legalApproved &&
+          Boolean(r.qc_approved) &&
+          gatesReady &&
           [
             "LICENSING_READY",
             "LIVE_FOR_BUYERS",
@@ -289,6 +341,12 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
         const blockers: string[] = [];
         if (!coveringGrant)
           blockers.push("A matching rights grant and explicit publication dimensions are required");
+        if (!r.qc_approved) blockers.push("QC approval for the current master and artwork is required");
+        if (!legalApproved) blockers.push("Legal approval must reference the active rights grant");
+        if (r.ott_preparation_status !== "READY") blockers.push("OTT preparation is not certified READY");
+        if (r.packaging_status !== "COMPLETE") blockers.push("Consumer packaging is not certified COMPLETE");
+        if (r.curation_status !== "APPROVED") blockers.push("Editorial curation is not APPROVED");
+        if (r.delivery_status !== "READY") blockers.push("Final delivery is not certified READY");
         if (
           ![
             "LICENSING_READY",
