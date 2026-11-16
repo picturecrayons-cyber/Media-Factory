@@ -149,10 +149,16 @@ export const setBuyerPublicationGate = createServerFn({ method: "POST" })
         where title_id=${data.titleId}`;
     }
     const field = ({ OTT: "ott_preparation_status", PACKAGING: "packaging_status", CURATION: "curation_status", DELIVERY: "delivery_status" } as const)[data.gate];
-    const readback = await sql<{ status: string }>`
-      select ${sql(field)} as status from bridge_title_gate_certifications where title_id=${data.titleId} limit 1
+    const readback = await sql<{
+      ott_preparation_status: string;
+      packaging_status: string;
+      curation_status: string;
+      delivery_status: string;
+    }>`
+      select ott_preparation_status, packaging_status, curation_status, delivery_status
+      from bridge_title_gate_certifications where title_id=${data.titleId} limit 1
     `;
-    if (readback[0]?.status !== value) throw new Error("Publication gate read-back verification failed");
+    if (readback[0]?.[field] !== value) throw new Error("Publication gate read-back verification failed");
     await writeAudit({actorUserId:actor.userId,action:`buyer_gate.${data.gate.toLowerCase()}.${data.decision.toLowerCase()}`,entityType:"bridge_title",entityId:data.titleId,metadata:{gate:data.gate,decision:data.decision,notes:data.notes??null}});
     const result=await sql<{ok:boolean}>`select public.bridge_title_buyer_visibility(${data.titleId}) as ok`;
     return {ok:true,gate:data.gate,decision:data.decision,persisted:true,publishable:result[0]?.ok===true};
