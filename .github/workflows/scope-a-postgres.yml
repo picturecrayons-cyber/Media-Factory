@@ -79,3 +79,6 @@ jobs:
       - name: Run real onboarding DB assertions
         run: node scripts/scope-a-onboarding-db.mjs
 
+      - name: Run two-organization Studio tenant-isolation DB assertions
+        run: node --experimental-strip-types scripts/studio-tenant-isolation.integration.mjs
+
