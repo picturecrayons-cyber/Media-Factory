@@ -7,6 +7,7 @@ import { assertNotDevUser } from "./guards";
 import { requireVerifiedActor } from "./session";
 import { assertPermission } from "./rbac";
 import { writeAudit } from "./audit";
+import { assertTitleControlClear } from "./title-controls-policy";
 
 const services = ["dubbing", "localization", "accessibility", "finishing", "delivery_qc", "marketing"] as const;
 const id = z.string().uuid();
@@ -111,6 +112,8 @@ export const handoffStreamVistaOrder = createServerFn({ method: "POST" })
     if (actor.internalRole !== "super_admin") throw new Error("Forbidden");
     assertPermission(actor, "loop.publish");
     const sql = await getSql();
+    const [control] = await sql<{control_state: "CLEAR" | "HOLD" | "BLOCK"}>`select control_state from public.bridge_title_controls where title_id=${data.bridgeTitleId}`;
+    assertTitleControlClear(control?.control_state);
     const rows = await sql<{ id: string }>`update streamvista_orders o set bridge_title_id = ${data.bridgeTitleId}, updated_at = now()
       where o.id = ${data.orderId} and o.status = 'approved' and o.source_s3_key is not null
       and o.bridge_title_id is null and exists (
