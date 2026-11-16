@@ -123,7 +123,9 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
     queryKey: ["title-workflow", id, actor.userId, actor.internalRole ?? actor.accountType],
     queryFn: () => getTitleWorkflow({ data: { titleId: id } }),
     enabled: !buyerView,
-  });  const controlQ = useQuery({
+  });
+
+  const controlQ = useQuery({
     queryKey: ["title-control", id],
     queryFn: () => getTitleControl({ data: { titleId: id } }),
     enabled: !buyerView && actor.internalRole === "super_admin",
