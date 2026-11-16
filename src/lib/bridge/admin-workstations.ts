@@ -45,6 +45,9 @@ export const reviewAdminTitle = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     const actor = await actorFor(context.userId);
     if (!actor.internalRole) throw new Error("Forbidden");
+    if (data.decision === "APPROVE" || data.decision === "REJECT") {
+      throw new Error("Rights decisions must use the grant-level evidence checklist in Admin → Workstations → Rights");
+    }
     const sql = await getSql();
     const rows = await sql<{ id: string; status: string }>`select id, status from bridge_titles where id = ${data.titleId} limit 1`;
     const title = rows[0];
