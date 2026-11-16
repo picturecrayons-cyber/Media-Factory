@@ -269,6 +269,7 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
             </>
           ) : null}
         </section>
+        {!buyerView ? <AssetPreviewGallery assets={assets} /> : null}
       ) : activeTab === "Files" && !buyerView ? (
         <FilesPanel
           canUpload={
