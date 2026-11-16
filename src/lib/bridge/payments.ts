@@ -11,6 +11,7 @@ import { loadTitle, recordTransition } from "./titles";
 import { writeAudit } from "./audit";
 import { assertBuyerPublishable } from "./buyer-visibility";
 import { assertNotDevUser } from "./guards";
+import { assertTitleControlClear } from "./title-controls-policy";
 
 
 function requireRazorpayKeys() {
