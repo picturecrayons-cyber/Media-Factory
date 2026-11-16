@@ -278,6 +278,104 @@ try {
         console.log("[migration-replay] restored two verified empty pre-ledger server-only table baselines locally");
       }
 
+      // The Story/Concept module predates the 69-row migration ledger.
+      // Production has three rows in bridge_story_concept_submissions; recreate
+      // only the schema/policies/grants locally and never copy those records.
+      if (name === "20261113090257_bridge_story_concept_nonrow_privileges_20261113.sql") {
+        await client.query(`
+          alter table public.bridge_titles
+            add column if not exists submission_type text
+            check (submission_type in ('finished_film', 'story_concept'))
+            default 'finished_film';
+
+          create table if not exists public.bridge_story_concept_submissions (
+            id uuid primary key default gen_random_uuid(),
+            title_id text not null unique
+              references public.bridge_titles(id) on delete cascade,
+            logline text,
+            synopsis text,
+            treatment_url text,
+            screenplay_url text,
+            genre text[] default '{}',
+            estimated_budget_range text,
+            target_platforms text[] default '{}',
+            curation_status text not null default 'PENDING'
+              check (curation_status in (
+                'PENDING', 'UNDER_REVIEW', 'APPROVED', 'REJECTED', 'INTRODUCED_TO_BUYERS'
+              )),
+            admin_notes text,
+            introduced_to_buyers_at timestamptz,
+            created_at timestamptz not null default now(),
+            updated_at timestamptz not null default now()
+          );
+          create index if not exists bridge_story_concept_curation_idx
+            on public.bridge_story_concept_submissions (curation_status, created_at desc);
+          alter table public.bridge_story_concept_submissions enable row level security;
+          revoke all on table public.bridge_story_concept_submissions from public, anon, authenticated;
+          grant select, insert, update, delete, maintain
+            on table public.bridge_story_concept_submissions to anon, authenticated;
+          grant all on table public.bridge_story_concept_submissions to postgres, service_role;
+
+          create table if not exists public.bridge_buyer_interest (
+            id uuid primary key default gen_random_uuid(),
+            concept_submission_id uuid not null
+              references public.bridge_story_concept_submissions(id) on delete cascade,
+            buyer_user_id text not null,
+            interest_level text not null default 'VIEWED'
+              check (interest_level in ('VIEWED', 'INTERESTED', 'REQUESTED_MATERIALS', 'PASSED')),
+            notes text,
+            created_at timestamptz not null default now()
+          );
+          create index if not exists bridge_buyer_interest_concept_idx
+            on public.bridge_buyer_interest (concept_submission_id, created_at desc);
+          alter table public.bridge_buyer_interest enable row level security;
+          revoke all on table public.bridge_buyer_interest from public, anon, authenticated;
+          grant all on table public.bridge_buyer_interest to postgres, service_role;
+        `);
+
+        await client.query(`
+          do $replay$
+          begin
+            if not exists (
+              select 1 from pg_policy
+              where polrelid = 'public.bridge_story_concept_submissions'::regclass
+                and polname = 'Deny anonymous public access'
+            ) then
+              create policy "Deny anonymous public access"
+                on public.bridge_story_concept_submissions
+                for all to anon using (false);
+            end if;
+            if not exists (
+              select 1 from pg_policy
+              where polrelid = 'public.bridge_story_concept_submissions'::regclass
+                and polname = 'bridge_story_concept_submissions_owner_only'
+            ) then
+              create policy bridge_story_concept_submissions_owner_only
+                on public.bridge_story_concept_submissions
+                for all to authenticated
+                using (exists (
+                  select 1
+                  from public.bridge_titles t
+                  join public.bridge_loop_identity_links l
+                    on l.bridge_user_id = t.owner_user_id
+                  where t.id = bridge_story_concept_submissions.title_id
+                    and l.auth_user_id = (select auth.uid())
+                ))
+                with check (exists (
+                  select 1
+                  from public.bridge_titles t
+                  join public.bridge_loop_identity_links l
+                    on l.bridge_user_id = t.owner_user_id
+                  where t.id = bridge_story_concept_submissions.title_id
+                    and l.auth_user_id = (select auth.uid())
+                ));
+            end if;
+          end
+          $replay$;
+        `);
+        console.log("[migration-replay] restored Story/Concept pre-ledger schema and RLS baseline locally; no Production rows copied");
+      }
+
       if (name === FIXTURE_MIGRATION) {
         const current = await client.query(`
           select count(*)::int as count
