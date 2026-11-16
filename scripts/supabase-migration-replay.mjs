@@ -376,6 +376,43 @@ try {
         console.log("[migration-replay] restored Story/Concept pre-ledger schema and RLS baseline locally; no Production rows copied");
       }
 
+      // The Delivery Desk table predates the 69-row migration ledger.
+      // Recreate its empty schema and existing internal-only RLS policy locally;
+      // the Production table currently has zero rows, and no live data is copied.
+      if (name === "20261114135437_bridge_delivery_job_ownership_20261114.sql") {
+        await client.query(`
+          create table public.bridge_delivery_jobs (
+            id uuid primary key default gen_random_uuid(),
+            title_id text not null
+              references public.bridge_titles(id) on delete cascade,
+            job_type text not null
+              constraint bridge_delivery_jobs_job_type_check
+              check (job_type in ('dubbing', 'loudness', 'imf', 'dcp', 'human_qc', 'localization')),
+            status text not null default 'requested'
+              constraint bridge_delivery_jobs_status_check
+              check (status in ('requested', 'in_progress', 'completed', 'failed', 'approved')),
+            assigned_vendor text,
+            delivery_receipt_url text,
+            admin_sign_off boolean not null default false,
+            created_at timestamptz not null default now(),
+            updated_at timestamptz not null default now()
+          );
+          create index bridge_delivery_jobs_status_idx
+            on public.bridge_delivery_jobs (status);
+          create index bridge_delivery_jobs_title_id_idx
+            on public.bridge_delivery_jobs (title_id);
+          alter table public.bridge_delivery_jobs enable row level security;
+          revoke all on table public.bridge_delivery_jobs from public;
+          grant all on table public.bridge_delivery_jobs to anon, authenticated, postgres, service_role;
+          create policy bridge_delivery_jobs_internal_only
+            on public.bridge_delivery_jobs
+            for all to authenticated
+            using ((select private.bridge_is_internal()))
+            with check ((select private.bridge_is_internal()));
+        `);
+        console.log("[migration-replay] restored empty Delivery Desk pre-ledger schema and internal-only RLS baseline locally; no Production rows copied");
+      }
+
       if (name === FIXTURE_MIGRATION) {
         const current = await client.query(`
           select count(*)::int as count
