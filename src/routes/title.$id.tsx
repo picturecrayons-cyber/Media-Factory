@@ -21,7 +21,6 @@ import {
 } from "@/lib/bridge/assets";
 import { getLoopPublication } from "@/lib/bridge/loop-publication";
 import { getTitleControl, setTitleControl, releaseTitleControl } from "@/lib/bridge/title-controls";
-import { getTitleControl, setTitleControl, releaseTitleControl } from "@/lib/bridge/title-controls";
 import type { BridgeActor } from "@/lib/bridge/session";
 import {
   OTT_INGEST_SPEC,
@@ -140,32 +139,7 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
       await Promise.all([controlQ.refetch(), titleQ.refetch(), qc.invalidateQueries({ queryKey: ["title-workflow", id] })]);
     },
     onError: (error) => setControlActionError(error instanceof Error ? error.message : "Control action failed"),
-  });  const controlQ = useQuery({
-    queryKey: ["title-control", id, actor.userId],
-    queryFn: () => getTitleControl({ data: { titleId: id } }),
-    enabled: !buyerView && actor.internalRole === "super_admin",
   });
-  const [controlReason, setControlReason] = useState("");
-  const [controlActionError, setControlActionError] = useState("");
-  const controlMutation = useMutation({
-    mutationFn: (action: "HOLD" | "BLOCK" | "RELEASE") => action === "RELEASE"
-      ? releaseTitleControl({ data: { titleId: id, reason: controlReason } })
-      : setTitleControl({ data: { titleId: id, state: action, reason: controlReason } }),
-    onSuccess: async () => {
-      setControlReason("");
-      setControlActionError("");
-      await Promise.all([controlQ.refetch(), titleQ.refetch(), qc.invalidateQueries({ queryKey: ["title-workflow", id] })]);
-    },
-    onError: (error) => setControlActionError(error instanceof Error ? error.message : "Control action failed"),
-  });
-  const title = titleQ.data?.title;
-  const assets = assetsQ.data?.assets ?? [];
-  const productionAssets = productionAssetsQ.data?.assets ?? [];
-  const pub = pubQ.data?.publication;
-  const activeTab: WorkspaceTab = buyerView
-    ? "Overview"
-    : chosenTab ?? (title && ["DRAFT", "UPLOADING", "PREPARING"].includes(title.status) ? "Assets" : "Overview");
-  const visibleTabs = buyerView ? (["Overview"] as const) : WORKSPACE_TABS;
 
   if (titleQ.isPending) return <p className="text-sm text-muted">Loading title workspace…</p>;
   if (titleQ.isError)
@@ -352,25 +326,6 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
                   <p className="mt-1 text-muted">{event.reason} · {event.actorUserId} · {new Date(event.createdAt).toLocaleString()}</p>
                 </article>)}
               </div> : null}
-            </section>
-          ) : null}
-          {actor.internalRole === "super_admin" ? (
-            <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Operational control</p>
-              <h2 className="mt-1 font-display text-xl font-semibold">Title HOLD / BLOCK</h2>
-              <p className="mt-2 text-sm text-muted">HOLD pauses operational processing. BLOCK prevents approval and release. Both preserve the title lifecycle status.</p>
-              <p className="mt-3 text-sm font-semibold">Current state: {controlQ.data?.control.state ?? (controlQ.isLoading ? "Loading…" : "Unavailable")}</p>
-              {controlQ.data?.control.reason ? <p className="mt-1 text-sm text-muted">Reason: {controlQ.data.control.reason}</p> : null}
-              <label className="mt-4 grid gap-1 text-sm">Reason (minimum 8 characters)
-                <textarea value={controlReason} onChange={(event) => setControlReason(event.target.value)} maxLength={2000} rows={3} className="rounded-lg border border-line bg-elevated p-3" />
-              </label>
-              <div className="mt-3 flex flex-wrap gap-2">
-                <button type="button" disabled={controlMutation.isPending || controlReason.trim().length < 8 || controlQ.data?.control.state === "BLOCK"} onClick={() => controlMutation.mutate("HOLD")} className="rounded-lg border border-line px-4 py-2 text-sm disabled:opacity-50">Set HOLD</button>
-                <button type="button" disabled={controlMutation.isPending || controlReason.trim().length < 8 || controlQ.data?.control.state === "BLOCK"} onClick={() => controlMutation.mutate("BLOCK")} className="rounded-lg border border-line px-4 py-2 text-sm disabled:opacity-50">Set BLOCK</button>
-                <button type="button" disabled={controlMutation.isPending || controlReason.trim().length < 8 || controlQ.data?.control.state === "CLEAR" || !controlQ.data} onClick={() => controlMutation.mutate("RELEASE")} className="rounded-lg border border-line px-4 py-2 text-sm disabled:opacity-50">Release / Unblock</button>
-              </div>
-              {controlActionError ? <p role="alert" className="mt-3 text-sm text-red-600">{controlActionError}</p> : null}
-              {controlQ.data?.events.length ? <div className="mt-5 space-y-2"><h3 className="text-sm font-semibold">Control audit history</h3>{controlQ.data.events.map((event) => <article key={event.id} className="rounded-lg border border-line p-3 text-xs"><p className="font-semibold">{event.action.replaceAll("_", " ")} · {event.state}</p><p className="mt-1 text-muted">{event.reason} · {event.actorUserId} · {new Date(event.createdAt).toLocaleString()}</p></article>)}</div> : null}
             </section>
           ) : null}
           <WorkflowDesk title={title} actor={actor} />
