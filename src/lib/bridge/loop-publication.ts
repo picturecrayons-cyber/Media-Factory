@@ -227,21 +227,8 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
     assertPermission(actor, "title.read_catalog");
     const sql = await getSql();
 
-    // Auto-reevaluate any expired distribution windows
-    await sql`
-      update bridge_loop_publications
-      set authorization_status = 'expired', updated_at = now()
-      where window_end is not null and window_end < now() and authorization_status in ('authorized', 'live')
-    `.catch(() => {});
-
-    await sql`
-      update loop_titles
-      set status = 'expired', published = false, listed = false, updated_at = now()
-      where bridge_title_id in (
-        select bridge_title_id from bridge_loop_publications where authorization_status = 'expired'
-      ) and published = true
-    `.catch(() => {});
-
+    // GET handlers must remain read-only. Expired windows are derived below;
+    // a dedicated, authorized lifecycle job may persist expiry separately.
     const rows = await sql<{
       id: string;
       slug: string;
@@ -318,6 +305,12 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
           : null;
         const legalGrantIds = Array.isArray(r.legal_grant_ids) ? r.legal_grant_ids : [];
         const legalApproved = Boolean(coveringGrant && legalGrantIds.includes(coveringGrant.id));
+        const windowExpired = Boolean(
+          r.window_end &&
+          new Date(r.window_end).getTime() <= Date.now() &&
+          ["authorized", "live"].includes((r.authorization_status || "").toLowerCase()),
+        );
+        const effectiveAuthorizationStatus = windowExpired ? "EXPIRED" : (r.authorization_status?.toUpperCase() || "PENDING");
         const gatesReady =
           r.ott_preparation_status === "READY" &&
           r.packaging_status === "COMPLETE" &&
@@ -339,6 +332,7 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
           Boolean(r.poster_key);
 
         const blockers: string[] = [];
+        if (windowExpired) blockers.push("The authorized distribution window has expired");
         if (!coveringGrant)
           blockers.push("A matching rights grant and explicit publication dimensions are required");
         if (!r.qc_approved) blockers.push("QC approval for the current master and artwork is required");
@@ -375,16 +369,15 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
             ? {
                 destination: "CRAYONS_LOOP" as const,
                 loopTitleId: r.loop_title_id,
-                authorizationStatus: (r.authorization_status?.toUpperCase() ||
-                  "PENDING") as DistributionAuthorizationStatus,
+                authorizationStatus: effectiveAuthorizationStatus as DistributionAuthorizationStatus,
                 territories: r.territories || ["IN"],
                 languages: r.languages || [r.language],
                 exploitationModels: r.exploitation_models || ["SVOD"],
                 windowStart: iso(r.window_start),
                 windowEnd: iso(r.window_end),
-                loopStatus: r.loop_status,
-                listed: Boolean(r.listed),
-                published: Boolean(r.published),
+                loopStatus: windowExpired ? "expired" : r.loop_status,
+                listed: windowExpired ? false : Boolean(r.listed),
+                published: windowExpired ? false : Boolean(r.published),
                 playbackPath: r.playback_path,
               }
             : null,
@@ -679,13 +672,18 @@ export const getLoopPublication = createServerFn({ method: "GET" })
     `;
     const r = rows[0];
     if (!r) return { publication: null };
+    const windowExpired = Boolean(
+      r.window_end &&
+      new Date(r.window_end).getTime() <= Date.now() &&
+      ["authorized", "live"].includes(r.authorization_status.toLowerCase()),
+    );
 
     return {
       publication: {
         destination: "CRAYONS_LOOP" as const,
         bridgeTitleId: r.bridge_title_id,
         loopTitleId: r.loop_title_id,
-        authorizationStatus: r.authorization_status,
+        authorizationStatus: windowExpired ? "expired" : r.authorization_status,
         territories: r.territories,
         languages: r.languages,
         exploitationModels: r.exploitation_models,
@@ -694,9 +692,9 @@ export const getLoopPublication = createServerFn({ method: "GET" })
         approvedAt: iso(r.approved_at),
         revokedAt: iso(r.revoked_at),
         commercialTerms: (r.metadata?.commercialTerms as CommercialTermsSummary) || null,
-        loopStatus: r.loop_status,
-        listed: r.listed,
-        published: r.published,
+        loopStatus: windowExpired ? "expired" : r.loop_status,
+        listed: windowExpired ? false : r.listed,
+        published: windowExpired ? false : r.published,
         playbackPath: r.playback_path,
       },
     };
