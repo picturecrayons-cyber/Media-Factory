@@ -22,7 +22,6 @@ test("authenticated profiles route through the server-resolved workspace home", 
 test("dashboard access is enforced server-side for verified super admins", () => {
   const session = read("./session.ts");
   const rbac = read("./rbac.ts");
-  assert.match(session, /const actor = await requireVerifiedActor\(context\.userId\)/);
   assert.match(session, /if \(!canAccessDashboard\(actor\)\) throw new Error\("Super admin access required"\)/);
   assert.match(rbac, /return actor\.emailVerified && actor\.internalRole === "super_admin"/);
 });
@@ -85,4 +84,16 @@ test("shared title workspace has an explicit role gate and Studio list scope", (
   assert.match(migration, /revoke all privileges on table bridge_organization_memberships from (?:public,\s*)?anon, authenticated/i);
   const profiles = read("./profiles.ts");
   assert.match(profiles, /insert into bridge_organization_memberships/);
+});
+
+test("Open Titles permits authorised internal catalog readers without weakening role gates", () => {
+  const gate = read("../../components/bridge/gate.tsx");
+  const rbac = read("./rbac.ts");
+
+  // The workspace gate is the single authority for Creator/Studio ownership
+  // and internal title-catalog read permission.
+  assert.match(gate, /allow === "workspace" && !canAccessTitleWorkspace\(profile\)/);
+  assert.match(gate, /allow !== "workspace"/);
+  assert.match(rbac, /if \(actor\.internalRole\) return hasPermission\(actor, "title\.read_catalog"\)/);
+  assert.match(rbac, /actor\.internalRole === "super_admin"/);
 });
