@@ -49,8 +49,10 @@ function InternalBody({
   canPublish: boolean;
   canRevoke: boolean;
 }) {
-  const titlesQ = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles() });
-  const logsQ = useQuery({ queryKey: ["bridge-audit"], queryFn: () => listAuditLogs() });
+  const [catalogOpen, setCatalogOpen] = useState(false);
+  const [auditOpen, setAuditOpen] = useState(false);
+  const titlesQ = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles(), enabled: catalogOpen });
+  const logsQ = useQuery({ queryKey: ["bridge-audit"], queryFn: () => listAuditLogs(), enabled: auditOpen });
   const titles = titlesQ.data?.titles ?? [];
   if (titlesQ.isError || logsQ.isError)
     return <p role="alert">Operations data could not be loaded. Refresh to retry.</p>;
@@ -64,16 +66,14 @@ function InternalBody({
       {canInvite ? <InviteForm /> : null}
 
       {/* 3. Catalog Queue */}
-      <section className="space-y-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="font-display text-2xl font-semibold text-fg">Catalog Titles</h2>
-            <p className="text-xs text-muted">Master titles currently recorded in Crayons Bridge</p>
-          </div>
-          <span className="text-xs font-mono text-muted">
-            {titles.length} title{titles.length === 1 ? "" : "s"}
+      <details onToggle={(event) => setCatalogOpen(event.currentTarget.open)} className="space-y-4">
+        <summary className="cursor-pointer list-none flex items-center justify-between gap-3">
+          <span>
+            <span className="block font-display text-2xl font-semibold text-fg">Catalog Titles</span>
+            <span className="block text-xs text-muted">Master titles currently recorded in Crayons Bridge</span>
           </span>
-        </div>
+          <span className="text-xs font-mono text-muted">{catalogOpen ? (titlesQ.isPending ? "Loading…" : `${titles.length} titles`) : "Open to load"}</span>
+        </summary>
 
         <ul className="divide-y divide-line rounded-2xl border border-line bg-surface">
           {titles.length ? (
@@ -96,14 +96,14 @@ function InternalBody({
             <li className="px-5 py-8 text-center text-sm text-muted">No titles in the pipeline.</li>
           )}
         </ul>
-      </section>
+      </details>
 
       {/* 4. Immutable Audit Trail */}
-      <section className="space-y-4">
-        <div>
-          <h2 className="font-display text-2xl font-semibold text-fg">Audit Ledger</h2>
-          <p className="text-xs text-muted">Cryptographically auditable operational decisions</p>
-        </div>
+      <details onToggle={(event) => setAuditOpen(event.currentTarget.open)} className="space-y-4">
+        <summary className="cursor-pointer list-none">
+          <span className="block font-display text-2xl font-semibold text-fg">Audit Ledger</span>
+          <span className="block text-xs text-muted">Cryptographically auditable operational decisions · Open to load</span>
+        </summary>
         <div className="rounded-2xl border border-line bg-surface p-4">
           <ul className="max-h-80 overflow-y-auto space-y-2 font-mono text-xs text-muted">
             {(logsQ.data?.logs ?? []).map((l) => (
@@ -121,7 +121,7 @@ function InternalBody({
             ))}
           </ul>
         </div>
-      </section>
+      </details>
     </div>
   );
 }
