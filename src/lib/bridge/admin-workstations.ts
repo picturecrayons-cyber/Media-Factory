@@ -53,7 +53,11 @@ export const reviewAdminTitle = createServerFn({ method: "POST" })
     if (!actor.internalRole) throw new Error("Forbidden");
 
     if (data.decision === "PASS" || data.decision === "APPROVE" || data.decision === "REJECT") {
-      if (!data.notes) throw new Error("Add review findings/evidence notes before submitting a decision");
+      const isLegalDecision = data.decision === "APPROVE" || data.decision === "REJECT";
+      if (!data.notes || data.notes.trim().length < 8) {
+        throw new Error("Add review findings/evidence notes (minimum 8 characters) before submitting a decision");
+      }
+      if (isLegalDecision && !data.grantId) throw new Error("Select one rights draft before making a legal decision");
       const result = await (await getSql()).transaction((tx) =>
         reviewWorkflow(tx, actor, {
           titleId: data.titleId,
