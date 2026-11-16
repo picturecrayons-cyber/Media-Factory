@@ -59,6 +59,33 @@ export function isValidHostingerBearer(
  * It contains no mailbox-bound message body and must never be persisted as mail.
  * Accept only this exact schema after the route has validated the Bearer secret.
  */
+function isStrictHostingerTimestamp(value: unknown): value is string {
+  if (typeof value !== "string") return false;
+  // Hostinger timestamps are RFC 3339 / ISO-8601 with an explicit timezone.
+  // Validate component ranges and calendar values before Date.parse so values
+  // such as "1" or 2026-02-30 are never normalized into valid test pings.
+  const match = /^(\\d{4})-(\\d{2})-(\\d{2})T(\\d{2}):(\\d{2}):(\\d{2})(?:\\.(\\d{1,9}))?(Z|[+-](?:0\\d|1\\d|2[0-3]):[0-5]\\d)$/.exec(value);
+  if (!match) return false;
+
+  const [, yearText, monthText, dayText, hourText, minuteText, secondText] = match;
+  const year = Number(yearText);
+  const month = Number(monthText);
+  const day = Number(dayText);
+  const hour = Number(hourText);
+  const minute = Number(minuteText);
+  const second = Number(secondText);
+
+  if (month < 1 || month > 12 || hour > 23 || minute > 59 || second > 59) return false;
+  const calendar = new Date(Date.UTC(year, month - 1, day));
+  if (
+    calendar.getUTCFullYear() !== year ||
+    calendar.getUTCMonth() !== month - 1 ||
+    calendar.getUTCDate() !== day
+  ) return false;
+
+  return Number.isFinite(Date.parse(value));
+}
+
 export function isHostingerTestDeliveryEnvelope(value: unknown): boolean {
   const payload = asRecord(value);
   if (!payload) return false;
@@ -71,11 +98,11 @@ export function isHostingerTestDeliveryEnvelope(value: unknown): boolean {
   if (!exactKeys(payload, ["data", "event", "id", "timestamp"])) return false;
   if (payload.event !== "message.received") return false;
   if (typeof payload.id !== "string" || !payload.id.trim() || payload.id.length > 256) return false;
-  if (typeof payload.timestamp !== "string" || !Number.isFinite(Date.parse(payload.timestamp))) return false;
+  if (!isStrictHostingerTimestamp(payload.timestamp)) return false;
 
   const data = asRecord(payload.data);
   if (!data || !exactKeys(data, ["date", "from", "messageId", "subject"])) return false;
-  if (typeof data.date !== "string" || !Number.isFinite(Date.parse(data.date))) return false;
+  if (!isStrictHostingerTimestamp(data.date)) return false;
   if (
     typeof data.messageId !== "string" ||
     !data.messageId.trim() ||
