@@ -128,6 +128,57 @@ test("same-organization verified Studio member can confirm upload, other organiz
   }
 });
 
+
+test("verified Super Admin can replace an asset after QC while preserving the HOLD/BLOCK gate", async () => {
+  const db = new PGlite();
+  try {
+    await db.waitReady;
+    await db.exec("create role anon; create role authenticated;");
+    await db.exec(readFileSync(join(process.cwd(), "migrations/0004_bridge.sql"), "utf8"));
+    await db.exec("create table bridge_title_controls (title_id text primary key, control_state text not null default 'CLEAR')");
+    await db.exec(`insert into bridge_titles (id,slug,name,owner_user_id,owner_account_type,status)
+      values ('title-qc-done','qc-done','QC completed','creator','independent_creator','RIGHTS_REVIEW');
+      insert into bridge_assets (id,title_id,kind,s3_key,content_type,created_by)
+      values ('asset-replacement','title-qc-done','master','source/replacement.mp4','video/mp4','super-admin');`);
+    const sql = { query: async <T>(query: string, params: unknown[]) => (await db.query<T>(query, params)).rows };
+    const args = {
+      assetId: "asset-replacement",
+      actorUserId: "super-admin",
+      internalActor: true,
+      allowLockedTitleReplacement: true,
+      titleId: "title-qc-done",
+      kind: "master",
+      byteSize: 240,
+      contentType: "video/mp4",
+      checksum: "replacement-etag",
+      sourceKey: "source/replacement.mp4",
+      sealedKey: "sealed/replacement.mp4",
+    };
+    assert.equal(await persistVerifiedAsset(sql, args), true);
+    const row = (await db.query<{ status: string; master_key: string | null; byte_size: number | null }>(`
+      select t.status, t.master_key, a.byte_size from bridge_titles t
+      join bridge_assets a on a.title_id=t.id where a.id='asset-replacement'`)).rows[0];
+    assert.deepEqual(row, {
+      status: "RIGHTS_REVIEW",
+      master_key: "sealed/replacement.mp4",
+      byte_size: 240,
+    });
+    const audit = (await db.query<{ metadata: string }>(
+      "select metadata from bridge_audit_logs where entity_id='asset-replacement'",
+    )).rows[0];
+    assert.equal(JSON.parse(audit?.metadata ?? "{}").superAdminReplacement, true);
+    await db.exec("update bridge_title_controls set control_state='HOLD' where title_id='title-qc-done'");
+    assert.equal(await persistVerifiedAsset(sql, {
+      ...args,
+      assetId: "asset-replacement",
+      sourceKey: "sealed/replacement.mp4",
+      sealedKey: "sealed/replacement-next.mp4",
+    }), false);
+  } finally {
+    await db.close();
+  }
+});
+
 test("title owner can confirm an upload when organization tables are absent", async () => {
   const db = new PGlite();
   try {
