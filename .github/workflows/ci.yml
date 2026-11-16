@@ -76,9 +76,12 @@ jobs:
 
       - run: npm ci
 
-      - uses: supabase/setup-cli@v1
+      # Pin the maintained v2 CLI to avoid a GitHub "latest release"
+      # lookup in the replay job. The replay is local-only and must not
+      # depend on GitHub release API rate limits.
+      - uses: supabase/setup-cli@v3.2.0
         with:
-          version: latest
+          version: 2.122.1
 
       # Supabase CLI automatically applies files in supabase/migrations during
       # start. Hide the recovered ledger temporarily so the custom replay can

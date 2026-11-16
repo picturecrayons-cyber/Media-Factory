@@ -60,3 +60,32 @@ for (const [label, databaseUrl] of rejectedTargets) {
     assert.doesNotMatch(result.stderr, /ECONNREFUSED|ENOTFOUND|ETIMEDOUT/);
   });
 }
+
+test("pre-ledger RLS checks validate exact roles, commands and full predicates", () => {
+  assert.match(replaySource, /p\.polcmd = '\*'/);
+  assert.match(replaySource, /p\.polpermissive/);
+  assert.match(replaySource, /cardinality\(p\.polroles\) = 2/);
+  assert.match(replaySource, /rolname = 'anon'\) = any\(p\.polroles\)/);
+  assert.match(replaySource, /rolname = 'authenticated'\) = any\(p\.polroles\)/);
+  assert.match(replaySource, /p\.polwithcheck is null/);
+  assert.match(replaySource, /polname = 'Deny anonymous public access'/);
+  assert.match(replaySource, /polname = 'bridge_story_concept_submissions_owner_only'/);
+  assert.ok(replaySource.includes("regexp_replace(pg_get_expr(p.polqual, p.polrelid), '[[:space:]]+', '', 'g')"));
+  assert.ok(replaySource.includes("regexp_replace(pg_get_expr(p.polwithcheck, p.polrelid), '[[:space:]]+', '', 'g')"));
+  // The entire normalized predicates are compared, so appending OR true cannot pass.
+  assert.ok(replaySource.includes("(EXISTS(SELECT1FROM(bridge_titlestJOINbridge_loop_identity_linkslON((l.bridge_user_id=t.owner_user_id)))WHERE((t.id=bridge_story_concept_submissions.title_id)AND(l.auth_user_id=(SELECTauth.uid()ASuid)))))"));
+  assert.ok(replaySource.includes("(SELECTprivate.bridge_is_internal()ASbridge_is_internal)"));
+  assert.ok(replaySource.includes("bridge_story_concept_submissions.title_id"));
+  assert.ok(replaySource.includes("private.bridge_is_internal()"));
+  assert.ok(replaySource.includes("not has_table_privilege('anon', c.oid, 'INSERT')"));
+  for (const role of ["anon", "authenticated"]) {
+    for (const privilege of ["TRUNCATE", "REFERENCES", "TRIGGER", "MAINTAIN"]) {
+      assert.ok(
+        replaySource.includes("not has_table_privilege('" + role + "', c.oid, '" + privilege + "')"),
+        "missing " + role + " " + privilege + " deny assertion",
+      );
+    }
+  }
+  assert.match(replaySource, /polname = 'bridge_delivery_jobs_internal_only'/);
+});
+
