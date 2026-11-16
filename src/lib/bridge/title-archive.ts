@@ -54,7 +54,6 @@ async function hasDependency(tx: Sql, titleId: string): Promise<boolean> {
       exists(select 1 from bridge_title_investors where title_id = ${titleId}) or
       exists(select 1 from bridge_title_merge_aliases where canonical_title_id = ${titleId}) or
       exists(select 1 from bridge_title_merge_audits where canonical_title_id = ${titleId}) or
-      exists(select 1 from bridge_story_concept_submissions where title_id = ${titleId}) or
       exists(select 1 from loop_titles where bridge_title_id = ${titleId}) or
       exists(select 1 from streamvista_legacy_links where bridge_title_id = ${titleId}) or
       exists(select 1 from streamvista_orders where bridge_title_id = ${titleId}) as blocked
@@ -71,6 +70,49 @@ function assertActorMayManage(actor: Actor, title: BridgeTitle) {
   if (!["independent_creator", "studio"].includes(actor.accountType) ||
       !canMutateTitle(actor, title, "title.update_own", "title.license")) {
     throw new Error("Only the verified owner or an active member of the owning Studio can manage this draft.");
+  }
+}
+
+export async function canArchiveDraftTitle(tx: Sql, actor: Actor, title: BridgeTitle): Promise<boolean> {
+  try {
+    assertActorMayManage(actor, title);
+    if (title.status !== "DRAFT" || title.masterKey || title.posterKey) return false;
+    const rows = await tx<{ blocked: boolean }>`
+      select exists(select 1 from bridge_assets where title_id = ${title.id}) or
+        exists(select 1 from bridge_asset_versions where title_id = ${title.id}) or
+        exists(select 1 from bridge_production_assets where title_id = ${title.id}) or
+        exists(select 1 from bridge_dit_ingest_sessions where title_id = ${title.id}) or
+        exists(select 1 from bridge_rights_grants where title_id = ${title.id}) or
+        exists(select 1 from bridge_language_rights where title_id = ${title.id}) or
+        exists(select 1 from bridge_qc_cases where title_id = ${title.id}) or
+        exists(select 1 from bridge_legal_cases where title_id = ${title.id}) or
+        exists(select 1 from bridge_title_submission_intake where title_id = ${title.id}) or
+        exists(select 1 from bridge_title_gate_certifications where title_id = ${title.id}) or
+        exists(select 1 from bridge_deals where title_id = ${title.id}) or
+        exists(select 1 from bridge_financial_ledger where title_id = ${title.id}) or
+        exists(select 1 from bridge_payments where title_id = ${title.id}) or
+        exists(select 1 from bridge_entitlements where title_id = ${title.id}) or
+        exists(select 1 from bridge_package_entitlements where title_id = ${title.id}) or
+        exists(select 1 from bridge_license_packages where title_id = ${title.id}) or
+        exists(select 1 from bridge_loop_publications where bridge_title_id = ${title.id}) or
+        exists(select 1 from bridge_service_orders where title_id = ${title.id}) or
+        exists(select 1 from bridge_service_quotes where title_id = ${title.id}) or
+        exists(select 1 from bridge_service_settlement_rules where title_id = ${title.id}) or
+        exists(select 1 from bridge_title_settlements where title_id = ${title.id}) or
+        exists(select 1 from bridge_destination_packages where title_id = ${title.id}) or
+        exists(select 1 from bridge_delivery_jobs where title_id = ${title.id}) or
+        exists(select 1 from bridge_desk_notes where title_id = ${title.id}) or
+        exists(select 1 from bridge_buyer_title_access where title_id = ${title.id}) or
+        exists(select 1 from bridge_title_investors where title_id = ${title.id}) or
+        exists(select 1 from bridge_title_merge_aliases where canonical_title_id = ${title.id}) or
+        exists(select 1 from bridge_title_merge_audits where canonical_title_id = ${title.id}) or
+        exists(select 1 from loop_titles where bridge_title_id = ${title.id}) or
+        exists(select 1 from streamvista_legacy_links where bridge_title_id = ${title.id}) or
+        exists(select 1 from streamvista_orders where bridge_title_id = ${title.id}) as blocked
+    `;
+    return !Boolean(rows[0]?.blocked);
+  } catch {
+    return false;
   }
 }
 
