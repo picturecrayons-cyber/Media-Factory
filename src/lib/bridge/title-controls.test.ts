@@ -22,6 +22,10 @@ test("title control schema persists HOLD/BLOCK state and immutable history", asy
         reason text not null check (length(trim(reason))>=8), actor_user_id text not null,
         created_at timestamptz not null default now()
       );
+      create function reject_control_event_mutation() returns trigger language plpgsql as $
+      begin raise exception 'bridge_title_control_events is append-only'; end; $;
+      create trigger no_control_event_mutation before update or delete on bridge_title_control_events
+        for each row execute function reject_control_event_mutation();
       insert into bridge_titles(id) values ('title-123');
     `);
     await db.query("insert into bridge_title_controls(title_id,control_state,reason,set_by,set_at) values ($1,'HOLD',$2,$3,now())", ["title-123","Rights evidence under review","super"]);
