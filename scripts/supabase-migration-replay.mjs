@@ -17,7 +17,7 @@ const { Pool } = pg;
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const MIGRATIONS_DIR = resolve(SCRIPT_DIR, "../supabase/migrations");
 const DATABASE_URL = process.env.SUPABASE_REPLAY_DATABASE_URL?.trim();
-const EXPECTED_MIGRATIONS = 69;
+const EXPECTED_MIGRATIONS = 70;
 const FIXTURE_MIGRATION =
   "20261113090535_map_verified_streamvista_studio_owner_20261113.sql";
 const FIXTURE_USER_ID = "bridge-migration-replay-fixture";
@@ -153,7 +153,7 @@ try {
     await client.query("BEGIN");
     try {
       // Production contains this legacy trigger helper, but it is not part
-      // of the 69-row migration ledger (it predates the recorded history).
+      // of the 70-row migration ledger (it predates the recorded history).
       // Recreate that verified baseline object only in the disposable replay DB
       // before the historical migration alters its search_path.
       if (name === "20261006154551_harden_authz_server_only_surfaces_20261006.sql") {
@@ -217,7 +217,7 @@ try {
       }
 
       // Three server-only tables exist in the Production baseline but are
-      // intentionally absent from the 69-row Supabase migration ledger.
+      // intentionally absent from the 70-row Supabase migration ledger.
       // Recreate their verified, empty schemas only in this disposable local
       // replay DB. The historical deep-clean migration below adds the deny
       // policies, so this fixture enables RLS but does not create policies.
@@ -278,7 +278,7 @@ try {
         console.log("[migration-replay] restored two verified empty pre-ledger server-only table baselines locally");
       }
 
-      // The Story/Concept module predates the 69-row migration ledger.
+      // The Story/Concept module predates the 70-row migration ledger.
       // Production has three rows in bridge_story_concept_submissions; recreate
       // only the schema/policies/grants locally and never copy those records.
       if (name === "20261113090257_bridge_story_concept_nonrow_privileges_20261113.sql") {
@@ -376,7 +376,7 @@ try {
         console.log("[migration-replay] restored Story/Concept pre-ledger schema and RLS baseline locally; no Production rows copied");
       }
 
-      // The Delivery Desk table predates the 69-row migration ledger.
+      // The Delivery Desk table predates the 70-row migration ledger.
       // Recreate its empty schema and existing internal-only RLS policy locally;
       // the Production table currently has zero rows, and no live data is copied.
       if (name === "20261114135437_bridge_delivery_job_ownership_20261114.sql") {
@@ -448,7 +448,7 @@ try {
   }
 
   // Production's current Bridge Data API security baseline is not fully
-  // represented by the 69-row migration ledger. Recreate it locally after
+  // represented by the 70-row migration ledger. Recreate it locally after
   // replay from read-only Production catalog evidence only.
   await client.query(`
     do $bridge_rls_baseline$
@@ -650,6 +650,8 @@ try {
     );
   }
 
+  // Assert the full Production-equivalent policy semantics, not only policy names.
+  // PostgreSQL uses USING as WITH CHECK for ALL policies when WITH CHECK is omitted.
   const baselineRls = await client.query(`
     select
       c.relname,
@@ -659,36 +661,86 @@ try {
           'bridge_creator_notifications',
           'loop_media_migration_queue',
           'loop_parental_controls'
-        ) then exists (
-          select 1 from pg_policy p
-          where p.polrelid = c.oid and p.polname = 'deny_client_access'
+        ) then (
+          (select count(*) from pg_policy x where x.polrelid = c.oid) = 1
+          and exists (
+            select 1 from pg_policy p
+            where p.polrelid = c.oid
+              and p.polname = 'deny_client_access'
+              and p.polcmd = '*'
+              and p.polpermissive
+              and cardinality(p.polroles) = 2
+              and (select oid from pg_roles where rolname = 'anon') = any(p.polroles)
+              and (select oid from pg_roles where rolname = 'authenticated') = any(p.polroles)
+              and pg_get_expr(p.polqual, p.polrelid) = 'false'
+              and (
+                p.polwithcheck is null
+                or pg_get_expr(p.polwithcheck, p.polrelid) = 'false'
+              )
+          )
         )
         when c.relname = 'bridge_story_concept_submissions' then (
-          exists (
+          (select count(*) from pg_policy x where x.polrelid = c.oid) = 2
+          and exists (
             select 1 from pg_policy p
-            where p.polrelid = c.oid and p.polname = 'Deny anonymous public access'
+            where p.polrelid = c.oid
+              and p.polname = 'Deny anonymous public access'
+              and p.polcmd = '*'
+              and p.polpermissive
+              and p.polroles = ARRAY[(select oid from pg_roles where rolname = 'anon')]
+              and pg_get_expr(p.polqual, p.polrelid) = 'false'
+              and (
+                p.polwithcheck is null
+                or pg_get_expr(p.polwithcheck, p.polrelid) = 'false'
+              )
           )
           and exists (
             select 1 from pg_policy p
             where p.polrelid = c.oid
               and p.polname = 'bridge_story_concept_submissions_owner_only'
+              and p.polcmd = '*'
+              and p.polpermissive
+              and p.polroles = ARRAY[(select oid from pg_roles where rolname = 'authenticated')]
+              and position('auth.uid()' in coalesce(pg_get_expr(p.polqual, p.polrelid), '')) > 0
+              and position('bridge_titles' in coalesce(pg_get_expr(p.polqual, p.polrelid), '')) > 0
+              and position('bridge_loop_identity_links' in coalesce(pg_get_expr(p.polqual, p.polrelid), '')) > 0
+              and position('owner_user_id' in coalesce(pg_get_expr(p.polqual, p.polrelid), '')) > 0
+              and position('title_id' in coalesce(pg_get_expr(p.polqual, p.polrelid), '')) > 0
+              and position('auth_user_id' in coalesce(pg_get_expr(p.polqual, p.polrelid), '')) > 0
+              and position('bridge_user_id' in coalesce(pg_get_expr(p.polqual, p.polrelid), '')) > 0
+              and position('auth.uid()' in coalesce(pg_get_expr(p.polwithcheck, p.polrelid), '')) > 0
+              and position('bridge_titles' in coalesce(pg_get_expr(p.polwithcheck, p.polrelid), '')) > 0
+              and position('bridge_loop_identity_links' in coalesce(pg_get_expr(p.polwithcheck, p.polrelid), '')) > 0
+              and position('owner_user_id' in coalesce(pg_get_expr(p.polwithcheck, p.polrelid), '')) > 0
+              and position('title_id' in coalesce(pg_get_expr(p.polwithcheck, p.polrelid), '')) > 0
+              and position('auth_user_id' in coalesce(pg_get_expr(p.polwithcheck, p.polrelid), '')) > 0
+              and position('bridge_user_id' in coalesce(pg_get_expr(p.polwithcheck, p.polrelid), '')) > 0
           )
         )
-        when c.relname = 'bridge_buyer_interest' then not exists (
-          select 1 from pg_policy p where p.polrelid = c.oid
+        when c.relname = 'bridge_buyer_interest' then (
+          not exists (select 1 from pg_policy p where p.polrelid = c.oid)
+          and not has_table_privilege('anon', c.oid, 'SELECT')
+          and not has_table_privilege('anon', c.oid, 'INSERT')
+          and not has_table_privilege('anon', c.oid, 'UPDATE')
+          and not has_table_privilege('anon', c.oid, 'DELETE')
+          and not has_table_privilege('authenticated', c.oid, 'SELECT')
+          and not has_table_privilege('authenticated', c.oid, 'INSERT')
+          and not has_table_privilege('authenticated', c.oid, 'UPDATE')
+          and not has_table_privilege('authenticated', c.oid, 'DELETE')
         )
-        when c.relname = 'bridge_delivery_jobs' then exists (
-          select 1 from pg_policy p
-          where p.polrelid = c.oid
-            and p.polname = 'bridge_delivery_jobs_internal_only'
-            and p.polcmd = '*'
-            and p.polroles = ARRAY[(select oid from pg_roles where rolname = 'authenticated')]
-            and position(
-              'private.bridge_is_internal' in coalesce(pg_get_expr(p.polqual, p.polrelid), '')
-            ) > 0
-            and position(
-              'private.bridge_is_internal' in coalesce(pg_get_expr(p.polwithcheck, p.polrelid), '')
-            ) > 0
+        when c.relname = 'bridge_delivery_jobs' then (
+          (select count(*) from pg_policy x where x.polrelid = c.oid) = 1
+          and exists (
+            select 1 from pg_policy p
+            where p.polrelid = c.oid
+              and p.polname = 'bridge_delivery_jobs_internal_only'
+              and p.polcmd = '*'
+              and p.polpermissive
+              and p.polroles = ARRAY[(select oid from pg_roles where rolname = 'authenticated')]
+              and position('private.bridge_is_internal' in coalesce(pg_get_expr(p.polqual, p.polrelid), '')) > 0
+              and position('private.bridge_is_internal' in coalesce(pg_get_expr(p.polwithcheck, p.polrelid), '')) > 0
+              and pg_get_expr(p.polqual, p.polrelid) = pg_get_expr(p.polwithcheck, p.polrelid)
+          )
         )
         else false
       end as policy_state_valid
@@ -710,7 +762,7 @@ try {
     baselineRls.rows.some((row) => !row.rls_enabled || !row.policy_state_valid)
   ) {
     throw new Error(
-      "Pre-ledger baseline RLS/policy verification failed: " +
+      "Pre-ledger baseline RLS/role/predicate verification failed: " +
         JSON.stringify(baselineRls.rows),
     );
   }
