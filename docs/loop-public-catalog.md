@@ -35,3 +35,15 @@ Production was not modified. No title, rights, publication, payment, entitlement
 
 ## Release gate
 Do not deploy this function or migration to Production until the SQL is replayed and reviewed against the exact Production schema, a separate Production migration is checked in, independent security review passes, and the Loop API is verified against a Production read-only smoke check. Public film releases remain title-specific gated by rights, asset, QC, legal and commercial evidence.
+
+
+## Production rollout (2026-11-16)
+Production Supabase ref: `mlmgugivsyoxzdgwkbpu`.
+- Applied migration `secure_public_loop_catalog_production` (version `20261116114408`).
+- Deployed `loop-public-catalog` Edge Function ACTIVE, version 1, JWT verification disabled for this read-only public catalogue.
+- Production RPC is SECURITY INVOKER with an empty search_path.
+- RPC EXECUTE: anon=false, authenticated=false, service_role=true.
+- Source table SELECT: anon=false and authenticated=false for both tables; service_role=true.
+- Production Loop `/api/titles/public` read-only smoke check: HTTP 200, `{ "success": true, "count": 0, "titles": [] }`.
+- Production app's current API route remains server-side and uses its service credential; the Loop PR moves the catalogue route to the Edge Function after review/merge.
+- No title, rights, publication, payment, entitlement, or media records were modified.
