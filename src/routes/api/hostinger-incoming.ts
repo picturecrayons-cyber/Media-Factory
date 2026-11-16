@@ -15,8 +15,14 @@ function safePayloadShape(value: unknown): Record<string, unknown> {
     return { payloadType: value === null ? "null" : Array.isArray(value) ? "array" : typeof value };
   }
   const payload = value as Record<string, unknown>;
+  const data = payload.data;
+  const dataRecord = data !== null && typeof data === "object" && !Array.isArray(data)
+    ? data as Record<string, unknown>
+    : null;
   const message = payload.message;
   const mailbox = payload.mailbox;
+  const dataMessage = dataRecord?.message;
+  const dataMailbox = dataRecord?.mailbox;
   const safeKeys = (record: unknown): string[] => {
     if (record === null || typeof record !== "object" || Array.isArray(record)) return [];
     return Object.keys(record as Record<string, unknown>)
@@ -24,12 +30,22 @@ function safePayloadShape(value: unknown): Record<string, unknown> {
       .map((key) => key.replace(/[^a-zA-Z0-9_.-]/g, "").slice(0, 48))
       .sort();
   };
+  const valueType = (input: unknown): string =>
+    input === null ? "null" : Array.isArray(input) ? "array" : typeof input;
   return {
     topLevelKeys: safeKeys(payload),
-    eventType: typeof payload.event,
-    mailboxType: mailbox === null ? "null" : Array.isArray(mailbox) ? "array" : typeof mailbox,
+    event: typeof payload.event === "string" ? payload.event : null,
+    idType: valueType(payload.id),
+    timestampType: valueType(payload.timestamp),
+    dataType: valueType(data),
+    dataKeys: safeKeys(data),
+    dataMailboxType: valueType(dataMailbox),
+    dataMailboxKeys: safeKeys(dataMailbox),
+    dataMessageType: valueType(dataMessage),
+    dataMessageKeys: safeKeys(dataMessage),
+    mailboxType: valueType(mailbox),
     mailboxKeys: safeKeys(mailbox),
-    messageType: message === null ? "null" : Array.isArray(message) ? "array" : typeof message,
+    messageType: valueType(message),
     messageKeys: safeKeys(message),
   };
 }
