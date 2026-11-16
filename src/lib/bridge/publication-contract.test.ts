@@ -8,7 +8,7 @@ import * as rights from "./rights-coverage.ts";
 
 // Execute the real server handler with isolated transport/database dependencies.
 // No database or AWS requests are made by this harness.
-function harness(grants: unknown[], allowed = true, existing = false) {
+function harness(grants: unknown[], allowed = true, existing = false, hasRendition = true) {
   const writes: { query: string; values: unknown[] }[] = [];
   const title = {
     id: "title-1",
@@ -22,6 +22,7 @@ function harness(grants: unknown[], allowed = true, existing = false) {
   const sql = async (strings: TemplateStringsArray, ...values: unknown[]) => {
     const query = strings.join("?");
     if (query.includes("from bridge_titles")) return [title];
+    if (query.includes("from bridge_playback_renditions")) return hasRendition ? [{ manifest_key: "renditions/title-1/index.m3u8" }] : [];
     if (query.includes("select evidence from bridge_rights_grants"))
       return [
         { evidence: [{ commercialTerms: { rightsOwnerSharePct: 80, distributorSharePct: 20 } }] },
@@ -110,6 +111,10 @@ test("new and existing publications emit the status accepted by the Loop catalog
     assert.match(publication.query, /authorization_status = 'authorized'/);
     assert.ok(publication.values.includes(data.territories));
     assert.ok(publication.values.includes(data.windowEnd));
+    const loopTitle = h.writes.find((write) => write.query.includes("insert into loop_titles"));
+    assert.ok(loopTitle);
+    assert.equal(loopTitle.values[10], "renditions/title-1/index.m3u8");
+    assert.ok(!loopTitle.values.includes("sealed/master"));
   }
 });
 
@@ -125,4 +130,11 @@ test("status alignment never bypasses operator, rights or commercial coverage", 
     await assert.rejects(h.authorize({ context, data: scenario.data }));
     assert.equal(h.writes.length, 0);
   }
+});
+
+
+test("publication fails closed when no verified HLS rendition exists", async () => {
+  const h = harness([grant], true, false, false);
+  await assert.rejects(h.authorize({ context, data }), /Verified HLS playback rendition is missing/);
+  assert.equal(h.writes.length, 0);
 });

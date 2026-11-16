@@ -112,7 +112,26 @@ export async function verifyDistributionPreflight(
     return { eligible: false, reasons: ["Title record does not exist in Crayons Bridge."] };
   }
 
+  // Consumer playback must reference a verified packaged rendition, never the QC master.
+  // Migration 0013 introduces this registry; until a trusted packager records a
+  // verified HLS manifest, publication fails closed.
+  const renditions = await sql<{ manifest_key: string }>`
+    select manifest_key
+    from bridge_playback_renditions
+    where title_id = ${titleId}
+      and protocol = 'HLS'
+      and status = 'VERIFIED'
+      and verified_at is not null
+      and is_primary = true
+    order by verified_at desc
+    limit 1
+  `;
+  const playbackManifestKey = renditions[0]?.manifest_key ?? null;
+
   const reasons: string[] = [];
+  if (!playbackManifestKey) {
+    reasons.push("Verified HLS playback rendition is missing; the QC master cannot be used for consumer playback.");
+  }
   if (!rightsRequest || !rightsRequest.windowStart || !rightsRequest.windowEnd ||
       rightsRequest.territories.length!==1 || rightsRequest.territories[0]!=="WORLDWIDE" ||
       rightsRequest.exploitationModels.length!==1 || rightsRequest.exploitationModels[0]!=="TVOD")
@@ -193,6 +212,7 @@ export async function verifyDistributionPreflight(
     title,
     rightsGrantId,
     commercialTerms,
+    playbackManifestKey,
   };
 }
 
@@ -382,9 +402,10 @@ export const authorizeLoopPublication = createServerFn({ method: "POST" })
         published, featured, access_tier, updated_at
       ) values (
         ${loopTitleId}, ${title.id}, ${title.slug}, ${title.name}, ${title.synopsis}, ${loopStageType(title.content_type)},
-        ${title.language}, ${title.year}, ${title.runtime_minutes}, ${title.poster_key}, ${title.master_key},
+        ${title.language}, ${title.year}, ${title.runtime_minutes}, ${title.poster_key}, ${preflight.playbackManifestKey},
         ${JSON.stringify({
-          source: "crayons-bridge-master-distribution",
+          source: "crayons-bridge-verified-rendition",
+          playbackProtocol: "HLS",
           lane: loopStageType(title.content_type),
           rightsGrantId: preflight.rightsGrantId,
           authorizedBy: actor.userId,
