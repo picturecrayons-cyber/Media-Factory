@@ -147,7 +147,7 @@ function StudioWorkspace({ actor }: { actor: BridgeActor }) {
               onNavigate={setActiveTab}
             />
           ) : null}
-          {activeTab === "productions" ? <ProductionPanel actor={actor} titles={titles} loading={titlesQuery.isPending} error={titlesQuery.isError} onRetry={() => void titlesQuery.refetch()} /> : null}
+          {activeTab === "productions" ? <ProductionPanel actor={actor} titles={titles} loading={titlesQuery.isPending} error={titlesQuery.isError} /> : null}
           {activeTab === "titles" ? <TitlesPanel /> : null}
           {activeTab === "dit" ? <DitPanel actor={actor} /> : null}
           {activeTab === "members" ? <MembersPanel /> : null}
@@ -203,13 +203,11 @@ function ProductionPanel({
   titles,
   loading,
   error,
-  onRetry,
 }: {
   actor: BridgeActor;
   titles: Array<{ id: string; name: string; status: string; language: string; year?: number | null; contentType?: string | null }>;
   loading: boolean;
   error: boolean;
-  onRetry: () => void;
 }) {
   return (
     <div className="space-y-5">
