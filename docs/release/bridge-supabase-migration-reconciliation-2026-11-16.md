@@ -7,6 +7,8 @@
 - SQL bytes: **144173** (excluding output trailing newlines).
 - Every active SQL file now preserves the exact stored statement text joined with LF, including all trailing spaces and newline characters. No trailing-whitespace normalization is performed. SHA-256 values are calculated from the same exact stored statement text.
 - Source-only PR: no Production migration was applied, repaired or reverted.
+- The local replay temporarily removes the active migrations directory while `supabase start` bootstraps managed services, then restores it for the script's controlled one-by-one replay. The script asserts that the local Supabase migration ledger is still empty before applying the 69 files itself.
+- Production has one verified pre-ledger dependency absent from the 69 SQL statements: `public.loop_parental_controls_set_updated_at()` and its BEFORE UPDATE trigger on `public.loop_parental_controls`. Production read-back confirmed the function body sets `NEW.updated_at = now()` and returns `NEW`; the replay runner recreates this exact helper/trigger only inside the disposable local database before the historical migration that alters the helper's search path. No live rows are copied.
 
 ## Remote version manifest
 
