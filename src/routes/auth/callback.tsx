@@ -18,25 +18,6 @@ export const Route = createFileRoute("/auth/callback")({
   component: AuthCallback,
 });
 
-/** Validates that redirect paths are strictly internal to prevent open redirect vulnerabilities */
-function sanitizeNextPath(raw: string | undefined): string | null {
-  if (!raw) return null;
-  const trimmed = raw.trim();
-  if (trimmed.startsWith("/") && !trimmed.startsWith("//") && !trimmed.startsWith("/\\")) {
-    if (
-      trimmed.startsWith("/dashboard") ||
-      trimmed.startsWith("/onboarding") ||
-      trimmed.startsWith("/workspace") ||
-      trimmed.startsWith("/title/") ||
-      trimmed.startsWith("/buyer") ||
-      trimmed.startsWith("/account")
-    ) {
-      return trimmed;
-    }
-  }
-  return null;
-}
-
 function AuthCallback() {
   const navigate = useNavigate();
   const search = Route.useSearch();
@@ -124,20 +105,19 @@ function AuthCallback() {
         }
 
         // 6. Synchronize user profile & workspace RBAC
-        const syncResult = await syncSupabaseSessionUser().catch((err) => {
-          console.warn("[auth/callback] Profile sync warning:", err);
-          return null;
-        });
+        // Profile sync errors are not equivalent to a missing profile. Preserve
+        // the signed-in session and show the service error instead of looping
+        // established users back through onboarding.
+        const syncResult = await syncSupabaseSessionUser();
 
         if (!alive) return;
 
-        // 7. Route to destination based on onboarding completion and safe next parameter
-        const safeNext = sanitizeNextPath(search.next || url.searchParams.get("next") || undefined);
-
-        if (syncResult?.isComplete && syncResult.profile) {
-          void navigate({ to: safeNext || syncResult.home || "/dashboard" });
+        // Role and home are server-resolved. Never let a callback query parameter
+        // override the account's Creator / Studio / Buyer / Investor / staff route.
+        if (syncResult.isComplete && syncResult.profile) {
+          void navigate({ to: syncResult.home || "/onboarding", replace: true });
         } else {
-          void navigate({ to: "/onboarding" });
+          void navigate({ to: "/onboarding", replace: true });
         }
       } catch (err: unknown) {
         console.error("[auth/callback verification error]", err);

@@ -9,6 +9,7 @@ import { randomBytes } from "node:crypto";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import { requireVerifiedActor } from "./session";
+import { listMyStoryConceptRows } from "./studio-tenant-scope";
 import { assertPermission } from "./rbac";
 import { writeAudit } from "./audit";
 import { assertNotDevUser } from "./guards";
@@ -188,19 +189,10 @@ export const listMyStoryConcepts = createServerFn({ method: "GET" })
     const sql = await getSql();
 
     try {
-      const rows = await sql<ConceptRow & { title_name: string }>`
-        select c.*, t.name as title_name
-        from bridge_story_concept_submissions c
-        join bridge_titles t on t.id = c.title_id
-        where t.owner_user_id = ${actor.userId}
-           or (
-             t.owner_account_type = 'studio'
-             and t.owner_organization_id is not null
-             and t.owner_organization_id = ${actor.organizationId ?? null}
-           )
-        order by c.created_at desc
-        limit 100
-      `;
+      const rows = await listMyStoryConceptRows<ConceptRow & { title_name: string }>(
+        sql,
+        { userId: actor.userId, organizationId: actor.organizationId ?? null },
+      );
 
       return {
         concepts: rows.map((r) => ({

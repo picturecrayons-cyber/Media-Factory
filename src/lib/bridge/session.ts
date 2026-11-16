@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
+import { resolveActiveOrganizationForUser } from "./studio-tenant-scope";
 import type { AccountType, InternalRole, Permission } from "./types";
 import type { Actor } from "./rbac";
 import { assertPermission, canAccessDashboard, workspaceHome } from "./rbac";
@@ -58,21 +59,7 @@ async function loadActorByBridgeUserId(userId: string): Promise<BridgeActor | nu
   // schema is absent, keep the profile available but do not grant organization
   // scope. Never infer an ID from organization_name or use another environment's ID.
   try {
-    const memberships = await sql<{ organization_id: string }>`
-      select bp.organization_id
-      from bridge_profiles bp
-      join bridge_organization_memberships m
-        on m.organization_id = bp.organization_id
-       and m.user_id = bp.user_id
-       and m.status = 'active'
-      join bridge_organizations o
-        on o.id = m.organization_id
-       and o.status = 'active'
-      where bp.user_id = ${userId}
-        and bp.organization_id is not null
-      limit 1
-    `;
-    actor.organizationId = memberships[0]?.organization_id ?? null;
+    actor.organizationId = await resolveActiveOrganizationForUser(sql, userId);
   } catch (error) {
     if (!isMissingOrganizationSchemaError(error)) throw error;
     actor.organizationId = null;
