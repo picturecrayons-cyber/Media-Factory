@@ -35,7 +35,7 @@ async function persistVerifiedAssetScoped(
     assetId: string;
     actorUserId: string;
     internalActor: boolean;
-    allowLockedTitleReplacement: boolean;
+    allowLockedTitleReplacement?: boolean;
     titleId: string;
     kind: string;
     byteSize: number;
