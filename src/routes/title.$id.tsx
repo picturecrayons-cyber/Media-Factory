@@ -587,7 +587,8 @@ function FilesPanel({
   }
 
   async function runMultipart(kind: SimpleAssetKind, file: File, contentType: string, assertAttemptActive: () => void, replacementTarget?: { assetId: string; reason: string }) {
-    const existing = readUploadSession(titleId, kind);
+    const sessionScope = replacementTarget?.assetId;
+    const existing = readUploadSession(titleId, kind, sessionScope);
     if (existing && !sameUploadFile(existing, file)) {
       throw new Error(`A paused ${kindLabel(kind)} upload is waiting for ${existing.fileName}. Choose that file to continue, or cancel it first.`);
     }
@@ -627,7 +628,7 @@ function FilesPanel({
         committed: false,
         expiresAt: started.expiresAt,
       };
-      writeUploadSession(session);
+      writeUploadSession(session, sessionScope);
     }
     activeMultipart.current = session;
     if (!session.committed) {
@@ -671,7 +672,7 @@ function FilesPanel({
           }
         }
         session = { ...session, completedParts: [...session.completedParts, part] };
-        writeUploadSession(session);
+        writeUploadSession(session, sessionScope);
         activeMultipart.current = session;
       }
       assertAttemptActive();
@@ -681,7 +682,7 @@ function FilesPanel({
         "Multipart commit",
       );
       session = { ...session, committed: true };
-      writeUploadSession(session);
+      writeUploadSession(session, sessionScope);
       activeMultipart.current = session;
     }
     return session.assetId;
@@ -748,7 +749,7 @@ function FilesPanel({
       announce("Storage verified. Refreshing the asset list…");
       await withTimeout(Promise.resolve(onAssetsChanged()), 15_000, "Asset refresh");
       assertAttemptActive();
-      clearUploadSession(titleId, kind);
+      clearUploadSession(titleId, kind, replacementTarget?.assetId);
       activeMultipart.current = null;
       setProgress(null);
       announce(`${kindLabel(kind)} is ready.`, "success", true);
@@ -1011,9 +1012,9 @@ function FilesPanel({
   );
 }
 
-function readUploadSession(titleId: string, kind: string): UploadSession | null {
+function readUploadSession(titleId: string, kind: string, storageScope?: string): UploadSession | null {
   try {
-    const raw = localStorage.getItem(sessionStorageKey(titleId, kind));
+    const raw = localStorage.getItem(sessionStorageKey(titleId, storageScope ? `${kind}:replacement:${storageScope}` : kind));
     if (!raw) return null;
     const session = JSON.parse(raw) as UploadSession;
     if (session.version !== 1 || session.titleId !== titleId || session.kind !== kind || !Array.isArray(session.completedParts)) return null;
@@ -1027,12 +1028,15 @@ function readUploadSession(titleId: string, kind: string): UploadSession | null 
   }
 }
 
-function writeUploadSession(session: UploadSession) {
-  localStorage.setItem(sessionStorageKey(session.titleId, session.kind), JSON.stringify(session));
+function writeUploadSession(session: UploadSession, storageScope?: string) {
+  localStorage.setItem(
+    sessionStorageKey(session.titleId, storageScope ? `${session.kind}:replacement:${storageScope}` : session.kind),
+    JSON.stringify(session),
+  );
 }
 
-function clearUploadSession(titleId: string, kind: string) {
-  localStorage.removeItem(sessionStorageKey(titleId, kind));
+function clearUploadSession(titleId: string, kind: string, storageScope?: string) {
+  localStorage.removeItem(sessionStorageKey(titleId, storageScope ? `${kind}:replacement:${storageScope}` : kind));
 }
 
 function displayKind(kind: string) {
