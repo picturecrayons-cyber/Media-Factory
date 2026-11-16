@@ -30,7 +30,7 @@ as $function$
           and l.status = 'APPROVED'
           and exists (
             select 1
-            from jsonb_array_elements(l.evidence) le
+            from jsonb_array_elements(case when jsonb_typeof(l.evidence)='array' then l.evidence else '[]'::jsonb end) le
             where le->>'grantId' = rg.id::text
           )
       )
@@ -43,9 +43,15 @@ as $function$
         select 1
         from public.bridge_destination_packages p
         join public.bridge_rights_grants rg on rg.id = p.rights_grant_id
+        join public.bridge_legal_cases l on l.title_id = rg.title_id and l.status = 'APPROVED'
         where p.title_id = t.id
           and p.readiness_state in ('READY','AUTHORIZED','DELIVERED')
           and rg.status = 'VALID'
+          and exists (
+            select 1
+            from jsonb_array_elements(case when jsonb_typeof(l.evidence)='array' then l.evidence else '[]'::jsonb end) le
+            where le->>'grantId' = rg.id::text
+          )
       )
   );
 $function$;
