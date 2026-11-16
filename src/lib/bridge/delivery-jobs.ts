@@ -8,6 +8,7 @@ import { requireVerifiedActor } from "./session";
 import { assertPermission, canReadTitle } from "./rbac";
 import { loadTitle } from "./titles";
 import { writeAudit } from "./audit";
+import { assertTitleControlClear } from "./title-controls-policy";
 
 const jobType = z.enum(["dubbing", "loudness_check", "imf_request", "dcp_request", "human_qc", "localization"]);
 const databaseType: Record<z.infer<typeof jobType>, string> = {
@@ -99,6 +100,8 @@ export const requestBridgeDeliveryJob = createServerFn({ method: "POST" })
     const actor = await actorFor(context.userId);
     const title = await loadTitle(data.titleId);
     if (!title) throw new Error("Title not found");
+    const [control] = await (await getSql())<{control_state: "CLEAR" | "HOLD" | "BLOCK"}>`select control_state from public.bridge_title_controls where title_id=${title.id}`;
+    assertTitleControlClear(control?.control_state);
     const canManage = Boolean(actor.internalRole && hasDeliveryPermission(actor));
     if (!canManage && (!canReadTitle(actor, title) || actor.internalRole)) {
       throw new Error("You can request delivery services only for titles you are authorized to access");
