@@ -5,7 +5,6 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { StatusChip } from "@/components/bridge/status-rail";
 import { createTitle, listTitles } from "@/lib/bridge/titles";
-import { deleteTitle } from "@/lib/bridge/title-deletion";
 import { BRIDGE_LOOP_LANES } from "@/lib/bridge/loop-lanes";
 
 export function TitleList({ empty, query = "" }: { empty: string; query?: string }) {
@@ -39,49 +38,11 @@ export function TitleList({ empty, query = "" }: { empty: string; query?: string
           </Link>
           <div className="flex shrink-0 items-center gap-3">
             <StatusChip status={t.status} />
-            {t.status === "DRAFT" ? <DeleteTitleButton id={t.id} name={t.name} /> : null}
+            {null}
           </div>
         </li>
       ))}
     </ul>
-  );
-}
-
-export function DeleteTitleButton({ id, name }: { id: string; name: string }) {
-  const qc = useQueryClient();
-  const navigate = useNavigate();
-  const deletion = useMutation({
-    mutationFn: (confirmation: string) => deleteTitle({ data: { id, confirmation } }),
-    onSuccess: () => {
-      toast("Empty draft title deleted.");
-      void qc.invalidateQueries({ queryKey: ["bridge-titles"] });
-      void qc.invalidateQueries({ queryKey: ["bridge-title", id] });
-      void qc.invalidateQueries({ queryKey: ["bridge-assets", id] });
-      if (window.location.pathname === `/title/${id}`) {
-        void navigate({ to: "/workspace" });
-      }
-    },
-    onError: (error) => toast.error(error instanceof Error ? error.message : "Could not delete title"),
-  });
-
-  function confirmDelete() {
-    const confirmation = window.prompt(
-      `Only an empty DRAFT title with no registered media can be deleted. Titles with uploads, versions, posters, masters, DIT sessions, review, rights, or commercial records are protected. Type the exact title name to continue:\n\n${name}`,
-    );
-    if (confirmation === null) return;
-    deletion.mutate(confirmation);
-  }
-
-  return (
-    <Button
-      type="button"
-      variant="outline"
-      disabled={deletion.isPending}
-      onClick={confirmDelete}
-      className="rounded-full border-red-300 px-3 text-xs text-red-700 hover:bg-red-50"
-    >
-      {deletion.isPending ? "Deleting…" : "Delete"}
-    </Button>
   );
 }
 
