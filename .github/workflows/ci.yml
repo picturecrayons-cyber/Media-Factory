@@ -76,9 +76,10 @@ jobs:
 
       - run: npm ci
 
-      - uses: supabase/setup-cli@v1
+      - uses: supabase/setup-cli@1dedf2c611547ede7232d26866dd3c56ab903bbb
         with:
-          version: latest
+          version: 3.0.0
+          github-token: ${{ github.token }}
 
       # Supabase CLI automatically applies files in supabase/migrations during
       # start. Hide the recovered ledger temporarily so the custom replay can
@@ -108,4 +109,9 @@ jobs:
 
       - name: Stop isolated Supabase stack
         if: always()
-        run: supabase stop --no-backup
+        run: |
+          if command -v supabase >/dev/null 2>&1; then
+            supabase stop --no-backup
+          else
+            echo "Supabase CLI was not installed; skipping local stack cleanup."
+          fi
