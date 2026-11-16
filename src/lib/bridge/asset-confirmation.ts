@@ -73,7 +73,7 @@ async function persistVerifiedAssetScoped(
           where t.id = a.title_id
             and t.status in ('DRAFT','UPLOADING','PREPARING')
             and not exists (
-              select 1 from public.bridge_title_controls c
+              select 1 from bridge_title_controls c
               where c.title_id=t.id and c.control_state in ('HOLD','BLOCK')
             )
             and (
