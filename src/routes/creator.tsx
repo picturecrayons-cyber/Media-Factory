@@ -128,9 +128,7 @@ function CreatorDashboard({
           </p>
         </div>
         <NewSubmissionPanel />
-        <div className="rounded-xl border border-line bg-surface p-4">
-          <MyStoryConcepts />
-        </div>
+        <MyStoryConcepts />
       </section>
 
       <section id="workspace-tools" className="scroll-mt-20 space-y-3">
