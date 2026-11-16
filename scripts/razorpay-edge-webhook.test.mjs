@@ -80,18 +80,53 @@ test("failed webhook worker logs claim-release persistence failures", () => {
   assert.match(source, /Failed to release webhook claim/);
 });
 
-test("license package reservation is atomic and cannot be reassigned to another buyer", async () => {
+test("package checkout reuses an existing buyer order before claiming the package", async () => {
   const paymentSource = await readFile(new URL("../src/lib/bridge/payments.ts", import.meta.url), "utf8");
   const start = paymentSource.indexOf("export const createLicenseOrder");
   const end = paymentSource.indexOf("export const verifyLicensePayment", start);
   const orderHandler = paymentSource.slice(start, end);
+  const packageOrder = orderHandler.indexOf("const packageOrder = await sql");
   const reserve = orderHandler.indexOf("update bridge_license_packages");
-  const createOrder = orderHandler.indexOf('razorpayFetch<{ id: string; amount: number; currency: string }>');
-  assert.ok(reserve >= 0 && createOrder > reserve, "package must be reserved before provider order creation");
-  assert.match(orderHandler, /and \(buyer_user_id is null or buyer_user_id = \$\{actor\.userId\}\)/);
-  assert.match(orderHandler, /returning id, title_id, price_paise, status, buyer_user_id/);
-  assert.match(orderHandler, /License package is reserved by another buyer or is not available/);
-  assert.doesNotMatch(orderHandler, /set status = 'IN_NEGOTIATION', buyer_user_id = \$\{actor\.userId\}/);
+  assert.ok(packageOrder >= 0 && reserve > packageOrder, "reuse an existing package order before making a new reservation");
+  const lookup = orderHandler.slice(packageOrder, reserve);
+  assert.match(lookup, /where user_id = \${actor\.userId}/);
+  assert.match(lookup, /package_id = \${data\.packageId}/);
+  assert.match(lookup, /provider_order_id is not null/);
+  assert.match(lookup, /status <> 'failed'/);
+  assert.match(lookup, /return \{[\s\S]*paymentRecordId: packageOrder\[0\]\.id/);
+});
+
+test("package reservation is first-buyer-only and can reclaim only stale empty reservations", async () => {
+  const paymentSource = await readFile(new URL("../src/lib/bridge/payments.ts", import.meta.url), "utf8");
+  const start = paymentSource.indexOf("export const createLicenseOrder");
+  const end = paymentSource.indexOf("export const verifyLicensePayment", start);
+  const orderHandler = paymentSource.slice(start, end);
+  const reserveStart = orderHandler.indexOf("update bridge_license_packages");
+  const reserveEnd = orderHandler.indexOf("returning id, title_id, price_paise", reserveStart);
+  const reserve = orderHandler.slice(reserveStart, reserveEnd);
+  assert.ok(reserveStart >= 0 && reserveEnd > reserveStart);
+  assert.match(reserve, /status = 'READY' and buyer_user_id is null/);
+  assert.match(reserve, /status = 'IN_NEGOTIATION'/);
+  assert.match(reserve, /buyer_user_id = \${actor\.userId}/);
+  assert.match(reserve, /updated_at < now\(\) - interval '10 minutes'/);
+  assert.match(reserve, /not exists \([\s\S]*from bridge_payments payment/);
+  assert.match(orderHandler, /checkout is already in progress/);
+});
+
+test("failed package-order creation releases only an unpersisted reservation", async () => {
+  const paymentSource = await readFile(new URL("../src/lib/bridge/payments.ts", import.meta.url), "utf8");
+  const start = paymentSource.indexOf("export const createLicenseOrder");
+  const end = paymentSource.indexOf("export const verifyLicensePayment", start);
+  const orderHandler = paymentSource.slice(start, end);
+  const providerOrder = orderHandler.indexOf("razorpayFetch<{ id: string; amount: number; currency: string }>");
+  const catchBlock = orderHandler.indexOf("} catch (error) {", providerOrder);
+  assert.ok(providerOrder >= 0 && catchBlock > providerOrder, "provider order and persistence must be covered by cleanup");
+  const cleanup = orderHandler.slice(catchBlock);
+  assert.match(cleanup, /update bridge_license_packages/);
+  assert.match(cleanup, /set status = 'READY', buyer_user_id = null/);
+  assert.match(cleanup, /buyer_user_id = \${actor\.userId}/);
+  assert.match(cleanup, /not exists \([\s\S]*from bridge_payments payment/);
+  assert.match(cleanup, /throw error/);
 });
 
 test("webhook stale lease outlives Supabase's maximum Edge Function worker duration", () => {
