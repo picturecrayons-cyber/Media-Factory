@@ -3,7 +3,6 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import {
   ArrowUpRight,
-  CheckCircle2,
   ChevronRight,
   Clapperboard,
   Film,
@@ -57,15 +56,12 @@ function StudioWorkspace({ actor }: { actor: BridgeActor }) {
   const counts = useMemo(() => {
     return titles.reduce(
       (result, title) => {
-        result.total += 1;
-        if (title.status === "DRAFT") result.draft += 1;
         if (title.status === "UPLOADING") result.uploading += 1;
         if (title.status === "PREPARING") result.preparing += 1;
         if (title.status === "QC_REVIEW") result.review += 1;
-        if (["LICENSING_READY", "LIVE_FOR_BUYERS", "LICENSED", "DELIVERED"].includes(title.status)) result.cleared += 1;
         return result;
       },
-      { total: 0, draft: 0, uploading: 0, preparing: 0, review: 0, cleared: 0 },
+      { uploading: 0, preparing: 0, review: 0 },
     );
   }, [titles]);
 
@@ -168,7 +164,7 @@ function OverviewPanel({
   titlesError,
   onNavigate,
 }: {
-  counts: { total: number; draft: number; uploading: number; preparing: number; review: number; cleared: number };
+  counts: { uploading: number; preparing: number; review: number };
   nextActions: Array<{ label: string; value: number; hint: string; tab: StudioTab }>;
   titlesLoading: boolean;
   titlesError: boolean;
