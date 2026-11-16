@@ -15,6 +15,7 @@ type DeletionTitle = {
   owner_user_id: string;
   owner_account_type: string;
   owner_organization_id: string | null;
+  submission_type: string | null;
   poster_key: string | null;
   master_key: string | null;
 };
@@ -32,7 +33,7 @@ export const deleteTitle = createServerFn({ method: "POST" })
     return sql.transaction(async (tx) => {
       const [title] = await tx<DeletionTitle>`
         select id, name, status, owner_user_id, owner_account_type, owner_organization_id,
-               poster_key, master_key
+               submission_type, poster_key, master_key
         from bridge_titles
         where id = ${data.id}
         for update
@@ -50,6 +51,9 @@ export const deleteTitle = createServerFn({ method: "POST" })
         "title.update_own",
       );
       if (!authorized) throw new Error("You do not have permission to delete this title.");
+      if (title.submission_type === "story_concept") {
+        throw new Error("Story / Concept submissions cannot be permanently deleted through the finished-film title action.");
+      }
       if (data.confirmation.trim() !== title.name) {
         throw new Error("Confirmation text does not match the title name.");
       }
