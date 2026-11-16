@@ -277,6 +277,8 @@ export const createLicenseOrder = createServerFn({ method: "POST" })
     assertPermission(actor, "payment.create_order");
     const title = await loadTitle(data.titleId);
     if (!title || (!canReadTitle(actor, title) && actor.accountType !== "buyer")) throw new Error("Not found");
+    const controlRows = await (await getSql())<{control_state: "CLEAR" | "HOLD" | "BLOCK"}>`select control_state from public.bridge_title_controls where title_id=${title.id}`;
+    assertTitleControlClear(controlRows[0]?.control_state);
     await assertBuyerPublishable(title.id);
     const sql = await getSql();
     if (title.status !== "LIVE_FOR_BUYERS" && title.status !== "IN_NEGOTIATION" && title.status !== "LICENSED" && title.status !== "DELIVERED") {
