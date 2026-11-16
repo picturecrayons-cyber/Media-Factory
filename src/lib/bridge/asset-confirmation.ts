@@ -136,7 +136,7 @@ export async function persistVerifiedAssetReplacement(
   if (opts.reason.trim().length < 8)
     throw new Error("A replacement reason of at least 8 characters is required");
 
-  const rows = await sql.query<{ entity_id: string }>(
+  const rows = await (sql as Sql).transaction(async (tx) => tx.query<{ entity_id: string }>(
     `
     select pg_advisory_xact_lock(hashtextextended($1, 0));
     with title_lock as (
@@ -235,6 +235,6 @@ export async function persistVerifiedAssetReplacement(
       opts.reason.trim(),
       opts.etag,
     ],
-  );
+  ));
   return Boolean(rows[0]);
 }
