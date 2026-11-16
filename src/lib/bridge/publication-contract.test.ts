@@ -12,7 +12,12 @@ function harness(
   grants: unknown[],
   allowed = true,
   existing = false,
-  gates = {
+  gates: {
+    ott_preparation_status: string | null;
+    packaging_status: string | null;
+    curation_status: string | null;
+    delivery_status: string | null;
+  } | null = {
     ott_preparation_status: "READY",
     packaging_status: "COMPLETE",
     curation_status: "APPROVED",
@@ -31,6 +36,7 @@ function harness(
   };
   const sql = async (strings: TemplateStringsArray, ...values: unknown[]) => {
     const query = strings.join("?");
+    if (query.includes("select b.id")) return [];
     if (query.includes("from bridge_titles")) return [title];
     if (query.includes("select evidence from bridge_rights_grants"))
       return [
@@ -38,7 +44,7 @@ function harness(
       ];
     if (query.includes("from bridge_rights_grants")) return grants;
     if (query.includes("as qc_ok")) return [{ qc_ok: true, legal_ok: true }];
-    if (query.includes("from bridge_title_gate_certifications")) return [gates];
+    if (query.includes("from bridge_title_gate_certifications")) return gates ? [gates] : [];
     if (query.includes("select id from bridge_titles")) return [title];
     if (query.includes("select id from loop_titles"))
       return existing ? [{ id: "loop-existing" }] : [];
@@ -83,7 +89,11 @@ function harness(
       return modules[name];
     },
   });
-  return { authorize: exports.authorizeLoopPublication, writes };
+  return {
+    authorize: exports.authorizeLoopPublication,
+    readiness: exports.listLoopPublicationReadiness,
+    writes,
+  };
 }
 
 const grant = {
@@ -151,4 +161,18 @@ test("publication requires all four release certifications", async () => {
     await assert.rejects(h.authorize({ context, data }), /Distribution Authorization Blocked/);
     assert.equal(h.writes.length, 0);
   }
+});
+
+
+test("missing release certification row fails closed", async () => {
+  const h = harness([grant], true, false, null);
+  await assert.rejects(h.authorize({ context, data }), /OTT preparation must be certified READY/);
+  assert.equal(h.writes.length, 0);
+});
+
+test("publication readiness GET performs no database writes", async () => {
+  const h = harness([grant]);
+  const result = await h.readiness({ context });
+  assert.deepEqual(result, { titles: [] });
+  assert.equal(h.writes.length, 0);
 });
