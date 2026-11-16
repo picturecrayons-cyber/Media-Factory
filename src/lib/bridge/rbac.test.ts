@@ -266,3 +266,26 @@ it("allows only verified Super Admin to approve their own legal draft", async ()
   assert.equal(canReviewLicenseDraft(actor("unverified-super", "independent_creator", "super_admin", false), "creator-a"), false);
   assert.equal(canReviewLicenseDraft(legal, "creator-a"), true);
 });
+
+
+it("grants verified Super Admin all existing QC, rights, licensing, publishing and release decisions", () => {
+  const permissions = [
+    "title.qc_review",
+    "title.rights_review",
+    "title.license",
+    "title.approve",
+    "title.negotiate",
+    "title.deliver",
+    "loop.publish",
+    "loop.revoke",
+    "loop.certify_playback",
+  ] as const;
+  for (const permission of permissions) {
+    assert.equal(hasPermission(superAdmin(), permission), true, `Super Admin missing ${permission}`);
+    assert.equal(hasPermission(admin(), permission), false, `Admin unexpectedly received ${permission}`);
+    assert.equal(hasPermission(qc, permission), permission === "title.qc_review");
+    assert.equal(hasPermission(legal, permission), permission === "title.rights_review");
+  }
+  const unverified = actor("unverified-super", "independent_creator", "super_admin", false);
+  for (const permission of permissions) assert.equal(hasPermission(unverified, permission), false);
+});
