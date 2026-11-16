@@ -139,7 +139,9 @@ test("verified Super Admin can replace an asset after QC while preserving the HO
     await db.exec(`insert into bridge_titles (id,slug,name,owner_user_id,owner_account_type,status)
       values ('title-qc-done','qc-done','QC completed','creator','independent_creator','RIGHTS_REVIEW');
       insert into bridge_assets (id,title_id,kind,s3_key,content_type,created_by)
-      values ('asset-replacement','title-qc-done','master','source/replacement.mp4','video/mp4','super-admin');`);
+      values
+        ('asset-replacement','title-qc-done','master','source/replacement.mp4','video/mp4','super-admin'),
+        ('asset-hold','title-qc-done','master','source/hold.mp4','video/mp4','super-admin');`);
     const sql = { query: async <T>(query: string, params: unknown[]) => (await db.query<T>(query, params)).rows };
     const args = {
       assetId: "asset-replacement",
@@ -167,12 +169,12 @@ test("verified Super Admin can replace an asset after QC while preserving the HO
       "select metadata from bridge_audit_logs where entity_id='asset-replacement'",
     )).rows[0];
     assert.equal(JSON.parse(audit?.metadata ?? "{}").superAdminReplacement, true);
-    await db.exec("update bridge_title_controls set control_state='HOLD' where title_id='title-qc-done'");
+    await db.exec("insert into bridge_title_controls (title_id,control_state) values ('title-qc-done','HOLD')");
     assert.equal(await persistVerifiedAsset(sql, {
       ...args,
-      assetId: "asset-replacement",
-      sourceKey: "sealed/replacement.mp4",
-      sealedKey: "sealed/replacement-next.mp4",
+      assetId: "asset-hold",
+      sourceKey: "source/hold.mp4",
+      sealedKey: "sealed/hold.mp4",
     }), false);
   } finally {
     await db.close();
