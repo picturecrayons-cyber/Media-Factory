@@ -38,7 +38,7 @@ export async function saveLoopLicense(
     )
   )
     throw new Error("Forbidden");
-  const [control] = await tx<{control_state: "CLEAR" | "HOLD" | "BLOCK"}>`select control_state from public.bridge_title_controls where title_id=${data.titleId} for update`;
+  const [control] = await tx<{control_state: "CLEAR" | "HOLD" | "BLOCK"}>`select control_state from bridge_title_controls where title_id=${data.titleId} for update`;
   assertTitleControlClear(control?.control_state);
   if (new Date(data.windowEnd) <= new Date()) throw new Error("License window has expired");
   const [grant] = await tx<{ id: string }>`insert into bridge_rights_grants
@@ -84,7 +84,7 @@ export async function reviewWorkflow(tx: Sql, actor: Actor, data: z.infer<typeof
     poster_key: string | null;
   }>`select status,master_key,poster_key from bridge_titles where id=${data.titleId} for update`;
   if (!title) throw new Error("Not found");
-  const [control] = await tx<{control_state: "CLEAR" | "HOLD" | "BLOCK"}>`select control_state from public.bridge_title_controls where title_id=${data.titleId}`;
+  const [control] = await tx<{control_state: "CLEAR" | "HOLD" | "BLOCK"}>`select control_state from bridge_title_controls where title_id=${data.titleId}`;
   assertTitleControlClear(control?.control_state);
   const expected = data.stage === "QC" ? "QC_REVIEW" : "RIGHTS_REVIEW";
   if (title.status !== expected) throw new Error(`Title must be in ${expected}`);
