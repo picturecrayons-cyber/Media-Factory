@@ -18,6 +18,7 @@ import {
   listProductionAssets,
   requestAssetDownload,
   requestAssetUpload,
+  requestAssetReplacement,
 } from "@/lib/bridge/assets";
 import { getLoopPublication } from "@/lib/bridge/loop-publication";
 import type { BridgeActor } from "@/lib/bridge/session";
@@ -278,6 +279,7 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
             canOperateOnTitle(actor, title, "asset.sign_upload", "title.ingest_internal") &&
             ["DRAFT", "UPLOADING", "PREPARING"].includes(title.status)
           }
+          canReplace={actor.emailVerified && actor.internalRole === "super_admin"}
           titleId={id}
           assets={assets}
           onAssetsChanged={() => assetsQ.refetch()}
@@ -429,8 +431,10 @@ function FilesPanel({
   assets,
   onAssetsChanged,
   canUpload,
+  canReplace,
 }: {
   canUpload: boolean;
+  canReplace: boolean;
   titleId: string;
   assets: Array<{
     id: string;
