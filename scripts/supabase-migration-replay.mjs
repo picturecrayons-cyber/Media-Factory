@@ -627,6 +627,8 @@ try {
 
   const expectedTables = [
     "public.bridge_titles",
+    "public.bridge_title_controls",
+    "public.bridge_title_control_events",
     "public.bridge_assets",
     "public.bridge_payments",
     "public.bridge_webhook_events",
