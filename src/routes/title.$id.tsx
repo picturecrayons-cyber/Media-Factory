@@ -97,6 +97,7 @@ function TitlePage() {
 function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
   const [chosenTab, setChosenTab] = useState<WorkspaceTab | null>(null);
   const buyerView = actor.accountType === "buyer" && !actor.internalRole;
+  const qc = useQueryClient();
 
   const titleQ = useQuery({
     // The same title has a redacted Buyer DTO and a full internal DTO.
@@ -142,6 +143,15 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
     },
     onError: (error) => setControlActionError(error instanceof Error ? error.message : "Control action failed"),
   });
+
+  const title = titleQ.data?.title;
+  const assets = assetsQ.data?.assets ?? [];
+  const productionAssets = productionAssetsQ.data?.assets ?? [];
+  const pub = pubQ.data?.publication;
+  const activeTab: WorkspaceTab = buyerView
+    ? "Overview"
+    : chosenTab ?? (title && ["DRAFT", "UPLOADING", "PREPARING"].includes(title.status) ? "Assets" : "Overview");
+  const visibleTabs = buyerView ? (["Overview"] as const) : WORKSPACE_TABS;
 
   if (titleQ.isPending) return <p className="text-sm text-muted">Loading title workspace…</p>;
   if (titleQ.isError)
