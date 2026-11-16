@@ -38,6 +38,17 @@ The STAGING database has a separate, test-specific migration history, including 
 8. Run replay only against a fresh local disposable PostgreSQL/Supabase instance. Never point the replay runner at STAGING or PRODUCTION.
 9. Request independent review and a separate, explicit STAGING WRITE approval before any hosted migration.
 
+## Follow-up READ-ONLY SQL command inventory — 2026-11-17
+
+A later targeted pattern pass refined the preliminary DML counts. These are command-pattern candidates from stored SQL text, not a parser-certified AST inventory; comments and quoted/dynamic SQL still require manual/source-level review.
+
+- **INSERT:** 11 command candidates across 7 migration records. Targets: `public.bridge_service_catalog`, `public.loop_payment_events`, `public.loop_user_tvod_entitlements`, `public.bridge_settlement_reference_claim_events`, `public.bridge_settlement_reference_claims`, `public.streamvista_projects`, `public.streamvista_service_orders`, `storage.buckets`, and `public.bridge_site_content`.
+- **UPDATE:** 3 command candidates across 2 migration records:
+  - `20261106031723 / bridge_server_authoritative_uploads_0023_20261106`: 1 candidate targeting `public.bridge_assets` (previously described as a null-only backfill; verify exact predicate and affected-row semantics in a disposable fixture).
+  - `20261110183454 / loop_runtime_tables_and_atomic_tvod_fulfillment_staging`: 2 candidates targeting `public.loop_payment_events` and `public.loop_user_tvod_entitlements`. These were absent from the earlier one-UPDATE summary and require full value/provenance and replay review.
+- This supersedes the earlier shorthand that there was only one UPDATE. It does not establish that all candidates are executable top-level commands; exact parser-backed classification remains incomplete.
+- No SQL from the hosted ledger was executed. No replay or data write was performed.
+
 ## TVOD function hardening proposal
 
 The companion SQL proposal is located at:
