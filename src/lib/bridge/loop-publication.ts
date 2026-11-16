@@ -9,6 +9,7 @@ import { requireVerifiedActor } from "./session";
 import { assertNotDevUser } from "./guards";
 import { writeAudit } from "./audit";
 import { assertPublicationCanExtend, findCoveringRightsGrant, type BridgeRightsGrant } from "./rights-coverage";
+import { assertTitleControlClear } from "./title-controls-policy";
 
 export type DistributionAuthorizationStatus =
   | "DRAFT"
@@ -413,6 +414,8 @@ export const authorizeLoopPublication = createServerFn({ method: "POST" })
       throw new Error("Consumer access tier must be covered by the requested exploitation models.");
     }
     return (await getSql()).transaction(async (sql) => {
+      const [control] = await sql<{control_state: "CLEAR" | "HOLD" | "BLOCK"}>`select control_state from public.bridge_title_controls where title_id=${data.bridgeTitleId}`;
+      assertTitleControlClear(control?.control_state);
       await sql`select id from bridge_titles where id=${data.bridgeTitleId} for update`;
       const preflight = await verifyDistributionPreflight(sql, data.bridgeTitleId, {
         destination: data.destination,
