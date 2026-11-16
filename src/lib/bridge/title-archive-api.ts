@@ -7,7 +7,7 @@ import { assertNotDevUser } from "./guards";
 import { writeAudit } from "./audit";
 import { canMutateTitle } from "./rbac";
 import { loadTitle } from "./titles";
-import { archiveDraftTitle, restoreArchivedDraft } from "./title-archive";
+import { archiveDraftTitle, canArchiveDraftTitle, restoreArchivedDraft } from "./title-archive";
 
 async function mutateDraft(userId: string, id: string, restore: boolean) {
   assertNotDevUser(userId);
@@ -38,6 +38,42 @@ async function mutateDraft(userId: string, id: string, restore: boolean) {
     return { id: targetId };
   });
 }
+
+export const listArchivableDraftIds = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    if (actor.internalRole && actor.internalRole !== "super_admin") return { ids: [] as string[] };
+    if (!actor.internalRole && !["independent_creator", "studio"].includes(actor.accountType)) return { ids: [] as string[] };
+    const sql = await getSql();
+    const rows = await sql<{ id: string }>`
+      select id from bridge_titles
+      where status = 'DRAFT' and archived_at is null
+        and (
+          ${actor.internalRole === "super_admin"}::boolean
+          or owner_user_id = ${actor.userId}
+          or (
+            ${actor.accountType === "studio"}::boolean
+            and owner_account_type = 'studio'
+            and owner_organization_id = ${actor.organizationId ?? null}
+            and exists (
+              select 1 from bridge_organization_memberships m
+              where m.organization_id = ${actor.organizationId ?? null}
+                and m.user_id = ${actor.userId}
+                and m.status = 'active'
+            )
+          )
+        )
+      order by updated_at desc limit 200
+    `;
+    const eligible: string[] = [];
+    for (const row of rows) {
+      const title = await loadTitle(row.id);
+      if (title && await canArchiveDraftTitle(sql, actor, title)) eligible.push(row.id);
+    }
+    return { ids: eligible };
+  });
 
 export const archiveDraftTitleAction = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
