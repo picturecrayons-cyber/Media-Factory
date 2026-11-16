@@ -207,3 +207,101 @@ export const setTitleReleaseControl = createServerFn({ method: "POST" })
     });
     return { ok: true, status: control.status, actor: actor.userId, verified: true };
   });
+
+
+const publishTitleInput = z.object({ titleId: z.string().min(8) });
+
+export const publishTitleToBuyers = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(publishTitleInput)
+  .handler(async ({ context, data }) => {
+    const actor = await actorFor(context.userId);
+    if (!actor.internalRole) throw new Error("Forbidden");
+    assertPermission(actor, "title.approve");
+    const sql = await getSql();
+    return sql.transaction(async (tx) => {
+      const [title] = await tx<{ id: string; status: string }>`
+        select id, status from bridge_titles where id = ${data.titleId} for update
+      `;
+      if (!title) throw new Error("Title not found");
+      if (title.status !== "LICENSING_READY") throw new Error("Title must be LICENSING_READY before buyer publication");
+      const checks = await tx<{
+        qc_ok: boolean;
+        legal_ok: boolean;
+        rights_ok: boolean;
+        gates_ok: boolean;
+        package_ok: boolean;
+        release_clear: boolean;
+      }>`
+        select
+          exists(select 1 from bridge_qc_cases q where q.title_id=t.id and q.status='PASSED') as qc_ok,
+          exists(
+            select 1 from bridge_legal_cases l
+            join bridge_rights_grants rg on rg.title_id=l.title_id
+            where l.title_id=t.id and l.status='APPROVED'
+              and rg.status='VALID'
+              and rg.window_start is not null and rg.window_start <= now()
+              and rg.window_end is not null and rg.window_end > now()
+              and exists (
+                select 1 from jsonb_array_elements(l.evidence) le
+                where le->>'grantId'=rg.id::text
+              )
+          ) as legal_ok,
+          exists(
+            select 1 from bridge_rights_grants rg
+            where rg.title_id=t.id and rg.status='VALID'
+              and rg.window_start is not null and rg.window_start <= now()
+              and rg.window_end is not null and rg.window_end > now()
+              and jsonb_array_length(rg.territories)>0
+              and jsonb_array_length(rg.languages)>0
+              and jsonb_array_length(rg.media)>0
+          ) as rights_ok,
+          exists(
+            select 1 from bridge_title_gate_certifications g
+            where g.title_id=t.id
+              and g.ott_preparation_status='READY'
+              and g.packaging_status='COMPLETE'
+              and g.curation_status='APPROVED'
+              and g.delivery_status='READY'
+              and coalesce(g.evidence->'releaseControl'->>'status','CLEAR')='CLEAR'
+          ) as gates_ok,
+          exists(
+            select 1 from bridge_destination_packages p
+            join bridge_rights_grants rg on rg.id=p.rights_grant_id
+            where p.title_id=t.id
+              and p.readiness_state in ('READY','AUTHORIZED','DELIVERED')
+              and rg.status='VALID'
+          ) as package_ok,
+          not exists(
+            select 1 from bridge_title_gate_certifications g
+            where g.title_id=t.id
+              and coalesce(g.evidence->'releaseControl'->>'status','CLEAR') in ('HOLD','BLOCK')
+          ) as release_clear
+        from bridge_titles t where t.id=${data.titleId}
+      `;
+      const c = checks[0];
+      if (!c || !c.qc_ok || !c.legal_ok || !c.rights_ok || !c.gates_ok || !c.package_ok || !c.release_clear) {
+        const missing = [
+          ["QC pass", c?.qc_ok],
+          ["approved legal case linked to a valid rights grant", c?.legal_ok],
+          ["active and complete rights grant", c?.rights_ok],
+          ["all four publication gates and no HOLD/BLOCK", c?.gates_ok],
+          ["ready destination package linked to valid rights", c?.package_ok],
+          ["release control clear", c?.release_clear],
+        ].filter(([, ok]) => !ok).map(([name]) => name);
+        throw new Error("Buyer publication blocked: " + missing.join(", "));
+      }
+      await tx`update bridge_titles set status='LIVE_FOR_BUYERS', updated_at=now() where id=${data.titleId}`;
+      await tx`insert into bridge_title_events(title_id,from_status,to_status,actor_user_id,note)
+        values (${data.titleId},'LICENSING_READY','LIVE_FOR_BUYERS',${actor.userId},'Super Admin buyer publication after verified gates')`;
+      await tx`insert into bridge_audit_logs(actor_user_id,action,entity_type,entity_id,metadata)
+        values (${actor.userId},'title.publish_to_buyers','bridge_title',${data.titleId},
+          ${JSON.stringify({ status: 'LIVE_FOR_BUYERS', verifiedBy: actor.userId })}::jsonb)`;
+      const [readback] = await tx<{ status: string }>`select status from bridge_titles where id=${data.titleId}`;
+      const [visibility] = await tx<{ visible: boolean }>`select public.bridge_title_buyer_visibility(${data.titleId}) as visible`;
+      if (readback?.status !== "LIVE_FOR_BUYERS" || visibility?.visible !== true) {
+        throw new Error("Buyer publication read-back failed; transaction rolled back");
+      }
+      return { ok: true, status: readback.status, buyerVisible: visibility.visible, verified: true };
+    });
+  });
