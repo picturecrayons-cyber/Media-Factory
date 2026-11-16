@@ -911,7 +911,16 @@ function FilesPanel({
                     busy={uploading === kind}
                     locked={uploading !== null && uploading !== kind}
                     canUpload={canUpload}
-                    onFile={(file) => void uploadFile(kind, file)}
+                    canReplace={canReplace}
+                    onFile={(file) => {
+                      if (verified && canReplace) {
+                        if (kind === "master" && !window.confirm("Replace the main film master? The previous master will be retained, QC will reopen, and all downstream approvals must be rechecked.")) return;
+                        setReplacement({ kind, file, targetAssetId: verified.id });
+                        setReplacementReason("");
+                      } else {
+                        void uploadFile(kind, file);
+                      }
+                    }}
                     onDownload={verified ? () => void download(verified.id) : undefined}
                   />
                 );
@@ -920,6 +929,49 @@ function FilesPanel({
           </div>
         ))}
       </div>
+      {replacement ? (
+        <div className="mt-5 rounded-xl border border-line bg-elevated/40 p-4">
+          <h3 className="text-sm font-semibold">Confirm {kindLabel(replacement.kind)} replacement</h3>
+          <p className="mt-1 text-xs text-muted">
+            The previous verified file stays preserved. The new file becomes current only after storage verification; this replacement reopens QC.
+          </p>
+          <label className="mt-3 block text-sm">
+            Replacement reason
+            <textarea
+              className="mt-1 min-h-24 w-full rounded-lg border border-line-strong bg-surface p-3"
+              value={replacementReason}
+              onChange={(event) => setReplacementReason(event.target.value)}
+              maxLength={1000}
+              placeholder="Explain why this verified asset needs replacement (minimum 8 characters)"
+            />
+          </label>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              disabled={uploading !== null || replacementReason.trim().length < 8}
+              onClick={() => {
+                const pending = replacement;
+                setReplacement(null);
+                void uploadFile(pending.kind, pending.file, {
+                  assetId: pending.targetAssetId,
+                  reason: replacementReason.trim(),
+                });
+              }}
+              className="rounded-full bg-fg px-4 py-2 text-xs font-semibold text-bg disabled:opacity-40"
+            >
+              Verify and replace
+            </button>
+            <button
+              type="button"
+              disabled={uploading !== null}
+              onClick={() => setReplacement(null)}
+              className="rounded-full border border-line bg-surface px-4 py-2 text-xs font-semibold"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : null}
       {message ? (
         <p
           className={`mt-4 rounded-lg border px-3 py-2 text-sm ${messageKind === "error" ? "border-red-300 bg-red-50 text-red-700" : messageKind === "success" ? "border-green-300 bg-green-50 text-green-800" : "border-line bg-elevated text-fg"}`}
