@@ -23,7 +23,8 @@ export const getTitleControl = createServerFn({ method: "GET" })
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
-    assertPermission(actor, "title.read_catalog");
+    if (actor.internalRole !== "super_admin") throw new Error("Verified Super Admin authority required");
+    assertPermission(actor, "title.approve");
     const sql = await getSql();
     const [control] = await sql<{
       control_state: "CLEAR" | "HOLD" | "BLOCK";
