@@ -7,7 +7,6 @@ import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
-import { DeleteTitleButton } from "@/components/bridge/title-desk";
 import { getTitle, updateTitle } from "@/lib/bridge/titles";
 import { BRIDGE_LOOP_LANES, loopStageType } from "@/lib/bridge/loop-lanes";
 import {
@@ -207,7 +206,7 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
                 >
                   Upload Files
                 </button>
-                {title.status === "DRAFT" ? <DeleteTitleButton id={title.id} name={title.name} /> : null}
+                
               </div>
             ) : null}
           </div>
