@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  isHostingerSyntheticTestEnvelope,
   isValidHostingerBearer,
   parseHostingerIncomingPayload,
   readLimitedRequestBody,
@@ -27,6 +28,42 @@ describe("Hostinger incoming mail webhook", () => {
     assert.equal(isValidHostingerBearer("Bearer wrong-token", "secret-token"), false);
     assert.equal(isValidHostingerBearer("secret-token", "secret-token"), false);
     assert.equal(isValidHostingerBearer("Bearer secret-token", ""), false);
+  });
+
+  it("recognizes only Hostinger's observed authenticated Test envelope", () => {
+    const envelope = {
+      data: {
+        date: "2026-11-16T13:06:03Z",
+        from: "Hostinger Test <test@example.com>",
+        messageId: "synthetic-message-id",
+        subject: "Hostinger webhook test",
+      },
+      event: "message.received",
+      id: "synthetic-event-id",
+      timestamp: "2026-11-16T13:06:03Z",
+    };
+
+    assert.equal(isHostingerSyntheticTestEnvelope(envelope), true);
+    assert.equal(isHostingerSyntheticTestEnvelope({
+      ...envelope,
+      mailbox,
+    }), false);
+    assert.equal(isHostingerSyntheticTestEnvelope({
+      ...envelope,
+      data: { ...envelope.data, body: "unexpected" },
+    }), false);
+    assert.equal(isHostingerSyntheticTestEnvelope({
+      ...envelope,
+      data: { ...envelope.data, from: "not-an-email" },
+    }), false);
+    assert.equal(isHostingerSyntheticTestEnvelope({
+      ...envelope,
+      data: { date: envelope.data.date, from: envelope.data.from, messageId: envelope.data.messageId },
+    }), false);
+    assert.equal(isHostingerSyntheticTestEnvelope({
+      ...envelope,
+      event: "message.deleted",
+    }), false);
   });
 
   it("rejects message.received events that omit message metadata", () => {
