@@ -473,13 +473,13 @@ export interface RootRouteChildren {
   TermsRoute: typeof TermsRoute
   VerifyEmailRoute: typeof VerifyEmailRoute
   WorkspaceRoute: typeof WorkspaceRoute
-
   ApiHostingerIncomingRoute: typeof ApiHostingerIncomingRoute
-  ApiBuyerPosterRoute: typeof ApiBuyerPosterRoute  AuthCallbackRoute: typeof AuthCallbackRoute
+  AuthCallbackRoute: typeof AuthCallbackRoute
   AuthConfirmRoute: typeof AuthConfirmRoute
   TitleIdRoute: typeof TitleIdRoute
   ApiA2aAgentCardRoute: typeof ApiA2aAgentCardRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
+  ApiBuyerPosterRoute: typeof ApiBuyerPosterRoute
   ApiRazorpayWebhookRoute: typeof ApiRazorpayWebhookRoute
   ApiA2aIndexRoute: typeof ApiA2aIndexRoute
 }
@@ -770,13 +770,13 @@ const rootRouteChildren: RootRouteChildren = {
   TermsRoute: TermsRoute,
   VerifyEmailRoute: VerifyEmailRoute,
   WorkspaceRoute: WorkspaceRoute,
-
   ApiHostingerIncomingRoute: ApiHostingerIncomingRoute,
-  ApiBuyerPosterRoute: ApiBuyerPosterRoute,  AuthCallbackRoute: AuthCallbackRoute,
+  AuthCallbackRoute: AuthCallbackRoute,
   AuthConfirmRoute: AuthConfirmRoute,
   TitleIdRoute: TitleIdRoute,
   ApiA2aAgentCardRoute: ApiA2aAgentCardRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
+  ApiBuyerPosterRoute: ApiBuyerPosterRoute,
   ApiRazorpayWebhookRoute: ApiRazorpayWebhookRoute,
   ApiA2aIndexRoute: ApiA2aIndexRoute,
 }
