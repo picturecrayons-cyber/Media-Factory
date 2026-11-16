@@ -135,7 +135,6 @@ export async function verifyDistributionPreflight(
   const validRightsStatuses = [
     "LICENSING_READY",
     "LIVE_FOR_BUYERS",
-    "IN_NEGOTIATION",
     "LICENSED",
     "DELIVERED",
   ];
@@ -338,7 +337,6 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
           [
             "LICENSING_READY",
             "LIVE_FOR_BUYERS",
-            "IN_NEGOTIATION",
             "LICENSED",
             "DELIVERED",
           ].includes(r.status) &&
@@ -358,7 +356,6 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
           ![
             "LICENSING_READY",
             "LIVE_FOR_BUYERS",
-            "IN_NEGOTIATION",
             "LICENSED",
             "DELIVERED",
           ].includes(r.status)
