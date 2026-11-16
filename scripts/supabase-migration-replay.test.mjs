@@ -60,3 +60,12 @@ for (const [label, databaseUrl] of rejectedTargets) {
     assert.doesNotMatch(result.stderr, /ECONNREFUSED|ENOTFOUND|ETIMEDOUT/);
   });
 }
+
+test("feature archive migration is checked after the 69-row recovered baseline", () => {
+  assert.match(replaySource, /const EXPECTED_MIGRATIONS = 69/);
+  assert.match(replaySource, /const FEATURE_MIGRATION = "20261116150000_bridge_title_archive_restore\\.sql"/);
+  assert.match(replaySource, /FEATURE_MIGRATION_BYTES = 1117/);
+  assert.match(replaySource, /FEATURE_MIGRATION_SHA256 = "3669b65c17642c2867c6efb7f8505943e8397756890fb6748bb6eb6ced9449bc"/);
+  assert.match(replaySource, /Draft archive feature migration schema verification failed/);
+  assert.match(replaySource, /await client\.query\(await readFile\(featureMigrationPath, "utf8"\)\)/);
+});
