@@ -5,6 +5,7 @@ import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import { requireVerifiedActor } from "./session";
 import { assertNotDevUser } from "./guards";
+import { assertTitleControlClear } from "./title-controls-policy";
 import { ditManifestDigest, ditManifestTotals, normalizeDitFiles } from "./dit-manifest";
 const loadDitOciStorage = createServerOnlyFn(async () => {
   const [{ bridgeEnv }, storage] = await Promise.all([
