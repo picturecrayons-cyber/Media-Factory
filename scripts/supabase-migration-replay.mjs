@@ -701,9 +701,15 @@ try {
               and p.polcmd = '*'
               and p.polpermissive
               and p.polroles = ARRAY[(select oid from pg_roles where rolname = 'authenticated')]
-              and pg_get_expr(p.polqual, p.polrelid) =
+              and regexp_replace(
+                regexp_replace(pg_get_expr(p.polqual, p.polrelid), 'public\\.', '', 'g'),
+                '[[:space:]]+', ' ', 'g'
+              ) =
                 '(EXISTS ( SELECT 1 FROM (bridge_titles t JOIN bridge_loop_identity_links l ON ((l.bridge_user_id = t.owner_user_id))) WHERE ((t.id = bridge_story_concept_submissions.title_id) AND (l.auth_user_id = ( SELECT auth.uid() AS uid)))))'
-              and pg_get_expr(p.polwithcheck, p.polrelid) =
+              and regexp_replace(
+                regexp_replace(pg_get_expr(p.polwithcheck, p.polrelid), 'public\\.', '', 'g'),
+                '[[:space:]]+', ' ', 'g'
+              ) =
                 '(EXISTS ( SELECT 1 FROM (bridge_titles t JOIN bridge_loop_identity_links l ON ((l.bridge_user_id = t.owner_user_id))) WHERE ((t.id = bridge_story_concept_submissions.title_id) AND (l.auth_user_id = ( SELECT auth.uid() AS uid)))))'
           )
         )
