@@ -13,7 +13,8 @@ test("CRA-101 confirmed-email callback establishes Supabase session before onboa
   assert.match(source, /supabase\.auth\.getSession\(\)/);
   assert.match(source, /supabase\.auth\.getUser\(\)/);
   assert.match(source, /syncSupabaseSessionUser\(\)/);
-  assert.match(source, /navigate\(\{ to: "\/onboarding" \}\)/);
+  assert.match(source, /navigate\(\{ to: "\/onboarding", replace: true \}\)/);
+  assert.match(source, /navigate\(\{ to: syncResult\.home \|\| "\/onboarding", replace: true \}\)/);
 });
 
 test("CRA-101 onboarding waits for restored identity and scopes workspace cache by user", () => {
@@ -39,4 +40,28 @@ test("CRA-101 expired or missing auth redirects once without retry loop", () => 
   assert.match(source, /redirects\+\+/);
   assert.match(source, /assert\.equal\(redirects, 1\)/);
   assert.match(source, /network failure preserves local session/);
+});
+
+test("CRA-101 Creator onboarding creates the profile and opens the Creator dashboard without title intake", () => {
+  const source = read("src/routes/onboarding.tsx");
+  assert.match(source, /publicAccountTypeFrom\(signupAccountTypeHint\)/);
+  assert.match(source, /accountType: accountType,/);
+  assert.match(source, /await completeOnboarding\(/);
+  assert.match(source, /result\.home/);
+  assert.match(source, /accountType === "buyer" \? "\/buyer"/);
+  assert.match(source, /accountType === "studio" \? "\/studio" : "\/creator"/);
+  assert.doesNotMatch(source, /createTitle\(/);
+  assert.doesNotMatch(source, /authorizationAttested/);
+});
+
+test("CRA-101 independent Creator completes account onboarding without submitting a title", () => {
+  const source = read("src/routes/onboarding.tsx");
+  assert.match(source, /signupAccountTypeHint/);
+  assert.match(source, /publicAccountTypeFrom\(signupAccountTypeHint\)/);
+  assert.match(source, /accountType: accountType,/);
+  assert.match(source, /completeOnboarding\(/);
+  assert.match(source, /result\.home/);
+  assert.match(source, /accountType === "studio" \? "\/studio" : "\/creator"/);
+  assert.doesNotMatch(source, /createTitle\(/);
+  assert.doesNotMatch(source, /authorizationAttested/);
 });
