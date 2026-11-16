@@ -90,8 +90,11 @@ test("direct payment verification cannot reassign a package to another buyer", a
   assert.match(grant, /pkg\[0\]\.buyer_user_id !== payment\.user_id/);
   assert.match(grant, /License package is reserved by another buyer/);
   assert.match(grant, /where id = \$\{pkg\[0\]\.id\}[\s\S]*and buyer_user_id = \$\{payment\.user_id\}/);
-  assert.match(grant, /and status in \('IN_NEGOTIATION', 'LICENSED'\)[\s\S]*returning id/);
+  assert.match(grant, /and \([\s\S]*payment_id is null or payment_id = \$\{payment\.id\}[\s\S]*returning id/);
   assert.match(grant, /if \(!licensedPackage\[0\]\)/);
+  const packageClaim = grant.indexOf("const licensedPackage = await sql");
+  const entitlement = grant.indexOf("insert into bridge_package_entitlements");
+  assert.ok(packageClaim >= 0 && entitlement > packageClaim, "direct verification must claim the package before granting entitlement");
 });
 
 test("Razorpay webhook requires an exact reserved package buyer", () => {
@@ -100,6 +103,11 @@ test("Razorpay webhook requires an exact reserved package buyer", () => {
   const packageLookup = source.slice(source.indexOf('from("bridge_license_packages")'));
   assert.match(packageLookup, /buyer_user_id/);
   assert.match(packageLookup, /Language licence package belongs to another buyer/);
+  const packageClaim = source.indexOf('.update({ status: "LICENSED", payment_id: localPayment.id');
+  const entitlement = source.indexOf('from("bridge_package_entitlements")');
+  assert.ok(packageClaim >= 0 && entitlement > packageClaim, "webhook must conditionally claim the package before granting entitlement");
+  assert.match(source, /\.eq\("buyer_user_id", localPayment\.user_id\)/);
+  assert.match(source, /payment_id\.is\.null,payment_id\.eq\.\$\{localPayment\.id\}/);
 });
 
 test("package checkout reuses an existing buyer order before claiming the package", async () => {
