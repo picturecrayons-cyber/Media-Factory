@@ -169,18 +169,6 @@ function Signup() {
             </div>
           ) : null}
 
-          <fieldset className="space-y-3 rounded-xl border border-line p-3">
-            <legend className="px-1 text-sm font-semibold text-fg">Required agreements</legend>
-            <label className="flex items-start gap-2.5 text-sm leading-6 text-muted">
-              <input type="checkbox" required checked={acceptedTerms} onChange={(e) => setAcceptedTerms(e.target.checked)} className="mt-1 h-4 w-4 accent-current" />
-              <span>I have read and agree to the <Link to="/terms" target="_blank" className="font-semibold text-accent underline">Terms &amp; Conditions</Link>.</span>
-            </label>
-            <label className="flex items-start gap-2.5 text-sm leading-6 text-muted">
-              <input type="checkbox" required checked={acceptedPrivacy} onChange={(e) => setAcceptedPrivacy(e.target.checked)} className="mt-1 h-4 w-4 accent-current" />
-              <span>I have read and acknowledge the <Link to="/privacy" target="_blank" className="font-semibold text-accent underline">Privacy Policy</Link>.</span>
-            </label>
-          </fieldset>
-
           {error ? (
             <div
               role="alert"
@@ -340,6 +328,40 @@ function Signup() {
               className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5 text-sm text-fg placeholder:text-faint transition focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
             />
           </label>
+
+          <fieldset className="space-y-3 rounded-xl border border-line p-3">
+            <legend className="px-1 text-sm font-semibold text-fg">Required agreements</legend>
+            <label className="flex items-start gap-2.5 text-sm leading-6 text-muted">
+              <input
+                type="checkbox"
+                required
+                checked={acceptedTerms}
+                onChange={(e) => setAcceptedTerms(e.target.checked)}
+                className="mt-1 h-4 w-4 accent-current"
+              />
+              <span>
+                I have read and agree to the{" "}
+                <Link to="/terms" target="_blank" className="font-semibold text-accent underline">
+                  Terms &amp; Conditions
+                </Link>.
+              </span>
+            </label>
+            <label className="flex items-start gap-2.5 text-sm leading-6 text-muted">
+              <input
+                type="checkbox"
+                required
+                checked={acceptedPrivacy}
+                onChange={(e) => setAcceptedPrivacy(e.target.checked)}
+                className="mt-1 h-4 w-4 accent-current"
+              />
+              <span>
+                I have read and acknowledge the{" "}
+                <Link to="/privacy" target="_blank" className="font-semibold text-accent underline">
+                  Privacy Policy
+                </Link>.
+              </span>
+            </label>
+          </fieldset>
 
           {error ? (
             <div
