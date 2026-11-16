@@ -329,7 +329,8 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
             "DELIVERED",
           ].includes(r.status) &&
           Boolean(r.master_key) &&
-          Boolean(r.poster_key);
+          Boolean(r.poster_key) &&
+          !windowExpired;
 
         const blockers: string[] = [];
         if (windowExpired) blockers.push("The authorized distribution window has expired");
