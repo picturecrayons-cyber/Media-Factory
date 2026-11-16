@@ -85,7 +85,6 @@ async function openUploadAsset(userId: string, assetId: string) {
   assertNotDevUser(userId);
   const actor = await requireVerifiedActor(userId);
   assertPermission(actor, actor.internalRole ? "title.ingest_internal" : "asset.sign_upload");
-  const sql = await getSql();
   const rows = await sql<{
     id: string;
     title_id: string;
