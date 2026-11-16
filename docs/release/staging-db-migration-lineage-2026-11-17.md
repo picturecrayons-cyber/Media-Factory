@@ -47,6 +47,19 @@ A further READ-ONLY query of all ledger metadata returned 56 rows, each with one
 
 This recheck supersedes the earlier latest-version observation `20261116210822 / bridge_title_hold_block_controls`. The total remains 56 in the query result; source recovery and replay remain incomplete. These two latest SQL payloads still require the same exact-source, dependency, security and disposable-replay review as the other records.
 
+## Source recovery and schema reconciliation — latest two records
+
+Two latest ledger statements have now been recovered byte-for-byte into the non-active archive directory `supabase/staging-recovery/` (not `supabase/migrations/`):
+
+| Version | Archive | Bytes | MD5 | SHA-256 |
+|---|---|---:|---|---|
+| `20261116224138` | `20261116224138_loop_viewer_profiles_20261117.sql` | 1,704 | `2f36c875d5efc3cef79269bc349f6e5b` | `de3610086b16e6401557764c5e251b8b579ed1eebd50b05ad7551cf132f81846` |
+| `20261116224140` | `20261116224140_loop_watchlists_20261117.sql` | 1,310 | `fc527f3c6f07593e070f488dde59dbc1` | `677b2b2cf9453b12dbe89876ac4f9aa814eba4d8fd1580da5b8d7d81a2576fc4` |
+
+READ-ONLY schema reconciliation against the hosted STAGING catalog found both tables present with the expected columns, defaults, constraints, indexes, RLS enabled, and policy definitions matching the archived source. Both have RLS enabled but not FORCE RLS. The observed policies are authenticated-user-owned row policies; no anon table grant was observed. `loop_viewer_profiles` has SELECT/INSERT/UPDATE/DELETE own-row policies and authenticated grants; `loop_watchlists` has SELECT/INSERT/DELETE own-row policies and authenticated grants. Service-role retains its broad administrative table grants. No hosted SQL was run and no rows were read/exported.
+
+This is **partial recovery: 2 of 56**. These two records are source-recovered and catalog-reconciled, but not replay-tested. The other 54 records remain unrecovered/unclassified. No replay has been run against any database.
+
 ## Follow-up READ-ONLY SQL command inventory — 2026-11-17
 
 A later targeted pattern pass refined the preliminary DML counts. These are command-pattern candidates from stored SQL text, not a parser-certified AST inventory; comments and quoted/dynamic SQL still require manual/source-level review.
