@@ -85,7 +85,8 @@ async function fixture() {
     );
     create table bridge_assets(id text,title_id text,kind text,s3_key text,byte_size bigint);
     create table bridge_title_events(title_id text,from_status text,to_status text,actor_user_id text,note text);
-    create table bridge_audit_logs(actor_user_id text,action text,entity_type text,entity_id text,metadata text);`);
+    create table bridge_audit_logs(actor_user_id text,action text,entity_type text,entity_id text,metadata text);
+    create table bridge_title_controls(title_id text primary key, control_state text not null default 'CLEAR' check (control_state in ('CLEAR','HOLD','BLOCK')), reason text, set_by text, set_at timestamptz, released_by text, released_at timestamptz, release_reason text, updated_at timestamptz not null default now());`);
     await db.exec(
       readFileSync(
         new URL("../../../migrations/0010_bridge_prd_phase1.sql", import.meta.url),
