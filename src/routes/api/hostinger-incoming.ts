@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { createFileRoute } from "@tanstack/react-router";
-import { getSql } from "@/lib/db";
 import {
+  isHostingerTestDeliveryPayload,
   isValidHostingerBearer,
   parseHostingerIncomingPayload,
   readLimitedRequestBody,
@@ -54,6 +54,11 @@ export const Route = createFileRoute("/api/hostinger-incoming")({
         let message: HostingerIncomingMailRecord;
         try {
           const expectedMailbox = bridgeEnv.hostingerIncomingMailbox();
+          if (isHostingerTestDeliveryPayload(payload, expectedMailbox)) {
+            // Hostinger's Test action has no message metadata. Acknowledge the
+            // connectivity probe without storing a synthetic message.
+            return Response.json({ ok: true, test: true, stored: false });
+          }
           message = parseHostingerIncomingPayload(payload, expectedMailbox);
         } catch (error) {
           // Log only the parser's fixed validation reason; never log message content,
@@ -66,6 +71,9 @@ export const Route = createFileRoute("/api/hostinger-incoming")({
         const payloadHash = createHash("sha256").update(raw, "utf8").digest("hex");
 
         try {
+          // Import the database lazily: metadata-free Hostinger test pings are
+          // acknowledged above and do not need a Postgres connection.
+          const { getSql } = await import("@/lib/db");
           const sql = await getSql();
           const inserted = await sql<{ id: string }>`
             insert into private.bridge_inbound_mail_events (
