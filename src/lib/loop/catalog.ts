@@ -232,7 +232,7 @@ export const checkPlaybackEntitlement = createServerFn({ method: "GET" })
     const sql = await getSql();
 
     // Check title access tier
-    const titles = await sql<{ id: string; access_tier: string }>`
+    const titles = await sql<{ id: string; access_tier: string; control_state: string }>`
       select l.id, l.access_tier, coalesce(c.control_state,'CLEAR') as control_state
       from loop_titles l left join public.bridge_title_controls c on c.title_id=l.bridge_title_id
       where l.id = ${data.loopTitleId} limit 1
