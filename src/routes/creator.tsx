@@ -7,6 +7,7 @@ import { TitleList } from "@/components/bridge/title-desk";
 import { MyStoryConcepts } from "@/components/bridge/my-story-concepts";
 import { NewSubmissionPanel } from "@/components/bridge/new-submission-panel";
 import { listTitles } from "@/lib/bridge/titles";
+import { listMyStoryConcepts } from "@/lib/bridge/story-concept-api";
 
 export const Route = createFileRoute("/creator")({ component: Creator });
 
@@ -47,7 +48,10 @@ function CreatorDashboard({
     queryFn: () => listTitles(),
     retry: 1,
   });
-  const titles = titlesQ.data?.titles ?? [];
+  const conceptsQ = useQuery({ queryKey: ["my-story-concepts"], queryFn: () => listMyStoryConcepts() });
+  const conceptTitleIds = new Set((conceptsQ.data?.concepts ?? []).map((concept) => concept.title_id));
+  // Fail closed until submission classification is available.
+  const titles = conceptsQ.isSuccess ? (titlesQ.data?.titles ?? []).filter((title) => !conceptTitleIds.has(title.id)) : [];
   const inProgress = titles.filter((title) => IN_PROGRESS.has(title.status));
   const licensingReady = titles.filter((title) => title.status === "LICENSING_READY");
   const live = titles.filter((title) => LIVE.has(title.status));
@@ -121,10 +125,10 @@ function CreatorDashboard({
           <h2 className="font-display text-2xl font-semibold">Overview</h2>
           <span className="text-xs text-muted">Authenticated account scope · up to 200 returned records</span>
         </div>
-        {titlesQ.isPending ? (
+        {titlesQ.isPending || conceptsQ.isPending ? (
           <p className="text-sm text-muted">Loading your title records…</p>
         ) : null}
-        {titlesQ.isError ? (
+        {titlesQ.isError || conceptsQ.isError ? (
           <div role="alert" className="rounded-xl border border-line bg-surface p-4 text-sm">
             <p>Title records could not be loaded. Dashboard totals are hidden until the data source responds.</p>
             <button
@@ -135,7 +139,7 @@ function CreatorDashboard({
               Retry
             </button>
           </div>
-        ) : !titlesQ.isPending ? (
+        ) : !titlesQ.isPending && conceptsQ.isSuccess ? (
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <Metric label="My titles" value={titles.length} note="Records returned for your Creator account" />
             <Metric label="In progress" value={inProgress.length} note="Upload, preparation, QC or rights review" />
@@ -159,7 +163,13 @@ function CreatorDashboard({
           </a>
         </div>
         <div className="rounded-2xl border border-line bg-surface p-4 sm:p-5">
-          <TitleList empty="No titles are available for this account yet. Start a submission to add your first title." />
+          {conceptsQ.isPending ? (
+            <p className="text-sm text-muted">Checking submission types…</p>
+          ) : conceptsQ.isError ? (
+            <p role="alert" className="text-sm text-muted">Finished-film records are hidden because Story / Concept classification could not be verified.</p>
+          ) : (
+            <TitleList empty="No finished-film titles are available for this account yet. Start a submission to add your first film." excludeIds={Array.from(conceptTitleIds)} />
+          )}
         </div>
       </section>
 
@@ -243,7 +253,7 @@ function CreatorDashboard({
           <p className="text-xs font-semibold uppercase tracking-widest text-accent">Activity</p>
           <h2 className="mt-1 font-display text-2xl font-semibold">Recent Title Updates</h2>
         </div>
-        {titlesQ.isPending ? (
+        {titlesQ.isPending || conceptsQ.isPending ? (
           <p className="text-sm text-muted">Loading recent title updates…</p>
         ) : titlesQ.isError ? (
           <p className="rounded-xl border border-line p-4 text-sm text-muted">Updates unavailable while title records cannot be loaded.</p>
