@@ -28,11 +28,20 @@ function firstString(source: UnknownRecord, keys: string[]): string | null {
 
 function normalizeSender(value: string): string {
   const sender = value.trim();
-  const address = sender.match(/<([^<>]+)>/)?.[1]?.trim() ?? sender;
-  if (
-    sender.length > 320 ||
-    !/^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(address)
-  ) {
+  if (!sender || sender.length > 320) {
+    throw new Error("Invalid sender");
+  }
+
+  let address = sender;
+  if (sender.includes("<") || sender.includes(">")) {
+    // If an angle-bracket form is used, require the entire value to match it.
+    // This rejects valid addresses embedded in leading/trailing junk.
+    const match = sender.match(/^([^<>]*)<([^<>]+)>$/);
+    if (!match) throw new Error("Invalid sender");
+    address = match[2].trim();
+  }
+
+  if (!/^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(address)) {
     throw new Error("Invalid sender");
   }
   return sender;
