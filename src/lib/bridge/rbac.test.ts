@@ -280,12 +280,17 @@ it("grants verified Super Admin all existing QC, rights, licensing, publishing a
     "loop.revoke",
     "loop.certify_playback",
   ] as const;
+  const adminPermissions = new Set(["title.license", "title.negotiate", "title.deliver"]);
   for (const permission of permissions) {
     assert.equal(hasPermission(superAdmin(), permission), true, `Super Admin missing ${permission}`);
-    assert.equal(hasPermission(admin(), permission), permission === "title.license" || permission === "title.negotiate" || permission === "title.deliver", `Admin permission mismatch for ${permission}`);
+    assert.equal(hasPermission(admin(), permission), adminPermissions.has(permission), `Admin permission mismatch for ${permission}`);
     assert.equal(hasPermission(qc, permission), permission === "title.qc_review");
     assert.equal(hasPermission(legal, permission), permission === "title.rights_review");
   }
+  assert.equal(hasPermission(admin(), "title.qc_review"), false);
+  assert.equal(hasPermission(admin(), "title.rights_review"), false);
+  assert.equal(hasPermission(admin(), "title.approve"), false);
+  assert.equal(hasPermission(admin(), "loop.publish"), false);
   const unverified = actor("unverified-super", "independent_creator", "super_admin", false);
   for (const permission of permissions) assert.equal(hasPermission(unverified, permission), false);
 });
