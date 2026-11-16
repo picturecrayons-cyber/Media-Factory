@@ -30,7 +30,7 @@ for (const [label, databaseUrl] of rejectedTargets) {
     assert.equal(result.status, 1, result.stderr || result.stdout);
     assert.match(
       result.stderr,
-      /local Supabase Postgres at localhost:54332\/postgres; remote databases are forbidden/,
+      /local Supabase Postgres at localhost:55432\/postgres; remote databases are forbidden/,
     );
     assert.doesNotMatch(result.stderr, /ECONNREFUSED|ENOTFOUND|ETIMEDOUT/);
   });
