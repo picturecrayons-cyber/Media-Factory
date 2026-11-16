@@ -81,7 +81,7 @@ jobs:
           version: latest
 
       - name: Start an isolated local Supabase stack
-        run: supabase start -p postgres -x studio,imgproxy,edge-runtime,logflare,vector
+        run: supabase start -x studio,imgproxy,edge-runtime,logflare,vector
 
       - name: Replay all recovered Production-ledger migrations
         run: node scripts/supabase-migration-replay.mjs
