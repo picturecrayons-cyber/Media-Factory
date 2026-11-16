@@ -2,6 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { assertPermission, canAccessAdminWorkstations, canAccessDashboard, canAccessTitleWorkspace, canGrantInternalRole, canMutateTitle, canOperateOnTitle, canReadTitle, hasPermission, hasStaffPermission, permissionForTransition, workspaceHome } from "./rbac.ts";
 import type { Actor } from "./rbac.ts";
+import { PERMISSIONS } from "./types.ts";
 
 const actor = (
   userId: string,
@@ -91,6 +92,17 @@ describe("PRD authorization matrix", () => {
     assert.equal(canOperateOnTitle(qc, foreign, "asset.sign_upload"), false);
     assert.equal(canMutateTitle(qc, foreign, "title.update_own", "title.qc_review"), true);
     assert.equal(canMutateTitle(viewer(), foreign, "title.update_own", "title.qc_review"), false);
+  });
+
+  it("Super Admin receives every registered permission while remaining email-verified", () => {
+    const privileged = superAdmin();
+    for (const permission of PERMISSIONS) {
+      assert.equal(hasPermission(privileged, permission), true, `missing ${permission}`);
+    }
+    const unverified = actor("unverified-super", "independent_creator", "super_admin", false);
+    for (const permission of PERMISSIONS) {
+      assert.equal(hasPermission(unverified, permission), false, `unverified received ${permission}`);
+    }
   });
 
   it("super admin can create canonical Bridge titles and use explicit internal upload powers", () => {
