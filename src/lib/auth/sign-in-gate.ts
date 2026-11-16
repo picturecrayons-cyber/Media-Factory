@@ -12,15 +12,13 @@ export function resolveSignInGateState(
   return input.hasUser ? "signed_in" : "signed_out";
 }
 
-
+/**
+ * A user workspace is determined by the verified server-side Bridge profile.
+ * Query-string navigation intent must never override Creator, Studio, Buyer,
+ * Investor, or Super Admin RBAC routing.
+ */
 export function resolvePostLoginDestination(input: {
-  next: string | null;
   sessionHome: string | null | undefined;
 }): string {
-  const next = input.next;
-  const safeNext = Boolean(
-    next && next.startsWith("/") && !next.startsWith("//") && !next.includes("://"),
-  );
-  if (safeNext) return next!;
   return input.sessionHome || "/onboarding";
 }
