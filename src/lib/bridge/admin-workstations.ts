@@ -148,9 +148,14 @@ export const setBuyerPublicationGate = createServerFn({ method: "POST" })
             evidence=evidence || ${gateEvidence}::jsonb, updated_at=now()
         where title_id=${data.titleId}`;
     }
+    const field = ({ OTT: "ott_preparation_status", PACKAGING: "packaging_status", CURATION: "curation_status", DELIVERY: "delivery_status" } as const)[data.gate];
+    const readback = await sql<{ status: string }>`
+      select ${sql(field)} as status from bridge_title_gate_certifications where title_id=${data.titleId} limit 1
+    `;
+    if (readback[0]?.status !== value) throw new Error("Publication gate read-back verification failed");
     await writeAudit({actorUserId:actor.userId,action:`buyer_gate.${data.gate.toLowerCase()}.${data.decision.toLowerCase()}`,entityType:"bridge_title",entityId:data.titleId,metadata:{gate:data.gate,decision:data.decision,notes:data.notes??null}});
     const result=await sql<{ok:boolean}>`select public.bridge_title_buyer_visibility(${data.titleId}) as ok`;
-    return {ok:true,gate:data.gate,decision:data.decision,publishable:result[0]?.ok===true};
+    return {ok:true,gate:data.gate,decision:data.decision,persisted:true,publishable:result[0]?.ok===true};
   });
 
 
