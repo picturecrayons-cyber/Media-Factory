@@ -266,6 +266,7 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
                 <Metric label="Licensing" value={legalReady ? "READY" : "PENDING"} />
                 <Metric label="Publish" value={distributionReady ? "LIVE" : packageReady ? "READY" : "PENDING"} />
               </div>
+              <AssetPreviewGallery assets={assets} />
             </>
           ) : null}
         </section>
