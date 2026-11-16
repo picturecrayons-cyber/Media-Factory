@@ -44,7 +44,9 @@ const recoveryKey = `${prefix}/recovery.bin`;
 const payload = Buffer.from(`CRAYONS BRIDGE OCI RECOVERY E2E ${runId}\n`, "utf8");
 const sha256 = createHash("sha256").update(payload).digest("hex");
 let sourceCreated = false;
-let recoveryCreated = false;
+// Track the unique destination key before issuing the copy: OCI may complete the
+// copy even if the helper later fails while waiting or verifying the destination.
+let recoveryCopyAttempted = false;
 
 try {
   console.log("1/6 create isolated synthetic object: START");
@@ -68,6 +70,7 @@ try {
   console.log("2/6 verify Primary object HEAD: PASS");
 
   console.log("3/6 copy to distinct Recovery bucket: START");
+  recoveryCopyAttempted = true;
   const copied = await sealVerifiedObject(
     sourceKey,
     recoveryKey,
@@ -75,7 +78,6 @@ try {
     undefined,
     recoveryBucket,
   );
-  recoveryCreated = true;
   assert.equal(copied.byteSize, payload.byteLength);
   console.log("3/6 copy to distinct Recovery bucket: PASS");
 
@@ -116,7 +118,7 @@ try {
 } finally {
   console.log("6/6 remove only this run's synthetic objects: START");
   const cleanupErrors = [];
-  if (recoveryCreated) {
+  if (recoveryCopyAttempted) {
     try { await deleteObject(recoveryKey, recoveryBucket); }
     catch (error) { cleanupErrors.push(`Recovery cleanup failed: ${error instanceof Error ? error.message : String(error)}`); }
   }
