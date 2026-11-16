@@ -6,6 +6,7 @@ export async function persistVerifiedAsset(sql: Pick<Sql, "query">, opts: {
   assetId: string;
   actorUserId: string;
   internalActor: boolean;
+  allowLockedTitleReplacement: boolean;
   titleId: string;
   kind: string;
   byteSize: number;
@@ -34,6 +35,7 @@ async function persistVerifiedAssetScoped(
     assetId: string;
     actorUserId: string;
     internalActor: boolean;
+    allowLockedTitleReplacement: boolean;
     titleId: string;
     kind: string;
     byteSize: number;
@@ -71,7 +73,7 @@ async function persistVerifiedAssetScoped(
           select 1
           from bridge_titles t
           where t.id = a.title_id
-            and t.status in ('DRAFT','UPLOADING','PREPARING')
+            and (t.status in ('DRAFT','UPLOADING','PREPARING') or $10::boolean)
             and not exists (
               select 1 from bridge_title_controls c
               where c.title_id=t.id and c.control_state in ('HOLD','BLOCK')
@@ -96,7 +98,8 @@ async function persistVerifiedAssetScoped(
         'titleId', v.title_id,
         'kind', v.kind,
         'byteSize', $1,
-        'checksum', $9::text
+        'checksum', $9::text,
+        'superAdminReplacement', $10::boolean
       )
     from verified v join title_set t on t.id = v.title_id
     returning entity_id
@@ -110,6 +113,7 @@ async function persistVerifiedAssetScoped(
     opts.sourceKey,
     opts.titleId,
     opts.checksum,
+    opts.allowLockedTitleReplacement,
   ]);
   return Boolean(rows[0]);
 }
