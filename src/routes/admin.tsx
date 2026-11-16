@@ -1,5 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { Button } from "@/components/ui/button";
@@ -35,10 +36,12 @@ function AdminControlPlane() {
 }
 
 function AdminBody({ actor }: { actor: any }) {
+  const [profilesOpen, setProfilesOpen] = useState(false);
+  const [auditOpen, setAuditOpen] = useState(false);
   const titlesQ = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles() });
-  const auditQ = useQuery({ queryKey: ["bridge-audit"], queryFn: () => listAuditLogs() });
+  const auditQ = useQuery({ queryKey: ["bridge-audit"], queryFn: () => listAuditLogs(), enabled: auditOpen });
   const distQ = useQuery({ queryKey: ["loop-publication-readiness"], queryFn: () => listLoopPublicationReadiness() });
-  const profilesQ = useQuery({ queryKey: ["bridge-admin-profiles"], queryFn: () => listAdminProfiles() });
+  const profilesQ = useQuery({ queryKey: ["bridge-admin-profiles"], queryFn: () => listAdminProfiles(), enabled: profilesOpen });
 
   const titles = titlesQ.data?.titles ?? [];
   const distribution = distQ.data?.titles ?? [];
@@ -113,7 +116,7 @@ function AdminBody({ actor }: { actor: any }) {
         </section>
 
         <section className="grid gap-3 lg:grid-cols-2">
-          <details className="min-w-0 rounded-2xl border border-line bg-surface p-4">
+          <details onToggle={(event) => setProfilesOpen(event.currentTarget.open)} className="min-w-0 rounded-2xl border border-line bg-surface p-4">
             <summary className="cursor-pointer list-none font-semibold">Users & organizations <span className="ml-1 text-sm font-normal text-muted">({profiles.length})</span></summary>
             <p className="mt-2 text-sm text-muted">Read-only Bridge profile view. Role changes remain controlled by the invitation and onboarding flow.</p>
             {profilesQ.isError ? <p role="alert" className="mt-3 text-sm text-muted">Profiles could not be loaded.</p> : null}
@@ -138,7 +141,7 @@ function AdminBody({ actor }: { actor: any }) {
             <div className="mt-3"><Link to="/internal"><Button variant="outline">Invite internal user</Button></Link></div>
           </details>
 
-          <details className="min-w-0 rounded-2xl border border-line bg-surface p-4">
+          <details onToggle={(event) => setAuditOpen(event.currentTarget.open)} className="min-w-0 rounded-2xl border border-line bg-surface p-4">
             <summary className="cursor-pointer list-none font-semibold">Recent operator activity</summary>
             <p className="mt-2 text-sm text-muted">Latest events from the persisted Bridge audit log.</p>
             {auditQ.isError ? <p role="alert" className="mt-3 text-sm text-muted">Audit history is temporarily unavailable.</p> : null}
