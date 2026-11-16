@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  isHostingerTestDeliveryPayload,
   isValidHostingerBearer,
   parseHostingerIncomingPayload,
   readLimitedRequestBody,
@@ -27,6 +28,32 @@ describe("Hostinger incoming mail webhook", () => {
     assert.equal(isValidHostingerBearer("Bearer wrong-token", "secret-token"), false);
     assert.equal(isValidHostingerBearer("secret-token", "secret-token"), false);
     assert.equal(isValidHostingerBearer("Bearer secret-token", ""), false);
+  });
+
+  it("acknowledges metadata-free Hostinger test pings without creating a mail record", () => {
+    assert.equal(isHostingerTestDeliveryPayload({
+      event: "message.received",
+      mailbox,
+    }, mailbox), true);
+
+    assert.equal(isHostingerTestDeliveryPayload({
+      event: "message.received",
+    }, mailbox), true);
+
+    assert.equal(isHostingerTestDeliveryPayload({
+      event: "message.received",
+      mailbox,
+      message: {},
+    }, mailbox), false);
+
+    assert.equal(isHostingerTestDeliveryPayload({
+      event: "message.deleted",
+    }, mailbox), false);
+
+    assert.throws(() => isHostingerTestDeliveryPayload({
+      event: "message.received",
+      mailbox: "other@example.com",
+    }, mailbox), /Unexpected mailbox/);
   });
 
   it("accepts a valid message.received event for the configured mailbox", () => {
