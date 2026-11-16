@@ -285,11 +285,14 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
         <FilesPanel
           canUpload={
             canOperateOnTitle(actor, title, "asset.sign_upload", "title.ingest_internal") &&
-            ["DRAFT", "UPLOADING", "PREPARING"].includes(title.status)
+            (actor.internalRole === "super_admin" || ["DRAFT", "UPLOADING", "PREPARING"].includes(title.status))
           }
+          allowLockedTitleReplacement={actor.internalRole === "super_admin"}
           titleId={id}
           assets={assets}
-          onAssetsChanged={() => assetsQ.refetch()}
+          onAssetsChanged={async () => {
+            await Promise.all([assetsQ.refetch(), titleQ.refetch(), reviewQ.refetch()]);
+          }}
         />
       ) : activeTab === "Production" && !buyerView ? (
         <ProductionAssetsPanel
@@ -512,8 +515,10 @@ function FilesPanel({
   assets,
   onAssetsChanged,
   canUpload,
+  allowLockedTitleReplacement,
 }: {
   canUpload: boolean;
+  allowLockedTitleReplacement: boolean;
   titleId: string;
   assets: Array<{
     id: string;
@@ -957,6 +962,11 @@ function FilesPanel({
         </div>
       ) : null}
 
+      {allowLockedTitleReplacement ? (
+        <p className="mt-4 rounded-lg border border-line bg-elevated/40 px-3 py-2 text-sm text-muted">
+          Super Admin replacement is available after QC and later lifecycle stages. Each replacement is stored as a new verified asset and recorded in the audit log. Replacing the main film makes the previous QC result no longer current; QC must be completed again before release.
+        </p>
+      ) : null}
       <div className="mt-6 space-y-6">
         {groups.map((group) => (
           <div key={group.title}>
