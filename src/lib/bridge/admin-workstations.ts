@@ -148,7 +148,7 @@ export const setBuyerPublicationGate = createServerFn({ method: "POST" })
     const sql = await getSql();
     const rows = await sql<{ id: string }>`select id from bridge_titles where id = ${data.titleId} limit 1`;
     if (!rows[0]) throw new Error("Title not found");
-    const result = await sql.transaction(async (tx) => {
+    const transactionResult = await sql.transaction(async (tx) => {
       const evidence = data.decision === "PASS" ? await verifyBuyerGateEvidence(tx, data.titleId, data.gate) : null;
       const value = data.decision === "PASS"
         ? ({ OTT: "READY", PACKAGING: "COMPLETE", CURATION: "APPROVED", DELIVERY: "READY" } as const)[data.gate]
@@ -172,13 +172,13 @@ export const setBuyerPublicationGate = createServerFn({ method: "POST" })
       } else {
         await tx`update bridge_title_gate_certifications set delivery_status=${value}, updated_by=${actor.userId}, evidence=evidence || ${gateEvidence}::jsonb, updated_at=now() where title_id=${data.titleId}`;
       }
-      await writeAudit({ actorUserId: actor.userId, action: `buyer_gate.${data.gate.toLowerCase()}.${data.decision.toLowerCase()}`,
-        entityType: "bridge_title", entityId: data.titleId,
-        metadata: { gate: data.gate, decision: data.decision, notes: data.notes, evidence } });
       return { evidence, value };
     });
-    const result = await sql<{ ok: boolean }>`select public.bridge_title_buyer_visibility(${data.titleId}) as ok`;
-    return { ok: true, gate: data.gate, decision: data.decision, publishable: result[0]?.ok === true, evidence: result.evidence };
+    await writeAudit({ actorUserId: actor.userId, action: `buyer_gate.${data.gate.toLowerCase()}.${data.decision.toLowerCase()}`,
+      entityType: "bridge_title", entityId: data.titleId,
+      metadata: { gate: data.gate, decision: data.decision, notes: data.notes, evidence: transactionResult.evidence } });
+    const visibility = await sql<{ ok: boolean }>`select public.bridge_title_buyer_visibility(${data.titleId}) as ok`;
+    return { ok: true, gate: data.gate, decision: data.decision, publishable: visibility[0]?.ok === true, evidence: transactionResult.evidence };
   });
 
         and length(trim(s3_key)) > 0 order by version desc, created_at desc limit 1`;
@@ -190,7 +190,7 @@ export const setBuyerPublicationGate = createServerFn({ method: "POST" })
         rights_grant_id, qc_case_id, legal_case_id, asset_version_ids
       from bridge_destination_packages where title_id = ${titleId} and readiness_state = 'READY'
         and rights_grant_id is not null and qc_case_id is not null and legal_case_id is not null
-        and jsonb_typeof(asset_version_ids) = 'array' and jsonb_array_length(asset_version_ids) > 0
+        and jsonb_array_length(case when jsonb_typeof(asset_version_ids) = 'array' then asset_version_ids else '[]'::jsonb end) > 0
       order by created_at desc limit 1`;
     if (!records.length) throw new Error("Packaging gate blocked: no READY destination package with rights, QC, legal and asset references exists");
     return { source: "bridge_destination_packages", records, verifiedAt: new Date().toISOString() };
