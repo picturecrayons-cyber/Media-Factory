@@ -202,6 +202,23 @@ export async function grantFromCapturedPayment(opts: {
     if (pkg[0].buyer_user_id !== payment.user_id) {
       throw new Error("License package is reserved by another buyer");
     }
+    // Lock the package into the buyer's licensed state before recording the
+    // capture or granting an entitlement. This conditional update is the
+    // ownership fence for direct verification and remains retryable.
+    const licensedPackage = await sql<{ id: string }>`
+      update bridge_license_packages
+      set status = 'LICENSED', payment_id = ${payment.id}, updated_at = now()
+      where id = ${pkg[0].id}
+        and buyer_user_id = ${payment.user_id}
+        and (
+          status = 'IN_NEGOTIATION'
+          or (status = 'LICENSED' and (payment_id is null or payment_id = ${payment.id}))
+        )
+      returning id
+    `;
+    if (!licensedPackage[0]) {
+      throw new Error("License package reservation changed or another payment already licensed it");
+    }
     await sql`
       update bridge_payments
       set status = 'captured', provider_payment_id = ${opts.paymentId}, verified_at = now()
@@ -212,17 +229,6 @@ export async function grantFromCapturedPayment(opts: {
       values (${pkg[0].id}, ${payment.title_id}, ${payment.user_id}, ${payment.id})
       on conflict (package_id, buyer_user_id) do nothing
     `;
-    const licensedPackage = await sql<{ id: string }>`
-      update bridge_license_packages
-      set status = 'LICENSED', payment_id = ${payment.id}, updated_at = now()
-      where id = ${pkg[0].id}
-        and buyer_user_id = ${payment.user_id}
-        and status in ('IN_NEGOTIATION', 'LICENSED')
-      returning id
-    `;
-    if (!licensedPackage[0]) {
-      throw new Error("License package reservation changed before entitlement finalization");
-    }
     await writeAudit({
       actorUserId: opts.actorUserId ?? payment.user_id,
       action: "licensing.language_package_licensed",
