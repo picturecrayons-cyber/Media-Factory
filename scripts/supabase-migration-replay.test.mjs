@@ -71,8 +71,15 @@ test("pre-ledger RLS checks validate exact roles, commands and predicates", () =
   assert.match(replaySource, /p\.polwithcheck is null/);
   assert.match(replaySource, /polname = 'Deny anonymous public access'/);
   assert.match(replaySource, /polname = 'bridge_story_concept_submissions_owner_only'/);
-  assert.match(replaySource, /position\('auth\.uid\(\)' in coalesce\(pg_get_expr\(p\.polqual/);
+  assert.match(replaySource, /pg_get_expr\(p\.polqual, p\.polrelid\) =/);
+  assert.match(replaySource, /bridge_story_concept_submissions\.title_id/);
+  assert.match(replaySource, /l\.auth_user_id = \( SELECT auth\.uid\(\) AS uid\)/);
+  assert.match(replaySource, /pg_get_expr\(p\.polwithcheck, p\.polrelid\) =/);
+  assert.match(replaySource, /private\.bridge_is_internal\(\) AS bridge_is_internal/);
   assert.match(replaySource, /not has_table_privilege\('anon', c\.oid, 'INSERT'\)/);
+  assert.match(replaySource, /has_table_privilege\('authenticated', c\.oid, 'TRUNCATE'\)/);
+  assert.match(replaySource, /has_table_privilege\('authenticated', c\.oid, 'REFERENCES'\)/);
+  assert.match(replaySource, /has_table_privilege\('authenticated', c\.oid, 'TRIGGER'\)/);
+  assert.match(replaySource, /has_table_privilege\('authenticated', c\.oid, 'MAINTAIN'\)/);
   assert.match(replaySource, /polname = 'bridge_delivery_jobs_internal_only'/);
-  assert.match(replaySource, /private\.bridge_is_internal/);
 });
