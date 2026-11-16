@@ -451,6 +451,8 @@ export const updateTitle = createServerFn({ method: "POST" })
       throw new Error("Title is locked after prepare");
     }
     const sql = await getSql();
+    const [control] = await sql<{control_state: "CLEAR" | "HOLD" | "BLOCK"}>`select control_state from public.bridge_title_controls where title_id=${title.id}`;
+    assertTitleControlClear(control?.control_state);
     await sql`
       update bridge_titles set
         name = ${data.name ?? title.name},
