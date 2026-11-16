@@ -63,8 +63,8 @@ for (const [name, ok] of Object.entries(results)) {
 
 const blocked = Object.values(results).some((ok) => !ok);
 if (blocked) {
-  console.error("\\nEnvironment readiness is incomplete. This script does not certify E2E behavior.");
+  console.error("\nEnvironment readiness is incomplete. This script does not certify E2E behavior.");
   process.exit(1);
 }
 
-console.log("\\nEnvironment variables are present. Real E2E evidence is still required before certification.");
+console.log("\nEnvironment variables are present. Real E2E evidence is still required before certification.");
