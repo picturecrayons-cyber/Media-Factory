@@ -116,7 +116,7 @@ async function persistVerifiedAssetScoped(
  * been sealed and verified. The previous asset row and object are retained.
  */
 export async function persistVerifiedAssetReplacement(
-  sql: Pick<Sql, "query">,
+  sql: Sql,
   opts: {
     assetId: string;
     previousAssetId: string;
@@ -136,15 +136,16 @@ export async function persistVerifiedAssetReplacement(
   if (opts.reason.trim().length < 8)
     throw new Error("A replacement reason of at least 8 characters is required");
 
-  const rows = await (sql as Sql).transaction(async (tx) => tx.query<{ entity_id: string }>(
+  const rows = await sql.transaction(async (tx) => tx.query<{ entity_id: string }>(
     `
-    select pg_advisory_xact_lock(hashtextextended($1, 0));
-    with title_lock as (
-      select id, status, master_key, poster_key
-      from bridge_titles
-      where id = $2
+    with lock as materialized (
+      select pg_advisory_xact_lock(hashtextextended($1, 0))
+    ), title_lock as materialized (
+      select b.id, b.status, b.master_key, b.poster_key
+      from bridge_titles b cross join lock
+      where b.id = $2
       for update
-    ), old_asset as (
+    ), old_asset as materialized (
       select a.id, a.title_id, a.kind, a.s3_key
       from bridge_assets a
       join title_lock t on t.id = a.title_id
@@ -215,7 +216,7 @@ export async function persistVerifiedAssetReplacement(
         'byteSize', $5,
         'etag', $12::text,
         'qcCaseId', (select id from qc_reopened limit 1)
-      )
+      )::text
     from new_asset n
     join old_asset old on true
     where exists(select 1 from retired)
