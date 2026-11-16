@@ -8,6 +8,7 @@ import { assertPermission, canOperateOnTitle, canReadTitle, hasStaffPermission }
 import { requireVerifiedActor } from "./session";
 import { loadTitle } from "./titles";
 import { writeAudit } from "./audit";
+import { assertTitleControlClear } from "./title-controls-policy";
 import { assertNotDevUser } from "./guards";
 import { persistVerifiedAsset } from "./asset-confirmation";
 import { downloadDecision } from "./delivery-policy";
@@ -101,6 +102,9 @@ async function openUploadAsset(userId: string, assetId: string) {
   if (!title || !canOperateOnTitle(actor, title, "asset.sign_upload", "asset.sign_upload") || !UPLOADABLE.has(title.status)) {
     throw new Error("Upload confirmation is closed for this title");
   }
+  const sql = await getSql();
+  const [control] = await sql<{control_state: "CLEAR" | "HOLD" | "BLOCK"}>`select control_state from public.bridge_title_controls where title_id=${title.id}`;
+  assertTitleControlClear(control?.control_state);
   return asset;
 }
 
