@@ -652,6 +652,13 @@ try {
     );
   }
 
+  const visibilityDefinition = await client.query(
+    "select pg_get_functiondef('public.bridge_title_buyer_visibility(text)'::regprocedure) as definition",
+  );
+  if (!visibilityDefinition.rows[0]?.definition?.includes("bridge_title_controls")) {
+    throw new Error("Buyer visibility function does not enforce title HOLD/BLOCK controls");
+  }
+
   const baselineRls = await client.query(`
     select
       c.relname,
