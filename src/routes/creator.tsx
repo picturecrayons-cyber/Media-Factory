@@ -255,7 +255,7 @@ function CreatorDashboard({
         </div>
         {titlesQ.isPending || conceptsQ.isPending ? (
           <p className="text-sm text-muted">Loading recent title updates…</p>
-        ) : titlesQ.isError ? (
+        ) : titlesQ.isError || conceptsQ.isError ? (
           <p className="rounded-xl border border-line p-4 text-sm text-muted">Updates unavailable while title records cannot be loaded.</p>
         ) : recent.length ? (
           <ul className="divide-y divide-line rounded-xl border border-line bg-surface">
