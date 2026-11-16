@@ -180,9 +180,6 @@ try {
             create index loop_parental_controls_locked_until_idx
               on public.loop_parental_controls (locked_until);
             alter table public.loop_parental_controls enable row level security;
-            create policy deny_client_access
-              on public.loop_parental_controls
-              for all using (false) with check (false);
             revoke all on table public.loop_parental_controls from public, anon, authenticated;
             grant all on table public.loop_parental_controls to postgres, service_role;
           `);
@@ -217,6 +214,68 @@ try {
           $replay$;
         `);
         console.log("[migration-replay] restored verified pre-ledger parental-controls trigger helper in local replay DB");
+      }
+
+      // Three server-only tables exist in the Production baseline but are
+      // intentionally absent from the 69-row Supabase migration ledger.
+      // Recreate their verified, empty schemas only in this disposable local
+      // replay DB. The historical deep-clean migration below adds the deny
+      // policies, so this fixture enables RLS but does not create policies.
+      if (name === "20261006231321_deep_clean_server_only_rls_20261007.sql") {
+        const baselineTables = await client.query(`
+          select
+            to_regclass('public.bridge_creator_notifications') is not null as creator_notifications,
+            to_regclass('public.loop_media_migration_queue') is not null as media_migration_queue
+        `);
+
+        if (!baselineTables.rows[0].creator_notifications) {
+          await client.query(`
+            create table public.bridge_creator_notifications (
+              id bigserial primary key,
+              legacy_user_id integer not null,
+              email text not null,
+              notification_type text not null,
+              title_ids text[] not null,
+              status text not null default 'PENDING'
+                constraint bridge_creator_notifications_status_check
+                check (status in ('PENDING', 'SENT', 'FAILED')),
+              provider text not null default 'hostinger_mail',
+              provider_message text,
+              sent_at timestamptz,
+              created_at timestamptz not null default now()
+            );
+            alter table public.bridge_creator_notifications enable row level security;
+          `);
+        }
+
+        if (!baselineTables.rows[0].media_migration_queue) {
+          await client.query(`
+            create table public.loop_media_migration_queue (
+              id bigserial primary key,
+              legacy_film_id integer not null,
+              title_id text not null,
+              owner_email text not null,
+              asset_kind text not null
+                constraint loop_media_migration_queue_asset_kind_check
+                check (asset_kind in ('MASTER', 'TRAILER', 'POSTER')),
+              source_provider text not null default 'aws_legacy',
+              source_key text,
+              target_provider text not null default 'supabase_storage',
+              target_bucket text not null,
+              target_path text,
+              status text not null default 'PENDING_REUPLOAD'
+                constraint loop_media_migration_queue_status_check
+                check (status in ('PENDING_REUPLOAD', 'UPLOADED', 'VERIFIED', 'MISSING_SOURCE_MEDIA', 'FAILED')),
+              notes text,
+              created_at timestamptz not null default now(),
+              updated_at timestamptz not null default now(),
+              constraint loop_media_migration_queue_legacy_film_id_asset_kind_key
+                unique (legacy_film_id, asset_kind)
+            );
+            alter table public.loop_media_migration_queue enable row level security;
+          `);
+        }
+        console.log("[migration-replay] restored two verified empty pre-ledger server-only table baselines locally");
       }
 
       if (name === FIXTURE_MIGRATION) {
@@ -274,6 +333,30 @@ try {
     throw new Error(
       "Missing expected tables after replay: " +
         missingTables.map((row) => row.name).join(", "),
+    );
+  }
+
+  const baselineRls = await client.query(`
+    select
+      c.relname,
+      c.relrowsecurity as rls_enabled,
+      exists (
+        select 1 from pg_policy p
+        where p.polrelid = c.oid and p.polname = 'deny_client_access'
+      ) as deny_policy_exists
+    from pg_class c
+    join pg_namespace n on n.oid = c.relnamespace
+    where n.nspname = 'public'
+      and c.relname = any($1::text[])
+    order by c.relname
+  `, [["bridge_creator_notifications", "loop_media_migration_queue", "loop_parental_controls"]]);
+  if (
+    baselineRls.rows.length !== 3 ||
+    baselineRls.rows.some((row) => !row.rls_enabled || !row.deny_policy_exists)
+  ) {
+    throw new Error(
+      "Pre-ledger server-only baseline RLS verification failed: " +
+        JSON.stringify(baselineRls.rows),
     );
   }
 

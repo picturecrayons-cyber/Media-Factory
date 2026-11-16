@@ -119,3 +119,13 @@ Seven files did not match a Production ledger statement and remain archived for 
 - `20261113090535_map_verified_streamvista_studio_owner_20261113` requires exactly one verified, unmapped Studio profile. A clean environment must provide that fixture before replay, or handle this one-time Production mapping separately.
 - After merge, compare local and remote versions using `supabase migration list` and validate a complete replay on a disposable/staging database before any `db push` or `migration repair`.
 - No Production schema, migration ledger, title, asset, payment, entitlement, mail row, or OCI object was modified.
+
+## Verified pre-ledger baseline fixtures used only for local replay
+
+Production contains three server-only tables that are not created by any of the 69 recorded ledger statements, but are referenced by later historical migrations. Their empty schemas are recreated **only inside the disposable local Supabase CI database** before the respective historical migration is replayed:
+
+- `public.loop_parental_controls`: exact Production columns, UUID primary key/FK to `auth.users`, 0–5 failed-attempt check, `locked_until` index, RLS enabled. The replay runner also recreates the verified updated-at trigger function and trigger. Its deny policy is deliberately left to migration `20261006231321`.
+- `public.bridge_creator_notifications`: exact Production columns, `bigserial` primary key, status check, RLS enabled; no rows and no policy before the historical deep-clean migration.
+- `public.loop_media_migration_queue`: exact Production columns, primary/unique constraints and enum checks, RLS enabled; no rows and no policy before the historical deep-clean migration.
+
+The replay runner inserts no live data and uses no remote Supabase credentials. It validates that all three tables have RLS enabled and receive the historical `deny_client_access` policies after the 69 migrations replay. These fixtures do not create a new Production migration and do not change the Production schema.
