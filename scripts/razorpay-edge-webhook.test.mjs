@@ -163,3 +163,23 @@ test("webhook stale lease outlives Supabase's maximum Edge Function worker durat
   assert.match(source, /Date\.now\(\) - 10 \* 60 \* 1000/);
   assert.match(source, /hard 400s wall-clock maximum/);
 });
+
+
+test("buyer can resume a reserved package checkout without seeing another buyer identity", async () => {
+  const rightsSource = await readFile(new URL("../src/lib/bridge/multilingual-rights.ts", import.meta.url), "utf8");
+  const panelSource = await readFile(new URL("../src/components/bridge/multilingual-rights-panel.tsx", import.meta.url), "utf8");
+  const listStart = rightsSource.indexOf("export const listLicensePackages");
+  const listEnd = rightsSource.indexOf("export const authorizeLanguagePackage", listStart);
+  const listHandler = rightsSource.slice(listStart, listEnd);
+
+  assert.match(listHandler, /buyer_user_id: string \| null/);
+  assert.match(listHandler, /delivery_status, buyer_user_id/);
+  assert.match(listHandler, /canCheckout: actor\.accountType === "buyer"/);
+  assert.match(listHandler, /r\.status === "READY" && r\.buyer_user_id === null/);
+  assert.match(listHandler, /r\.status === "IN_NEGOTIATION" && r\.buyer_user_id === actor\.userId/);
+  assert.doesNotMatch(listHandler, /buyerUserId:\s*r\.buyer_user_id/);
+
+  assert.match(panelSource, /actor\.accountType === "buyer" && p\.canCheckout/);
+  assert.match(panelSource, /p\.status === "IN_NEGOTIATION" \? "Resume checkout" : "License package"/);
+  assert.doesNotMatch(panelSource, /actor\.accountType === "buyer" && p\.status === "READY"/);
+});
