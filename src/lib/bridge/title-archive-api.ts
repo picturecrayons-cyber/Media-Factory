@@ -44,8 +44,8 @@ export const listArchivableDraftIds = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
-    if (actor.internalRole && actor.internalRole !== "super_admin") return { ids: [] as string[] };
-    if (!actor.internalRole && !["independent_creator", "studio"].includes(actor.accountType)) return { ids: [] as string[] };
+    if (actor.internalRole && actor.internalRole !== "super_admin") return { ids: [] as string[], canManage: false };
+    if (!actor.internalRole && !["independent_creator", "studio"].includes(actor.accountType)) return { ids: [] as string[], canManage: false };
     const sql = await getSql();
     const rows = await sql<{ id: string }>`
       select id from bridge_titles
@@ -72,7 +72,7 @@ export const listArchivableDraftIds = createServerFn({ method: "GET" })
       const title = await loadTitle(row.id);
       if (title && await canArchiveDraftTitle(sql, actor, title)) eligible.push(row.id);
     }
-    return { ids: eligible };
+    return { ids: eligible, canManage: true };
   });
 
 export const archiveDraftTitleAction = createServerFn({ method: "POST" })
@@ -90,12 +90,8 @@ export const listMyArchivedDrafts = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
-    if (actor.internalRole && actor.internalRole !== "super_admin") {
-      throw new Error("Only Super Admin may view cross-account archived drafts.");
-    }
-    if (!actor.internalRole && !["independent_creator", "studio"].includes(actor.accountType)) {
-      throw new Error("Only verified Creator or Studio accounts can view archived drafts.");
-    }
+    if (actor.internalRole && actor.internalRole !== "super_admin") return { titles: [] };
+    if (!actor.internalRole && !["independent_creator", "studio"].includes(actor.accountType)) return { titles: [] };
     const sql = await getSql();
     const allTenants = actor.internalRole === "super_admin";
     const rows = await sql<{
