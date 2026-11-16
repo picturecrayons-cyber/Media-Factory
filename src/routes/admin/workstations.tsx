@@ -7,7 +7,7 @@ import { BridgeShell } from "@/components/bridge/shell";
 import { StoryConceptDesk } from "@/components/bridge/story-concept-desk";
 import { hasPermission } from "@/lib/bridge/rbac";
 import type { BridgeActor } from "@/lib/bridge/session";
-import { listAdminWorkstations, reviewAdminTitle, setBuyerPublicationGate, setTitleReleaseControl } from "@/lib/bridge/admin-workstations";
+import { listAdminWorkstations, reviewAdminTitle, setBuyerPublicationGate, setTitleReleaseControl, publishTitleToBuyers } from "@/lib/bridge/admin-workstations";
 import { reviewTitleWorkflow } from "@/lib/bridge/workflow";
 import { listDuplicateReviews, openDuplicateReview, decideDuplicateReview } from "@/lib/bridge/duplicate-reconciliation";
 
@@ -47,6 +47,10 @@ function WorkstationBody({ actor }: { actor: BridgeActor }) {
   });
   const releaseControl = useMutation({
     mutationFn: setTitleReleaseControl,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-workstations"] }),
+  });
+  const publish = useMutation({
+    mutationFn: publishTitleToBuyers,
     onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-workstations"] }),
   });
   const [activeTab, setActiveTab] = useState<Tab>("Titles");
@@ -98,9 +102,13 @@ function WorkstationBody({ actor }: { actor: BridgeActor }) {
         <BuyerRelease
           titles={data.titles}
           gateCertifications={data.gateCertifications}
+          packages={data.packages}
+          rights={data.rights}
+          legal={data.legal}
           canApprove={hasPermission(actor, "title.approve")}
           onGate={(titleId, gateName, decision, notes) => gate.mutate({ data: { titleId, gate: gateName, decision, notes } })}
           onRelease={(titleId, decision, reason) => releaseControl.mutate({ data: { titleId, decision, reason } })}
+          onPublish={(titleId) => publish.mutate({ data: { titleId } })}
         />
       ) : activeTab === "Deliveries" ? (
         <div className="space-y-6">
@@ -116,7 +124,7 @@ function WorkstationBody({ actor }: { actor: BridgeActor }) {
           rows={data.audit} fields={["action", "entity_type", "entity_id", "actor_user_id", "created_at"]} />
       )}
 
-      {review.isError || gate.isError || rightsReview.isError || releaseControl.isError ? <p className="rounded-xl border border-line p-4 text-sm">Action failed: {String(review.error ?? gate.error ?? rightsReview.error ?? releaseControl.error)}</p> : null}
+      {review.isError || gate.isError || rightsReview.isError || releaseControl.isError || publish.isError ? <p className="rounded-xl border border-line p-4 text-sm">Action failed: {String(review.error ?? gate.error ?? rightsReview.error ?? releaseControl.error ?? publish.error)}</p> : null}
     </div>
   );
 }
@@ -255,12 +263,16 @@ function RightsGrantCard({ title, grant, canReview, mutation }: { title: any; gr
   </article>;
 }
 
-function BuyerRelease({ titles, gateCertifications, canApprove, onGate, onRelease }: {
+function BuyerRelease({ titles, gateCertifications, packages, rights, legal, canApprove, onGate, onRelease, onPublish }: {
   titles: any[];
   gateCertifications: any[];
+  packages: any[];
+  rights: any[];
+  legal: any[];
   canApprove: boolean;
   onGate: (titleId: string, gateName: "OTT" | "PACKAGING" | "CURATION" | "DELIVERY", decision: "PASS" | "HOLD", notes: string) => void;
   onRelease: (titleId: string, decision: "HOLD" | "BLOCK" | "RELEASE", reason: string) => void;
+  onPublish: (titleId: string) => void;
 }) {
   const [gateNotes, setGateNotes] = useState<Record<string, string>>({});
   const [controlReasons, setControlReasons] = useState<Record<string, string>>({});
@@ -276,6 +288,10 @@ function BuyerRelease({ titles, gateCertifications, canApprove, onGate, onReleas
       const cert = gateCertifications.find((row) => row.title_id === title.id);
       const control = cert?.evidence?.releaseControl;
       const reason = controlReasons[title.id] ?? "";
+      const gateReady = Boolean(cert && cert.ott_preparation_status === "READY" && cert.packaging_status === "COMPLETE" && cert.curation_status === "APPROVED" && cert.delivery_status === "READY");
+      const packageReady = packages.some((row) => row.title_id === title.id && ["READY", "AUTHORIZED", "DELIVERED"].includes(row.readiness_state) && rights.some((grant) => grant.id === row.rights_grant_id && grant.status === "VALID"));
+      const legalReady = legal.some((row) => row.title_id === title.id && row.status === "APPROVED" && (row.evidence ?? []).some((entry: any) => rights.some((grant) => grant.title_id === title.id && grant.status === "VALID" && entry.grantId === grant.id)));
+      const publishReady = title.status === "LICENSING_READY" && gateReady && packageReady && legalReady && !["HOLD", "BLOCK"].includes(control?.status ?? "");
       return <div key={title.id} className="space-y-3 rounded-2xl border border-line bg-surface p-4">
         <div className="flex flex-wrap items-center justify-between gap-2"><div><p className="font-medium">{title.name}</p><p className="text-xs text-muted">{title.status} · {title.id}</p></div><span className="text-xs font-semibold">Release control: {control?.status ?? "CLEAR"}</span></div>
         <div className="grid gap-2 sm:grid-cols-2">
@@ -303,6 +319,10 @@ function BuyerRelease({ titles, gateCertifications, canApprove, onGate, onReleas
             <Button size="sm" disabled={!canApprove || reason.trim().length < 8 || !["HOLD", "BLOCK"].includes(control?.status ?? "")} onClick={() => onRelease(title.id, "RELEASE", reason)}>Release control</Button>
           </div>
           {control ? <p className="text-xs text-muted">Last control: {control.status} · {control.actor ?? "Unknown actor"} · {control.at ?? "Timestamp unavailable"} · {control.reason ?? ""}</p> : null}
+          <div className="border-t border-line pt-3">
+            <Button size="sm" disabled={!canApprove || !publishReady} onClick={() => onPublish(title.id)}>Publish to Buyer Gallery</Button>
+            {!publishReady ? <p className="mt-2 text-xs text-muted">Publication is locked until lifecycle, approved grant/legal link, destination package, all four gates and release control are ready.</p> : null}
+          </div>
           {!canApprove ? <p className="text-xs text-muted">Super Admin approval permission required.</p> : null}
         </div>
       </div>;
