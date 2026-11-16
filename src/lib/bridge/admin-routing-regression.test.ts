@@ -95,7 +95,7 @@ test("Creator workspace keeps primary actions visible and reduces navigation clu
   assert.match(creator, /<NewSubmissionPanel \/>/);
   assert.match(creator, /Your authenticated account/);
   assert.match(creator, /Creator workspace navigation/);
-  assert.match(creator, /\[\["Overview", "#overview"\],\s*\["My titles", "#my-titles"\],\s*\["Add title", "#add-title"\],\s*\["More", "#workspace-tools"\]\]/);
+  assert.match(creator, /\\[\\s*\\["Overview", "#overview"\\],\\s*\\["My titles", "#my-titles"\\],\\s*\\["Add title", "#add-title"\\],\\s*\\["More", "#workspace-tools"\\]\\s*\\]/);
   assert.match(creator, /<details className="rounded-xl border border-line bg-surface">/);
   assert.match(creator, /Creator accounts cannot approve QC or Legal decisions/);
   assert.match(creator, /Delivery appears only after required Bridge authorization/);
