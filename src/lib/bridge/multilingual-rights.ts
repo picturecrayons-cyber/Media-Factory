@@ -68,6 +68,34 @@ function setIncludes(granted: unknown, requested: string[]) {
   return requested.every((v) => set.has(v.toUpperCase()) || set.has("ALL") || set.has("*") || set.has("WORLDWIDE"));
 }
 
+function intersectsSet(a: unknown, b: string[], wildcard: string[]) {
+  if (!Array.isArray(a)) return false;
+  const left = new Set(a.map((value) => String(value).trim().toUpperCase()).filter(Boolean));
+  const right = b.map((value) => value.trim().toUpperCase()).filter(Boolean);
+  if (left.size === 0 || right.length === 0) return false;
+  if (wildcard.some((token) => left.has(token)) || wildcard.some((token) => right.includes(token))) return true;
+  return right.some((value) => left.has(value));
+}
+
+function hasExclusiveConflict(
+  existing: LanguageRightRow[],
+  candidate: { language: string; rightType: string; territories: string[]; media: string[]; exclusivity: string; windowStart: Date | null; windowEnd: Date | null },
+) {
+  return existing.find((row) => {
+    if (row.language.trim().toUpperCase() !== candidate.language.trim().toUpperCase()) return false;
+    if (row.right_type !== candidate.rightType) return false;
+    if (row.exclusivity !== "EXCLUSIVE" && candidate.exclusivity !== "EXCLUSIVE") return false;
+    const territoryOverlap = intersectsSet(row.territories, candidate.territories, ["ALL","*","WORLDWIDE","GLOBAL"]);
+    const mediaOverlap = intersectsSet(row.media, candidate.media, ["ALL","*","OTT","STREAMING","DIGITAL"]);
+    return territoryOverlap && mediaOverlap && overlaps(
+      row.window_start ? new Date(row.window_start) : null,
+      row.window_end ? new Date(row.window_end) : null,
+      candidate.windowStart,
+      candidate.windowEnd,
+    );
+  }) ?? null;
+}
+
 export const listLanguageRights = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .validator(z.object({ titleId: z.string().min(8) }))
@@ -102,25 +130,27 @@ export const createLanguageRight = createServerFn({ method: "POST" })
     if (start && end && end <= start) throw new Error("Rights window end must be after start");
 
     const sql = await getSql();
-    const existing = await sql<LanguageRightRow>`
-      select id, title_id, language, right_type, territories, media, window_start, window_end,
-             exclusivity, asking_price_paise, evidence, status
-      from bridge_language_rights
-      where title_id = ${data.titleId} and status = 'VALID'
-    `;
-
-    const conflict = existing.find((r) => {
-      if (r.language.trim().toUpperCase() !== data.language.trim().toUpperCase()) return false;
-      if (r.right_type !== data.rightType) return false;
-      if (r.exclusivity !== "EXCLUSIVE" && data.exclusivity !== "EXCLUSIVE") return false;
-      const territoryOverlap = data.territories.some((t) => setIncludes(r.territories, [t]));
-      const mediaOverlap = data.media.some((m) => setIncludes(r.media, [m]));
-      return territoryOverlap && mediaOverlap && overlaps(
-        r.window_start ? new Date(r.window_start) : null,
-        r.window_end ? new Date(r.window_end) : null,
-        start,
-        end,
+    const conflict = await sql.transaction(async (tx) => {
+      await tx.query(
+        "select pg_advisory_xact_lock(hashtextextended($1, 0))",
+        [`bridge-language-right:${data.titleId}:${data.language.trim().toUpperCase()}:${data.rightType}`],
       );
+      const existing = await tx<LanguageRightRow>`
+        select id, title_id, language, right_type, territories, media, window_start, window_end,
+               exclusivity, asking_price_paise, evidence, status
+        from bridge_language_rights
+        where title_id = ${data.titleId} and status = 'VALID'
+        for update
+      `;
+      return hasExclusiveConflict(existing, {
+        language: data.language,
+        rightType: data.rightType,
+        territories: data.territories,
+        media: data.media,
+        exclusivity: data.exclusivity,
+        windowStart: start,
+        windowEnd: end,
+      });
     });
     if (conflict) throw new Error("RIGHTS_CONFLICT: an overlapping exclusive language right already exists");
 
@@ -236,6 +266,11 @@ export const listLicensePackages = createServerFn({ method: "GET" })
              exclusivity, price_paise, status, delivery_status
       from bridge_license_packages
       where title_id = ${data.titleId}
+        and (
+          ${Boolean(actor.internalRole)}
+          or buyer_user_id is null
+          or buyer_user_id = ${actor.userId}
+        )
       order by created_at desc
     `;
     const rightIds = [...new Set(rows.flatMap((r) => Array.isArray(r.language_right_ids) ? r.language_right_ids.map(String) : []))];
