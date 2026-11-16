@@ -13,6 +13,7 @@ import { assertNotDevUser } from "./guards";
 import { loopStageType } from "./loop-lanes";
 import { assertBuyerPublishable, getBuyerGateStatus } from "./buyer-visibility";
 import { submitTitleForQc } from "./title-submission";
+import { assertTitleControlClear } from "./title-controls-policy";
 
 type TitleRow = {
   id: string;
@@ -610,6 +611,8 @@ export const advanceTitle = createServerFn({ method: "POST" })
     const expected = nextStatus(title.status);
     if (expected !== data.to) throw new Error("Illegal title transition");
     const sql = await getSql();
+    const [control] = await sql<{control_state: "CLEAR" | "HOLD" | "BLOCK"}>`select control_state from public.bridge_title_controls where title_id=${title.id}`;
+    assertTitleControlClear(control?.control_state);
     if (data.to === "QC_REVIEW") {
       return submitTitleForQc(sql, title, actor.userId, data.note);
     }
