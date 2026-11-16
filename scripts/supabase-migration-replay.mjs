@@ -672,7 +672,8 @@ try {
               and cardinality(p.polroles) = 2
               and (select oid from pg_roles where rolname = 'anon') = any(p.polroles)
               and (select oid from pg_roles where rolname = 'authenticated') = any(p.polroles)
-              and pg_get_expr(p.polqual, p.polrelid) = 'false'
+              and regexp_replace(pg_get_expr(p.polqual, p.polrelid), '[[:space:]]+', '', 'g') =
+                'false'
               and (
                 p.polwithcheck is null
                 or pg_get_expr(p.polwithcheck, p.polrelid) = 'false'
@@ -688,7 +689,8 @@ try {
               and p.polcmd = '*'
               and p.polpermissive
               and p.polroles = ARRAY[(select oid from pg_roles where rolname = 'anon')]
-              and pg_get_expr(p.polqual, p.polrelid) = 'false'
+              and regexp_replace(pg_get_expr(p.polqual, p.polrelid), '[[:space:]]+', '', 'g') =
+                'false'
               and (
                 p.polwithcheck is null
                 or pg_get_expr(p.polwithcheck, p.polrelid) = 'false'
@@ -701,10 +703,10 @@ try {
               and p.polcmd = '*'
               and p.polpermissive
               and p.polroles = ARRAY[(select oid from pg_roles where rolname = 'authenticated')]
-              and pg_get_expr(p.polqual, p.polrelid) =
-                '(EXISTS ( SELECT 1 FROM (bridge_titles t JOIN bridge_loop_identity_links l ON ((l.bridge_user_id = t.owner_user_id))) WHERE ((t.id = bridge_story_concept_submissions.title_id) AND (l.auth_user_id = ( SELECT auth.uid() AS uid)))))'
-              and pg_get_expr(p.polwithcheck, p.polrelid) =
-                '(EXISTS ( SELECT 1 FROM (bridge_titles t JOIN bridge_loop_identity_links l ON ((l.bridge_user_id = t.owner_user_id))) WHERE ((t.id = bridge_story_concept_submissions.title_id) AND (l.auth_user_id = ( SELECT auth.uid() AS uid)))))'
+              and regexp_replace(pg_get_expr(p.polqual, p.polrelid), '[[:space:]]+', '', 'g') =
+                '(EXISTS(SELECT1FROM(bridge_titlestJOINbridge_loop_identity_linkslON((l.bridge_user_id=t.owner_user_id)))WHERE((t.id=bridge_story_concept_submissions.title_id)AND(l.auth_user_id=(SELECTauth.uid()ASuid)))))'
+              and regexp_replace(pg_get_expr(p.polwithcheck, p.polrelid), '[[:space:]]+', '', 'g') =
+                '(EXISTS(SELECT1FROM(bridge_titlestJOINbridge_loop_identity_linkslON((l.bridge_user_id=t.owner_user_id)))WHERE((t.id=bridge_story_concept_submissions.title_id)AND(l.auth_user_id=(SELECTauth.uid()ASuid)))))'
           )
         )
         when c.relname = 'bridge_buyer_interest' then (
@@ -735,10 +737,10 @@ try {
               and p.polcmd = '*'
               and p.polpermissive
               and p.polroles = ARRAY[(select oid from pg_roles where rolname = 'authenticated')]
-              and pg_get_expr(p.polqual, p.polrelid) =
-                '( SELECT private.bridge_is_internal() AS bridge_is_internal)'
-              and pg_get_expr(p.polwithcheck, p.polrelid) =
-                '( SELECT private.bridge_is_internal() AS bridge_is_internal)'
+              and regexp_replace(pg_get_expr(p.polqual, p.polrelid), '[[:space:]]+', '', 'g') =
+                '(SELECTprivate.bridge_is_internal()ASbridge_is_internal)'
+              and regexp_replace(pg_get_expr(p.polwithcheck, p.polrelid), '[[:space:]]+', '', 'g') =
+                '(SELECTprivate.bridge_is_internal()ASbridge_is_internal)'
           )
         )
         else false
