@@ -39,14 +39,14 @@ const localReplayHosts = new Set(["localhost", "127.0.0.1", "[::1]"]);
 if (
   !["postgres:", "postgresql:"].includes(replayUrl.protocol) ||
   !localReplayHosts.has(replayUrl.hostname) ||
-  replayUrl.port !== "54332" ||
+  replayUrl.port !== "55432" ||
   replayUrl.pathname !== "/postgres" ||
   decodeURIComponent(replayUrl.username) !== "postgres" ||
   replayUrl.search !== "" ||
   replayUrl.hash !== ""
 ) {
   throw new Error(
-    "Migration replay is restricted to local Supabase Postgres at localhost:54322/postgres; remote databases are forbidden",
+    "Migration replay is restricted to local Supabase Postgres at localhost:55432/postgres; remote databases are forbidden",
   );
 }
 
@@ -438,22 +438,49 @@ try {
     select
       c.relname,
       c.relrowsecurity as rls_enabled,
-      exists (
-        select 1 from pg_policy p
-        where p.polrelid = c.oid and p.polname = 'deny_client_access'
-      ) as deny_policy_exists
+      case
+        when c.relname in (
+          'bridge_creator_notifications',
+          'loop_media_migration_queue',
+          'loop_parental_controls'
+        ) then exists (
+          select 1 from pg_policy p
+          where p.polrelid = c.oid and p.polname = 'deny_client_access'
+        )
+        when c.relname = 'bridge_story_concept_submissions' then (
+          exists (
+            select 1 from pg_policy p
+            where p.polrelid = c.oid and p.polname = 'Deny anonymous public access'
+          )
+          and exists (
+            select 1 from pg_policy p
+            where p.polrelid = c.oid
+              and p.polname = 'bridge_story_concept_submissions_owner_only'
+          )
+        )
+        when c.relname = 'bridge_buyer_interest' then not exists (
+          select 1 from pg_policy p where p.polrelid = c.oid
+        )
+        else false
+      end as policy_state_valid
     from pg_class c
     join pg_namespace n on n.oid = c.relnamespace
     where n.nspname = 'public'
       and c.relname = any($1::text[])
     order by c.relname
-  `, [["bridge_creator_notifications", "loop_media_migration_queue", "loop_parental_controls"]]);
+  `, [[
+    "bridge_creator_notifications",
+    "bridge_story_concept_submissions",
+    "bridge_buyer_interest",
+    "loop_media_migration_queue",
+    "loop_parental_controls",
+  ]]);
   if (
-    baselineRls.rows.length !== 3 ||
-    baselineRls.rows.some((row) => !row.rls_enabled || !row.deny_policy_exists)
+    baselineRls.rows.length !== 5 ||
+    baselineRls.rows.some((row) => !row.rls_enabled || !row.policy_state_valid)
   ) {
     throw new Error(
-      "Pre-ledger server-only baseline RLS verification failed: " +
+      "Pre-ledger baseline RLS/policy verification failed: " +
         JSON.stringify(baselineRls.rows),
     );
   }
