@@ -86,3 +86,19 @@ test("shared title workspace has an explicit role gate and Studio list scope", (
   const profiles = read("./profiles.ts");
   assert.match(profiles, /insert into bridge_organization_memberships/);
 });
+
+
+test("Creator workspace keeps primary actions visible and reduces navigation clutter", () => {
+  const creator = read("../../routes/creator.tsx");
+  assert.match(creator, /<RequireBridge allow="creator">/);
+  assert.match(creator, /<TitleList empty=/);
+  assert.match(creator, /<NewSubmissionPanel \/>/);
+  assert.match(creator, /Your authenticated account/);
+  assert.match(creator, /Creator workspace navigation/);
+  assert.match(creator, /\[\["Overview", "#overview"\],\s*\["My titles", "#my-titles"\],\s*\["Add title", "#add-title"\],\s*\["More", "#workspace-tools"\]\]/);
+  assert.match(creator, /<details className="rounded-xl border border-line bg-surface">/);
+  assert.match(creator, /Creator accounts cannot approve QC or Legal decisions/);
+  assert.match(creator, /Delivery appears only after required Bridge authorization/);
+  assert.doesNotMatch(creator, /sticky top-0 z-10/);
+  assert.doesNotMatch(creator, /Statements", "#statements"/);
+});
