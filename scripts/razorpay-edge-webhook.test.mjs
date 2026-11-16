@@ -70,7 +70,7 @@ test("webhook completion must update the row still owned by the same claim token
 
 
 test("webhook finalization is conditional on the same active claim token", () => {
-  assert.match(source, /\.eq\("event_id",\\s*id\)\.eq\("processing_token",\\s*token\)\.select\("event_id"\)\.maybeSingle\(\)/);
+  assert.ok(source.includes('.eq("event_id", id).eq("processing_token", token).select("event_id").maybeSingle()'));
   assert.match(source, /if\s*\(\s*doneError\s*\|\|\s*!finalized\s*\)/);
   assert.match(source, /Webhook processing lease was lost/);
 });
