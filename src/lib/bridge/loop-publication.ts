@@ -76,6 +76,12 @@ function iso(v: string | Date | null) {
   return v instanceof Date ? v.toISOString() : String(v);
 }
 
+function hasExpiredWindow(windowEnd: string | Date | null, now = new Date()) {
+  if (!windowEnd) return false;
+  const end = new Date(windowEnd);
+  return Number.isFinite(end.getTime()) && end.getTime() <= now.getTime();
+}
+
 /** Pre-flight verification checking rights, assets, QC and operator authority */
 export async function verifyDistributionPreflight(
   sql: Sql,
@@ -227,21 +233,8 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
     assertPermission(actor, "title.read_catalog");
     const sql = await getSql();
 
-    // Auto-reevaluate any expired distribution windows
-    await sql`
-      update bridge_loop_publications
-      set authorization_status = 'expired', updated_at = now()
-      where window_end is not null and window_end < now() and authorization_status in ('authorized', 'live')
-    `.catch(() => {});
-
-    await sql`
-      update loop_titles
-      set status = 'expired', published = false, listed = false, updated_at = now()
-      where bridge_title_id in (
-        select bridge_title_id from bridge_loop_publications where authorization_status = 'expired'
-      ) and published = true
-    `.catch(() => {});
-
+    // GET readiness is observational only. Expiry is projected in the response below;
+    // state transitions belong to an explicit audited mutation, never a read request.
     const rows = await sql<{
       id: string;
       slug: string;
@@ -303,6 +296,9 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
 
     return {
       titles: rows.map((r) => {
+        const expiredWindow = hasExpiredWindow(r.window_end);
+        const publicationExpired =
+          expiredWindow && ["AUTHORIZED", "LIVE"].includes((r.authorization_status || "").toUpperCase());
         const coveringGrant = r.loop_title_id
           ? findCoveringRightsGrant(
               grants.filter((grant) => grant.title_id === r.id),
@@ -375,16 +371,17 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
             ? {
                 destination: "CRAYONS_LOOP" as const,
                 loopTitleId: r.loop_title_id,
-                authorizationStatus: (r.authorization_status?.toUpperCase() ||
-                  "PENDING") as DistributionAuthorizationStatus,
+                authorizationStatus: (publicationExpired
+                  ? "EXPIRED"
+                  : r.authorization_status?.toUpperCase() || "PENDING") as DistributionAuthorizationStatus,
                 territories: r.territories || ["IN"],
                 languages: r.languages || [r.language],
                 exploitationModels: r.exploitation_models || ["SVOD"],
                 windowStart: iso(r.window_start),
                 windowEnd: iso(r.window_end),
-                loopStatus: r.loop_status,
-                listed: Boolean(r.listed),
-                published: Boolean(r.published),
+                loopStatus: publicationExpired ? "expired" : r.loop_status,
+                listed: publicationExpired ? false : Boolean(r.listed),
+                published: publicationExpired ? false : Boolean(r.published),
                 playbackPath: r.playback_path,
               }
             : null,
