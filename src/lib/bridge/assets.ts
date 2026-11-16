@@ -183,7 +183,8 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
     const title = await loadTitle(asset.title_id);
     if (!title || !canOperateOnTitle(actor, title, "asset.sign_upload", "asset.sign_upload") || !UPLOADABLE.has(title.status)) {
       throw new Error("Upload confirmation is closed for this title");
-    }
+    }    const [control] = await sql<{control_state: "CLEAR" | "HOLD" | "BLOCK"}>`select control_state from public.bridge_title_controls where title_id=${title.id}`;
+    assertTitleControlClear(control?.control_state);
     if (asset.byte_size != null)
       return { assetId: asset.id, byteSize: Number(asset.byte_size), verified: true };
 
