@@ -23,11 +23,20 @@ function safePayloadShape(value: unknown): Record<string, unknown> {
   const mailbox = payload.mailbox;
   const dataMessage = dataRecord?.message;
   const dataMailbox = dataRecord?.mailbox;
+  // Never echo arbitrary payload property names: an attacker can make a
+  // sensitive value itself the key. Emit only known schema field names.
+  const diagnosticKeyAllowlist = new Set([
+    "data", "event", "id", "timestamp", "mailbox", "message",
+    "from", "sender", "subject", "thread_id", "threadId",
+    "preview", "snippet", "truncated_message", "text", "body",
+    "received_at", "receivedAt", "date", "address",
+    "delivery", "payload", "email", "mail", "message_id",
+    "messageId", "mailbox_id", "mailboxId",
+  ]);
   const safeKeys = (record: unknown): string[] => {
     if (record === null || typeof record !== "object" || Array.isArray(record)) return [];
     return Object.keys(record as Record<string, unknown>)
-      .slice(0, 30)
-      .map((key) => key.replace(/[^a-zA-Z0-9_.-]/g, "").slice(0, 48))
+      .filter((key) => diagnosticKeyAllowlist.has(key))
       .sort();
   };
   const valueType = (input: unknown): string =>
