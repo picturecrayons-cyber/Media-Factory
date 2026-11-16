@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import { CreateTitleForm } from "@/components/bridge/title-desk";
 import { listTitles } from "@/lib/bridge/titles";
 import { listLoopPublicationReadiness } from "@/lib/bridge/loop-publication";
-import { useQuery } from "@tanstack/react-query";
 import { hasPermission } from "@/lib/bridge/rbac";
 
 export const Route = createFileRoute("/cms")({ component: OperationalCms });
