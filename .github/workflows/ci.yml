@@ -90,6 +90,13 @@ jobs:
           mv supabase/migrations "$RUNNER_TEMP/bridge-production-ledger-migrations"
           mkdir -p supabase/migrations
 
+      - name: Set a dedicated local Supabase database port
+        run: |
+          cat >> supabase/config.toml <<'TOML'
+          [db]
+          port = 54332
+          TOML
+
       - name: Start an isolated local Supabase stack without auto-applying the ledger
         run: supabase start -x studio,imgproxy,edge-runtime,logflare,vector
 
@@ -104,7 +111,7 @@ jobs:
       - name: Replay all recovered Production-ledger migrations
         run: node scripts/supabase-migration-replay.mjs
         env:
-          SUPABASE_REPLAY_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+          SUPABASE_REPLAY_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54332/postgres
 
       - name: Stop isolated Supabase stack
         if: always()
