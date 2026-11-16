@@ -8,20 +8,21 @@ const clean = {
 };
 
 describe("reversible draft archive eligibility", () => {
-  it("allows only an untouched draft with no registered dependency", () => {
+  it("allows an untouched draft", () => {
     assert.doesNotThrow(() => assertDraftCanBeArchived(clean));
   });
 
-  it("blocks every non-draft lifecycle state", () => {
+  it("blocks non-draft lifecycle states", () => {
     for (const status of [
-      "UPLOADING", "PREPARING", "QC_REVIEW", "RIGHTS_REVIEW", "LICENSING_READY",
-      "LIVE_FOR_BUYERS", "IN_NEGOTIATION", "LICENSED", "DELIVERED",
+      "UPLOADING", "PREPARING", "QC_REVIEW", "RIGHTS_REVIEW",
+      "LICENSING_READY", "LIVE_FOR_BUYERS", "IN_NEGOTIATION",
+      "LICENSED", "DELIVERED",
     ]) {
-      assert.throws(() => assertDraftCanBeArchived({ ...clean, status }), /Only untouched DRAFT/);
+      assert.throws(() => assertDraftCanBeArchived({ ...clean, status }), /Only DRAFT/);
     }
   });
 
-  it("blocks every class of linked records and media", () => {
+  it("blocks linked media, ingest, review, rights and commercial records", () => {
     for (const key of [
       "hasAssets", "hasMaster", "hasPoster", "hasDitSession",
       "hasRights", "hasReview", "hasCommercial",
