@@ -383,6 +383,35 @@ export const approveLanguageRight = createServerFn({ method: "POST" })
       throw new Error("Not found");
     }
     await sql.transaction(async (tx) => {
+      await tx.query(
+        "select pg_advisory_xact_lock(hashtextextended($1, 0))",
+        [`bridge-language-right:${right.title_id}:${right.created_by}:${data.rightId}`],
+      );
+      const [locked] = await tx<LanguageRightRow>`
+        select id, title_id, language, right_type, territories, media, window_start, window_end,
+               exclusivity, asking_price_paise, evidence, status
+        from bridge_language_rights
+        where id = ${data.rightId}::uuid and title_id = ${right.title_id}
+        for update
+      `;
+      if (!locked || locked.status !== "DRAFT") throw new Error("Only a draft language right can be reviewed");
+      const existing = await tx<LanguageRightRow>`
+        select id, title_id, language, right_type, territories, media, window_start, window_end,
+               exclusivity, asking_price_paise, evidence, status
+        from bridge_language_rights
+        where title_id = ${right.title_id} and status = 'VALID' and id <> ${data.rightId}::uuid
+        for update
+      `;
+      const conflict = hasExclusiveConflict(existing, {
+        language: locked.language,
+        rightType: locked.right_type,
+        territories: Array.isArray(locked.territories) ? locked.territories.map(String) : [],
+        media: Array.isArray(locked.media) ? locked.media.map(String) : [],
+        exclusivity: locked.exclusivity,
+        windowStart: locked.window_start ? new Date(locked.window_start) : null,
+        windowEnd: locked.window_end ? new Date(locked.window_end) : null,
+      });
+      if (conflict) throw new Error("RIGHTS_CONFLICT: an overlapping exclusive language right already exists");
       await tx`
         update bridge_language_rights set status = 'VALID', updated_at = now()
         where id = ${data.rightId}::uuid and status = 'DRAFT'
