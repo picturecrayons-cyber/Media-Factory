@@ -141,6 +141,8 @@ export async function reviewWorkflow(tx: Sql, actor: Actor, data: z.infer<typeof
       if (startsAt > now) throw new Error("Rights period has not started yet");
       if (endsAt <= now) throw new Error("Rights period has expired");
       if (!evidenceComplete) throw new Error("Attach a producer agreement, chain-of-title or authorization document reference before approval");
+      const reviewerEvidence = data.note.trim().length >= 8;
+      if (!reviewerEvidence) throw new Error("Legal reviewer findings/evidence reference is required");
       if (!grant.exclusivity || !["EXCLUSIVE", "NON_EXCLUSIVE"].includes(grant.exclusivity))
         throw new Error("Rights exclusivity must be explicitly recorded");
       if (!grant.grant_type) throw new Error("Rights type is missing");
