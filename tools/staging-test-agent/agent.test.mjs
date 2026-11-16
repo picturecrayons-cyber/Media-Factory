@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
-const root = fileURLToPath(new URL("../../..", import.meta.url));
+const root = fileURLToPath(new URL("../..", import.meta.url));
 const agent = join(root, "tools/staging-test-agent/agent.mjs");
 const example = JSON.parse(await readFile(join(root, "tools/staging-test-agent/fixtures.example.json"), "utf8"));
 
