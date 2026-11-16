@@ -102,9 +102,12 @@ export const setBuyerPublicationGate = createServerFn({ method: "POST" })
     const actor = await actorFor(context.userId);
     if (!actor.internalRole) throw new Error("Forbidden");
     assertPermission(actor, "title.approve");
-    const sql = await getSql();
-    const rows = await sql<{ id: string }>`select id from bridge_titles where id = ${data.titleId} limit 1`;
+    const db = await getSql();
+    return db.transaction(async (sql) => {
+    const rows = await sql<{ id: string }>`select id from bridge_titles where id = ${data.titleId} for update`;
     if (!rows[0]) throw new Error("Title not found");
+    const [control] = await sql<{control_state: "CLEAR" | "HOLD" | "BLOCK"}>`select control_state from public.bridge_title_controls where title_id=${data.titleId} for update`;
+    assertTitleControlClear(control?.control_state);
 
     const value = data.decision === "PASS"
       ? ({OTT:"READY",PACKAGING:"COMPLETE",CURATION:"APPROVED",DELIVERY:"READY"} as const)[data.gate]
@@ -145,7 +148,8 @@ export const setBuyerPublicationGate = createServerFn({ method: "POST" })
             evidence=evidence || ${gateEvidence}::jsonb, updated_at=now()
         where title_id=${data.titleId}`;
     }
-    await writeAudit({actorUserId:actor.userId,action:`buyer_gate.${data.gate.toLowerCase()}.${data.decision.toLowerCase()}`,entityType:"bridge_title",entityId:data.titleId,metadata:{gate:data.gate,decision:data.decision,notes:data.notes??null}});
+    await writeAudit({actorUserId:actor.userId,action:`buyer_gate.${data.gate.toLowerCase()}.${data.decision.toLowerCase()}`,entityType:"bridge_title",entityId:data.titleId,metadata:{gate:data.gate,decision:data.decision,notes:data.notes??null}},sql);
     const result=await sql<{ok:boolean}>`select public.bridge_title_buyer_visibility(${data.titleId}) as ok`;
     return {ok:true,gate:data.gate,decision:data.decision,publishable:result[0]?.ok===true};
+    });
   });
