@@ -385,3 +385,25 @@ test("Submit for QC advances PREPARING with the referenced vertical poster and w
     await f.db.close();
   }
 });
+
+test("HOLD and BLOCK prevent submission for QC without changing title lifecycle", async () => {
+  for (const state of ["HOLD", "BLOCK"] as const) {
+    const f = await fixture();
+    try {
+      const id = "qc-" + state.toLowerCase() + "-title";
+      await f.sql.query("insert into bridge_titles(id,owner_user_id,status,master_key,poster_key,updated_at) values ($1,'owner','PREPARING','sealed/master','sealed/poster',now())", [id]);
+      await f.sql.query("insert into bridge_assets values ($1,$2,'master','sealed/master',4096),($3,$2,'poster_vertical','sealed/poster',1024)", [id + "-master", id, id + "-poster"]);
+      await f.sql.query("insert into bridge_title_controls(title_id,control_state,reason,set_by,set_at) values ($1,$2,$3,'super',now())", [id, state, "Release gate " + state.toLowerCase() + " pending"]);
+      await assert.rejects(
+        submitTitleForQc(f.sql, { id, status: "PREPARING", masterKey: "sealed/master", posterKey: "sealed/poster" }, "owner", "Submit title for QC"),
+        state === "HOLD" ? /TITLE_ON_HOLD/ : /TITLE_BLOCKED/,
+      );
+      const status = await f.sql.query<{ status: string }>("select status from bridge_titles where id=$1", [id]);
+      const events = await f.sql.query("select * from bridge_title_events where title_id=$1", [id]);
+      assert.equal(status[0]?.status, "PREPARING");
+      assert.equal(events.length, 0);
+    } finally {
+      await f.db.close();
+    }
+  }
+});
