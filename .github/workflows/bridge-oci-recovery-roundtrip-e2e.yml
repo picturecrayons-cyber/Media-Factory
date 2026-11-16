@@ -2,9 +2,13 @@ name: Bridge OCI Primary to Recovery E2E
 
 on:
   workflow_dispatch:
-
-permissions:
-  contents: read
+  # Narrow fallback trigger to this dedicated certification branch only.
+  push:
+    branches:
+      - "certification/bridge-oci-recovery-e2e-*"
+    paths:
+      - ".github/workflows/bridge-oci-recovery-roundtrip-e2e.yml"
+      - "scripts/oci-recovery-roundtrip-e2e.mjs"
 
 jobs:
   recovery-roundtrip:
