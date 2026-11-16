@@ -30,10 +30,12 @@ test("title control schema persists HOLD/BLOCK state and immutable history", asy
     `);
     await db.query("insert into bridge_title_controls(title_id,control_state,reason,set_by,set_at) values ($1,'HOLD',$2,$3,now())", ["title-123","Rights evidence under review","super"]);
     await db.query("insert into bridge_title_control_events(title_id,control_state,action,reason,actor_user_id) values ($1,'HOLD','SET_HOLD',$2,$3)", ["title-123","Rights evidence under review","super"]);
-    assert.equal((await db.query("select control_state from bridge_title_controls where title_id='title-123'")).rows[0].control_state, "HOLD");
+    const stateResult = await db.query<{ control_state: string }>("select control_state from bridge_title_controls where title_id='title-123'");
+    assert.equal(stateResult.rows[0]?.control_state, "HOLD");
     await db.query("update bridge_title_controls set control_state='CLEAR',reason=null,set_by=null,set_at=null,released_by='super',released_at=now(),release_reason='Evidence confirmed',updated_at=now() where title_id='title-123'");
     await db.query("insert into bridge_title_control_events(title_id,control_state,action,reason,actor_user_id) values ($1,'CLEAR','RELEASE_HOLD',$2,$3)", ["title-123","Evidence confirmed","super"]);
-    assert.equal((await db.query("select count(*)::int as count from bridge_title_control_events")).rows[0].count, 2);
+    const eventCount = await db.query<{ count: number }>("select count(*)::int as count from bridge_title_control_events");
+    assert.equal(eventCount.rows[0]?.count, 2);
     await assert.rejects(db.query("delete from bridge_title_control_events where id=1"));
   } finally { await db.close(); }
 });
