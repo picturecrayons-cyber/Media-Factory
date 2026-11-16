@@ -36,7 +36,7 @@ alter table public.bridge_title_controls enable row level security;
 -- Existing buyer catalogue, poster and direct-listing queries all use this function.
 -- Exclude controlled titles centrally so HOLD/BLOCK also suspend existing listings.
 create or replace function public.bridge_title_buyer_visibility(p_title_id text)
-returns boolean language sql stable as $function$
+returns boolean language sql stable set search_path = public, pg_temp as $function$
   select exists (
     select 1 from public.bridge_titles t
     join public.bridge_title_gate_certifications g on g.title_id=t.id
