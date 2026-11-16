@@ -280,7 +280,14 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
     const asset = rows[0];
     if (!asset) throw new Error("Asset not found");
     const title = await loadTitle(asset.title_id);
-    if (!title || !canOperateOnTitle(actor, title, "asset.sign_upload", "asset.sign_upload") || !UPLOADABLE.has(title.status)) {
+    const replacementUpload = Boolean(asset.supersedes_asset_id);
+    if (!title || !canOperateOnTitle(actor, title, "asset.sign_upload", "asset.sign_upload")) {
+      throw new Error("Upload confirmation is closed for this title");
+    }
+    if (replacementUpload) {
+      if (actor.internalRole !== "super_admin")
+        throw new Error("Forbidden: Super Admin replacement only");
+    } else if (!UPLOADABLE.has(title.status)) {
       throw new Error("Upload confirmation is closed for this title");
     }
     if (asset.byte_size != null)
@@ -302,18 +309,32 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
     }
     // Persist asset/title/audit state first. Do not advance the migration queue
     // if persistence fails: its prior state remains the truthful state.
-    const confirmed = await persistVerifiedAsset(sql, {
-      assetId: asset.id,
-      actorUserId: actor.userId,
-      internalActor: Boolean(actor.internalRole),
-      titleId: title.id,
-      kind: asset.kind,
-      byteSize: sealed.byteSize,
-      contentType: sealed.contentType,
-      checksum: sealed.etag,
-      sourceKey: asset.s3_key,
-      sealedKey,
-    });
+    const confirmed = replacementUpload
+      ? await persistVerifiedAssetReplacement(sql, {
+          assetId: asset.id,
+          previousAssetId: asset.supersedes_asset_id!,
+          actorUserId: actor.userId,
+          titleId: title.id,
+          kind: asset.kind,
+          byteSize: sealed.byteSize,
+          contentType: sealed.contentType,
+          etag: sealed.etag,
+          sourceKey: asset.s3_key,
+          sealedKey,
+          reason: asset.replacement_reason || "",
+        })
+      : await persistVerifiedAsset(sql, {
+          assetId: asset.id,
+          actorUserId: actor.userId,
+          internalActor: Boolean(actor.internalRole),
+          titleId: title.id,
+          kind: asset.kind,
+          byteSize: sealed.byteSize,
+          contentType: sealed.contentType,
+          checksum: sealed.etag,
+          sourceKey: asset.s3_key,
+          sealedKey,
+        });
     if (confirmed) {
       // UPLOADED is only recorded after persistVerifiedAsset succeeds.
       await sql`
