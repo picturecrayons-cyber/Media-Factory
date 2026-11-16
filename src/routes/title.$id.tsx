@@ -237,6 +237,7 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
       </nav>
 
       {activeTab === "Overview" ? (
+        <>
         <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
           <div className="flex items-center justify-between gap-3">
             <div>
@@ -270,6 +271,7 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
           ) : null}
         </section>
         {!buyerView ? <AssetPreviewGallery assets={assets} /> : null}
+        </>
       ) : activeTab === "Files" && !buyerView ? (
         <FilesPanel
           canUpload={
