@@ -128,6 +128,16 @@ try {
   `);
   const state = baseline.rows[0];
   console.log("[migration-replay] connected", JSON.stringify(state));
+  if (state.migrations_ledger_ready) {
+    const localLedger = await client.query(
+      "select count(*)::int as count from supabase_migrations.schema_migrations",
+    );
+    if (localLedger.rows[0].count !== 0) {
+      throw new Error(
+        "Supabase startup auto-applied project migrations before the controlled replay",
+      );
+    }
+  }
   if (
     !state.auth_users_ready ||
     !state.storage_ready ||
@@ -179,10 +189,7 @@ try {
                 and tgname = 'loop_parental_controls_set_updated_at'
                 and not tgisinternal
             ) then
-              create trigger loop_parental_controls_set_updated_at
-                before update on public.loop_parental_controls
-                for each row
-                execute function public.loop_parental_controls_set_updated_at();
+              execute 'create trigger loop_parental_controls_set_updated_at before update on public.loop_parental_controls for each row execute function public.loop_parental_controls_set_updated_at()';
             end if;
           end
           $replay$;
