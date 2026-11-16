@@ -60,3 +60,19 @@ for (const [label, databaseUrl] of rejectedTargets) {
     assert.doesNotMatch(result.stderr, /ECONNREFUSED|ENOTFOUND|ETIMEDOUT/);
   });
 }
+
+test("pre-ledger RLS checks validate exact roles, commands and predicates", () => {
+  assert.match(replaySource, /p\.polcmd = '\*'/);
+  assert.match(replaySource, /p\.polpermissive/);
+  assert.match(replaySource, /cardinality\(p\.polroles\) = 2/);
+  assert.match(replaySource, /rolname = 'anon'\) = any\(p\.polroles\)/);
+  assert.match(replaySource, /rolname = 'authenticated'\) = any\(p\.polroles\)/);
+  assert.match(replaySource, /pg_get_expr\(p\.polqual, p\.polrelid\) = 'false'/);
+  assert.match(replaySource, /p\.polwithcheck is null/);
+  assert.match(replaySource, /polname = 'Deny anonymous public access'/);
+  assert.match(replaySource, /polname = 'bridge_story_concept_submissions_owner_only'/);
+  assert.match(replaySource, /position\('auth\.uid\(\)' in coalesce\(pg_get_expr\(p\.polqual/);
+  assert.match(replaySource, /not has_table_privilege\('anon', c\.oid, 'INSERT'\)/);
+  assert.match(replaySource, /polname = 'bridge_delivery_jobs_internal_only'/);
+  assert.match(replaySource, /private\.bridge_is_internal/);
+});
