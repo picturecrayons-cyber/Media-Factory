@@ -79,3 +79,22 @@ test("failed webhook worker logs claim-release persistence failures", () => {
   assert.match(source, /const \{ error \} = await supabase\.from\("bridge_webhook_events"\)/);
   assert.match(source, /Failed to release webhook claim/);
 });
+
+test("license package reservation is atomic and cannot be reassigned to another buyer", async () => {
+  const paymentSource = await readFile(new URL("../src/lib/bridge/payments.ts", import.meta.url), "utf8");
+  const start = paymentSource.indexOf("export const createLicenseOrder");
+  const end = paymentSource.indexOf("export const verifyLicensePayment", start);
+  const orderHandler = paymentSource.slice(start, end);
+  const reserve = orderHandler.indexOf("update bridge_license_packages");
+  const createOrder = orderHandler.indexOf('razorpayFetch<{ id: string; amount: number; currency: string }>');
+  assert.ok(reserve >= 0 && createOrder > reserve, "package must be reserved before provider order creation");
+  assert.match(orderHandler, /and \(buyer_user_id is null or buyer_user_id = \$\{actor\.userId\}\)/);
+  assert.match(orderHandler, /returning id, title_id, price_paise, status, buyer_user_id/);
+  assert.match(orderHandler, /License package is reserved by another buyer or is not available/);
+  assert.doesNotMatch(orderHandler, /set status = 'IN_NEGOTIATION', buyer_user_id = \$\{actor\.userId\}/);
+});
+
+test("webhook stale lease outlives Supabase's maximum Edge Function worker duration", () => {
+  assert.match(source, /Date\.now\(\) - 10 \* 60 \* 1000/);
+  assert.match(source, /hard 400s wall-clock maximum/);
+});
