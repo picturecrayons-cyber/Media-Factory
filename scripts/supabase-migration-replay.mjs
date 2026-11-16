@@ -501,8 +501,16 @@ try {
         )
         when c.relname = 'bridge_delivery_jobs' then exists (
           select 1 from pg_policy p
-          where p.polrelid = c.oid and p.polname = 'bridge_delivery_jobs_internal_only'
+          where p.polrelid = c.oid
+            and p.polname = 'bridge_delivery_jobs_internal_only'
             and p.polcmd = '*'
+            and p.polroles = ARRAY[(select oid from pg_roles where rolname = 'authenticated')]
+            and position(
+              'private.bridge_is_internal' in coalesce(pg_get_expr(p.polqual, p.polrelid), '')
+            ) > 0
+            and position(
+              'private.bridge_is_internal' in coalesce(pg_get_expr(p.polwithcheck, p.polrelid), '')
+            ) > 0
         )
         else false
       end as policy_state_valid
