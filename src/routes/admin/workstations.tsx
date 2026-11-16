@@ -7,7 +7,8 @@ import { BridgeShell } from "@/components/bridge/shell";
 import { StoryConceptDesk } from "@/components/bridge/story-concept-desk";
 import { hasPermission } from "@/lib/bridge/rbac";
 import type { BridgeActor } from "@/lib/bridge/session";
-import { listAdminWorkstations, reviewAdminTitle, setBuyerPublicationGate } from "@/lib/bridge/admin-workstations";
+import { listAdminWorkstations, reviewAdminTitle, setBuyerPublicationGate, setTitleReleaseControl } from "@/lib/bridge/admin-workstations";
+import { reviewTitleWorkflow } from "@/lib/bridge/workflow";
 import { listDuplicateReviews, openDuplicateReview, decideDuplicateReview } from "@/lib/bridge/duplicate-reconciliation";
 
 export const Route = createFileRoute("/admin/workstations")({ component: AdminWorkstations });
@@ -38,6 +39,14 @@ function WorkstationBody({ actor }: { actor: BridgeActor }) {
   });
   const gate = useMutation({
     mutationFn: setBuyerPublicationGate,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-workstations"] }),
+  });
+  const rightsReview = useMutation({
+    mutationFn: reviewTitleWorkflow,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-workstations"] }),
+  });
+  const releaseControl = useMutation({
+    mutationFn: setTitleReleaseControl,
     onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-workstations"] }),
   });
   const [activeTab, setActiveTab] = useState<Tab>("Titles");
@@ -81,14 +90,18 @@ function WorkstationBody({ actor }: { actor: BridgeActor }) {
         <ReviewQueue title="QC Review" description="Review technical quality before rights review." titles={qcQueue}
           canAct={hasPermission(actor, "title.qc_review")} actions={[["PASS", "Approve → Rights"], ["FAIL", "Fail QC"]]} mutation={review} />
       ) : activeTab === "Rights" ? (
-        <ReviewQueue title="Rights Review" description="Clear ownership, territory, language and window before licensing." titles={rightsQueue}
-          canAct={hasPermission(actor, "title.rights_review")} actions={[["APPROVE", "Approve → Licensing"], ["REJECT", "Reject"]]} mutation={review} />
+        <RightsGrantQueue titles={rightsQueue} grants={data.rights} actor={actor} mutation={rightsReview} />
       ) : activeTab === "Assets" ? (
         <SimpleTable title="Assets" description={data.assets.length + " base assets · " + data.assetVersions.length + " versioned assets"}
           rows={data.assets} fields={["kind", "s3_key", "content_type", "byte_size"]} />
       ) : activeTab === "Buyers" ? (
-        <BuyerRelease titles={data.titles} canApprove={hasPermission(actor, "title.approve")}
-          onGate={(titleId, gateName) => gate.mutate({ data: { titleId, gate: gateName as "OTT", decision: "PASS" } })} />
+        <BuyerRelease
+          titles={data.titles}
+          gateCertifications={data.gateCertifications}
+          canApprove={hasPermission(actor, "title.approve")}
+          onGate={(titleId, gateName, decision, notes) => gate.mutate({ data: { titleId, gate: gateName, decision, notes } })}
+          onRelease={(titleId, decision, reason) => releaseControl.mutate({ data: { titleId, decision, reason } })}
+        />
       ) : activeTab === "Deliveries" ? (
         <div className="space-y-6">
           <SimpleTable title="Licensing & Delivery" description={ready.length + " titles in the commercial pipeline"}
@@ -103,7 +116,7 @@ function WorkstationBody({ actor }: { actor: BridgeActor }) {
           rows={data.audit} fields={["action", "entity_type", "entity_id", "actor_user_id", "created_at"]} />
       )}
 
-      {review.isError || gate.isError ? <p className="rounded-xl border border-line p-4 text-sm">Action failed: {String(review.error ?? gate.error)}</p> : null}
+      {review.isError || gate.isError || rightsReview.isError || releaseControl.isError ? <p className="rounded-xl border border-line p-4 text-sm">Action failed: {String(review.error ?? gate.error ?? rightsReview.error ?? releaseControl.error)}</p> : null}
     </div>
   );
 }
@@ -165,6 +178,134 @@ function ReviewQueue({ title, description, titles, canAct, actions, mutation }: 
 function SimpleTable({ title, description, rows, fields, titleName }: { title: string; description: string; rows: any[]; fields: string[]; titleName?: Map<any, any> }) {
   return <section className="space-y-3"><SectionHeader title={title} description={description} /><RecordTable rows={rows} fields={fields} titleName={titleName ?? new Map()} /></section>;
 }
-function BuyerRelease({ titles, canApprove, onGate }: { titles: any[]; canApprove: boolean; onGate: (titleId: string, gateName: string) => void }) {
-  return <section className="space-y-3"><SectionHeader title="Buyer release" description="Pass a gate only after the required check." />{titles.map((t) => <div key={t.id} className="flex items-center justify-between rounded-2xl border border-line p-4"><span>{t.name}</span>{canApprove ? <ActionButton label="Pass gate" onClick={() => onGate(t.id, "buyer")} /> : <span className="text-xs text-muted">Approval reserved to Super Admin</span>}</div>)}</section>;
+const RIGHTS_CATEGORIES = [
+  { key: "THEATRICAL", label: "Theatrical" },
+  { key: "NON_THEATRICAL", label: "Non-Theatrical" },
+  { key: "LINEAR", label: "Linear / TV & Broadcast" },
+  { key: "NON_LINEAR", label: "Non-Linear / OTT & VOD" },
+  { key: "ANCILLARY", label: "Ancillary" },
+] as const;
+
+function RightsGrantQueue({ titles, grants, actor, mutation }: { titles: any[]; grants: any[]; actor: BridgeActor; mutation: any }) {
+  const canReview = hasPermission(actor, "title.rights_review");
+  return <section className="space-y-4">
+    <SectionHeader title="Rights review & exploitation coverage" description="Review every grant separately. Mark rights held or not held, verify each category against documentary evidence, then submit the legal review." />
+    {!titles.length ? <Empty text="No titles are currently in Rights Review." /> : titles.map((title) => {
+      const titleGrants = grants.filter((grant) => grant.title_id === title.id);
+      return <div key={title.id} className="space-y-3 rounded-2xl border border-line bg-surface p-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div><p className="font-semibold">{title.name}</p><p className="text-xs text-muted">{title.id} · {title.status}</p></div>
+          <Link to="/title/$id" params={{ id: title.id }} className="text-xs text-accent hover:underline">Open title</Link>
+        </div>
+        {!titleGrants.length ? <Empty text="No rights grant records. A grant draft and documentary references must be recorded before review." /> : titleGrants.map((grant) =>
+          <RightsGrantCard key={grant.id} title={title} grant={grant} canReview={canReview} mutation={mutation} />
+        )}
+      </div>;
+    })}
+  </section>;
+}
+
+function RightsGrantCard({ title, grant, canReview, mutation }: { title: any; grant: any; canReview: boolean; mutation: any }) {
+  const [note, setNote] = useState("");
+  const [scope, setScope] = useState(() => RIGHTS_CATEGORIES.map((category) => ({
+    category: category.key,
+    available: false,
+    verified: false,
+    evidenceReference: "",
+    notes: "",
+  })));
+  const allVerified = scope.length === RIGHTS_CATEGORIES.length && scope.every((item) => item.verified && item.evidenceReference.trim().length >= 8);
+  const editable = canReview && grant.status === "DRAFT" && title.status === "RIGHTS_REVIEW";
+  return <article className="space-y-3 rounded-xl border border-line p-3">
+    <div className="flex flex-wrap items-center justify-between gap-2">
+      <div><p className="font-medium">Rights grant · {grant.grant_type}</p><p className="text-xs text-muted">Status: {grant.status} · {grant.exclusivity} · {grant.id}</p></div>
+      <span className="text-xs text-muted">{(grant.territories ?? []).join(", ")} · {(grant.languages ?? []).join(", ")}</span>
+    </div>
+    <div className="grid gap-2 text-xs text-muted sm:grid-cols-2">
+      <p>Window: {grant.window_start ?? "Not set"} → {grant.window_end ?? "Not set"}</p>
+      <p>Media: {(grant.media ?? []).join(", ") || "Not recorded"}</p>
+    </div>
+    {grant.status === "VALID" ? <p className="text-xs text-emerald-700">Approved grant · database status VALID</p> : null}
+    {grant.status === "DRAFT" ? <>
+      <div className="rounded-lg border border-line p-3">
+        <p className="mb-3 text-sm font-semibold">Rights availability checklist</p>
+        <p className="mb-3 text-xs text-muted">“Rights available” unchecked means the rights are not held / excluded. “Evidence verified” must be checked only after reviewing the supporting document. Enter a reference for every category, including rights not held.</p>
+        <div className="space-y-3">
+          {scope.map((item, index) => <div key={item.category} className="grid gap-2 border-t border-line pt-3 first:border-t-0 first:pt-0">
+            <p className="text-sm font-medium">{RIGHTS_CATEGORIES[index].label}</p>
+            <div className="flex flex-wrap gap-4 text-xs">
+              <label className="flex items-center gap-2"><input type="checkbox" checked={item.available} disabled={!editable} onChange={(event) => setScope((current) => current.map((entry, i) => i === index ? { ...entry, available: event.target.checked } : entry))} /> Rights available / held</label>
+              <label className="flex items-center gap-2"><input type="checkbox" checked={item.verified} disabled={!editable} onChange={(event) => setScope((current) => current.map((entry, i) => i === index ? { ...entry, verified: event.target.checked } : entry))} /> Evidence verified</label>
+            </div>
+            <input value={item.evidenceReference} disabled={!editable} onChange={(event) => setScope((current) => current.map((entry, i) => i === index ? { ...entry, evidenceReference: event.target.value } : entry))} placeholder="Agreement / assignment / exclusion evidence reference (min 8 characters)" className="w-full rounded-lg border border-line bg-elevated p-2 text-xs" />
+            <input value={item.notes} disabled={!editable} onChange={(event) => setScope((current) => current.map((entry, i) => i === index ? { ...entry, notes: event.target.value } : entry))} placeholder="Optional scope notes / restrictions" className="w-full rounded-lg border border-line bg-elevated p-2 text-xs" />
+          </div>)}
+        </div>
+      </div>
+      <label className="grid gap-1 text-xs">Legal reviewer decision note
+        <textarea value={note} disabled={!editable} onChange={(event) => setNote(event.target.value)} rows={2} className="rounded-lg border border-line bg-elevated p-2" placeholder="Record what was checked and any restrictions (minimum 8 characters)" />
+      </label>
+      <div className="flex flex-wrap gap-2">
+        <Button size="sm" disabled={!editable || mutation.isPending || !allVerified || note.trim().length < 8} onClick={() => mutation.mutate({ data: { titleId: title.id, stage: "LEGAL", decision: "APPROVE", note, grantId: grant.id, rightsScope: scope } })}>Verify & approve grant</Button>
+        <Button size="sm" variant="outline" disabled={!editable || mutation.isPending || note.trim().length < 8} onClick={() => mutation.mutate({ data: { titleId: title.id, stage: "LEGAL", decision: "REJECT", note, grantId: grant.id } })}>Reject grant</Button>
+      </div>
+      {!canReview ? <p className="text-xs text-muted">Rights review permission required. Super Admin has this permission.</p> : null}
+      {!allVerified ? <p className="text-xs text-amber-700">Approval locked: all five categories need an evidence reference and Evidence verified check.</p> : null}
+    </> : null}
+  </article>;
+}
+
+function BuyerRelease({ titles, gateCertifications, canApprove, onGate, onRelease }: {
+  titles: any[];
+  gateCertifications: any[];
+  canApprove: boolean;
+  onGate: (titleId: string, gateName: "OTT" | "PACKAGING" | "CURATION" | "DELIVERY", decision: "PASS" | "HOLD", notes: string) => void;
+  onRelease: (titleId: string, decision: "HOLD" | "BLOCK" | "RELEASE", reason: string) => void;
+}) {
+  const [gateNotes, setGateNotes] = useState<Record<string, string>>({});
+  const [controlReasons, setControlReasons] = useState<Record<string, string>>({});
+  const gates = [
+    { key: "OTT" as const, label: "OTT preparation", field: "ott_preparation_status" },
+    { key: "PACKAGING" as const, label: "Packaging", field: "packaging_status" },
+    { key: "CURATION" as const, label: "Curation", field: "curation_status" },
+    { key: "DELIVERY" as const, label: "Delivery", field: "delivery_status" },
+  ];
+  return <section className="space-y-4">
+    <SectionHeader title="Buyer release & title controls" description="Pass each publication gate independently. HOLD / BLOCK prevents buyer release until a reasoned Super Admin release action clears the control." />
+    {titles.map((title) => {
+      const cert = gateCertifications.find((row) => row.title_id === title.id);
+      const control = cert?.evidence?.releaseControl;
+      const reason = controlReasons[title.id] ?? "";
+      return <div key={title.id} className="space-y-3 rounded-2xl border border-line bg-surface p-4">
+        <div className="flex flex-wrap items-center justify-between gap-2"><div><p className="font-medium">{title.name}</p><p className="text-xs text-muted">{title.status} · {title.id}</p></div><span className="text-xs font-semibold">Release control: {control?.status ?? "CLEAR"}</span></div>
+        <div className="grid gap-2 sm:grid-cols-2">
+          {gates.map((gateDef) => {
+            const status = cert?.[gateDef.field] ?? "NOT_SET";
+            const key = title.id + ":" + gateDef.key;
+            const note = gateNotes[key] ?? "";
+            return <div key={gateDef.key} className="rounded-lg border border-line p-3">
+              <p className="text-sm font-medium">{gateDef.label}</p><p className="my-1 text-xs text-muted">Status: {status}</p>
+              <input value={note} onChange={(event) => setGateNotes((current) => ({ ...current, [key]: event.target.value }))} placeholder="Reason / evidence note for HOLD (min 8)" className="mb-2 w-full rounded-lg border border-line bg-elevated p-2 text-xs" disabled={!canApprove} />
+              <div className="flex flex-wrap gap-2">
+                <Button size="sm" disabled={!canApprove} onClick={() => onGate(title.id, gateDef.key, "PASS", note)}>Pass</Button>
+                <Button size="sm" variant="outline" disabled={!canApprove || note.trim().length < 8} onClick={() => onGate(title.id, gateDef.key, "HOLD", note)}>Hold</Button>
+              </div>
+            </div>;
+          })}
+        </div>
+        <div className="space-y-2 rounded-lg border border-line p-3">
+          <label className="grid gap-1 text-xs">Title-level HOLD / BLOCK reason
+            <textarea rows={2} value={reason} disabled={!canApprove} onChange={(event) => setControlReasons((current) => ({ ...current, [title.id]: event.target.value }))} className="rounded-lg border border-line bg-elevated p-2" placeholder="Reason and evidence reference (minimum 8 characters)" />
+          </label>
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" variant="outline" disabled={!canApprove || reason.trim().length < 8} onClick={() => onRelease(title.id, "HOLD", reason)}>Place on HOLD</Button>
+            <Button size="sm" variant="outline" disabled={!canApprove || reason.trim().length < 8} onClick={() => onRelease(title.id, "BLOCK", reason)}>BLOCK release</Button>
+            <Button size="sm" disabled={!canApprove || reason.trim().length < 8 || !["HOLD", "BLOCK"].includes(control?.status ?? "")} onClick={() => onRelease(title.id, "RELEASE", reason)}>Release control</Button>
+          </div>
+          {control ? <p className="text-xs text-muted">Last control: {control.status} · {control.actor ?? "Unknown actor"} · {control.at ?? "Timestamp unavailable"} · {control.reason ?? ""}</p> : null}
+          {!canApprove ? <p className="text-xs text-muted">Super Admin approval permission required.</p> : null}
+        </div>
+      </div>;
+    })}
+  </section>;
 }
