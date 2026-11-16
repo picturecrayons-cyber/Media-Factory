@@ -225,6 +225,8 @@ export const createDitIngestSession = createServerFn({ method: "POST" })
     const actor = await requireDitOperator(context.userId);
     const sql = await getSql();
     const title = await requireStudioTitle(sql, data.titleId, actor.organizationId!);
+    const [control] = await sql<{ control_state: "CLEAR" | "HOLD" | "BLOCK" }>`select control_state from public.bridge_title_controls where title_id=${title.id}`;
+    assertTitleControlClear(control?.control_state);
     const files = normalizeDitFiles(data.manifest.files);
     const digest = ditManifestDigest(files);
     const totals = ditManifestTotals(files);
@@ -266,6 +268,8 @@ export const requestDitFileUpload = createServerFn({ method: "POST" })
     const sql = await getSql();
     const session = await requireSession(sql, data.sessionId, actor.organizationId!);
     if (session.status === "SIGNED_OFF") throw new Error("A signed-off DIT session is locked");
+    const [control] = await sql<{ control_state: "CLEAR" | "HOLD" | "BLOCK" }>`select control_state from public.bridge_title_controls where title_id=${session.title_id}`;
+    assertTitleControlClear(control?.control_state);
 
     const { bridgeEnv, signUpload } = await loadDitOciStorage();
     const primaryBucket = bridgeEnv.ociBucket();
