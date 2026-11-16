@@ -76,7 +76,7 @@ export const reviewAdminTitle = createServerFn({ method: "POST" })
       assertPermission(actor, "title.rights_review");
       if (title.status !== "RIGHTS_REVIEW") throw new Error("Title is not in rights review");
       await sql`insert into bridge_legal_cases (title_id, status, evidence, reviewed_by, reviewed_at) values (${title.id}, 'REJECTED', ${JSON.stringify(data.notes ? [{ note: data.notes }] : [])}::jsonb, ${actor.userId}, now())`;
-      await writeAudit({ actorUserId: actor.userId, action: "rights.reject", entityType: "bridge_title", entityId: title.id, metadata: { notes: data.notes ?? null } });
+      await writeAudit({ actorUserId: actor.userId, action: "rights.reject", entityType: "bridge_title", entityId: title.id, metadata: { notes: data.notes ?? null } }, sql);
       return { ok: true, status: "RIGHTS_REVIEW" };
     }
     await sql`update bridge_titles set status = ${next}, updated_at = now() where id = ${title.id}`;
