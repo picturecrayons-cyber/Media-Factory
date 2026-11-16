@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { storyConceptOrganizationScope } from "./story-concept-access.ts";
+import { storyConceptOrganizationScope, storyConceptOwnerUserScope } from "./story-concept-access.ts";
 
 describe("Story/Concept organization read scope", () => {
   const sharedOrganizationId = "11111111-1111-4111-8111-111111111111";
@@ -61,4 +61,22 @@ describe("Story/Concept organization read scope", () => {
       );
     }
   });
+  it("does not expose even directly owned Story/Concept rows to Buyer or Investor accounts", () => {
+    for (const accountType of ["buyer", "investor"]) {
+      assert.equal(
+        storyConceptOwnerUserScope({ accountType, userId: "buyer-user" }),
+        null,
+      );
+    }
+  });
+
+  it("keeps direct owner scope for independent creators and Studio members", () => {
+    for (const accountType of ["independent_creator", "studio"]) {
+      assert.equal(
+        storyConceptOwnerUserScope({ accountType, userId: "creator-user" }),
+        "creator-user",
+      );
+    }
+  });
+
 });
