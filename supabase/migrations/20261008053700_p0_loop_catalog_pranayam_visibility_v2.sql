@@ -5,3 +5,4 @@
           published=true,
           updated_at=timezone('utc'::text, now())
       WHERE slug='pranayam-1947';
+    

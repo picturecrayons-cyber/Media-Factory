@@ -7,3 +7,4 @@
       CREATE INDEX IF NOT EXISTS idx_bridge_titles_merged_into
         ON public.bridge_titles(merged_into_title_id)
         WHERE merged_into_title_id IS NOT NULL;
+    

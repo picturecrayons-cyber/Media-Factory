@@ -5,7 +5,7 @@
 - Snapshot date: 2026-11-16.
 - Recorded remote migrations restored to active `supabase/migrations/`: **69**.
 - SQL bytes: **144173** (excluding output trailing newlines).
-- SHA-256 values are calculated from the exact stored statement text joined with LF, excluding the output trailing newline.
+- Every active SQL file now preserves the exact stored statement text joined with LF, including all trailing spaces and newline characters. No trailing-whitespace normalization is performed. SHA-256 values are calculated from the same exact stored statement text.
 - Source-only PR: no Production migration was applied, repaired or reverted.
 
 ## Remote version manifest
