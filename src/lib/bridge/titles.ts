@@ -382,6 +382,18 @@ export const getTitle = createServerFn({ method: "GET" })
     const title = await loadTitle(data.id);
     if (!title) throw new Error("Not found");
     const sql = await getSql();
+    const archiveState = await sql<{ archived_at: string | Date | null }>`
+      select archived_at from bridge_titles where id = ${title.id} limit 1
+    `;
+    if (archiveState[0]?.archived_at) {
+      const canViewArchived =
+        actor.internalRole === "super_admin" ||
+        (!actor.internalRole && (
+          title.ownerUserId === actor.userId ||
+          canMutateTitle(actor, title, "title.update_own", "title.license")
+        ));
+      if (!canViewArchived) throw new Error("Not found");
+    }
     const buyerView = actor.accountType === "buyer" && !actor.internalRole;
     if (buyerView) {
       // A published status alone is not enough: re-check every publication gate
