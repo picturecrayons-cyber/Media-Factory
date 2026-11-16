@@ -188,8 +188,8 @@ export const listMyStoryConcepts = createServerFn({ method: "GET" })
     const sql = await getSql();
 
     try {
-      const rows = await sql<ConceptRow & { title_name: string }>`
-        select c.*, t.name as title_name
+      const rows = await sql<ConceptRow & { title_name: string; title_status: string }>`
+        select c.*, t.name as title_name, t.status as title_status
         from bridge_story_concept_submissions c
         join bridge_titles t on t.id = c.title_id
         where t.archived_at is null
@@ -208,6 +208,7 @@ export const listMyStoryConcepts = createServerFn({ method: "GET" })
         concepts: rows.map((r) => ({
           ...mapConcept(r),
           titleName: r.title_name,
+          titleStatus: r.title_status,
         })),
       };
     } catch (err) {
