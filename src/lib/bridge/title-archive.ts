@@ -114,7 +114,7 @@ export async function canArchiveDraftTitle(tx: Sql, actor: Actor, title: BridgeT
         exists(select 1 from streamvista_legacy_links where bridge_title_id = ${title.id}) or
         exists(select 1 from streamvista_orders where bridge_title_id = ${title.id}) as blocked
     `;
-    return !Boolean(rows[0]?.blocked);
+    return rows[0]?.blocked !== true;
   } catch {
     return false;
   }
