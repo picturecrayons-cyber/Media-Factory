@@ -133,8 +133,12 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
   });
   const [controlReason, setControlReason] = useState("");
   const [controlActionError, setControlActionError] = useState("");
-  const controlMutation = useMutation({
-    mutationFn: (action: "HOLD" | "BLOCK" | "RELEASE") => action === "RELEASE"
+  const controlMutation = useMutation<
+    { titleId: string; state: "CLEAR" | "HOLD" | "BLOCK"; action?: string },
+    Error,
+    "HOLD" | "BLOCK" | "RELEASE"
+  >({
+    mutationFn: (action) => action === "RELEASE"
       ? releaseTitleControl({ data: { titleId: id, reason: controlReason } })
       : setTitleControl({ data: { titleId: id, state: action, reason: controlReason } }),
     onSuccess: async () => {
