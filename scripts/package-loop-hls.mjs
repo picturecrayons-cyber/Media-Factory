@@ -14,7 +14,7 @@
  */
 import { createHash } from "node:crypto";
 import { createWriteStream, createReadStream } from "node:fs";
-import { mkdtemp, mkdir, readdir, readFile, rm, stat } from "node:fs/promises";
+import { mkdtemp, mkdir, readdir, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { pipeline } from "node:stream/promises";
