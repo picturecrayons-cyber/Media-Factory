@@ -256,3 +256,13 @@ it("reserves final approval, duplicate merge, and Loop publication to Super Admi
   assert.equal(hasPermission(qc, "title.rights_review"), false);
   assert.equal(hasPermission(legal, "title.qc_review"), false);
 });
+
+
+it("allows only verified Super Admin to approve their own legal draft", async () => {
+  const { canReviewLicenseDraft } = await import("./rbac.ts");
+  assert.equal(canReviewLicenseDraft(superAdmin(), superAdmin().userId), true);
+  assert.equal(canReviewLicenseDraft(admin(), admin().userId), false);
+  assert.equal(canReviewLicenseDraft(legal, legal.userId), false);
+  assert.equal(canReviewLicenseDraft(actor("unverified-super", "independent_creator", "super_admin", false), "creator-a"), false);
+  assert.equal(canReviewLicenseDraft(legal, "creator-a"), true);
+});
