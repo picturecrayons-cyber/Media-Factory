@@ -87,8 +87,8 @@ function WorkstationBody({ actor }: { actor: BridgeActor }) {
         <SimpleTable title="Assets" description={data.assets.length + " base assets · " + data.assetVersions.length + " versioned assets"}
           rows={data.assets} fields={["kind", "s3_key", "content_type", "byte_size"]} />
       ) : activeTab === "Buyers" ? (
-        <BuyerRelease titles={data.titles} canApprove={hasPermission(actor, "title.approve")}
-          gateRows={data.gates} onGate={(titleId, gateName) => gate.mutate({ data: { titleId, gate: gateName, decision: "PASS" } })} />
+        <BuyerRelease titles={data.titles} gateRows={data.gates} canApprove={hasPermission(actor, "title.approve")} pending={gate.isPending}
+          onGate={(titleId, gateName) => gate.mutate({ data: { titleId, gate: gateName, decision: "PASS" } })} />
       ) : activeTab === "Deliveries" ? (
         <div className="space-y-6">
           <SimpleTable title="Licensing & Delivery" description={ready.length + " titles in the commercial pipeline"}
@@ -165,24 +165,31 @@ function ReviewQueue({ title, description, titles, canAct, actions, mutation }: 
 function SimpleTable({ title, description, rows, fields, titleName }: { title: string; description: string; rows: any[]; fields: string[]; titleName?: Map<any, any> }) {
   return <section className="space-y-3"><SectionHeader title={title} description={description} /><RecordTable rows={rows} fields={fields} titleName={titleName ?? new Map()} /></section>;
 }
-function BuyerRelease({ titles, canApprove, gateRows, onGate }: { titles: any[]; canApprove: boolean; gateRows: any[]; onGate: (titleId: string, gateName: "OTT" | "PACKAGING" | "CURATION" | "DELIVERY") => void }) {
+function BuyerRelease({ titles, canApprove, gateRows, pending, onGate }: { titles: any[]; canApprove: boolean; gateRows: any[]; pending: boolean; onGate: (titleId: string, gateName: "OTT" | "PACKAGING" | "CURATION" | "DELIVERY") => void }) {
   const gates = [
-    ["OTT", "OTT preparation", "ott_preparation_status"],
-    ["PACKAGING", "Packaging", "packaging_status"],
-    ["CURATION", "Curation", "curation_status"],
-    ["DELIVERY", "Delivery", "delivery_status"],
+    ["OTT", "OTT preparation", "ott_preparation_status", "READY"],
+    ["PACKAGING", "Packaging", "packaging_status", "COMPLETE"],
+    ["CURATION", "Curation", "curation_status", "APPROVED"],
+    ["DELIVERY", "Delivery", "delivery_status", "READY"],
   ] as const;
-  return <section className="space-y-3"><SectionHeader title="Buyer release" description="Pass each required gate independently. Buyer visibility remains fail-closed until every publication requirement is satisfied." />{titles.map((t) => {
-    const row = gateRows.find((g) => g.title_id === t.id);
-    return <div key={t.id} className="rounded-2xl border border-line p-4 space-y-3">
-      <p className="font-medium">{t.name}</p>
-      <div className="grid gap-2 sm:grid-cols-2">
-        {gates.map(([gateName, label, field]) => <div key={gateName} className="flex items-center justify-between gap-3 rounded-xl bg-elevated p-3">
-          <span className="text-sm">{label}: <strong>{row?.[field] ?? "HOLD"}</strong></span>
-          {canApprove ? <ActionButton label="Pass" disabled={row?.[field] === ({OTT:"READY",PACKAGING:"COMPLETE",CURATION:"APPROVED",DELIVERY:"READY"} as const)[gateName]} onClick={() => onGate(t.id, gateName)} /> : null}
-        </div>)}
-      </div>
-      {!canApprove ? <span className="text-xs text-muted">Gate approval reserved to Super Admin</span> : null}
-    </div>;
-  })}</section>;
+  return <section className="space-y-3">
+    <SectionHeader title="Buyer release" description="Review evidence before passing each gate. Buyer visibility remains blocked until every required certification and destination package is ready." />
+    {titles.map((t) => {
+      const row = gateRows.find((g) => g.title_id === t.id);
+      return <div key={t.id} className="rounded-2xl border border-line p-4 space-y-3">
+        <p className="font-medium">{t.name}</p>
+        <div className="grid gap-2 sm:grid-cols-2">
+          {gates.map(([gateName, label, field, passedValue]) => {
+            const status = row?.[field] ?? "HOLD";
+            return <div key={gateName} className="flex items-center justify-between gap-3 rounded-xl bg-elevated p-3">
+              <span className="text-sm">{label}: <strong>{status}</strong></span>
+              {canApprove ? <ActionButton label={status === passedValue ? "Passed" : "Pass"} disabled={status === passedValue || pending} onClick={() => onGate(t.id, gateName)} /> : null}
+            </div>;
+          })}
+        </div>
+        {!canApprove ? <span className="text-xs text-muted">Gate approval reserved to Super Admin</span> : null}
+      </div>;
+    })}
+    {!titles.length ? <Empty text="No titles in the Bridge catalog." /> : null}
+  </section>;
 }
