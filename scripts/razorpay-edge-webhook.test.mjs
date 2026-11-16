@@ -80,6 +80,20 @@ test("failed webhook worker logs claim-release persistence failures", () => {
   assert.match(source, /Failed to release webhook claim/);
 });
 
+test("direct payment verification cannot reassign a package to another buyer", async () => {
+  const paymentSource = await readFile(new URL("../src/lib/bridge/payments.ts", import.meta.url), "utf8");
+  const grantStart = paymentSource.indexOf("export async function grantFromCapturedPayment");
+  const orderStart = paymentSource.indexOf("export const createLicenseOrder", grantStart);
+  const grant = paymentSource.slice(grantStart, orderStart);
+  assert.match(grant, /buyer_user_id: string \| null/);
+  assert.match(grant, /select id, title_id, status, delivery_status, buyer_user_id/);
+  assert.match(grant, /pkg\[0\]\.buyer_user_id !== payment\.user_id/);
+  assert.match(grant, /License package is reserved by another buyer/);
+  assert.match(grant, /where id = \$\{pkg\[0\]\.id\}[\s\S]*and buyer_user_id = \$\{payment\.user_id\}/);
+  assert.match(grant, /and status in \('IN_NEGOTIATION', 'LICENSED'\)[\s\S]*returning id/);
+  assert.match(grant, /if \(!licensedPackage\[0\]\)/);
+});
+
 test("package checkout reuses an existing buyer order before claiming the package", async () => {
   const paymentSource = await readFile(new URL("../src/lib/bridge/payments.ts", import.meta.url), "utf8");
   const start = paymentSource.indexOf("export const createLicenseOrder");
