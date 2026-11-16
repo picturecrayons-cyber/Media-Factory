@@ -322,22 +322,6 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
           </section>
         </div>
       ) : null}
-      ) : activeTab === "Assets" && !buyerView ? (
-        <FilesPanel
-          canUpload={
-            canOperateOnTitle(actor, title, "asset.sign_upload", "title.ingest_internal") &&
-            ["DRAFT", "UPLOADING", "PREPARING"].includes(title.status)
-          }
-          titleId={id}
-          assets={assets}
-          onAssetsChanged={() => assetsQ.refetch()}
-        />
-      ) : activeTab === "Production" && !buyerView ? (
-        <ProductionAssetsPanel
-          assets={productionAssets}
-          loading={productionAssetsQ.isPending}
-          error={productionAssetsQ.error instanceof Error ? productionAssetsQ.error.message : null}
-        />
       ) : null}
     </div>
   );
