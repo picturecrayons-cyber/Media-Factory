@@ -273,8 +273,11 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
       created_by: string;
       content_type: string | null;
       byte_size: number | null;
+      supersedes_asset_id: string | null;
+      replacement_reason: string | null;
     }>`
-      select id, title_id, kind, s3_key, created_by, content_type, byte_size
+      select id, title_id, kind, s3_key, created_by, content_type, byte_size,
+             supersedes_asset_id, replacement_reason
       from bridge_assets where id = ${data.assetId} limit 1
     `;
     const asset = rows[0];
