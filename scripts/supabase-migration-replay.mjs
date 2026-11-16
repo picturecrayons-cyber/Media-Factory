@@ -447,6 +447,184 @@ try {
     console.log(`[migration-replay] applied ${name}`);
   }
 
+  // Production's current Bridge Data API security baseline is not fully
+  // represented by the 69-row migration ledger. Recreate it locally after
+  // replay from read-only Production catalog evidence only.
+  await client.query(`
+    do $bridge_rls_baseline$
+    declare table_record record;
+    begin
+      for table_record in
+        select c.relname
+        from pg_class c
+        join pg_namespace n on n.oid = c.relnamespace
+        where n.nspname = 'public'
+          and c.relkind = 'r'
+          and substring(c.relname from 1 for 7) = 'bridge_'
+      loop
+        execute format(
+          'alter table public.%I enable row level security',
+          table_record.relname
+        );
+      end loop;
+    end
+    $bridge_rls_baseline$;
+
+    grant select on table
+      public.bridge_profiles,
+      public.bridge_titles,
+      public.bridge_loop_identity_links,
+      public.bridge_buyer_title_access
+    to authenticated;
+
+    do $bridge_core_policies$
+    begin
+      if not exists (
+        select 1 from pg_policy
+        where polrelid = 'public.bridge_profiles'::regclass
+          and polname = 'bridge_profiles_self_select'
+      ) then
+        create policy bridge_profiles_self_select
+          on public.bridge_profiles
+          for select to authenticated
+          using (exists (
+            select 1 from public.bridge_loop_identity_links l
+            where l.auth_user_id = (select auth.uid())
+              and l.bridge_user_id = bridge_profiles.user_id
+          ));
+      end if;
+
+      if not exists (
+        select 1 from pg_policy
+        where polrelid = 'public.bridge_titles'::regclass
+          and polname = 'bridge_titles_owner_or_buyer_select'
+      ) then
+        create policy bridge_titles_owner_or_buyer_select
+          on public.bridge_titles
+          for select to authenticated
+          using (exists (
+            select 1
+            from public.bridge_loop_identity_links l
+            where l.auth_user_id = (select auth.uid())
+              and (
+                l.bridge_user_id = bridge_titles.owner_user_id
+                or exists (
+                  select 1
+                  from public.bridge_buyer_title_access a
+                  where a.title_id = bridge_titles.id
+                    and a.buyer_user_id = l.bridge_user_id
+                    and a.revoked_at is null
+                    and (a.expires_at is null or a.expires_at > now())
+                )
+              )
+          ));
+      end if;
+
+      if not exists (
+        select 1 from pg_policy
+        where polrelid = 'public.bridge_loop_identity_links'::regclass
+          and polname = 'bridge_identity_links_self_select'
+      ) then
+        create policy bridge_identity_links_self_select
+          on public.bridge_loop_identity_links
+          for select to authenticated
+          using (auth_user_id = (select auth.uid()));
+      end if;
+
+      if not exists (
+        select 1 from pg_policy
+        where polrelid = 'public.bridge_buyer_title_access'::regclass
+          and polname = 'bridge_buyer_title_access_self_select'
+      ) then
+        create policy bridge_buyer_title_access_self_select
+          on public.bridge_buyer_title_access
+          for select to authenticated
+          using (exists (
+            select 1
+            from public.bridge_loop_identity_links l
+            where l.auth_user_id = (select auth.uid())
+              and l.bridge_user_id = bridge_buyer_title_access.buyer_user_id
+          ));
+      end if;
+    end
+    $bridge_core_policies$;
+  `);
+
+  const bridgeRls = await client.query(`
+    select
+      count(*)::int as total_bridge_tables,
+      count(*) filter (where not c.relrowsecurity)::int as rls_disabled_tables
+    from pg_class c
+    join pg_namespace n on n.oid = c.relnamespace
+    where n.nspname = 'public'
+      and c.relkind = 'r'
+      and substring(c.relname from 1 for 7) = 'bridge_'
+  `);
+  const corePolicies = await client.query(`
+    select
+      c.relname,
+      c.relrowsecurity as rls_enabled,
+      p.polname,
+      p.polcmd,
+      p.polroles = ARRAY[(select oid from pg_roles where rolname = 'authenticated')] as exact_authenticated_role,
+      position('auth.uid()' in coalesce(pg_get_expr(p.polqual, p.polrelid), '')) > 0 as binds_to_auth_user,
+      case c.relname
+        when 'bridge_profiles' then
+          position('bridge_loop_identity_links' in coalesce(pg_get_expr(p.polqual, p.polrelid), '')) > 0
+          and position('bridge_profiles.user_id' in coalesce(pg_get_expr(p.polqual, p.polrelid), '')) > 0
+        when 'bridge_titles' then
+          position('bridge_loop_identity_links' in coalesce(pg_get_expr(p.polqual, p.polrelid), '')) > 0
+          and position('bridge_buyer_title_access' in coalesce(pg_get_expr(p.polqual, p.polrelid), '')) > 0
+          and position('bridge_titles.owner_user_id' in coalesce(pg_get_expr(p.polqual, p.polrelid), '')) > 0
+        when 'bridge_loop_identity_links' then
+          position('auth_user_id' in coalesce(pg_get_expr(p.polqual, p.polrelid), '')) > 0
+        when 'bridge_buyer_title_access' then
+          position('bridge_buyer_title_access.buyer_user_id' in coalesce(pg_get_expr(p.polqual, p.polrelid), '')) > 0
+        else false
+      end as owner_scope_valid,
+      has_table_privilege('authenticated', c.oid, 'SELECT') as authenticated_select,
+      has_table_privilege('anon', c.oid, 'SELECT') as anon_select
+    from pg_class c
+    join pg_namespace n on n.oid = c.relnamespace
+    left join pg_policy p
+      on p.polrelid = c.oid
+     and p.polname = case c.relname
+       when 'bridge_profiles' then 'bridge_profiles_self_select'
+       when 'bridge_titles' then 'bridge_titles_owner_or_buyer_select'
+       when 'bridge_loop_identity_links' then 'bridge_identity_links_self_select'
+       when 'bridge_buyer_title_access' then 'bridge_buyer_title_access_self_select'
+     end
+    where n.nspname = 'public'
+      and c.relname in (
+        'bridge_profiles','bridge_titles',
+        'bridge_loop_identity_links','bridge_buyer_title_access'
+      )
+    order by c.relname
+  `);
+  if (
+    bridgeRls.rows[0]?.total_bridge_tables < 1 ||
+    bridgeRls.rows[0]?.rls_disabled_tables !== 0 ||
+    corePolicies.rows.length !== 4 ||
+    corePolicies.rows.some((row) =>
+      !row.rls_enabled ||
+      !row.polname ||
+      row.polcmd !== 'r' ||
+      !row.exact_authenticated_role ||
+      !row.binds_to_auth_user ||
+      !row.owner_scope_valid ||
+      !row.authenticated_select ||
+      row.anon_select
+    )
+  ) {
+    throw new Error(
+      "Core Bridge RLS/identity policy verification failed: " +
+      JSON.stringify({ bridgeRls: bridgeRls.rows, corePolicies: corePolicies.rows }),
+    );
+  }
+  console.log(
+    `[migration-replay] verified RLS on all ${bridgeRls.rows[0].total_bridge_tables} Bridge tables and exact self/owner policies on four client-readable core tables`,
+  );
+
   const expectedTables = [
     "public.bridge_titles",
     "public.bridge_assets",
