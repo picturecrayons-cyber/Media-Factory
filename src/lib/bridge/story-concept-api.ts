@@ -192,12 +192,14 @@ export const listMyStoryConcepts = createServerFn({ method: "GET" })
         select c.*, t.name as title_name
         from bridge_story_concept_submissions c
         join bridge_titles t on t.id = c.title_id
-        where t.owner_user_id = ${actor.userId}
+        where t.archived_at is null
+          and (t.owner_user_id = ${actor.userId}
            or (
              t.owner_account_type = 'studio'
              and t.owner_organization_id is not null
              and t.owner_organization_id = ${actor.organizationId ?? null}
            )
+          )
         order by c.created_at desc
         limit 100
       `;
