@@ -367,39 +367,10 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                             );
                           })()}
                         </div>
-                        {selectedGrant.status === "DRAFT" &&
-                        title.status === "RIGHTS_REVIEW" &&
-                        hasPermission(actor, "title.rights_review") ? (
-                          <div className="flex flex-wrap gap-2 border-t border-line pt-3">
-                            {button(
-                              "Approve rights / license",
-                              () =>
-                                reviewTitleWorkflow({
-                                  data: {
-                                    titleId: title.id,
-                                    stage: "LEGAL",
-                                    decision: "APPROVE",
-                                    note,
-                                    grantId: selectedGrant.id,
-                                  },
-                                }),
-                              note.trim().length < 8,
-                            )}
-                            {button(
-                              "Reject",
-                              () =>
-                                reviewTitleWorkflow({
-                                  data: {
-                                    titleId: title.id,
-                                    stage: "LEGAL",
-                                    decision: "REJECT",
-                                    note,
-                                    grantId: selectedGrant.id,
-                                  },
-                                }),
-                              note.trim().length < 8,
-                            )}
-                          </div>
+                        {selectedGrant.status === "DRAFT" && title.status === "RIGHTS_REVIEW" && hasPermission(actor, "title.rights_review") ? (
+                          <p className="border-t border-line pt-3 text-xs text-muted">
+                            Grant approval now requires the complete Theatrical, Non-Theatrical, Linear, Non-Linear and Ancillary evidence checklist. Complete this review in Admin → Workstations → Rights.
+                          </p>
                         ) : null}
                       </article>
                     ) : null}

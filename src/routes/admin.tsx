@@ -61,9 +61,14 @@ function AdminBody({ actor }: { actor: any }) {
             <p className="mt-1 max-w-2xl text-sm text-muted">Review titles, complete QC and rights checks, and authorize delivery only when required gates pass.</p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Link to="/admin/workstations"><Button>Open workspace</Button></Link>
-            <Link to="/cms"><Button variant="outline">Open CMS</Button></Link>
-            <a href="https://crayonsloop.in/" target="_blank" rel="noreferrer"><Button variant="outline">Open Loop ↗</Button></a>
+            <Link to="/admin/workstations">
+              <Button type="button">Open workspace</Button>
+            </Link>
+            <Link to="/admin/workstations" className="text-sm font-semibold text-accent hover:underline">
+              Go to operational workstations →
+            </Link>
+            <Link to="/cms"><Button variant="outline" type="button">Open CMS</Button></Link>
+            <a href="https://crayonsloop.in/" target="_blank" rel="noreferrer"><Button variant="outline" type="button">Open Loop ↗</Button></a>
           </div>
         </section>
 
