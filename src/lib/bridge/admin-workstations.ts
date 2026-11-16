@@ -6,6 +6,7 @@ import { assertPermission, canAccessAdminWorkstations } from "./rbac";
 import { requireVerifiedActor } from "./session";
 import { writeAudit } from "./audit";
 import { assertNotDevUser } from "./guards";
+import { assertTitleControlClear } from "./title-controls-policy";
 
 async function actorFor(userId: string) {
   assertNotDevUser(userId);
@@ -48,6 +49,8 @@ export const reviewAdminTitle = createServerFn({ method: "POST" })
     const rows = await sql<{ id: string; status: string }>`select id, status from bridge_titles where id = ${data.titleId} limit 1`;
     const title = rows[0];
     if (!title) throw new Error("Title not found");
+    const [control] = await sql<{control_state: "CLEAR" | "HOLD" | "BLOCK"}>`select control_state from public.bridge_title_controls where title_id=${title.id}`;
+    assertTitleControlClear(control?.control_state);
     let next: string | null = null;
     let action = "admin.review";
     if (data.decision === "ACCEPT") {
