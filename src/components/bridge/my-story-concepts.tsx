@@ -26,7 +26,7 @@ export function MyStoryConcepts() {
 
   if (!STORY_CONCEPT_ENABLED) return null;
   if (query.isLoading) return <p className="text-sm text-muted">Loading concepts…</p>;
-  if (query.isError) return null;
+  if (query.isError) return <p role="alert" className="text-sm text-muted">Story / Concept records could not be loaded or verified. Retry after the account connection is restored.</p>;
 
   const concepts = query.data?.concepts ?? [];
   if (!concepts.length) return null;
