@@ -349,7 +349,7 @@ export const confirmAssetUpload = createServerFn({ method: "POST" })
           sourceKey: asset.s3_key,
           sealedKey,
         });
-    if (confirmed) {
+    if (confirmed && !replacementUpload) {
       // UPLOADED is only recorded after persistVerifiedAsset succeeds.
       await sql`
         update loop_media_migration_queue
