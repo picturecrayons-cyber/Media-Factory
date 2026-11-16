@@ -1069,8 +1069,10 @@ function FileTypeCard({
   onFile,
   onDownload,
   canUpload,
+  canReplace,
 }: {
   canUpload: boolean;
+  canReplace: boolean;
   kind: SimpleAssetKind;
   label: string;
   status: string;
@@ -1092,20 +1094,24 @@ function FileTypeCard({
           </p>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-2">
-          <label className={`cursor-pointer rounded-full px-3 py-1.5 text-xs font-semibold ${ready ? "border border-line bg-surface" : "bg-fg text-bg"} ${busy || locked || !canUpload ? "pointer-events-none opacity-50" : ""}`}>
-            {busy ? "Uploading…" : ready ? "Replace" : "Upload"}
-            <input
-              className="sr-only"
-              type="file"
-              accept={getOttIngestAccept(kind)}
-              disabled={busy || locked || !canUpload}
-              onChange={(e) => {
-                const file = e.currentTarget.files?.[0];
-                if (file) onFile(file);
-                e.currentTarget.value = "";
-              }}
-            />
-          </label>
+          {ready && !canReplace ? (
+            <span className="text-[11px] text-muted">Replacement restricted to Super Admin</span>
+          ) : (
+            <label className={`cursor-pointer rounded-full px-3 py-1.5 text-xs font-semibold ${ready ? "border border-line bg-surface" : "bg-fg text-bg"} ${busy || locked || (ready ? !canReplace : !canUpload) ? "pointer-events-none opacity-50" : ""}`}>
+              {busy ? "Uploading…" : ready ? "Replace" : "Upload"}
+              <input
+                className="sr-only"
+                type="file"
+                accept={getOttIngestAccept(kind)}
+                disabled={busy || locked || (ready ? !canReplace : !canUpload)}
+                onChange={(e) => {
+                  const file = e.currentTarget.files?.[0];
+                  if (file) onFile(file);
+                  e.currentTarget.value = "";
+                }}
+              />
+            </label>
+          )}
           {onDownload ? (
             <button type="button" onClick={onDownload} className="rounded-full border border-line bg-surface px-3 py-1.5 text-xs font-semibold">
               Download
