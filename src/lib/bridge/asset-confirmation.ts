@@ -6,7 +6,7 @@ export async function persistVerifiedAsset(sql: Pick<Sql, "query">, opts: {
   assetId: string;
   actorUserId: string;
   internalActor: boolean;
-  allowLockedTitleReplacement: boolean;
+  allowLockedTitleReplacement?: boolean;
   titleId: string;
   kind: string;
   byteSize: number;
@@ -113,7 +113,7 @@ async function persistVerifiedAssetScoped(
     opts.sourceKey,
     opts.titleId,
     opts.checksum,
-    opts.allowLockedTitleReplacement,
+    Boolean(opts.allowLockedTitleReplacement),
   ]);
   return Boolean(rows[0]);
 }
