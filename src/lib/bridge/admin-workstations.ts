@@ -103,7 +103,7 @@ async function verifyBuyerGateEvidence(
 ): Promise<GateEvidence> {
   let records: Array<{ id: string }> = [];
   if (gate === "OTT") {
-    records = await sql<Record<string, unknown>>`select id
+    records = await sql<{ id: string }>`select id
       from bridge_asset_versions where title_id = ${titleId} and asset_group = 'VIDEO'
         and processing_state = 'PASSED' and checksum_sha256 is not null and length(checksum_sha256) = 64
         and length(trim(s3_key)) > 0 order by version desc, created_at desc limit 1`;
@@ -111,7 +111,7 @@ async function verifyBuyerGateEvidence(
     return { source: "bridge_asset_versions", recordIds: records.map((record) => record.id), verifiedAt: new Date().toISOString() };
   }
   if (gate === "PACKAGING") {
-    records = await sql<Record<string, unknown>>`select id
+    records = await sql<{ id: string }>`select id
       from bridge_destination_packages where title_id = ${titleId} and readiness_state = 'READY'
         and rights_grant_id is not null and qc_case_id is not null and legal_case_id is not null
         and jsonb_array_length(case when jsonb_typeof(asset_version_ids) = 'array' then asset_version_ids else '[]'::jsonb end) > 0
@@ -120,7 +120,7 @@ async function verifyBuyerGateEvidence(
     return { source: "bridge_destination_packages", recordIds: records.map((record) => record.id), verifiedAt: new Date().toISOString() };
   }
   if (gate === "CURATION") {
-    records = await sql<Record<string, unknown>>`select a.id
+    records = await sql<{ id: string }>`select a.id
       from bridge_titles t join bridge_assets a on a.title_id = t.id and a.s3_key = t.poster_key
         and a.kind in ('poster', 'poster_vertical')
       where t.id = ${titleId} and length(trim(coalesce(t.name, ''))) > 0
@@ -130,11 +130,11 @@ async function verifyBuyerGateEvidence(
     if (!records.length) throw new Error("Curation gate blocked: verified poster artwork and required title metadata are missing");
     return { source: "bridge_titles+bridge_assets", recordIds: records.map((record) => record.id), verifiedAt: new Date().toISOString() };
   }
-  records = await sql<Record<string, unknown>>`select id, destination, package_version, readiness_state, authorized_by, authorized_at
+  records = await sql<{ id: string }>`select id
     from bridge_destination_packages where title_id = ${titleId} and readiness_state = 'DELIVERED'
     order by authorized_at desc nulls last, created_at desc limit 1`;
   if (!records.length) throw new Error("Delivery gate blocked: no destination package is recorded as DELIVERED");
-  return { source: "bridge_destination_packages", records, verifiedAt: new Date().toISOString() };
+  return { source: "bridge_destination_packages", recordIds: records.map((record) => record.id), verifiedAt: new Date().toISOString() };
 }
 
 export const setBuyerPublicationGate = createServerFn({ method: "POST" })
