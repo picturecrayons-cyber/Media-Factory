@@ -38,6 +38,7 @@ function AdminControlPlane() {
 function AdminBody({ actor }: { actor: any }) {
   const [profilesOpen, setProfilesOpen] = useState(false);
   const [auditOpen, setAuditOpen] = useState(false);
+  const [servicesOpen, setServicesOpen] = useState(false);
   const titlesQ = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles() });
   const auditQ = useQuery({ queryKey: ["bridge-audit"], queryFn: () => listAuditLogs(), enabled: auditOpen });
   const distQ = useQuery({ queryKey: ["loop-publication-readiness"], queryFn: () => listLoopPublicationReadiness() });
@@ -117,7 +118,7 @@ function AdminBody({ actor }: { actor: any }) {
 
         <section className="grid gap-3 lg:grid-cols-2">
           <details onToggle={(event) => setProfilesOpen(event.currentTarget.open)} className="min-w-0 rounded-2xl border border-line bg-surface p-4">
-            <summary className="cursor-pointer list-none font-semibold">Users & organizations <span className="ml-1 text-sm font-normal text-muted">({profiles.length})</span></summary>
+            <summary className="cursor-pointer list-none font-semibold">Users & organizations <span className="ml-1 text-sm font-normal text-muted">({profilesQ.isPending ? "open to load" : profiles.length})</span></summary>
             <p className="mt-2 text-sm text-muted">Read-only Bridge profile view. Role changes remain controlled by the invitation and onboarding flow.</p>
             {profilesQ.isError ? <p role="alert" className="mt-3 text-sm text-muted">Profiles could not be loaded.</p> : null}
             <div className="mt-3 max-h-80 overflow-auto">
@@ -157,11 +158,9 @@ function AdminBody({ actor }: { actor: any }) {
           </details>
         </section>
 
-        <details className="rounded-2xl border border-line bg-surface p-4 sm:p-5">
+        <details onToggle={(event) => setServicesOpen(event.currentTarget.open)} className="rounded-2xl border border-line bg-surface p-4 sm:p-5">
           <summary className="cursor-pointer list-none font-semibold">Production services</summary>
-          <div className="mt-4">
-            <StreamVistaOrders />
-          </div>
+          {servicesOpen ? <div className="mt-4"><StreamVistaOrders /></div> : null}
         </details>
       </div>
     </BridgeShell>
