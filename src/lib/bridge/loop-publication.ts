@@ -168,6 +168,29 @@ export async function verifyDistributionPreflight(
   `;
   if (!reviews[0]?.qc_ok) reasons.push("Recorded QC approval for the current assets is required.");
   if (!reviews[0]?.legal_ok) reasons.push("Recorded legal approval for this license is required.");
+
+  // Publication is blocked until every explicit consumer-release certification is recorded.
+  const gateRows = await sql<{
+    ott_preparation_status: string | null;
+    packaging_status: string | null;
+    curation_status: string | null;
+    delivery_status: string | null;
+  }>`
+    select ott_preparation_status, packaging_status, curation_status, delivery_status
+    from bridge_title_gate_certifications
+    where title_id = ${titleId}
+    limit 1
+  `;
+  const gates = gateRows[0];
+  if (gates?.ott_preparation_status !== "READY")
+    reasons.push("OTT preparation must be certified READY.");
+  if (gates?.packaging_status !== "COMPLETE")
+    reasons.push("Consumer packaging must be certified COMPLETE.");
+  if (gates?.curation_status !== "APPROVED")
+    reasons.push("Editorial curation must be APPROVED.");
+  if (gates?.delivery_status !== "READY")
+    reasons.push("Final delivery must be certified READY.");
+
   const licenses = rightsGrantId
     ? await sql<{ evidence: Array<{ commercialTerms?: CommercialTermsSummary }> }>`
     select evidence from bridge_rights_grants where id=${rightsGrantId}
@@ -204,21 +227,8 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
     assertPermission(actor, "title.read_catalog");
     const sql = await getSql();
 
-    // Auto-reevaluate any expired distribution windows
-    await sql`
-      update bridge_loop_publications
-      set authorization_status = 'expired', updated_at = now()
-      where window_end is not null and window_end < now() and authorization_status in ('authorized', 'live')
-    `.catch(() => {});
-
-    await sql`
-      update loop_titles
-      set status = 'expired', published = false, listed = false, updated_at = now()
-      where bridge_title_id in (
-        select bridge_title_id from bridge_loop_publications where authorization_status = 'expired'
-      ) and published = true
-    `.catch(() => {});
-
+    // GET handlers must remain read-only. Expired windows are derived below;
+    // a dedicated, authorized lifecycle job may persist expiry separately.
     const rows = await sql<{
       id: string;
       slug: string;
@@ -241,15 +251,34 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
       listed: boolean | null;
       published: boolean | null;
       playback_path: string | null;
+      qc_approved: boolean;
+      legal_grant_ids: string[] | null;
+      ott_preparation_status: string | null;
+      packaging_status: string | null;
+      curation_status: string | null;
+      delivery_status: string | null;
     }>`
       select b.id, b.slug, b.name, b.status, b.language, b.master_key, b.poster_key,
              b.synopsis, b.year, b.runtime_minutes,
              p.loop_title_id, p.authorization_status, p.window_start, p.window_end,
              p.territories, p.languages, p.exploitation_models,
-             l.status as loop_status, l.listed, l.published, l.playback_path
+             l.status as loop_status, l.listed, l.published, l.playback_path,
+             exists(
+               select 1 from bridge_qc_cases q
+               where q.title_id=b.id and q.status='PASSED'
+                 and q.reviewer_findings->0->>'masterKey'=b.master_key
+                 and q.reviewer_findings->0->>'posterKey'=b.poster_key
+             ) as qc_approved,
+             coalesce((
+               select jsonb_agg(lc.evidence->0->>'grantId')
+               from bridge_legal_cases lc
+               where lc.title_id=b.id and lc.status='APPROVED'
+             ), '[]'::jsonb) as legal_grant_ids,
+             g.ott_preparation_status, g.packaging_status, g.curation_status, g.delivery_status
       from bridge_titles b
       left join bridge_loop_publications p on p.bridge_title_id = b.id
       left join loop_titles l on l.id = p.loop_title_id
+      left join bridge_title_gate_certifications g on g.title_id = b.id
       order by b.updated_at desc
       limit 200
     `;
@@ -274,8 +303,24 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
               },
             )
           : null;
+        const legalGrantIds = Array.isArray(r.legal_grant_ids) ? r.legal_grant_ids : [];
+        const legalApproved = Boolean(coveringGrant && legalGrantIds.includes(coveringGrant.id));
+        const windowExpired = Boolean(
+          r.window_end &&
+          new Date(r.window_end).getTime() <= Date.now() &&
+          ["authorized", "live"].includes((r.authorization_status || "").toLowerCase()),
+        );
+        const effectiveAuthorizationStatus = windowExpired ? "EXPIRED" : (r.authorization_status?.toUpperCase() || "PENDING");
+        const gatesReady =
+          r.ott_preparation_status === "READY" &&
+          r.packaging_status === "COMPLETE" &&
+          r.curation_status === "APPROVED" &&
+          r.delivery_status === "READY";
         const isReady =
           Boolean(coveringGrant) &&
+          legalApproved &&
+          Boolean(r.qc_approved) &&
+          gatesReady &&
           [
             "LICENSING_READY",
             "LIVE_FOR_BUYERS",
@@ -284,11 +329,19 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
             "DELIVERED",
           ].includes(r.status) &&
           Boolean(r.master_key) &&
-          Boolean(r.poster_key);
+          Boolean(r.poster_key) &&
+          !windowExpired;
 
         const blockers: string[] = [];
+        if (windowExpired) blockers.push("The authorized distribution window has expired");
         if (!coveringGrant)
           blockers.push("A matching rights grant and explicit publication dimensions are required");
+        if (!r.qc_approved) blockers.push("QC approval for the current master and artwork is required");
+        if (!legalApproved) blockers.push("Legal approval must reference the active rights grant");
+        if (r.ott_preparation_status !== "READY") blockers.push("OTT preparation is not certified READY");
+        if (r.packaging_status !== "COMPLETE") blockers.push("Consumer packaging is not certified COMPLETE");
+        if (r.curation_status !== "APPROVED") blockers.push("Editorial curation is not APPROVED");
+        if (r.delivery_status !== "READY") blockers.push("Final delivery is not certified READY");
         if (
           ![
             "LICENSING_READY",
@@ -317,16 +370,15 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
             ? {
                 destination: "CRAYONS_LOOP" as const,
                 loopTitleId: r.loop_title_id,
-                authorizationStatus: (r.authorization_status?.toUpperCase() ||
-                  "PENDING") as DistributionAuthorizationStatus,
+                authorizationStatus: effectiveAuthorizationStatus as DistributionAuthorizationStatus,
                 territories: r.territories || ["IN"],
                 languages: r.languages || [r.language],
                 exploitationModels: r.exploitation_models || ["SVOD"],
                 windowStart: iso(r.window_start),
                 windowEnd: iso(r.window_end),
-                loopStatus: r.loop_status,
-                listed: Boolean(r.listed),
-                published: Boolean(r.published),
+                loopStatus: windowExpired ? "expired" : r.loop_status,
+                listed: windowExpired ? false : Boolean(r.listed),
+                published: windowExpired ? false : Boolean(r.published),
                 playbackPath: r.playback_path,
               }
             : null,
@@ -621,13 +673,18 @@ export const getLoopPublication = createServerFn({ method: "GET" })
     `;
     const r = rows[0];
     if (!r) return { publication: null };
+    const windowExpired = Boolean(
+      r.window_end &&
+      new Date(r.window_end).getTime() <= Date.now() &&
+      ["authorized", "live"].includes(r.authorization_status.toLowerCase()),
+    );
 
     return {
       publication: {
         destination: "CRAYONS_LOOP" as const,
         bridgeTitleId: r.bridge_title_id,
         loopTitleId: r.loop_title_id,
-        authorizationStatus: r.authorization_status,
+        authorizationStatus: windowExpired ? "expired" : r.authorization_status,
         territories: r.territories,
         languages: r.languages,
         exploitationModels: r.exploitation_models,
@@ -636,9 +693,9 @@ export const getLoopPublication = createServerFn({ method: "GET" })
         approvedAt: iso(r.approved_at),
         revokedAt: iso(r.revoked_at),
         commercialTerms: (r.metadata?.commercialTerms as CommercialTermsSummary) || null,
-        loopStatus: r.loop_status,
-        listed: r.listed,
-        published: r.published,
+        loopStatus: windowExpired ? "expired" : r.loop_status,
+        listed: windowExpired ? false : r.listed,
+        published: windowExpired ? false : r.published,
         playbackPath: r.playback_path,
       },
     };
