@@ -1,0 +1,1 @@
+alter table bridge_webhook_events add column if not exists processing_token text;

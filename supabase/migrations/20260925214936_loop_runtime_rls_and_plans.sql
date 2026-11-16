@@ -1,0 +1,9 @@
+insert into public.loop_plans (id,plan_key,name,price_inr,duration_days,is_active) values ('b0000001-0000-0000-0000-000000000001','monthly','Loop Monthly',149,30,true),('b0000001-0000-0000-0000-000000000002','annual','Loop Annual',999,365,true) on conflict (id) do update set plan_key=excluded.plan_key,name=excluded.name,price_inr=excluded.price_inr,duration_days=excluded.duration_days,is_active=excluded.is_active,updated_at=now();
+create policy loop_titles_public_read on public.loop_titles for select to anon,authenticated using (status='approved' and listed=true and published=true);
+create policy loop_plans_public_read on public.loop_plans for select to anon,authenticated using (is_active=true);
+create policy loop_subscriptions_own_read on public.loop_subscriptions for select to authenticated using ((select auth.uid())=user_id);
+create policy loop_tvod_own_read on public.loop_user_tvod_entitlements for select to authenticated using ((select auth.uid())=user_id);
+create policy loop_watch_own_read on public.loop_watch_progress for select to authenticated using ((select auth.uid())=user_id);
+create policy loop_watch_own_insert on public.loop_watch_progress for insert to authenticated with check ((select auth.uid())=user_id);
+create policy loop_watch_own_update on public.loop_watch_progress for update to authenticated using ((select auth.uid())=user_id) with check ((select auth.uid())=user_id);
+create index if not exists loop_titles_public_idx on public.loop_titles(status,listed,published,created_at desc); create index if not exists loop_payment_events_payment_idx on public.loop_payment_events(razorpay_payment_id);

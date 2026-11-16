@@ -1,0 +1,13 @@
+revoke all on table public.bridge_asset_versions from anon, authenticated;
+revoke all on table public.bridge_destination_packages from anon, authenticated;
+revoke all on table public.bridge_dmca_registrations from anon, authenticated;
+revoke all on table public.bridge_legal_cases from anon, authenticated;
+revoke all on table public.bridge_qc_cases from anon, authenticated;
+revoke all on table public.bridge_rights_grants from anon, authenticated;
+revoke all on table public.loop_payment_events from anon, authenticated;
+revoke all on table public.loop_plans from anon, authenticated;
+revoke all on table public.loop_subscriptions from anon, authenticated;
+revoke all on table public.loop_title_embeddings from anon, authenticated;
+revoke all on table public.loop_titles from anon, authenticated;
+revoke all on table public.loop_user_tvod_entitlements from anon, authenticated;
+revoke all on table public.loop_watch_progress from anon, authenticated;
