@@ -9,7 +9,7 @@ import { requireVerifiedActor } from "./session";
 import { loadTitle } from "./titles";
 import { writeAudit } from "./audit";
 import { assertNotDevUser } from "./guards";
-import { persistVerifiedAsset } from "./asset-confirmation";
+import { persistVerifiedAsset, persistVerifiedAssetReplacement } from "./asset-confirmation";
 import { downloadDecision } from "./delivery-policy";
 import { uploadUrlLifetimeSeconds } from "./upload-url-lifetime";
 import { validateOttIngestFile, type OttIngestKind } from "./ott-ingest-spec";
@@ -76,6 +76,90 @@ export const requestAssetUpload = createServerFn({ method: "POST" })
       entityType: "bridge_asset",
       entityId: id,
       metadata: { titleId: title.id, kind: data.kind },
+    });
+    return { assetId: id, ...signed };
+
+  });
+
+/** Super Admin-only replacement upload. Existing verified asset remains active until final verification. */
+export const requestAssetReplacement = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({
+    titleId: z.string().min(8),
+    targetAssetId: z.string().min(8),
+    kind: z.enum(ASSET_KINDS),
+    filename: z.string().min(1).max(120),
+    contentType: z.string().min(3).max(120),
+    byteSize: z.number().int().positive().max(200 * 1024 * 1024 * 1024).optional(),
+    reason: z.string().trim().min(8).max(1000),
+  }))
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    if (actor.internalRole !== "super_admin") throw new Error("Forbidden: Super Admin replacement only");
+    assertPermission(actor, "asset.sign_upload");
+    const title = await loadTitle(data.titleId);
+    if (!title || !canOperateOnTitle(actor, title, "asset.sign_upload", "asset.sign_upload"))
+      throw new Error("Not found");
+    if (!["master","poster","poster_vertical","poster_horizontal","thumbnail","subtitle","screener","technical","censor_certificate"].includes(data.kind))
+      throw new Error("This asset kind cannot be replaced here");
+    const ingestValidation = validateOttIngestFile({
+      kind: data.kind as OttIngestKind,
+      filename: data.filename,
+      contentType: data.contentType,
+    });
+    if (!ingestValidation.ok) throw new Error(ingestValidation.message);
+
+    const sql = await getSql();
+    const current = await sql<{
+      id: string; title_id: string; kind: string; s3_key: string; byte_size: number | null; superseded_at: string | null;
+    }>`
+      select id, title_id, kind, s3_key, byte_size, superseded_at
+      from bridge_assets
+      where id = ${data.targetAssetId} and title_id = ${title.id}
+      limit 1
+      for update
+    `;
+    const previous = current[0];
+    if (!previous || previous.kind !== data.kind || Number(previous.byte_size ?? 0) <= 0 || previous.superseded_at)
+      throw new Error("The selected verified asset is no longer the current replaceable version");
+
+    const id = randomBytes(16).toString("hex");
+    const { signUpload, titleAssetKey } = await import("./oci-object-storage.server");
+    // Append the new immutable asset ID before signing so identical filenames
+    // cannot ever overwrite the currently referenced OCI object.
+    const baseKey = titleAssetKey({
+      ownerUserId: title.ownerUserId,
+      titleId: title.id,
+      kind: data.kind,
+      filename: data.filename,
+    });
+    const key = `${baseKey}.replacement/${id}`;
+    const signed = await signUpload({
+      key,
+      contentType: data.contentType,
+      expiresIn: uploadUrlLifetimeSeconds(data.byteSize),
+    });
+    await sql`
+      insert into bridge_assets (
+        id, title_id, kind, s3_key, content_type, created_by,
+        supersedes_asset_id, replacement_reason, replacement_initiated_by
+      ) values (
+        ${id}, ${title.id}, ${data.kind}, ${key}, ${data.contentType}, ${actor.userId},
+        ${previous.id}, ${data.reason.trim()}, ${actor.userId}
+      )
+    `;
+    await writeAudit({
+      actorUserId: actor.userId,
+      action: "asset.replacement_upload_signed",
+      entityType: "bridge_asset",
+      entityId: id,
+      metadata: {
+        titleId: title.id,
+        kind: data.kind,
+        previousAssetId: previous.id,
+        reason: data.reason.trim(),
+      },
     });
     return { assetId: id, ...signed };
   });
