@@ -207,10 +207,37 @@ test("real SQL services persist QC, independently approved license, lifecycle an
       "VALID",
     );
     assert.equal((await f.sql.query("select * from bridge_audit_logs")).length, 3);
+    const grantEvidence = (await f.sql.query<{ evidence: Array<{ rightsScope?: Array<{ category: string; available: boolean; verified: boolean }> }> }>("select evidence from bridge_rights_grants"))[0].evidence;
+    assert.equal(grantEvidence.at(-1)?.rightsScope?.length, 5);
+    assert.equal(grantEvidence.at(-1)?.rightsScope?.find((item) => item.category === "ANCILLARY")?.available, false);
+    const legalEvidence = (await f.sql.query<{ evidence: Array<{ grantId?: string }> }>("select evidence from bridge_legal_cases"))[0].evidence;
+    assert.equal(legalEvidence[0]?.grantId, saved.grantId);
   } finally {
     await f.db.close();
   }
 });
+test("legal approval cannot proceed without all five verified rights categories", async () => {
+  const f = await fixture();
+  try {
+    const saved = (await f.sql.transaction((tx) => f.save(tx, owner, license))) as { grantId: string };
+    await f.sql.query("update bridge_titles set status='RIGHTS_REVIEW'");
+    await assert.rejects(
+      f.sql.transaction((tx) => f.review(tx, legal, {
+        titleId: "title-123",
+        stage: "LEGAL",
+        decision: "APPROVE",
+        note: "Review ownership and grant evidence",
+        grantId: saved.grantId,
+      })),
+      /Complete all five rights categories/,
+    );
+    assert.equal((await f.sql.query("select * from bridge_legal_cases")).length, 0);
+    assert.equal((await f.sql.query<{ status: string }>("select status from bridge_rights_grants"))[0].status, "DRAFT");
+  } finally {
+    await f.db.close();
+  }
+});
+
 test("unauthorized review and unverified current assets cannot clear QC", async () => {
   const f = await fixture();
   try {
