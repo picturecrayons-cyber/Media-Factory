@@ -64,12 +64,37 @@ export const submitLoopLicense = createServerFn({ method: "POST" })
     return (await getSql()).transaction((tx) => saveLoopLicense(tx, actor, data));
   });
 
+const rightsScopeInput = z.array(z.object({
+  category: z.enum(["THEATRICAL", "NON_THEATRICAL", "LINEAR", "NON_LINEAR", "ANCILLARY"]),
+  available: z.boolean(),
+  verified: z.boolean(),
+  evidenceReference: z.string().trim().min(8).max(500),
+  notes: z.string().trim().max(1000).optional(),
+})).length(5);
+
 const reviewInput = z.object({
   titleId: z.string().min(8),
   stage: z.enum(["QC", "LEGAL"]),
   decision: z.enum(["APPROVE", "REJECT"]),
   note: z.string().trim().min(8).max(2000),
   grantId: z.string().uuid().optional(),
+  rightsScope: rightsScopeInput.optional(),
+}).superRefine((value, ctx) => {
+  if (value.stage === "LEGAL" && value.decision === "APPROVE") {
+    if (!value.rightsScope || value.rightsScope.length !== 5) {
+      ctx.addIssue({ code: "custom", path: ["rightsScope"], message: "Complete all five rights categories before approval" });
+      return;
+    }
+    const categories = new Set(value.rightsScope.map((item) => item.category));
+    if (categories.size !== 5 || !["THEATRICAL", "NON_THEATRICAL", "LINEAR", "NON_LINEAR", "ANCILLARY"].every((key) => categories.has(key as never))) {
+      ctx.addIssue({ code: "custom", path: ["rightsScope"], message: "Each rights category must be recorded exactly once" });
+    }
+    value.rightsScope.forEach((item, index) => {
+      if (!item.verified || item.evidenceReference.trim().length < 8) {
+        ctx.addIssue({ code: "custom", path: ["rightsScope", index], message: "Each category requires verification and an evidence reference" });
+      }
+    });
+  }
 });
 
 export async function reviewWorkflow(tx: Sql, actor: Actor, data: z.infer<typeof reviewInput>) {
@@ -108,17 +133,24 @@ export async function reviewWorkflow(tx: Sql, actor: Actor, data: z.infer<typeof
       throw new Error("Another legal reviewer must approve this license");
     if (data.decision === "APPROVE" && new Date(grant.window_end) <= new Date())
       throw new Error("License has expired");
+    const reviewedAt = new Date().toISOString();
+    const rightsScope = data.rightsScope ?? [];
     await tx`insert into bridge_legal_cases(title_id,status,evidence,reviewed_by,reviewed_at)
       values (${data.titleId},${data.decision === "APPROVE" ? "APPROVED" : "REJECTED"},
-      ${JSON.stringify([{ grantId: data.grantId, note: data.note }])}::jsonb,${actor.userId},now())`;
-    await tx`update bridge_rights_grants set status=${data.decision === "APPROVE" ? "VALID" : "REVOKED"} where id=${data.grantId}`;
+      ${JSON.stringify([{ grantId: data.grantId, note: data.note, rightsScope }])}::jsonb,${actor.userId},now())`;
+    if (data.decision === "APPROVE") {
+      await tx`update bridge_rights_grants
+        set status='VALID',
+            evidence=evidence || ${JSON.stringify([{ rightsScope, rightsReviewedBy: actor.userId, rightsReviewedAt: reviewedAt, rightsReviewNote: data.note }])}::jsonb
+        where id=${data.grantId}`;
+    } else {
+      await tx`update bridge_rights_grants set status='REVOKED' where id=${data.grantId}`;
+    }
   }
   const next =
-    data.decision === "REJECT"
-      ? "PREPARING"
-      : data.stage === "QC"
-        ? "RIGHTS_REVIEW"
-        : "LICENSING_READY";
+    data.stage === "QC"
+      ? data.decision === "REJECT" ? "PREPARING" : "RIGHTS_REVIEW"
+      : data.decision === "REJECT" ? "RIGHTS_REVIEW" : "LICENSING_READY";
   await tx`update bridge_titles set status=${next},updated_at=now() where id=${data.titleId}`;
   await tx`insert into bridge_title_events(title_id,from_status,to_status,actor_user_id,note) values (${data.titleId},${title.status},${next},${actor.userId},${data.note})`;
   await audit(
