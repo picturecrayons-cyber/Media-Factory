@@ -79,7 +79,13 @@ The 69-entry manifest in `docs/release/bridge-supabase-migration-reconciliation-
 | 52 | `20261116111314` | `secure_public_loop_catalog_testing` |
 | 53 | `20261116111344` | `grant_public_loop_catalog_invoker_reads_testing` |
 | 54 | `20261116111454` | `normalize_public_loop_catalog_schema_testing` |
-| 55 | `20261116111631` | `restrict_public_loop_catalog_rpc_to_edge_service_testing` |\n| 56 | `20261116210822` | `bridge_title_hold_block_controls` |\n| 57 | `20261116224138` | `loop_viewer_profiles_20261117` |\n| 58 | `20261116224140` | `loop_watchlists_20261117` |\n| 59 | `20261116233444` | `streamvista_legacy_links_unresolved_resolution_state` |\n| 60 | `20261116234234` | `harden_legacy_links_service_role_privileges_20261117` |\n| 61 | `20261116234306` | `bridge_legal_consent_evidence_20261117` |
+| 55 | `20261116111631` | `restrict_public_loop_catalog_rpc_to_edge_service_testing` |
+| 56 | `20261116210822` | `bridge_title_hold_block_controls` |
+| 57 | `20261116224138` | `loop_viewer_profiles_20261117` |
+| 58 | `20261116224140` | `loop_watchlists_20261117` |
+| 59 | `20261116233444` | `streamvista_legacy_links_unresolved_resolution_state` |
+| 60 | `20261116234234` | `harden_legacy_links_service_role_privileges_20261117` |
+| 61 | `20261116234306` | `bridge_legal_consent_evidence_20261117` |
 
 ## Production manifest comparison
 
@@ -117,7 +123,9 @@ The table inventory confirms RLS is enabled on listed public relations, but this
 | STAGING migration ledger retrieved | PASS — 61 entries |
 | Production source manifest retrieved | PASS — 69 entries |
 | Direct ledger version match | FAIL — 0 matching versions |
-| Applied STAGING SQL bodies preserved/retrieved | PASS — 61/61 |\n| Original source-file/commit mapping | PARTIAL — 11/61 original repository source mappings (10 exact, 1 normalized); 48 source mappings remain unverified after accounting for two separate ledger-exact recovered body copies in PR #681 |\n| Ledger-statement serialization fingerprints | PARTIAL — later 24 plus six latest records; not original file hashes |
+| Applied STAGING SQL bodies preserved/retrieved | PASS — 61/61 |
+| Original source-file/commit mapping | PARTIAL — 11/61 original repository source mappings (10 exact, 1 normalized); 48 source mappings remain unverified after accounting for two separate ledger-exact recovered body copies in PR #681 |
+| Ledger-statement serialization fingerprints | PARTIAL — later 24 plus six latest records; not original file hashes |
 | Intended STAGING schema contract pinned | BLOCKED |
 | Full semantic catalog comparison | BLOCKED |
 | Disposable replay of exact STAGING source | NOT RUN |
