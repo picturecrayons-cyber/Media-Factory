@@ -6,7 +6,7 @@ import { decideLegacyLinkReview, listLegacyLinkReviews } from "@/lib/bridge/lega
 
 type DecisionInput =
   | {
-      sourceTable: string;
+      sourceTable: "films_film" | "films_filmdraft" | "films_filmbuyermapping" | "films_status" | "films_viewhistory";
       legacyId: string;
       decision: "verify";
       bridgeTitleId: string;
