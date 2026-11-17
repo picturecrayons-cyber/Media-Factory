@@ -107,6 +107,10 @@ begin
 end
 $$;
 
+-- Drop the old mandatory-target check before moving suggestions out of active columns.
+alter table public.streamvista_legacy_links
+  drop constraint if exists streamvista_link_target;
+
 -- Keep suggested targets for later review, but remove them from active use.
 update public.streamvista_legacy_links
 set
@@ -127,9 +131,6 @@ set
     when review_status = 'rejected' then 'rejected'
     else 'unresolved'
   end;
-
-alter table public.streamvista_legacy_links
-  drop constraint if exists streamvista_link_target;
 
 alter table public.streamvista_legacy_links
   add constraint streamvista_link_target
