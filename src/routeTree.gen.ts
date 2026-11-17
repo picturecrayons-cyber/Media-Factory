@@ -26,4 +26,261 @@ import { Route as InvestorRouteImport } from './routes/investor'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as LoopCmsRouteImport } from './routes/loop-cms'
 import { Route as OnboardingRouteImport } from './routes/onboarding'
-import { Route as ֻǱ˞
+import { Route as ֻǱ˞  id: '/internal',
+  path: '/internal',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const InvestorRoute = InvestorRouteImport.update({
+  id: '/investor',
+  path: '/investor',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LoopCmsRoute = LoopCmsRouteImport.update({
+  id: '/loop-cms',
+  path: '/loop-cms',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const OnboardingRoute = OnboardingRouteImport.update({
+  id: '/onboarding',
+  path: '/onboarding',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PrivacyRoute = PrivacyRouteImport.update({
+  id: '/privacy',
+  path: '/privacy',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ResetPasswordRoute = ResetPasswordRouteImport.update({
+  id: '/reset-password',
+  path: '/reset-password',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SignupRoute = SignupRouteImport.update({
+  id: '/signup',
+  path: '/signup',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const StudioRoute = StudioRouteImport.update({
+  id: '/studio',
+  path: '/studio',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SubmitFilmRoute = SubmitFilmRouteImport.update({
+  id: '/submit-film',
+  path: '/submit-film',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TermsRoute = TermsRouteImport.update({
+  id: '/terms',
+  path: '/terms',
+  getParentRoute: () => rootRouteImport,
+} as ֻǱ˞  '/api/hostinger-incoming': typeof ApiHostingerIncomingRoute
+  '/auth/callback': typeof AuthCallbackRoute
+  '/auth/confirm': typeof AuthConfirmRoute
+  '/title/$id': typeof TitleIdRoute
+  '/api/a2a/agent-card': typeof ApiA2aAgentCardRoute
+  '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/buyer/poster': typeof ApiBuyerPosterRoute
+  '/api/razorpay/webhook': typeof ApiRazorpayWebhookRoute
+  '/api/a2a/': typeof ApiA2aIndexRoute
+}
+export interface FileRoutesByTo {
+  '/': typeof IndexRoute
+  '/account': typeof AccountRoute
+  '/admin': typeof AdminRouteWithChildren
+  '/admin-cms': typeof AdminCmsRoute
+  '/app': typeof AppRoute
+  '/buyer': typeof BuyerRoute
+  '/cms': typeof CmsRoute
+  '/contact': typeof ContactRoute
+  '/creator': typeof CreatorRoute
+  '/dashboard': typeof DashboardRoute
+  '/deliveries': typeof DeliveriesRoute
+  '/forgot-password': typeof ForgotPasswordRoute
+  '/internal': typeof InternalRoute
+  '/investor': typeof InvestorRoute
+  '/login': typeof LoginRoute
+  '/loop-cms': typeof LoopCmsRoute
+  '/onboarding': typeof OnboardingRoute
+  '/privacy': typeof PrivacyRoute
+  '/reset-password': typeof ResetPasswordRoute
+  '/signup': typeof SignupRoute
+  '/studio': typeof StudioRoute
+  '/submit-film': typeof SubmitFilmRoute
+  '/terms': typeof TermsRoute
+  '/verify-email': typeof VerifyEmailRoute
+  '/workspace': typeof WorkspaceRoute
+  '/admin/workstations': typeof AdminWorkstationsRoute
+  '/api/hostinger-incoming': typeof ApiHostingerIncomingRoute
+  '/auth/callback': typeof AutֻǱ˞    | '/verify-email'
+    | '/workspace'
+    | '/admin/workstations'
+    | '/api/hostinger-incoming'
+    | '/auth/callback'
+    | '/auth/confirm'
+    | '/title/$id'
+    | '/api/a2a/agent-card'
+    | '/api/auth/$'
+    | '/api/buyer/poster'
+    | '/api/razorpay/webhook'
+    | '/api/a2a'
+  id:
+    | '__root__'
+    | '/'
+    | '/account'
+    | '/admin'
+    | '/admin-cms'
+    | '/app'
+    | '/buyer'
+    | '/cms'
+    | '/contact'
+    | '/creator'
+    | '/dashboard'
+    | '/deliveries'
+    | '/forgot-password'
+    | '/internal'
+    | '/investor'
+    | '/login'
+    | '/loop-cms'
+    | '/onboarding'
+    | '/privacy'
+    | '/reset-password'
+    | '/signup'
+    | '/studio'
+    | '/submit-film'
+    | '/terms'
+    | '/verify-email'
+    | '/workspace'
+    | '/admin/workstations'
+    | '/api/hostinger-incoming'
+    | '/auth/callback'
+    | '/auth/confirm'
+    | '/title/$id'
+    | '/api/a2a/agent-card'
+    | '/api/auth/$'
+    | '/api/buyer/poster'
+    | '/api/razorpay/webhook'
+    | '/api/a2a/'
+  fileRoutesById: FileRoutesById
+}
+export interface RootRouteChildren {
+  IndexRoute: typeof IndexRoute
+  AccountRoute: typeof AccountRoute
+  AdminRoute: typeof AdminRouteWithChildren
+  AdminCmsRoute: typeof AdminCmsRoute
+  AppRoute: typeof AppRoute
+  BuyerRoute: typeof BuyerRoute
+  CmsRoute: typeof CmsRoute
+  ContactRoute: typeof ContactRoute
+  CreatorRoute: typeof CreatorRoute
+  DashboardRoute: typeof DashboardRoute
+  DeliveriesRoute: typeof DeliveriesRoute
+  ForgotPasswordRoute: typeof ForgotPasswoֻǱ˞    '/forgot-password': {
+      id: '/forgot-password'
+      path: '/forgot-password'
+      fullPath: '/forgot-password'
+      preLoaderRoute: typeof ForgotPasswordRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/internal': {
+      id: '/internal'
+      path: '/internal'
+      fullPath: '/internal'
+      preLoaderRoute: typeof InternalRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/investor': {
+      id: '/investor'
+      path: '/investor'
+      fullPath: '/investor'
+      preLoaderRoute: typeof InvestorRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/loop-cms': {
+      id: '/loop-cms'
+      path: '/loop-cms'
+      fullPath: '/loop-cms'
+      preLoaderRoute: typeof LoopCmsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/onboarding': {
+      id: '/onboarding'
+      path: '/onboarding'
+      fullPath: '/onboarding'
+      preLoaderRoute: typeof OnboardingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/privacy': {
+      id: '/privacy'
+      path: '/privacy'
+      fullPath: '/privacy'
+      preLoaderRoute: typeof PrivacyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/reset-password': {
+      id: '/reset-password'
+      path: '/reset-password'
+      fullPath: '/reset-password'
+      preLoaderRoute: typeof RֻǱ˞      id: '/api/buyer/poster'
+      path: '/api/buyer/poster'
+      fullPath: '/api/buyer/poster'
+      preLoaderRoute: typeof ApiBuyerPosterRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/razorpay/webhook': {
+      id: '/api/razorpay/webhook'
+      path: '/api/razorpay/webhook'
+      fullPath: '/api/razorpay/webhook'
+      preLoaderRoute: typeof ApiRazorpayWebhookRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+  }
+}
+
+interface AdminRouteChildren {
+  AdminWorkstationsRoute: typeof AdminWorkstationsRoute
+}
+
+const AdminRouteChildren: AdminRouteChildren = {
+  AdminWorkstationsRoute: AdminWorkstationsRoute,
+}
+
+const AdminRouteWithChildren = AdminRoute._addFileChildren(AdminRouteChildren)
+
+const rootRouteChildren: RootRouteChildren = {
+  IndexRoute: IndexRoute,
+  AccountRoute: AccountRoute,
+  AdminRoute: AdminRouteWithChildren,
+  AdminCmsRoute: AdminCmsRoute,
+  AppRoute: AppRoute,
+  BuyerRoute: BuyerRoute,
+  CmsRoute: CmsRoute,
+  ContactRoute: ContactRoute,
+  CreatorRoute: CreatorRoute,
+  DashboardRoute: DashboardRoute,
+  DeliveriesRoute: DeliveriesRoute,
+  ForgotPasswordRoute: ForgotPasswordRoute,
+  InternalRoute: InternalRoute,
+  InvestorRoute: InvestorRoute,
+  LoginRoute: LoginRoute,
+  LoopCmsRoute: LoopCmsRoute,
+  OnboardingRoute: OnboardingRoute,
+  PrivacyRoute: PrivacyRoute,
+  ResetPasswordRoute: ResetPasswordRoute,
+  SignupRoute: SignupRoute,
+  StudioRoute: StudioRoute,
+  SubmitFilmRoute: SubmitFilmRoute,
+  TermsRoute: TermsRoute,
+  VerifyEֻǱ˞
