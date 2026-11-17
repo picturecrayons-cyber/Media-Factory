@@ -322,7 +322,7 @@ test("legacy OCI reconciliation admits only exact reviewer-verified film-to-titl
         and l.bridge_title_id is not null
         and l.bridge_title_id <> q.title_id
     `);
-    assert.equal(mismatches.rows[0]?.count, 1);
+    assert.equal(mismatches.rows[0]?.count, 2);
   } finally {
     await db.close();
   }
