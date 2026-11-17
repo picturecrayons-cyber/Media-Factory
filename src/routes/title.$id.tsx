@@ -10,7 +10,6 @@ import { BridgeShell } from "@/components/bridge/shell";
 import { getTitle, updateTitle } from "@/lib/bridge/titles";
 import { BRIDGE_LOOP_LANES, loopStageType } from "@/lib/bridge/loop-lanes";
 import {
-  abortAssetMultipart,
   beginAssetMultipart,
   commitAssetMultipart,
   getAssetMultipartStatus,
@@ -768,13 +767,17 @@ function FilesPanel({
                 cancelRequestedRef.current = true;
                 for (const xhr of [...uploadXhrRef.current]) xhr.abort();
                 const session = activeMultipart.current;
+                // Pause is intentionally non-destructive: keep the signed session hint and
+                // durable server-side part manifest so the same file can resume later.
                 activeMultipart.current = null;
-                if (session) {
-                  clearUploadSession(session.titleId, session.kind);
-                  void abortAssetMultipart({ data: { assetId: session.assetId, sessionId: session.sessionId, sessionToken: session.sessionToken } }).catch(() => undefined);
-                }
                 setProgress(null);
-                announce("Upload cancelled. Completed parts from this attempt were discarded.", "error", true);
+                announce(
+                  session
+                    ? "Upload paused. Completed parts are retained; choose the same file to resume."
+                    : "Upload paused. Check the file status before retrying.",
+                  "error",
+                  true,
+                );
                 if (uploadXhrRef.current.size === 0) setUploading(null);
               }}
               className="rounded-full border border-line bg-surface px-3 py-1.5 text-xs font-semibold"
