@@ -56,7 +56,8 @@ export const listLegacyLinkReviews = createServerFn({ method: "GET" })
           l.reviewed_at
         from streamvista_legacy_links l
         left join bridge_titles t on t.id = l.candidate_bridge_title_id
-        where l.review_status = 'pending'
+        where l.source_table in ('films_film', 'films_filmdraft', 'films_filmbuyermapping', 'films_status', 'films_viewhistory')
+          and l.review_status = 'pending'
           and l.resolution_status = 'unresolved'
         order by
           case l.source_table
@@ -80,7 +81,8 @@ export const listLegacyLinkReviews = createServerFn({ method: "GET" })
       sql<{ source_table: string; count: number }>`
         select source_table, count(*)::int as count
         from streamvista_legacy_links
-        where review_status = 'pending'
+        where source_table in ('films_film', 'films_filmdraft', 'films_filmbuyermapping', 'films_status', 'films_viewhistory')
+          and review_status = 'pending'
           and resolution_status = 'unresolved'
         group by source_table
         order by source_table
