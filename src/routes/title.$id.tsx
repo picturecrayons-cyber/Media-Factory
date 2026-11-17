@@ -48,6 +48,18 @@ export const Route = createFileRoute("/title/$id")({
 const WORKSPACE_TABS = ["Overview", "Files", "Production"] as const;
 type WorkspaceTab = (typeof WORKSPACE_TABS)[number];
 
+function withQueryTimeout<T>(operation: Promise<T>, timeoutMs: number, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  return Promise.race([
+    operation,
+    new Promise<T>((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`${label} did not respond within ${Math.round(timeoutMs / 1000)} seconds. Please retry.`)), timeoutMs);
+    }),
+  ]).finally(() => {
+    if (timer !== undefined) clearTimeout(timer);
+  });
+}
+
 function LaneStore({ titleId, stored, locked }: { titleId: string; stored: string; locked: boolean }) {
   const qc = useQueryClient();
   const [value, setValue] = useState(stored);
@@ -100,7 +112,8 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
   const titleQ = useQuery({
     // The same title has a redacted Buyer DTO and a full internal DTO.
     queryKey: ["bridge-title", id, actor.userId, actor.internalRole ?? actor.accountType],
-    queryFn: () => getTitle({ data: { id } }),
+    queryFn: () => withQueryTimeout(getTitle({ data: { id } }), 20_000, "Title workspace"),
+    retry: false,
   });
   const assetsQ = useQuery({
     queryKey: ["bridge-assets", id, actor.userId],
@@ -132,9 +145,25 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
     : chosenTab ?? (title && ["DRAFT", "UPLOADING", "PREPARING"].includes(title.status) ? "Files" : "Overview");
   const visibleTabs = buyerView ? (["Overview"] as const) : WORKSPACE_TABS;
 
-  if (titleQ.isPending) return <p className="text-sm text-muted">Loading title workspace…</p>;
-  if (titleQ.isError)
-    return <p role="alert">Title workspace unavailable: {titleQ.error.message}</p>;
+  if (titleQ.isPending) {
+    return (
+      <section aria-busy="true" className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
+        <p className="text-sm font-semibold">Opening title workspace</p>
+        <p className="mt-1 text-sm text-muted">Loading the canonical title record. This screen will report an error if the request does not respond.</p>
+      </section>
+    );
+  }
+  if (titleQ.isError) {
+    return (
+      <section role="alert" className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
+        <p className="text-sm font-semibold">Title workspace unavailable</p>
+        <p className="mt-1 text-sm text-muted">{titleQ.error.message}</p>
+        <button type="button" onClick={() => void titleQ.refetch()} className="mt-4 rounded-full bg-fg px-4 py-2 text-sm font-semibold text-bg">
+          Retry
+        </button>
+      </section>
+    );
+  }
   if (!title) return <p className="text-sm text-muted">Title not found.</p>;
 
   const qcReady =
