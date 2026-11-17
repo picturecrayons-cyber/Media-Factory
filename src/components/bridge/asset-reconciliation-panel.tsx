@@ -66,6 +66,12 @@ export function ProductionAssetReconciliationPanel() {
       void queryClient.invalidateQueries({ queryKey: ["bridge-titles"] });
       void queryClient.invalidateQueries({ queryKey: ["bridge-audit"] });
 
+      if (result.failed > 0) {
+        setAutoRun(false);
+        toast.error(`Reconciliation paused after ${result.failed} item(s) failed. Review the error details before retrying.`);
+        return;
+      }
+
       if (!result.queueHasMore && !result.assetsHaveMore) {
         setAutoRun(false);
         toast.success("Production asset reconciliation pass complete");
