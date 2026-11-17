@@ -340,3 +340,16 @@ test("production asset reconciliation uses stable queue keys and holds unresolve
   assert.match(source, /status in \('PENDING_REUPLOAD', 'MISSING_SOURCE_MEDIA', 'UPLOADED'\)/);
   assert.doesNotMatch(source, /randomBytes/);
 });
+
+
+test("production reconciliation records storage verification without claiming SHA-256 or QC completion", () => {
+  const source = readFileSync(
+    join(process.cwd(), "src/lib/bridge/asset-reconciliation.ts"),
+    "utf8",
+  );
+  assert.match(source, /insert into bridge_asset_versions/);
+  assert.match(source, /'OCI_HEAD_AND_IMMUTABLE_COPY'/);
+  assert.match(source, /'checksum_sha256_state', 'PENDING'/);
+  assert.match(source, /'PROCESSING'/);
+  assert.match(source, /checksum_sha256, byte_size, technical_metadata, processing_state/);
+});
