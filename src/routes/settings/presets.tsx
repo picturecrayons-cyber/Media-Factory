@@ -24,12 +24,20 @@ const defaultOperational: OperationalPresetConfig = {
   documentCategories: ["MASTER", "TRAILER", "SCREENER", "POSTER", "STILL", "SUBTITLE", "CENSOR_CERTIFICATE"],
 };
 
-const defaultLegal: LegalPresetConfig = {
+type LegalPresetDraft = {
+  agreementReference: string;
+  ownershipReference: string;
+  rightsOwnerSharePct: string;
+  distributorSharePct: string;
+  exclusivity: "" | LegalPresetConfig["exclusivity"];
+};
+
+const defaultLegal: LegalPresetDraft = {
   agreementReference: "",
   ownershipReference: "",
-  rightsOwnerSharePct: 65,
-  distributorSharePct: 35,
-  exclusivity: "NON_EXCLUSIVE",
+  rightsOwnerSharePct: "",
+  distributorSharePct: "",
+  exclusivity: "",
 };
 
 function WorkspacePresetsPage() {
@@ -50,7 +58,7 @@ function WorkspacePresetsManager() {
   const [editingId, setEditingId] = useState<string | undefined>();
   const [name, setName] = useState("Default TVOD workspace");
   const [operational, setOperational] = useState<OperationalPresetConfig>(defaultOperational);
-  const [legal, setLegal] = useState<LegalPresetConfig>(defaultLegal);
+  const [legal, setLegal] = useState<LegalPresetDraft>(defaultLegal);
   const presetsQ = useQuery({
     queryKey: ["bridge-workspace-presets"],
     queryFn: () => listWorkspacePresets({ data: { includeArchived: true } }),
@@ -87,7 +95,14 @@ function WorkspacePresetsManager() {
     if (preset.preset_type === "OPERATIONAL") {
       setOperational(preset.configuration as OperationalPresetConfig);
     } else {
-      setLegal(preset.configuration as LegalPresetConfig);
+      const config = preset.configuration as LegalPresetConfig;
+      setLegal({
+        agreementReference: config.agreementReference,
+        ownershipReference: config.ownershipReference,
+        rightsOwnerSharePct: String(config.rightsOwnerSharePct),
+        distributorSharePct: String(config.distributorSharePct),
+        exclusivity: config.exclusivity,
+      });
     }
     save.reset();
   }
@@ -99,7 +114,13 @@ function WorkspacePresetsManager() {
         ...(editingId ? { id: editingId } : {}),
         name,
         type,
-        configuration: type === "OPERATIONAL" ? operational : legal,
+        configuration: type === "OPERATIONAL" ? operational : {
+          agreementReference: legal.agreementReference,
+          ownershipReference: legal.ownershipReference,
+          rightsOwnerSharePct: Number(legal.rightsOwnerSharePct),
+          distributorSharePct: Number(legal.distributorSharePct),
+          exclusivity: legal.exclusivity,
+        },
       } as never,
     });
   }
@@ -177,20 +198,18 @@ function WorkspacePresetsManager() {
                 </label>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <label className="grid gap-1 text-sm">Rights owner share (%)
-                    <input type="number" min="0" max="100" step="1" value={legal.rightsOwnerSharePct} onChange={(event) => setLegal({ ...legal, rightsOwnerSharePct: Number(event.target.value), distributorSharePct: 100 - Number(event.target.value) })} required className="h-10 rounded-lg border border-line bg-surface px-3" />
+                    <input type="number" min="0" max="100" step="1" value={legal.rightsOwnerSharePct} onChange={(event) => setLegal({ ...legal, rightsOwnerSharePct: event.target.value, distributorSharePct: event.target.value === "" ? "" : String(100 - Number(event.target.value)) })} required className="h-10 rounded-lg border border-line bg-surface px-3" />
                   </label>
                   <label className="grid gap-1 text-sm">Distributor share (%) · calculated
                     <input type="number" value={legal.distributorSharePct} readOnly className="h-10 rounded-lg border border-line bg-surface px-3" />
                   </label>
                 </div>
                 <label className="grid gap-1 text-sm">Exclusivity
-                  <select value={legal.exclusivity} onChange={(event) => setLegal({ ...legal, exclusivity: event.target.value as LegalPresetConfig["exclusivity"] })} className="h-10 rounded-lg border border-line bg-surface px-3">
+                  <select value={legal.exclusivity} required onChange={(event) => setLegal({ ...legal, exclusivity: event.target.value as LegalPresetDraft["exclusivity"] })} className="h-10 rounded-lg border border-line bg-surface px-3">
+                    <option value="">Choose contract terms…</option>
                     <option value="NON_EXCLUSIVE">Non-exclusive</option>
                     <option value="EXCLUSIVE">Exclusive</option>
                   </select>
-                </label>
-                <label className="grid gap-1 text-sm">Suggested validity days (optional; requires confirmation)
-                  <input type="number" min="1" max="3650" value={legal.suggestedValidityDays ?? ""} onChange={(event) => setLegal({ ...legal, suggestedValidityDays: event.target.value ? Number(event.target.value) : undefined })} className="h-10 rounded-lg border border-line bg-surface px-3" />
                 </label>
                 <p className="text-xs text-muted">These are draft references/terms only. They do not verify documents, establish legal ownership, or approve a license.</p>
               </div>
