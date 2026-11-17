@@ -6,7 +6,7 @@ import { retryWorkspaceSession } from "@/lib/auth/workspace-session-retry";
 import { supabase } from "@/lib/supabase";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { getBridgeSession, type BridgeActor } from "@/lib/bridge/session";
-import { canAccessBuyerDesk, canAccessTitleWorkspace } from "@/lib/bridge/rbac";
+import { canEnterBuyerDeskRoute, canAccessTitleWorkspace } from "@/lib/bridge/rbac";
 import { requestEmailVerification } from "@/lib/bridge/profiles";
 import { Button } from "@/components/ui/button";
 import { BrandMark } from "./shell";
@@ -108,7 +108,7 @@ export function RequireBridge({
 
   // Buyer Desk is a narrowly scoped exception for verified Super Admins.
   // It does not widen access for other internal roles or creator/studio accounts.
-  if (allow === "buyer" && !canAccessBuyerDesk(profile)) return <Navigate to={sessionQ.data?.home ?? "/"} />;
+  if (allow === "buyer" && !canEnterBuyerDeskRoute(profile)) return <Navigate to={sessionQ.data?.home ?? "/"} />;
 
   // Role-specific workspaces use account-type checks. The shared title workspace
   // has already applied its own explicit Creator/Studio and internal catalog-read
