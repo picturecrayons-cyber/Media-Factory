@@ -14,8 +14,10 @@ const SOURCE_TABLES = [
   "films_viewhistory",
 ] as const;
 
+type LegacySourceTable = (typeof SOURCE_TABLES)[number];
+
 type LegacyLinkRow = {
-  source_table: string;
+  source_table: LegacySourceTable;
   legacy_id: string;
   review_status: string;
   resolution_status: string;
