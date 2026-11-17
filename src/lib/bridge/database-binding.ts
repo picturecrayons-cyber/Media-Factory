@@ -18,7 +18,7 @@ function projectRefFromSupabaseUrl(value: string | undefined): string | null {
   if (!value) return null;
   try {
     const hostname = new URL(value).hostname.toLowerCase();
-    const match = hostname.match(/^([a-z0-9]{20})\\.supabase\\.co$/);
+    const match = hostname.match(/^([a-z0-9]{20})\.supabase\.co$/);
     return match?.[1] ?? null;
   } catch {
     return null;
