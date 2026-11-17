@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
+import type { FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { BridgeShell } from "@/components/bridge/shell";
 import { RequireBridge } from "@/components/bridge/gate";
@@ -91,7 +92,7 @@ function WorkspacePresetsManager() {
     save.reset();
   }
 
-  function submit(event: React.FormEvent<HTMLFormElement>) {
+  function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     save.mutate({
       data: {
