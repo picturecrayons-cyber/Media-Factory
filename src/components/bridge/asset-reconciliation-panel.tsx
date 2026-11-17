@@ -8,6 +8,7 @@ type Totals = {
   batches: number;
   legacyAssetsLinked: number;
   existingAssetsVerified: number;
+  assetVersionsRegistered: number;
   missingInOci: number;
   failed: number;
   mappingBlockedRows: number;
@@ -22,6 +23,7 @@ const initialTotals: Totals = {
   batches: 0,
   legacyAssetsLinked: 0,
   existingAssetsVerified: 0,
+  assetVersionsRegistered: 0,
   missingInOci: 0,
   failed: 0,
   mappingBlockedRows: 0,
@@ -51,6 +53,7 @@ export function ProductionAssetReconciliationPanel() {
         batches: current.batches + 1,
         legacyAssetsLinked: current.legacyAssetsLinked + result.legacyAssetsLinked,
         existingAssetsVerified: current.existingAssetsVerified + result.existingAssetsVerified,
+        assetVersionsRegistered: current.assetVersionsRegistered + result.assetVersionsRegistered,
         missingInOci: current.missingInOci + result.missingInOci,
         failed: current.failed + result.failed,
         mappingBlockedRows: result.mappingBlockedRows,
@@ -98,12 +101,12 @@ export function ProductionAssetReconciliationPanel() {
           Production Asset Reconciliation
         </h2>
         <p className="text-sm text-muted">
-          Check existing OCI migration targets and unverified title assets. A file is linked only
-          after OCI size and ETag verification and an immutable copy check.
+          Check existing OCI migration targets and unverified title assets. A storage version is
+          registered only after OCI size/ETag checks and an immutable copy check.
         </p>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-7">
         <div className="rounded-xl border border-line bg-elevated/40 p-3">
           <p className="text-xs text-muted">Legacy assets linked</p>
           <p className="mt-1 text-xl font-semibold tabular-nums text-fg">{totals.legacyAssetsLinked}</p>
@@ -111,6 +114,10 @@ export function ProductionAssetReconciliationPanel() {
         <div className="rounded-xl border border-line bg-elevated/40 p-3">
           <p className="text-xs text-muted">Existing assets verified</p>
           <p className="mt-1 text-xl font-semibold tabular-nums text-fg">{totals.existingAssetsVerified}</p>
+        </div>
+        <div className="rounded-xl border border-line bg-elevated/40 p-3">
+          <p className="text-xs text-muted">Asset versions registered</p>
+          <p className="mt-1 text-xl font-semibold tabular-nums text-fg">{totals.assetVersionsRegistered}</p>
         </div>
         <div className="rounded-xl border border-line bg-elevated/40 p-3">
           <p className="text-xs text-muted">Not found in OCI</p>
@@ -198,8 +205,10 @@ export function ProductionAssetReconciliationPanel() {
       </div>
 
       <p className="text-xs text-muted">
-        Legacy assets are eligible only after the matching films_film link is reviewer-verified.
-        This action does not change QC, legal, rights, publication, payments, or title lifecycle status.
+        SHA-256 verification and technical QC remain separate gates; registered versions are marked
+        PROCESSING with checksum pending until DIT verification is completed. Legacy assets are
+        eligible only after the matching films_film link is reviewer-verified. This action does not
+        change QC, legal, rights, publication, payments, or title lifecycle status.
       </p>
     </section>
   );
