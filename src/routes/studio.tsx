@@ -10,15 +10,15 @@ import { DitAgentDesk } from "@/components/bridge/dit-agent-desk";
 export const Route = createFileRoute("/studio")({ component: Studio });
 
 const studioModules = [
-  ["Organization", "Studio profile and organization workspace.", "Organization data is shown only when the verified organization mapping is available."],
-  ["Members & Roles", "Manage approved studio members and access roles.", "Membership management is not enabled in this dashboard yet."],
-  ["Productions", "Track projects, production stages and title ownership.", "Production project tracking is not connected yet."],
-  ["QC & Rights", "Follow quality-control and rights-review progress.", "Use the status shown on each title; separate review approvals remain authoritative."],
-  ["Deliveries", "Track approved delivery packages.", "Open the current Deliveries workspace for available records."],
-  ["Schedule", "Coordinate production and delivery milestones.", "A shared studio schedule is not connected yet."],
-  ["Statements", "Review verified licensing and settlement records.", "Financial statements are not connected yet."],
-  ["Insights", "Review verified studio portfolio activity.", "Studio analytics are not connected yet."],
-  ["Help", "Get help with studio onboarding and production workflows.", "Use the existing Bridge support channel."],
+  ["Organization", "Studio identity, verified organization scope and account owner.", "Organization scope is resolved from active membership. Contact Super Admin for membership corrections."],
+  ["Members & Roles", "View the members assigned to this Studio organization.", "Read-only roster. Membership invitations and role changes are not enabled in this release."],
+  ["Productions", "Coordinate active productions using canonical Studio-owned titles.", "Studio title and DIT ingest workflows are connected; a separate production schedule is not yet connected."],
+  ["QC & Rights", "Track QC, Legal and Rights decisions before commercial release.", "Review decisions remain in the authoritative Admin QC / Legal / Rights workstations; title status alone is not approval."],
+  ["Deliveries", "Track delivery jobs, assignments and approval.", "Open the shared Deliveries workspace for persisted jobs and server-authorized actions."],
+  ["Schedule", "Coordinate production and delivery milestones.", "No production calendar is connected yet; no sample dates or synthetic milestones are shown."],
+  ["Statements", "Review captured payments and verified settlements.", "No Studio statement report is currently connected. Unverified licensing fees are not shown as cash received."],
+  ["Insights", "Review persisted Studio titles, ingest and delivery activity.", "Only verified database-backed activity is displayed. Audience and commercial analytics remain unconnected."],
+  ["Help", "Get support with Studio onboarding and production workflows.", "Use the existing Bridge support channel."],
 ] as const;
 
 function Studio() {
@@ -31,7 +31,7 @@ function Studio() {
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Studio workspace</p>
                 <h2 className="mt-1 font-display text-2xl font-semibold sm:text-3xl">{actor.organizationName || actor.displayName}</h2>
-                <p className="mt-1 max-w-2xl text-sm text-muted">Manage studio-owned titles and coordinate organization, production and DIT work. Member access and title visibility remain server-authorized.</p>
+                <p className="mt-1 max-w-2xl text-sm text-muted">Manage Studio-owned titles, production handover, members and Camera-to-Cloud ingest. All records remain scoped to the verified Studio organization.</p>
               </div>
               <Link to="/deliveries" className="rounded-sm border border-line px-4 py-2 text-sm font-semibold">View deliveries</Link>
             </section>
@@ -40,7 +40,7 @@ function Studio() {
               <a href="#studio-titles" className="rounded-sm border border-line p-4 hover:border-accent"><strong>Studio Titles</strong><p className="mt-1 text-sm text-muted">Finished films and story concepts</p></a>
               <a href="#studio-operations" className="rounded-sm border border-line p-4 hover:border-accent"><strong>Production & DIT</strong><p className="mt-1 text-sm text-muted">Production operations and media handover</p></a>
               <Link to="/account" className="rounded-sm border border-line p-4 hover:border-accent"><strong>Account</strong><p className="mt-1 text-sm text-muted">Studio account profile</p></Link>
-              <a href="#studio-dit" className="rounded-sm border border-line p-4 hover:border-accent"><strong>DIT Agent</strong><p className="mt-1 text-sm text-muted">Camera-card manifest, checksum evidence and sign-off</p></a>
+              <a href="#studio-dit" className="rounded-sm border border-line p-4 hover:border-accent"><strong>DIT Agent</strong><p className="mt-1 text-sm text-muted">Camera-to-Cloud ingest, Primary / Recovery copy verification and sign-off</p></a>
             </section>
 
             <section className="space-y-4">
@@ -72,7 +72,7 @@ function Studio() {
             <section id="studio-dit" className="space-y-3">
               <div>
                 <h3 className="font-display text-xl font-semibold">Studio DIT Agent</h3>
-                <p className="mt-1 text-sm text-muted">Register source-card manifests, compare Primary and Recovery manifest evidence, and record operator sign-off. Server actions are restricted to active Studio owner, admin, producer or DIT memberships.</p>
+                <p className="mt-1 text-sm text-muted">Register camera-card manifests, upload original files to OCI Primary, create and verify the independent Recovery copy, and record DIT operator sign-off. Original folder paths and filenames are preserved. Actions require an active Studio owner, admin, producer or DIT membership.</p>
               </div>
               <DitAgentDesk actor={actor} />
             </section>
