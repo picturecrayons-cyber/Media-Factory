@@ -31,7 +31,7 @@ function harness(
   };
   const sql = async (strings: TemplateStringsArray, ...values: unknown[]) => {
     const query = strings.join("?");
-    if (query.includes("from bridge_titles")) return [title];
+    if (query.includes("from bridge_titles b")) return [{\n      id: "title-1", name: "Film", bridge_status: "LICENSED", language: "Malayalam",\n      loop_title_id: "loop-1", authorization_status: "authorized", territories: ["WORLDWIDE"],\n      languages: ["Malayalam"], exploitation_models: ["TVOD"], window_start: null, window_end: null,\n      loop_status: "approved", listed: true, published: true,\n    }];\n    if (query.includes("from bridge_titles")) return [title];
     if (query.includes("select evidence from bridge_rights_grants"))
       return [
         { evidence: [{ commercialTerms: { rightsOwnerSharePct: 80, distributorSharePct: 20 } }] },
@@ -62,7 +62,7 @@ function harness(
     "@/lib/auth/middleware": { authMiddleware: {} },
     "@/lib/db": { getSql: async () => sql },
     "./rbac": { assertPermission: () => { if (!allowed) throw new Error("Forbidden"); } },
-    "./session": { requireVerifiedActor: async () => ({ userId: "operator", emailVerified: true }) },
+    "./session": { requireVerifiedActor: async () => ({ userId: "operator", emailVerified: true, internalRole }) },
     "./guards": { assertNotDevUser: () => {} },
     "./audit": { writeAudit: async () => {} },
     "./rights-coverage": rights,
@@ -83,7 +83,7 @@ function harness(
       return modules[name];
     },
   });
-  return { authorize: exports.authorizeLoopPublication, writes };
+  return { authorize: exports.authorizeLoopPublication, snapshot: exports.listLoopCmsGovernanceSnapshot, writes };
 }
 
 const grant = {
@@ -151,4 +151,22 @@ test("publication requires all four release certifications", async () => {
     await assert.rejects(h.authorize({ context, data }), /Distribution Authorization Blocked/);
     assert.equal(h.writes.length, 0);
   }
+});
+
+
+test("Super Admin Loop CMS governance snapshot is read-only", async () => {
+  const h = harness([grant]);
+  const result = await h.snapshot({ context }) as {
+    titles: Array<{ id: string; publication: { published: boolean; authorizationStatus: string } | null }>;
+  };
+  assert.equal(result.titles.length, 1);
+  assert.equal(result.titles[0].publication?.authorizationStatus, "authorized");
+  assert.equal(result.titles[0].publication?.published, true);
+  assert.equal(h.writes.length, 0);
+});
+
+test("Loop CMS governance snapshot rejects non-Super Admin staff", async () => {
+  const h = harness([grant], true, false, undefined, "admin");
+  await assert.rejects(h.snapshot({ context }), /Super Admin access required/);
+  assert.equal(h.writes.length, 0);
 });
