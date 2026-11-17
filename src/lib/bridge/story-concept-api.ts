@@ -188,16 +188,18 @@ export const listMyStoryConcepts = createServerFn({ method: "GET" })
     const sql = await getSql();
 
     try {
-      const rows = await sql<ConceptRow & { title_name: string }>`
-        select c.*, t.name as title_name
+      const rows = await sql<ConceptRow & { title_name: string; title_status: string }>`
+        select c.*, t.name as title_name, t.status as title_status
         from bridge_story_concept_submissions c
         join bridge_titles t on t.id = c.title_id
-        where t.owner_user_id = ${actor.userId}
+        where t.archived_at is null
+          and (t.owner_user_id = ${actor.userId}
            or (
              t.owner_account_type = 'studio'
              and t.owner_organization_id is not null
              and t.owner_organization_id = ${actor.organizationId ?? null}
            )
+          )
         order by c.created_at desc
         limit 100
       `;
@@ -206,6 +208,7 @@ export const listMyStoryConcepts = createServerFn({ method: "GET" })
         concepts: rows.map((r) => ({
           ...mapConcept(r),
           titleName: r.title_name,
+          titleStatus: r.title_status,
         })),
       };
     } catch (err) {
@@ -230,7 +233,7 @@ export const listPendingStoryConcepts = createServerFn({ method: "GET" })
         select c.*, t.name as title_name, t.owner_user_id
         from bridge_story_concept_submissions c
         join bridge_titles t on t.id = c.title_id
-        where c.curation_status in ('PENDING', 'UNDER_REVIEW', 'APPROVED')
+        where t.archived_at is null and c.curation_status in ('PENDING', 'UNDER_REVIEW', 'APPROVED')
         order by c.created_at asc
         limit 200
       `;

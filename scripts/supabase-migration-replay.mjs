@@ -17,7 +17,10 @@ const { Pool } = pg;
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const MIGRATIONS_DIR = resolve(SCRIPT_DIR, "../supabase/migrations");
 const DATABASE_URL = process.env.SUPABASE_REPLAY_DATABASE_URL?.trim();
-const EXPECTED_MIGRATIONS = 69;
+const EXPECTED_BASELINE_MIGRATIONS = 69;
+const FEATURE_MIGRATION = "20261116150000_bridge_title_archive_restore.sql";
+const FEATURE_MIGRATION_BYTES = 1117;
+const FEATURE_MIGRATION_SHA256 = "3669b65c17642c2867c6efb7f8505943e8397756890fb6748bb6eb6ced9449bc";
 const FIXTURE_MIGRATION =
   "20261113090535_map_verified_streamvista_studio_owner_20261113.sql";
 const FIXTURE_USER_ID = "bridge-migration-replay-fixture";
@@ -54,9 +57,10 @@ const names = (await readdir(MIGRATIONS_DIR))
   .filter((name) => /^\d{14}_[a-z0-9_]+\.sql$/.test(name))
   .sort((a, b) => a.localeCompare(b));
 
-if (names.length !== EXPECTED_MIGRATIONS) {
+const baselineNames = names.filter((name) => name !== FEATURE_MIGRATION);
+if (baselineNames.length !== EXPECTED_BASELINE_MIGRATIONS || !names.includes(FEATURE_MIGRATION)) {
   throw new Error(
-    `Expected ${EXPECTED_MIGRATIONS} versioned migrations; found ${names.length}`,
+    `Expected ${EXPECTED_BASELINE_MIGRATIONS} baseline migrations plus ${FEATURE_MIGRATION}; found ${baselineNames.length} baseline and feature=${names.includes(FEATURE_MIGRATION)}`,
   );
 }
 if (new Set(names).size !== names.length) {
@@ -86,13 +90,26 @@ for (const line of manifest.split(String.fromCharCode(10))) {
   }
   manifestRows.set(`${version}_${migrationName}.sql`, { bytes, sha256 });
 }
-if (manifestRows.size !== EXPECTED_MIGRATIONS) {
+if (manifestRows.size !== EXPECTED_BASELINE_MIGRATIONS) {
   throw new Error(
-    `Expected ${EXPECTED_MIGRATIONS} manifest rows; found ${manifestRows.size}`,
+    `Expected ${EXPECTED_BASELINE_MIGRATIONS} immutable baseline manifest rows; found ${manifestRows.size}`,
   );
 }
 
-for (const name of names) {
+const featureMigrationPath = join(MIGRATIONS_DIR, FEATURE_MIGRATION);
+const featureMigrationContents = await readFile(featureMigrationPath);
+const featureMigrationBytes = featureMigrationContents.byteLength;
+const featureMigrationSha256 = createHash("sha256").update(featureMigrationContents).digest("hex");
+if (
+  featureMigrationBytes !== FEATURE_MIGRATION_BYTES ||
+  featureMigrationSha256 !== FEATURE_MIGRATION_SHA256
+) {
+  throw new Error(
+    `Feature migration integrity mismatch: ${featureMigrationBytes} bytes / ${featureMigrationSha256}`,
+  );
+}
+
+for (const name of baselineNames) {
   const contents = await readFile(join(MIGRATIONS_DIR, name));
   const expected = manifestRows.get(name);
   if (!expected) throw new Error(`Migration missing from manifest: ${name}`);
@@ -731,8 +748,49 @@ try {
     throw new Error("The one-time Studio owner mapping did not complete in replay");
   }
 
+  // Apply only the new feature migration after the immutable 69-row
+  // Production source ledger. This is still a disposable local replay DB.
+  await client.query("BEGIN");
+  try {
+    await client.query(await readFile(featureMigrationPath, "utf8"));
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  }
+  const archiveColumns = await client.query(`
+    select column_name
+    from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'bridge_titles'
+      and column_name in ('archived_at', 'archived_by', 'archive_reason')
+    order by column_name
+  `);
+  const archiveConstraint = await client.query(`
+    select exists (
+      select 1 from pg_constraint
+      where conrelid = 'public.bridge_titles'::regclass
+        and conname = 'bridge_titles_archive_state_check'
+    ) as exists
+  `);
+  const archiveIndexes = await client.query(`
+    select count(*)::int as count
+    from pg_indexes
+    where schemaname = 'public'
+      and indexname in (
+        'bridge_titles_active_owner_updated_idx',
+        'bridge_titles_archived_owner_updated_idx'
+      )
+  `);
+  if (
+    archiveColumns.rows.length !== 3 ||
+    !archiveConstraint.rows[0].exists ||
+    archiveIndexes.rows[0].count !== 2
+  ) {
+    throw new Error("Draft archive feature migration schema verification failed");
+  }
   console.log(
-    `[migration-replay] PASS: all ${names.length} Production-ledger migrations replayed in a fresh local Supabase stack.`,
+    `[migration-replay] PASS: ${baselineNames.length} immutable baseline migrations plus feature migration ${FEATURE_MIGRATION} verified in disposable local Supabase.`,
   );
 } finally {
   client.release();
