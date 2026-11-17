@@ -15,7 +15,7 @@ export function supabaseRefFromUrl(url: string | undefined): string | null {
   if (!url) return null;
   try {
     const host = new URL(url).hostname;
-    const m = host.match(/^([a-z0-9]+)\\.supabase\\.co$/i);
+    const m = host.match(/^([a-z0-9]+)\.supabase\.co$/i);
     return m?.[1] ?? null;
   } catch {
     return null;
