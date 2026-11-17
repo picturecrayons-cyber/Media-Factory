@@ -4,6 +4,7 @@ import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import { assertNotDevUser } from "./guards";
 import { requireVerifiedActor } from "./session";
+import { assertPermission } from "./rbac";
 import { writeAudit } from "./audit";
 
 const SOURCE_TABLES = [
@@ -34,6 +35,7 @@ async function requireSuperAdmin(userId: string) {
   if (actor.internalRole !== "super_admin") {
     throw new Error("Super Admin access is required to resolve legacy mappings");
   }
+  assertPermission(actor, "title.approve");
   return actor;
 }
 
