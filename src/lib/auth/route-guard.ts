@@ -1,7 +1,10 @@
-import { redirect } from "@tanstack/react-router";
-import { getBridgeSession } from "@/lib/bridge/session";
+import type { BridgeActor } from "../bridge/session";
 
-export type ProtectedBridgeSession = Awaited<ReturnType<typeof getBridgeSession>>;
+export type ProtectedBridgeSession = {
+  userId: string;
+  profile: BridgeActor | null;
+  home: string;
+};
 export type AuthenticatedBridgeSession = ProtectedBridgeSession & {
   profile: NonNullable<ProtectedBridgeSession["profile"]>;
 };
@@ -63,15 +66,21 @@ export async function resolveProtectedBridgeRoute(
 
 const browserDependencies: GuardDependencies = {
   isBrowser: typeof window !== "undefined",
-  getSession: () => getBridgeSession(),
+  getSession: async () => {
+    const { getBridgeSession } = await import("../bridge/session");
+    return getBridgeSession();
+  },
   goToLogin: () => {
-    throw redirect({ to: "/login", replace: true });
+    if (typeof window !== "undefined") window.location.replace("/login");
+    throw new Error("Redirecting to sign in");
   },
   goToOnboarding: () => {
-    throw redirect({ to: "/onboarding", replace: true });
+    if (typeof window !== "undefined") window.location.replace("/onboarding");
+    throw new Error("Redirecting to onboarding");
   },
   goToWorkspace: () => {
-    throw redirect({ to: "/workspace", replace: true });
+    if (typeof window !== "undefined") window.location.replace("/workspace");
+    throw new Error("Redirecting to workspace");
   },
 };
 
