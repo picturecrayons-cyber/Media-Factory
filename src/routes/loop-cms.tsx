@@ -27,7 +27,6 @@ function LoopCmsBody() {
   const titles = snapshotQ.data?.titles ?? [];
   const mapped = titles.filter((title) => title.publication);
   const published = mapped.filter((title) => title.publication?.published);
-  const blockedOrUnpublished = mapped.filter((title) => !title.publication?.published);
 
   return (
     <div className="space-y-6">
