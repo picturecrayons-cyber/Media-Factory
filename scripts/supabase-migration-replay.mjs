@@ -90,7 +90,11 @@ for (const line of manifest.split(String.fromCharCode(10))) {
   if (!Number.isSafeInteger(bytes) || bytes < 1) {
     throw new Error(`Invalid byte count for ${version}`);
   }
-  manifestRows.set(`${version}_${migrationName}.sql`, { bytes, sha256 });
+  const filename = `${version}_${migrationName}.sql`;
+  // New PR migrations are validated from the pending-source manifest below,
+  // not folded into the historical Production ledger manifest count.
+  if (PENDING_MIGRATIONS.has(filename)) continue;
+  manifestRows.set(filename, { bytes, sha256 });
 }
 if (manifestRows.size !== EXPECTED_MIGRATIONS) {
   throw new Error(
