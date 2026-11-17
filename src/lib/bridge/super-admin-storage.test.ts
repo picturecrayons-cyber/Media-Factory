@@ -70,7 +70,7 @@ test("Super Admin storage overview is metadata-only and performs SELECTs only", 
   assert.equal(result.recentAssets[0].reference, "asset-ref");
   assert.equal(result.recentAssets[0].verified, true);
   assert.equal(h.queries.length, 2);
-  assert.ok(h.queries.every((query) => !/\\b(insert|update|delete)\\b/i.test(query)));
+  assert.ok(h.queries.every((query) => !/\b(insert|update|delete)\b/i.test(query)));
   assert.ok(h.queries.every((query) => !/s3_key|owner_user_id|created_by/i.test(query)));
 });
 
