@@ -1,4 +1,3 @@
-import { randomBytes } from "node:crypto";
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { authMiddleware } from "@/lib/auth/middleware";
@@ -47,6 +46,8 @@ export const reconcileProductionAssets = createServerFn({ method: "POST" })
       existingAssetsVerified: 0,
       missingInOci: 0,
       failed: 0,
+      mappingBlockedRows: 0,
+      mappingMismatchRows: 0,
       errors: [] as string[],
     };
 
@@ -57,13 +58,14 @@ export const reconcileProductionAssets = createServerFn({ method: "POST" })
     // AWS source keys are never treated as OCI paths and are never copied by this action.
     const queueRows = await sql<{
       id: string;
+      legacy_film_id: number | null;
       title_id: string;
       title_name: string;
       asset_kind: string;
       source_key: string | null;
       target_path: string;
     }>`
-      select q.id::text as id, q.title_id, t.name as title_name,
+      select q.id::text as id, q.legacy_film_id, q.title_id, t.name as title_name,
              q.asset_kind, q.source_key, q.target_path
       from loop_media_migration_queue q
       join bridge_titles t on t.id = q.title_id
@@ -76,6 +78,18 @@ export const reconcileProductionAssets = createServerFn({ method: "POST" })
         and lower(t.name) not like 'test%'
         and lower(t.name) not like '%internal test%'
         and q.asset_kind in ('MASTER', 'POSTER', 'TRAILER')
+        -- Legacy queue rows are eligible only after the exact source film ID
+        -- has been independently verified against this Bridge title.
+        and (
+          q.legacy_film_id is null
+          or exists (
+            select 1 from streamvista_legacy_links l
+            where l.source_table = 'films_film'
+              and l.legacy_id = q.legacy_film_id::text
+              and l.review_status = 'verified'
+              and l.bridge_title_id = q.title_id
+          )
+        )
         and not exists (
           select 1 from bridge_assets a
           where a.title_id = q.title_id and a.s3_key = q.target_path
@@ -96,8 +110,9 @@ export const reconcileProductionAssets = createServerFn({ method: "POST" })
         if (!Number.isSafeInteger(source.byteSize) || source.byteSize <= 0 || !source.etag) {
           throw new Error("OCI target did not return a positive size and ETag");
         }
-        const assetId = randomBytes(16).toString("hex");
-        const sealedKey = `${row.target_path}.verified/${assetId}`;
+        // Stable IDs and keys make retries and overlapping scans idempotent.
+        const assetId = `legacy-queue-${row.id}`;
+        const sealedKey = `${row.target_path}.verified/queue-${row.id}`;
         const sealed = await sealVerifiedObject(row.target_path, sealedKey, source.etag);
         if (
           !Number.isSafeInteger(sealed.byteSize) ||
@@ -116,6 +131,17 @@ export const reconcileProductionAssets = createServerFn({ method: "POST" })
             for update
           `;
           if (!lockedQueue) return false;
+          if (row.legacy_film_id !== null) {
+            const [verifiedMapping] = await tx<{ legacy_id: string }>`
+              select legacy_id from streamvista_legacy_links
+              where source_table = 'films_film'
+                and legacy_id = ${String(row.legacy_film_id)}
+                and review_status = 'verified'
+                and bridge_title_id = ${row.title_id}
+              for share
+            `;
+            if (!verifiedMapping) return false;
+          }
           const [lockedTitle] = await tx<{ id: string }>`
             select id from bridge_titles
             where id = ${row.title_id}
@@ -235,6 +261,7 @@ export const reconcileProductionAssets = createServerFn({ method: "POST" })
     if (queueRows.length === 0) {
       const assetRows = await sql<{
         id: string;
+        legacy_film_id: number | null;
         title_id: string;
         title_name: string;
         kind: string;
@@ -257,7 +284,16 @@ export const reconcileProductionAssets = createServerFn({ method: "POST" })
                    end
                  order by q.id desc
                  limit 1
-               ) as source_key
+               ) as source_key,
+               (
+                 select q.legacy_film_id
+                 from loop_media_migration_queue q
+                 where q.title_id = a.title_id
+                   and q.target_path = a.s3_key
+                   and q.target_provider = 'oci_object_storage'
+                 order by q.id desc
+                 limit 1
+               ) as legacy_film_id
         from bridge_assets a
         join bridge_titles t on t.id = a.title_id
         where a.id > ${data.assetAfterId}
@@ -267,6 +303,23 @@ export const reconcileProductionAssets = createServerFn({ method: "POST" })
           and t.merged_into_title_id is null
           and lower(t.name) not like 'test%'
           and lower(t.name) not like '%internal test%'
+          -- A queue-linked legacy asset is held until the source-to-title link is verified.
+          and not exists (
+            select 1
+            from loop_media_migration_queue q
+            where q.title_id = a.title_id
+              and q.target_path = a.s3_key
+              and q.target_provider = 'oci_object_storage'
+              and q.legacy_film_id is not null
+              and not exists (
+                select 1
+                from streamvista_legacy_links l
+                where l.source_table = 'films_film'
+                  and l.legacy_id = q.legacy_film_id::text
+                  and l.review_status = 'verified'
+                  and l.bridge_title_id = q.title_id
+              )
+          )
         order by a.id asc
         limit ${data.limit}
       `;
@@ -298,6 +351,17 @@ export const reconcileProductionAssets = createServerFn({ method: "POST" })
               for update
             `;
             if (!lockedTitle) return false;
+            if (row.legacy_film_id !== null) {
+              const [verifiedMapping] = await tx<{ legacy_id: string }>`
+                select legacy_id from streamvista_legacy_links
+                where source_table = 'films_film'
+                  and legacy_id = ${String(row.legacy_film_id)}
+                  and review_status = 'verified'
+                  and bridge_title_id = ${row.title_id}
+                for share
+              `;
+              if (!verifiedMapping) return false;
+            }
             const updated = await tx<{ id: string }>`
               update bridge_assets
               set byte_size = ${sealed.byteSize},
@@ -354,7 +418,7 @@ export const reconcileProductionAssets = createServerFn({ method: "POST" })
               where title_id = ${row.title_id}
                 and asset_kind = ${queueKind}
                 and target_path = ${row.s3_key}
-                and status in ('PENDING_REUPLOAD', 'UPLOADED')
+                and status in ('PENDING_REUPLOAD', 'MISSING_SOURCE_MEDIA', 'UPLOADED')
             `;
 
             await writeAudit(
@@ -391,6 +455,38 @@ export const reconcileProductionAssets = createServerFn({ method: "POST" })
 
     }
 
+    const [mappingBlocked] = await sql<{ n: number }>`
+      select count(*)::int as n
+      from loop_media_migration_queue q
+      join bridge_titles t on t.id = q.title_id
+      where q.status in ('PENDING_REUPLOAD', 'MISSING_SOURCE_MEDIA', 'UPLOADED')
+        and q.target_provider = 'oci_object_storage'
+        and q.target_path is not null
+        and q.legacy_film_id is not null
+        and t.merged_into_title_id is null
+        and lower(t.name) not like 'test%'
+        and lower(t.name) not like '%internal test%'
+        and not exists (
+          select 1 from streamvista_legacy_links l
+          where l.source_table = 'films_film'
+            and l.legacy_id = q.legacy_film_id::text
+            and l.review_status = 'verified'
+            and l.bridge_title_id = q.title_id
+        )
+    `;
+    const [mappingMismatch] = await sql<{ n: number }>`
+      select count(*)::int as n
+      from loop_media_migration_queue q
+      join streamvista_legacy_links l
+        on l.source_table = 'films_film'
+       and l.legacy_id = q.legacy_film_id::text
+      where q.status in ('PENDING_REUPLOAD', 'MISSING_SOURCE_MEDIA', 'UPLOADED')
+        and q.target_provider = 'oci_object_storage'
+        and q.legacy_film_id is not null
+        and l.review_status = 'pending'
+        and l.bridge_title_id is not null
+        and l.bridge_title_id <> q.title_id
+    `;
     const [queueRemaining] = await sql<{ n: number }>`
       select count(*)::int as n
       from loop_media_migration_queue q
@@ -404,6 +500,16 @@ export const reconcileProductionAssets = createServerFn({ method: "POST" })
         and lower(t.name) not like 'test%'
         and lower(t.name) not like '%internal test%'
         and q.asset_kind in ('MASTER', 'POSTER', 'TRAILER')
+        and (
+          q.legacy_film_id is null
+          or exists (
+            select 1 from streamvista_legacy_links l
+            where l.source_table = 'films_film'
+              and l.legacy_id = q.legacy_film_id::text
+              and l.review_status = 'verified'
+              and l.bridge_title_id = q.title_id
+          )
+        )
         and not exists (
           select 1 from bridge_assets a
           where a.title_id = q.title_id and a.s3_key = q.target_path
@@ -420,6 +526,22 @@ export const reconcileProductionAssets = createServerFn({ method: "POST" })
         and t.merged_into_title_id is null
         and lower(t.name) not like 'test%'
         and lower(t.name) not like '%internal test%'
+        and not exists (
+          select 1
+          from loop_media_migration_queue q
+          where q.title_id = a.title_id
+            and q.target_path = a.s3_key
+            and q.target_provider = 'oci_object_storage'
+            and q.legacy_film_id is not null
+            and not exists (
+              select 1
+              from streamvista_legacy_links l
+              where l.source_table = 'films_film'
+                and l.legacy_id = q.legacy_film_id::text
+                and l.review_status = 'verified'
+                and l.bridge_title_id = q.title_id
+            )
+        )
     `;
     const [unmatchedLegacy] = await sql<{ n: number }>`
       select count(*)::int as n
@@ -435,5 +557,7 @@ export const reconcileProductionAssets = createServerFn({ method: "POST" })
       queueHasMore: Number(queueRemaining?.n ?? 0) > 0,
       assetsHaveMore: Number(assetsRemaining?.n ?? 0) > 0,
       unmatchedLegacyRows: Number(unmatchedLegacy?.n ?? 0),
+      mappingBlockedRows: Number(mappingBlocked?.n ?? 0),
+      mappingMismatchRows: Number(mappingMismatch?.n ?? 0),
     };
   });
