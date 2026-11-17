@@ -218,7 +218,7 @@ export const reconcileProductionAssets = createServerFn({ method: "POST" })
                 ),
                 'checksum_sha256_state', 'PENDING'
               ),
-              'PROCESSING', ${actor.userId}
+              'ACTION_REQUIRED', ${actor.userId}
             from bridge_asset_versions
             where title_id = ${row.title_id}
               and asset_type = ${kind}
@@ -448,7 +448,7 @@ export const reconcileProductionAssets = createServerFn({ method: "POST" })
                   ),
                   'checksum_sha256_state', 'PENDING'
                 ),
-                'PROCESSING', ${actor.userId}
+                'ACTION_REQUIRED', ${actor.userId}
               from bridge_asset_versions
               where title_id = ${row.title_id}
                 and asset_type = ${row.kind}
