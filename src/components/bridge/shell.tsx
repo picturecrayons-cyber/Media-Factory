@@ -22,7 +22,10 @@ function navigationFor(actor: BridgeActor): NavItem[] {
 
     if (actor.internalRole === "super_admin") {
       items.unshift({ to: "/dashboard", label: "Founder Centre" });
-      items.push({ to: "/cms", label: "Loop Gateway" });
+      items.push(
+        { to: "/internal/legacy-links", label: "Legacy Mapping Review" },
+        { to: "/cms", label: "Loop Gateway" },
+      );
     }
 
     return [...items, { to: "/account", label: "Account" }];
