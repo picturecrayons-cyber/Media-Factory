@@ -162,7 +162,7 @@ export function AssetPreviewGallery({ assets }: { assets: PreviewAsset[] }) {
                   </details>
                 ) : null}
               </div>
-            </article>  </article>
+            </article>
           ))}
         </div>
       </section>
