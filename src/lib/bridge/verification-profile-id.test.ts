@@ -15,7 +15,6 @@ test("verification requires an existing Bridge profile", () => {
   assert.throws(() => verificationProfileId(null), /Bridge profile required/);
 });
 
-
 test("verification challenge identity resolution accepts an existing unverified Bridge profile", () => {
   const unverifiedActor = { userId: "unverified-buyer-profile", emailVerified: false } as BridgeActor;
   assert.equal(verificationProfileId(unverifiedActor), "unverified-buyer-profile");
