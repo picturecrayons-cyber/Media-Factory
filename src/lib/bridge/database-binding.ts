@@ -1,3 +1,5 @@
+import { CANONICAL_SUPABASE_REF, STAGING_SUPABASE_REF } from "./canonical.ts";
+
 type DatabaseBindingEnv = {
   VERCEL_ENV?: string;
   BRIDGE_DATABASE_TARGET?: string;
@@ -18,17 +20,38 @@ function projectRefFromSupabaseUrl(value: string | undefined): string | null {
   if (!value) return null;
   try {
     const hostname = new URL(value).hostname.toLowerCase();
-    const match = hostname.match(/^([a-z0-9]{20})\.supabase\.co$/);
+    const match = hostname.match(/^([a-z0-9]{20})\\.supabase\\.co$/);
     return match?.[1] ?? null;
   } catch {
     return null;
   }
 }
 
+function databaseMatchesProject(selected: string, expectedRef: string): boolean {
+  let parsed: URL;
+  try {
+    parsed = new URL(selected.trim());
+  } catch {
+    throw new Error("The Bridge database binding is not a valid PostgreSQL URL.");
+  }
+  if (parsed.protocol !== "postgres:" && parsed.protocol !== "postgresql:") {
+    throw new Error("The Bridge database binding must use postgres:// or postgresql://.");
+  }
+  const hostMatches = parsed.hostname.toLowerCase() === `db.${expectedRef}.supabase.co`;
+  let username = parsed.username.toLowerCase();
+  try {
+    username = decodeURIComponent(username);
+  } catch {
+    throw new Error("The Bridge database binding has an invalid encoded username.");
+  }
+  const poolerUsernameMatches = username.split(".").includes(expectedRef);
+  return hostMatches || poolerUsernameMatches;
+}
+
 /**
- * Preview is fail-closed: it must explicitly select STAGING and its Postgres
- * host or pooler username must identify the same project as the Supabase API URL.
- * Production/local retain their existing configured binding.
+ * Preview is fail-closed and may connect only to the approved Testing DB.
+ * Production is pinned to the canonical Production project. Local retains its
+ * existing configured binding for developer workflows.
  */
 export function resolveBridgeDatabaseUrl(env: DatabaseBindingEnv): string | undefined {
   const selected = firstConfigured(
@@ -44,44 +67,24 @@ export function resolveBridgeDatabaseUrl(env: DatabaseBindingEnv): string | unde
     );
   }
 
-  if (env.VERCEL_ENV !== "preview") return selected;
-
-  if (!selected) {
-    throw new Error(
-      "DATABASE_URL or POSTGRES_URL for the approved STAGING Supabase project is required on Bridge Preview.",
-    );
-  }
+  if (env.VERCEL_ENV !== "preview" && env.VERCEL_ENV !== "production") return selected;
 
   const expectedRef = projectRefFromSupabaseUrl(
     firstConfigured(env.SUPABASE_URL, env.VITE_SUPABASE_URL, env.NEXT_PUBLIC_SUPABASE_URL),
   );
-  if (!expectedRef) {
-    throw new Error("A valid STAGING Supabase URL is required to verify the Preview database binding.");
-  }
+  const allowedRef = env.VERCEL_ENV === "preview" ? STAGING_SUPABASE_REF : CANONICAL_SUPABASE_REF;
+  const environmentLabel = env.VERCEL_ENV === "preview" ? "STAGING" : "Production";
 
-  let parsed: URL;
-  try {
-    parsed = new URL(selected.trim());
-  } catch {
-    throw new Error("The Preview STAGING database binding is not a valid PostgreSQL URL.");
+  if (expectedRef !== allowedRef) {
+    throw new Error(`Bridge ${environmentLabel} must use its explicitly approved Supabase project URL.`);
   }
-  if (parsed.protocol !== "postgres:" && parsed.protocol !== "postgresql:") {
-    throw new Error("The Preview STAGING database binding must use postgres:// or postgresql://.");
+  if (!selected) {
+    throw new Error(`A PostgreSQL database URL for the approved Bridge ${environmentLabel} project is required.`);
   }
-
-  const hostMatches = parsed.hostname.toLowerCase() === `db.${expectedRef}.supabase.co`;
-  let username = parsed.username.toLowerCase();
-  try {
-    username = decodeURIComponent(username);
-  } catch {
-    throw new Error("The Preview STAGING database binding has an invalid encoded username.");
-  }
-  const poolerUsernameMatches = username.split(".").includes(expectedRef);
-  if (!hostMatches && !poolerUsernameMatches) {
+  if (!databaseMatchesProject(selected, allowedRef)) {
     throw new Error(
-      "Preview database binding does not match the configured STAGING Supabase project; refusing the connection.",
+      `Bridge database binding does not match the approved ${environmentLabel} Supabase project; refusing the connection.`,
     );
   }
-
   return selected;
 }
