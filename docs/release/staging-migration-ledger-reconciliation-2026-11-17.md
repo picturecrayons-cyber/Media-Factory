@@ -12,14 +12,14 @@ This is a documentation-only reconciliation. No SQL writes, migrations, `migrati
 ## Executive result
 
 - STAGING project status: ACTIVE_HEALTHY.
-- STAGING recorded migration ledger: **55 entries**.
+- STAGING recorded migration ledger: **61 entries**.
 - Canonical Bridge Production source manifest (snapshot 2026-11-16): **69 entries**.
 - Version overlap between the two ledgers: **0**.
 - Conclusion: **FAIL — NOT A COMMON MIGRATION LINEAGE / NOT RECONCILED**.
 
 The 69-entry manifest in `docs/release/bridge-supabase-migration-reconciliation-2026-11-16.md` is explicitly sourced from Production project `mlmgugivsyoxzdgwkbpu`. It must not be treated as the expected applied migration list for STAGING. STAGING has a separate test-specific migration history with different version identifiers and migration names. Zero matching versions does not prove schema divergence by itself; it proves that a direct version-ledger reconciliation cannot be declared PASS.
 
-**Do not run `supabase db push`, `supabase migration repair`, or apply any Production-source migration to STAGING based on this comparison.** First build a semantic schema/object reconciliation from the current STAGING catalog, the 55 recorded STAGING migration SQL bodies, and the intended STAGING target contract.
+**Do not run `supabase db push`, `supabase migration repair`, or apply any Production-source migration to STAGING based on this comparison.** First build a semantic schema/object reconciliation from the current STAGING catalog, the 61 recorded STAGING migration SQL bodies, and the intended STAGING target contract.
 
 ## STAGING ledger — exact current entries
 
@@ -79,13 +79,13 @@ The 69-entry manifest in `docs/release/bridge-supabase-migration-reconciliation-
 | 52 | `20261116111314` | `secure_public_loop_catalog_testing` |
 | 53 | `20261116111344` | `grant_public_loop_catalog_invoker_reads_testing` |
 | 54 | `20261116111454` | `normalize_public_loop_catalog_schema_testing` |
-| 55 | `20261116111631` | `restrict_public_loop_catalog_rpc_to_edge_service_testing` |
+| 55 | `20261116111631` | `restrict_public_loop_catalog_rpc_to_edge_service_testing` |\n| 56 | `20261116210822` | `bridge_title_hold_block_controls` |\n| 57 | `20261116224138` | `loop_viewer_profiles_20261117` |\n| 58 | `20261116224140` | `loop_watchlists_20261117` |\n| 59 | `20261116233444` | `streamvista_legacy_links_unresolved_resolution_state` |\n| 60 | `20261116234234` | `harden_legacy_links_service_role_privileges_20261117` |\n| 61 | `20261116234306` | `bridge_legal_consent_evidence_20261117` |
 
 ## Production manifest comparison
 
 - Production manifest source: `docs/release/bridge-supabase-migration-reconciliation-2026-11-16.md`, pinned snapshot in the Bridge repository.
 - Production manifest count: 69.
-- STAGING ledger count: 55.
+- STAGING ledger count: 61.
 - Exact version overlap: 0.
 - No attempt was made to compare or replay SQL bodies because the Production manifest is not the STAGING target and the full intended STAGING migration source set has not yet been independently pinned.
 
@@ -96,14 +96,14 @@ The connected Supabase project inventory lists public Bridge and Loop relations 
 - Bridge rights/production workflow: `bridge_titles`, `bridge_rights_grants`, `bridge_production_assets`, `bridge_dit_ingest_sessions`, `bridge_dit_ingest_files`, `bridge_dit_copy_verifications`.
 - Loop runtime: `loop_titles`, `bridge_loop_publications`, `loop_plans`, `loop_subscriptions`, `loop_user_tvod_entitlements`, `loop_payment_events`, `loop_watch_progress`, `loop_media_migration_queue`.
 
-The table inventory confirms RLS is enabled on listed public relations, but this is not proof that every policy, grant, function, trigger, constraint, index, storage policy, or edge function matches the intended design. The security advisor still reports 11 RLS-enabled tables without policies, two authenticated-callable SECURITY DEFINER functions, and disabled leaked-password protection.
+The table inventory confirms RLS is enabled on listed public relations, but this is not proof that every policy, grant, function, trigger, constraint, index, storage policy, or edge function matches the intended design. The latest security advisor reports 15 RLS-enabled tables without policies, two authenticated-callable SECURITY DEFINER functions, and disabled leaked-password protection.
 
 ## Blockers before a PASS
 
-1. Preserve the 55/55 applied SQL bodies recovered from read-only ledger queries and prior non-executable evidence archives; distinguish this from locating original migration files.
+1. Preserve the 61/61 applied SQL bodies recovered from read-only ledger queries and prior non-executable evidence archives; distinguish this from locating original migration files.
 2. Obtain the authoritative intended STAGING schema contract; do not use the Production manifest as a substitute.
 3. Produce a catalog inventory for tables/columns/types/defaults/constraints/FKs/indexes/views/functions/triggers/policies/grants/default ACLs/storage buckets and policies.
-4. Map all 55 applied entries to original source files/commits; 10 exact and 1 normalized source matches are already recorded, while 44 original-source mappings remain unverified. For the later 24 entries, ledger-statement serialization byte counts and SHA-256 fingerprints are recorded in `staging-migration-source-sha256-followup-2026-11-17.md`; these are not original file hashes.
+4. Map all 55 applied entries to original source files/commits; 10 exact and 1 normalized source matches are already recorded, while 50 original-source mappings remain unverified. For the later 24 entries, ledger-statement serialization byte counts and SHA-256 fingerprints are recorded in `staging-migration-source-sha256-followup-2026-11-17.md`; these are not original file hashes.
 5. Compare the catalog to a disposable local replay of the STAGING migration set, not to Production.
 6. Reconcile current object state against migration effects; separately identify intentional test fixtures and drift.
 7. Review security advisor findings and test-only functions/policies.
@@ -114,10 +114,10 @@ The table inventory confirms RLS is enabled on listed public relations, but this
 | Gate | Status |
 |---|---|
 | STAGING project identity/status/version | PASS |
-| STAGING migration ledger retrieved | PASS — 55 entries |
+| STAGING migration ledger retrieved | PASS — 61 entries |
 | Production source manifest retrieved | PASS — 69 entries |
 | Direct ledger version match | FAIL — 0 matching versions |
-| Applied STAGING SQL bodies preserved/retrieved | PASS — 55/55 |\n| Original source-file/commit mapping | PARTIAL — 11/55 (10 exact, 1 normalized); 44 unverified |\n| Later 24 ledger-statement serialization fingerprints | PASS — documented; not original file hashes |
+| Applied STAGING SQL bodies preserved/retrieved | PASS — 61/61 |\n| Original source-file/commit mapping | PARTIAL — 11/55 (10 exact, 1 normalized); 44 unverified |\n| Later 24 ledger-statement serialization fingerprints | PASS — documented; not original file hashes |
 | Intended STAGING schema contract pinned | BLOCKED |
 | Full semantic catalog comparison | BLOCKED |
 | Disposable replay of exact STAGING source | NOT RUN |
