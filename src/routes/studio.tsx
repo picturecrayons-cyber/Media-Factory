@@ -7,6 +7,7 @@ import { NewSubmissionPanel } from "@/components/bridge/new-submission-panel";
 import { StudioMemberDesk } from "@/components/bridge/studio-member-desk";
 import { DitAgentDesk } from "@/components/bridge/dit-agent-desk";
 import { StudioStatementDesk } from "@/components/bridge/studio-statement-desk";
+import { StudioScheduleDesk } from "@/components/bridge/studio-schedule-desk";
 
 export const Route = createFileRoute("/studio")({ component: Studio });
 
@@ -16,7 +17,7 @@ const studioModules = [
   ["Productions", "Coordinate active productions using canonical Studio-owned titles.", "Studio title and DIT ingest workflows are connected; a separate production schedule is not yet connected."],
   ["QC & Rights", "Track QC, Legal and Rights decisions before commercial release.", "Review decisions remain in the authoritative Admin QC / Legal / Rights workstations; title status alone is not approval."],
   ["Deliveries", "Track delivery jobs, assignments and approval.", "Open the shared Deliveries workspace for persisted jobs and server-authorized actions."],
-  ["Schedule", "Coordinate production and delivery milestones.", "No production calendar is connected yet; no sample dates or synthetic milestones are shown."],
+  ["Schedule", "Coordinate title-linked production and delivery milestones.", "Persisted events are organization-scoped and each status change is audit-logged."],
   ["Statements", "Review channel statements and their payment schedules.", "Read-only records show estimated, reported and reconciled amounts separately; a PAID status is not bank verification."],
   ["Insights", "Review persisted Studio titles, ingest and delivery activity.", "Only verified database-backed activity is displayed. Audience and commercial analytics remain unconnected."],
   ["Help", "Get support with Studio onboarding and production workflows.", "Use the existing Bridge support channel."],
@@ -78,6 +79,14 @@ function Studio() {
               <DitAgentDesk actor={actor} />
             </section>
 
+
+            <section id="studio-schedule" className="space-y-3">
+              <div>
+                <h3 className="font-display text-xl font-semibold">Production schedule</h3>
+                <p className="mt-1 text-sm text-muted">Create and track production events for titles owned by this Studio organization.</p>
+              </div>
+              <StudioScheduleDesk actor={actor} />
+            </section>
 
             <section id="studio-statements" className="space-y-3">
               <div>
