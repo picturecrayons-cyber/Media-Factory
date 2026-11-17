@@ -198,7 +198,7 @@ describe("Super Admin legacy mapping review", () => {
       "utf8",
     );
     const route = readFileSync(
-      join(process.cwd(), "src/routes/internal.legacy-links.tsx"),
+      join(process.cwd(), "src/routes/legacy-links.tsx"),
       "utf8",
     );
     const panel = readFileSync(
