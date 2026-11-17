@@ -121,6 +121,7 @@ async function fixture() {
       "./titles": {},
     "./env": {bridgeEnv:{}},
       "./workflow-policy": policy,
+      "./qc-readiness": { assertVerifiedTitleIngestReady: async () => undefined },
     };
     const exports: Record<string, (...args: unknown[]) => Promise<unknown>> = {};
     const source = readFileSync(new URL("./workflow.ts", import.meta.url), "utf8");
