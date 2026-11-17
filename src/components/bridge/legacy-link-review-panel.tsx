@@ -23,13 +23,17 @@ type DecisionInput =
       evidenceNote: string;
     }
   | {
-      sourceTable: string;
+      sourceTable: LegacySourceTable;
       legacyId: string;
       decision: "reject";
       evidenceNote: string;
     };
 
-function rowKey(sourceTable: string, legacyId: string) {
+function isLegacySourceTable(value: string): value is LegacySourceTable {
+  return (LEGACY_SOURCE_TABLES as readonly string[]).includes(value);
+}
+
+function rowKey(sourceTable: LegacySourceTable, legacyId: string) {
   return `${sourceTable}:${legacyId}`;
 }
 
@@ -122,8 +126,8 @@ export function LegacyLinkReviewPanel() {
 
       <div className="space-y-3">
         {rows.map((row) => {
-          const sourceTable = LEGACY_SOURCE_TABLES.find((candidate) => candidate === row.sourceTable);
-          if (!sourceTable) return null;
+          if (!isLegacySourceTable(row.sourceTable)) return null;
+          const sourceTable = row.sourceTable;
           const key = rowKey(sourceTable, row.legacyId);
           const selectedTitleId = selectedTitles[key] ?? "";
           const note = evidenceNotes[key] ?? "";
