@@ -4,6 +4,16 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { decideLegacyLinkReview, listLegacyLinkReviews } from "@/lib/bridge/legacy-link-review";
 
+const LEGACY_SOURCE_TABLES = [
+  "films_film",
+  "films_filmdraft",
+  "films_filmbuyermapping",
+  "films_status",
+  "films_viewhistory",
+] as const;
+
+type LegacySourceTable = (typeof LEGACY_SOURCE_TABLES)[number];
+
 type DecisionInput =
   | {
       sourceTable: "films_film" | "films_filmdraft" | "films_filmbuyermapping" | "films_status" | "films_viewhistory";
@@ -112,7 +122,9 @@ export function LegacyLinkReviewPanel() {
 
       <div className="space-y-3">
         {rows.map((row) => {
-          const key = rowKey(row.sourceTable, row.legacyId);
+          const sourceTable = LEGACY_SOURCE_TABLES.find((candidate) => candidate === row.sourceTable);
+          if (!sourceTable) return null;
+          const key = rowKey(sourceTable, row.legacyId);
           const selectedTitleId = selectedTitles[key] ?? "";
           const note = evidenceNotes[key] ?? "";
           const hasEvidence = note.trim().length >= 20;
@@ -192,7 +204,7 @@ export function LegacyLinkReviewPanel() {
                   disabled={!canVerify}
                   onClick={() =>
                     decisionMutation.mutate({
-                      sourceTable: row.sourceTable,
+                      sourceTable,
                       legacyId: row.legacyId,
                       decision: "verify",
                       bridgeTitleId: selectedTitleId,
@@ -208,7 +220,7 @@ export function LegacyLinkReviewPanel() {
                   disabled={!canReject}
                   onClick={() =>
                     decisionMutation.mutate({
-                      sourceTable: row.sourceTable,
+                      sourceTable,
                       legacyId: row.legacyId,
                       decision: "reject",
                       evidenceNote: note.trim(),
