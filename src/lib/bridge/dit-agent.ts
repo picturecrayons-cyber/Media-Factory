@@ -522,6 +522,13 @@ export const signOffDitIngestSession = createServerFn({ method: "POST" })
       `;
       if (!rows[0]) throw new Error("DIT ingest session was not found");
       if (rows[0].status === "SIGNED_OFF") throw new Error("DIT ingest session is already signed off");
+      if (
+        data.folderStructurePreserved !== true ||
+        data.originalFilenamesPreserved !== true ||
+        data.cameraCardRetained !== true
+      ) {
+        throw new Error("DIT sign-off requires all three operator attestations to be explicitly confirmed");
+      }
       const copies = await tx<{ copy_type: string; verified: boolean }>`
         select copy_type, verified from bridge_dit_copy_verifications
         where session_id = ${data.sessionId}::uuid
