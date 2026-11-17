@@ -24,7 +24,7 @@ function Login() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  // If already authenticated with Supabase session, resolve profile and route to dashboard
+  // Preserve the existing authenticated-session and role-aware routing behaviour.
   useEffect(() => {
     if (isPending || !user) return;
     void getBridgeSession()
@@ -51,7 +51,6 @@ function Login() {
 
     try {
       await signInWithEmail(email.trim(), password);
-      // Session established; let the useEffect resolve profile or route
       const s = await getBridgeSession().catch(() => null);
       const nextParam =
         typeof window !== "undefined"
@@ -81,102 +80,153 @@ function Login() {
   }
 
   return (
-    <main className="grid min-h-screen place-items-center bg-bg p-6">
-      <div className="w-full max-w-sm space-y-6 rounded-2xl border border-line bg-surface p-7 shadow-sm">
-        <div className="flex flex-col items-center text-center">
-          <BrandMark />
-          <h1 className="mt-4 font-display text-2xl font-semibold tracking-tight text-fg">
-            Sign in
-          </h1>
-          <p className="mt-1 text-sm text-muted">
-            Securely access your Crayons Bridge workspace.
+    <main className="min-h-screen bg-[#071724] p-3 sm:p-5 lg:grid lg:place-items-center lg:p-8">
+      <div className="mx-auto grid min-h-[min(760px,calc(100vh-4rem))] w-full max-w-6xl overflow-hidden rounded-[28px] border border-white/10 bg-white shadow-[0_32px_100px_rgba(0,0,0,0.35)] lg:grid-cols-[1.04fr_0.96fr]">
+        <section className="relative isolate flex min-h-[270px] flex-col justify-between overflow-hidden bg-[#09283a] px-6 py-7 text-white sm:px-9 sm:py-9 lg:min-h-[700px] lg:px-12 lg:py-12">
+          <div aria-hidden="true" className="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
+            <div className="absolute -right-28 -top-28 h-96 w-96 rounded-full border border-cyan-100/10" />
+            <div className="absolute -right-12 -top-12 h-64 w-64 rounded-full border border-cyan-100/10" />
+            <div className="absolute -bottom-44 -left-24 h-[28rem] w-[28rem] rounded-full bg-cyan-400/10 blur-3xl" />
+            <div className="absolute inset-0 bg-[linear-gradient(135deg,rgba(4,18,29,0.15),transparent_55%,rgba(0,150,180,0.12))]" />
+          </div>
+
+          <div className="relative">
+            <div className="inline-flex rounded-xl bg-white px-4 py-2 shadow-lg shadow-black/10">
+              <BrandMark />
+            </div>
+            <p className="mt-8 inline-flex items-center gap-2 rounded-full border border-cyan-100/20 bg-white/5 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.2em] text-cyan-100 sm:mt-12">
+              <span className="h-1.5 w-1.5 rounded-full bg-cyan-300" />
+              Private B2B workspace
+            </p>
+            <h1 className="mt-5 max-w-xl font-display text-3xl font-semibold leading-[1.12] tracking-tight sm:text-4xl lg:text-[3.35rem]">
+              Every story deserves a clear path to the world.
+            </h1>
+            <p className="mt-4 max-w-lg text-sm leading-7 text-slate-300 sm:text-base">
+              One secure workspace for content, rights, licensing and delivery — built for the people who bring stories to market.
+            </p>
+          </div>
+
+          <div className="relative mt-8 hidden max-w-lg grid-cols-2 gap-3 sm:grid">
+            {[
+              ["01", "Prepare", "Content & quality"],
+              ["02", "Protect", "Rights & approvals"],
+              ["03", "License", "Buyers & agreements"],
+              ["04", "Deliver", "Secure handover"],
+            ].map(([number, label, detail]) => (
+              <div key={number} className="rounded-2xl border border-white/10 bg-white/[0.055] p-4 backdrop-blur-sm">
+                <span className="text-[10px] font-semibold tracking-[0.18em] text-cyan-200">{number}</span>
+                <p className="mt-2 text-sm font-semibold text-white">{label}</p>
+                <p className="mt-1 text-xs text-slate-400">{detail}</p>
+              </div>
+            ))}
+          </div>
+
+          <p className="relative mt-6 text-[11px] tracking-wide text-slate-400">
+            CRAYONS BRIDGE <span className="mx-2 text-cyan-300/70">/</span> PREPARE. PROTECT. LICENSE. DELIVER.
           </p>
-        </div>
+        </section>
 
-        <form className="space-y-4" onSubmit={(e) => void onSubmit(e)}>
-          <label className="block text-sm font-medium text-fg">
-            Email
-            <input
-              required
-              autoComplete="email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@example.com"
-              className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5 text-sm text-fg placeholder:text-faint transition focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
-            />
-          </label>
+        <section className="flex items-center justify-center bg-white px-6 py-9 sm:px-10 sm:py-12 lg:px-14">
+          <div className="w-full max-w-md">
+            <div className="mb-8">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#007291]">Welcome back</p>
+              <h2 className="mt-3 font-display text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">
+                Sign in to Bridge
+              </h2>
+              <p className="mt-3 text-sm leading-6 text-slate-500">
+                Access your workspace securely with your registered email.
+              </p>
+            </div>
 
-          <label className="block text-sm font-medium text-fg">
-            <span className="flex items-center justify-between gap-3">
-              <span>Password</span>
+            <form className="space-y-5" onSubmit={(e) => void onSubmit(e)}>
+              <label className="block text-sm font-semibold text-slate-700">
+                Email address
+                <input
+                  required
+                  autoComplete="email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="you@company.com"
+                  className="mt-2 h-12 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm font-normal text-slate-900 outline-none transition placeholder:text-slate-400 hover:border-slate-300 focus:border-[#007291] focus:bg-white focus:ring-4 focus:ring-cyan-800/10"
+                />
+              </label>
+
+              <label className="block text-sm font-semibold text-slate-700">
+                <span className="flex items-center justify-between gap-3">
+                  <span>Password</span>
+                  <Link
+                    to="/forgot-password"
+                    className="text-xs font-semibold text-[#007291] underline-offset-4 hover:underline"
+                  >
+                    Forgot password?
+                  </Link>
+                </span>
+                <div className="relative mt-2">
+                  <input
+                    required
+                    autoComplete="current-password"
+                    type={showPassword ? "text" : "password"}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="Enter your password"
+                    className="h-12 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 pr-12 text-sm font-normal text-slate-900 outline-none transition placeholder:text-slate-400 hover:border-slate-300 focus:border-[#007291] focus:bg-white focus:ring-4 focus:ring-cyan-800/10"
+                  />
+                  <button
+                    type="button"
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                    aria-pressed={showPassword}
+                    onClick={() => setShowPassword((value) => !value)}
+                    className="absolute inset-y-0 right-0 grid w-12 place-items-center rounded-r-xl text-slate-400 transition hover:text-slate-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#007291]"
+                  >
+                    {showPassword ? (
+                      <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+                        <path d="M3 3l18 18" />
+                        <path d="M10.6 10.7a2 2 0 002.7 2.7" />
+                        <path d="M9.9 4.2A10.7 10.7 0 0112 4c5.5 0 9 5 9 5a16 16 0 01-3.1 3.8M6.2 6.2C4.1 7.5 3 9 3 9s3.5 5 9 5c1 0 1.9-.2 2.7-.4" />
+                      </svg>
+                    ) : (
+                      <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+                        <path d="M3 12s3.5-5 9-5 9 5 9 5-3.5 5-9 5-9-5-9-5z" />
+                        <circle cx="12" cy="12" r="2.5" />
+                      </svg>
+                    )}
+                  </button>
+                </div>
+              </label>
+
+              {error ? (
+                <div
+                  role="alert"
+                  className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700"
+                >
+                  {error}
+                </div>
+              ) : null}
+
+              <Button
+                type="submit"
+                disabled={busy}
+                className="h-12 w-full rounded-xl bg-[#007291] font-semibold text-white shadow-lg shadow-cyan-900/15 transition hover:bg-[#005f78] active:scale-[0.99]"
+              >
+                {busy ? "Signing in…" : "Sign in securely"}
+              </Button>
+            </form>
+
+            <div className="mt-7 border-t border-slate-100 pt-6 text-center text-sm text-slate-500">
+              New to Crayons Bridge?{" "}
               <Link
-                to="/forgot-password"
-                className="text-xs font-medium text-accent underline-offset-4 hover:underline"
+                to="/signup"
+                className="font-semibold text-[#007291] underline-offset-4 hover:underline"
               >
-                Forgot password?
+                Create an account
               </Link>
-            </span>
-            <div className="relative mt-1.5">
-              <input
-                required
-                autoComplete="current-password"
-                type={showPassword ? "text" : "password"}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••••"
-                className="h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5 pr-11 text-sm text-fg placeholder:text-faint transition focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
-              />
-              <button
-                type="button"
-                aria-label={showPassword ? "Hide password" : "Show password"}
-                aria-pressed={showPassword}
-                onClick={() => setShowPassword((value) => !value)}
-                className="absolute inset-y-0 right-0 grid w-11 place-items-center text-muted transition hover:text-fg"
-              >
-                {showPassword ? (
-                  <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
-                    <path d="M3 3l18 18" />
-                    <path d="M10.6 10.7a2 2 0 002.7 2.7" />
-                    <path d="M9.9 4.2A10.7 10.7 0 0112 4c5.5 0 9 5 9 5a16 16 0 01-3.1 3.8M6.2 6.2C4.1 7.5 3 9 3 9s3.5 5 9 5c1 0 1.9-.2 2.7-.4" />
-                  </svg>
-                ) : (
-                  <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
-                    <path d="M3 12s3.5-5 9-5 9 5 9 5-3.5 5-9 5-9-5-9-5z" />
-                    <circle cx="12" cy="12" r="2.5" />
-                  </svg>
-                )}
-              </button>
             </div>
-          </label>
-
-          {error ? (
-            <div
-              role="alert"
-              className="rounded-xl border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-600 dark:text-red-400"
-            >
-              {error}
-            </div>
-          ) : null}
-
-          <Button
-            type="submit"
-            disabled={busy}
-            className="w-full h-11 rounded-full font-semibold shadow-sm transition active:scale-[0.98]"
-          >
-            {busy ? "Signing in…" : "Sign in"}
-          </Button>
-        </form>
-
-        <div className="border-t border-line pt-4 text-center text-sm text-muted">
-          New to Crayons Bridge?{" "}
-          <Link
-            to="/signup"
-            className="font-medium text-accent underline-offset-4 hover:underline"
-          >
-            Create account
-          </Link>
-        </div>
+            <p className="mt-8 text-center text-[11px] leading-5 text-slate-400">
+              Your account access is protected by role-based permissions and verified identity.
+            </p>
+          </div>
+        </section>
       </div>
     </main>
   );
