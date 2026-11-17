@@ -245,7 +245,7 @@ function DashboardBody() {
             </div>
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               <Stat label="Service orders" value={metricValue(metricsQ.data?.service_orders_total)} />
-              <Stat label="Failed service orders" value={metricValue(metricsQ.data?.service_orders_failed)} />
+              <Stat label="Cancelled / refunded orders" value={metricValue(metricsQ.data?.service_orders_cancelled_or_refunded)} />
               <Stat label="DIT ingest files" value={metricValue(metricsQ.data?.dit_files_total)} />
               <Stat label="Verified DIT copy manifests" value={metricValue(metricsQ.data?.dit_copy_manifests_verified)} />
             </div>
