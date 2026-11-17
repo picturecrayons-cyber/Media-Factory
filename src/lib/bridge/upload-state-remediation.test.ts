@@ -236,3 +236,107 @@ test("persistence failure does not advance migration queue state", async () => {
   assert.match(successBlock, /set status = 'UPLOADED'/);
   assert.match(successBlock, /set status = 'VERIFIED'/);
 });
+
+
+test("legacy OCI reconciliation admits only exact reviewer-verified film-to-title links", async () => {
+  const db = new PGlite();
+  try {
+    await db.waitReady;
+    await db.exec(`
+      create table bridge_titles (
+        id text primary key,
+        name text not null,
+        status text not null,
+        merged_into_title_id text
+      );
+      create table streamvista_legacy_links (
+        source_table text not null,
+        legacy_id text not null,
+        review_status text not null,
+        bridge_title_id text
+      );
+      create table loop_media_migration_queue (
+        id bigserial primary key,
+        legacy_film_id integer,
+        title_id text not null,
+        asset_kind text not null,
+        target_provider text not null,
+        target_path text not null,
+        status text not null
+      );
+
+      insert into bridge_titles (id,name,status) values
+        ('title-koodal','Koodal','PREPARING'),
+        ('title-jananam','Jananam 1947','PREPARING');
+
+      -- Pending and mismatched mappings must never authorise an asset link.
+      insert into streamvista_legacy_links
+        (source_table,legacy_id,review_status,bridge_title_id) values
+        ('films_film','7','pending','title-jananam'),
+        ('films_film','36','pending','title-koodal'),
+        ('films_film','8','verified','title-koodal'),
+        ('films_film','9','verified','title-jananam');
+
+      insert into loop_media_migration_queue
+        (legacy_film_id,title_id,asset_kind,target_provider,target_path,status) values
+        (7,'title-koodal','MASTER','oci_object_storage','legacy/7/master.mp4','PENDING_REUPLOAD'),
+        (36,'title-jananam','MASTER','oci_object_storage','legacy/36/master.mp4','PENDING_REUPLOAD'),
+        (8,'title-koodal','MASTER','oci_object_storage','legacy/8/master.mp4','PENDING_REUPLOAD'),
+        (9,'title-koodal','MASTER','oci_object_storage','legacy/9/master.mp4','PENDING_REUPLOAD'),
+        (null,'title-koodal','MASTER','oci_object_storage','direct/koodal/master.mp4','PENDING_REUPLOAD');
+    `);
+
+    const eligible = await db.query<{ id: number; legacy_film_id: number | null }>(`
+      select q.id,q.legacy_film_id
+      from loop_media_migration_queue q
+      join bridge_titles t on t.id=q.title_id
+      where q.status in ('PENDING_REUPLOAD','MISSING_SOURCE_MEDIA','UPLOADED')
+        and q.target_provider='oci_object_storage'
+        and t.status in ('DRAFT','UPLOADING','PREPARING')
+        and t.merged_into_title_id is null
+        and (
+          q.legacy_film_id is null
+          or exists (
+            select 1 from streamvista_legacy_links l
+            where l.source_table='films_film'
+              and l.legacy_id=q.legacy_film_id::text
+              and l.review_status='verified'
+              and l.bridge_title_id=q.title_id
+          )
+        )
+      order by q.id
+    `);
+    assert.deepEqual(eligible.rows, [
+      { id: 3, legacy_film_id: 8 },
+      { id: 5, legacy_film_id: null },
+    ]);
+
+    const mismatches = await db.query<{ count: number }>(`
+      select count(*)::int as count
+      from loop_media_migration_queue q
+      join streamvista_legacy_links l
+        on l.source_table='films_film'
+       and l.legacy_id=q.legacy_film_id::text
+      where q.legacy_film_id is not null
+        and l.review_status='pending'
+        and l.bridge_title_id is not null
+        and l.bridge_title_id <> q.title_id
+    `);
+    assert.equal(mismatches.rows[0]?.count, 1);
+  } finally {
+    await db.close();
+  }
+});
+
+test("production asset reconciliation uses stable queue keys and holds unresolved mappings", () => {
+  const source = readFileSync(
+    join(process.cwd(), "src/lib/bridge/asset-reconciliation.ts"),
+    "utf8",
+  );
+  assert.match(source, /const assetId = `legacy-queue-\$\{row\.id\}`/);
+  assert.match(source, /\.verified\/queue-\$\{row\.id\}/);
+  assert.match(source, /l\.review_status = 'verified'/);
+  assert.match(source, /l\.bridge_title_id = q\.title_id/);
+  assert.match(source, /status in \('PENDING_REUPLOAD', 'MISSING_SOURCE_MEDIA', 'UPLOADED'\)/);
+  assert.doesNotMatch(source, /randomBytes/);
+});
