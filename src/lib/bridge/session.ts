@@ -184,7 +184,7 @@ export const getFounderDashboardMetrics = createServerFn({ method: "GET" })
       buyers_total: number; investors_total: number; organizations_total: number; qc_pending: number;
       legal_pending: number; marketplace_live: number; buyer_interest_total: number; payments_total: number;
       payments_verified_paise: number; entitlements_total: number; loop_active: number;
-      service_orders_total: number; service_orders_failed: number; storage_bytes: number;
+      service_orders_total: number; service_orders_cancelled_or_refunded: number; storage_bytes: number;
       dit_files_total: number; dit_copy_manifests_verified: number; webhook_failed: number;
     }>`
       select
@@ -204,7 +204,7 @@ export const getFounderDashboardMetrics = createServerFn({ method: "GET" })
         (select count(*)::int from bridge_entitlements) as entitlements_total,
         (select count(*)::int from bridge_loop_publications where revoked_at is null and window_start <= now() and window_end > now() and lower(authorization_status) in ('approved','authorized','published')) as loop_active,
         (select count(*)::int from bridge_service_orders) as service_orders_total,
-        (select count(*)::int from bridge_service_orders where lower(status) in ('failed','error','dead_letter')) as service_orders_failed,
+        (select count(*)::int from bridge_service_orders where lower(status) in ('cancelled','refunded')) as service_orders_cancelled_or_refunded,
         (select coalesce(sum(byte_size),0)::bigint from bridge_assets) as storage_bytes,
         (select count(*)::int from bridge_dit_ingest_files) as dit_files_total,
         (select count(*)::int from bridge_dit_copy_verifications where verified = true) as dit_copy_manifests_verified,
