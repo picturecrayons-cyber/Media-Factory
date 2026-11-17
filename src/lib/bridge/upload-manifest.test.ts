@@ -18,7 +18,10 @@ test("rejects gaps, overlaps, missing parts, bad ETags and wrong total size", ()
     { partNumber: 1, byteStart: 0, byteEnd: PART, etag: "etag-1" },
     { partNumber: 2, byteStart: PART, byteEnd: SIZE, etag: "etag-2" },
   ];
-  assert.throws(() => validatePartManifest([{ ...base[0], byteEnd: PART - 1 }, base[1]], {
+  assert.throws(() => validatePartManifest([base[0], { ...base[1], byteStart: PART + 1 }], {
+    expectedSize: SIZE, partSize: PART,
+  }), /contiguous/);
+  assert.throws(() => validatePartManifest([base[0], { ...base[1], byteStart: PART - 1 }], {
     expectedSize: SIZE, partSize: PART,
   }), /contiguous/);
   assert.throws(() => validatePartManifest([base[0]], {
