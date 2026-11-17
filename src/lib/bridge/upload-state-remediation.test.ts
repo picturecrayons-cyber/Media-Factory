@@ -208,6 +208,15 @@ test("atomic state transition: migration queue and title master/poster only adva
       byteSize: 52428800,
       contentType: "video/mp4",
       checksum: "sealed-etag-abc",
+      checksumSha256: "a".repeat(64),
+      storage: {
+        provider: "oci",
+        bucket: "test-bucket",
+        namespace: "test-namespace",
+        region: "ap-mumbai-1",
+        endpoint: "https://objectstorage.ap-mumbai-1.oraclecloud.com",
+      },
+      objectVersionId: null,
       sourceKey: "bridge/owner-1/title-pass-test/screener/raw.mp4",
       sealedKey,
     });
