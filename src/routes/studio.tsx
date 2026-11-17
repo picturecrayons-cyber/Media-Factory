@@ -12,7 +12,7 @@ export const Route = createFileRoute("/studio")({ component: Studio });
 const studioModules = [
   ["Organization", "Studio profile and organization workspace.", "Organization data is shown only when the verified organization mapping is available."],
   ["Members & Roles", "Manage approved studio members and access roles.", "Membership management is not enabled in this dashboard yet."],
-  ["Productions", "Track projects, production stages and title ownership.", "Production project tracking is not connected yet."],
+  ["Productions", "Track production titles, shoot progress and title ownership.", "Production stages are represented by title status; a separate schedule/calendar is not connected yet."],
   ["QC & Rights", "Follow quality-control and rights-review progress.", "Use the status shown on each title; separate review approvals remain authoritative."],
   ["Deliveries", "Track approved delivery packages.", "Open the current Deliveries workspace for available records."],
   ["Schedule", "Coordinate production and delivery milestones.", "A shared studio schedule is not connected yet."],
@@ -37,26 +37,25 @@ function Studio() {
             </section>
 
             <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3" aria-label="Studio workspace navigation">
-              <a href="#studio-titles" className="rounded-sm border border-line p-4 hover:border-accent"><strong>Studio Titles</strong><p className="mt-1 text-sm text-muted">Finished films and story concepts</p></a>
-              <a href="#studio-operations" className="rounded-sm border border-line p-4 hover:border-accent"><strong>Production & DIT</strong><p className="mt-1 text-sm text-muted">Production operations and media handover</p></a>
+              <a href="#studio-titles" className="rounded-sm border border-line p-4 hover:border-accent"><strong>Production titles</strong><p className="mt-1 text-sm text-muted">Active films, uploads and preparation</p></a>
+              <a href="#studio-operations" className="rounded-sm border border-line p-4 hover:border-accent"><strong>Production & DIT</strong><p className="mt-1 text-sm text-muted">Shoot operations, camera-card ingest and media handover</p></a>
               <Link to="/account" className="rounded-sm border border-line p-4 hover:border-accent"><strong>Account</strong><p className="mt-1 text-sm text-muted">Studio account profile</p></Link>
-              <a href="#studio-dit" className="rounded-sm border border-line p-4 hover:border-accent"><strong>DIT Agent</strong><p className="mt-1 text-sm text-muted">Camera-card manifest, checksum evidence and sign-off</p></a>
             </section>
 
             <section className="space-y-4">
               <div>
-                <h3 className="font-display text-xl font-semibold">Add a studio title</h3>
-                <p className="mt-1 text-sm text-muted">Finished films and story concepts remain separate. A title upload does not bypass QC, rights or licensing approvals.</p>
+                <h3 className="font-display text-xl font-semibold">Start a production or submit a concept</h3>
+                <p className="mt-1 text-sm text-muted">Create the production title before shoot ingest. Story / Concept submissions follow a separate admin-curation workflow. Uploading never bypasses QC, rights or licensing approvals.</p>
               </div>
               <NewSubmissionPanel />
             </section>
 
             <section id="studio-titles" className="space-y-4">
               <div>
-                <h3 className="font-display text-xl font-semibold">Finished films</h3>
-                <p className="mt-1 text-sm text-muted">Only titles authorized for this studio account should appear here.</p>
+                <h3 className="font-display text-xl font-semibold">Production titles</h3>
+                <p className="mt-1 text-sm text-muted">Your Studio-owned films across Draft, Uploading, Preparing and review stages. Select a title to continue its production workflow or use it in DIT ingest.</p>
               </div>
-              <TitleList empty="No finished films are currently returned for this studio account." />
+              <TitleList submissionType="finished_film" empty="No production titles have been created for this Studio yet." />
               <MyStoryConcepts />
             </section>
 
@@ -71,8 +70,8 @@ function Studio() {
 
             <section id="studio-dit" className="space-y-3">
               <div>
-                <h3 className="font-display text-xl font-semibold">Studio DIT Agent</h3>
-                <p className="mt-1 text-sm text-muted">Register source-card manifests, compare Primary and Recovery manifest evidence, and record operator sign-off. Server actions are restricted to active Studio owner, admin, producer or DIT memberships.</p>
+                <h3 className="font-display text-xl font-semibold">Production DIT</h3>
+                <p className="mt-1 text-sm text-muted">Choose the active production title, then register camera-card manifests, verify Primary and Recovery copies independently, and record operator sign-off. Only active Studio owner, admin, producer or DIT memberships can perform DIT actions.</p>
               </div>
               <DitAgentDesk actor={actor} />
             </section>
