@@ -173,7 +173,7 @@ try {
         await client.query(
           `insert into public.bridge_profiles
              (user_id, email, display_name, account_type, email_verified)
-           values ($1, $2, $3, 'creator', true)`,
+           values ($1, $2, $3, 'independent_creator', true)`,
           [fixtureBridgeUserId, "identity-fk-replay@example.invalid", "Identity FK Replay Fixture"],
         );
         await client.query(
