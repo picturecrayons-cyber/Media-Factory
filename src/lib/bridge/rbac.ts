@@ -114,6 +114,16 @@ export function canAccessDashboard(actor: Actor): boolean {
   return actor.emailVerified && actor.internalRole === "super_admin";
 }
 
+/** Buyer Desk is available to verified Buyer accounts and verified Super Admins only. */
+export function canAccessBuyerDesk(actor: Actor): boolean {
+  if (!actor.emailVerified) return false;
+  if (actor.internalRole === "super_admin") return true;
+  return actor.internalRole === null &&
+    actor.accountType === "buyer" &&
+    hasPermission(actor, "payment.create_order") &&
+    hasPermission(actor, "entitlement.read_own");
+}
+
 /** Broad internal workstation datasets are restricted to verified Admin roles. */
 export function canAccessAdminWorkstations(actor: Actor): boolean {
   return actor.emailVerified &&
