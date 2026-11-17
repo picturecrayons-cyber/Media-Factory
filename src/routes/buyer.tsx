@@ -262,7 +262,11 @@ function BuyerBody({ userId, readOnly = false }: { userId: string; readOnly?: bo
       <div className="grid gap-3 sm:grid-cols-3">
         <Stat label="Discover" value={String(titles.length)} note="Live for buyers" />
         <Stat label="Listing" value={String(visible.length)} note="Matching this search" />
-        <Stat label="Licenses" value={String(licensed.length)} note="Captured entitlements" />
+        {readOnly ? (
+          <Stat label="Access" value="Read-only" note="Buyer entitlements not queried" />
+        ) : (
+          <Stat label="Licenses" value={String(licensed.length)} note="Captured entitlements" />
+        )}
       </div>
       <div className="flex flex-wrap gap-2">
         {(readOnly ? (["discover", "listing"] as const) : (["discover", "listing", "licenses"] as const)).map((id) => (
