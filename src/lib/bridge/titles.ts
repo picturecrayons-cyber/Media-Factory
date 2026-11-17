@@ -371,6 +371,52 @@ export const listTitles = createServerFn({ method: "GET" })
     }) };
   });
 
+export const listBuyerCatalogueForInspection = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    if (actor.internalRole !== "super_admin") throw new Error("Super Admin inspection access required");
+    const sql = await getSql();
+    const hasMergeColumn = await hasTitleMergeColumn(sql);
+    const rows = hasMergeColumn
+      ? await sql<{
+          id: string; name: string; synopsis: string; language: string; year: number | null;
+          runtime_minutes: number | null; licensing_fee_paise: number; status: string;
+        }>`
+          select t.id, t.name, t.synopsis, t.language, t.year, t.runtime_minutes,
+            t.licensing_fee_paise, t.status
+          from bridge_titles t
+          where t.merged_into_title_id is null
+            and t.status in ('LIVE_FOR_BUYERS','IN_NEGOTIATION','LICENSED','DELIVERED')
+            and public.bridge_title_buyer_visibility(t.id)
+          order by t.updated_at desc limit 200
+        `
+      : await sql<{
+          id: string; name: string; synopsis: string; language: string; year: number | null;
+          runtime_minutes: number | null; licensing_fee_paise: number; status: string;
+        }>`
+          select t.id, t.name, t.synopsis, t.language, t.year, t.runtime_minutes,
+            t.licensing_fee_paise, t.status
+          from bridge_titles t
+          where t.status in ('LIVE_FOR_BUYERS','IN_NEGOTIATION','LICENSED','DELIVERED')
+            and public.bridge_title_buyer_visibility(t.id)
+          order by t.updated_at desc limit 200
+        `;
+    return {
+      titles: rows.map((row) => ({
+        id: row.id,
+        name: row.name,
+        synopsis: row.synopsis,
+        language: row.language,
+        year: row.year,
+        runtimeMinutes: row.runtime_minutes,
+        licensingFeePaise: Number(row.licensing_fee_paise ?? 0),
+        status: row.status,
+      })),
+    };
+  });
+
 export const getTitle = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .validator(z.object({ id: z.string().min(8) }))
