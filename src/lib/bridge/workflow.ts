@@ -7,6 +7,7 @@ import { assertPermission, canReadTitle, canOperateOnTitle, type Actor } from ".
 import { loadTitle } from "./titles";
 import { loopLicenseInput, producerSharePaise } from "./workflow-policy";
 import { bridgeEnv } from "./env";
+import { assertVerifiedTitleIngestReady } from "./qc-readiness";
 
 async function audit(tx: Sql, user: string, title: string, action: string, metadata: object) {
   await tx`insert into bridge_audit_logs(actor_user_id,action,entity_type,entity_id,metadata)
@@ -83,6 +84,7 @@ export async function reviewWorkflow(tx: Sql, actor: Actor, data: z.infer<typeof
   const expected = data.stage === "QC" ? "QC_REVIEW" : "RIGHTS_REVIEW";
   if (title.status !== expected) throw new Error(`Title must be in ${expected}`);
   if (data.stage === "QC") {
+    if (data.decision === "APPROVE") await assertVerifiedTitleIngestReady(tx, data.titleId);
     const assets = await tx<{
       kind: string;
       s3_key: string;

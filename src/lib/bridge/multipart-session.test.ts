@@ -12,7 +12,7 @@ const regionKey = "OCI_REGION";
 const validSecret = "test-only-session-secret-with-at-least-32-bytes";
 const objectKey = "bridge/owner/title/master/film.mov";
 const partBaseUrl = `https://objectstorage.ap-mumbai-1.oraclecloud.com/p/token/n/ns/b/bucket/u/${objectKey}/id/upload-123/`;
-const expected = { actorUserId: "actor-1", assetId: "asset-123", objectKey };
+const expected = { sessionId: "session-123", actorUserId: "actor-1", assetId: "asset-123", objectKey };
 
 function withEnv(values: Record<string, string | undefined>, run: () => void) {
   const saved = Object.fromEntries(Object.keys(values).map((key) => [key, process.env[key]]));
