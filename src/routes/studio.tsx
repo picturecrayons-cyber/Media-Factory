@@ -6,17 +6,18 @@ import { MyStoryConcepts } from "@/components/bridge/my-story-concepts";
 import { NewSubmissionPanel } from "@/components/bridge/new-submission-panel";
 import { StudioMemberDesk } from "@/components/bridge/studio-member-desk";
 import { DitAgentDesk } from "@/components/bridge/dit-agent-desk";
+import { StudioStatementDesk } from "@/components/bridge/studio-statement-desk";
 
 export const Route = createFileRoute("/studio")({ component: Studio });
 
 const studioModules = [
   ["Organization", "Studio identity, verified organization scope and account owner.", "Organization scope is resolved from active membership. Contact Super Admin for membership corrections."],
-  ["Members & Roles", "View the members assigned to this Studio organization.", "Read-only roster. Membership invitations and role changes are not enabled in this release."],
+  ["Members & Roles", "Manage existing Studio member roles and access.", "Owner/admin role and status updates are audit-logged. New invitations and owner transfer remain disabled."],
   ["Productions", "Coordinate active productions using canonical Studio-owned titles.", "Studio title and DIT ingest workflows are connected; a separate production schedule is not yet connected."],
   ["QC & Rights", "Track QC, Legal and Rights decisions before commercial release.", "Review decisions remain in the authoritative Admin QC / Legal / Rights workstations; title status alone is not approval."],
   ["Deliveries", "Track delivery jobs, assignments and approval.", "Open the shared Deliveries workspace for persisted jobs and server-authorized actions."],
   ["Schedule", "Coordinate production and delivery milestones.", "No production calendar is connected yet; no sample dates or synthetic milestones are shown."],
-  ["Statements", "Review captured payments and verified settlements.", "No Studio statement report is currently connected. Unverified licensing fees are not shown as cash received."],
+  ["Statements", "Review channel statements and their payment schedules.", "Read-only records show estimated, reported and reconciled amounts separately; a PAID status is not bank verification."],
   ["Insights", "Review persisted Studio titles, ingest and delivery activity.", "Only verified database-backed activity is displayed. Audience and commercial analytics remain unconnected."],
   ["Help", "Get support with Studio onboarding and production workflows.", "Use the existing Bridge support channel."],
 ] as const;
@@ -64,7 +65,7 @@ function Studio() {
             <section id="studio-members" className="space-y-3">
               <div>
                 <h3 className="font-display text-xl font-semibold">Members & Roles</h3>
-                <p className="mt-1 text-sm text-muted">Read-only roster for verified Studio owners and administrators. Role changes and invitations remain disabled until separately approved.</p>
+                <p className="mt-1 text-sm text-muted">Manage existing memberships within this verified Studio organization. Owner transfer, new member invitations and restoration of removed users are disabled.</p>
               </div>
               <StudioMemberDesk />
             </section>
@@ -75,6 +76,15 @@ function Studio() {
                 <p className="mt-1 text-sm text-muted">Register camera-card manifests, upload original files to OCI Primary, create and verify the independent Recovery copy, and record DIT operator sign-off. Original folder paths and filenames are preserved. Actions require an active Studio owner, admin, producer or DIT membership.</p>
               </div>
               <DitAgentDesk actor={actor} />
+            </section>
+
+
+            <section id="studio-statements" className="space-y-3">
+              <div>
+                <h3 className="font-display text-xl font-semibold">Studio statements</h3>
+                <p className="mt-1 text-sm text-muted">Read-only channel statements and payment schedule records for this organization.</p>
+              </div>
+              <StudioStatementDesk />
             </section>
 
             <section id="studio-operations" className="space-y-3">
