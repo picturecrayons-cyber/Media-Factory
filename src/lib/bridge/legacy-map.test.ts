@@ -187,3 +187,42 @@ describe("legacy-link unresolved migration", () => {
     }
   });
 });
+
+
+describe("Super Admin legacy mapping review", () => {
+  it("fails closed unless a verified Super Admin reviews an unresolved mapping with evidence", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    const source = readFileSync(
+      join(process.cwd(), "src/lib/bridge/legacy-link-review.ts"),
+      "utf8",
+    );
+    const route = readFileSync(
+      join(process.cwd(), "src/routes/internal.legacy-links.tsx"),
+      "utf8",
+    );
+    const panel = readFileSync(
+      join(process.cwd(), "src/components/bridge/legacy-link-review-panel.tsx"),
+      "utf8",
+    );
+
+    assert.match(source, /requireVerifiedActor\(userId\)/);
+    assert.match(source, /actor\.internalRole !== "super_admin"/);
+    assert.match(source, /review_status = 'pending'/);
+    assert.match(source, /resolution_status = 'unresolved'/);
+    assert.match(source, /for update/i);
+    assert.match(source, /evidenceNote: z\.string\(\)\.trim\(\)\.min\(20\)/);
+    assert.match(source, /review_status = 'verified'/);
+    assert.match(source, /resolution_status = 'resolved'/);
+    assert.match(source, /reviewed_by = \$\{actor\.userId\}/);
+    assert.match(source, /reviewed_at = now\(\)/);
+    assert.match(source, /writeAudit\([\s\S]*?streamvista_legacy_link/);
+    assert.match(source, /merged_into_title_id is null|merged_into_title_id !== null/);
+
+    assert.match(route, /RequireBridge allow="super_admin"/);
+    assert.match(panel, /Verify selected mapping/);
+    assert.match(panel, /Reject suggestion/);
+    assert.match(panel, /A suggestion is not an approval/);
+    assert.match(panel, /does not approve QC/);
+  });
+});
