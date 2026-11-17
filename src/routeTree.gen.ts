@@ -22,8 +22,8 @@ import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as DeliveriesRouteImport } from './routes/deliveries'
 import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
 import { Route as InternalRouteImport } from './routes/internal'
-import { Route as InternalLegacyLinksRouteImport } from './routes/internal.legacy-links'
 import { Route as InvestorRouteImport } from './routes/investor'
+import { Route as LegacyLinksRouteImport } from './routes/legacy-links'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as LoopCmsRouteImport } from './routes/loop-cms'
 import { Route as OnboardingRouteImport } from './routes/onboarding'
@@ -109,9 +109,9 @@ const InternalRoute = InternalRouteImport.update({
   path: '/internal',
   getParentRoute: () => rootRouteImport,
 } as any)
-const InternalLegacyLinksRoute = InternalLegacyLinksRouteImport.update({
-  id: '/internal/legacy-links',
-  path: '/internal/legacy-links',
+const LegacyLinksRoute = LegacyLinksRouteImport.update({
+  id: '/legacy-links',
+  path: '/legacy-links',
   getParentRoute: () => rootRouteImport,
 } as any)
 const InvestorRoute = InvestorRouteImport.update({
@@ -229,7 +229,7 @@ export interface FileRoutesByFullPath {
   '/deliveries': typeof DeliveriesRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/internal': typeof InternalRoute
-  '/internal/legacy-links': typeof InternalLegacyLinksRoute
+  '/legacy-links': typeof LegacyLinksRoute
   '/investor': typeof InvestorRoute
   '/login': typeof LoginRoute
   '/loop-cms': typeof LoopCmsRoute
@@ -265,7 +265,7 @@ export interface FileRoutesByTo {
   '/deliveries': typeof DeliveriesRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/internal': typeof InternalRoute
-  '/internal/legacy-links': typeof InternalLegacyLinksRoute
+  '/legacy-links': typeof LegacyLinksRoute
   '/investor': typeof InvestorRoute
   '/login': typeof LoginRoute
   '/loop-cms': typeof LoopCmsRoute
@@ -302,7 +302,7 @@ export interface FileRoutesById {
   '/deliveries': typeof DeliveriesRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/internal': typeof InternalRoute
-  '/internal/legacy-links': typeof InternalLegacyLinksRoute
+  '/legacy-links': typeof LegacyLinksRoute
   '/investor': typeof InvestorRoute
   '/login': typeof LoginRoute
   '/loop-cms': typeof LoopCmsRoute
@@ -340,8 +340,8 @@ export interface FileRouteTypes {
     | '/deliveries'
     | '/forgot-password'
     | '/internal'
-    | '/internal/legacy-links'
-    | '/internal/legacy-links'
+    | '/legacy-links'
+    | '/legacy-links'
     | '/investor'
     | '/login'
     | '/loop-cms'
@@ -377,7 +377,7 @@ export interface FileRouteTypes {
     | '/deliveries'
     | '/forgot-password'
     | '/internal'
-    | '/internal/legacy-links'
+    | '/legacy-links'
     | '/investor'
     | '/login'
     | '/loop-cms'
@@ -449,7 +449,7 @@ export interface RootRouteChildren {
   DeliveriesRoute: typeof DeliveriesRoute
   ForgotPasswordRoute: typeof ForgotPasswordRoute
   InternalRoute: typeof InternalRoute
-  InternalLegacyLinksRoute: typeof InternalLegacyLinksRoute
+  LegacyLinksRoute: typeof LegacyLinksRoute
   InvestorRoute: typeof InvestorRoute
   LoginRoute: typeof LoginRoute
   LoopCmsRoute: typeof LoopCmsRoute
@@ -564,11 +564,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof InternalRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/internal/legacy-links': {
-      id: '/internal/legacy-links'
-      path: '/internal/legacy-links'
-      fullPath: '/internal/legacy-links'
-      preLoaderRoute: typeof InternalLegacyLinksRouteImport
+    '/legacy-links': {
+      id: '/legacy-links'
+      path: '/legacy-links'
+      fullPath: '/legacy-links'
+      preLoaderRoute: typeof LegacyLinksRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/investor': {
@@ -738,7 +738,7 @@ const rootRouteChildren: RootRouteChildren = {
   DeliveriesRoute: DeliveriesRoute,
   ForgotPasswordRoute: ForgotPasswordRoute,
   InternalRoute: InternalRoute,
-  InternalLegacyLinksRoute: InternalLegacyLinksRoute,
+  LegacyLinksRoute: LegacyLinksRoute,
   InvestorRoute: InvestorRoute,
   LoginRoute: LoginRoute,
   LoopCmsRoute: LoopCmsRoute,
