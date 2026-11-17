@@ -25,6 +25,10 @@ alter table public.streamvista_legacy_links
   add column if not exists candidate_bridge_title_id text,
   add column if not exists resolution_status text not null default 'unresolved';
 
+-- A prior test iteration may already have added the column with a less safe default.
+alter table public.streamvista_legacy_links
+  alter column resolution_status set default 'unresolved';
+
 do $$
 begin
   if not exists (
