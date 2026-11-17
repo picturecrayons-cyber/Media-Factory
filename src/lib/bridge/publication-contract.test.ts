@@ -18,6 +18,7 @@ function harness(
     curation_status: "APPROVED",
     delivery_status: "READY",
   },
+  internalRole = "super_admin",
 ) {
   const writes: { query: string; values: unknown[] }[] = [];
   const title = {
@@ -31,7 +32,13 @@ function harness(
   };
   const sql = async (strings: TemplateStringsArray, ...values: unknown[]) => {
     const query = strings.join("?");
-    if (query.includes("from bridge_titles b")) return [{\n      id: "title-1", name: "Film", bridge_status: "LICENSED", language: "Malayalam",\n      loop_title_id: "loop-1", authorization_status: "authorized", territories: ["WORLDWIDE"],\n      languages: ["Malayalam"], exploitation_models: ["TVOD"], window_start: null, window_end: null,\n      loop_status: "approved", listed: true, published: true,\n    }];\n    if (query.includes("from bridge_titles")) return [title];
+    if (query.includes("from bridge_titles b")) return [{
+      id: "title-1", name: "Film", bridge_status: "LICENSED", language: "Malayalam",
+      loop_title_id: "loop-1", authorization_status: "authorized", territories: ["WORLDWIDE"],
+      languages: ["Malayalam"], exploitation_models: ["TVOD"], window_start: null, window_end: null,
+      loop_status: "approved", listed: true, published: true,
+    }];
+    if (query.includes("from bridge_titles")) return [title];
     if (query.includes("select evidence from bridge_rights_grants"))
       return [
         { evidence: [{ commercialTerms: { rightsOwnerSharePct: 80, distributorSharePct: 20 } }] },
