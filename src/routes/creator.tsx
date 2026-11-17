@@ -42,8 +42,10 @@ function CreatorDashboard({
 }: {
   actor: { userId: string; organizationId?: string | null };
 }) {
+  const creatorTitlesQueryKey = ["bridge-titles", actor.userId, actor.organizationId ?? null] as const;
+  const creatorConceptsQueryKey = ["my-story-concepts", actor.userId, actor.organizationId ?? null] as const;
   const titlesQ = useQuery({
-    queryKey: ["bridge-titles", actor.userId, actor.organizationId],
+    queryKey: creatorTitlesQueryKey,
     queryFn: () => listTitles(),
     retry: 1,
   });
@@ -149,7 +151,7 @@ function CreatorDashboard({
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <p className="text-xs font-semibold uppercase tracking-widest text-accent">Your catalogue</p>
-            <h2 className="mt-1 font-display text-2xl font-semibold">My Titles</h2>
+            <h2 className="mt-1 font-display text-2xl font-semibold">My Finished Films</h2>
             <p className="mt-1 text-sm text-muted">
               Only records returned by the authenticated, server-scoped Creator title query are shown.
             </p>
@@ -159,7 +161,7 @@ function CreatorDashboard({
           </a>
         </div>
         <div className="rounded-2xl border border-line bg-surface p-4 sm:p-5">
-          <TitleList empty="No titles are available for this account yet. Start a submission to add your first title." />
+          <TitleList empty="No finished-film titles are available for this account yet. Start a submission to add your first title." queryKey={creatorTitlesQueryKey} />
         </div>
       </section>
 
@@ -180,7 +182,7 @@ function CreatorDashboard({
             Keep story concepts separate from finished-film title records. A concept submission is not a
             finished film or a license-ready asset.
           </p>
-          <MyStoryConcepts />
+          <MyStoryConcepts queryKey={creatorConceptsQueryKey} />
         </div>
       </section>
 
