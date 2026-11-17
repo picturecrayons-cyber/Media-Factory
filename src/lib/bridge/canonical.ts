@@ -31,7 +31,7 @@ export function resolveBridgeSupabaseUrl(env: {
   BRIDGE_DATABASE_TARGET?: string;
   SUPABASE_URL?: string;
 }): string {
-  const configured = env.SUPABASE_URL?.trim().replace(/\\/+$/, "");
+  const configured = env.SUPABASE_URL?.trim().replace(/\/+$/, "");
   const ref = supabaseRefFromUrl(configured);
 
   if (env.VERCEL_ENV === "preview") {
