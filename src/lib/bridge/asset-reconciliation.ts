@@ -12,6 +12,32 @@ const MIGRATION_KIND: Record<string, "master" | "poster" | "screener"> = {
   TRAILER: "screener",
 };
 
+const ASSET_GROUP_BY_KIND: Record<
+  string,
+  "VIDEO" | "AUDIO" | "SUBTITLE" | "ACCESSIBILITY" | "ARTWORK" | "DOCUMENT" | "PROMO"
+> = {
+  master: "VIDEO",
+  screener: "VIDEO",
+  trailer: "VIDEO",
+  audio: "AUDIO",
+  audio_dub: "AUDIO",
+  subtitle: "SUBTITLE",
+  subtitle_extra: "SUBTITLE",
+  audio_description: "ACCESSIBILITY",
+  poster: "ARTWORK",
+  poster_vertical: "ARTWORK",
+  poster_horizontal: "ARTWORK",
+  thumbnail: "ARTWORK",
+  censor_certificate: "DOCUMENT",
+  technical: "DOCUMENT",
+};
+
+function assetGroupForKind(kind: string) {
+  const group = ASSET_GROUP_BY_KIND[kind];
+  if (!group) throw new Error(`Unsupported asset version type: ${kind}`);
+  return group;
+}
+
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error);
 }
@@ -44,6 +70,7 @@ export const reconcileProductionAssets = createServerFn({ method: "POST" })
       legacyAssetsLinked: 0,
       existingAssetsScanned: 0,
       existingAssetsVerified: 0,
+      assetVersionsRegistered: 0,
       missingInOci: 0,
       failed: 0,
       mappingBlockedRows: 0,
@@ -174,6 +201,31 @@ export const reconcileProductionAssets = createServerFn({ method: "POST" })
           if (!inserted[0]) return false;
 
           await tx`
+            insert into bridge_asset_versions (
+              title_id, asset_group, asset_type, version, language, s3_key,
+              checksum_sha256, byte_size, technical_metadata, processing_state, created_by
+            )
+            select
+              ${row.title_id}, ${assetGroupForKind(kind)}, ${kind},
+              coalesce(max(version), 0) + 1, null, ${sealedKey},
+              null, ${sealed.byteSize},
+              jsonb_build_object(
+                'storage_verification', jsonb_build_object(
+                  'method', 'OCI_HEAD_AND_IMMUTABLE_COPY',
+                  'state', 'PASSED',
+                  'source_etag', ${source.etag},
+                  'sealed_etag', ${sealed.etag}
+                ),
+                'checksum_sha256_state', 'PENDING'
+              ),
+              'PROCESSING', ${actor.userId}
+            from bridge_asset_versions
+            where title_id = ${row.title_id}
+              and asset_type = ${kind}
+              and language is null
+          `;
+
+          await tx`
             update bridge_titles t set
               poster_key = case
                 when ${kind} = 'poster'
@@ -241,7 +293,10 @@ export const reconcileProductionAssets = createServerFn({ method: "POST" })
           );
           return true;
         });
-        if (linked) summary.legacyAssetsLinked += 1;
+        if (linked) {
+          summary.legacyAssetsLinked += 1;
+          summary.assetVersionsRegistered += 1;
+        }
         nextQueueAfterId = row.id;
       } catch (error) {
         if (isMissingObject(error)) {
@@ -376,6 +431,31 @@ export const reconcileProductionAssets = createServerFn({ method: "POST" })
             if (!updated[0]) return false;
 
             await tx`
+              insert into bridge_asset_versions (
+                title_id, asset_group, asset_type, version, language, s3_key,
+                checksum_sha256, byte_size, technical_metadata, processing_state, created_by
+              )
+              select
+                ${row.title_id}, ${assetGroupForKind(row.kind)}, ${row.kind},
+                coalesce(max(version), 0) + 1, null, ${sealedKey},
+                null, ${sealed.byteSize},
+                jsonb_build_object(
+                  'storage_verification', jsonb_build_object(
+                    'method', 'OCI_HEAD_AND_IMMUTABLE_COPY',
+                    'state', 'PASSED',
+                    'source_etag', ${source.etag},
+                    'sealed_etag', ${sealed.etag}
+                  ),
+                  'checksum_sha256_state', 'PENDING'
+                ),
+                'PROCESSING', ${actor.userId}
+              from bridge_asset_versions
+              where title_id = ${row.title_id}
+                and asset_type = ${row.kind}
+                and language is null
+            `;
+
+            await tx`
               update bridge_titles t set
                 poster_key = case
                   when ${row.kind} in ('poster', 'poster_vertical', 'poster_horizontal', 'thumbnail')
@@ -439,7 +519,10 @@ export const reconcileProductionAssets = createServerFn({ method: "POST" })
             );
             return true;
           });
-          if (verified) summary.existingAssetsVerified += 1;
+          if (verified) {
+            summary.existingAssetsVerified += 1;
+            summary.assetVersionsRegistered += 1;
+          }
           nextAssetAfterId = row.id;
         } catch (error) {
           if (isMissingObject(error)) {
