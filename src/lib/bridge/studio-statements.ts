@@ -34,7 +34,7 @@ function numberOrNull(value: number | string | null): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-function isoOrNull(value: string | Date | null): string | null {
+function dateOnly(value: string | Date): string {\n  if (value instanceof Date) return value.toISOString().slice(0, 10);\n  return String(value).slice(0, 10);\n}\n\nfunction isoOrNull(value: string | Date | null): string | null {
   if (!value) return null;
   const date = value instanceof Date ? value : new Date(value);
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
@@ -118,8 +118,8 @@ export const listStudioStatements = createServerFn({ method: "GET" })
         titleName: row.title_name,
         channelCode: row.channel_code,
         channelName: row.channel_name,
-        periodStart: String(row.period_start).slice(0, 10),
-        periodEnd: String(row.period_end).slice(0, 10),
+        periodStart: dateOnly(row.period_start),
+        periodEnd: dateOnly(row.period_end),
         currency: row.currency,
         estimateAmountMinor: numberOrNull(row.estimate_amount_minor),
         reportedGrossMinor: numberOrNull(row.reported_gross_minor),
@@ -130,7 +130,7 @@ export const listStudioStatements = createServerFn({ method: "GET" })
         receivedAt: isoOrNull(row.received_at),
         reconciledAt: isoOrNull(row.reconciled_at),
         paymentStatus: row.payment_status,
-        paymentDueAt: row.payment_due_at ? String(row.payment_due_at).slice(0, 10) : null,
+        paymentDueAt: row.payment_due_at ? dateOnly(row.payment_due_at) : null,
         paymentPostedAt: isoOrNull(row.payment_posted_at),
         paidAmountMinor: numberOrNull(row.paid_amount_minor),
         paymentReference: row.payment_reference,
