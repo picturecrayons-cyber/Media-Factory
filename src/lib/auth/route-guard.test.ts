@@ -1,15 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { resolveProtectedBridgeRoute, type BridgeRouteAccess } from "./route-guard.ts";
+import { resolveProtectedBridgeRoute, type BridgeRouteAccess, type ProtectedBridgeProfile } from "./route-guard.ts";
 
-type Profile = {
-  userId: string;
-  email: string;
-  displayName: string;
-  organizationName: string | null;
-  accountType: "independent_creator" | "studio" | "buyer" | "investor";
-  internalRole: "viewer" | "qc_reviewer" | "legal_reviewer" | "finance" | "admin" | "super_admin" | null;
-  emailVerified: boolean;
+type Profile = ProtectedBridgeProfile & {
 };
 
 const profile = (overrides: Partial<Profile> = {}): Profile => ({
