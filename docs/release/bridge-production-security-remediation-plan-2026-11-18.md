@@ -3,6 +3,7 @@
 **Status:** DRAFT / NOT APPROVED FOR EXECUTION  
 **Prepared:** 2026-11-18  
 **Source baseline:** `main` at `73e33e342596e6f6f9e6c0b82f4b986136417457`; PR #703 reviewed at `0151295c6dd9aff47e0973bcea5922dc3b0dfaad`  
+**Production catalog snapshot:** READ-ONLY review on 2026-11-18  
 **Release rule:** App-inu pani kittaruthu. Production remains HOLD / NOT CERTIFIED / NO-GO.
 
 ## 1. Scope and non-goals
@@ -13,40 +14,61 @@ This document records a source-backed corrective plan only. It does not contain 
 
 No live data is to be copied into local or test fixtures. Tests must use synthetic disposable data.
 
-## 2. Findings from source review
+## 2. Findings
 
-### 2.1 Legacy browser grants
+### 2.1 Legacy browser grants — DB evidence confirmed; consumers not fully cleared
 
-Production read-only catalog verification found `anon` and `authenticated` with all seven table privileges (SELECT, INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER) on:
+Production READ-ONLY catalog verification confirms `anon` and `authenticated` have all seven table privileges (SELECT, INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER) on:
 - `public.orders`
 - `public.titles`
 - `public.user_entitlements`
 
-The three tables have RLS enabled and zero policies. RLS does not protect TRUNCATE.
+All three have RLS enabled, FORCE RLS disabled, and zero RLS policies. RLS does not protect TRUNCATE. Current effective table ACL also includes `service_role` and `postgres`.
 
-**Source search result (main baseline):**
-- No direct application-code references to `public.orders`, `public.titles`, or `public.user_entitlements` were returned by repository code search.
-- Search hits for “orders” were separate objects such as `streamvista_orders`, `bridge_service_orders`, and Razorpay `/orders`; these are not the legacy `public.orders` table.
-- Search hits for “titles” primarily use `bridge_titles`, not legacy `public.titles`.
-- No `user_entitlements` source hit was returned.
-- This is evidence of no indexed direct consumer, **not proof of no consumer**. Search can miss dynamic SQL, external clients, old deployed bundles, scheduled jobs, integrations, and out-of-repository consumers.
+**Production schema dependency inventory (READ-ONLY, 2026-11-18):**
+- `public.orders.title_slug → public.titles.slug` (FK `orders_title_slug_fkey`).
+- `public.user_entitlements.title_slug → public.titles.slug` (FK `user_entitlements_title_slug_fkey`).
+- No other FK references to these three tables were returned by the catalog query.
+- No views, triggers, or RLS policies on these three tables were returned by the inspected catalogs.
+- A scan of public routine definitions for references to these three legacy relations returned no routine-text hits.
+- This does **not** prove there are no external consumers, dynamic SQL, edge functions, scheduled jobs, deployed older clients, API/Data API callers, or integrations.
 
-**Plan:** inventory schema dependencies, views, triggers, functions, policies, jobs, API logs, external integrations, and historical app versions. Build a consumer matrix per legacy table. Do not revoke until every consumer has an owner, replacement path, and regression coverage. Prefer a narrow, reviewed privilege change only after proving the app uses server-side canonical tables and no legitimate browser client needs the legacy tables. No blanket grant changes.
+**GitHub source inventory (main baseline):**
+- Searches for `public.orders`, `public.titles`, `public.user_entitlements`, and `user_entitlements` returned no direct application-code callsites.
+- Generic “orders” matches are distinct Bridge/StreamVista order objects (`streamvista_orders`, `bridge_service_orders`) or the Razorpay `/orders` endpoint, not the legacy `public.orders` table.
+- The repo uses canonical `bridge_titles`, `bridge_payments`, and `bridge_entitlements` paths in the reviewed Bridge workflows.
+- Search-index absence is not proof of no consumer. Dynamic SQL, external clients, old deployed bundles, scheduled jobs, integrations, and out-of-repository consumers remain unverified.
 
-### 2.2 SECURITY DEFINER owner helper
+**Consumer disposition matrix:**
 
-Production advisor identifies:
+| Legacy relation | In-repo direct app consumer | DB dependency found | Current disposition |
+|---|---|---|---|
+| `public.orders` | No match in indexed main source | FK child of `public.titles` via `title_slug` | External/runtime consumer NOT VERIFIED |
+| `public.titles` | No match in indexed main source | Parent of `orders` and `user_entitlements` | Cannot classify unused; retain pending evidence |
+| `public.user_entitlements` | No match in indexed main source | FK child of `public.titles` via `title_slug` | External/runtime consumer NOT VERIFIED |
+
+**SEC-01 status: PARTIAL / NOT CLEARED.** Catalog and source inventories are complete for the inspected scope, but API logs, edge functions, cron/jobs, older deployed versions, third-party clients, and real usage telemetry were not available in this review. No grant revoke is safe to propose as execution-ready yet.
+
+**Plan:** identify data owner and business meaning for every legacy row; inspect Supabase API logs and scheduled/edge functions; search all deployed client versions and connected integrations; confirm whether legacy Loop code or an older application still queries these tables; build synthetic compatibility tests and a rollback plan. Only then prepare a narrow least-privilege change. No blanket grant changes.
+
+### 2.2 SECURITY DEFINER owner helper — policy dependency confirmed
+
+Production READ-ONLY catalog verification confirms:
 `public.bridge_is_title_owner(p_title_id text)`
-- SECURITY DEFINER
-- EXECUTE: authenticated = true; anon = false
-- `search_path = pg_catalog`, `row_security = off`
+- owner: `postgres`
+- SECURITY DEFINER = true; STABLE
+- `search_path = pg_catalog`; `row_security = off`
+- function body joins `public.bridge_titles` to `public.bridge_loop_identity_links` on `bridge_user_id = owner_user_id`, and checks `l.auth_user_id = (SELECT auth.uid())`
+- effective EXECUTE ACL: `postgres`, `authenticated`, and `service_role`; no `anon` or PUBLIC entry was returned.
+- four RLS policies on `public.bridge_production_assets` call this function: SELECT, INSERT, UPDATE, DELETE. Catalog dependency records confirm policy dependencies.
 
 Source:
-- `supabase/migrations/20261115164711_bridge_production_owner_rls_helper.sql` defines the function and grants EXECUTE to authenticated.
+- `supabase/migrations/20261115164711_bridge_production_owner_rls_helper.sql` defines the function and owner policies.
 - `supabase/migrations/20261116090923_bridge_title_owner_helper_search_path_hardening_20261116.sql` hardens search_path and revokes PUBLIC/anon while retaining authenticated EXECUTE.
-- The function is called by the SELECT/INSERT/UPDATE/DELETE RLS policies on `public.bridge_production_assets`.
 
-**Plan:** do not blindly revoke authenticated EXECUTE; that would break the policies that call it. Review function owner, body, grants, policy dependency, and actor mapping. Add tests for own-title allow, other-title deny, null/unauthenticated deny, forged title ID, and policy operations. Keep function narrow and schema-qualified; consider moving it to a non-exposed schema only with policy/deployment compatibility tests. SECURITY DEFINER must remain only if the policy design demonstrably requires it.
+**Review conclusion:** the function is a live authorization dependency, not an unused helper. Do not revoke authenticated EXECUTE or alter/drop the function without replacing and testing all four policies. The live ACL also includes `service_role`; confirm whether that is expected from inherited/default grants and keep it documented.
+
+**Not yet verified:** adversarial execution tests for own-title/non-owner/null auth, forged title IDs, role switching, RLS behavior, and whether `row_security=off` is necessary. Function safety is NOT CERTIFIED by catalog inspection alone.
 
 ### 2.3 Identity FK parity — PR #703
 
@@ -83,9 +105,9 @@ Auth leaked-password protection should be enabled only through a separately appr
 
 | ID | Work package | Required evidence | Current access |
 |---|---|---|---|
-| SEC-01 | Legacy table consumer/dependency inventory | table-by-table consumer matrix; grants; views/functions/triggers/jobs; API log evidence | READ-ONLY |
-| SEC-02 | Legacy grant remediation proposal | least-privilege matrix; explicit compatibility tests; rollback plan | Draft only |
-| SEC-03 | SECURITY DEFINER helper review | function body/owner/grants; policy dependency graph; adversarial tests | READ-ONLY |
+| SEC-01 | Legacy consumer/dependency inventory | FK graph and source search complete for inspected scope; API logs, cron/edge, deployed clients and external consumer proof still outstanding | READ-ONLY / PARTIAL |
+| SEC-02 | Legacy grant remediation proposal | least-privilege matrix; explicit compatibility tests; rollback plan; consumer sign-off | Draft only / BLOCKED |
+| SEC-03 | SECURITY DEFINER helper review | function body/owner/grants and four policy dependencies inspected; adversarial tests outstanding | READ-ONLY / PARTIAL |
 | ID-01 | PR #703 migration review | exact-head replay, fixture/constraint tests, identity preservation, idempotency | Draft PR only |
 | RLS-01 | 27 advisor finding classification | table, RLS, grants, policies, intended access, owning code path | READ-ONLY |
 | AUTH-01 | Leaked-password protection plan | impact assessment and separate configuration approval | No change |
@@ -97,15 +119,16 @@ Auth leaked-password protection should be enabled only through a separately appr
 - Authenticated non-owner: cannot access another creator's production assets or private title data.
 - Creator/Studio/Buyer/Investor: only their documented permissions and organization/title scope.
 - Admin/Super Admin: distinct privileged checks; all privileged actions audited.
-- `bridge_is_title_owner`: owner allowed, non-owner denied, unauthenticated denied; policy behavior preserved.
+- `bridge_is_title_owner`: owner allowed, non-owner denied, unauthenticated denied; policy behavior preserved; test authenticated and service_role execution paths explicitly.
 - Identity: direct Bridge profile mapping, verified Supabase identity mapping, duplicate links, missing profile, orphan detection, legacy `account`/`session` integrity.
+- Legacy tables: confirm all historical Loop/Bridge flows and external clients before any grant reduction; verify FK insert/update/delete semantics with disposable fixtures.
 - Payments and entitlements: existing Bridge canonical tables unaffected; no live provider call in tests.
 - Negative cases: wrong account type, missing FK, duplicate FK, unexpected FK target, duplicate identity, migration rerun.
 
 ## 5. Sequencing and gates
 
-1. Complete SEC-01 and RLS-01 inventory without changing grants.
-2. Complete SEC-03 function/policy dependency review.
+1. SEC-01 catalog and source search completed for inspected scope; close remaining telemetry/external-client gaps before any legacy grant change.
+2. Complete SEC-03 adversarial tests and confirm helper ACL/policy behavior; preserve current policy dependencies meanwhile.
 3. Reconcile PR #703 history and exact-head replay; preserve Draft.
 4. Prepare separate Draft-only code/migration proposals with automated regression tests.
 5. Validate only on disposable local Supabase first. Staging hosted writes require a separate explicit approval and a compatibility snapshot.
@@ -123,7 +146,7 @@ Auth leaked-password protection should be enabled only through a separately appr
 ## 7. Exit criteria
 
 This security workstream is not complete until:
-- every legacy table has a verified consumer disposition;
+- every legacy table has a verified consumer disposition, including external and historical clients;
 - browser grants match the approved least-privilege matrix;
 - every RLS-no-policy finding has an explicit rationale;
 - the owner helper is proven safe and its policy dependency preserved;
