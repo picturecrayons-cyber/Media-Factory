@@ -1,5 +1,6 @@
 import { resolveBridgeConfiguredOrigin } from "./origin.ts";
 import { resolveCanonicalSupabaseUrl } from "../supabase-url.ts";
+import { resolveBridgeDatabaseUrl } from "./database-binding.ts";
 function read(key: string): string | undefined {
   const v = typeof process === "undefined" ? undefined : process.env[key]?.trim();
   return v || undefined;
@@ -33,7 +34,7 @@ export const bridgeEnv = {
   smtpPass: () => read("SMTP_PASS") || read("HOSTINGER_SMTP_PASS"),
   mailFrom: () => read("MAIL_FROM") || "abijithasokan@crayonspictures.com",
   appUrl: () => resolveBridgeConfiguredOrigin(read("APP_URL"), read("SITE_URL")),
-  databaseUrl: () => read("DATABASE_URL") || read("POSTGRES_URL"),
+  databaseUrl: () => resolveBridgeDatabaseUrl(typeof process === "undefined" ? {} : process.env),
 };
 
 export function integrationStatus() {
