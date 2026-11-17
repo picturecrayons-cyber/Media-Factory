@@ -51,9 +51,9 @@ const verifyFileInput = z.object({
 const signoffInput = z.object({
   sessionId: z.string().uuid(),
   signoffNote: z.string().trim().min(8).max(2000),
-  folderStructurePreserved: z.literal(true),
-  originalFilenamesPreserved: z.literal(true),
-  cameraCardRetained: z.literal(true),
+  folderStructurePreserved: z.boolean(),
+  originalFilenamesPreserved: z.boolean(),
+  cameraCardRetained: z.boolean(),
 });
 
 type DitRoleRow = { membership_role: string };
