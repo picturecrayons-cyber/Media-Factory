@@ -701,3 +701,67 @@ export const getLoopPublication = createServerFn({ method: "GET" })
       },
     };
   });
+
+
+/**
+ * Read-only Loop CMS governance snapshot for Super Admin.
+ * Unlike listLoopPublicationReadiness, this endpoint performs SELECTs only:
+ * it never expires, publishes, unlists, or otherwise mutates Loop records.
+ */
+export const listLoopCmsGovernanceSnapshot = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    if (actor.internalRole !== "super_admin") {
+      throw new Error("Super Admin access required");
+    }
+    const sql = await getSql();
+    const rows = await sql<{
+      id: string;
+      name: string;
+      bridge_status: string;
+      language: string;
+      loop_title_id: string | null;
+      authorization_status: string | null;
+      territories: string[] | null;
+      languages: string[] | null;
+      exploitation_models: string[] | null;
+      window_start: string | Date | null;
+      window_end: string | Date | null;
+      loop_status: string | null;
+      listed: boolean | null;
+      published: boolean | null;
+    }>`
+      select b.id, b.name, b.status as bridge_status, b.language,
+             p.loop_title_id, p.authorization_status, p.territories, p.languages,
+             p.exploitation_models, p.window_start, p.window_end,
+             l.status as loop_status, l.listed, l.published
+      from bridge_titles b
+      left join bridge_loop_publications p on p.bridge_title_id = b.id
+      left join loop_titles l on l.id = p.loop_title_id
+      order by b.updated_at desc
+      limit 200
+    `;
+    return {
+      titles: rows.map((row) => ({
+        id: row.id,
+        name: row.name,
+        bridgeStatus: row.bridge_status,
+        language: row.language,
+        publication: row.loop_title_id
+          ? {
+              authorizationStatus: row.authorization_status ?? "unknown",
+              territories: row.territories ?? [],
+              languages: row.languages ?? [],
+              exploitationModels: row.exploitation_models ?? [],
+              windowStart: iso(row.window_start),
+              windowEnd: iso(row.window_end),
+              loopStatus: row.loop_status,
+              listed: Boolean(row.listed),
+              published: Boolean(row.published),
+            }
+          : null,
+      })),
+    };
+  });
