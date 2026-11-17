@@ -212,7 +212,7 @@ export function ProductionAssetReconciliationPanel() {
 
       <p className="text-xs text-muted">
         SHA-256 verification and technical QC remain separate gates; registered versions are marked
-        PROCESSING with checksum pending until DIT verification is completed. Legacy assets are
+        ACTION_REQUIRED with checksum pending until DIT verification is completed. Legacy assets are
         eligible only after the matching films_film link is reviewer-verified. This action does not
         change QC, legal, rights, publication, payments, or title lifecycle status.
       </p>
