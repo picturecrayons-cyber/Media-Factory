@@ -353,3 +353,29 @@ test("production reconciliation records storage verification without claiming SH
   assert.match(source, /'PROCESSING'/);
   assert.match(source, /checksum_sha256, byte_size, technical_metadata, processing_state/);
 });
+
+
+test("asset reconciliation casts ETags for JSON metadata and never promotes thumbnails as posters", () => {
+  const source = readFileSync(
+    join(process.cwd(), "src/lib/bridge/asset-reconciliation.ts"),
+    "utf8",
+  );
+  assert.match(source, /'source_etag', \$\{source\.etag\}::text/);
+  assert.match(source, /'sealed_etag', \$\{sealed\.etag\}::text/);
+  assert.match(
+    source,
+    /when \$\{row\.kind\} in \('poster', 'poster_vertical'\)\s+and t\.poster_key is null/,
+  );
+  assert.doesNotMatch(
+    source,
+    /when \$\{row\.kind\} in \('poster', 'poster_vertical', 'poster_horizontal', 'thumbnail'\)\s+and t\.poster_key is null/,
+  );
+});
+
+test("reconciliation auto-run stops when an item fails instead of retrying the same cursor forever", () => {
+  const panel = readFileSync(
+    join(process.cwd(), "src/components/bridge/asset-reconciliation-panel.tsx"),
+    "utf8",
+  );
+  assert.match(panel, /if \(result\.failed > 0\)[\s\S]*?setAutoRun\(false\)/);
+});
