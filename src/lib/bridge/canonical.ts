@@ -1,6 +1,8 @@
 /** Canonical StreamVista / Crayons Bridge infrastructure pins. Never print secret values. */
 
 export const CANONICAL_SUPABASE_REF = "mlmgugivsyoxzdgwkbpu";
+export const STAGING_SUPABASE_REF = "jbymleftneggcgutlcqu";
+export const STAGING_SUPABASE_URL = `https://${STAGING_SUPABASE_REF}.supabase.co`;
 export const FORBIDDEN_SUPABASE_REFS = ["tqzimuwozhipqgyerdff", "uakpqqardziifcwzvgfx"] as const;
 export const CANONICAL_SUPABASE_URL = `https://${CANONICAL_SUPABASE_REF}.supabase.co`;
 export const PRODUCT_NAME = "Crayons Bridge";
@@ -18,6 +20,41 @@ export function supabaseRefFromUrl(url: string | undefined): string | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * Resolve the browser Supabase endpoint with an explicit deployment boundary.
+ * Preview is fail-closed to the approved Testing DB; Production is pinned.
+ */
+export function resolveBridgeSupabaseUrl(env: {
+  VERCEL_ENV?: string;
+  BRIDGE_DATABASE_TARGET?: string;
+  SUPABASE_URL?: string;
+}): string {
+  const configured = env.SUPABASE_URL?.trim().replace(/\/+$/, "");
+  const ref = supabaseRefFromUrl(configured);
+
+  if (env.VERCEL_ENV === "preview") {
+    if (env.BRIDGE_DATABASE_TARGET !== "staging") {
+      throw new Error("Bridge Preview is blocked: browser database target must explicitly equal staging.");
+    }
+    if (ref !== STAGING_SUPABASE_REF) {
+      throw new Error("Bridge Preview must use the approved STAGING Supabase project.");
+    }
+    return STAGING_SUPABASE_URL;
+  }
+
+  if (env.VERCEL_ENV === "production") {
+    if (configured && ref !== CANONICAL_SUPABASE_REF) {
+      throw new Error("Bridge Production browser client is pinned to the canonical Production Supabase project.");
+    }
+    return CANONICAL_SUPABASE_URL;
+  }
+
+  if (configured && !ref) {
+    throw new Error("Configured browser Supabase URL is invalid or not a Supabase project URL.");
+  }
+  return configured ?? CANONICAL_SUPABASE_URL;
 }
 
 export function assertCanonicalSupabaseUrl(url: string | undefined): string {
