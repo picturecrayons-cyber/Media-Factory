@@ -202,13 +202,13 @@ function DashboardBody() {
           </p>
         </div>
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <Stat label="Active titles" value={titleCountValue} />
-          <Stat label="Live / commercial titles" value={metricValue(metricsQ.data?.marketplace_live)} />
+          <Stat label="Title records" value={titleCountValue} />
+          <Stat label="Titles in commercial workflow stages" value={metricValue(metricsQ.data?.marketplace_live)} />
           <Stat label="Verified captured payments" value={moneyValue} />
           <Stat label="Recorded entitlements" value={metricValue(metricsQ.data?.entitlements_total)} />
         </div>
         <p className="text-xs text-muted">
-          Cash received is shown only from verified payment records. Title licensing fees are not treated as collected revenue.
+          Captured payment amounts exclude recorded refunds and chargebacks; they are not bank-settlement, fee, tax or accounting statements. Title licensing fees are not treated as collected revenue.
         </p>
       </section>
 
@@ -216,7 +216,7 @@ function DashboardBody() {
         <div>
           <h3 id="operations-title" className="font-display text-xl font-semibold">Operational control</h3>
           <p className="mt-1 text-sm text-muted">
-            Live counts from Bridge Production records. Financial totals include verified payment records only.
+            Live counts from Bridge Production records. Commercial-stage title counts do not certify buyer publication; publication and rights gates remain authoritative. Captured amounts do not certify bank settlement.
           </p>
         </div>
         {metricsQ.isError ? (
@@ -234,7 +234,7 @@ function DashboardBody() {
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               <Stat label="QC pending" value={metricValue(metricsQ.data?.qc_pending)} />
               <Stat label="Legal pending" value={metricValue(metricsQ.data?.legal_pending)} />
-              <Stat label="Live / commercial titles" value={metricValue(metricsQ.data?.marketplace_live)} />
+              <Stat label="Titles in commercial workflow stages" value={metricValue(metricsQ.data?.marketplace_live)} />
               <Stat label="Buyer interest records" value={metricValue(metricsQ.data?.buyer_interest_total)} />
             </div>
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
