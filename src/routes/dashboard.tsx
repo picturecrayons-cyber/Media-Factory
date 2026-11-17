@@ -50,6 +50,21 @@ const ADMIN_MODULES = [
     to: "/internal",
   },
   {
+    title: "Studio operations & DIT",
+    description: "Studio-owned titles, memberships, Camera-to-Cloud ingest and media verification.",
+    to: "/studio",
+  },
+  {
+    title: "Creator workspace",
+    description: "Creator portfolio, title submissions, assets and review status.",
+    to: "/creator",
+  },
+  {
+    title: "Investor portfolio",
+    description: "Verified investor assignments and recorded participation.",
+    to: "/investor",
+  },
+  {
     title: "CMS & site content",
     description: "Bridge-managed website content.",
     to: "/cms",
@@ -87,27 +102,14 @@ function DashboardBody() {
 
   const titles = titlesQ.data?.titles ?? [];
   const actionItems = titles.filter((title) => title.status in ACTION_GUIDANCE);
-  const liveOrCommercial = titles.filter((title) =>
-    ["LIVE_FOR_BUYERS", "IN_NEGOTIATION", "LICENSED", "DELIVERED"].includes(title.status),
-  );
-  const readyToList = titles.filter((title) => title.status === "LICENSING_READY").length;
-  const activeDeals = titles.filter((title) =>
-    title.status === "LICENSED" || title.status === "IN_NEGOTIATION",
-  ).length;
-  const licensedValuePaise = titles.reduce(
-    (sum, title) =>
-      title.status === "LICENSED" || title.status === "DELIVERED"
-        ? sum + title.licensingFeePaise
-        : sum,
-    0,
-  );
   const reportingUnavailable = titlesQ.isError;
-  const metricValue = (value: number) =>
-    titlesQ.isPending || reportingUnavailable ? "—" : String(value);
+  const titleCountValue = titlesQ.isPending || reportingUnavailable ? "—" : String(titles.length);
+  const metricValue = (value: number | undefined) =>
+    metricsQ.isPending || metricsQ.isError || value === undefined ? "—" : String(value);
   const moneyValue =
-    titlesQ.isPending || reportingUnavailable
+    metricsQ.isPending || metricsQ.isError
       ? "—"
-      : `₹${(licensedValuePaise / 100).toLocaleString("en-IN")}`;
+      : `₹${(metricsQ.data.payments_verified_paise / 100).toLocaleString("en-IN")}`;
 
   return (
     <div className="space-y-7">
@@ -118,7 +120,7 @@ function DashboardBody() {
           </p>
           <h2 className="font-display text-3xl font-semibold">Founder control centre</h2>
           <p className="mt-1 max-w-2xl text-sm text-muted">
-            One place to see what needs attention, understand the business and open the right workspace.
+            Super Admin command centre: business health, approvals, people, revenue and delivery operations in one workspace.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -128,12 +130,9 @@ function DashboardBody() {
           >
             Open titles
           </Link>
-          <Link
-            to="/admin/workstations"
-            className="rounded-sm border border-line px-4 py-2 text-sm font-semibold"
-          >
-            Open operations
-          </Link>
+          <Link to="/admin/workstations" className="rounded-sm border border-line px-4 py-2 text-sm font-semibold">Open operations</Link>
+          <Link to="/internal" className="rounded-sm border border-line px-4 py-2 text-sm font-semibold">Distribution</Link>
+          <Link to="/studio" className="rounded-sm border border-line px-4 py-2 text-sm font-semibold">Studio</Link>
         </div>
       </section>
 
@@ -203,13 +202,13 @@ function DashboardBody() {
           </p>
         </div>
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <Stat label="Licensed value*" value={moneyValue} />
-          <Stat label="Live / commercial titles" value={metricValue(liveOrCommercial.length)} />
-          <Stat label="Ready for licensing review" value={metricValue(readyToList)} />
-          <Stat label="Licensed or negotiating deals" value={metricValue(activeDeals)} />
+          <Stat label="Active titles" value={titleCountValue} />
+          <Stat label="Live / commercial titles" value={metricValue(metricsQ.data?.marketplace_live)} />
+          <Stat label="Captured payment value" value={moneyValue} />
+          <Stat label="Verified licenses" value={metricValue(metricsQ.data?.entitlements_total)} />
         </div>
         <p className="text-xs text-muted">
-          *Sum of recorded licensing fees for licensed or delivered titles; not cash received.
+          Cash received is shown only from verified payment records. Title licensing fees are not treated as collected revenue.
         </p>
       </section>
 
@@ -227,39 +226,56 @@ function DashboardBody() {
         ) : (
           <>
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-              <Stat label="All registered profiles" value={metricsQ.isPending ? "—" : String(metricsQ.data.profiles_total)} />
-              <Stat label="Independent-creator profiles" value={metricsQ.isPending ? "—" : String(metricsQ.data.creators_total)} />
-              <Stat label="Studios" value={metricsQ.isPending ? "—" : String(metricsQ.data.studios_total)} />
-              <Stat label="Organizations" value={metricsQ.isPending ? "—" : String(metricsQ.data.organizations_total)} />
+              <Stat label="All registered profiles" value={metricValue(metricsQ.data?.profiles_total)} />
+              <Stat label="Independent-creator profiles" value={metricValue(metricsQ.data?.creators_total)} />
+              <Stat label="Studios" value={metricValue(metricsQ.data?.studios_total)} />
+              <Stat label="Organizations" value={metricValue(metricsQ.data?.organizations_total)} />
             </div>
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-              <Stat label="QC pending" value={metricsQ.isPending ? "—" : String(metricsQ.data.qc_pending)} />
-              <Stat label="Legal pending" value={metricsQ.isPending ? "—" : String(metricsQ.data.legal_pending)} />
-              <Stat label="Live / commercial titles" value={metricsQ.isPending ? "—" : String(metricsQ.data.marketplace_live)} />
-              <Stat label="Buyer enquiries" value={metricsQ.isPending ? "—" : String(metricsQ.data.enquiries_total)} />
+              <Stat label="QC pending" value={metricValue(metricsQ.data?.qc_pending)} />
+              <Stat label="Legal pending" value={metricValue(metricsQ.data?.legal_pending)} />
+              <Stat label="Live / commercial titles" value={metricValue(metricsQ.data?.marketplace_live)} />
+              <Stat label="Buyer enquiries" value={metricValue(metricsQ.data?.enquiries_total)} />
             </div>
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-              <Stat label="Payment records" value={metricsQ.isPending ? "—" : String(metricsQ.data.payments_total)} />
-              <Stat label="Verified payment value" value={metricsQ.isPending ? "—" : "₹" + (metricsQ.data.payments_verified_paise / 100).toLocaleString("en-IN")} />
-              <Stat label="Entitlements / licenses" value={metricsQ.isPending ? "—" : String(metricsQ.data.entitlements_total)} />
-              <Stat label="Active LOOP publications" value={metricsQ.isPending ? "—" : String(metricsQ.data.loop_active)} />
+              <Stat label="Payment records" value={metricValue(metricsQ.data?.payments_total)} />
+              <Stat label="Verified payment value" value={moneyValue} />
+              <Stat label="Entitlements / licenses" value={metricValue(metricsQ.data?.entitlements_total)} />
+              <Stat label="Active LOOP publications" value={metricValue(metricsQ.data?.loop_active)} />
             </div>
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-              <Stat label="Delivery jobs" value={metricsQ.isPending ? "—" : String(metricsQ.data.delivery_total)} />
-              <Stat label="Failed deliveries" value={metricsQ.isPending ? "—" : String(metricsQ.data.delivery_failed)} />
-              <Stat label="DIT storage objects" value={metricsQ.isPending ? "—" : String(metricsQ.data.dit_objects_total)} />
-              <Stat label="Checksum-verified DIT objects" value={metricsQ.isPending ? "—" : String(metricsQ.data.dit_objects_verified)} />
+              <Stat label="Delivery jobs" value={metricValue(metricsQ.data?.delivery_total)} />
+              <Stat label="Failed deliveries" value={metricValue(metricsQ.data?.delivery_failed)} />
+              <Stat label="DIT storage objects" value={metricValue(metricsQ.data?.dit_objects_total)} />
+              <Stat label="Checksum-verified DIT objects" value={metricValue(metricsQ.data?.dit_objects_verified)} />
             </div>
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-              <Stat label="Bridge asset bytes recorded" value={metricsQ.isPending ? "—" : (metricsQ.data.storage_bytes / (1024 ** 3)).toFixed(2) + " GiB"} />
-              <Stat label="Failed webhook events" value={metricsQ.isPending ? "—" : String(metricsQ.data.webhook_failed)} />
-              <Stat label="Investor profiles" value={metricsQ.isPending ? "—" : String(metricsQ.data.investors_total)} />
+              <Stat label="Bridge asset bytes recorded" value={metricsQ.isPending || metricsQ.isError ? "—" : (metricsQ.data.storage_bytes / (1024 ** 3)).toFixed(2) + " GiB"} />
+              <Stat label="Failed webhook events" value={metricValue(metricsQ.data?.webhook_failed)} />
+              <Stat label="Investor profiles" value={metricValue(metricsQ.data?.investors_total)} />
             </div>
           </>
         )}
         <p className="text-xs text-muted">
           Storage is the sum of Bridge asset metadata, not an OCI billing or complete bucket-usage report. Profile counts follow account_type and may include internal profiles mapped to that account type.
         </p>
+      </section>
+
+      <section aria-labelledby="founder-authority-title" className="space-y-3">
+        <div>
+          <h3 id="founder-authority-title" className="font-display text-xl font-semibold">Founder authority & controls</h3>
+          <p className="mt-1 text-sm text-muted">
+            Verified Super Admin is granted every registered Bridge permission. High-impact decisions remain individually recorded with actor, reason and outcome.
+          </p>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          <Link to="/workspace" className="rounded-sm border border-line p-4 hover:border-accent"><strong>Title master & media</strong><p className="mt-1 text-sm text-muted">Metadata, ownership, assets and title lifecycle</p></Link>
+          <Link to="/admin/workstations" className="rounded-sm border border-line p-4 hover:border-accent"><strong>QC / Legal / Rights approvals</strong><p className="mt-1 text-sm text-muted">Review queue, decisions and audit evidence</p></Link>
+          <Link to="/buyer" className="rounded-sm border border-line p-4 hover:border-accent"><strong>Buyer & licensing desk</strong><p className="mt-1 text-sm text-muted">Discovery, offers, payment and entitlement workflow</p></Link>
+          <Link to="/internal" className="rounded-sm border border-line p-4 hover:border-accent"><strong>Distribution & LOOP</strong><p className="mt-1 text-sm text-muted">Publication readiness, authorization and distribution windows</p></Link>
+          <Link to="/deliveries" className="rounded-sm border border-line p-4 hover:border-accent"><strong>Delivery operations</strong><p className="mt-1 text-sm text-muted">Vendor jobs, assignment, approval and fulfilment</p></Link>
+          <Link to="/cms" className="rounded-sm border border-line p-4 hover:border-accent"><strong>CMS & business content</strong><p className="mt-1 text-sm text-muted">Manage approved Bridge site content</p></Link>
+        </div>
       </section>
 
       <section aria-labelledby="portfolio-title" className="space-y-3">
