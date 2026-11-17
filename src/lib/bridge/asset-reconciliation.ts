@@ -147,7 +147,7 @@ export const reconcileProductionAssets = createServerFn({ method: "POST" })
           sealed.byteSize !== source.byteSize ||
           !sealed.etag
         ) {
-          throw new Error("Immutable OCI copy did not pass size and ETag verification");
+          throw new Error("Sealed-path OCI copy did not pass size and ETag verification");
         }
 
         const linked = await sql.transaction(async (tx) => {
@@ -211,7 +211,7 @@ export const reconcileProductionAssets = createServerFn({ method: "POST" })
               null, ${sealed.byteSize},
               jsonb_build_object(
                 'storage_verification', jsonb_build_object(
-                  'method', 'OCI_HEAD_AND_IMMUTABLE_COPY',
+                  'method', 'OCI_HEAD_AND_SEALED_PATH_COPY',
                   'state', 'PASSED',
                   'source_etag', ${source.etag}::text,
                   'sealed_etag', ${sealed.etag}::text
@@ -286,7 +286,7 @@ export const reconcileProductionAssets = createServerFn({ method: "POST" })
                 kind,
                 queueId: row.id,
                 byteSize: sealed.byteSize,
-                immutableOciCopyVerified: true,
+                sealedPathCopyVerified: true,
               },
             },
             tx,
@@ -311,8 +311,8 @@ export const reconcileProductionAssets = createServerFn({ method: "POST" })
     }
 
     // Then verify unconfirmed asset rows already associated with a production title.
-    // A successful HEAD is not enough: the object is copied to an immutable key and
-    // the database pointer, byte size and audit record are changed atomically.
+    // A successful HEAD is not enough: the object is copied to a dedicated sealed-path key and
+    // the database pointer, byte size, version evidence and audit record are changed atomically.
     if (queueRows.length === 0) {
       const assetRows = await sql<{
         id: string;
@@ -394,7 +394,7 @@ export const reconcileProductionAssets = createServerFn({ method: "POST" })
             sealed.byteSize !== source.byteSize ||
             !sealed.etag
           ) {
-            throw new Error("Immutable OCI copy did not pass size and ETag verification");
+            throw new Error("Sealed-path OCI copy did not pass size and ETag verification");
           }
 
           const verified = await sql.transaction(async (tx) => {
@@ -441,7 +441,7 @@ export const reconcileProductionAssets = createServerFn({ method: "POST" })
                 null, ${sealed.byteSize},
                 jsonb_build_object(
                   'storage_verification', jsonb_build_object(
-                    'method', 'OCI_HEAD_AND_IMMUTABLE_COPY',
+                    'method', 'OCI_HEAD_AND_SEALED_PATH_COPY',
                     'state', 'PASSED',
                     'source_etag', ${source.etag}::text,
                     'sealed_etag', ${sealed.etag}::text
@@ -512,7 +512,7 @@ export const reconcileProductionAssets = createServerFn({ method: "POST" })
                   titleName: row.title_name,
                   kind: row.kind,
                   byteSize: sealed.byteSize,
-                  immutableOciCopyVerified: true,
+                  sealedPathCopyVerified: true,
                 },
               },
               tx,
