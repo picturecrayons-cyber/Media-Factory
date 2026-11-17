@@ -188,7 +188,7 @@ export const getFounderDashboardMetrics = createServerFn({ method: "GET" })
       dit_files_total: number; dit_copy_manifests_verified: number; webhook_failed: number;
     }>`
       select
-        (select count(*)::int from bridge_titles where merged_into_title_id is null) as titles_total,
+        (select count(*)::int from bridge_titles) as titles_total,
         (select count(*)::int from bridge_profiles) as profiles_total,
         (select count(*)::int from bridge_profiles where account_type = 'independent_creator') as creators_total,
         (select count(*)::int from bridge_profiles where account_type = 'studio') as studios_total,
@@ -197,7 +197,7 @@ export const getFounderDashboardMetrics = createServerFn({ method: "GET" })
         (select count(*)::int from bridge_organizations) as organizations_total,
         (select count(*)::int from bridge_qc_cases where status in ('PENDING','OPEN','IN_REVIEW')) as qc_pending,
         (select count(*)::int from bridge_legal_cases where status in ('PENDING','OPEN','IN_REVIEW')) as legal_pending,
-        (select count(*)::int from bridge_titles where merged_into_title_id is null and status in ('LIVE_FOR_BUYERS','IN_NEGOTIATION','LICENSED','DELIVERED')) as marketplace_live,
+        (select count(*)::int from bridge_titles where status in ('LIVE_FOR_BUYERS','IN_NEGOTIATION','LICENSED','DELIVERED')) as marketplace_live,
         (select count(*)::int from bridge_buyer_interest) as buyer_interest_total,
         (select count(*)::int from bridge_payments) as payments_total,
         (select coalesce(sum(greatest(0, amount_paise - coalesce(refunded_amount_paise,0) - coalesce(chargeback_amount_paise,0))),0)::bigint from bridge_payments where verified_at is not null and lower(status) = 'captured') as payments_verified_paise,
