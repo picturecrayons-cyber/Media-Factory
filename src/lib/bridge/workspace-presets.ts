@@ -6,6 +6,8 @@ import { requireVerifiedActor } from "./session";
 import { writeAudit } from "./audit";
 import {
   isWorkspacePresetManager,
+  legalPresetConfig,
+  operationalPresetConfig,
   workspacePresetWriteInput,
   type WorkspacePresetConfig,
 } from "./workspace-presets-policy";
@@ -15,25 +17,12 @@ function assertPresetManager(actor: { emailVerified: boolean; internalRole: stri
 }
 
 function parseConfiguration(type: "OPERATIONAL" | "LEGAL", value: unknown): WorkspacePresetConfig {
-  if (type === "OPERATIONAL") {
-    const parsed = workspacePresetWriteInput.shape.configuration.safeParse(value);
-    if (!parsed.success || !("companyName" in parsed.data)) {
-      throw new Error("Invalid operational preset configuration");
-    }
-    return parsed.data;
-  }
-  const { legalPresetConfig } = requirePolicySchemas();
-  const parsed = legalPresetConfig.safeParse(value);
-  if (!parsed.success) throw new Error("Invalid legal preset configuration");
+  const parsed = type === "OPERATIONAL"
+    ? operationalPresetConfig.safeParse(value)
+    : legalPresetConfig.safeParse(value);
+  if (!parsed.success) throw new Error("Invalid workspace preset configuration");
   return parsed.data;
 }
-
-function requirePolicySchemas() {
-  // Kept as a static module reference so the browser bundle receives only
-  // TanStack server-function stubs, never database or session implementation.
-  return policySchemas;
-}
-import * as policySchemas from "./workspace-presets-policy";
 
 const presetRow = z.object({
   id: z.string().uuid(),
@@ -53,18 +42,27 @@ export const listWorkspacePresets = createServerFn({ method: "GET" })
     const actor = await requireVerifiedActor(context.userId);
     assertPresetManager(actor);
     const sql = await getSql();
-    const rows = await sql<z.infer<typeof presetRow>>`
-      select id, preset_type, name, version, configuration, status, created_at, updated_at
-      from public.bridge_workspace_presets
-      where ${data.includeArchived ? sql`true` : sql`status = 'ACTIVE'`}
-      order by preset_type, lower(name), version desc
-      limit 200
-    `;
-    return { presets: rows.map((row) => ({
-      ...row,
-      created_at: new Date(row.created_at).toISOString(),
-      updated_at: new Date(row.updated_at).toISOString(),
-    })) };
+    const rows = data.includeArchived
+      ? await sql<z.infer<typeof presetRow>>`
+          select id, preset_type, name, version, configuration, status, created_at, updated_at
+          from public.bridge_workspace_presets
+          order by preset_type, lower(name), version desc
+          limit 200
+        `
+      : await sql<z.infer<typeof presetRow>>`
+          select id, preset_type, name, version, configuration, status, created_at, updated_at
+          from public.bridge_workspace_presets
+          where status = 'ACTIVE'
+          order by preset_type, lower(name), version desc
+          limit 200
+        `;
+    return {
+      presets: rows.map((row) => ({
+        ...row,
+        created_at: new Date(row.created_at).toISOString(),
+        updated_at: new Date(row.updated_at).toISOString(),
+      })),
+    };
   });
 
 export const saveWorkspacePreset = createServerFn({ method: "POST" })
