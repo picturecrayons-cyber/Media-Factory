@@ -37,16 +37,20 @@ export const legalPresetConfig = z.object({
   }
 });
 
-export const workspacePresetConfig = z.discriminatedUnion("type", [
-  z.object({ type: z.literal("OPERATIONAL"), configuration: operationalPresetConfig }),
-  z.object({ type: z.literal("LEGAL"), configuration: legalPresetConfig }),
+export const workspacePresetWriteInput = z.discriminatedUnion("type", [
+  z.object({
+    id: z.string().uuid().optional(),
+    name: z.string().trim().min(3).max(100),
+    type: z.literal("OPERATIONAL"),
+    configuration: operationalPresetConfig,
+  }),
+  z.object({
+    id: z.string().uuid().optional(),
+    name: z.string().trim().min(3).max(100),
+    type: z.literal("LEGAL"),
+    configuration: legalPresetConfig,
+  }),
 ]);
-
-export const workspacePresetWriteInput = z.object({
-  id: z.string().uuid().optional(),
-  name: z.string().trim().min(3).max(100),
-  ...workspacePresetConfig.shape,
-});
 
 export type OperationalPresetConfig = z.infer<typeof operationalPresetConfig>;
 export type LegalPresetConfig = z.infer<typeof legalPresetConfig>;
