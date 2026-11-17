@@ -101,6 +101,45 @@ Leaked-password protection is disabled.
 
 Auth leaked-password protection should be enabled only through a separately approved Auth configuration change, after checking user impact and rollout behavior. This draft does not change Auth settings.
 
+
+## 2.5 Supabase API logs, Edge Functions, scheduled jobs, and deployed Loop clients — READ-ONLY review (2026-11-18)
+
+**API/log evidence window:** unified Supabase logs default 24-hour query window; records surfaced from 2026-11-17. This is not a complete historical retention export.
+
+- Unified log sources available include `postgrest_logs`, `postgres_logs`, `edge_logs`, `function_edge_logs`, and `function_logs`.
+- Targeted search across PostgREST, Edge, and function log messages/attributes for `orders`, `public.titles`, and `user_entitlements` returned no exact legacy-table hits in the inspected log window.
+- Recent Edge log samples show canonical API access to `public.loop_titles` and `public.bridge_loop_publications`, plus calls to `/rest/v1/rpc/public_loop_catalog`; they do not show calls to the legacy `public.orders`, `public.titles`, or `public.user_entitlements`.
+- PostgREST sample records included server timeout errors. Absence of matching legacy paths in this bounded log window is not proof of historical non-use.
+- Vercel runtime log retrieval for the 7-day and 24-hour windows timed out before returning records. Runtime log usage for those windows is therefore NOT VERIFIED; no negative conclusion is drawn from the timeout.
+
+**Cumulative Postgres query statistics:**
+- `pg_stat_statements` is installed; its statistics reset timestamp is 2026-09-25 10:42:00+00.
+- The cumulative query text includes SQL touching all three legacy tables. Examples include `SELECT`/row-count/reconciliation queries, plus historical DDL and seed statements for the legacy schema.
+- Several recorded statements contain query comments identifying `POST /mcp` and timestamps on 2026-11-16. These are real SQL statements recorded by Postgres, but the comment identifies an MCP-originated SQL call, not an application browser/API consumer. Other legacy-table statements also appear in the cumulative statistics; the stats alone do not identify the originating app/client or prove ongoing traffic.
+- No exact legacy-table statements were returned by the targeted pg_stat_statements search for the current canonical app query patterns; the legacy hits are historical and low-count in the returned results. Statistics are cumulative since reset and can include manual/admin audit activity.
+
+**Deployed Supabase Edge Functions (Production):**
+1. `loop-public-catalog` — ACTIVE, version 1. Source calls `public_loop_catalog()` using the server-side service role. The SQL function reads `public.loop_titles` joined to `public.bridge_loop_publications`; it does not read the three legacy tables. Recent function logs show successful GET calls to the function and its RPC.
+2. `razorpay-webhook` — ACTIVE, version 16. Inspected source writes/reads `bridge_webhook_events`, `bridge_payments`, `bridge_entitlements`, `bridge_package_entitlements`, `bridge_license_packages`, `bridge_titles`, `bridge_audit_logs`, `bridge_profiles`, and `bridge_notification_outbox`. No direct legacy `orders`, `titles`, or `user_entitlements` table calls were found in the deployed function source.
+
+The Edge Function inventory returned two active functions. This is the deployed Supabase Edge Function inventory available through the connected project API, not a guarantee that no external function/service exists.
+
+**Scheduled jobs:**
+- `pg_cron` is present in the available-extension catalog but is not installed in this Production database (`pg_extension` has no `pg_cron` row).
+- The `cron.job` relation and cron job tables are absent. No Postgres cron jobs were returned.
+- GitHub source search of the Loop repository found no `vercel.json crons`, `cron.schedule`, or `/api/cron` match on its default branch.
+- This does not cover external schedulers or third-party workflow systems outside the connected project.
+
+**Older READY Production Loop deployments inspected:**
+- READY deployment commit `d8e4e6918e5a6a750a5615d47abed1636c855e42`.
+- READY deployment commit `e4a13852c837334122f9f6c8fb51b0933f22d7a4`.
+- In both deployed source snapshots, `api/titles/public.ts`, `api/razorpay/create-order.ts`, `api/razorpay/verify-payment.ts`, and `api/webhooks/[type].ts` use canonical `loop_titles` and Razorpay gateway `/orders` endpoints; no direct calls to the three legacy database tables were found.
+- Current READY Production deployment commit is `4a0fcd1cffd035e26e39c5dbc5ecfd9e99f8855f`; GitHub default-branch search for the three legacy table names returned no direct application callsites.
+- Two older BLOCKED Production-target deployment records were not treated as live clients. Historical browser caches, previously downloaded bundles, and third-party clients remain outside the verified scope.
+
+**Updated consumer decision:** No direct legacy-table usage was found in the inspected current/older READY Loop app source, active Edge Function source, or bounded recent Supabase API log window. However, Postgres cumulative statistics prove historical SQL usage against all three tables, and the source comment indicates at least some of that activity came from MCP audit/inspection. External and older client usage is still NOT VERIFIED. Therefore SEC-01 remains **PARTIAL / NOT CLEARED**, and no least-privilege revoke proposal is execution-ready.
+
+
 ## 3. Corrective work packages
 
 | ID | Work package | Required evidence | Current access |
