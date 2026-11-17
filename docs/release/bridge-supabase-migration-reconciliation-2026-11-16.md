@@ -88,6 +88,14 @@
 | 20261115165233 | bridge_production_owner_helper_revoke_anon | 155 | `d4a980b33b895324231304f17fbaf912043d5659c6cf43e78421a00ed568a71e` |
 | 20261116090923 | bridge_title_owner_helper_search_path_hardening_20261116 | 824 | `486eba102805b78a28a4509466eecab3f2557cb4093dac20d619f51c6a946fba` |
 
+## Pending PR migration candidates (not yet applied to the remote ledger)
+
+| Version | Name | SQL bytes | SHA-256 |
+|---|---|---:|---|
+| 20261118100000 | bridge_production_schedule_20261118 | 1863 | `2c00e3129b860c99485a97453018ffa1397399f9d429c13992fb7e33a52609d3` |
+
+These candidate migrations are checked for exact source integrity and replayed only in the disposable local CI database after the 69 recorded Production migrations. They are not counted as already-applied remote Production migrations.
+
 ## Previously committed files
 
 All 17 files previously under `supabase/migrations/` are preserved byte-for-byte under `supabase/migrations_archive_unreconciled_20261116/`.
