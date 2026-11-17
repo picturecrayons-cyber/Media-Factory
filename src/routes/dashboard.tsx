@@ -50,7 +50,7 @@ const WORK_AREAS = [
   {
     group: "Loop CMS & Publishing",
     summary: "Bridge-side publication readiness and authorization. Consumer merchandising CMS is a separate implementation gap.",
-    links: [{ label: "Bridge publication gateway", to: "/cms" }],
+    links: [{ label: "Loop CMS governance", to: "/loop-cms" }, { label: "Bridge publication gateway", to: "/cms" }],
     state: "partial",
   },
   {
