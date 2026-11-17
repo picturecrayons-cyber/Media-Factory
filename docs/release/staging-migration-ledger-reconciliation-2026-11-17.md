@@ -103,7 +103,7 @@ The table inventory confirms RLS is enabled on listed public relations, but this
 1. Preserve the 61/61 applied SQL bodies recovered from read-only ledger queries and prior non-executable evidence archives; distinguish this from locating original migration files.
 2. Obtain the authoritative intended STAGING schema contract; do not use the Production manifest as a substitute.
 3. Produce a catalog inventory for tables/columns/types/defaults/constraints/FKs/indexes/views/functions/triggers/policies/grants/default ACLs/storage buckets and policies.
-4. Map all 55 applied entries to original source files/commits; 10 exact and 1 normalized source matches are already recorded, while 50 original-source mappings remain unverified. For the later 24 entries, ledger-statement serialization byte counts and SHA-256 fingerprints are recorded in `staging-migration-source-sha256-followup-2026-11-17.md`; these are not original file hashes.
+4. Map all 61 applied entries to original source files/commits; 10 exact and 1 normalized original source matches are already recorded; two additional ledger-exact applied-body copies are archived in PR #681; 48 original-source mappings remain unverified. For the later 24 entries, ledger-statement serialization byte counts and SHA-256 fingerprints are recorded in `staging-migration-source-sha256-followup-2026-11-17.md`; these are not original file hashes.
 5. Compare the catalog to a disposable local replay of the STAGING migration set, not to Production.
 6. Reconcile current object state against migration effects; separately identify intentional test fixtures and drift.
 7. Review security advisor findings and test-only functions/policies.
@@ -117,7 +117,7 @@ The table inventory confirms RLS is enabled on listed public relations, but this
 | STAGING migration ledger retrieved | PASS — 61 entries |
 | Production source manifest retrieved | PASS — 69 entries |
 | Direct ledger version match | FAIL — 0 matching versions |
-| Applied STAGING SQL bodies preserved/retrieved | PASS — 61/61 |\n| Original source-file/commit mapping | PARTIAL — 11/55 (10 exact, 1 normalized); 44 unverified |\n| Later 24 ledger-statement serialization fingerprints | PASS — documented; not original file hashes |
+| Applied STAGING SQL bodies preserved/retrieved | PASS — 61/61 |\n| Original source-file/commit mapping | PARTIAL — 11/61 original repository source mappings (10 exact, 1 normalized); 48 source mappings remain unverified after accounting for two separate ledger-exact recovered body copies in PR #681 |\n| Ledger-statement serialization fingerprints | PARTIAL — later 24 plus six latest records; not original file hashes |
 | Intended STAGING schema contract pinned | BLOCKED |
 | Full semantic catalog comparison | BLOCKED |
 | Disposable replay of exact STAGING source | NOT RUN |
