@@ -50,7 +50,10 @@ describe("legacy-link unresolved migration", () => {
           review_status text not null default 'pending',
           reviewed_by text,
           reviewed_at timestamptz,
+          resolution_status text not null default 'resolved',
           constraint streamvista_legacy_links_pkey primary key (source_table, legacy_id),
+          constraint streamvista_legacy_links_resolution_status_check
+            check (resolution_status in ('resolved','unresolved','rejected')),
           constraint streamvista_legacy_links_bridge_title_id_fkey
             foreign key (bridge_title_id) references public.bridge_titles(id) on delete restrict,
           constraint streamvista_legacy_links_order_id_fkey
