@@ -16,7 +16,7 @@ type LegacySourceTable = (typeof LEGACY_SOURCE_TABLES)[number];
 
 type DecisionInput =
   | {
-      sourceTable: "films_film" | "films_filmdraft" | "films_filmbuyermapping" | "films_status" | "films_viewhistory";
+      sourceTable: LegacySourceTable;
       legacyId: string;
       decision: "verify";
       bridgeTitleId: string;
