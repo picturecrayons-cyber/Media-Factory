@@ -24,14 +24,16 @@ export function StudioMemberDesk() {
     );
   }
 
-  const members = query.data.members;
+  if (!query.data) return <p className="text-sm text-muted">Studio member data is unavailable.</p>;
+  const result = query.data;
+  const members = result.members;
   if (!members.length) {
     return <p className="text-sm text-muted">No Studio memberships are recorded for this organization.</p>;
   }
 
   function controls(member: StudioMember) {
     const locked = member.membershipRole === "owner" ||
-      member.userId === query.data.currentUserId ||
+      member.userId === result.currentUserId ||
       member.status === "removed" ||
       mutation.isPending;
     return (
@@ -41,14 +43,14 @@ export function StudioMemberDesk() {
           id={`studio-role-${member.userId}`}
           className="rounded-sm border border-line bg-bg px-2 py-1 text-xs"
           value={member.membershipRole}
-          disabled={locked || (query.data.managerRole !== "owner" && member.membershipRole === "admin")}
+          disabled={locked || (result.managerRole !== "owner" && member.membershipRole === "admin")}
           onChange={(event) => mutation.mutate({
             memberUserId: member.userId,
             membershipRole: event.target.value as "admin" | "producer" | "dit" | "member",
             status: member.status as "active" | "suspended" | "removed",
           })}
         >
-          {query.data.managerRole === "owner" ? <option value="admin">Admin</option> : null}
+          {result.managerRole === "owner" ? <option value="admin">Admin</option> : null}
           <option value="producer">Producer</option>
           <option value="dit">DIT</option>
           <option value="member">Member</option>
@@ -70,7 +72,7 @@ export function StudioMemberDesk() {
           <option value="suspended">Suspended</option>
           <option value="removed">Removed</option>
         </select>
-        {locked ? <span className="self-center text-[11px] text-muted">{member.membershipRole === "owner" ? "Owner protected" : member.userId === query.data.currentUserId ? "Your access protected" : member.status === "removed" ? "Removed" : "Updating…"}</span> : null}
+        {locked ? <span className="self-center text-[11px] text-muted">{member.membershipRole === "owner" ? "Owner protected" : member.userId === result.currentUserId ? "Your access protected" : member.status === "removed" ? "Removed" : "Updating…"}</span> : null}
       </div>
     );
   }
