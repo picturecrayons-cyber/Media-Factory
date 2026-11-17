@@ -49,16 +49,16 @@ test("an authenticated identity without a Bridge profile goes to onboarding", as
   assert.deepEqual(redirects, ["onboarding"]);
 });
 
-test("buyer route admits Buyers and verified Super Admins only", async () => {
+test("buyer route admits Buyers for the verification flow and verified Super Admins only", async () => {
   for (const value of [
     profile({ accountType: "buyer" }),
+    profile({ accountType: "buyer", internalRole: null, emailVerified: false }),
     profile({ internalRole: "super_admin", emailVerified: true }),
   ]) {
     const { deps } = dependencies(value);
     assert.ok(await resolveProtectedBridgeRoute(deps, "buyer"));
   }
   for (const value of [
-    profile({ accountType: "buyer", internalRole: null, emailVerified: false }),
     profile({ internalRole: "super_admin", emailVerified: false }),
     profile({ internalRole: "admin" }),
     profile({ internalRole: "qc_reviewer" }),
