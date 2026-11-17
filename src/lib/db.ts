@@ -1,4 +1,5 @@
 import { pendingMigrations } from "../../scripts/migration-plan.mjs";
+import { resolveBridgeDatabaseUrl } from "./bridge/database-binding.ts";
 
 /** Which database backend is active. */
 export type DbSource = "postgres" | "pglite";
@@ -7,14 +8,7 @@ export type DbSource = "postgres" | "pglite";
 // integration injects POSTGRES_URL, so accept that as the canonical fallback.
 // Empty/whitespace values are treated as unset to avoid a silent PGLite fallback.
 const rawDatabaseUrl =
-  typeof process !== "undefined"
-    ? (
-        process.env.DATABASE_URL ??
-        process.env.POSTGRES_URL ??
-        process.env.SUPABASE_DB_URL ??
-        process.env.SUPABASE_DATABASE_URL
-      )
-    : undefined;
+  typeof process !== "undefined" ? resolveBridgeDatabaseUrl(process.env) : undefined;
 function normalizePostgresUrl(value: string | undefined): string | undefined {
   if (!value) return undefined;
   const trimmed = value.trim();

@@ -11,6 +11,9 @@ export async function persistVerifiedAsset(sql: Pick<Sql, "query">, opts: {
   byteSize: number;
   contentType: string | null;
   checksum: string | null;
+  checksumSha256: string;
+  storage: { provider: string; bucket: string; namespace: string; region: string; endpoint: string };
+  objectVersionId: string | null;
   sourceKey: string;
   sealedKey: string;
 }): Promise<boolean> {
@@ -39,6 +42,9 @@ async function persistVerifiedAssetScoped(
     byteSize: number;
     contentType: string | null;
     checksum: string | null;
+    checksumSha256: string;
+    storage: { provider: string; bucket: string; namespace: string; region: string; endpoint: string };
+    objectVersionId: string | null;
     sourceKey: string;
     sealedKey: string;
   },
@@ -64,7 +70,11 @@ async function persistVerifiedAssetScoped(
               )` : "";
   const rows = await sql.query<{ entity_id: string }>(`
     with verified as (
-      update bridge_assets a set byte_size = $1, content_type = coalesce($2, a.content_type), s3_key = $6
+      update bridge_assets a set byte_size = $1, content_type = coalesce($2, a.content_type), s3_key = $6,
+        source_object_key = $7, verified_object_key = $6, checksum_sha256 = $10,
+        storage_provider = $11, storage_bucket = $12, storage_namespace = $13,
+        storage_region = $14, storage_endpoint = $15, object_version_id = $16,
+        storage_verified_at = now()
       where a.id = $3 and a.created_by = $4 and a.byte_size is null and a.s3_key = $7
         and a.title_id = $8
         and exists (
@@ -92,7 +102,11 @@ async function persistVerifiedAssetScoped(
         'titleId', v.title_id,
         'kind', v.kind,
         'byteSize', $1,
-        'checksum', $9::text
+        'checksumEtag', $9::text,
+        'checksumSha256', $10::text,
+        'storageProvider', $11::text,
+        'storageBucket', $12::text,
+        'storageRegion', $14::text
       )
     from verified v join title_set t on t.id = v.title_id
     returning entity_id
@@ -106,6 +120,13 @@ async function persistVerifiedAssetScoped(
     opts.sourceKey,
     opts.titleId,
     opts.checksum,
+    opts.checksumSha256,
+    opts.storage.provider,
+    opts.storage.bucket,
+    opts.storage.namespace,
+    opts.storage.region,
+    opts.storage.endpoint,
+    opts.objectVersionId,
   ]);
   return Boolean(rows[0]);
 }
