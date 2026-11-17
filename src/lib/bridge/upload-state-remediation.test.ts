@@ -350,7 +350,7 @@ test("production reconciliation records storage verification without claiming SH
   assert.match(source, /insert into bridge_asset_versions/);
   assert.match(source, /'OCI_HEAD_AND_IMMUTABLE_COPY'/);
   assert.match(source, /'checksum_sha256_state', 'PENDING'/);
-  assert.match(source, /'PROCESSING'/);
+  assert.match(source, /'ACTION_REQUIRED'/);
   assert.match(source, /checksum_sha256, byte_size, technical_metadata, processing_state/);
 });
 
