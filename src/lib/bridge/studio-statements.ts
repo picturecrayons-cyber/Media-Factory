@@ -34,7 +34,12 @@ function numberOrNull(value: number | string | null): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-function dateOnly(value: string | Date): string {\n  if (value instanceof Date) return value.toISOString().slice(0, 10);\n  return String(value).slice(0, 10);\n}\n\nfunction isoOrNull(value: string | Date | null): string | null {
+function dateOnly(value: string | Date): string {
+  if (value instanceof Date) return value.toISOString().slice(0, 10);
+  return String(value).slice(0, 10);
+}
+
+function isoOrNull(value: string | Date | null): string | null {
   if (!value) return null;
   const date = value instanceof Date ? value : new Date(value);
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
