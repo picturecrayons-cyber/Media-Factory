@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { assertPermission, canAccessAdminWorkstations, canAccessBuyerDesk, canAccessDashboard, canAccessTitleWorkspace, canGrantInternalRole, canMutateTitle, canOperateOnTitle, canReadTitle, hasPermission, hasStaffPermission, permissionForTransition, workspaceHome } from "./rbac.ts";
+import { assertPermission, canAccessAdminWorkstations, canEnterBuyerDeskRoute, canAccessDashboard, canAccessTitleWorkspace, canGrantInternalRole, canMutateTitle, canOperateOnTitle, canReadTitle, hasPermission, hasStaffPermission, permissionForTransition, workspaceHome } from "./rbac.ts";
 import type { Actor } from "./rbac.ts";
 import { PERMISSIONS } from "./types.ts";
 
@@ -167,15 +167,15 @@ describe("PRD authorization matrix", () => {
     assert.equal(canAccessAdminWorkstations(actor("unverified-admin", "independent_creator", "admin", false)), false);
   });
 
-  it("allows only verified Buyers and Super Admins into the Buyer Desk", () => {
-    assert.equal(canAccessBuyerDesk(buyer()), true);
-    assert.equal(canAccessBuyerDesk(superAdmin()), true);
-    assert.equal(canAccessBuyerDesk(actor("unverified-buyer", "buyer", null, false)), false);
+  it("allows eligible Buyers through to the shared verification gate and only verified Super Admins", () => {
+    assert.equal(canEnterBuyerDeskRoute(buyer()), true);
+    assert.equal(canEnterBuyerDeskRoute(superAdmin()), true);
+    assert.equal(canEnterBuyerDeskRoute(actor("unverified-buyer", "buyer", null, false)), true);
     for (const staff of [admin(), viewer(), qc, legal, finance]) {
-      assert.equal(canAccessBuyerDesk(staff), false);
+      assert.equal(canEnterBuyerDeskRoute(staff), false);
     }
     for (const account of [creator(), studio(), investor()]) {
-      assert.equal(canAccessBuyerDesk(account), false);
+      assert.equal(canEnterBuyerDeskRoute(account), false);
     }
   });
 
