@@ -4,7 +4,7 @@ import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { listTitles } from "@/lib/bridge/titles";
 import { BRIDGE_LOOP_LANES, loopStageType } from "@/lib/bridge/loop-lanes";
-import { getDashboardSession } from "@/lib/bridge/session";
+import { getDashboardSession, getFounderDashboardMetrics } from "@/lib/bridge/session";
 
 export const Route = createFileRoute("/dashboard")({
   head: () => ({ meta: [{ name: "robots", content: "noindex, nofollow" }] }),
@@ -73,6 +73,13 @@ function DashboardBody() {
     queryFn: () => listTitles(),
     enabled: dashboardQ.isSuccess,
     retry: 1,
+  });
+  const metricsQ = useQuery({
+    queryKey: ["bridge-founder-dashboard-metrics"],
+    queryFn: () => getFounderDashboardMetrics(),
+    enabled: dashboardQ.isSuccess,
+    retry: 1,
+    refetchInterval: 60_000,
   });
 
   if (dashboardQ.isPending) return <p className="text-sm text-muted">Checking access…</p>;
@@ -203,6 +210,55 @@ function DashboardBody() {
         </div>
         <p className="text-xs text-muted">
           *Sum of recorded licensing fees for licensed or delivered titles; not cash received.
+        </p>
+      </section>
+
+      <section aria-labelledby="operations-title" className="space-y-3">
+        <div>
+          <h3 id="operations-title" className="font-display text-xl font-semibold">Operational control</h3>
+          <p className="mt-1 text-sm text-muted">
+            Live counts from Bridge Production records. Financial totals include verified payment records only.
+          </p>
+        </div>
+        {metricsQ.isError ? (
+          <p role="alert" className="rounded-sm border border-line px-4 py-3 text-sm text-accent">
+            Operational metrics are unavailable. Values are not replaced with zero; retry the dashboard query.
+          </p>
+        ) : (
+          <>
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              <Stat label="All registered profiles" value={metricsQ.isPending ? "—" : String(metricsQ.data.profiles_total)} />
+              <Stat label="Independent-creator profiles" value={metricsQ.isPending ? "—" : String(metricsQ.data.creators_total)} />
+              <Stat label="Studios" value={metricsQ.isPending ? "—" : String(metricsQ.data.studios_total)} />
+              <Stat label="Organizations" value={metricsQ.isPending ? "—" : String(metricsQ.data.organizations_total)} />
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              <Stat label="QC pending" value={metricsQ.isPending ? "—" : String(metricsQ.data.qc_pending)} />
+              <Stat label="Legal pending" value={metricsQ.isPending ? "—" : String(metricsQ.data.legal_pending)} />
+              <Stat label="Live / commercial titles" value={metricsQ.isPending ? "—" : String(metricsQ.data.marketplace_live)} />
+              <Stat label="Buyer enquiries" value={metricsQ.isPending ? "—" : String(metricsQ.data.enquiries_total)} />
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              <Stat label="Payment records" value={metricsQ.isPending ? "—" : String(metricsQ.data.payments_total)} />
+              <Stat label="Verified payment value" value={metricsQ.isPending ? "—" : "₹" + (metricsQ.data.payments_verified_paise / 100).toLocaleString("en-IN")} />
+              <Stat label="Entitlements / licenses" value={metricsQ.isPending ? "—" : String(metricsQ.data.entitlements_total)} />
+              <Stat label="Active LOOP publications" value={metricsQ.isPending ? "—" : String(metricsQ.data.loop_active)} />
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              <Stat label="Delivery jobs" value={metricsQ.isPending ? "—" : String(metricsQ.data.delivery_total)} />
+              <Stat label="Failed deliveries" value={metricsQ.isPending ? "—" : String(metricsQ.data.delivery_failed)} />
+              <Stat label="DIT storage objects" value={metricsQ.isPending ? "—" : String(metricsQ.data.dit_objects_total)} />
+              <Stat label="Checksum-verified DIT objects" value={metricsQ.isPending ? "—" : String(metricsQ.data.dit_objects_verified)} />
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              <Stat label="Bridge asset bytes recorded" value={metricsQ.isPending ? "—" : (metricsQ.data.storage_bytes / (1024 ** 3)).toFixed(2) + " GiB"} />
+              <Stat label="Failed webhook events" value={metricsQ.isPending ? "—" : String(metricsQ.data.webhook_failed)} />
+              <Stat label="Investor profiles" value={metricsQ.isPending ? "—" : String(metricsQ.data.investors_total)} />
+            </div>
+          </>
+        )}
+        <p className="text-xs text-muted">
+          Storage is the sum of Bridge asset metadata, not an OCI billing or complete bucket-usage report. Profile counts follow account_type and may include internal profiles mapped to that account type.
         </p>
       </section>
 
