@@ -17,7 +17,7 @@ const { Pool } = pg;
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const MIGRATIONS_DIR = resolve(SCRIPT_DIR, "../supabase/migrations");
 const DATABASE_URL = process.env.SUPABASE_REPLAY_DATABASE_URL?.trim();
-const EXPECTED_MIGRATIONS = 69;
+const EXPECTED_MIGRATIONS = 70;
 const FIXTURE_MIGRATION =
   "20261113090535_map_verified_streamvista_studio_owner_20261113.sql";
 const FIXTURE_USER_ID = "bridge-migration-replay-fixture";
@@ -446,6 +446,35 @@ try {
     }
     console.log(`[migration-replay] applied ${name}`);
   }
+
+  // Re-run the forward-only identity FK migration to prove it is safe when
+  // the target FK is already present (the current Testing DB contract).
+  const identityFkMigration = await readFile(
+    join(MIGRATIONS_DIR, "20261118120000_bridge_identity_link_fk_parity_20261118.sql"),
+    "utf8",
+  );
+  await client.query(identityFkMigration);
+  const identityFkState = await client.query(`
+    select
+      c.confrelid = 'public.bridge_profiles'::regclass as targets_bridge_profiles,
+      (select count(*)::int
+       from public.bridge_loop_identity_links l
+       left join public.bridge_profiles p on p.user_id = l.bridge_user_id
+       where p.user_id is null) as orphan_links
+    from pg_constraint c
+    join pg_attribute a on a.attrelid = c.conrelid
+      and a.attname = 'bridge_user_id' and a.attnum = any(c.conkey)
+    where c.conrelid = 'public.bridge_loop_identity_links'::regclass
+      and c.contype = 'f'
+  `);
+  if (
+    identityFkState.rows.length !== 1 ||
+    !identityFkState.rows[0].targets_bridge_profiles ||
+    identityFkState.rows[0].orphan_links !== 0
+  ) {
+    throw new Error("Bridge identity FK parity/idempotency verification failed: " + JSON.stringify(identityFkState.rows));
+  }
+  console.log("[migration-replay] verified identity FK targets bridge_profiles and is idempotent");
 
   // Production's current Bridge Data API security baseline is not fully
   // represented by the 69-row migration ledger. Recreate it locally after
