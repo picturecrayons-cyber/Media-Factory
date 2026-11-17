@@ -108,7 +108,7 @@ export function ProductionAssetReconciliationPanel() {
         </h2>
         <p className="text-sm text-muted">
           Check existing OCI migration targets and unverified title assets. A storage version is
-          registered only after OCI size/ETag checks and an immutable copy check.
+          registered only after OCI size/ETag checks and a sealed-path copy check. This is not bucket-level WORM retention.
         </p>
       </div>
 
