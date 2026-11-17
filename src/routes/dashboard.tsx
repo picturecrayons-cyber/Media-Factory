@@ -61,9 +61,9 @@ const WORK_AREAS = [
   },
   {
     group: "Finance & Payments",
-    summary: "Finance oversight is not represented as a complete Super Admin workspace yet. Buyer checkout and customer entitlements stay separate.",
-    links: [{ label: "Operational review", to: "/admin/workstations" }],
-    state: "gap",
+    summary: "Read-only payment record oversight is available for Preview review. Settlement, invoice and ledger reconciliation remain separate; Buyer checkout and customer entitlements stay isolated.",
+    links: [{ label: "Payment oversight", to: "/finance" }],
+    state: "preview-gated",
   },
   {
     group: "Storage & Assets",
