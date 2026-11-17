@@ -7,7 +7,7 @@ import { BridgeShell } from "@/components/bridge/shell";
 import { StatusChip } from "@/components/bridge/status-rail";
 import { Button } from "@/components/ui/button";
 import { getBearerToken } from "@/lib/auth/client";
-import { listTitles } from "@/lib/bridge/titles";
+import { listBuyerCatalogueForInspection, listTitles } from "@/lib/bridge/titles";
 import {
   createLicenseOrder,
   listOwnEntitlements,
@@ -168,7 +168,7 @@ function BuyerBody({ userId, readOnly = false }: { userId: string; readOnly?: bo
   const entitlementsKey = ["bridge-buyer-entitlements", userId] as const;
   const titlesQ = useQuery({
     queryKey: titlesKey,
-    queryFn: () => withTimeout(listTitles(), "Buyer catalogue"),
+    queryFn: () => withTimeout(readOnly ? listBuyerCatalogueForInspection() : listTitles(), "Buyer catalogue"),
     retry: 1,
   });
   const titles = titlesQ.data?.titles ?? [];
@@ -185,7 +185,7 @@ function BuyerBody({ userId, readOnly = false }: { userId: string; readOnly?: bo
     queryKey: ["bridge-buyer-poster-artwork", userId, posterTitleIds],
     queryFn: ({ signal }) =>
       withTimeout(fetchBuyerPosterArtwork(posterTitleIds, signal), "Buyer artwork", 120_000),
-    enabled: tab !== "licenses" && view === "gallery" && posterTitleIds.length > 0,
+    enabled: !readOnly && tab !== "licenses" && view === "gallery" && posterTitleIds.length > 0,
     retry: 1,
   });
   const entQ = useQuery({
@@ -238,7 +238,7 @@ function BuyerBody({ userId, readOnly = false }: { userId: string; readOnly?: bo
   const licensed = visible.filter((t) => entitled.has(t.id));
   const artworkByTitle = postersQ.data ?? new Map<string, Blob>();
   if (titlesQ.isPending || (!readOnly && entQ.isPending)) {
-    return <p role="status" aria-live="polite">Loading your Buyer catalogue and licenses…</p>;
+    return <p role="status" aria-live="polite">{readOnly ? "Loading buyer-visible catalogue…" : "Loading your Buyer catalogue and licenses…"}</p>;
   }
   if (titlesQ.isError || (!readOnly && entQ.isError)) {
     return (
@@ -402,9 +402,13 @@ function TitleGallery({
             <div className="space-y-3 p-4">
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
-                  <Link to="/title/$id" params={{ id: title.id }} className="font-semibold leading-snug hover:text-accent">
-                    {title.name}
-                  </Link>
+                  {readOnly ? (
+                    <span className="font-semibold leading-snug">{title.name}</span>
+                  ) : (
+                    <Link to="/title/$id" params={{ id: title.id }} className="font-semibold leading-snug hover:text-accent">
+                      {title.name}
+                    </Link>
+                  )}
                   <p className="mt-1 text-xs text-muted">{details || "Details pending"}</p>
                 </div>
                 <StatusChip status={title.status as never} />
@@ -481,7 +485,7 @@ function TitleList({ titles, entitled, order, empty, readOnly = false }: { title
       {titles.map((t) => (
         <li key={t.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-4">
           <div>
-            <Link to="/title/$id" params={{ id: t.id }} className="font-medium hover:text-accent">{t.name}</Link>
+            {readOnly ? <span className="font-medium">{t.name}</span> : <Link to="/title/$id" params={{ id: t.id }} className="font-medium hover:text-accent">{t.name}</Link>}
             <p className="text-sm text-muted">{t.language}{t.licensingFeePaise > 0 ? ` · ${formatLicensingFeePaise(t.licensingFeePaise)}` : " · fee unset"}</p>
           </div>
           <div className="flex items-center gap-3">
