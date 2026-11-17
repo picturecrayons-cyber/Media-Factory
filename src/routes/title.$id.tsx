@@ -457,7 +457,7 @@ function FilesPanel({
       xhr.onabort = () => {
         if (stall) clearTimeout(stall);
         uploadXhrRef.current.delete(xhr);
-        reject(new Error(cancelRequestedRef.current ? "cancelled" : "stalled"));
+        reject(new Error(cancelRequestedRef.current ? "paused" : "stalled"));
       };
       bump();
       xhr.send(blob);
@@ -562,7 +562,7 @@ function FilesPanel({
             activePartBytes.delete(part);
             updateAggregateProgress();
             const raw = error instanceof Error ? error.message : "";
-            if (raw === "cancelled") throw new Error("Upload cancelled. The asset was not marked Ready.");
+            if (raw === "paused") throw new Error("Upload paused. Completed parts are retained; choose the same file to resume.");
             if (attempt === 4) {
               throw new Error("Connection dropped. Choose the same file to continue. Completed parts were kept.");
             }
@@ -782,7 +782,7 @@ function FilesPanel({
               }}
               className="rounded-full border border-line bg-surface px-3 py-1.5 text-xs font-semibold"
             >
-              Cancel
+              Pause upload
             </button>
           </div>
           <ol className="mt-3 flex flex-wrap gap-2">
