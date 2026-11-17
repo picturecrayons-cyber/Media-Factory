@@ -9,7 +9,7 @@ export function StudioMemberDesk() {
     retry: 1,
   });
   const mutation = useMutation({
-    mutationFn: updateStudioMember,
+    mutationFn: (data: { memberUserId: string; membershipRole: "admin" | "producer" | "dit" | "member"; status: "active" | "suspended" | "removed" }) => updateStudioMember({ data }),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["bridge-studio-members"] });
     },
