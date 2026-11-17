@@ -10,6 +10,8 @@ type Totals = {
   existingAssetsVerified: number;
   missingInOci: number;
   failed: number;
+  mappingBlockedRows: number;
+  mappingMismatchRows: number;
   queueHasMore: boolean;
   assetsHaveMore: boolean;
   unmatchedLegacyRows: number;
@@ -22,6 +24,8 @@ const initialTotals: Totals = {
   existingAssetsVerified: 0,
   missingInOci: 0,
   failed: 0,
+  mappingBlockedRows: 0,
+  mappingMismatchRows: 0,
   queueHasMore: true,
   assetsHaveMore: true,
   unmatchedLegacyRows: 0,
@@ -49,6 +53,8 @@ export function ProductionAssetReconciliationPanel() {
         existingAssetsVerified: current.existingAssetsVerified + result.existingAssetsVerified,
         missingInOci: current.missingInOci + result.missingInOci,
         failed: current.failed + result.failed,
+        mappingBlockedRows: result.mappingBlockedRows,
+        mappingMismatchRows: result.mappingMismatchRows,
         queueHasMore: result.queueHasMore,
         assetsHaveMore: result.assetsHaveMore,
         unmatchedLegacyRows: result.unmatchedLegacyRows,
@@ -97,7 +103,7 @@ export function ProductionAssetReconciliationPanel() {
         </p>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
         <div className="rounded-xl border border-line bg-elevated/40 p-3">
           <p className="text-xs text-muted">Legacy assets linked</p>
           <p className="mt-1 text-xl font-semibold tabular-nums text-fg">{totals.legacyAssetsLinked}</p>
@@ -111,11 +117,28 @@ export function ProductionAssetReconciliationPanel() {
           <p className="mt-1 text-xl font-semibold tabular-nums text-fg">{totals.missingInOci}</p>
         </div>
         <div className="rounded-xl border border-line bg-elevated/40 p-3">
+          <p className="text-xs text-muted">Held for verified mapping</p>
+          <p className="mt-1 text-xl font-semibold tabular-nums text-fg">{totals.mappingBlockedRows}</p>
+        </div>
+        <div className="rounded-xl border border-line bg-elevated/40 p-3">
+          <p className="text-xs text-muted">Title mapping conflicts</p>
+          <p className="mt-1 text-xl font-semibold tabular-nums text-fg">{totals.mappingMismatchRows}</p>
+        </div>
+        <div className="rounded-xl border border-line bg-elevated/40 p-3">
           <p className="text-xs text-muted">Errors</p>
           <p className="mt-1 text-xl font-semibold tabular-nums text-fg">{totals.failed}</p>
         </div>
       </div>
 
+      {totals.mappingBlockedRows > 0 || totals.mappingMismatchRows > 0 ? (
+        <p className="text-xs text-amber-400" role="status">
+          {totals.mappingBlockedRows} legacy asset rows are held until their exact legacy film-to-Bridge title mapping is verified.
+          {totals.mappingMismatchRows > 0
+            ? ` ${totals.mappingMismatchRows} rows currently point to a different suggested Bridge title and require manual reconciliation.`
+            : ""}
+          No held row will be linked automatically.
+        </p>
+      ) : null}
       {totals.unmatchedLegacyRows > 0 ? (
         <p className="text-xs text-amber-400">
           {totals.unmatchedLegacyRows} legacy migration records have no matching Bridge title ID.
@@ -175,8 +198,8 @@ export function ProductionAssetReconciliationPanel() {
       </div>
 
       <p className="text-xs text-muted">
-        AWS-only source references without a verified OCI target remain pending. This action does
-        not change QC, legal, rights, publication, payments, or title lifecycle status.
+        Legacy assets are eligible only after the matching films_film link is reviewer-verified.
+        This action does not change QC, legal, rights, publication, payments, or title lifecycle status.
       </p>
     </section>
   );
