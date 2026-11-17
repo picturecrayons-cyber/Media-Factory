@@ -1,8 +1,17 @@
-import type { BridgeActor } from "../bridge/session";
+export type ProtectedBridgeProfile = {
+  userId: string;
+  email: string;
+  displayName: string;
+  organizationName: string | null;
+  accountType: "independent_creator" | "studio" | "buyer" | "investor";
+  internalRole: "viewer" | "qc_reviewer" | "legal_reviewer" | "finance" | "admin" | "super_admin" | null;
+  emailVerified: boolean;
+  organizationId?: string | null;
+};
 
 export type ProtectedBridgeSession = {
   userId: string;
-  profile: BridgeActor | null;
+  profile: ProtectedBridgeProfile | null;
   home: string;
 };
 export type AuthenticatedBridgeSession = ProtectedBridgeSession & {
@@ -67,7 +76,7 @@ export async function resolveProtectedBridgeRoute(
 const browserDependencies: GuardDependencies = {
   isBrowser: typeof window !== "undefined",
   getSession: async () => {
-    const { getBridgeSession } = await import("../bridge/session");
+    const { getBridgeSession } = await import("@/lib/bridge/session");
     return getBridgeSession();
   },
   goToLogin: () => {
