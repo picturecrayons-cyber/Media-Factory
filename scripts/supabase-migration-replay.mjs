@@ -477,8 +477,8 @@ try {
   console.log("[migration-replay] verified identity FK targets bridge_profiles and is idempotent");
 
   // Production's current Bridge Data API security baseline is not fully
-  // represented by the 69-row migration ledger. Recreate it locally after
-  // replay from read-only Production catalog evidence only.
+  // represented by the 69-row recovered ledger. The replay also includes the
+  // one proposed, not-yet-applied identity FK migration from this branch.
   await client.query(`
     do $bridge_rls_baseline$
     declare table_record record;
@@ -761,7 +761,7 @@ try {
   }
 
   console.log(
-    `[migration-replay] PASS: all ${names.length} Production-ledger migrations replayed in a fresh local Supabase stack.`,
+    `[migration-replay] PASS: all ${names.length} active migration files (69 recovered Production-ledger entries plus one proposed forward migration) replayed in a fresh local Supabase stack.`,
   );
 } finally {
   client.release();
