@@ -19,6 +19,8 @@ test("pause retains upload session and never aborts durable multipart parts", ()
   assert.notEqual(pauseEnd, -1);
   const pauseHandler = route.slice(pauseStart, pauseEnd);
   assert.match(pauseHandler, /Upload paused/);
+  assert.match(route, /raw === "paused"/);
+  assert.match(route, /Pause upload/);
   assert.doesNotMatch(pauseHandler, /clearUploadSession|abortAssetMultipart/);
   assert.match(route, /getAssetMultipartStatus/);
 });
