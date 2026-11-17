@@ -213,8 +213,8 @@ export const reconcileProductionAssets = createServerFn({ method: "POST" })
                 'storage_verification', jsonb_build_object(
                   'method', 'OCI_HEAD_AND_IMMUTABLE_COPY',
                   'state', 'PASSED',
-                  'source_etag', ${source.etag},
-                  'sealed_etag', ${sealed.etag}
+                  'source_etag', ${source.etag}::text,
+                  'sealed_etag', ${sealed.etag}::text
                 ),
                 'checksum_sha256_state', 'PENDING'
               ),
@@ -443,8 +443,8 @@ export const reconcileProductionAssets = createServerFn({ method: "POST" })
                   'storage_verification', jsonb_build_object(
                     'method', 'OCI_HEAD_AND_IMMUTABLE_COPY',
                     'state', 'PASSED',
-                    'source_etag', ${source.etag},
-                    'sealed_etag', ${sealed.etag}
+                    'source_etag', ${source.etag}::text,
+                    'sealed_etag', ${sealed.etag}::text
                   ),
                   'checksum_sha256_state', 'PENDING'
                 ),
@@ -460,7 +460,7 @@ export const reconcileProductionAssets = createServerFn({ method: "POST" })
                 poster_key = case
                   when ${row.kind} in ('poster', 'poster_vertical', 'poster_horizontal', 'thumbnail')
                     and (t.poster_key = ${row.s3_key} or t.poster_key = ${row.source_key}) then ${sealedKey}
-                  when ${row.kind} in ('poster', 'poster_vertical', 'poster_horizontal', 'thumbnail')
+                  when ${row.kind} in ('poster', 'poster_vertical')
                     and t.poster_key is null
                     and (
                       select count(*) from bridge_assets p
