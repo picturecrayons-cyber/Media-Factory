@@ -164,8 +164,8 @@ test("certified Loop publication advances a licensing-ready Bridge title to buye
   assert.ok(advance.values.includes("LIVE_FOR_BUYERS"));
   const event = h.writes.find((write) => write.query.includes("insert into bridge_title_events"));
   assert.ok(event);
-  assert.ok(event.values.includes("LICENSING_READY"));
-  assert.ok(event.values.includes("LIVE_FOR_BUYERS"));
+  assert.match(event.query, /values\s*\(\s*\$\{title\.id\},\s*\x27LICENSING_READY\x27,\s*\x27LIVE_FOR_BUYERS\x27/);
+  assert.ok(event.values.includes("operator"));
 });
 
 test("publication fails closed without explicitly approved TVOD pricing", async () => {
