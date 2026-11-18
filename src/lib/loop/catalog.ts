@@ -92,7 +92,7 @@ export const getLoopCatalog = createServerFn({ method: "GET" })
         and l.listed = true
         and l.status = 'approved' and l.listed = true
         and (p.window_start is null or p.window_start <= now())
-        and (p.window_end is null or p.window_end >= now())
+        and (p.window_end is null or p.window_end > now())
       order by l.featured desc, l.created_at desc
       limit 100
     `;
