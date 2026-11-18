@@ -23,6 +23,10 @@ const PENDING_MIGRATIONS = new Map([
     bytes: 1863,
     sha256: "2c00e3129b860c99485a97453018ffa1397399f9d429c13992fb7e33a52609d3",
   }],
+  ["20261118110000_bridge_studio_invites_and_owner_transfer_20261118.sql", {
+    bytes: 3077,
+    sha256: "b92976971e05edae1d02fc18381cdbb7e00a7789a5720f97edde0a9b982e6472",
+  }],
 ]);
 const FIXTURE_MIGRATION =
   "20261113090535_map_verified_streamvista_studio_owner_20261113.sql";
