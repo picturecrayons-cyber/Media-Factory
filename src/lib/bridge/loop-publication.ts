@@ -73,6 +73,12 @@ function iso(v: string | Date | null) {
   return v instanceof Date ? v.toISOString() : String(v);
 }
 
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0)
+    : [];
+}
+
 /** Pre-flight verification checking rights, assets, QC and operator authority */
 export async function verifyDistributionPreflight(
   sql: Sql,
@@ -392,9 +398,10 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
         };
         const rightsMatchedGrant = titleGrants.find((grant) => {
           const { start, end } = candidateWindow(grant);
-          return grant.territories.length > 0 && Boolean(findCoveringRightsGrant([grant], {
+          const grantTerritories = stringArray(grant.territories);
+          return grantTerritories.length > 0 && Boolean(findCoveringRightsGrant([grant], {
             destination: "CRAYONS_LOOP",
-            territories: grant.territories,
+            territories: grantTerritories,
             languages: requestedLanguages,
             exploitationModels: requestedModels,
             windowStart: start.toISOString(),
@@ -403,7 +410,7 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
         });
         const requestedTerritories = r.territories?.length
           ? r.territories
-          : rightsMatchedGrant?.territories ?? [];
+          : stringArray(rightsMatchedGrant?.territories);
         const coveringGrant = titleGrants.find((grant) => {
           const { start, end } = candidateWindow(grant);
           return Boolean(findCoveringRightsGrant([grant], {
@@ -472,14 +479,14 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
           hasPoster: Boolean(r.poster_key),
           ready: isReady,
           blockers,
-          suggestedTerritories: rightsMatchedGrant?.territories ?? [],
+          suggestedTerritories: stringArray(rightsMatchedGrant?.territories),
           publication: r.loop_title_id
             ? {
                 destination: "CRAYONS_LOOP" as const,
                 loopTitleId: r.loop_title_id,
                 authorizationStatus: (r.authorization_status?.toUpperCase() ||
                   "PENDING") as DistributionAuthorizationStatus,
-                territories: r.territories || rightsMatchedGrant?.territories || [],
+                territories: r.territories?.length ? r.territories : stringArray(rightsMatchedGrant?.territories),
                 languages: r.languages || [r.language],
                 exploitationModels: r.exploitation_models || ["TVOD"],
                 windowStart: iso(r.window_start),
