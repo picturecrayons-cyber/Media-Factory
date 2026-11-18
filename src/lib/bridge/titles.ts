@@ -1,7 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
 import { distributionMandateSchema, isDestinationCovered, isMediaCovered, canSublicenseWithinMandate } from "./distribution-mandate";
-import type { Sql } from "../db";
-
 import { z } from "zod";
 import { randomBytes } from "node:crypto";
 import { authMiddleware } from "@/lib/auth/middleware";
