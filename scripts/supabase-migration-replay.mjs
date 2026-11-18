@@ -54,13 +54,28 @@ const names = (await readdir(MIGRATIONS_DIR))
   .filter((name) => /^\d{14}_[a-z0-9_]+\.sql$/.test(name))
   .sort((a, b) => a.localeCompare(b));
 
-if (names.length !== EXPECTED_MIGRATIONS) {
-  throw new Error(
-    `Expected ${EXPECTED_MIGRATIONS} versioned migrations; found ${names.length}`,
-  );
-}
 if (new Set(names).size !== names.length) {
   throw new Error("Duplicate migration filenames detected");
+}
+
+// The reconciliation manifest is an immutable snapshot of the 69 historical
+// Production-ledger statements. New feature migrations are replayed separately
+// after the historical source has passed exact byte/hash validation.
+const productionNames = names.filter((name) => name < "20261118130000_");
+if (productionNames.length !== EXPECTED_MIGRATIONS) {
+  throw new Error(
+    `Expected ${EXPECTED_MIGRATIONS} reconciled Production migrations; found ${productionNames.length}`,
+  );
+}
+const featureNames = names.filter((name) => name >= "20261118130000_");
+const supportedFeatureMigrations = new Set([
+  "20261118130000_loop_tvod_payment_fulfillment.sql",
+  "20261118143000_bridge_creator_document_vault.sql",
+]);
+for (const name of featureNames) {
+  if (!supportedFeatureMigrations.has(name)) {
+    throw new Error(`Unreviewed feature migration in replay set: ${name}`);
+  }
 }
 
 const manifestPath = resolve(
@@ -92,7 +107,7 @@ if (manifestRows.size !== EXPECTED_MIGRATIONS) {
   );
 }
 
-for (const name of names) {
+for (const name of productionNames) {
   const contents = await readFile(join(MIGRATIONS_DIR, name));
   const expected = manifestRows.get(name);
   if (!expected) throw new Error(`Migration missing from manifest: ${name}`);
@@ -148,7 +163,7 @@ try {
     throw new Error("Local Supabase base schemas/roles are not ready");
   }
 
-  for (const name of names) {
+  for (const name of productionNames) {
     const sql = await readFile(join(MIGRATIONS_DIR, name), "utf8");
     await client.query("BEGIN");
     try {
@@ -648,6 +663,23 @@ try {
       "Missing expected tables after replay: " +
         missingTables.map((row) => row.name).join(", "),
     );
+  }
+
+
+  // Replay newly introduced feature migrations only after the historical
+  // production-ledger baseline has replayed successfully. They are not part
+  // of the 69-row 2026-11-16 reconciliation manifest.
+  for (const name of featureNames) {
+    const sql = await readFile(join(MIGRATIONS_DIR, name), "utf8");
+    await client.query("BEGIN");
+    try {
+      await client.query(sql);
+      await client.query("COMMIT");
+      console.log(`[migration-replay] PASS feature migration ${name}`);
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw new Error(`Feature migration failed: ${name}: ${error.message}`);
+    }
   }
 
   const baselineRls = await client.query(`
