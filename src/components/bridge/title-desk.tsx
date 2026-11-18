@@ -5,9 +5,17 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { StatusChip } from "@/components/bridge/status-rail";
 import { createTitle, listTitles } from "@/lib/bridge/titles";
+import { inspectTitleDeletion } from "@/lib/bridge/title-deletion";
 import { BRIDGE_LOOP_LANES } from "@/lib/bridge/loop-lanes";
 
-export function TitleList({ empty, query = "" }: { empty: string; query?: string }) {
+export function TitleList({ empty, query = "", canDelete = false }: { empty: string; query?: string; canDelete?: boolean }) {
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
+  const deletionPreflight = useQuery({
+    queryKey: ["bridge-title-delete-preflight", deleteTarget?.id],
+    queryFn: () => inspectTitleDeletion({ data: { id: deleteTarget!.id } }),
+    enabled: Boolean(deleteTarget),
+    retry: false,
+  });
   const titlesQ = useQuery({ queryKey: ["bridge-titles"], queryFn: () => listTitles() });
   const titles = (titlesQ.data?.titles ?? []).filter((t) => !query || `${t.name} ${t.language} ${t.year ?? ""}`.toLowerCase().includes(query.toLowerCase()));
   if (titlesQ.isPending) return <p className="text-sm text-muted">Loading titles…</p>;
@@ -38,11 +46,40 @@ export function TitleList({ empty, query = "" }: { empty: string; query?: string
           </Link>
           <div className="flex shrink-0 items-center gap-3">
             <StatusChip status={t.status} />
-            
+            {canDelete ? <Button type="button" variant="outline" className="rounded-full" onClick={() => setDeleteTarget({ id: t.id, name: t.name })}>Delete review</Button> : null}
           </div>
         </li>
       ))}
     </ul>
+    {deleteTarget ? (
+      <div role="dialog" aria-modal="true" aria-labelledby="title-delete-review-heading" className="mt-4 rounded-2xl border border-amber-500/40 bg-surface p-5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h3 id="title-delete-review-heading" className="font-display text-lg font-semibold">Permanent deletion review</h3>
+            <p className="mt-1 text-sm text-muted">Title: {deleteTarget.name}</p>
+          </div>
+          <Button type="button" variant="outline" className="rounded-full" onClick={() => setDeleteTarget(null)}>Close</Button>
+        </div>
+        {deletionPreflight.isFetching ? <p className="mt-4 text-sm text-muted">Checking deletion dependencies…</p> : null}
+        {deletionPreflight.isError ? <p role="alert" className="mt-4 text-sm text-accent">Preflight could not be completed. Deletion remains blocked. {deletionPreflight.error instanceof Error ? deletionPreflight.error.message : ""}</p> : null}
+        {deletionPreflight.data ? (
+          <div className="mt-4 space-y-3">
+            <p className="text-sm font-semibold text-amber-400">BLOCKED — permanent deletion is not available.</p>
+            <p className="text-xs text-muted">Schema-level dependencies are listed below. This check does not count live dependent rows or verify external obligations.</p>
+            <ul className="list-disc space-y-1 pl-5 text-sm">
+              {deletionPreflight.data.blockers.map((reason) => <li key={reason}>{reason}</li>)}
+            </ul>
+            <div className="rounded-xl border border-line p-3">
+              <p className="text-sm font-medium">Database relationships ({deletionPreflight.data.foreignKeys.length})</p>
+              <ul className="mt-2 max-h-40 space-y-1 overflow-auto text-xs text-muted">
+                {deletionPreflight.data.foreignKeys.map((fk, index) => <li key={index}>{fk.referencing_table}.{fk.referencing_column} — {fk.on_delete}</li>)}
+              </ul>
+            </div>
+            <p className="text-xs text-muted">No title, database row, or media object has been changed. This review is read-only.</p>
+          </div>
+        ) : null}
+      </div>
+    ) : null}
   );
 }
 
