@@ -63,7 +63,7 @@ export async function saveLoopLicense(
             distributorSharePct: data.distributorSharePct,
           },
         },
-      ])}::jsonb,'DRAFT',${actor.userId}) returning id`;
+      ])}::jsonb,'SUBMITTED',${actor.userId}) returning id`;
   await audit(tx, actor.userId, data.titleId, "license.loop_draft", { grantId: grant.id });
   return { grantId: grant.id };
 }
@@ -115,7 +115,7 @@ export async function reviewWorkflow(tx: Sql, actor: Actor, data: z.infer<typeof
       window_end: string;
       created_by: string;
     }>`select status,window_end,created_by from bridge_rights_grants where id=${data.grantId} and title_id=${data.titleId} for update`;
-    if (!grant || grant.status !== "DRAFT") throw new Error("License draft is unavailable");
+    if (!grant || !["SUBMITTED", "DRAFT"].includes(grant.status)) throw new Error("Submitted license is unavailable");
     if (grant.created_by === actor.userId)
       throw new Error("Another legal reviewer must approve this license");
     if (data.decision === "APPROVE" && new Date(grant.window_end) <= new Date())
