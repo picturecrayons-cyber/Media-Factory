@@ -159,12 +159,25 @@ export async function verifyDistributionPreflight(
     }
   }
 
-  const reviews = await sql<{ qc_ok: boolean; legal_ok: boolean }>`
-    select exists(select 1 from bridge_qc_cases q where q.title_id=${titleId} and q.status='PASSED'
-      and q.reviewer_findings->0->>'masterKey'=${title.master_key}
-      and q.reviewer_findings->0->>'posterKey'=${title.poster_key}) as qc_ok,
-    exists(select 1 from bridge_legal_cases l where l.title_id=${titleId} and l.status='APPROVED'
-      and l.evidence->0->>'grantId'=${rightsGrantId}) as legal_ok
+  const reviews = await sql<{
+    qc_ok: boolean;
+    legal_ok: boolean;
+    qc_case_id: string | null;
+    legal_case_id: string | null;
+  }>`
+    select
+      exists(select 1 from bridge_qc_cases q where q.title_id=${titleId} and q.status='PASSED'
+        and q.reviewer_findings->0->>'masterKey'=${title.master_key}
+        and q.reviewer_findings->0->>'posterKey'=${title.poster_key}) as qc_ok,
+      exists(select 1 from bridge_legal_cases l where l.title_id=${titleId} and l.status='APPROVED'
+        and l.evidence->0->>'grantId'=${rightsGrantId}) as legal_ok,
+      (select q.id from bridge_qc_cases q where q.title_id=${titleId} and q.status='PASSED'
+        and q.reviewer_findings->0->>'masterKey'=${title.master_key}
+        and q.reviewer_findings->0->>'posterKey'=${title.poster_key}
+        order by q.reviewed_at desc nulls last, q.created_at desc limit 1) as qc_case_id,
+      (select l.id from bridge_legal_cases l where l.title_id=${titleId} and l.status='APPROVED'
+        and l.evidence->0->>'grantId'=${rightsGrantId}
+        order by l.reviewed_at desc nulls last, l.created_at desc limit 1) as legal_case_id
   `;
   if (!reviews[0]?.qc_ok) reasons.push("Recorded QC approval for the current assets is required.");
   if (!reviews[0]?.legal_ok) reasons.push("Recorded legal approval for this license is required.");
@@ -211,8 +224,16 @@ export async function verifyDistributionPreflight(
   const destinationPackage = packages[0];
   if (!destinationPackage) {
     reasons.push("A current READY Crayons Loop destination package is required.");
-  } else if (destinationPackage.rights_grant_id !== rightsGrantId) {
-    reasons.push("The Loop destination package must reference the active rights grant.");
+  } else {
+    if (destinationPackage.rights_grant_id !== rightsGrantId) {
+      reasons.push("The Loop destination package must reference the active rights grant.");
+    }
+    if (destinationPackage.qc_case_id !== (reviews[0]?.qc_case_id ?? null)) {
+      reasons.push("The Loop destination package must reference the QC approval for the current master and artwork.");
+    }
+    if (destinationPackage.legal_case_id !== (reviews[0]?.legal_case_id ?? null)) {
+      reasons.push("The Loop destination package must reference the Legal approval for the active rights grant.");
+    }
   }
 
   const assetVersionIds = Array.isArray(destinationPackage?.asset_version_ids)
