@@ -21,6 +21,7 @@ import {
 } from "@/lib/bridge/assets";
 import { getLoopPublication } from "@/lib/bridge/loop-publication";
 import type { BridgeActor } from "@/lib/bridge/session";
+import { MASTER_LANGUAGES, type MasterLanguage } from "@/lib/bridge/types";
 import {
   OTT_INGEST_SPEC,
   getOttIngestAccept,
@@ -282,7 +283,7 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
       ) : activeTab === "Production" && !buyerView ? (
         <ProductionAssetsPanel
           titleId={title.id}
-          masterLanguage={title.masterLanguage}
+          masterLanguage={title.masterLanguage ?? null}
           locked={!actor.internalRole && !["DRAFT", "UPLOADING", "PREPARING"].includes(title.status)}
           assets={productionAssets}
           loading={productionAssetsQ.isPending}
@@ -327,7 +328,7 @@ function ProductionAssetsPanel({
   error,
 }: {
   titleId: string;
-  masterLanguage: string | null;
+  masterLanguage: MasterLanguage | null;
   locked: boolean;
   assets: ProductionAssetView[];
   loading: boolean;
@@ -362,11 +363,11 @@ function ProductionAssetsPanel({
           id="bridge-master-language"
           value={masterLanguage ?? ""}
           disabled={locked || saveLanguage.isPending}
-          onChange={(event) => saveLanguage.mutate(event.target.value)}
+          onChange={(event) => saveLanguage.mutate(event.target.value as MasterLanguage)}
           className="mt-2 h-11 w-full rounded-lg border border-line-strong bg-elevated px-3"
         >
           <option value="">Select master language</option>
-          {["Malayalam", "Telugu", "Tamil", "Hindi", "Kannada", "English", "Bengali", "Marathi", "Other"].map((item) => (
+          {MASTER_LANGUAGES.map((item) => (
             <option key={item} value={item}>{item}</option>
           ))}
         </select>
