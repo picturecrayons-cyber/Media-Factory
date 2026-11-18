@@ -25,6 +25,9 @@ export const TITLE_STATUSES = [
 ] as const;
 export type TitleStatus = (typeof TITLE_STATUSES)[number];
 
+export const MASTER_LANGUAGES = ["Malayalam", "Telugu", "Tamil", "Hindi", "Kannada", "English", "Bengali", "Marathi", "Other"] as const;
+export type MasterLanguage = (typeof MASTER_LANGUAGES)[number];
+
 export type BridgeProfile = {
   userId: string;
   email: string;
@@ -48,7 +51,7 @@ export type BridgeTitle = {
   status: TitleStatus;
   synopsis: string;
   language: string;
-  masterLanguage?: string | null;
+  masterLanguage?: MasterLanguage | null;
   year: number | null;
   runtimeMinutes: number | null;
   licensingFeePaise: number;
