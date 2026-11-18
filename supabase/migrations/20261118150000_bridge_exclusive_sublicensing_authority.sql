@@ -26,3 +26,6 @@ create index if not exists bridge_sublicense_authorizations_grant_idx
 alter table public.bridge_sublicense_authorizations enable row level security;
 revoke all on table public.bridge_sublicense_authorizations from anon, authenticated;
 grant all on table public.bridge_sublicense_authorizations to service_role;
+
+create unique index if not exists bridge_sublicense_authorizations_idempotency_idx
+  on public.bridge_sublicense_authorizations(rights_grant_id, downstream_licensee_reference, window_start, window_end);
