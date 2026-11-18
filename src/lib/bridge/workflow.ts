@@ -37,7 +37,19 @@ export async function saveLoopLicense(
     )
   )
     throw new Error("Forbidden");
-  if (new Date(data.windowEnd) <= new Date()) throw new Error("License window has expired");
+  const windowStart = new Date(data.windowStart);
+  const windowEnd = new Date(data.windowEnd);
+  if (windowEnd <= new Date()) throw new Error("License window has expired");
+  if (actor.internalRole !== "super_admin") {
+    const maximumEnd = new Date(windowStart);
+    maximumEnd.setUTCFullYear(maximumEnd.getUTCFullYear() + 5);
+    if (Math.abs(windowEnd.getTime() - maximumEnd.getTime()) > 60_000) {
+      throw new Error("Creator/Studio submissions use the default five-year Bridge term; only Super Admin may change the period.");
+    }
+    if (data.rightsOwnerSharePct !== 50 || data.distributorSharePct !== 50) {
+      throw new Error("The default revenue split is 50:50. Only Super Admin may approve a different split.");
+    }
+  }
   const [grant] = await tx<{ id: string }>`insert into bridge_rights_grants
     (title_id,grant_type,territories,languages,media,window_start,window_end,exclusivity,evidence,status,created_by)
     values (${data.titleId},'DISTRIBUTION',${JSON.stringify(data.territories)}::jsonb,${JSON.stringify(data.languages)}::jsonb,
@@ -51,8 +63,8 @@ export async function saveLoopLicense(
             distributorSharePct: data.distributorSharePct,
           },
         },
-      ])}::jsonb,'DRAFT',${actor.userId}) returning id`;
-  await audit(tx, actor.userId, data.titleId, "license.loop_draft", { grantId: grant.id });
+      ])}::jsonb,'SUBMITTED',${actor.userId}) returning id`;
+  await audit(tx, actor.userId, data.titleId, "license.loop_submitted", { grantId: grant.id });
   return { grantId: grant.id };
 }
 
@@ -103,7 +115,7 @@ export async function reviewWorkflow(tx: Sql, actor: Actor, data: z.infer<typeof
       window_end: string;
       created_by: string;
     }>`select status,window_end,created_by from bridge_rights_grants where id=${data.grantId} and title_id=${data.titleId} for update`;
-    if (!grant || grant.status !== "DRAFT") throw new Error("License draft is unavailable");
+    if (!grant || !["SUBMITTED", "DRAFT"].includes(grant.status)) throw new Error("Submitted license is unavailable");
     if (grant.created_by === actor.userId)
       throw new Error("Another legal reviewer must approve this license");
     if (data.decision === "APPROVE" && new Date(grant.window_end) <= new Date())

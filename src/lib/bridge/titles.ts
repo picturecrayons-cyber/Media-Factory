@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { distributionMandateSchema, isDestinationCovered, isMediaCovered, canSublicenseWithinMandate } from "./distribution-mandate";
 import { z } from "zod";
 import { randomBytes } from "node:crypto";
 import { authMiddleware } from "@/lib/auth/middleware";
@@ -172,6 +173,39 @@ export async function recordTransition(
   `;
 }
 
+async function assertAccountMandateScope(
+  sql: Sql,
+  actor: { userId: string; accountType: string; internalRole?: string | null },
+  destinations: readonly string[],
+  media: readonly string[],
+  sublicensingRequested: boolean,
+) {
+  if (actor.internalRole || actor.accountType === "buyer") return;
+  if (actor.accountType !== "independent_creator" && actor.accountType !== "studio") {
+    throw new Error("This account cannot submit rights-holder distribution requests.");
+  }
+  const rows = await sql<{ status: string; scope: unknown }>`
+    select status, scope
+    from bridge_creator_distribution_mandates
+    where creator_user_id = ${actor.userId}
+    limit 1
+  `;
+  const row = rows[0];
+  if (!row || row.status !== "ACTIVE") {
+    throw new Error("An active Creator Distribution Mandate is required before submitting a title.");
+  }
+  const scope = distributionMandateSchema.parse(row.scope);
+  if (!isDestinationCovered(scope, destinations)) {
+    throw new Error("The requested distribution destination is outside your account mandate.");
+  }
+  if (!isMediaCovered(scope, media)) {
+    throw new Error("The requested media type is outside your account mandate.");
+  }
+  if (sublicensingRequested && !canSublicenseWithinMandate(scope, true)) {
+    throw new Error("Sublicensing is not authorized by the account mandate.");
+  }
+}
+
 export const createTitle = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(
@@ -231,7 +265,16 @@ export const createTitle = createServerFn({ method: "POST" })
       ) {
         throw new Error("Complete the rights package and authorization evidence details before submitting.");
       }
-      const windowStart = new Date(data.windowStart);
+      if (!actor.internalRole) {
+        await assertAccountMandateScope(
+          sql,
+          actor,
+          data.intendedDestinations!,
+          data.media!,
+          data.sublicensingAllowed === true,
+        );
+      }
+            const windowStart = new Date(data.windowStart);
       const windowEnd = new Date(data.windowEnd);
       if (!Number.isFinite(windowStart.getTime()) || !Number.isFinite(windowEnd.getTime()) || windowEnd <= windowStart) {
         throw new Error("Rights window dates are invalid.");

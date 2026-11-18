@@ -11,6 +11,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { bridgeEnv } from "./env";
 import { bridgeInvitationUrl, bridgeVerificationUrl } from "./origin";
 import { assertNotDevUser } from "./guards";
+import { createDefaultDistributionMandate } from "./distribution-mandate";
 import { ONBOARDING_EMAIL_CONFLICT_MESSAGE, isBridgeProfileEmailConflict } from "./onboarding-errors";
 
 function tokenPair() {
@@ -179,6 +180,7 @@ export const completeOnboarding = createServerFn({ method: "POST" })
       accountType: z.enum(ACCOUNT_TYPES),
       organizationName: z.string().max(120).optional(),
       inviteToken: z.string().optional(),
+      creatorMandateAccepted: z.boolean().optional(),
     }),
   )
   .handler(async ({ context, data }) => {
@@ -191,6 +193,35 @@ export const completeOnboarding = createServerFn({ method: "POST" })
       await sql.transaction(async (tx) => {
         await persistSupabaseIdentityLink(tx, existing.userId, context.userId);
         await claimLegacyCreatorIntake(tx, email, existing.userId);
+        if (
+          data.creatorMandateAccepted === true &&
+          (existing.accountType === "independent_creator" || existing.accountType === "studio")
+        ) {
+          const active = await tx<{ status: string }>`
+            select status from bridge_creator_distribution_mandates
+            where creator_user_id = ${existing.userId} for update
+          `;
+          if (active.length === 0) {
+            const mandate = createDefaultDistributionMandate(new Date().toISOString());
+            await tx`
+              insert into bridge_creator_distribution_mandates
+                (creator_user_id, mandate_version, status, scope, accepted_at, consent_text_version)
+              values (
+                ${existing.userId}, ${mandate.version}, 'ACTIVE',
+                ${JSON.stringify(mandate)}::jsonb, ${mandate.acceptedAt}, ${mandate.consentTextVersion}
+              )
+            `;
+            await writeAudit({
+              actorUserId: existing.userId,
+              action: "creator.distribution_mandate.accepted",
+              entityType: "bridge_creator_distribution_mandate",
+              entityId: existing.userId,
+              metadata: { mandateVersion: mandate.version, consentTextVersion: mandate.consentTextVersion },
+            }, tx);
+          } else if (active[0].status !== "ACTIVE") {
+            throw new Error("This account-level mandate is not active. A Super Admin review is required.");
+          }
+        }
       });
       return { home: workspaceHome(existing), profile: existing };
     }
@@ -199,6 +230,15 @@ export const completeOnboarding = createServerFn({ method: "POST" })
     // this at the authenticated server endpoint, not only in the signup UI.
     if (data.accountType === "investor") {
       throw new Error("Investor access requires a reviewed access request.");
+    }
+
+    // Creator/Studio accounts must explicitly accept the reusable account-level mandate.
+    // This mandate is not a title-specific legal approval or blanket rights grant.
+    if (
+      (data.accountType === "independent_creator" || data.accountType === "studio") &&
+      data.creatorMandateAccepted !== true
+    ) {
+      throw new Error("Accept the Creator Distribution Mandate to create this workspace.");
     }
 
     const email = context.userEmail;
@@ -334,6 +374,19 @@ export const completeOnboarding = createServerFn({ method: "POST" })
             `;
           }
         }
+        if (data.accountType === "independent_creator" || data.accountType === "studio") {
+          const mandate = createDefaultDistributionMandate(new Date().toISOString());
+          await tx`
+            insert into bridge_creator_distribution_mandates
+              (creator_user_id, mandate_version, status, scope, accepted_at, consent_text_version)
+            values (
+              ${bridgeUserId}, ${mandate.version}, 'ACTIVE',
+              ${JSON.stringify(mandate)}::jsonb, ${mandate.acceptedAt}, ${mandate.consentTextVersion}
+            )
+            on conflict (creator_user_id) do nothing
+          `;
+        }
+
         await persistSupabaseIdentityLink(tx, bridgeUserId, context.userId);
         await claimLegacyCreatorIntake(tx, email, bridgeUserId);
         const roleForTransaction: string | null = internalRole;
