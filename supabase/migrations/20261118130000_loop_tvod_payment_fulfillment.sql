@@ -141,31 +141,51 @@ end $$;
 revoke all on function public.loop_fulfill_captured_rental(text,text) from public, anon, authenticated;
 grant execute on function public.loop_fulfill_captured_rental(text,text) to service_role;
 
-create or replace function public.loop_refund_captured_rental(p_payment_id text,p_refund_id text)
-returns jsonb language plpgsql security invoker set search_path = '' as $$
-declare prior_event public.loop_tvod_payment_events%rowtype;
+drop function if exists public.loop_refund_captured_rental(text,text);
+create or replace function public.loop_refund_captured_rental(
+  p_payment_id text,p_refund_id text,p_order_id text default null
+) returns jsonb
+language plpgsql security invoker set search_path = '' as $$
+declare
+  prior_event public.loop_tvod_payment_events%rowtype;
+  rental public.loop_tvod_orders%rowtype;
 begin
   if nullif(p_payment_id,'') is null or nullif(p_refund_id,'') is null then raise exception 'Refund identity is required'; end if;
   perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended('loop-payment:' || p_payment_id,0));
+  if p_order_id is not null then
+    select * into rental from public.loop_tvod_orders where provider_order_id=p_order_id for update;
+    if not found then raise exception 'Loop TVOD refund order not found'; end if;
+    if rental.provider_payment_id is not null and rental.provider_payment_id<>p_payment_id then
+      raise exception 'Refund payment does not match Loop TVOD order';
+    end if;
+  else
+    select * into rental from public.loop_tvod_orders where provider_payment_id=p_payment_id for update;
+  end if;
+
   select * into prior_event from public.loop_tvod_payment_events where event_id='tvod:' || p_payment_id for update;
   if not found then
-    insert into public.loop_tvod_payment_events(event_id,event_name,razorpay_payment_id,status,payload,processed_at)
-    values('tvod:' || p_payment_id,'tvod_refunded',p_payment_id,'refunded',pg_catalog.jsonb_build_object('refund_id',p_refund_id),now());
-    update public.loop_tvod_orders set status='refunded',updated_at=now()
-      where provider_payment_id=p_payment_id and status in ('pending','captured','fulfilled');
+    insert into public.loop_tvod_payment_events
+      (event_id,event_name,razorpay_payment_id,user_id,loop_title_id,status,payload,processed_at)
+    values('tvod:' || p_payment_id,'tvod_refunded',p_payment_id,rental.user_id,rental.loop_title_id,'refunded',
+      pg_catalog.jsonb_build_object('refund_id',p_refund_id,'order_id',coalesce(p_order_id,rental.provider_order_id)),now());
+    if rental.id is not null then
+      update public.loop_tvod_orders set status='refunded',provider_payment_id=coalesce(provider_payment_id,p_payment_id),updated_at=now()
+        where id=rental.id;
+    end if;
     return pg_catalog.jsonb_build_object('processed',true,'refund_before_capture',true);
   end if;
   if prior_event.status='refunded' then return pg_catalog.jsonb_build_object('processed',true,'duplicate',true); end if;
   update public.loop_user_tvod_entitlements set status='REFUNDED'
-    where payment_transaction_id=p_payment_id and user_id=prior_event.user_id::uuid
-      and title_id=prior_event.loop_title_id::uuid;
+    where payment_transaction_id=p_payment_id
+      and user_id=prior_event.user_id::uuid and title_id=prior_event.loop_title_id::uuid;
   update public.loop_tvod_payment_events set status='refunded',event_name='tvod_refunded',
     payload=payload || pg_catalog.jsonb_build_object('refund_id',p_refund_id),processed_at=now() where id=prior_event.id;
-  update public.loop_tvod_orders set status='refunded',updated_at=now() where provider_payment_id=p_payment_id;
+  update public.loop_tvod_orders set status='refunded',updated_at=now()
+    where provider_payment_id=p_payment_id or (p_order_id is not null and provider_order_id=p_order_id);
   return pg_catalog.jsonb_build_object('processed',true,'payment_id',p_payment_id,'refund_id',p_refund_id);
 end $$;
-revoke all on function public.loop_refund_captured_rental(text,text) from public, anon, authenticated;
-grant execute on function public.loop_refund_captured_rental(text,text) to service_role;
+revoke all on function public.loop_refund_captured_rental(text,text,text) from public, anon, authenticated;
+grant execute on function public.loop_refund_captured_rental(text,text,text) to service_role;
 
 create or replace function public.loop_rental_fulfillment_ready()
 returns boolean language sql security invoker set search_path = ''
