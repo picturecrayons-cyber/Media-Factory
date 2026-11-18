@@ -6,9 +6,9 @@ import { getSql } from "@/lib/db";
 import { assertNotDevUser } from "./guards";
 import { requireVerifiedActor } from "./session";
 import { loadTitle } from "./titles";
-import { canReadTitle, canOperateOnTitle } from "./rbac";
+import { canReadTitle, canOperateOnTitle, hasPermission } from "./rbac";
 import { writeAudit } from "./audit";
-import { sameOwner } from "./creator-document-policy";
+import { sameOwner, canDownloadCreatorDocument } from "./creator-document-policy";
 
 const DOCUMENT_TYPES = [
   "FINISHED_FILM_AGREEMENT",
@@ -222,17 +222,26 @@ export const requestCreatorDocumentDownload = createServerFn({ method: "POST" })
     const doc = rows[0];
     if (!doc || doc.status !== "VERIFIED") throw new Error("Document not found");
     const ownerAccess = sameOwner(actor, doc);
+    const reviewerCanReadLinkedEvidence =
+      actor.internalRole === "legal_reviewer" && hasPermission(actor, "title.rights_review");
     const titleAccess = await sql<{ allowed: boolean }>`
       select exists (
         select 1 from bridge_title_document_links l
         join bridge_titles t on t.id=l.title_id
         where l.document_id=${doc.id}
-          and (t.owner_user_id=${actor.userId}
+          and (
+            t.owner_user_id=${actor.userId}
             or (t.owner_account_type='studio' and t.owner_organization_id=${actor.organizationId ?? null}
-                and ${actor.accountType}='studio' and ${actor.organizationId ?? null} is not null))
+                and ${actor.accountType}='studio' and ${actor.organizationId ?? null} is not null)
+            or ${reviewerCanReadLinkedEvidence}
+          )
       ) as allowed
     `;
-    if (!ownerAccess && !titleAccess[0]?.allowed && actor.internalRole !== "super_admin" && actor.internalRole !== "legal_reviewer") {
+    if (!canDownloadCreatorDocument({
+      ownerAccess,
+      linkedTitleAccess: Boolean(titleAccess[0]?.allowed),
+      isSuperAdmin: actor.internalRole === "super_admin",
+    })) {
       throw new Error("Forbidden");
     }
     const { signDownload } = await import("./oci-object-storage.server");
