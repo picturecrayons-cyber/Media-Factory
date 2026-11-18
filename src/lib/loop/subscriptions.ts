@@ -104,8 +104,10 @@ export const rentTvodMovie = createServerFn({ method: "POST" })
     const titles = await sql<{ id: string; title: string; tvod_rental_price: number }>`
       select l.id,l.title,l.tvod_rental_price
       from loop_titles l
-      join bridge_loop_publications p on p.loop_title_id=l.id and p.bridge_title_id=l.bridge_title_id
-      where l.id=${data.loopTitleId} and l.status='approved' and l.listed=true and l.published=true
+      join bridge_loop_publications p on p.loop_title_id::text=l.id::text and p.bridge_title_id=l.bridge_title_id
+      join bridge_loop_consumer_pricing cp on cp.bridge_title_id=p.bridge_title_id
+        and cp.status='APPROVED' and cp.access_tier='TVOD' and cp.rental_price_inr=l.tvod_rental_price
+      where l.id::text=${data.loopTitleId} and l.status='approved' and l.listed=true and l.published=true
         and l.access_tier='TVOD' and p.authorization_status='authorized' and p.revoked_at is null
         and p.window_start <= now() and p.window_end > now()
         and 'WORLDWIDE'=any(p.territories) and 'TVOD'=any(p.exploitation_models)
