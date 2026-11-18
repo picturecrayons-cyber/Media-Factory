@@ -665,6 +665,23 @@ try {
     );
   }
 
+
+  // Replay newly introduced feature migrations only after the historical
+  // production-ledger baseline has replayed successfully. They are not part
+  // of the 69-row 2026-11-16 reconciliation manifest.
+  for (const name of featureNames) {
+    const sql = await readFile(join(MIGRATIONS_DIR, name), "utf8");
+    await client.query("BEGIN");
+    try {
+      await client.query(sql);
+      await client.query("COMMIT");
+      console.log(`[migration-replay] PASS feature migration ${name}`);
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw new Error(`Feature migration failed: ${name}: ${error.message}`);
+    }
+  }
+
   const baselineRls = await client.query(`
     select
       c.relname,
