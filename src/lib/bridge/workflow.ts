@@ -38,6 +38,71 @@ export async function saveLoopLicense(
   )
     throw new Error("Forbidden");
   if (new Date(data.windowEnd) <= new Date()) throw new Error("License window has expired");
+
+  // The title row lock serializes submissions for this title. Reuse an identical
+  // draft on retries; reject the same agreement reference if its terms differ.
+  const existingDrafts = await tx<{
+    id: string;
+    territories: string[];
+    languages: string[];
+    window_start: string;
+    window_end: string;
+    exclusivity: string;
+    evidence: Array<{
+      agreementReference?: string;
+      ownershipReference?: string;
+      commercialTerms?: {
+        rightsOwnerSharePct?: number;
+        distributorSharePct?: number;
+      };
+    }> | string;
+  }>`select id,territories,languages,window_start,window_end,exclusivity,evidence
+    from bridge_rights_grants
+    where title_id=${data.titleId} and grant_type='DISTRIBUTION' and status='DRAFT'
+    order by created_at asc,id asc`;
+
+  const requestedTerms = {
+    agreementReference: data.agreementReference.trim(),
+    ownershipReference: data.ownershipReference.trim(),
+    rightsOwnerSharePct: data.rightsOwnerSharePct,
+    distributorSharePct: data.distributorSharePct,
+    territories: [...data.territories].sort(),
+    languages: [...data.languages].sort(),
+    windowStart: new Date(data.windowStart).toISOString(),
+    windowEnd: new Date(data.windowEnd).toISOString(),
+    exclusivity: data.exclusivity,
+  };
+  const sameJsonArray = (left: string[], right: string[]) =>
+    JSON.stringify([...left].sort()) === JSON.stringify([...right].sort());
+  const matchingAgreement = existingDrafts.filter((draft) => {
+    const evidence = typeof draft.evidence === "string" ? JSON.parse(draft.evidence) : draft.evidence;
+    return evidence?.some((item) => item.agreementReference?.trim() === requestedTerms.agreementReference);
+  });
+  const exactMatches = matchingAgreement.filter((draft) => {
+    const evidence = typeof draft.evidence === "string" ? JSON.parse(draft.evidence) : draft.evidence;
+    const item = evidence?.find((entry) => entry.agreementReference?.trim() === requestedTerms.agreementReference);
+    const terms = item?.commercialTerms;
+    return Boolean(
+      item?.ownershipReference?.trim() === requestedTerms.ownershipReference &&
+      terms?.rightsOwnerSharePct === requestedTerms.rightsOwnerSharePct &&
+      terms?.distributorSharePct === requestedTerms.distributorSharePct &&
+      sameJsonArray(draft.territories, requestedTerms.territories) &&
+      sameJsonArray(draft.languages, requestedTerms.languages) &&
+      new Date(draft.window_start).toISOString() === requestedTerms.windowStart &&
+      new Date(draft.window_end).toISOString() === requestedTerms.windowEnd &&
+      draft.exclusivity === requestedTerms.exclusivity
+    );
+  });
+  if (matchingAgreement.length > 0) {
+    if (exactMatches.length !== matchingAgreement.length)
+      throw new Error("Agreement reference already exists with different rights or commercial terms; legal review required");
+    const grantId = exactMatches[0].id;
+    await audit(tx, actor.userId, data.titleId, "license.loop_draft_duplicate_reused", {
+      grantId,
+      agreementReference: requestedTerms.agreementReference,
+    });
+    return { grantId, reused: true };
+  }
   const [grant] = await tx<{ id: string }>`insert into bridge_rights_grants
     (title_id,grant_type,territories,languages,media,window_start,window_end,exclusivity,evidence,status,created_by)
     values (${data.titleId},'DISTRIBUTION',${JSON.stringify(data.territories)}::jsonb,${JSON.stringify(data.languages)}::jsonb,
