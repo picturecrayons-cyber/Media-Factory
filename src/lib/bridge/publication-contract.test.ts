@@ -189,7 +189,7 @@ test("publication accepts a rights-covered India-only territory without widening
 test("publication blocks without a ready package or checksum-verified playback rendition", async () => {
   for (const options of [
     { packageRow: null, renditionRow: null },
-    { packageRow: { ...undefined, id: "package-1", rights_grant_id: "grant-1", qc_case_id: "qc-1", legal_case_id: "legal-1", asset_version_ids: [], readiness_state: "READY" }, renditionRow: null },
+    { packageRow: { id: "package-1", rights_grant_id: "grant-1", qc_case_id: "qc-1", legal_case_id: "legal-1", asset_version_ids: [], readiness_state: "READY" }, renditionRow: null },
   ]) {
     const h = harness([grant], true, false, undefined, options.packageRow, options.renditionRow);
     await assert.rejects(h.authorize({ context, data }), /Distribution Authorization Blocked/);
