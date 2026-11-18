@@ -40,6 +40,7 @@ function LoopCmsBody() {
             </p>
           </div>
           <Link to="/cms" search={{ tab: "publishing" }} className="text-sm font-semibold text-accent hover:underline">Open Bridge publication gateway →</Link>
+          <Link to="/loop-merchandising" className="text-sm font-semibold text-accent hover:underline">Open homepage merchandising editor →</Link>
         </div>
       </section>
 
