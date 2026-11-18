@@ -169,18 +169,30 @@ export async function verifyDistributionPreflight(
   if (!reviews[0]?.qc_ok) reasons.push("Recorded QC approval for the current assets is required.");
   if (!reviews[0]?.legal_ok) reasons.push("Recorded legal approval for this license is required.");
 
+  const pricingRows = await sql<{
+    access_tier: string; rental_price_inr: number; purchase_price_inr: number | null; status: string;
+  }>`
+    select access_tier,rental_price_inr,purchase_price_inr,status
+    from bridge_loop_consumer_pricing where bridge_title_id=${titleId} limit 1
+  `;
+  const consumerPricing = pricingRows[0] ?? null;
+  if (!consumerPricing || consumerPricing.status !== "APPROVED" || consumerPricing.access_tier !== "TVOD" ||
+      !Number.isInteger(Number(consumerPricing.rental_price_inr)) || Number(consumerPricing.rental_price_inr) <= 0) {
+    reasons.push("Super Admin-approved TVOD rental pricing is required; legacy default prices are not accepted.");
+  }
+
   let destinationPackageId: string | null = null;
   if (rightsGrantId) {
-    const packages = await sql<{ id: string }>`
-      select id from bridge_destination_packages
-      where title_id=${titleId} and destination='CRAYONS_LOOP'
-        and rights_grant_id=${rightsGrantId}
-        and readiness_state in ('READY','AUTHORIZED','DELIVERED')
+    const packages = await sql<{ id: string; readiness_state: string }>`
+      select id,readiness_state from bridge_destination_packages
+      where title_id=${titleId} and destination='CRAYONS_LOOP' and rights_grant_id=${rightsGrantId}
       order by package_version desc limit 1
     `;
-    destinationPackageId = packages[0]?.id ?? null;
+    if (["READY","AUTHORIZED","DELIVERED"].includes(packages[0]?.readiness_state ?? "")) {
+      destinationPackageId = packages[0]?.id ?? null;
+    }
   }
-  if (!destinationPackageId) reasons.push("A certified READY Crayons Loop destination package is required.");
+  if (!destinationPackageId) reasons.push("The latest Crayons Loop destination package must be certified READY.");
 
   // Publication is blocked until every explicit consumer-release certification is recorded.
   const gateRows = await sql<{
@@ -229,6 +241,7 @@ export async function verifyDistributionPreflight(
     title,
     rightsGrantId,
     destinationPackageId,
+    consumerPricing,
     commercialTerms,
   };
 }
@@ -408,6 +421,81 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
   });
 
 const loopPackageInput = z.object({ bridgeTitleId: z.string().min(8) });
+
+export const configureLoopConsumerPricing = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({
+    bridgeTitleId: z.string().min(8),
+    rentalPriceInr: z.number().int().min(1).max(100000),
+    purchasePriceInr: z.number().int().min(1).max(100000).nullable().optional(),
+    approvalNote: z.string().trim().min(8).max(500),
+  }))
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    assertPermission(actor, "loop.publish");
+    const sql = await getSql();
+    return sql.transaction(async (tx) => {
+      const titles = await tx<{ id: string; status: string }>`
+        select id,status from bridge_titles where id=${data.bridgeTitleId} for update
+      `;
+      const title = titles[0];
+      if (!title) throw new Error("Bridge title not found");
+      if (!["LICENSING_READY","LIVE_FOR_BUYERS"].includes(title.status)) {
+        throw new Error("Consumer pricing can only be configured after rights clearance");
+      }
+      const live = await tx<{ id: string }>`
+        select id from bridge_loop_publications
+        where bridge_title_id=${title.id} and authorization_status in ('authorized','live')
+        limit 1
+      `;
+      if (live[0]) throw new Error("Published Loop pricing cannot be changed in place; a versioned commercial amendment and re-approval are required");
+
+      const prior = await tx<{ rental_price_inr: number; purchase_price_inr: number | null; status: string }>`
+        select rental_price_inr,purchase_price_inr,status
+        from bridge_loop_consumer_pricing where bridge_title_id=${title.id} for update
+      `;
+      const changed = !prior[0] || prior[0].status !== "APPROVED" ||
+        Number(prior[0].rental_price_inr) !== data.rentalPriceInr ||
+        (prior[0].purchase_price_inr == null ? null : Number(prior[0].purchase_price_inr)) !== (data.purchasePriceInr ?? null);
+      if (changed) {
+        await tx`
+          update bridge_destination_packages
+          set readiness_state='HOLD',authorized_by=null,authorized_at=null
+          where title_id=${title.id} and destination='CRAYONS_LOOP'
+            and readiness_state in ('READY','AUTHORIZED')
+        `;
+      }
+      await tx`
+        insert into bridge_loop_consumer_pricing
+          (bridge_title_id,access_tier,rental_price_inr,purchase_price_inr,status,approved_by,approved_at,approval_note,updated_at)
+        values
+          (${title.id},'TVOD',${data.rentalPriceInr},${data.purchasePriceInr ?? null},'APPROVED',${actor.userId},now(),${data.approvalNote},now())
+        on conflict (bridge_title_id) do update set
+          access_tier='TVOD',rental_price_inr=excluded.rental_price_inr,
+          purchase_price_inr=excluded.purchase_price_inr,status='APPROVED',
+          approved_by=excluded.approved_by,approved_at=now(),approval_note=excluded.approval_note,updated_at=now()
+      `;
+      await writeAudit({
+        actorUserId: actor.userId,
+        action: "distribution.loop_consumer_pricing_approved",
+        entityType: "bridge_title",
+        entityId: title.id,
+        metadata: {
+          accessTier: "TVOD",
+          rentalPriceInr: data.rentalPriceInr,
+          purchasePriceInr: data.purchasePriceInr ?? null,
+          previousPricingChanged: changed,
+        },
+      }, tx);
+      return {
+        approved: true as const,
+        accessTier: "TVOD" as const,
+        rentalPriceInr: data.rentalPriceInr,
+        purchasePriceInr: data.purchasePriceInr ?? null,
+      };
+    });
+  });
 
 /** Build a private, versioned Loop destination package from the title's current verified assets. */
 export const prepareLoopDestinationPackage = createServerFn({ method: "POST" })
