@@ -498,6 +498,24 @@ export const configureLoopConsumerPricing = createServerFn({ method: "POST" })
   });
 
 /** Build a private, versioned Loop destination package from the title's current verified assets. */
+export const getLoopConsumerPricing = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .validator(loopPackageInput)
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    assertPermission(actor, "title.read_catalog");
+    const sql = await getSql();
+    const rows = await sql<{
+      access_tier: string; rental_price_inr: number; purchase_price_inr: number | null;
+      status: string; approval_note: string; approved_at: string;
+    }>`
+      select access_tier,rental_price_inr,purchase_price_inr,status,approval_note,approved_at::text as approved_at
+      from bridge_loop_consumer_pricing where bridge_title_id=${data.bridgeTitleId} limit 1
+    `;
+    return { pricing: rows[0] ?? null };
+  });
+
 export const prepareLoopDestinationPackage = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(loopPackageInput)
