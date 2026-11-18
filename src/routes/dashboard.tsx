@@ -65,7 +65,7 @@ function DashboardBody() {
           <Link to="/workspace" className="rounded-sm bg-accent px-4 py-2 text-sm font-semibold text-[#041018]">
             Open title library
           </Link>
-          <Link to="/internal" className="rounded-sm border border-line px-4 py-2 text-sm font-semibold">
+          <Link to="/admin/services" className="rounded-sm border border-line px-4 py-2 text-sm font-semibold">
             Open services
           </Link>
         </div>
