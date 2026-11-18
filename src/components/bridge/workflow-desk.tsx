@@ -66,6 +66,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
   const [exclusive, setExclusive] = useState(false);
   const [agreement, setAgreement] = useState("");
   const [ownership, setOwnership] = useState("");
+  const [studioDeclaration, setStudioDeclaration] = useState(false);
   const [ownerShare, setOwnerShare] = useState("");
   const [selectedGrantByAgreement, setSelectedGrantByAgreement] = useState<Record<string, string>>({});
   function downloadStatement() {
@@ -232,6 +233,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                             ownershipReference: ownership,
                             rightsOwnerSharePct: Number(ownerShare),
                             distributorSharePct: 100 - Number(ownerShare),
+                            studioDeclaration: actor.accountType === "studio" && studioDeclaration ? true : undefined,
                           },
                         }),
                       );
@@ -242,6 +244,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                     {input("Agreement reference", agreement, setAgreement)}
                     {input("Ownership evidence reference", ownership, setOwnership)}
                     {input("Rights owner share (%)", ownerShare, setOwnerShare, "number")}
+                    {actor.accountType === "studio" ? <label className="flex items-start gap-2 text-sm sm:col-span-2"><input type="checkbox" className="mt-1" checked={studioDeclaration} onChange={(e) => setStudioDeclaration(e.target.checked)} required /><span>I confirm that I am authorized to submit this title’s rights information and that the agreement and ownership references supplied are accurate to the best of my knowledge. This is a Studio submission declaration, not Legal approval.</span></label> : null}
                     <label className="flex items-center gap-2 text-sm">
                       <input
                         type="checkbox"
@@ -251,7 +254,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                       Exclusive license
                     </label>
                     <button
-                      disabled={action.isPending || !start || !end || agreement.trim().length < 8 || ownership.trim().length < 8 || ownerShare === ""}
+                      disabled={action.isPending || !start || !end || agreement.trim().length < 8 || ownership.trim().length < 8 || ownerShare === "" || (actor.accountType === "studio" && !studioDeclaration)}
                       className="rounded-lg border border-line px-4 py-2 text-sm sm:col-span-2"
                     >
                       {action.isPending ? "Saving…" : "Save draft"}
@@ -333,6 +336,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                               new Date(selectedGrant.window_end) > new Date(selectedGrant.window_start) &&
                               new Date(selectedGrant.window_end) > new Date();
                             const checks = [
+                              ["Studio submission declaration recorded when required", title.ownerAccountType !== "studio" || evidence?.studioDeclaration?.accepted === true],
                               ["Ownership evidence reference recorded", Boolean(evidence?.ownershipReference?.trim())],
                               ["Agreement reference recorded", Boolean(evidence?.agreementReference?.trim())],
                               ["NON-EXCLUSIVE terms recorded", selectedGrant.exclusivity === "NON_EXCLUSIVE"],
@@ -353,6 +357,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                                   ))}
                                 </ul>
                                 <div className="grid gap-1 border-t border-line pt-2 text-xs text-muted sm:grid-cols-2">
+                                  {title.ownerAccountType === "studio" ? <p>Studio declaration: {evidence?.studioDeclaration?.accepted ? `Accepted by ${evidence.studioDeclaration.submittedBy} · ${evidence.studioDeclaration.submittedAt}` : "Not recorded"}</p> : null}
                                   <p>Ownership ref: {evidence?.ownershipReference || "Not recorded"}</p>
                                   <p>Agreement ref: {evidence?.agreementReference || "Not recorded"}</p>
                                   <p>Rights owner share: {typeof ownerShare === "number" && Number.isInteger(ownerShare) ? `${ownerShare}%` : "Not recorded"}</p>

@@ -5,7 +5,7 @@ import { getSql, type Sql } from "@/lib/db";
 import { requireVerifiedActor } from "./session";
 import { assertPermission, canReadTitle, canOperateOnTitle, type Actor } from "./rbac";
 import { loadTitle } from "./titles";
-import { loopLicenseInput, producerSharePaise } from "./workflow-policy";
+import { assertStudioDeclaration, loopLicenseInput, producerSharePaise } from "./workflow-policy";
 import { bridgeEnv } from "./env";
 import { hasVerifiedMasterAndArtwork } from "./asset-roles";
 
@@ -21,6 +21,7 @@ export async function saveLoopLicense(
   data: z.infer<typeof loopLicenseInput>,
 ) {
   data = loopLicenseInput.parse(data);
+  assertStudioDeclaration(actor.accountType, data.studioDeclaration);
   const [title] = await tx<{
     owner_user_id: string;
     owner_account_type: string;
@@ -50,6 +51,7 @@ export async function saveLoopLicense(
             rightsOwnerSharePct: data.rightsOwnerSharePct,
             distributorSharePct: data.distributorSharePct,
           },
+          studioDeclaration: actor.accountType === "studio" ? { accepted: true, declarationVersion: "studio-rights-attestation-v1", submittedBy: actor.userId, submittedAt: new Date().toISOString() } : null,
         },
       ])}::jsonb,'DRAFT',${actor.userId}) returning id`;
   await audit(tx, actor.userId, data.titleId, "license.loop_draft", { grantId: grant.id });
@@ -79,7 +81,8 @@ export async function reviewWorkflow(tx: Sql, actor: Actor, data: z.infer<typeof
     status: string;
     master_key: string | null;
     poster_key: string | null;
-  }>`select status,master_key,poster_key from bridge_titles where id=${data.titleId} for update`;
+    owner_account_type: string;
+  }>`select status,master_key,poster_key,owner_account_type from bridge_titles where id=${data.titleId} for update`;
   if (!title) throw new Error("Not found");
   const expected = data.stage === "QC" ? "QC_REVIEW" : "RIGHTS_REVIEW";
   if (title.status !== expected) throw new Error(`Title must be in ${expected}`);
@@ -102,8 +105,18 @@ export async function reviewWorkflow(tx: Sql, actor: Actor, data: z.infer<typeof
       status: string;
       window_end: string;
       created_by: string;
-    }>`select status,window_end,created_by from bridge_rights_grants where id=${data.grantId} and title_id=${data.titleId} for update`;
+      evidence: Array<{ agreementReference?: string; ownershipReference?: string; commercialTerms?: { rightsOwnerSharePct?: number; distributorSharePct?: number }; studioDeclaration?: { accepted?: boolean; submittedBy?: string; declarationVersion?: string } | null }>;
+    }>`select status,window_end,created_by,evidence from bridge_rights_grants where id=${data.grantId} and title_id=${data.titleId} for update`;
     if (!grant || grant.status !== "DRAFT") throw new Error("License draft is unavailable");
+    const submittedEvidence = grant.evidence?.[0];
+    if (!submittedEvidence?.agreementReference?.trim() || !submittedEvidence.ownershipReference?.trim() || submittedEvidence.agreementReference.trim().length < 8 || submittedEvidence.ownershipReference.trim().length < 8) throw new Error("Legal review requires recorded agreement and ownership evidence references");
+    const ownerShare = submittedEvidence.commercialTerms?.rightsOwnerSharePct;
+    const distributorShare = submittedEvidence.commercialTerms?.distributorSharePct;
+    if (!Number.isInteger(ownerShare) || !Number.isInteger(distributorShare) || ownerShare! < 0 || distributorShare! < 0 || ownerShare! + distributorShare! !== 100) throw new Error("Legal review requires a valid revenue-share split totaling 100%");
+    if (title.owner_account_type === "studio") {
+      const declaration = submittedEvidence.studioDeclaration;
+      if (!declaration?.accepted || declaration.submittedBy !== grant.created_by || declaration.declarationVersion !== "studio-rights-attestation-v1") throw new Error("Studio declaration evidence is missing or does not match the submitting account");
+    }
     if (grant.created_by === actor.userId)
       throw new Error("Another legal reviewer must approve this license");
     if (data.decision === "APPROVE" && new Date(grant.window_end) <= new Date())
@@ -164,6 +177,7 @@ export const getTitleWorkflow = createServerFn({ method: "GET" })
         agreementReference?: string;
         ownershipReference?: string;
         commercialTerms?: { rightsOwnerSharePct: number; distributorSharePct: number };
+        studioDeclaration?: { accepted: boolean; declarationVersion: string; submittedBy: string; submittedAt: string } | null;
       }>;
     }>`select id,status,territories,languages,window_start,window_end,exclusivity,evidence from bridge_rights_grants where title_id=${data.titleId} order by created_at desc`;
     const qc = await sql<{
