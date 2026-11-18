@@ -8,6 +8,7 @@ import { requireVerifiedActor } from "./session";
 import { loadTitle } from "./titles";
 import { canReadTitle, canOperateOnTitle } from "./rbac";
 import { writeAudit } from "./audit";
+import { sameOwner } from "./creator-document-policy";
 
 const DOCUMENT_TYPES = [
   "FINISHED_FILM_AGREEMENT",
@@ -21,7 +22,6 @@ const DOCUMENT_TYPES = [
 
 const MAX_DOCUMENT_BYTES = 50 * 1024 * 1024;
 const MIME_TYPES = new Set(["application/pdf"]);
-import { sameOwner } from "./creator-document-policy";
 
 function assertCreatorOrStudio(actor: { accountType: string }) {
   if (actor.accountType !== "independent_creator" && actor.accountType !== "studio") {
