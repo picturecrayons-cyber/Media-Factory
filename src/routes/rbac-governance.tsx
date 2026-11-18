@@ -45,7 +45,7 @@ function RbacGovernanceBody({ currentUserId }: { currentUserId: string }) {
   return (
     <div className="space-y-6">
       <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">Policy registry · read only</p>
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">Policy registry · gated role changes</p>
         <h2 className="mt-2 font-display text-2xl font-semibold sm:text-3xl">Role and permission matrix</h2>
         <p className="mt-2 max-w-3xl text-sm leading-relaxed text-muted">
           This is the checked-in application policy, not a live inventory of assigned users. Staff roles and account entitlements are shown separately.
