@@ -156,6 +156,8 @@ function BuyerBody({ userId }: { userId: string }) {
   const [tab, setTab] = useState<"discover" | "listing" | "licenses">("discover");
   const [view, setView] = useState<"gallery" | "list">("gallery");
   const [query, setQuery] = useState("");
+  const [languageFilter, setLanguageFilter] = useState("all");
+  const [sortOrder, setSortOrder] = useState<"recent" | "title">("recent");
   const [galleryPage, setGalleryPage] = useState(0);
   // Buyer-sensitive responses must never share a React Query cache entry across accounts.
   const titlesKey = ["bridge-buyer-titles", userId] as const;
@@ -167,7 +169,10 @@ function BuyerBody({ userId }: { userId: string }) {
   });
   const titles = titlesQ.data?.titles ?? [];
   const needle = query.trim().toLowerCase();
-  const visible = titles.filter((t) => !needle || `${t.name} ${t.language}`.toLowerCase().includes(needle));
+  const languages = [...new Set(titles.map((title) => title.language.trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  const visible = titles
+    .filter((t) => (!needle || `${t.name} ${t.language} ${t.synopsis}`.toLowerCase().includes(needle)) && (languageFilter === "all" || t.language === languageFilter))
+    .sort((a, b) => sortOrder === "title" ? a.name.localeCompare(b.name) : 0);
   const pageCount = Math.max(1, Math.ceil(visible.length / BUYER_GALLERY_PAGE_SIZE));
   const currentPage = Math.min(galleryPage, pageCount - 1);
   const pageTitles = visible.slice(
@@ -265,7 +270,19 @@ function BuyerBody({ userId }: { userId: string }) {
       </div>
       {tab !== "licenses" && (
         <div className="flex flex-wrap items-center gap-3">
-          <input value={query} onChange={(e) => { setQuery(e.target.value); setGalleryPage(0); }} placeholder="Search title or language" className="w-full max-w-md rounded-sm border border-line bg-transparent px-3 py-2 text-sm" />
+          <label className="sr-only" htmlFor="buyer-catalogue-search">Search catalogue</label>
+          <input id="buyer-catalogue-search" value={query} onChange={(e) => { setQuery(e.target.value); setGalleryPage(0); }} placeholder="Search title, language or synopsis" className="w-full max-w-md rounded-sm border border-line bg-transparent px-3 py-2 text-sm" />
+          <label className="sr-only" htmlFor="buyer-language-filter">Filter by language</label>
+          <select id="buyer-language-filter" value={languageFilter} onChange={(e) => { setLanguageFilter(e.target.value); setGalleryPage(0); }} className="min-h-10 rounded-sm border border-line bg-surface px-3 py-2 text-sm">
+            <option value="all">All languages</option>
+            {languages.map((language) => <option key={language} value={language}>{language}</option>)}
+          </select>
+          <label className="sr-only" htmlFor="buyer-sort-order">Sort catalogue</label>
+          <select id="buyer-sort-order" value={sortOrder} onChange={(e) => { setSortOrder(e.target.value as "recent" | "title"); setGalleryPage(0); }} className="min-h-10 rounded-sm border border-line bg-surface px-3 py-2 text-sm">
+            <option value="recent">Default order</option>
+            <option value="title">Title A–Z</option>
+          </select>
+          {(query || languageFilter !== "all" || sortOrder !== "recent") ? <button type="button" onClick={() => { setQuery(""); setLanguageFilter("all"); setSortOrder("recent"); setGalleryPage(0); }} className="min-h-10 px-2 text-sm font-semibold text-accent hover:underline">Clear filters</button> : null}
           <div className="inline-flex rounded-sm border border-line p-1" role="group" aria-label="Catalogue view">
             <button type="button" onClick={() => setView("gallery")} aria-pressed={view === "gallery"} className={`rounded-sm px-3 py-1.5 text-sm ${view === "gallery" ? "bg-accent text-bg" : "text-muted hover:text-fg"}`}>
               Gallery
@@ -282,6 +299,7 @@ function BuyerBody({ userId }: { userId: string }) {
         <TitleList titles={licensed} entitled={entitled} order={order} empty="No licenses yet. Discover a title and complete payment." />
       ) : view === "gallery" ? (
         <div className="space-y-4">
+          <p className="text-xs text-muted" aria-live="polite">Showing {pageTitles.length} of {visible.length} matching titles</p>
           <TitleGallery titles={pageTitles} artworkByTitle={artworkByTitle} entitled={entitled} order={order} />
           {visible.length > BUYER_GALLERY_PAGE_SIZE ? (
             <div className="flex items-center justify-between gap-3 border-t border-line pt-4">
@@ -306,7 +324,10 @@ function BuyerBody({ userId }: { userId: string }) {
           ) : null}
         </div>
       ) : (
-        <TitleList titles={visible} entitled={entitled} order={order} empty="No titles match this search." />
+        <div className="space-y-3">
+          <p className="text-xs text-muted" aria-live="polite">Showing {visible.length} matching titles</p>
+          <TitleList titles={visible} entitled={entitled} order={order} empty="No titles match the current search and filters." />
+        </div>
       )}
       {tab !== "licenses" && postersQ.isError && titles.length > 0 ? (
         <p role="status" className="text-xs text-muted">Poster artwork is temporarily unavailable. You can still open title details.</p>

@@ -24,6 +24,9 @@ function Signup() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [accountType, setAccountType] = useState<AccountChoice>(initialChoice);
 
   const [error, setError] = useState<string | null>(null);
@@ -34,6 +37,7 @@ function Signup() {
   const [resendBusy, setResendBusy] = useState(false);
   const [resendStatus, setResendStatus] = useState<string | null>(null);
   const [cooldown, setCooldown] = useState(0);
+  const passwordStrength = [password.length >= 8, /[A-Z]/.test(password) && /[a-z]/.test(password), /\d/.test(password), /[^A-Za-z0-9]/.test(password)].filter(Boolean).length;
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -46,6 +50,10 @@ function Signup() {
 
     if (password.length < 8) {
       setError("Password must be at least 8 characters long.");
+      return;
+    }
+    if (!acceptedTerms) {
+      setError("Please review and accept the Terms & Conditions and Privacy Policy.");
       return;
     }
 
@@ -299,13 +307,20 @@ function Signup() {
             <input
               required
               autoComplete="new-password"
-              type="password"
+              type={showPassword ? "text" : "password"}
               minLength={8}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="At least 8 characters"
               className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5 text-sm text-fg placeholder:text-faint transition focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
             />
+            <div className="mt-2 flex items-center justify-between gap-3">
+              <div className="flex flex-1 gap-1" aria-label={`Password strength ${passwordStrength} of 4`}>
+                {[1, 2, 3, 4].map((level) => <span key={level} className={`h-1.5 flex-1 rounded-full ${passwordStrength >= level ? "bg-accent" : "bg-line"}`} />)}
+              </div>
+              <span className="text-[11px] text-muted">{password ? ["Weak", "Fair", "Good", "Strong", "Strong"][passwordStrength] : "At least 8 characters"}</span>
+              <button type="button" onClick={() => setShowPassword((value) => !value)} className="text-xs font-semibold text-accent hover:underline" aria-pressed={showPassword}>{showPassword ? "Hide" : "Show"}</button>
+            </div>
           </label>
 
           <label className="block text-sm font-medium text-fg">
@@ -313,13 +328,21 @@ function Signup() {
             <input
               required
               autoComplete="new-password"
-              type="password"
+              type={showConfirmPassword ? "text" : "password"}
               minLength={8}
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               placeholder="Re-enter password"
               className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5 text-sm text-fg placeholder:text-faint transition focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
             />
+            <div className="mt-2 text-right">
+              <button type="button" onClick={() => setShowConfirmPassword((value) => !value)} className="text-xs font-semibold text-accent hover:underline" aria-pressed={showConfirmPassword}>{showConfirmPassword ? "Hide" : "Show"} confirmation</button>
+            </div>
+          </label>
+
+          <label className="flex items-start gap-3 text-xs leading-relaxed text-muted">
+            <input type="checkbox" required checked={acceptedTerms} onChange={(event) => setAcceptedTerms(event.target.checked)} className="mt-0.5 h-4 w-4 rounded border-line-strong accent-[var(--color-accent)]" />
+            <span>I agree to the <Link to="/terms" className="font-semibold text-accent underline">Terms &amp; Conditions</Link> and acknowledge the <Link to="/privacy" className="font-semibold text-accent underline">Privacy Policy</Link>.</span>
           </label>
 
           {error ? (

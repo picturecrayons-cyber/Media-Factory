@@ -252,8 +252,14 @@ function Home() {
                   Loop is the consumer streaming experience.
                 </p>
               </div>
-
-
+              <a
+                href="https://crayonsloop.in/"
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-full border border-line-strong px-5 py-3 text-sm font-semibold text-fg transition hover:border-accent hover:text-accent"
+              >
+                Explore Crayons Loop <span aria-hidden="true" className="ml-2">↗</span>
+              </a>
             </div>
           </div>
         </section>
