@@ -9,6 +9,12 @@ function harness(internalRole = "super_admin") {
   const sql = async (strings: TemplateStringsArray) => {
     const query = strings.join(" ");
     queries.push(query);
+    if (query.includes("from bridge_title_settlements s")) {
+      return [{ id: "settlement-ref", title_name: "Test Film", revenue_received_paise: 50000, creator_payable_paise: 30000, investor_payable_paise: 10000, bridge_share_paise: 10000, currency: "INR", status: "PENDING", settled_at: null, created_at: new Date("2026-11-18T00:00:00.000Z") }];
+    }
+    if (query.includes("from bridge_title_settlements")) {
+      return [{ status: "PENDING", currency: "INR", settlement_count: 1, revenue_received_paise: 50000, creator_payable_paise: 30000, investor_payable_paise: 10000, bridge_share_paise: 10000 }];
+    }
     if (query.includes("group by status, currency")) {
       return [{
         status: "captured",
@@ -16,9 +22,6 @@ function harness(internalRole = "super_admin") {
         payment_count: 2,
         total_amount_paise: 250000,
       }];
-    }
-    if (query.includes("from bridge_title_settlements")) {
-      return [{ status: "PENDING", currency: "INR", settlement_count: 1, revenue_received_paise: 50000, creator_payable_paise: 30000, investor_payable_paise: 10000, bridge_share_paise: 10000 }];
     }
     if (query.includes("from bridge_payments p")) {
       return [{
