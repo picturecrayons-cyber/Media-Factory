@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { sameOwner, isSupportedCreatorDocumentMimeType } from "./creator-documents.ts";
+import { sameOwner, isSupportedCreatorDocumentMimeType } from "./creator-document-policy.ts";
 
 test("Creator document vault is isolated to the owning Creator account", () => {
   const document = {
