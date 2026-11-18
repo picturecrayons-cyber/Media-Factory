@@ -19,13 +19,14 @@ function harness(
     delivery_status: "READY",
   },
   packageReady = true,
+  titleStatus = "LICENSED",
 ) {
   const writes: { query: string; values: unknown[] }[] = [];
   const title = {
     id: "title-1",
     slug: "film",
     name: "Film",
-    status: "LICENSED",
+    status: titleStatus,
     language: "Malayalam",
     master_key: "sealed/master",
     poster_key: "sealed/poster",
@@ -40,6 +41,10 @@ function harness(
     if (query.includes("from bridge_rights_grants")) return grants;
     if (query.includes("as qc_ok")) return [{ qc_ok: true, legal_ok: true }];
     if (query.includes("from bridge_title_gate_certifications")) return [gates];
+    if (query.includes("update bridge_titles")) {
+      writes.push({ query, values });
+      return [{ id: title.id }];
+    }
     if (query.includes("from bridge_destination_packages")) return packageReady ? [{ id: "package-1" }] : [];
     if (query.includes("update bridge_destination_packages")) {
       if (!packageReady) return [];
@@ -145,6 +150,19 @@ test("status alignment never bypasses operator, rights or commercial coverage", 
   }
 });
 
+
+test("certified Loop publication advances a licensing-ready Bridge title to buyer-visible", async () => {
+  const h = harness([grant], true, false, undefined, true, "LICENSING_READY");
+  const result = await h.authorize({ context, data });
+  assert.equal((result as { status: string }).status, "AUTHORIZED");
+  const advance = h.writes.find((write) => write.query.includes("update bridge_titles"));
+  assert.ok(advance);
+  assert.ok(advance.values.includes("LIVE_FOR_BUYERS"));
+  const event = h.writes.find((write) => write.query.includes("insert into bridge_title_events"));
+  assert.ok(event);
+  assert.ok(event.values.includes("LICENSING_READY"));
+  assert.ok(event.values.includes("LIVE_FOR_BUYERS"));
+});
 
 test("publication requires a certified Loop destination package", async () => {
   const h = harness([grant], true, false, undefined, false);
