@@ -15,7 +15,8 @@ create table if not exists public.loop_merchandising_documents (
 alter table public.loop_merchandising_documents enable row level security;
 revoke all privileges on table public.loop_merchandising_documents from public;
 revoke insert, update, delete on table public.loop_merchandising_documents from anon, authenticated;
-grant select on table public.loop_merchandising_documents to anon, authenticated;
+grant select (document_key,payload,publish_at,unpublish_at)
+  on table public.loop_merchandising_documents to anon, authenticated;
 grant all privileges on table public.loop_merchandising_documents to service_role;
 drop policy if exists loop_merchandising_public_active_read on public.loop_merchandising_documents;
 create policy loop_merchandising_public_active_read
@@ -25,3 +26,13 @@ using (
   and publish_at is not null and publish_at <= now()
   and (unpublish_at is null or unpublish_at > now())
 );
+
+-- Safe public projection: never expose editor identity, revision, audit or internal timestamps.
+create or replace view public.loop_public_merchandising
+with (security_invoker = true) as
+select document_key, payload, publish_at, unpublish_at
+from public.loop_merchandising_documents
+where status in ('PUBLISHED','SCHEDULED')
+  and publish_at is not null and publish_at <= now()
+  and (unpublish_at is null or unpublish_at > now());
+grant select on public.loop_public_merchandising to anon, authenticated;
