@@ -54,13 +54,10 @@ const publishInput = z.object({
   destination: z.literal("CRAYONS_LOOP").default("CRAYONS_LOOP"),
   territories: z.array(z.string().min(2).max(32)).min(1).max(50),
   languages: z.array(z.string().min(2).max(40)).min(1).max(20),
-  exploitationModels: z
-    .array(z.enum(["SVOD", "TVOD", "AVOD", "FREE", "PROMOTIONAL"]))
-    .min(1)
-    .max(5),
+  exploitationModels: z.array(z.literal("TVOD")).length(1),
   windowStart: z.string().datetime(),
   windowEnd: z.string().datetime(),
-  accessTier: z.enum(["FREE", "SVOD", "TVOD"]),
+  accessTier: z.literal("TVOD"),
   commercialTerms: z
     .object({
       rightsOwnerSharePct: z.number().min(0).max(100).optional(),
@@ -116,6 +113,8 @@ export async function verifyDistributionPreflight(
   if (!rightsRequest || !rightsRequest.windowStart || !rightsRequest.windowEnd ||
       rightsRequest.territories.length === 0 || rightsRequest.exploitationModels.length === 0) {
     reasons.push("Loop publication requires explicit territories, exploitation models, and a bounded distribution window.");
+  } else if (rightsRequest.exploitationModels.length !== 1 || rightsRequest.exploitationModels[0] !== "TVOD") {
+    reasons.push("Crayons Loop currently supports rental-only TVOD publication.");
   } else if (
     !Number.isFinite(new Date(rightsRequest.windowStart).getTime()) ||
     !Number.isFinite(new Date(rightsRequest.windowEnd).getTime()) ||
@@ -518,7 +517,7 @@ export const authorizeLoopPublication = createServerFn({ method: "POST" })
       insert into loop_titles (
         id, bridge_title_id, slug, title, synopsis, content_type, language, year,
         duration_minutes, poster_path, playback_path, metadata, status, listed,
-        published, featured, access_tier, updated_at
+        published, featured, access_tier, tvod_rental_price, updated_at
       ) values (
         ${loopTitleId}, ${title.id}, ${title.slug}, ${title.name}, ${title.synopsis}, ${loopStageType(title.content_type)},
         ${title.language}, ${title.year}, ${title.runtime_minutes}, ${title.poster_key}, ${preflight.playbackRendition?.s3_key ?? null},
@@ -534,7 +533,7 @@ export const authorizeLoopPublication = createServerFn({ method: "POST" })
           commercialTerms: preflight.commercialTerms || null,
         })}::jsonb,
         ${"approved"}, true, true, false,
-        ${data.accessTier}, now()
+        ${data.accessTier}, ${99}, now()
       )
       on conflict (bridge_title_id) do update set
         slug = excluded.slug, title = excluded.title, synopsis = excluded.synopsis,
@@ -542,6 +541,7 @@ export const authorizeLoopPublication = createServerFn({ method: "POST" })
         language = excluded.language, year = excluded.year, duration_minutes = excluded.duration_minutes,
         poster_path = excluded.poster_path, playback_path = excluded.playback_path,
         status = 'approved', listed = true, published = true, access_tier = excluded.access_tier,
+        tvod_rental_price = excluded.tvod_rental_price,
         metadata = excluded.metadata, updated_at = now()
     `;
 
