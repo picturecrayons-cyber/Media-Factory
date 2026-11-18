@@ -4,6 +4,7 @@ import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import { assertNotDevUser } from "./guards";
 import { requireVerifiedActor } from "./session";
+import { writeAudit } from "./audit";
 
 /** Read-only view of the canonical organization and membership records. No invitations are sent. */
 export const listSuperAdminOrganizationGovernance = createServerFn({ method: "GET" })
