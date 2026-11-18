@@ -31,17 +31,23 @@ export const getConsumerSubscription = createServerFn({ method: "GET" })
   .handler(async ({ context }): Promise<LoopSubscription> => {
     const sql = await getSql();
     const rows = await sql<{
-      id: number;
+      id: string;
       plan_key: string;
       status: string;
       started_at: string | Date;
       expires_at: string | Date;
     }>`
-      select id, plan_key, status, started_at, expires_at
-      from loop_subscriptions
-      where user_id = ${context.userId}
-        and status = 'active'
-        and expires_at > now()
+      select s.id::text as id,
+        coalesce(to_jsonb(s)->>'plan_key',(select p.plan_key from loop_plans p where p.id::text=to_jsonb(s)->>'plan_id')) as plan_key,
+        s.status,
+        coalesce(nullif(to_jsonb(s)->>'started_at','')::timestamptz,
+                 nullif(to_jsonb(s)->>'current_period_start','')::timestamptz) as started_at,
+        coalesce(nullif(to_jsonb(s)->>'expires_at','')::timestamptz,
+                 nullif(to_jsonb(s)->>'current_period_end','')::timestamptz) as expires_at
+      from loop_subscriptions s
+      where s.user_id::text=${context.userId} and s.status='active'
+        and coalesce(nullif(to_jsonb(s)->>'expires_at','')::timestamptz,
+                     nullif(to_jsonb(s)->>'current_period_end','')::timestamptz)>now()
       order by expires_at desc
       limit 1
     `;
