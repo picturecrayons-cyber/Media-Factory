@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import type { BridgeActor } from "@/lib/bridge/session";
@@ -152,7 +152,7 @@ function Summary({ label, value }: { label: string; value: string }) {
   return <div className="rounded-xl bg-bg p-3"><p className="text-xs text-muted">{label}</p><p className="mt-1 text-2xl font-semibold tabular-nums">{value}</p></div>;
 }
 
-function Panel({ title, description, children }: { title: string; description: string; children: React.ReactNode }) {
+function Panel({ title, description, children }: { title: string; description: string; children: ReactNode }) {
   return <section className="rounded-2xl border border-line bg-surface p-5"><h3 className="font-display text-lg font-semibold">{title}</h3><p className="mt-1 mb-4 text-sm text-muted">{description}</p>{children}</section>;
 }
 
