@@ -271,6 +271,13 @@ test("an audit failure rolls back review records and lifecycle", async () => {
     await f.db.close();
   }
 });
+test("Studio rights declaration is mandatory at submission and is not a Legal approval", () => {
+  assert.doesNotThrow(() => policy.assertStudioDeclaration("studio", true));
+  assert.throws(() => policy.assertStudioDeclaration("studio", false), /declaration/);
+  assert.throws(() => policy.assertStudioDeclaration("studio", undefined), /declaration/);
+  assert.doesNotThrow(() => policy.assertStudioDeclaration("independent_creator", undefined));
+});
+
 test("license constraints reject unsupported territory, bad window and invalid share totals", () => {
   assert.equal(policy.loopLicenseInput.safeParse(license).success, true);
   for (const data of [
