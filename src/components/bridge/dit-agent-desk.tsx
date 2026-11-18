@@ -53,10 +53,12 @@ export function DitAgentDesk({ actor }: { actor: StudioActor }) {
   const [attestations, setAttestations] = useState<Record<string, Attestations>>({});
   const [signoffNotes, setSignoffNotes] = useState<Record<string, string>>({});
   const [fileError, setFileError] = useState("");
+  const [ingestError, setIngestError] = useState("");
 
   const refresh = async () => queryClient.invalidateQueries({ queryKey });
   const createMutation = useMutation({
     mutationFn: async () => {
+      setIngestError("");
       if (!sourceManifest) throw new Error("Select the source-card manifest first");
       if (!sourceMediaFiles.length) throw new Error("Select the original camera-card folder");
       const mediaByPath = new Map<string, File>();
@@ -135,7 +137,8 @@ export function DitAgentDesk({ actor }: { actor: StudioActor }) {
       if (folderInputRef.current) folderInputRef.current.value = "";
       await refresh();
     },
-    onError: async () => {
+    onError: async (error) => {
+      setIngestError(error instanceof Error ? error.message : "Camera-card ingest failed. The session remains available for a safe retry.");
       setUploadProgress(null);
       await refresh();
     },
@@ -232,7 +235,13 @@ export function DitAgentDesk({ actor }: { actor: StudioActor }) {
           </label>
         </div>
         {fileError ? <p role="alert" className="mt-3 text-sm text-red-600">{fileError}</p> : null}
-        {createMutation.error ? <p role="alert" className="mt-3 text-sm text-red-600">{createMutation.error.message}</p> : null}
+        {ingestError ? (
+          <div role="alert" className="mt-3 rounded-lg border border-red-500/40 bg-red-500/5 p-3 text-sm">
+            <p className="font-semibold">Ingest did not complete.</p>
+            <p className="mt-1">{ingestError}</p>
+            <p className="mt-1 text-xs text-muted">No DIT sign-off was recorded. Review the session state before retrying; already verified files are protected by the server's idempotent upload checks.</p>
+          </div>
+        ) : null}
         <div className="mt-4 flex flex-wrap items-center gap-3">
           <Button disabled={createMutation.isPending || !titleId || !cardLabel.trim() || !sourceVolume.trim() || !sourceRoot.trim() || !sourceManifest || !sourceMediaFiles.length} onClick={() => createMutation.mutate()}>
             {createMutation.isPending ? "Uploading and verifying…" : activeSessionId ? "Resume camera-card ingest" : "Register and ingest camera card"}
