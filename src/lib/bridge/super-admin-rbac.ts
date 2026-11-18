@@ -46,8 +46,8 @@ export const getSuperAdminRbacGovernance = createServerFn({ method: "GET" })
       internalRoles,
       accountTypes,
       source: "checked-in application RBAC policy",
-      assignments: "NOT_QUERIED",
-      mutationControls: "NOT_IMPLEMENTED",
+      assignments: "AVAILABLE_IN_SEPARATE_LIVE_INVENTORY",
+      mutationControls: "FEATURE_FLAG_GATED; SUPER_ADMIN_PROMOTION_PROTECTED",
     };
   });
 
