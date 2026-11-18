@@ -10,7 +10,7 @@ function harness(internalRole = "super_admin") {
     "@/lib/auth/middleware": { authMiddleware: {} },
     "@/lib/db": { getSql: async () => async () => [] },
     "./audit": { writeAudit: async () => {} },
-    "zod": { z: { enum: () => ({ nullable: () => ({}) }), object: () => ({}) } },
+    "zod": { z: { enum: () => ({ nullable: () => ({}) }), object: () => ({}), string: () => ({ min: () => ({ max: () => ({}) }) }) } },
     "./session": { requireVerifiedActor: async () => ({ userId: "operator", emailVerified: true, internalRole }) },
     "./guards": { assertNotDevUser: () => {} },
     "./rbac": {
