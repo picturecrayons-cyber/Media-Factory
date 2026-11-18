@@ -21,7 +21,7 @@ function harness(internalRole = "super_admin") {
     "@tanstack/react-start": { createServerFn: () => { const builder = { middleware: () => builder, validator: () => builder, handler: (handler: unknown) => handler }; return builder; } },
     "@/lib/auth/middleware": { authMiddleware: {} },
     "@/lib/db": { getSql: async () => sql },
-    "zod": { z: { enum: () => ({ default: () => ({}), nullable: () => ({}) }), object: () => ({ refine: () => ({}) }), string: () => ({ min: () => ({ max: () => ({}) }), max: () => ({}), email: () => ({}), uuid: () => ({}), trim: () => ({ min: () => ({ max: () => ({}) }) }) }) } },
+    "zod": { z: { enum: () => ({ default: () => ({}), nullable: () => ({}) }), object: () => ({ refine: () => ({}) }), string: () => ({ min: () => ({ max: () => ({}) }), max: () => ({}), email: () => ({}), uuid: () => ({}), regex: () => ({}), trim: () => ({ min: () => ({ max: () => ({}) }) }) }) } },
     "node:crypto": { createHash: () => ({ update: () => ({ digest: () => "hash" }) }), randomBytes: () => ({ toString: () => "token" }) },
     "./audit": { writeAudit: async () => {} },
     "./env": { bridgeEnv: { appUrl: () => "https://bridge-preview.vercel.app" } },
