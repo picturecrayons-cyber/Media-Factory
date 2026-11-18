@@ -336,6 +336,8 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
       destination_package_id: string | null;
       package_rights_grant_id: string | null;
       package_qc_case_id: string | null;
+      package_legal_case_id: string | null;
+      legal_approvals: Array<{ id: string; grantId: string | null }> | null;
       playback_asset_version_id: string | null;
       playback_rendition_key: string | null;
       playback_checksum_sha256: string | null;
@@ -361,6 +363,11 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
                from bridge_legal_cases lc
                where lc.title_id=b.id and lc.status='APPROVED'
              ), '[]'::jsonb) as legal_grant_ids,
+             coalesce((
+               select jsonb_agg(jsonb_build_object('id',lc.id,'grantId',lc.evidence->0->>'grantId'))
+               from bridge_legal_cases lc
+               where lc.title_id=b.id and lc.status='APPROVED'
+             ), '[]'::jsonb) as legal_approvals,
              (select q.id from bridge_qc_cases q
                where q.title_id=b.id and q.status='PASSED'
                  and q.reviewer_findings->0->>'masterKey'=b.master_key
@@ -369,6 +376,7 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
              dp.id as destination_package_id,
              dp.rights_grant_id as package_rights_grant_id,
              dp.qc_case_id as package_qc_case_id,
+             dp.legal_case_id as package_legal_case_id,
              rendition.id as playback_asset_version_id,
              rendition.s3_key as playback_rendition_key,
              rendition.checksum_sha256 as playback_checksum_sha256,
@@ -427,7 +435,9 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
           }));
         });
         const legalGrantIds = Array.isArray(r.legal_grant_ids) ? r.legal_grant_ids : [];
-        const legalApproved = Boolean(coveringGrant && legalGrantIds.includes(coveringGrant.id));
+        const legalApprovals = Array.isArray(r.legal_approvals) ? r.legal_approvals : [];
+        const currentLegalCaseId = legalApprovals.find((approval) => approval.grantId === coveringGrant?.id)?.id ?? null;
+        const legalApproved = Boolean(coveringGrant && legalGrantIds.includes(coveringGrant.id) && currentLegalCaseId);
         const gatesReady =
           r.ott_preparation_status === "READY" &&
           r.packaging_status === "COMPLETE" &&
@@ -436,7 +446,8 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
         const packageReady =
           Boolean(r.destination_package_id) &&
           r.package_rights_grant_id === (coveringGrant?.id ?? null) &&
-          r.package_qc_case_id === r.qc_case_id;
+          r.package_qc_case_id === r.qc_case_id &&
+          r.package_legal_case_id === currentLegalCaseId;
         const playbackReady =
           Boolean(r.playback_asset_version_id) &&
           Boolean(r.playback_rendition_key) &&
@@ -469,7 +480,7 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
         if (r.curation_status !== "APPROVED") blockers.push("Editorial curation is not APPROVED");
         if (r.delivery_status !== "READY") blockers.push("Final delivery is not certified READY");
         if (!r.destination_package_id) blockers.push("A READY Crayons Loop destination package is required");
-        else if (!packageReady) blockers.push("The Loop package must reference the active rights grant and current QC approval");
+        else if (!packageReady) blockers.push("The Loop package must reference the active rights grant, current QC approval, and matching Legal approval");
         if (!playbackReady) blockers.push("A checksum-verified LOOP_HLS_MASTER playback rendition is required");
         if (
           ![
