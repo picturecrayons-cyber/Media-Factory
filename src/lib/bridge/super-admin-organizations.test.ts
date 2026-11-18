@@ -18,9 +18,13 @@ function harness(internalRole = "super_admin") {
     return [];
   };
   const modules: Record<string, unknown> = {
-    "@tanstack/react-start": { createServerFn: () => { const builder = { middleware: () => builder, handler: (handler: unknown) => handler }; return builder; } },
+    "@tanstack/react-start": { createServerFn: () => { const builder = { middleware: () => builder, validator: () => builder, handler: (handler: unknown) => handler }; return builder; } },
     "@/lib/auth/middleware": { authMiddleware: {} },
     "@/lib/db": { getSql: async () => sql },
+    "zod": { z: { enum: () => ({ default: () => ({}), nullable: () => ({}) }), object: () => ({ refine: () => ({}) }), string: () => ({ min: () => ({ max: () => ({ email: () => ({}) , uuid: () => ({}), trim: () => ({}) }) }), email: () => ({}) }) } },
+    "node:crypto": { createHash: () => ({ update: () => ({ digest: () => "hash" }) }), randomBytes: () => ({ toString: () => "token" }) },
+    "./audit": { writeAudit: async () => {} },
+    "./env": { bridgeEnv: { appUrl: () => "https://bridge-preview.vercel.app" } },
     "./session": { requireVerifiedActor: async () => ({ userId: "operator", emailVerified: true, internalRole }) },
     "./guards": { assertNotDevUser: () => {} },
   };
