@@ -19,9 +19,9 @@ type TestDb = {
   transaction<T>(fn: (tx: Pick<TestDb, "query">) => Promise<T>): Promise<T>;
   close(): Promise<void>;
 };
-async function testDatabase(): Promise<{ db: TestDb; schema: string }> {
+async function testDatabase(): Promise<{ db: TestDb; schema: string; external: boolean }> {
   const binding = process.env.BRIDGE_WORKFLOW_TEST_DATABASE_URL;
-  if (!binding) return { db: new PGlite(), schema: "public" };
+  if (!binding) return { db: new PGlite(), schema: "public", external: false };
   // Static credentials for the disposable CI service only. Never use production bindings.
   const expected = "postgres://workflow_test:workflow_test@127.0.0.1:5432/bridge_workflow_test";
   if (binding !== expected || process.env.CI !== "true")
@@ -68,17 +68,21 @@ async function testDatabase(): Promise<{ db: TestDb; schema: string }> {
       }
     },
   };
-  return { db, schema };
+  return { db, schema, external: true };
 }
 async function fixture() {
-  const { db, schema } = await testDatabase();
+  const { db, schema, external } = await testDatabase();
   try {
-    await db.exec(`do $ begin
-      if not exists (select 1 from pg_roles where rolname = 'anon') then create role anon; end if;
-      if not exists (select 1 from pg_roles where rolname = 'authenticated') then create role authenticated; end if;
-      if not exists (select 1 from pg_roles where rolname = 'service_role') then create role service_role; end if;
-    end $;
-    create table bridge_profiles(user_id text primary key);
+    if (external) {
+      await db.exec(`do $$ begin
+        if not exists (select 1 from pg_roles where rolname = 'anon') then create role anon; end if;
+        if not exists (select 1 from pg_roles where rolname = 'authenticated') then create role authenticated; end if;
+        if not exists (select 1 from pg_roles where rolname = 'service_role') then create role service_role; end if;
+      end $$;`);
+    } else {
+      await db.exec("create role anon; create role authenticated; create role service_role;");
+    }
+    await db.exec(`    create table bridge_profiles(user_id text primary key);
     create table bridge_titles(
       id text primary key,
       owner_user_id text,
