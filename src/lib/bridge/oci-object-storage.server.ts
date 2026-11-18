@@ -454,7 +454,7 @@ export async function inspectBucketHealth(bucketName?: string) {
   const bucket = await res.json() as {
     name?: string; namespace?: string; compartmentId?: string; timeCreated?: string;
     etag?: string; storageTier?: string; publicAccessType?: string; versioning?: string;
-    autoTiering?: string; objectEventsEnabled?: boolean;
+    autoTiering?: string; objectEventsEnabled?: boolean; approximateCount?: number; approximateSize?: number;
   };
   return {
     status: "AVAILABLE" as const,
@@ -468,6 +468,8 @@ export async function inspectBucketHealth(bucketName?: string) {
     versioning: bucket.versioning ?? null,
     autoTiering: bucket.autoTiering ?? null,
     objectEventsEnabled: bucket.objectEventsEnabled ?? null,
+    approximateObjectCount: bucket.approximateCount ?? null,
+    approximateSizeBytes: bucket.approximateSize ?? null,
     backupVerification: "NOT_CONFIGURED" as const,
     replicationVerification: "NOT_CONFIGURED" as const,
   };
