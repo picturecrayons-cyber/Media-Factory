@@ -316,6 +316,7 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
       playback_path: string | null;
       qc_approved: boolean;
       legal_grant_ids: string[] | null;
+      loop_package_ready: boolean;
       ott_preparation_status: string | null;
       packaging_status: string | null;
       curation_status: string | null;
@@ -337,6 +338,37 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
                from bridge_legal_cases lc
                where lc.title_id=b.id and lc.status='APPROVED'
              ), '[]'::jsonb) as legal_grant_ids,
+             exists (
+               select 1
+               from bridge_destination_packages dp
+               where dp.title_id=b.id and dp.destination='CRAYONS_LOOP'
+                 and dp.readiness_state in ('READY','AUTHORIZED','DELIVERED')
+                 and exists (
+                   select 1 from bridge_rights_grants rg
+                   where rg.id=dp.rights_grant_id and rg.title_id=b.id and rg.status='VALID'
+                 )
+                 and dp.qc_case_id = (
+                   select q.id from bridge_qc_cases q
+                   where q.title_id=b.id and q.status='PASSED'
+                     and q.reviewer_findings->0->>'masterKey'=b.master_key
+                     and q.reviewer_findings->0->>'posterKey'=b.poster_key
+                   order by q.reviewed_at desc nulls last, q.created_at desc limit 1
+                 )
+                 and dp.legal_case_id = (
+                   select lc.id from bridge_legal_cases lc
+                   where lc.title_id=b.id and lc.status='APPROVED'
+                     and lc.evidence->0->>'grantId'=dp.rights_grant_id
+                   order by lc.reviewed_at desc nulls last, lc.created_at desc limit 1
+                 )
+                 and exists (
+                   select 1
+                   from jsonb_array_elements_text(coalesce(dp.asset_version_ids, '[]'::jsonb)) ids(value)
+                   join bridge_asset_versions av on av.id::text=ids.value
+                   where av.title_id=b.id and av.asset_group='VIDEO'
+                     and av.asset_type='LOOP_HLS_MASTER' and av.processing_state='PASSED'
+                     and av.checksum_sha256 ~ '^[a-f0-9]{64}$' and av.byte_size > 0
+                 )
+             ) as loop_package_ready,
              g.ott_preparation_status, g.packaging_status, g.curation_status, g.delivery_status
       from bridge_titles b
       left join bridge_loop_publications p on p.bridge_title_id = b.id
@@ -353,19 +385,29 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
 
     return {
       titles: rows.map((r) => {
-        const coveringGrant = r.loop_title_id
-          ? findCoveringRightsGrant(
-              grants.filter((grant) => grant.title_id === r.id),
-              {
-                destination: "CRAYONS_LOOP",
-                territories: r.territories || [],
-                languages: r.languages || [],
-                exploitationModels: r.exploitation_models || [],
-                windowStart: iso(r.window_start),
-                windowEnd: iso(r.window_end),
-              },
-            )
-          : null;
+        const titleGrants = grants.filter((grant) => grant.title_id === r.id);
+        const requestedTerritories = r.territories?.length ? r.territories : ["IN"];
+        const requestedLanguages = r.languages?.length ? r.languages : [r.language];
+        const requestedModels = r.exploitation_models?.length ? r.exploitation_models : ["TVOD"];
+        const now = new Date();
+        const coveringGrant = titleGrants.find((grant) => {
+          const grantStart = grant.window_start ? new Date(grant.window_start) : null;
+          const candidateStart = r.window_start
+            ? new Date(r.window_start)
+            : grantStart && grantStart > now ? grantStart : now;
+          const grantEnd = grant.window_end ? new Date(grant.window_end) : null;
+          const candidateEnd = r.window_end
+            ? new Date(r.window_end)
+            : grantEnd ?? new Date(candidateStart.getTime() + 24 * 60 * 60 * 1000);
+          return Boolean(findCoveringRightsGrant([grant], {
+            destination: "CRAYONS_LOOP",
+            territories: requestedTerritories,
+            languages: requestedLanguages,
+            exploitationModels: requestedModels,
+            windowStart: candidateStart.toISOString(),
+            windowEnd: candidateEnd.toISOString(),
+          }));
+        });
         const legalGrantIds = Array.isArray(r.legal_grant_ids) ? r.legal_grant_ids : [];
         const legalApproved = Boolean(coveringGrant && legalGrantIds.includes(coveringGrant.id));
         const gatesReady =
@@ -378,6 +420,7 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
           legalApproved &&
           Boolean(r.qc_approved) &&
           gatesReady &&
+          r.loop_package_ready &&
           [
             "LICENSING_READY",
             "LIVE_FOR_BUYERS",
@@ -397,6 +440,7 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
         if (r.packaging_status !== "COMPLETE") blockers.push("Consumer packaging is not certified COMPLETE");
         if (r.curation_status !== "APPROVED") blockers.push("Editorial curation is not APPROVED");
         if (r.delivery_status !== "READY") blockers.push("Final delivery is not certified READY");
+        if (!r.loop_package_ready) blockers.push("A READY Loop package with current rights/QC/Legal links and a checksum-verified playback rendition is required");
         if (
           ![
             "LICENSING_READY",
