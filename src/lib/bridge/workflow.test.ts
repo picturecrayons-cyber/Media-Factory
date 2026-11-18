@@ -382,3 +382,55 @@ test("Submit for QC advances PREPARING with the referenced vertical poster and w
     await f.db.close();
   }
 });
+
+test("identical Loop TVOD submissions reuse the original draft instead of duplicating it", async () => {
+  const f = await fixture();
+  try {
+    const first = (await f.sql.transaction((tx) => f.save(tx, owner, license))) as {
+      grantId: string;
+      reused: boolean;
+    };
+    const retry = (await f.sql.transaction((tx) => f.save(tx, owner, license))) as {
+      grantId: string;
+      reused: boolean;
+    };
+    assert.equal(first.reused, false);
+    assert.equal(retry.reused, true);
+    assert.equal(retry.grantId, first.grantId);
+    assert.equal((await f.sql.query("select * from bridge_rights_grants")).length, 1);
+    assert.equal(
+      (await f.sql.query("select * from bridge_audit_logs where action='license.loop_draft'")).length,
+      1,
+    );
+    assert.equal(
+      (await f.sql.query("select * from bridge_audit_logs where action='license.loop_draft.idempotent_reuse'")).length,
+      1,
+    );
+  } finally {
+    await f.db.close();
+  }
+});
+
+test("conflicting Loop TVOD draft terms fail closed and preserve the existing draft", async () => {
+  const f = await fixture();
+  try {
+    const first = (await f.sql.transaction((tx) => f.save(tx, owner, license))) as {
+      grantId: string;
+    };
+    await assert.rejects(
+      f.sql.transaction((tx) =>
+        f.save(tx, owner, { ...license, exclusivity: "EXCLUSIVE" }),
+      ),
+      /Reconcile the existing draft/,
+    );
+    const rows = await f.sql.query<{ id: string; status: string; exclusivity: string }>(
+      "select id,status,exclusivity from bridge_rights_grants",
+    );
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].id, first.grantId);
+    assert.equal(rows[0].status, "DRAFT");
+    assert.equal(rows[0].exclusivity, "NON_EXCLUSIVE");
+  } finally {
+    await f.db.close();
+  }
+});

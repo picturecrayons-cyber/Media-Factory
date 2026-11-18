@@ -13,6 +13,7 @@ import { persistVerifiedAsset } from "./asset-confirmation";
 import { downloadDecision } from "./delivery-policy";
 import { uploadUrlLifetimeSeconds } from "./upload-url-lifetime";
 import { validateOttIngestFile, type OttIngestKind } from "./ott-ingest-spec";
+import { findForeignTitleFilenameMatch } from "./asset-title-association";
 
 const UPLOADABLE: ReadonlySet<string> = new Set(["DRAFT", "UPLOADING", "PREPARING"]);
 
@@ -52,6 +53,23 @@ export const requestAssetUpload = createServerFn({ method: "POST" })
       contentType: data.contentType,
     });
     if (!ingestValidation.ok) throw new Error(ingestValidation.message);
+    const sql = await getSql();
+    if (data.kind === "subtitle") {
+      const candidates = await sql<{ id: string; slug: string; name: string; name_ml: string | null }>`
+        select id,slug,name,name_ml from bridge_titles where id <> ${title.id}
+      `;
+      const foreignTitle = findForeignTitleFilenameMatch(data.filename, title.id, candidates.map((row) => ({
+        id: row.id,
+        slug: row.slug,
+        name: row.name,
+        nameMl: row.name_ml,
+      })));
+      if (foreignTitle) {
+        throw new Error(
+          `Subtitle filename appears to identify another Bridge title ("${foreignTitle.name}"). Verify the file's film identity before uploading it to this title.`,
+        );
+      }
+    }
     const { signUpload, titleAssetKey } = await import("./oci-object-storage.server");
     const key = titleAssetKey({
       ownerUserId: title.ownerUserId,
@@ -65,7 +83,6 @@ export const requestAssetUpload = createServerFn({ method: "POST" })
       expiresIn: uploadUrlLifetimeSeconds(data.byteSize),
     });
     const id = randomBytes(16).toString("hex");
-    const sql = await getSql();
     await sql`
       insert into bridge_assets (id, title_id, kind, s3_key, content_type, created_by)
       values (${id}, ${title.id}, ${data.kind}, ${key}, ${data.contentType}, ${actor.userId})

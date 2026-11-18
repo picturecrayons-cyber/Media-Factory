@@ -6,6 +6,7 @@ import { PGlite } from "@electric-sql/pglite";
 import { ASSET_KINDS, type AssetKind } from "./types.ts";
 import { persistVerifiedAsset } from "./asset-confirmation.ts";
 import { validateOttIngestFile } from "./ott-ingest-spec.ts";
+import { findForeignTitleFilenameMatch } from "./asset-title-association.ts";
 
 test("all 9 supported asset types are valid in OTT ingest specification", () => {
   const expectedKinds: AssetKind[] = [
@@ -235,4 +236,43 @@ test("persistence failure does not advance migration queue state", async () => {
   const successBlock = assets.slice(assets.indexOf("if (confirmed)", persistAt), failureBranchAt);
   assert.match(successBlock, /set status = 'UPLOADED'/);
   assert.match(successBlock, /set status = 'VERIFIED'/);
+});
+
+
+test("subtitle filenames that clearly identify another canonical title are rejected before upload", () => {
+  const match = findForeignTitleFilenameMatch(
+    "Jananam_1947_Pranayam_Thudarunnu_English_CC.srt",
+    "malayalakkara-id",
+    [
+      { id: "malayalakkara-id", name: "Malayalakkara Residency", slug: "malayalakkara-residency-858f0e" },
+      { id: "jananam-id", name: "Jananam 1947 Pranayam Thudarunnu", slug: "jananam-1947-pranayam-thudarunnu" },
+    ],
+  );
+  assert.equal(match?.id, "jananam-id");
+});
+
+test("subtitle title matching uses the object-key basename", () => {
+  const match = findForeignTitleFilenameMatch(
+    "bridge/owner/title-123/subtitle/Jananam_1947_Pranayam_Thudarunnu_English_CC.srt",
+    "malayalakkara-id",
+    [{ id: "jananam-id", name: "Jananam 1947 Pranayam Thudarunnu" }],
+  );
+  assert.equal(match?.id, "jananam-id");
+});
+
+test("subtitle filename guard ignores the current title and ambiguous generic filenames", () => {
+  assert.equal(
+    findForeignTitleFilenameMatch(
+      "Malayalakkara_Residency_English.srt",
+      "malayalakkara-id",
+      [{ id: "malayalakkara-id", name: "Malayalakkara Residency" }],
+    ),
+    null,
+  );
+  assert.equal(
+    findForeignTitleFilenameMatch("English_CC.srt", "malayalakkara-id", [
+      { id: "jananam-id", name: "Jananam 1947 Pranayam Thudarunnu" },
+    ]),
+    null,
+  );
 });

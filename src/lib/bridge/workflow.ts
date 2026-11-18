@@ -38,6 +38,57 @@ export async function saveLoopLicense(
   )
     throw new Error("Forbidden");
   if (new Date(data.windowEnd) <= new Date()) throw new Error("License window has expired");
+
+  // The title row is already locked above. Serialize all Loop TVOD draft
+  // submissions for this title and reuse an exact retry instead of creating
+  // another immutable grant. Conflicting drafts require human reconciliation.
+  const [existingDraft] = await tx<{
+    id: string;
+    created_by: string;
+    territories: string[];
+    languages: string[];
+    window_start: string | Date;
+    window_end: string | Date;
+    exclusivity: string;
+    evidence: Array<{
+      agreementReference?: string;
+      ownershipReference?: string;
+      commercialTerms?: { rightsOwnerSharePct?: number; distributorSharePct?: number };
+    }>;
+  }>`select id,created_by,territories,languages,window_start,window_end,exclusivity,evidence
+    from bridge_rights_grants
+    where title_id = ${data.titleId}
+      and grant_type = 'DISTRIBUTION'
+      and status = 'DRAFT'
+      and media @> '["CRAYONS_LOOP","TVOD"]'::jsonb
+    order by created_at asc, id asc
+    limit 1
+    for update`;
+  if (existingDraft) {
+    const evidence = existingDraft.evidence?.[0];
+    const sameWindowStart = new Date(existingDraft.window_start).getTime() === new Date(data.windowStart).getTime();
+    const sameWindowEnd = new Date(existingDraft.window_end).getTime() === new Date(data.windowEnd).getTime();
+    const exactRetry =
+      JSON.stringify(existingDraft.territories) === JSON.stringify(data.territories) &&
+      JSON.stringify(existingDraft.languages) === JSON.stringify(data.languages) &&
+      sameWindowStart &&
+      sameWindowEnd &&
+      existingDraft.exclusivity === data.exclusivity &&
+      evidence?.agreementReference === data.agreementReference &&
+      evidence?.ownershipReference === data.ownershipReference &&
+      evidence?.commercialTerms?.rightsOwnerSharePct === data.rightsOwnerSharePct &&
+      evidence?.commercialTerms?.distributorSharePct === data.distributorSharePct;
+    if (exactRetry) {
+      await audit(tx, actor.userId, data.titleId, "license.loop_draft.idempotent_reuse", {
+        grantId: existingDraft.id,
+      });
+      return { grantId: existingDraft.id, reused: true };
+    }
+    throw new Error(
+      "A Loop TVOD draft already exists for this title. Reconcile the existing draft with an authorized reviewer before creating another.",
+    );
+  }
+
   const [grant] = await tx<{ id: string }>`insert into bridge_rights_grants
     (title_id,grant_type,territories,languages,media,window_start,window_end,exclusivity,evidence,status,created_by)
     values (${data.titleId},'DISTRIBUTION',${JSON.stringify(data.territories)}::jsonb,${JSON.stringify(data.languages)}::jsonb,
@@ -53,7 +104,7 @@ export async function saveLoopLicense(
         },
       ])}::jsonb,'DRAFT',${actor.userId}) returning id`;
   await audit(tx, actor.userId, data.titleId, "license.loop_draft", { grantId: grant.id });
-  return { grantId: grant.id };
+  return { grantId: grant.id, reused: false };
 }
 
 export const submitLoopLicense = createServerFn({ method: "POST" })

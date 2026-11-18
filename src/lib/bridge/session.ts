@@ -172,6 +172,48 @@ export const getDashboardSession = createServerFn({ method: "GET" })
     return { profile: actor };
   });
 
+export const getFounderDashboardMetrics = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    if (!canAccessDashboard(actor)) throw new Error("Super admin access required");
+    const sql = await getSql();
+    const rows = await sql<{
+      titles_total: number; profiles_total: number; creators_total: number; studios_total: number;
+      buyers_total: number; investors_total: number; organizations_total: number; qc_pending: number;
+      legal_pending: number; marketplace_live: number; buyer_interest_total: number; payments_total: number;
+      payments_verified_paise: number; entitlements_total: number; loop_active: number;
+      service_orders_total: number; service_orders_cancelled_or_refunded: number; storage_bytes: number;
+      dit_files_total: number; dit_copy_manifests_verified: number; webhook_failed: number;
+    }>`
+      select
+        (select count(*)::int from bridge_titles) as titles_total,
+        (select count(*)::int from bridge_profiles) as profiles_total,
+        (select count(*)::int from bridge_profiles where account_type = 'independent_creator') as creators_total,
+        (select count(*)::int from bridge_profiles where account_type = 'studio') as studios_total,
+        (select count(*)::int from bridge_profiles where account_type = 'buyer') as buyers_total,
+        (select count(*)::int from bridge_profiles where account_type = 'investor') as investors_total,
+        (select count(*)::int from bridge_organizations) as organizations_total,
+        (select count(*)::int from bridge_qc_cases where status in ('PENDING','OPEN','IN_REVIEW')) as qc_pending,
+        (select count(*)::int from bridge_legal_cases where status in ('PENDING','OPEN','IN_REVIEW')) as legal_pending,
+        (select count(*)::int from bridge_titles where status in ('LIVE_FOR_BUYERS','IN_NEGOTIATION','LICENSED','DELIVERED')) as marketplace_live,
+        (select count(*)::int from bridge_buyer_interest) as buyer_interest_total,
+        (select count(*)::int from bridge_payments) as payments_total,
+        (select coalesce(sum(greatest(0, amount_paise - coalesce(refunded_amount_paise,0) - coalesce(chargeback_amount_paise,0))),0)::bigint from bridge_payments where verified_at is not null and lower(status) = 'captured') as payments_verified_paise,
+        (select count(*)::int from bridge_entitlements) as entitlements_total,
+        (select count(*)::int from bridge_loop_publications where revoked_at is null and window_start <= now() and window_end > now() and lower(authorization_status) in ('approved','authorized','published')) as loop_active,
+        (select count(*)::int from bridge_service_orders) as service_orders_total,
+        (select count(*)::int from bridge_service_orders where lower(status) in ('cancelled','refunded')) as service_orders_cancelled_or_refunded,
+        (select coalesce(sum(byte_size),0)::bigint from bridge_assets) as storage_bytes,
+        (select count(*)::int from bridge_dit_ingest_files) as dit_files_total,
+        (select count(*)::int from bridge_dit_copy_verifications where verified = true) as dit_copy_manifests_verified,
+        (select count(*)::int from bridge_webhook_events where lower(status) in ('failed','error','dead_letter')) as webhook_failed
+    `;
+    const row = rows[0];
+    if (!row) throw new Error("Founder dashboard metrics unavailable");
+    return row;
+  });
 export const getBridgePublicStatus = createServerFn({ method: "GET" }).handler(async () => {
   return {
     product: PRODUCT_NAME,

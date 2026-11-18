@@ -150,9 +150,9 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
 
   // Authorization Form State
   const [selectedTitleId, setSelectedTitleId] = useState<string>("");
-  const [territories, setTerritories] = useState("IN");
+  const [territories, setTerritories] = useState("");
   const [languages, setLanguages] = useState("Malayalam");
-  const [model] = useState<ExploitationModel>("TVOD");
+  const model: ExploitationModel = "TVOD";
   const [windowStart, setWindowStart] = useState("");
   const [windowEnd, setWindowEnd] = useState("");
   const [rightsOwnerShare, setRightsOwnerShare] = useState<string>("80");
@@ -176,8 +176,8 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
             .filter(Boolean),
           exploitationModels: [model],
           accessTier: "TVOD",
-          windowStart: windowStart ? new Date(windowStart).toISOString() : null,
-          windowEnd: windowEnd ? new Date(windowEnd).toISOString() : null,
+          windowStart: windowStart ? new Date(windowStart).toISOString() : "",
+          windowEnd: windowEnd ? new Date(windowEnd).toISOString() : "",
           commercialTerms: {
             rightsOwnerSharePct: Number(rightsOwnerShare) || 0,
             distributorSharePct: Number(distributorShare) || 0,
@@ -386,12 +386,12 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
 
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 text-xs">
             <label className="block space-y-1">
-              <span className="font-semibold text-muted">Territories (comma-separated)</span>
+              <span className="font-semibold text-muted">Rights-covered territories (comma-separated)</span>
               <input
                 value={territories}
                 onChange={(e) => setTerritories(e.target.value)}
                 className="h-9 w-full rounded-xl border border-line bg-elevated px-3 text-fg focus:outline-none"
-                placeholder="IN, AE, US"
+                placeholder="Loaded from the active rights grant"
               />
             </label>
 
@@ -453,7 +453,7 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
           <div className="flex items-center gap-3 pt-2">
             <Button
               type="button"
-              disabled={publishMut.isPending}
+              disabled={publishMut.isPending || !selectedTitleId || !territories.trim() || !languages.trim() || !windowStart || !windowEnd || new Date(windowEnd) <= new Date(windowStart)}
               onClick={() => publishMut.mutate(selectedTitleId)}
               className="rounded-full px-5 text-xs font-semibold"
             >
@@ -531,9 +531,9 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
                     <strong className={t.hasMaster ? "text-emerald-400" : "text-amber-400"}>
                       {t.hasMaster ? "VERIFIED" : "MISSING"}
                     </strong>{" "}
-                    · Artwork:{" "}
+                    · Artwork asset:{" "}
                     <strong className={t.hasPoster ? "text-emerald-400" : "text-amber-400"}>
-                      {t.hasPoster ? "READY" : "MISSING"}
+                      {t.hasPoster ? "REGISTERED" : "MISSING"}
                     </strong>
                   </p>
                 </div>
@@ -599,7 +599,10 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
                   <Button
                     type="button"
                     disabled={!t.ready}
-                    onClick={() => setSelectedTitleId(t.id)}
+                    onClick={() => {
+                      setTerritories(t.suggestedTerritories.join(", "));
+                      setSelectedTitleId(t.id);
+                    }}
                     className="rounded-full text-xs font-semibold px-4 h-9"
                   >
                     {pub ? "Re-authorize & Distribute" : "Distribute to Crayons Loop"}

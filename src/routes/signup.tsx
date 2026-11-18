@@ -1,5 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
+import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { resendConfirmationEmail, signUpWithEmail } from "@/lib/auth/client";
 import { classifySignupResult } from "@/lib/auth/signup-classification";
 import { publicAccountTypeFrom } from "@/lib/auth/public-account-type";
@@ -7,8 +8,10 @@ import { BrandMark } from "@/components/bridge/shell";
 import { Button } from "@/components/ui/button";
 
 export const Route = createFileRoute("/signup")({
-  validateSearch: (search: Record<string, unknown>): { role?: string } => ({
+  validateSearch: (search: Record<string, unknown>): { role?: string; invite?: string; kind?: string } => ({
     role: typeof search.role === "string" ? search.role : undefined,
+    invite: typeof search.invite === "string" ? search.invite : undefined,
+    kind: typeof search.kind === "string" ? search.kind : undefined,
   }),
   component: Signup,
 });
@@ -17,8 +20,29 @@ type AccountChoice = "independent_creator" | "studio" | "buyer";
 
 function Signup() {
   const search = Route.useSearch();
+  const { user, isPending: authPending } = useCurrentUserState();
   const initialChoice: AccountChoice =
-    publicAccountTypeFrom(search.role) ?? "independent_creator";
+    search.kind === "studio" ? "studio" : publicAccountTypeFrom(search.role) ?? "independent_creator";
+
+  useEffect(() => {
+    if (!search.invite) return;
+    try {
+      if (search.kind === "studio") {
+        localStorage.setItem("bridge-studio-invite", search.invite);
+      } else {
+        sessionStorage.setItem("bridge-invite", search.invite);
+      }
+    } catch {
+      // The invite remains in the URL for this tab if browser storage is unavailable.
+    }
+    if (search.kind === "studio") setAccountType("studio");
+  }, [search.invite, search.kind]);
+
+  useEffect(() => {
+    if (!authPending && user && search.invite && search.kind === "studio") {
+      window.location.assign("/onboarding");
+    }
+  }, [authPending, user, search.invite, search.kind]);
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -263,11 +287,13 @@ function Signup() {
               Choose the workspace that matches your role. Access is restricted by permissions after sign-in.
             </p>
             <div role="radiogroup" aria-describedby="account-type-help" className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-              {[
+              {(search.kind === "studio" ? [
+                { id: "studio" as const, label: "Studio / Production", detail: "Accept your Studio invitation" },
+              ] : [
                 { id: "independent_creator" as const, label: "Creator / Filmmaker", detail: "Submit and manage your own titles" },
                 { id: "studio" as const, label: "Studio / Production", detail: "Manage a company slate" },
                 { id: "buyer" as const, label: "Buyer / Platform", detail: "Review cleared titles and licensing" },
-              ].map((opt) => (
+              ]).map((opt) => (
                 <label
                   key={opt.id}
                   className={`flex min-h-24 cursor-pointer flex-col items-start justify-center gap-1 rounded-xl border p-3 text-left transition focus-within:ring-2 focus-within:ring-accent focus-within:ring-offset-2 ${

@@ -6,6 +6,7 @@ import { StatusChip } from "@/components/bridge/status-rail";
 import { TitleList } from "@/components/bridge/title-desk";
 import { MyStoryConcepts } from "@/components/bridge/my-story-concepts";
 import { NewSubmissionPanel } from "@/components/bridge/new-submission-panel";
+import { CreatorStatementDesk } from "@/components/bridge/creator-statement-desk";
 import { listTitles } from "@/lib/bridge/titles";
 
 export const Route = createFileRoute("/creator")({ component: Creator });
@@ -270,13 +271,9 @@ function CreatorDashboard({
         <p className="text-xs font-semibold uppercase tracking-widest text-muted">Creator finance</p>
         <h2 className="mt-1 font-display text-2xl font-semibold">Statements</h2>
         <p className="mt-3 max-w-3xl text-sm leading-relaxed text-muted">
-          Creator earnings, commissions, adjustments and downloadable statements are shown only when
-          verified creator-payable ledger and reconciliation data are available. Title licensing values
-          are not treated as creator earnings.
+          View explicit Creator-payable allocations assigned to your verified account. Only recorded settlement lines appear; title licensing prices are never treated as your earnings.
         </p>
-        <p className="mt-4 inline-flex rounded-full border border-line px-3 py-1 text-xs font-semibold text-muted">
-          NOT VERIFIED · No statement feed connected
-        </p>
+        <CreatorStatementDesk />
       </section>
 
       <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-line pt-5 text-xs text-muted">

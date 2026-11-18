@@ -13,6 +13,7 @@ import { assertNotDevUser } from "./guards";
 import { loopStageType } from "./loop-lanes";
 import { assertBuyerPublishable, getBuyerGateStatus } from "./buyer-visibility";
 import { submitTitleForQc } from "./title-submission";
+import { findForeignTitleFilenameMatch } from "./asset-title-association";
 
 type TitleRow = {
   id: string;
@@ -555,6 +556,24 @@ async function assertLicensingReady(titleId: string) {
   `;
   const row = rows[0];
   if (!row) throw new Error("Title not found");
+  const subtitleAssets = await sql<{ s3_key: string }>`
+    select s3_key from bridge_assets where title_id = ${titleId} and kind = 'subtitle' and coalesce(byte_size, 0) > 0
+  `;
+  const otherTitles = await sql<{ id: string; slug: string; name: string; name_ml: string | null }>`
+    select id,slug,name,name_ml from bridge_titles where id <> ${titleId}
+  `;
+  const subtitleAssociationOk = !subtitleAssets.some((asset) =>
+    findForeignTitleFilenameMatch(
+      asset.s3_key,
+      titleId,
+      otherTitles.map((candidate) => ({
+        id: candidate.id,
+        slug: candidate.slug,
+        name: candidate.name,
+        nameMl: candidate.name_ml,
+      })),
+    ),
+  );
   const missing = [
     ["metadata", row.metadata_ok],
     ["rights grant", row.rights_ok],
@@ -566,6 +585,7 @@ async function assertLicensingReady(titleId: string) {
     ["verified master", row.master_ok],
     ["required artwork", row.poster_ok],
     ["destination package", row.package_ok],
+    ["subtitle title association", subtitleAssociationOk],
   ].filter(([, ok]) => !ok).map(([name]) => name);
   if (missing.length) {
     throw new Error(`LICENSING_READY blocked: ${missing.join(", ")}`);

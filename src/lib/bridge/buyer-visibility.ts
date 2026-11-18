@@ -1,4 +1,5 @@
 import { getSql } from "@/lib/db";
+import { findForeignTitleFilenameMatch } from "./asset-title-association";
 
 export type BuyerGateStatus = {
   qc: boolean; legal: boolean; ott: boolean; packaging: boolean; curation: boolean; delivery: boolean; publishable: boolean;
@@ -17,10 +18,54 @@ export async function getBuyerGateStatus(titleId: string): Promise<BuyerGateStat
         and exists(select 1 from bridge_destination_packages p where p.title_id=${titleId} and p.readiness_state in ('READY','AUTHORIZED','DELIVERED')) as delivery,
       public.bridge_title_buyer_visibility(${titleId}) as publishable
   `;
-  return rows[0] ?? {qc:false,legal:false,ott:false,packaging:false,curation:false,delivery:false,publishable:false};
+  const row = rows[0] ?? {qc:false,legal:false,ott:false,packaging:false,curation:false,delivery:false,publishable:false};
+  const subtitleAssets = await sql<{ s3_key: string }>`
+    select s3_key from bridge_assets where title_id = ${titleId} and kind = 'subtitle' and coalesce(byte_size, 0) > 0
+  `;
+  const otherTitles = await sql<{ id: string; slug: string; name: string; name_ml: string | null }>`
+    select id,slug,name,name_ml from bridge_titles where id <> ${titleId}
+  `;
+  const subtitleAssociationOk = !subtitleAssets.some((asset) =>
+    findForeignTitleFilenameMatch(
+      asset.s3_key,
+      titleId,
+      otherTitles.map((candidate) => ({
+        id: candidate.id,
+        slug: candidate.slug,
+        name: candidate.name,
+        nameMl: candidate.name_ml,
+      })),
+    ),
+  );
+  return {
+    ...row,
+    packaging: row.packaging && subtitleAssociationOk,
+    publishable: row.publishable && subtitleAssociationOk,
+  };
 }
 
 export async function assertBuyerPublishable(titleId: string) {
   const sql = await getSql();
+  const subtitleAssets = await sql<{ s3_key: string }>`
+    select s3_key from bridge_assets where title_id = ${titleId} and kind = 'subtitle' and coalesce(byte_size, 0) > 0
+  `;
+  const otherTitles = await sql<{ id: string; slug: string; name: string; name_ml: string | null }>`
+    select id,slug,name,name_ml from bridge_titles where id <> ${titleId}
+  `;
+  const hasForeignSubtitle = subtitleAssets.some((asset) =>
+    findForeignTitleFilenameMatch(
+      asset.s3_key,
+      titleId,
+      otherTitles.map((candidate) => ({
+        id: candidate.id,
+        slug: candidate.slug,
+        name: candidate.name,
+        nameMl: candidate.name_ml,
+      })),
+    ),
+  );
+  if (hasForeignSubtitle) {
+    throw new Error("Buyer publication blocked: a subtitle asset appears to belong to another title");
+  }
   await sql`select public.bridge_assert_buyer_publishable(${titleId})`;
 }

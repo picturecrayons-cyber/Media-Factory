@@ -17,7 +17,21 @@ const { Pool } = pg;
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const MIGRATIONS_DIR = resolve(SCRIPT_DIR, "../supabase/migrations");
 const DATABASE_URL = process.env.SUPABASE_REPLAY_DATABASE_URL?.trim();
-const EXPECTED_MIGRATIONS = 69;
+const EXPECTED_MIGRATIONS = 69; // recorded Production ledger entries
+const PENDING_MIGRATIONS = new Map([
+  ["20261118100000_bridge_production_schedule_20261118.sql", {
+    bytes: 1863,
+    sha256: "2c00e3129b860c99485a97453018ffa1397399f9d429c13992fb7e33a52609d3",
+  }],
+  ["20261118110000_bridge_studio_invites_and_owner_transfer_20261118.sql", {
+    bytes: 3077,
+    sha256: "b92976971e05edae1d02fc18381cdbb7e00a7789a5720f97edde0a9b982e6472",
+  }],
+  ["20261118120000_bridge_loop_projection_compat.sql", {
+    bytes: 4144,
+    sha256: "017a12f5682e5fd8b3b271b267c96d0bd0b8b11cccdbeb3ad293871307012436",
+  }],
+]);
 const FIXTURE_MIGRATION =
   "20261113090535_map_verified_streamvista_studio_owner_20261113.sql";
 const FIXTURE_USER_ID = "bridge-migration-replay-fixture";
@@ -54,9 +68,14 @@ const names = (await readdir(MIGRATIONS_DIR))
   .filter((name) => /^\d{14}_[a-z0-9_]+\.sql$/.test(name))
   .sort((a, b) => a.localeCompare(b));
 
-if (names.length !== EXPECTED_MIGRATIONS) {
+if (names.length !== EXPECTED_MIGRATIONS + PENDING_MIGRATIONS.size) {
+  const pendingNames = [...PENDING_MIGRATIONS.keys()].sort((a, b) => a.localeCompare(b));
   throw new Error(
-    `Expected ${EXPECTED_MIGRATIONS} versioned migrations; found ${names.length}`,
+    [
+      `Migration inventory mismatch: expected ${EXPECTED_MIGRATIONS} recorded Production migrations + ${pendingNames.length} pending PR migrations = ${EXPECTED_MIGRATIONS + pendingNames.length}; found ${names.length}.`,
+      `Pending PR migrations: ${pendingNames.join(", ")}`,
+      `Discovered migration files: ${names.join(", ")}`,
+    ].join("\\n"),
   );
 }
 if (new Set(names).size !== names.length) {
@@ -84,7 +103,11 @@ for (const line of manifest.split(String.fromCharCode(10))) {
   if (!Number.isSafeInteger(bytes) || bytes < 1) {
     throw new Error(`Invalid byte count for ${version}`);
   }
-  manifestRows.set(`${version}_${migrationName}.sql`, { bytes, sha256 });
+  const filename = `${version}_${migrationName}.sql`;
+  // New PR migrations are validated from the pending-source manifest below,
+  // not folded into the historical Production ledger manifest count.
+  if (PENDING_MIGRATIONS.has(filename)) continue;
+  manifestRows.set(filename, { bytes, sha256 });
 }
 if (manifestRows.size !== EXPECTED_MIGRATIONS) {
   throw new Error(
@@ -94,8 +117,8 @@ if (manifestRows.size !== EXPECTED_MIGRATIONS) {
 
 for (const name of names) {
   const contents = await readFile(join(MIGRATIONS_DIR, name));
-  const expected = manifestRows.get(name);
-  if (!expected) throw new Error(`Migration missing from manifest: ${name}`);
+  const expected = manifestRows.get(name) ?? PENDING_MIGRATIONS.get(name);
+  if (!expected) throw new Error(`Migration missing from both the Production manifest and pending PR migration list: ${name}`);
   const actualBytes = contents.byteLength;
   const actualSha256 = createHash("sha256").update(contents).digest("hex");
   if (actualBytes !== expected.bytes || actualSha256 !== expected.sha256) {

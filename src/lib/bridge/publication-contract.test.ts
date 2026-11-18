@@ -18,6 +18,20 @@ function harness(
     curation_status: "APPROVED",
     delivery_status: "READY",
   },
+  packageRow: any = {
+    id: "package-1",
+    rights_grant_id: "grant-1",
+    qc_case_id: "qc-1",
+    legal_case_id: "legal-1",
+    asset_version_ids: ["00000000-0000-4000-8000-000000000001"],
+    readiness_state: "READY",
+  },
+  renditionRow: any = {
+    id: "00000000-0000-4000-8000-000000000001",
+    s3_key: "deliverables/loop/hls/master.m3u8",
+    checksum_sha256: "a".repeat(64),
+    byte_size: 1024,
+  },
 ) {
   const writes: { query: string; values: unknown[] }[] = [];
   const title = {
@@ -37,8 +51,12 @@ function harness(
         { evidence: [{ commercialTerms: { rightsOwnerSharePct: 80, distributorSharePct: 20 } }] },
       ];
     if (query.includes("from bridge_rights_grants")) return grants;
-    if (query.includes("as qc_ok")) return [{ qc_ok: true, legal_ok: true }];
+    if (query.includes("as qc_ok")) return [{
+      qc_ok: true, legal_ok: true, qc_case_id: "qc-1", legal_case_id: "legal-1",
+    }];
     if (query.includes("from bridge_title_gate_certifications")) return [gates];
+    if (query.includes("from bridge_destination_packages")) return packageRow ? [packageRow] : [];
+    if (query.includes("from bridge_asset_versions")) return renditionRow ? [renditionRow] : [];
     if (query.includes("select id from bridge_titles")) return [title];
     if (query.includes("select id from loop_titles"))
       return existing ? [{ id: "loop-existing" }] : [];
@@ -121,6 +139,12 @@ test("new and existing publications emit the status accepted by the Loop catalog
     assert.match(publication.query, /authorization_status = 'authorized'/);
     assert.ok(publication.values.includes(data.territories));
     assert.ok(publication.values.includes(data.windowEnd));
+    const loopTitle = h.writes.find((write) => write.query.includes("insert into loop_titles"));
+    assert.ok(loopTitle);
+    assert.equal(loopTitle.values[10], "deliverables/loop/hls/master.m3u8");
+    assert.notEqual(loopTitle.values[10], "sealed/master");
+    assert.match(loopTitle.query, /true, true, false/);
+    assert.equal(loopTitle.values[13], data.accessTier, "Loop title access tier matches the authorized TVOD contract");
   }
 });
 
@@ -151,4 +175,39 @@ test("publication requires all four release certifications", async () => {
     await assert.rejects(h.authorize({ context, data }), /Distribution Authorization Blocked/);
     assert.equal(h.writes.length, 0);
   }
+});
+
+test("publication accepts a rights-covered India-only territory without widening it to worldwide", async () => {
+  const indiaGrant = { ...grant, territories: ["IN"] };
+  const indiaData = { ...data, territories: ["IN"] };
+  const h = harness([indiaGrant]);
+  const result = await h.authorize({ context, data: indiaData });
+  assert.equal((result as { status: string }).status, "AUTHORIZED");
+  const publication = h.writes.find((write) => write.query.includes("insert into bridge_loop_publications"));
+  assert.ok(publication);
+  assert.ok(publication.values.some((value) => Array.isArray(value) && value[0] === "IN"));
+});
+
+test("publication blocks without a ready package or checksum-verified playback rendition", async () => {
+  for (const options of [
+    { packageRow: null, renditionRow: null },
+    { packageRow: { id: "package-1", rights_grant_id: "grant-1", qc_case_id: "qc-1", legal_case_id: "legal-1", asset_version_ids: [], readiness_state: "READY" }, renditionRow: null },
+  ]) {
+    const h = harness([grant], true, false, undefined, options.packageRow, options.renditionRow);
+    await assert.rejects(h.authorize({ context, data }), /Distribution Authorization Blocked/);
+    assert.equal(h.writes.length, 0);
+  }
+});
+
+test("publication blocks if destination package is bound to stale QC or legal evidence", async () => {
+  const h = harness([grant], true, false, undefined, {
+    id: "package-1",
+    rights_grant_id: "grant-1",
+    qc_case_id: "old-qc",
+    legal_case_id: "legal-1",
+    asset_version_ids: ["00000000-0000-4000-8000-000000000001"],
+    readiness_state: "READY",
+  });
+  await assert.rejects(h.authorize({ context, data }), /current master and artwork/);
+  assert.equal(h.writes.length, 0);
 });

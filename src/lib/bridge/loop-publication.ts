@@ -54,13 +54,10 @@ const publishInput = z.object({
   destination: z.literal("CRAYONS_LOOP").default("CRAYONS_LOOP"),
   territories: z.array(z.string().min(2).max(32)).min(1).max(50),
   languages: z.array(z.string().min(2).max(40)).min(1).max(20),
-  exploitationModels: z
-    .array(z.enum(["SVOD", "TVOD", "AVOD", "FREE", "PROMOTIONAL"]))
-    .min(1)
-    .max(5),
-  windowStart: z.string().datetime().nullable().optional(),
-  windowEnd: z.string().datetime().nullable().optional(),
-  accessTier: z.enum(["FREE", "SVOD", "TVOD"]),
+  exploitationModels: z.array(z.literal("TVOD")).length(1),
+  windowStart: z.string().datetime(),
+  windowEnd: z.string().datetime(),
+  accessTier: z.literal("TVOD"),
   commercialTerms: z
     .object({
       rightsOwnerSharePct: z.number().min(0).max(100).optional(),
@@ -74,6 +71,12 @@ const publishInput = z.object({
 function iso(v: string | Date | null) {
   if (!v) return null;
   return v instanceof Date ? v.toISOString() : String(v);
+}
+
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0)
+    : [];
 }
 
 /** Pre-flight verification checking rights, assets, QC and operator authority */
@@ -114,9 +117,17 @@ export async function verifyDistributionPreflight(
 
   const reasons: string[] = [];
   if (!rightsRequest || !rightsRequest.windowStart || !rightsRequest.windowEnd ||
-      rightsRequest.territories.length!==1 || rightsRequest.territories[0]!=="WORLDWIDE" ||
-      rightsRequest.exploitationModels.length!==1 || rightsRequest.exploitationModels[0]!=="TVOD")
-    reasons.push("Loop requires WORLDWIDE TVOD with explicit start and end dates.");
+      rightsRequest.territories.length === 0 || rightsRequest.exploitationModels.length === 0) {
+    reasons.push("Loop publication requires explicit territories, exploitation models, and a bounded distribution window.");
+  } else if (rightsRequest.exploitationModels.length !== 1 || rightsRequest.exploitationModels[0] !== "TVOD") {
+    reasons.push("Crayons Loop currently supports rental-only TVOD publication.");
+  } else if (
+    !Number.isFinite(new Date(rightsRequest.windowStart).getTime()) ||
+    !Number.isFinite(new Date(rightsRequest.windowEnd).getTime()) ||
+    new Date(rightsRequest.windowEnd) <= new Date(rightsRequest.windowStart)
+  ) {
+    reasons.push("Loop publication window must be valid and end after its start.");
+  }
 
 
   // 1. QC & Master verification
@@ -159,12 +170,25 @@ export async function verifyDistributionPreflight(
     }
   }
 
-  const reviews = await sql<{ qc_ok: boolean; legal_ok: boolean }>`
-    select exists(select 1 from bridge_qc_cases q where q.title_id=${titleId} and q.status='PASSED'
-      and q.reviewer_findings->0->>'masterKey'=${title.master_key}
-      and q.reviewer_findings->0->>'posterKey'=${title.poster_key}) as qc_ok,
-    exists(select 1 from bridge_legal_cases l where l.title_id=${titleId} and l.status='APPROVED'
-      and l.evidence->0->>'grantId'=${rightsGrantId}) as legal_ok
+  const reviews = await sql<{
+    qc_ok: boolean;
+    legal_ok: boolean;
+    qc_case_id: string | null;
+    legal_case_id: string | null;
+  }>`
+    select
+      exists(select 1 from bridge_qc_cases q where q.title_id=${titleId} and q.status='PASSED'
+        and q.reviewer_findings->0->>'masterKey'=${title.master_key}
+        and q.reviewer_findings->0->>'posterKey'=${title.poster_key}) as qc_ok,
+      exists(select 1 from bridge_legal_cases l where l.title_id=${titleId} and l.status='APPROVED'
+        and l.evidence->0->>'grantId'=${rightsGrantId}) as legal_ok,
+      (select q.id from bridge_qc_cases q where q.title_id=${titleId} and q.status='PASSED'
+        and q.reviewer_findings->0->>'masterKey'=${title.master_key}
+        and q.reviewer_findings->0->>'posterKey'=${title.poster_key}
+        order by q.reviewed_at desc nulls last, q.created_at desc limit 1) as qc_case_id,
+      (select l.id from bridge_legal_cases l where l.title_id=${titleId} and l.status='APPROVED'
+        and l.evidence->0->>'grantId'=${rightsGrantId}
+        order by l.reviewed_at desc nulls last, l.created_at desc limit 1) as legal_case_id
   `;
   if (!reviews[0]?.qc_ok) reasons.push("Recorded QC approval for the current assets is required.");
   if (!reviews[0]?.legal_ok) reasons.push("Recorded legal approval for this license is required.");
@@ -190,6 +214,35 @@ export async function verifyDistributionPreflight(
     reasons.push("Editorial curation must be APPROVED.");
   if (gates?.delivery_status !== "READY")
     reasons.push("Final delivery must be certified READY.");
+  // Loop receives only a destination-approved rendition; the private master is never a playback source.
+  const packages = await sql<{ id: string; rights_grant_id: string | null; qc_case_id: string | null; legal_case_id: string | null; asset_version_ids: unknown }>`
+    select id, rights_grant_id, qc_case_id, legal_case_id, asset_version_ids
+    from bridge_destination_packages
+    where title_id = ${titleId} and destination = 'CRAYONS_LOOP'
+      and readiness_state in ('READY', 'AUTHORIZED', 'DELIVERED')
+    order by package_version desc, created_at desc limit 1
+  `;
+  const destinationPackage = packages[0];
+  if (!destinationPackage) reasons.push("A READY Crayons Loop destination package is required.");
+  else {
+    if (destinationPackage.rights_grant_id !== rightsGrantId) reasons.push("The Loop package must reference the active rights grant.");
+    if (destinationPackage.qc_case_id !== (reviews[0]?.qc_case_id ?? null)) reasons.push("The Loop package must reference QC approval for the current master and artwork.");
+    if (destinationPackage.legal_case_id !== (reviews[0]?.legal_case_id ?? null)) reasons.push("The Loop package must reference Legal approval for the active rights grant.");
+  }
+  const assetVersionIds = Array.isArray(destinationPackage?.asset_version_ids)
+    ? destinationPackage.asset_version_ids.filter((value): value is string => typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value))
+    : [];
+  const renditionRows = assetVersionIds.length
+    ? await sql<{ id: string; s3_key: string; checksum_sha256: string | null; byte_size: number | string | null }>`
+        select id, s3_key, checksum_sha256, byte_size from bridge_asset_versions
+        where title_id = ${titleId} and id = any(${assetVersionIds}::uuid[])
+          and asset_group = 'VIDEO' and asset_type = 'LOOP_HLS_MASTER'
+          and processing_state = 'PASSED' and checksum_sha256 ~ '^[a-f0-9]{64}$' and byte_size > 0
+        order by version desc, created_at desc limit 1
+      `
+    : [];
+  const playbackRendition = renditionRows[0] ?? null;
+  if (!playbackRendition) reasons.push("A checksum-verified LOOP_HLS_MASTER rendition is required in the approved package.");
 
   const licenses = rightsGrantId
     ? await sql<{ evidence: Array<{ commercialTerms?: CommercialTermsSummary }> }>`
@@ -216,6 +269,8 @@ export async function verifyDistributionPreflight(
     title,
     rightsGrantId,
     commercialTerms,
+    destinationPackageId: destinationPackage?.id ?? null,
+    playbackRendition,
   };
 }
 
@@ -226,21 +281,6 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
     const actor = await requireVerifiedActor(context.userId);
     assertPermission(actor, "title.read_catalog");
     const sql = await getSql();
-
-    // Auto-reevaluate any expired distribution windows
-    await sql`
-      update bridge_loop_publications
-      set authorization_status = 'expired', updated_at = now()
-      where window_end is not null and window_end < now() and authorization_status in ('authorized', 'live')
-    `.catch(() => {});
-
-    await sql`
-      update loop_titles
-      set status = 'expired', published = false, listed = false, updated_at = now()
-      where bridge_title_id in (
-        select bridge_title_id from bridge_loop_publications where authorization_status = 'expired'
-      ) and published = true
-    `.catch(() => {});
 
     const rows = await sql<{
       id: string;
@@ -266,6 +306,7 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
       playback_path: string | null;
       qc_approved: boolean;
       legal_grant_ids: string[] | null;
+      loop_package_ready: boolean;
       ott_preparation_status: string | null;
       packaging_status: string | null;
       curation_status: string | null;
@@ -273,9 +314,15 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
     }>`
       select b.id, b.slug, b.name, b.status, b.language, b.master_key, b.poster_key,
              b.synopsis, b.year, b.runtime_minutes,
-             p.loop_title_id, p.authorization_status, p.window_start, p.window_end,
-             p.territories, p.languages, p.exploitation_models,
-             l.status as loop_status, l.listed, l.published, l.playback_path,
+             p.loop_title_id,
+             case when p.window_end is not null and p.window_end < now()
+                       and p.authorization_status in ('authorized','live')
+                  then 'expired' else p.authorization_status end as authorization_status,
+             p.window_start, p.window_end, p.territories, p.languages, p.exploitation_models,
+             case when p.window_end is not null and p.window_end < now() then 'expired' else l.status end as loop_status,
+             case when p.window_end is not null and p.window_end < now() then false else l.listed end as listed,
+             case when p.window_end is not null and p.window_end < now() then false else l.published end as published,
+             l.playback_path,
              exists(
                select 1 from bridge_qc_cases q
                where q.title_id=b.id and q.status='PASSED'
@@ -287,6 +334,37 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
                from bridge_legal_cases lc
                where lc.title_id=b.id and lc.status='APPROVED'
              ), '[]'::jsonb) as legal_grant_ids,
+             exists (
+               select 1
+               from bridge_destination_packages dp
+               where dp.title_id=b.id and dp.destination='CRAYONS_LOOP'
+                 and dp.readiness_state in ('READY','AUTHORIZED','DELIVERED')
+                 and exists (
+                   select 1 from bridge_rights_grants rg
+                   where rg.id=dp.rights_grant_id and rg.title_id=b.id and rg.status='VALID'
+                 )
+                 and dp.qc_case_id = (
+                   select q.id from bridge_qc_cases q
+                   where q.title_id=b.id and q.status='PASSED'
+                     and q.reviewer_findings->0->>'masterKey'=b.master_key
+                     and q.reviewer_findings->0->>'posterKey'=b.poster_key
+                   order by q.reviewed_at desc nulls last, q.created_at desc limit 1
+                 )
+                 and dp.legal_case_id = (
+                   select lc.id from bridge_legal_cases lc
+                   where lc.title_id=b.id and lc.status='APPROVED'
+                     and lc.evidence->0->>'grantId'=dp.rights_grant_id
+                   order by lc.reviewed_at desc nulls last, lc.created_at desc limit 1
+                 )
+                 and exists (
+                   select 1
+                   from jsonb_array_elements_text(coalesce(dp.asset_version_ids, '[]'::jsonb)) ids(value)
+                   join bridge_asset_versions av on av.id::text=ids.value
+                   where av.title_id=b.id and av.asset_group='VIDEO'
+                     and av.asset_type='LOOP_HLS_MASTER' and av.processing_state='PASSED'
+                     and av.checksum_sha256 ~ '^[a-f0-9]{64}$' and av.byte_size > 0
+                 )
+             ) as loop_package_ready,
              g.ott_preparation_status, g.packaging_status, g.curation_status, g.delivery_status
       from bridge_titles b
       left join bridge_loop_publications p on p.bridge_title_id = b.id
@@ -303,19 +381,47 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
 
     return {
       titles: rows.map((r) => {
-        const coveringGrant = r.loop_title_id
-          ? findCoveringRightsGrant(
-              grants.filter((grant) => grant.title_id === r.id),
-              {
-                destination: "CRAYONS_LOOP",
-                territories: r.territories || [],
-                languages: r.languages || [],
-                exploitationModels: r.exploitation_models || [],
-                windowStart: iso(r.window_start),
-                windowEnd: iso(r.window_end),
-              },
-            )
-          : null;
+        const titleGrants = grants.filter((grant) => grant.title_id === r.id);
+        const requestedLanguages = r.languages?.length ? r.languages : [r.language];
+        const requestedModels = r.exploitation_models?.length ? r.exploitation_models : ["TVOD"];
+        const now = new Date();
+        const candidateWindow = (grant: (typeof titleGrants)[number]) => {
+          const grantStart = grant.window_start ? new Date(grant.window_start) : null;
+          const start = r.window_start
+            ? new Date(r.window_start)
+            : grantStart && grantStart > now ? grantStart : now;
+          const grantEnd = grant.window_end ? new Date(grant.window_end) : null;
+          const end = r.window_end
+            ? new Date(r.window_end)
+            : grantEnd ?? new Date(start.getTime() + 24 * 60 * 60 * 1000);
+          return { start, end };
+        };
+        const rightsMatchedGrant = titleGrants.find((grant) => {
+          const { start, end } = candidateWindow(grant);
+          const grantTerritories = stringArray(grant.territories);
+          return grantTerritories.length > 0 && Boolean(findCoveringRightsGrant([grant], {
+            destination: "CRAYONS_LOOP",
+            territories: grantTerritories,
+            languages: requestedLanguages,
+            exploitationModels: requestedModels,
+            windowStart: start.toISOString(),
+            windowEnd: end.toISOString(),
+          }));
+        });
+        const requestedTerritories = r.territories?.length
+          ? r.territories
+          : stringArray(rightsMatchedGrant?.territories);
+        const coveringGrant = titleGrants.find((grant) => {
+          const { start, end } = candidateWindow(grant);
+          return Boolean(findCoveringRightsGrant([grant], {
+            destination: "CRAYONS_LOOP",
+            territories: requestedTerritories,
+            languages: requestedLanguages,
+            exploitationModels: requestedModels,
+            windowStart: start.toISOString(),
+            windowEnd: end.toISOString(),
+          }));
+        });
         const legalGrantIds = Array.isArray(r.legal_grant_ids) ? r.legal_grant_ids : [];
         const legalApproved = Boolean(coveringGrant && legalGrantIds.includes(coveringGrant.id));
         const gatesReady =
@@ -328,6 +434,7 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
           legalApproved &&
           Boolean(r.qc_approved) &&
           gatesReady &&
+          r.loop_package_ready &&
           [
             "LICENSING_READY",
             "LIVE_FOR_BUYERS",
@@ -347,6 +454,7 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
         if (r.packaging_status !== "COMPLETE") blockers.push("Consumer packaging is not certified COMPLETE");
         if (r.curation_status !== "APPROVED") blockers.push("Editorial curation is not APPROVED");
         if (r.delivery_status !== "READY") blockers.push("Final delivery is not certified READY");
+        if (!r.loop_package_ready) blockers.push("A READY Loop package with current rights/QC/Legal links and a checksum-verified playback rendition is required");
         if (
           ![
             "LICENSING_READY",
@@ -371,15 +479,16 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
           hasPoster: Boolean(r.poster_key),
           ready: isReady,
           blockers,
+          suggestedTerritories: stringArray(rightsMatchedGrant?.territories),
           publication: r.loop_title_id
             ? {
                 destination: "CRAYONS_LOOP" as const,
                 loopTitleId: r.loop_title_id,
                 authorizationStatus: (r.authorization_status?.toUpperCase() ||
                   "PENDING") as DistributionAuthorizationStatus,
-                territories: r.territories || ["IN"],
+                territories: r.territories?.length ? r.territories : stringArray(rightsMatchedGrant?.territories),
                 languages: r.languages || [r.language],
-                exploitationModels: r.exploitation_models || ["SVOD"],
+                exploitationModels: r.exploitation_models || ["TVOD"],
                 windowStart: iso(r.window_start),
                 windowEnd: iso(r.window_end),
                 loopStatus: r.loop_status,
@@ -401,11 +510,7 @@ export const authorizeLoopPublication = createServerFn({ method: "POST" })
     const actor = await requireVerifiedActor(context.userId);
     assertPermission(actor, "loop.publish");
 
-    if (
-      data.windowStart &&
-      data.windowEnd &&
-      new Date(data.windowEnd) <= new Date(data.windowStart)
-    ) {
+    if (new Date(data.windowEnd) <= new Date(data.windowStart)) {
       throw new Error("Distribution window end date must be strictly after window start date.");
     }
 
@@ -440,11 +545,15 @@ export const authorizeLoopPublication = createServerFn({ method: "POST" })
         published, featured, access_tier, updated_at
       ) values (
         ${loopTitleId}, ${title.id}, ${title.slug}, ${title.name}, ${title.synopsis}, ${loopStageType(title.content_type)},
-        ${title.language}, ${title.year}, ${title.runtime_minutes}, ${title.poster_key}, ${title.master_key},
+        ${title.language}, ${title.year}, ${title.runtime_minutes}, ${title.poster_key}, ${preflight.playbackRendition?.s3_key ?? null},
         ${JSON.stringify({
           source: "crayons-bridge-master-distribution",
           lane: loopStageType(title.content_type),
           rightsGrantId: preflight.rightsGrantId,
+          destinationPackageId: preflight.destinationPackageId,
+          playbackAssetVersionId: preflight.playbackRendition?.id ?? null,
+          playbackChecksumSha256: preflight.playbackRendition?.checksum_sha256 ?? null,
+          playbackByteSize: preflight.playbackRendition?.byte_size ?? null,
           authorizedBy: actor.userId,
           commercialTerms: preflight.commercialTerms || null,
         })}::jsonb,
@@ -474,6 +583,9 @@ export const authorizeLoopPublication = createServerFn({ method: "POST" })
           commercialTerms: preflight.commercialTerms || null,
           authorizedOperator: actor.userId,
           rightsGrantId: preflight.rightsGrantId,
+          destinationPackageId: preflight.destinationPackageId,
+          playbackAssetVersionId: preflight.playbackRendition?.id ?? null,
+          playbackChecksumSha256: preflight.playbackRendition?.checksum_sha256 ?? null,
         })}::jsonb,
         now()
       )
@@ -496,6 +608,8 @@ export const authorizeLoopPublication = createServerFn({ method: "POST" })
             destination: "CRAYONS_LOOP",
             loopTitleId,
             rightsGrantId: preflight.rightsGrantId,
+            destinationPackageId: preflight.destinationPackageId,
+            playbackAssetVersionId: preflight.playbackRendition?.id ?? null,
             territories: data.territories,
             languages: data.languages,
             exploitationModels: data.exploitationModels,
