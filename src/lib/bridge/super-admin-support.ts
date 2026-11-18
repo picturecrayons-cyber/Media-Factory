@@ -19,7 +19,7 @@ function assertWritesEnabled(){
 export const listSuperAdminSupportDesk=createServerFn({method:"GET"}).middleware([authMiddleware]).handler(async({context})=>{
  await guard(context.userId);
  const sql=await getSql();
- const [cases,inbound,staff]=await Promise.all([
+ const [cases,inbound,staff,events]=await Promise.all([
   sql<{id:string;case_number:number|string;requester_email:string;subject:string;status:string;priority:string;assigned_to:string|null;created_at:string|Date;updated_at:string|Date}>`
    select id,case_number,requester_email,subject,status,priority,assigned_to,created_at,updated_at
    from private.bridge_support_cases
@@ -31,6 +31,11 @@ export const listSuperAdminSupportDesk=createServerFn({method:"GET"}).middleware
    where not exists(select 1 from private.bridge_support_cases c where c.source_event_id=m.id)
    order by m.received_at desc limit 100
   `,
+  sql<{id:string;case_id:string;actor_name:string;event_type:string;from_value:string|null;to_value:string|null;note:string|null;created_at:string|Date}>`
+   select e.id,e.case_id,p.display_name as actor_name,e.event_type,e.from_value,e.to_value,e.note,e.created_at
+   from private.bridge_support_case_events e join bridge_profiles p on p.user_id=e.actor_user_id
+   order by e.created_at desc limit 500
+  `,
   sql<{user_id:string;display_name:string;internal_role:string}>`
    select user_id,display_name,internal_role from bridge_profiles
    where internal_role is not null and email_verified=true order by display_name limit 200
@@ -40,6 +45,7 @@ export const listSuperAdminSupportDesk=createServerFn({method:"GET"}).middleware
   cases:cases.map(r=>({id:r.id,caseNumber:Number(r.case_number),requesterEmail:r.requester_email,subject:r.subject,status:r.status,priority:r.priority,assignedTo:r.assigned_to,createdAt:r.created_at instanceof Date?r.created_at.toISOString():String(r.created_at),updatedAt:r.updated_at instanceof Date?r.updated_at.toISOString():String(r.updated_at)})),
   inbound:inbound.map(r=>({id:r.id,sender:r.sender,subject:r.subject,preview:r.preview,receivedAt:r.received_at instanceof Date?r.received_at.toISOString():String(r.received_at)})),
   staff:staff.map(r=>({userId:r.user_id,displayName:r.display_name,role:r.internal_role})),
+  events:events.map(r=>({id:r.id,caseId:r.case_id,actorName:r.actor_name,eventType:r.event_type,fromValue:r.from_value,toValue:r.to_value,note:r.note,createdAt:r.created_at instanceof Date?r.created_at.toISOString():String(r.created_at)})),
   mutationsEnabled:process.env.BRIDGE_SUPPORT_WRITES_ENABLED==="true",
   outboundEmail:"DISABLED",
  };
