@@ -92,6 +92,12 @@ async function fixture() {
         "utf8",
       ).replaceAll("public.", `${schema}.`),
     );
+    await db.exec(
+      readFileSync(
+        new URL("../../../migrations/0025_bridge_rights_grants_submitted_status.sql", import.meta.url),
+        "utf8",
+      ).replaceAll("public.", `${schema}.`),
+    );
     await db.exec(`insert into bridge_titles(id,owner_user_id,status,master_key,poster_key,updated_at)
       values('title-123','owner','QC_REVIEW','sealed/master','sealed/poster',now());
     insert into bridge_assets values
@@ -356,7 +362,7 @@ test("license author cannot approve their own agreement", async () => {
     );
     assert.equal(
       (await f.sql.query<{ status: string }>("select status from bridge_rights_grants"))[0].status,
-      "DRAFT",
+      "SUBMITTED",
     );
   } finally {
     await f.db.close();
