@@ -13,10 +13,10 @@ export type StudioStatementLine = {
   periodStart: string;
   periodEnd: string;
   currency: string;
-  estimateAmountMinor: number | null;
-  reportedGrossMinor: number | null;
-  adjustmentsMinor: number;
-  netAmountMinor: number | null;
+  estimateAmountMinor: string | null;
+  reportedGrossMinor: string | null;
+  adjustmentsMinor: string | null;
+  netAmountMinor: string | null;
   statementStatus: "ESTIMATED" | "REPORTED" | "RECONCILED" | "DISPUTED" | string;
   statementReference: string | null;
   receivedAt: string | null;
@@ -24,14 +24,13 @@ export type StudioStatementLine = {
   paymentStatus: string | null;
   paymentDueAt: string | null;
   paymentPostedAt: string | null;
-  paidAmountMinor: number | null;
+  paidAmountMinor: string | null;
   paymentReference: string | null;
 };
 
-function numberOrNull(value: number | string | null): number | null {
-  if (value === null) return null;
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : null;
+function minorAmountOrNull(value: string | null): string | null {
+  if (value === null || !/^-?\\d+$/.test(value)) return null;
+  try { return BigInt(value).toString(); } catch { return null; }
 }
 
 function dateOnly(value: string | Date): string {
@@ -77,10 +76,10 @@ export const listStudioStatements = createServerFn({ method: "GET" })
       period_start: string | Date;
       period_end: string | Date;
       currency: string;
-      estimate_amount_minor: number | string | null;
-      reported_gross_minor: number | string | null;
-      adjustments_minor: number | string;
-      net_amount_minor: number | string | null;
+      estimate_amount_minor: string | null;
+      reported_gross_minor: string | null;
+      adjustments_minor: string;
+      net_amount_minor: string | null;
       statement_status: string;
       statement_reference: string | null;
       received_at: string | Date | null;
@@ -88,15 +87,16 @@ export const listStudioStatements = createServerFn({ method: "GET" })
       payment_status: string | null;
       payment_due_at: string | Date | null;
       payment_posted_at: string | Date | null;
-      paid_amount_minor: number | string | null;
+      paid_amount_minor: string | null;
       payment_reference: string | null;
     }>`
       select s.id, s.title_id, t.name as title_name, s.channel_code, s.channel_name,
-        s.period_start, s.period_end, s.currency, s.estimate_amount_minor,
-        s.reported_gross_minor, s.adjustments_minor, s.net_amount_minor,
+        s.period_start, s.period_end, s.currency, s.estimate_amount_minor::text as estimate_amount_minor,
+        s.reported_gross_minor::text as reported_gross_minor, s.adjustments_minor::text as adjustments_minor,
+        s.net_amount_minor::text as net_amount_minor,
         s.statement_status, s.statement_reference, s.received_at, s.reconciled_at,
         p.payment_status, p.payment_due_at, p.payment_posted_at,
-        p.paid_amount_minor, p.payment_reference
+        p.paid_amount_minor::text as paid_amount_minor, p.payment_reference
       from bridge_channel_statement_lines s
       join bridge_titles t on t.id=s.title_id
       left join bridge_channel_payment_schedule p on p.statement_line_id=s.id
@@ -126,10 +126,10 @@ export const listStudioStatements = createServerFn({ method: "GET" })
         periodStart: dateOnly(row.period_start),
         periodEnd: dateOnly(row.period_end),
         currency: row.currency,
-        estimateAmountMinor: numberOrNull(row.estimate_amount_minor),
-        reportedGrossMinor: numberOrNull(row.reported_gross_minor),
-        adjustmentsMinor: numberOrNull(row.adjustments_minor) ?? 0,
-        netAmountMinor: numberOrNull(row.net_amount_minor),
+        estimateAmountMinor: minorAmountOrNull(row.estimate_amount_minor),
+        reportedGrossMinor: minorAmountOrNull(row.reported_gross_minor),
+        adjustmentsMinor: minorAmountOrNull(row.adjustments_minor),
+        netAmountMinor: minorAmountOrNull(row.net_amount_minor),
         statementStatus: row.statement_status,
         statementReference: row.statement_reference,
         receivedAt: isoOrNull(row.received_at),
@@ -137,7 +137,7 @@ export const listStudioStatements = createServerFn({ method: "GET" })
         paymentStatus: row.payment_status,
         paymentDueAt: row.payment_due_at ? dateOnly(row.payment_due_at) : null,
         paymentPostedAt: isoOrNull(row.payment_posted_at),
-        paidAmountMinor: numberOrNull(row.paid_amount_minor),
+        paidAmountMinor: minorAmountOrNull(row.paid_amount_minor),
         paymentReference: row.payment_reference,
       })),
     };
@@ -151,7 +151,7 @@ export type StudioFinancialActivity = {
   titleName: string;
   category: string;
   status: string;
-  amountMinor: number;
+  amountMinor: string | null;
   currency: string;
   reference: string | null;
   occurredAt: string | null;
@@ -204,15 +204,17 @@ export const listStudioFinancialActivity = createServerFn({ method: "GET" })
       sql<{
         id: string; title_id: string; title_name: string; purpose: string;
         provider: string; provider_order_id: string | null; provider_payment_id: string | null;
-        amount_paise: number | string; currency: string; status: string;
+        amount_paise: string; currency: string; status: string;
         verified_at: string | Date | null; created_at: string | Date;
-        provider_fee_paise: number | string | null; provider_tax_paise: number | string | null;
-        refunded_amount_paise: number | string; chargeback_amount_paise: number | string;
+        provider_fee_paise: string | null; provider_tax_paise: string | null;
+        refunded_amount_paise: string; chargeback_amount_paise: string;
       }>`
         select p.id, p.title_id, t.name as title_name, p.purpose, p.provider,
-          p.provider_order_id, p.provider_payment_id, p.amount_paise, p.currency,
-          p.status, p.verified_at, p.created_at, p.provider_fee_paise,
-          p.provider_tax_paise, p.refunded_amount_paise, p.chargeback_amount_paise
+          p.provider_order_id, p.provider_payment_id, p.amount_paise::text as amount_paise, p.currency,
+          p.status, p.verified_at, p.created_at, p.provider_fee_paise::text as provider_fee_paise,
+          p.provider_tax_paise::text as provider_tax_paise,
+          p.refunded_amount_paise::text as refunded_amount_paise,
+          p.chargeback_amount_paise::text as chargeback_amount_paise
         from bridge_payments p
         join bridge_titles t on t.id=p.title_id
         where ${ownership}
@@ -221,11 +223,11 @@ export const listStudioFinancialActivity = createServerFn({ method: "GET" })
       `,
       sql<{
         id: string; title_id: string; title_name: string; entry_type: string;
-        classification: string; amount_paise: number | string; currency: string;
+        classification: string; amount_paise: string; currency: string;
         reference: string | null; source_event_id: string | null; created_at: string | Date;
       }>`
         select l.id::text as id, l.title_id, t.name as title_name,
-          l.entry_type, l.classification, l.amount_paise, l.currency,
+          l.entry_type, l.classification, l.amount_paise::text as amount_paise, l.currency,
           l.reference, l.source_event_id, l.created_at
         from bridge_financial_ledger l
         join bridge_titles t on t.id=l.title_id
@@ -235,11 +237,11 @@ export const listStudioFinancialActivity = createServerFn({ method: "GET" })
       `,
       sql<{
         id: string; title_id: string; title_name: string; beneficiary_type: string;
-        basis: string; amount_paise: number | string; status: string;
+        basis: string; amount_paise: string; status: string;
         paid_at: string | Date | null; created_at: string | Date;
       }>`
         select s.id::text as id, so.title_id, t.name as title_name,
-          s.beneficiary_type, s.basis, s.amount_paise, s.status, s.paid_at, s.created_at
+          s.beneficiary_type, s.basis, s.amount_paise::text as amount_paise, s.status, s.paid_at, s.created_at
         from bridge_service_settlement_lines s
         join bridge_service_orders so on so.id=s.order_id
         join bridge_titles t on t.id=so.title_id
@@ -254,7 +256,7 @@ export const listStudioFinancialActivity = createServerFn({ method: "GET" })
       const parsed = value instanceof Date ? value : new Date(value);
       return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
     };
-    const money = (value: number | string | null) => numberOrNull(value);
+    const money = (value: string | null) => minorAmountOrNull(value);
 
     const activity: StudioFinancialActivity[] = [
       ...paymentRows.map((row) => ({
@@ -264,15 +266,15 @@ export const listStudioFinancialActivity = createServerFn({ method: "GET" })
         titleName: row.title_name,
         category: `${row.provider} · ${row.purpose}`,
         status: row.status,
-        amountMinor: money(row.amount_paise) ?? 0,
+        amountMinor: money(row.amount_paise),
         currency: row.currency,
         reference: row.provider_payment_id ?? row.provider_order_id,
         occurredAt: iso(row.verified_at) ?? iso(row.created_at),
         note: [
           row.verified_at ? "Provider payment verification timestamp recorded." : "No provider verification timestamp recorded.",
-          `Provider fee: ${money(row.provider_fee_paise) ?? 0} paise.`,
-          `Provider tax: ${money(row.provider_tax_paise) ?? 0} paise.`,
-          `Refunded: ${money(row.refunded_amount_paise) ?? 0} paise; chargeback: ${money(row.chargeback_amount_paise) ?? 0} paise.`,
+          `Provider fee: ${money(row.provider_fee_paise) ?? "Unavailable"} paise.`,
+          `Provider tax: ${money(row.provider_tax_paise) ?? "Unavailable"} paise.`,
+          `Refunded: ${money(row.refunded_amount_paise) ?? "Unavailable"} paise; chargeback: ${money(row.chargeback_amount_paise) ?? "Unavailable"} paise.`,
           "Provider status is not independent bank reconciliation.",
         ].join(" "),
       })),
