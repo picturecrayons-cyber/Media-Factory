@@ -46,7 +46,7 @@ export const authorizeBridgeSublicense = createServerFn({ method: "POST" })
 
     const startsAt = new Date(data.windowStart);
     const endsAt = new Date(data.windowEnd);
-    if (endsAt <= startsAt) throw new Error("Invalid sublicense window.");
+    if (endsAt <= startsAt || endsAt <= new Date()) throw new Error("Invalid or expired sublicense window.");
 
     const sql = await getSql();
     return sql.transaction(async (tx) => {
