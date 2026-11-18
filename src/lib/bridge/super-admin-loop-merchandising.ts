@@ -13,8 +13,6 @@ const payloadSchema=z.object({
   collections:z.array(z.object({id:z.string().uuid(),title:z.string().trim().min(1).max(100),description:z.string().max(280),titleIds:z.array(z.string().uuid()).max(100),sortOrder:z.number().int().min(0).max(1000),enabled:z.boolean(),...itemWindowShape})).max(30),
 }).refine(v=>[...v.banners,...v.collections].every(item=>!item.publishAt||!item.unpublishAt||new Date(item.unpublishAt)>new Date(item.publishAt)),"Every item unpublish date must be after its publish date");
 const scheduleShape={publishAt:z.string().datetime(),unpublishAt:z.string().datetime().nullable()};
-const scheduleSchema=z.object(scheduleShape)
-  .refine(v=>!v.unpublishAt||new Date(v.unpublishAt)>new Date(v.publishAt),"Unpublish must be after publish");
 async function guard(userId:string){
  assertNotDevUser(userId);
  const actor=await requireVerifiedActor(userId);
