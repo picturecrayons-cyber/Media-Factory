@@ -15,11 +15,11 @@ export const Route = createFileRoute("/studio")({ component: Studio });
 const studioModules = [
   ["Organization", "Studio identity, verified organization scope and account owner.", "Organization scope is resolved from active membership. Contact Super Admin for membership corrections."],
   ["Members & Roles", "Manage Studio membership, invitations and ownership.", "Existing-member role/status updates, email-bound invitations and two-party owner transfer are implemented. Actual invitation delivery and handover require a live verified account test."],
-  ["Productions", "Coordinate active productions using canonical Studio-owned titles.", "Studio title and DIT ingest workflows are connected; a separate production schedule is not yet connected."],
-  ["QC & Rights", "Track QC, Legal and Rights decisions before commercial release.", "Review decisions remain in the authoritative Admin QC / Legal / Rights workstations; title status alone is not approval."],
+  ["Productions", "Coordinate Studio-owned titles, DIT handover and production milestones.", "Studio-owned title workflows, DIT ingest and organization-scoped production schedule are connected."],
+  ["QC & Rights", "Track feedback and evidence for Studio-owned titles.", "Open each title workspace for current QC feedback and rights evidence; only authorized Legal/QC decisions can approve."],
   ["Deliveries", "Track delivery jobs, assignments and approval.", "Open the shared Deliveries workspace for persisted jobs and server-authorized actions."],
-  ["Schedule", "Coordinate title-linked production and delivery milestones.", "Persisted events are organization-scoped and each status change is audit-logged."],
-  ["Statements", "Review channel statements, commercial activity and payment schedules.", "Read-only source records are linked. Evidence-backed bank reconciliation, settlement approval and accounting certification remain outstanding."],
+  ["Schedule", "Coordinate title-linked production and delivery milestones.", "Connected: organization-scoped events with audited status changes."],
+  ["Statements", "Review Studio title settlements, channel statements and payment schedules.", "Connected read-only source records. Bank reconciliation and accounting certification remain separate and NOT VERIFIED."],
   ["Insights", "Review persisted Studio titles, ingest and delivery activity.", "Only verified database-backed activity is displayed. Audience and commercial analytics remain unconnected."],
   ["Help", "Get support with Studio onboarding and production workflows.", "Use the existing Bridge support channel."],
 ] as const;
@@ -57,7 +57,7 @@ function Studio() {
             <section id="studio-titles" className="space-y-4">
               <div>
                 <h3 className="font-display text-xl font-semibold">Finished films</h3>
-                <p className="mt-1 text-sm text-muted">Only titles authorized for this studio account should appear here.</p>
+                <p className="mt-1 text-sm text-muted">Only titles authorized for this Studio account appear here. Open a title to manage metadata, upload its assets, review QC feedback and submit rights evidence.</p>
               </div>
               <TitleList empty="No finished films are currently returned for this studio account." />
               <MyStoryConcepts />
