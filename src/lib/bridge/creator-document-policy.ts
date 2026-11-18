@@ -22,3 +22,12 @@ export function hasPdfMagicBytes(bytes: Uint8Array) {
     bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 &&
     bytes[3] === 0x46 && bytes[4] === 0x2d;
 }
+
+/** Download is permitted only to an owner, an authorized linked-title reviewer, or Super Admin. */
+export function canDownloadCreatorDocument(input: {
+  ownerAccess: boolean;
+  linkedTitleAccess: boolean;
+  isSuperAdmin: boolean;
+}) {
+  return input.ownerAccess || input.linkedTitleAccess || input.isSuperAdmin;
+}
