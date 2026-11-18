@@ -1,42 +1,82 @@
-import test from "node:test";
 import assert from "node:assert/strict";
-import { ditManifestDigest, ditManifestTotals, normalizeDitFiles } from "./dit-manifest.ts";
+import test from "node:test";
+import {
+  ditManifestDigest,
+  ditManifestTotals,
+  normalizeDitFiles,
+  type DitManifestFile,
+} from "./dit-manifest.ts";
 
-const hashA = "a".repeat(64);
-const hashB = "b".repeat(64);
+const a = "a".repeat(64);
+const b = "b".repeat(64);
 
-test("normalizes and sorts file paths before hashing", () => {
-  const input = [
-    { relativePath: "B/clip.mov", byteSize: 22, sha256: hashB },
-    { relativePath: "A/clip.mov", byteSize: 11, sha256: hashA },
-  ];
-  const normalized = normalizeDitFiles(input);
-  assert.deepEqual(normalized.map((file) => file.relativePath), ["A/clip.mov", "B/clip.mov"]);
-  assert.equal(ditManifestDigest(input), ditManifestDigest([...input].reverse()));
-  assert.deepEqual(ditManifestTotals(normalized), { fileCount: 2, totalBytes: 33 });
+test("normalizes separators, checksum casing and deterministic manifest order", () => {
+  const files = normalizeDitFiles([
+    { relativePath: "CAM_A\\clip-02.mov", byteSize: 20, sha256: b.toUpperCase() },
+    { relativePath: "CAM_A/clip-01.mov", byteSize: 10, sha256: a },
+  ]);
+  assert.deepEqual(files, [
+    { relativePath: "CAM_A/clip-01.mov", byteSize: 10, sha256: a },
+    { relativePath: "CAM_A/clip-02.mov", byteSize: 20, sha256: b },
+  ]);
+  assert.equal(ditManifestDigest(files), ditManifestDigest([...files].reverse()));
 });
 
-test("rejects traversal, absolute paths, and duplicate/case-colliding paths", () => {
-  assert.throws(() => normalizeDitFiles([{ relativePath: "../outside.mov", byteSize: 1, sha256: hashA }]), /Unsafe relative path/);
-  assert.throws(() => normalizeDitFiles([{ relativePath: "/volume/clip.mov", byteSize: 1, sha256: hashA }]), /Unsafe relative path/);
+test("rejects absolute, drive-qualified, traversal and malformed paths", () => {
+  for (const relativePath of [
+    "/root/clip.mov",
+    "C:\\camera\\clip.mov",
+    "../clip.mov",
+    "camera/../clip.mov",
+    "camera/./clip.mov",
+    "camera//clip.mov",
+    "camera/clip.mov/",
+    "camera\\0clip.mov",
+  ]) {
+    assert.throws(
+      () => normalizeDitFiles([{ relativePath, byteSize: 1, sha256: a }]),
+      /Unsafe relative path/,
+      relativePath,
+    );
+  }
+});
+
+test("rejects case-colliding paths and duplicate paths", () => {
   assert.throws(() => normalizeDitFiles([
-    { relativePath: "A/Clip.mov", byteSize: 1, sha256: hashA },
-    { relativePath: "a/clip.mov", byteSize: 1, sha256: hashA },
-  ]), /Duplicate or case-colliding/);
+    { relativePath: "Camera/Clip.mov", byteSize: 1, sha256: a },
+    { relativePath: "camera/clip.mov", byteSize: 1, sha256: a },
+  ]), /Duplicate or case-colliding path/);
+  assert.throws(() => normalizeDitFiles([
+    { relativePath: "camera/clip.mov", byteSize: 1, sha256: a },
+    { relativePath: "camera/clip.mov", byteSize: 1, sha256: a },
+  ]), /Duplicate or case-colliding path/);
 });
 
-test("rejects malformed checksums, sizes, empty manifests and excessive file counts", () => {
+test("rejects invalid sizes and checksums", () => {
+  for (const byteSize of [-1, 1.5, Number.MAX_SAFE_INTEGER + 1, NaN]) {
+    assert.throws(() => normalizeDitFiles([{ relativePath: "clip.mov", byteSize, sha256: a }]), /Invalid byte size/);
+  }
+  for (const sha256 of ["", "x".repeat(64), "a".repeat(63), "a".repeat(65)]) {
+    assert.throws(() => normalizeDitFiles([{ relativePath: "clip.mov", byteSize: 1, sha256 }]), /Invalid SHA-256/);
+  }
+});
+
+test("rejects empty, oversized and non-array manifests", () => {
+  assert.throws(() => normalizeDitFiles(null), /must be an array/);
   assert.throws(() => normalizeDitFiles([]), /contains no files/);
-  assert.throws(() => normalizeDitFiles([{ relativePath: "clip.mov", byteSize: -1, sha256: hashA }]), /Invalid byte size/);
-  assert.throws(() => normalizeDitFiles([{ relativePath: "clip.mov", byteSize: 1, sha256: "bad" }]), /Invalid SHA-256/);
   assert.throws(() => normalizeDitFiles(Array.from({ length: 10001 }, (_, i) => ({
-    relativePath: `file-${i}.mov`, byteSize: 1, sha256: hashA,
-  }))), /10,000 files/);
+    relativePath: `clip-${i}.mov`, byteSize: 1, sha256: a,
+  }))), /limited to 10,000 files/);
 });
 
-test("rejects unsafe aggregate sizes", () => {
+test("computes safe file and byte totals without rounding", () => {
+  const files: DitManifestFile[] = [
+    { relativePath: "a.mov", byteSize: 9007199254740000, sha256: a },
+    { relativePath: "b.mov", byteSize: 100, sha256: b },
+  ];
+  assert.deepEqual(ditManifestTotals(files), { fileCount: 2, totalBytes: 9007199254740100 });
   assert.throws(() => ditManifestTotals([
-    { relativePath: "a.mov", byteSize: Number.MAX_SAFE_INTEGER, sha256: hashA },
-    { relativePath: "b.mov", byteSize: 1, sha256: hashB },
+    { relativePath: "a.mov", byteSize: Number.MAX_SAFE_INTEGER, sha256: a },
+    { relativePath: "b.mov", byteSize: 1, sha256: b },
   ]), /safe integer limit/);
 });
