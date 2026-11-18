@@ -21,8 +21,8 @@ type CatalogRow = {
   maturity_rating: string;
   genres: string;
   access_tier: string;
-  tvod_rental_price: number;
-  tvod_purchase_price: number;
+  tvod_rental_price: number | null;
+  tvod_purchase_price: number | null;
   featured: boolean;
   published: boolean;
   authorization_status: string;
@@ -49,8 +49,8 @@ function mapCatalogRow(r: CatalogRow): LoopTitle {
     maturityRating: r.maturity_rating || "U",
     genres: (r.genres || "Drama").split(",").map((g) => g.trim()).filter(Boolean),
     accessTier: (r.access_tier as "FREE" | "SVOD" | "TVOD") || "SVOD",
-    tvodRentalPrice: r.tvod_rental_price || 79,
-    tvodPurchasePrice: r.tvod_purchase_price || 249,
+    tvodRentalPrice: Number(r.tvod_rental_price ?? 0),
+    tvodPurchasePrice: Number(r.tvod_purchase_price ?? 0),
     featured: Boolean(r.featured),
     published: Boolean(r.published),
     authorizationStatus: r.authorization_status,
