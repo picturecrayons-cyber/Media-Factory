@@ -41,6 +41,9 @@ export const requestCreatorDocumentUpload = createServerFn({ method: "POST" })
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
     assertCreatorOrStudio(actor);
+    if (actor.accountType === "studio" && !actor.organizationId) {
+      throw new Error("A verified Studio organization mapping is required before uploading reusable organization documents");
+    }
     const id = randomBytes(16).toString("hex");
     const safeName = data.fileName.replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 100);
     const key = `bridge-private/creator-documents/${actor.userId}/${id}/${safeName}`;
