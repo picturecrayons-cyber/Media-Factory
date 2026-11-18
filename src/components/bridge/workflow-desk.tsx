@@ -7,6 +7,7 @@ import {
   submitLoopLicense,
   reviewTitleWorkflow,
 } from "@/lib/bridge/workflow";
+import { applyWorkspacePreset, listWorkspacePresets } from "@/lib/bridge/workspace-presets";
 import { advanceTitle } from "@/lib/bridge/titles";
 import {
   authorizeLoopPublication,
@@ -33,6 +34,11 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
     queryKey: ["title-workflow", title.id],
     queryFn: () => getTitleWorkflow({ data: { titleId: title.id } }),
     enabled: Boolean(actor.internalRole) || actor.accountType !== "buyer",
+  });
+  const presetsQuery = useQuery({
+    queryKey: ["bridge-workspace-presets"],
+    queryFn: () => listWorkspacePresets({ data: { includeArchived: false } }),
+    enabled: actor.internalRole === "super_admin",
   });
   const publication = useQuery({
     queryKey: ["loop-pub", title.id],
@@ -67,7 +73,27 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
   const [agreement, setAgreement] = useState("");
   const [ownership, setOwnership] = useState("");
   const [ownerShare, setOwnerShare] = useState("");
+  const [licenseLanguage, setLicenseLanguage] = useState(title.language);
+  const [selectedPresetId, setSelectedPresetId] = useState("");
+  const [presetError, setPresetError] = useState("");
   const [selectedGrantByAgreement, setSelectedGrantByAgreement] = useState<Record<string, string>>({});
+  async function applySelectedPreset() {
+    setPresetError("");
+    if (!selectedPresetId) return;
+    try {
+      const result = await applyWorkspacePreset({ data: { id: selectedPresetId } });
+      if (result.type === "OPERATIONAL") {
+        setLicenseLanguage(result.configuration.defaultLanguage);
+      } else {
+        setAgreement(result.configuration.agreementReference);
+        setOwnership(result.configuration.ownershipReference);
+        setOwnerShare(String(result.configuration.rightsOwnerSharePct));
+        setExclusive(result.configuration.exclusivity === "EXCLUSIVE");
+      }
+    } catch (cause) {
+      setPresetError(cause instanceof Error ? cause.message : "Unable to apply preset");
+    }
+  }
   function downloadStatement() {
     const safe = (v: string) =>
       '"' + (/^[=+@-]/.test(v) ? "'" : "") + v.replaceAll('"', '""') + '"';
@@ -213,7 +239,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
             <div className="space-y-4">
               <details className="rounded-xl border border-line p-3">
                 <summary className="cursor-pointer text-sm font-semibold">＋ Create TVOD license draft</summary>
-                <p className="mt-2 text-xs text-muted">Worldwide · {title.language}. Legal evidence is required before review.</p>
+                <p className="mt-2 text-xs text-muted">Worldwide · {licenseLanguage}. Legal evidence is required before review.</p>
                 {canOperateOnTitle(actor, title, "title.update_own", "title.license") ? (
                   <form
                     className="mt-3 grid gap-3 sm:grid-cols-2"
@@ -224,7 +250,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                           data: {
                             titleId: title.id,
                             territories: ["WORLDWIDE"],
-                            languages: [title.language],
+                            languages: [licenseLanguage],
                             windowStart: new Date(start).toISOString(),
                             windowEnd: new Date(end).toISOString(),
                             exclusivity: exclusive ? "EXCLUSIVE" : "NON_EXCLUSIVE",
@@ -237,8 +263,32 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                       );
                     }}
                   >
+                    {actor.internalRole === "super_admin" ? (
+                      <div className="sm:col-span-2 rounded-xl border border-line bg-elevated p-3">
+                        <label className="grid gap-1 text-sm">
+                          Apply saved Workspace Preset
+                          <select value={selectedPresetId} onChange={(event) => setSelectedPresetId(event.target.value)} className="rounded-lg border border-line bg-surface p-2">
+                            <option value="">Choose a preset…</option>
+                            {(presetsQuery.data?.presets ?? []).map((preset) => (
+                              <option key={preset.id} value={preset.id}>
+                                {preset.name} · {preset.preset_type} · v{preset.version}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <div className="mt-2 flex flex-wrap items-center gap-3">
+                          <button type="button" onClick={() => void applySelectedPreset()} disabled={!selectedPresetId || presetsQuery.isPending} className="rounded-lg border border-line px-3 py-2 text-xs font-semibold disabled:opacity-50">
+                            Apply to this draft form
+                          </button>
+                          <span className="text-xs text-muted">Prefills only; does not save, approve, or verify rights.</span>
+                        </div>
+                        {presetsQuery.isError ? <p role="alert" className="mt-2 text-xs text-red-600">Preset list unavailable.</p> : null}
+                        {presetError ? <p role="alert" className="mt-2 text-xs text-red-600">{presetError}</p> : null}
+                      </div>
+                    ) : null}
                     {input("License starts", start, setStart, "datetime-local")}
                     {input("License ends", end, setEnd, "datetime-local")}
+                    {input("License language", licenseLanguage, setLicenseLanguage)}
                     {input("Agreement reference", agreement, setAgreement)}
                     {input("Ownership evidence reference", ownership, setOwnership)}
                     {input("Rights owner share (%)", ownerShare, setOwnerShare, "number")}
