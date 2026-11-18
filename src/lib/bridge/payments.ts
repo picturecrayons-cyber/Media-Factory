@@ -284,13 +284,22 @@ export const createLicenseOrder = createServerFn({ method: "POST" })
     }
     let amountPaise = title.licensingFeePaise;
     if (data.packageId) {
-      const pkg = await sql<{ id: string; title_id: string; price_paise: number; status: string }>`
-        select id, title_id, price_paise, status
-        from bridge_license_packages
-        where id = ${data.packageId} and title_id = ${title.id}
-        limit 1
+      // Reserve the package atomically for the first buyer before creating
+      // a provider order. A competing buyer cannot replace buyer_user_id after
+      // this UPDATE has acquired the row lock. The same buyer may safely retry
+      // if provider order creation or the client request needs to be repeated.
+      const pkg = await sql<{ id: string; title_id: string; price_paise: number; status: string; buyer_user_id: string | null }>`
+        update bridge_license_packages
+        set status = 'IN_NEGOTIATION',
+            buyer_user_id = ${actor.userId},
+            updated_at = now()
+        where id = ${data.packageId}
+          and title_id = ${title.id}
+          and status in ('READY', 'IN_NEGOTIATION')
+          and (buyer_user_id is null or buyer_user_id = ${actor.userId})
+        returning id, title_id, price_paise, status, buyer_user_id
       `;
-      if (!pkg[0] || !["READY", "IN_NEGOTIATION"].includes(pkg[0].status)) throw new Error("License package is not available");
+      if (!pkg[0]) throw new Error("License package is reserved by another buyer or is not available");
       amountPaise = Number(pkg[0].price_paise);
     }
     if (amountPaise <= 0) throw new Error("Licensing price is not set");
@@ -360,13 +369,7 @@ export const createLicenseOrder = createServerFn({ method: "POST" })
       };
     }
 
-    if (data.packageId) {
-      await sql`
-        update bridge_license_packages
-        set status = 'IN_NEGOTIATION', buyer_user_id = ${actor.userId}, updated_at = now()
-        where id = ${data.packageId} and title_id = ${title.id}
-      `;
-    } else if (title.status === "LIVE_FOR_BUYERS") {
+    if (!data.packageId && title.status === "LIVE_FOR_BUYERS") {
       await recordTransition({
         titleId: title.id,
         from: "LIVE_FOR_BUYERS",
