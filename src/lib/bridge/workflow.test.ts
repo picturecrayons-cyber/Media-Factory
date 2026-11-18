@@ -382,3 +382,56 @@ test("Submit for QC advances PREPARING with the referenced vertical poster and w
     await f.db.close();
   }
 });
+
+
+test("repeated identical Loop license submission reuses the existing draft", async () => {
+  const f = await fixture();
+  try {
+    const first = (await f.sql.transaction((tx) => f.save(tx, owner, license))) as {
+      grantId: string;
+      reused?: boolean;
+    };
+    const second = (await f.sql.transaction((tx) => f.save(tx, owner, license))) as {
+      grantId: string;
+      reused?: boolean;
+    };
+    assert.equal(second.grantId, first.grantId);
+    assert.equal(second.reused, true);
+    assert.equal((await f.sql.query("select * from bridge_rights_grants")).length, 1);
+    assert.equal(
+      (await f.sql.query("select * from bridge_audit_logs where action='license.loop_draft_duplicate_reused'")).length,
+      1,
+    );
+  } finally {
+    await f.db.close();
+  }
+});
+
+test("same agreement with changed commercial terms is rejected without creating another draft", async () => {
+  const f = await fixture();
+  try {
+    await f.sql.transaction((tx) => f.save(tx, owner, license));
+    await assert.rejects(
+      f.sql.transaction((tx) =>
+        f.save(tx, owner, { ...license, rightsOwnerSharePct: 65, distributorSharePct: 35 }),
+      ),
+      /different rights or commercial terms/,
+    );
+    assert.equal((await f.sql.query("select * from bridge_rights_grants")).length, 1);
+  } finally {
+    await f.db.close();
+  }
+});
+
+test("different agreement references may create separate immutable drafts", async () => {
+  const f = await fixture();
+  try {
+    await f.sql.transaction((tx) => f.save(tx, owner, license));
+    await f.sql.transaction((tx) =>
+      f.save(tx, owner, { ...license, agreementReference: "agreement-456" }),
+    );
+    assert.equal((await f.sql.query("select * from bridge_rights_grants")).length, 2);
+  } finally {
+    await f.db.close();
+  }
+});
