@@ -302,6 +302,44 @@ Deno.serve(async (req: Request) => {
       }
     }
 
+    if (eventName === "refund.processed") {
+      const refund = payload?.payload?.refund?.entity;
+      const paymentId = String(refund?.payment_id ?? "");
+      const refundId = String(refund?.id ?? "");
+      if (paymentId && refundId) {
+        let loopOrder: { provider_order_id: string } | null = null;
+        const { data: knownOrder } = await supabase.from("loop_tvod_orders")
+          .select("provider_order_id").eq("provider_payment_id", paymentId).maybeSingle();
+        loopOrder = knownOrder;
+        if (!loopOrder) {
+          const keyId = Deno.env.get("RAZORPAY_KEY_ID") ?? "";
+          const keySecret = Deno.env.get("RAZORPAY_KEY_SECRET") ?? "";
+          if (keyId && keySecret) {
+            const auth = btoa(`${keyId}:${keySecret}`);
+            const paymentResponse = await fetch(`https://api.razorpay.com/v1/payments/${encodeURIComponent(paymentId)}`, {
+              headers: { Authorization: `Basic ${auth}` },
+            });
+            if (paymentResponse.ok) {
+              const providerPayment = await paymentResponse.json() as { order_id?: string; notes?: Record<string, string> };
+              if (providerPayment.order_id) {
+                const { data: orderByProviderId } = await supabase.from("loop_tvod_orders")
+                  .select("provider_order_id").eq("provider_order_id", providerPayment.order_id).maybeSingle();
+                loopOrder = orderByProviderId;
+              }
+            }
+          }
+        }
+        if (loopOrder) {
+          const { error: refundError } = await supabase.rpc("loop_refund_captured_rental", {
+            p_payment_id: paymentId,
+            p_refund_id: refundId,
+            p_order_id: loopOrder.provider_order_id,
+          });
+          if (refundError) return await failEvent(supabase, id, "Loop TVOD refund could not revoke playback entitlement");
+        }
+      }
+    }
+
     const { error: doneError } = await supabase.from("bridge_webhook_events").update({
       status: "processed", processed_at: new Date().toISOString(),
       processing_token: null, processing_started_at: null,
