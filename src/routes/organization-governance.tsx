@@ -34,7 +34,7 @@ function OrganizationGovernanceBody() {
   });
   const organizations = query.data?.organizations ?? [];
   const memberships = query.data?.memberships ?? [];
-  const inviteMutation=useMutation({mutationFn:()=>createSuperAdminOrganizationInvite({data:{organizationId:orgId,email,role:inviteRole as "admin"|"member"|"producer"|"dit"}}),onSuccess:(result)=>{setInviteUrl(result.inviteUrl);setEmail("");}});
+  const inviteMutation=useMutation({mutationFn:()=>createSuperAdminOrganizationInvite({data:{organizationId:orgId,email,role:inviteRole as "admin"|"member"|"producer"|"dit"}}),onSuccess:(result)=>{const url=new URL("/organization-invite",window.location.origin);url.searchParams.set("token",result.inviteToken);setInviteUrl(url.toString());setEmail("");}});
   const membershipMutation=useMutation({mutationFn:(v:{organizationId:string;userId:string;role:"admin"|"member"|"producer"|"dit";status:"active"|"suspended"|"removed";evidenceReference:string})=>updateSuperAdminOrganizationMembership({data:v}),onSuccess:()=>qc.invalidateQueries({queryKey:["super-admin-organization-governance"]})});
 
   return (
