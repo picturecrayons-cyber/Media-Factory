@@ -101,12 +101,12 @@ function OrganizationGovernanceBody() {
           <section className="overflow-hidden rounded-2xl border border-line">
             <div className="border-b border-line px-4 py-4 sm:px-5">
               <h3 className="font-semibold">Membership records</h3>
-              <p className="mt-1 text-xs text-muted">Account email and identity-provider credentials are not exposed.</p>
+              <p className="mt-1 text-xs text-muted">Account email and identity-provider credentials are not exposed. Non-owner role changes require an evidence reference.</p>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full min-w-[720px] text-left text-sm">
                 <thead className="border-b border-line text-xs uppercase tracking-wider text-muted">
-                  <tr><th className="px-4 py-3">Organization</th><th className="px-4 py-3">Member</th><th className="px-4 py-3">Account type</th><th className="px-4 py-3">Role</th><th className="px-4 py-3">Status</th></tr>
+                  <tr><th className="px-4 py-3">Organization</th><th className="px-4 py-3">Member</th><th className="px-4 py-3">Account type</th><th className="px-4 py-3">Role</th><th className="px-4 py-3">Status</th><th className="px-4 py-3">Governance change</th></tr>
                 </thead>
                 <tbody className="divide-y divide-line">
                   {memberships.map((row) => (
@@ -116,14 +116,25 @@ function OrganizationGovernanceBody() {
                       <td className="px-4 py-3">{row.accountType}</td>
                       <td className="px-4 py-3">{row.role}</td>
                       <td className="px-4 py-3">{row.status}</td>
+                      <td className="px-4 py-3">
+                        {row.role==="owner" ? <span className="text-xs text-muted">Owner protected</span> : (
+                          <div className="min-w-[260px] space-y-2">
+                            <select value={membershipDraft[row.organizationId+":"+row.userReference]??row.role} disabled={!query.data?.mutationsEnabled||membershipMutation.isPending} onChange={e=>setMembershipDraft(v=>({...v,[row.organizationId+":"+row.userReference]:e.target.value}))} className="h-9 w-full rounded-lg border border-line bg-elevated px-2 text-xs">
+                              {["admin","member","producer","dit"].map(role=><option key={role} value={role}>{role}</option>)}
+                            </select>
+                            <input value={evidence[row.organizationId+":"+row.userReference]??""} onChange={e=>setEvidence(v=>({...v,[row.organizationId+":"+row.userReference]:e.target.value}))} placeholder="Evidence reference (required)" className="h-9 w-full rounded-lg border border-line bg-elevated px-2 text-xs"/>
+                            <button type="button" disabled={!query.data?.mutationsEnabled||!evidence[row.organizationId+":"+row.userReference]?.trim()||(membershipDraft[row.organizationId+":"+row.userReference]??row.role)===row.role||membershipMutation.isPending} onClick={()=>membershipMutation.mutate({organizationId:row.organizationId,userId:row.userReference,role:(membershipDraft[row.organizationId+":"+row.userReference]??row.role) as "admin"|"member"|"producer"|"dit",status:row.status as "active"|"suspended"|"removed",evidenceReference:evidence[row.organizationId+":"+row.userReference]})} className="rounded-full border border-line px-3 py-2 text-xs font-semibold disabled:opacity-40">Save membership</button>
+                          </div>
+                        )}
+                      </td>
                     </tr>
                   ))}
                   {!memberships.length ? <tr><td colSpan={5} className="px-4 py-8 text-center text-muted">No membership records are currently available.</td></tr> : null}
-                  {memberships.map(row=>null)}
                 </tbody>
               </table>
             </div>
           </section>
+          {membershipMutation.isError?<p role="alert" className="text-sm text-accent">{membershipMutation.error instanceof Error?membershipMutation.error.message:"Membership update failed"}</p>:null}
         </>
       )}
 
