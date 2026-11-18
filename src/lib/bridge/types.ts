@@ -48,6 +48,7 @@ export type BridgeTitle = {
   status: TitleStatus;
   synopsis: string;
   language: string;
+  masterLanguage: string | null;
   year: number | null;
   runtimeMinutes: number | null;
   licensingFeePaise: number;
