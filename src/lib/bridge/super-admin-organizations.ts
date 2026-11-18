@@ -77,7 +77,6 @@ export const listSuperAdminOrganizationGovernance = createServerFn({ method: "GE
   });
 
 import { createHash, randomBytes } from "node:crypto";
-import { bridgeEnv } from "./env";
 const membershipRole = z.enum(["admin","member","producer","dit"]);
 function assertOrganizationWritesEnabled() {
   if (process.env.BRIDGE_SUPER_ADMIN_ORG_WRITES !== "true") {
@@ -104,12 +103,8 @@ export const createSuperAdminOrganizationInvite = createServerFn({method:"POST"}
       values (${data.organizationId}::uuid,${data.email.trim().toLowerCase()},${data.role},${tokenHash},${context.userId},now()+interval '7 days')
       returning id,expires_at
     `;
-    const origin=bridgeEnv.appUrl();
-    if(!origin) throw new Error("Bridge application origin is not configured");
-    const inviteUrl=new URL("/organization-invite",origin);
-    inviteUrl.searchParams.set("token",token);
     await writeAudit({actorUserId:context.userId,action:"organization.invite_created",entityType:"bridge_organization_invite",entityId:rows[0].id,metadata:{organizationId:data.organizationId,role:data.role,inviteeEmail:data.email.trim().toLowerCase(),emailSent:false}});
-    return {inviteId:rows[0].id,inviteUrl:inviteUrl.toString(),expiresAt:rows[0].expires_at instanceof Date?rows[0].expires_at.toISOString():String(rows[0].expires_at),emailSent:false};
+    return {inviteId:rows[0].id,inviteToken:token,expiresAt:rows[0].expires_at instanceof Date?rows[0].expires_at.toISOString():String(rows[0].expires_at),emailSent:false};
   });
 
 export const acceptSuperAdminOrganizationInvite = createServerFn({method:"POST"})
