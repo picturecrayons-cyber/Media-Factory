@@ -66,7 +66,7 @@ function DashboardBody() {
             Open title library
           </Link>
           <Link to="/internal" className="rounded-sm border border-line px-4 py-2 text-sm font-semibold">
-            Open operations
+            Open services
           </Link>
         </div>
       </header>
@@ -123,10 +123,10 @@ function DashboardBody() {
           <Workspace title="Titles & Media" description="Master title library, Creator/Studio submissions, assets, metadata and QC." to="/workspace" />
           <Workspace title="Rights & Legal" description="Rights evidence, agreements, independent reviews and approval decisions." to="/admin/workstations" />
           <Workspace title="Buyer Management" description="Independent Buyer accounts and their own licensing access." to="/buyer-management" />
-          <Workspace title="Distribution Control" description="Loop authorization, destinations, delivery and publication state." to="/internal" />
+          <Workspace title="Distribution Control" description="Loop authorization, destinations, delivery and publication state." to="/admin/services" />
           <Workspace title="Revenue & Finance" description="Buyer deals, captured payments, ledger and reconciliation work." to="/admin" />
           <Workspace title="People & Access" description="Creator, Studio, Buyer and internal roles with controlled access." to="/admin/users" />
-          <Workspace title="Website & Loop Gateway" description="Bridge website CMS and separate Loop publication controls." to="/cms" />
+          <Workspace title="Website & Loop Gateway" description="Bridge website CMS and separate Loop publication controls." to="/admin-cms" />
           <Workspace title="Audit & Security" description="Read-only persisted audit history and security evidence." to="/admin/audit" />
         </div>
       </section>
