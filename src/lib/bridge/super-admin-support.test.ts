@@ -14,7 +14,7 @@ function load(role="super_admin") {
   };
   const modules:Record<string,unknown>={
     "@tanstack/react-start":{createServerFn:()=>{const b={middleware:()=>b,validator:()=>b,handler:(h:unknown)=>h};return b;}},
-    "zod":{z:{enum:()=>({default:()=>({}),optional:()=>({})}),object:()=>({refine:()=>({})}),string:()=>({uuid:()=>({}),min:()=>({max:()=>({})}),trim:()=>({max:()=>({})})})}},
+    "zod":{z:{enum:()=>({default:()=>({}),optional:()=>({})}),object:()=>({refine:()=>({})}),string:()=>({uuid:()=>({}),regex:()=>({}),min:()=>({max:()=>({})}),trim:()=>({max:()=>({})})})}},
     "@/lib/auth/middleware":{authMiddleware:{}},
     "@/lib/db":{getSql:async()=>sql},
     "./guards":{assertNotDevUser:()=>{}},
