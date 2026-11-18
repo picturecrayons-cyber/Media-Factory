@@ -43,8 +43,8 @@ export async function saveLoopLicense(
   if (actor.internalRole !== "super_admin") {
     const maximumEnd = new Date(windowStart);
     maximumEnd.setUTCFullYear(maximumEnd.getUTCFullYear() + 5);
-    if (windowEnd > maximumEnd) {
-      throw new Error("Creator/Studio submissions are limited to the default five-year Bridge term; Super Admin may approve a longer term.");
+    if (Math.abs(windowEnd.getTime() - maximumEnd.getTime()) > 60_000) {
+      throw new Error("Creator/Studio submissions use the default five-year Bridge term; only Super Admin may change the period.");
     }
     if (data.rightsOwnerSharePct !== 50 || data.distributorSharePct !== 50) {
       throw new Error("The default revenue split is 50:50. Only Super Admin may approve a different split.");
