@@ -282,7 +282,7 @@ function TitleBody({ id, actor }: { id: string; actor: BridgeActor }) {
       ) : activeTab === "Production" && !buyerView ? (
         <ProductionAssetsPanel
           titleId={title.id}
-          language={title.language}
+          masterLanguage={title.masterLanguage}
           locked={!actor.internalRole && !["DRAFT", "UPLOADING", "PREPARING"].includes(title.status)}
           assets={productionAssets}
           loading={productionAssetsQ.isPending}
@@ -320,23 +320,22 @@ type ProductionAssetView = {
 
 function ProductionAssetsPanel({
   titleId,
-  language,
+  masterLanguage,
   locked,
   assets,
   loading,
   error,
 }: {
   titleId: string;
-  language: string;
+  masterLanguage: string | null;
   locked: boolean;
   assets: ProductionAssetView[];
   loading: boolean;
   error: string | null;
 }) {
   const qc = useQueryClient();
-  const [masterLanguage, setMasterLanguage] = useState(language || "Malayalam");
   const saveLanguage = useMutation({
-    mutationFn: (nextLanguage: string) => updateTitle({ data: { id: titleId, language: nextLanguage } }),
+    mutationFn: (nextLanguage: string) => updateTitle({ data: { id: titleId, masterLanguage: nextLanguage } }),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["bridge-title", titleId] });
     },
@@ -361,15 +360,12 @@ function ProductionAssetsPanel({
         <label className="block text-sm font-semibold" htmlFor="bridge-master-language">Master language</label>
         <select
           id="bridge-master-language"
-          value={masterLanguage}
+          value={masterLanguage ?? ""}
           disabled={locked || saveLanguage.isPending}
-          onChange={(event) => {
-            const next = event.target.value;
-            setMasterLanguage(next);
-            saveLanguage.mutate(next);
-          }}
+          onChange={(event) => saveLanguage.mutate(event.target.value)}
           className="mt-2 h-11 w-full rounded-lg border border-line-strong bg-elevated px-3"
         >
+          <option value="">Select master language</option>
           {["Malayalam", "Telugu", "Tamil", "Hindi", "Kannada", "English", "Bengali", "Marathi", "Other"].map((item) => (
             <option key={item} value={item}>{item}</option>
           ))}
