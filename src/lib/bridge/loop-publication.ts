@@ -533,7 +533,7 @@ export const getLoopDestinationPackage = createServerFn({ method: "GET" })
       consumer_metadata: Record<string, unknown>; created_at: string | Date;
     }>`
       select id,package_version,readiness_state,rights_grant_id,qc_case_id,legal_case_id,
-             asset_version_ids,consumer_metadata,created_at
+             asset_version_ids,consumer_metadata::text as consumer_metadata,created_at::text as created_at
       from bridge_destination_packages
       where title_id=${data.bridgeTitleId} and destination='CRAYONS_LOOP'
       order by package_version desc limit 1
