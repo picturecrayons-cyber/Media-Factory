@@ -12,6 +12,7 @@ import { bridgeEnv } from "./env";
 import { bridgeInvitationUrl, bridgeVerificationUrl } from "./origin";
 import { assertNotDevUser } from "./guards";
 import { ONBOARDING_EMAIL_CONFLICT_MESSAGE, isBridgeProfileEmailConflict } from "./onboarding-errors";
+import { assertStudioInvitationAcceptable } from "./studio-invitation-policy";
 
 function tokenPair() {
   const token = randomBytes(32).toString("hex");
@@ -100,12 +101,17 @@ async function acceptStudioInvitation(sql: Sql, bridgeUserId: string, email: str
     for update of i
   `;
   const invite = invites[0];
-  if (!invite || invite.accepted_at || invite.revoked_at || new Date(invite.expires_at) <= new Date()) {
-    throw new Error("Studio invitation is invalid, expired or already used");
-  }
-  if (invite.email.trim().toLowerCase() !== email.trim().toLowerCase()) {
-    throw new Error("Studio invitation email does not match this verified account");
-  }
+  assertStudioInvitationAcceptable({
+    invite: invite ? {
+      email: invite.email,
+      expiresAt: invite.expires_at,
+      acceptedAt: invite.accepted_at,
+      revokedAt: invite.revoked_at,
+    } : null,
+    verifiedEmail: email,
+    emailVerified: true,
+  });
+  if (!invite) throw new Error("Studio invitation is invalid, expired or already used");
 
   const profiles = await sql<{ account_type: string; organization_id: string | null }>`
     select account_type, organization_id::text as organization_id
