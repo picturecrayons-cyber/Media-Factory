@@ -99,7 +99,11 @@ export function CreatorDocumentVault() {
     onSuccess: async () => {
       setNotice("Verified evidence linked to the selected title. Legal review remains separate.");
       setErrorText("");
-      await queryClient.invalidateQueries({ queryKey: ["bridge-title-document-evidence", selectedTitle] });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["bridge-title-document-evidence", selectedTitle] }),
+        queryClient.invalidateQueries({ queryKey: ["title-document-evidence", selectedTitle] }),
+        queryClient.invalidateQueries({ queryKey: ["title-workflow", selectedTitle] }),
+      ]);
     },
     onError: (error) => {
       setErrorText(message(error));
