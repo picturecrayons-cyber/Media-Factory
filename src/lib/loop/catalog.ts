@@ -348,6 +348,8 @@ export const getAuthorizedLoopPlayback = createServerFn({ method: "GET" })
       `;
       if (!entitlements[0]) throw new Error("A captured TVOD rental or purchase entitlement is required");
       accessType = entitlements[0].access_type === "PURCHASE" ? "TVOD_PURCHASE" : "TVOD_RENTAL";
+    } else if (title.access_tier !== "FREE") {
+      throw new Error("Unsupported Loop access tier; playback is blocked");
     }
     const { signDownload } = await import("@/lib/bridge/oci-object-storage.server");
     const signed = await signDownload({ key: title.playback_path, expiresIn: 180 });
