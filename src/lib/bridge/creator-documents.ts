@@ -89,8 +89,9 @@ export const confirmCreatorDocumentUpload = createServerFn({ method: "POST" })
     if (!doc || !sameOwner(actor, doc)) throw new Error("Document not found");
     if (doc.status === "VERIFIED") return { documentId: doc.id, verified: true as const };
     if (doc.status !== "PENDING_UPLOAD") throw new Error("Document upload is no longer active");
-    const { verifyObject, sealVerifiedObject } = await import("./oci-object-storage.server");
+    const { verifyObject, verifyPdfSignature, sealVerifiedObject } = await import("./oci-object-storage.server");
     const uploaded = await verifyObject(doc.storage_key, doc.content_type);
+    await verifyPdfSignature(doc.storage_key);
     if (uploaded.byteSize !== Number(doc.byte_size)) throw new Error("Uploaded document size mismatch");
     if (!uploaded.etag) throw new Error("Uploaded document integrity metadata is missing");
     const sealedKey = `${doc.storage_key}.verified/${doc.id}`;
