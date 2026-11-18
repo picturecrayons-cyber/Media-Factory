@@ -53,12 +53,16 @@ function escapeHtml(value: string) {
   })[character] ?? character);
 }
 
-async function failEvent(supabase: any, id: string, message: string) {
+async function failEvent(supabase: any, id: string, token: string, message: string) {
   console.error(message);
-  await supabase.from("bridge_webhook_events")
+  // A worker may only release the lease it owns. A stale worker must never
+  // clear a newer worker's claim after the lease has been reclaimed.
+  const { error } = await supabase.from("bridge_webhook_events")
     .update({ status: "failed", processing_token: null, processing_started_at: null })
-    .eq("event_id", id);
-  return new Response(message, { status: 503 });
+    .eq("event_id", id)
+    .eq("processing_token", token);
+  if (error) console.error("Failed to release webhook claim", error);
+  return new Response(message, { status: 503, headers: { "Retry-After": "30" } });
 }
 
 Deno.serve(async (req: Request) => {
@@ -95,7 +99,10 @@ Deno.serve(async (req: Request) => {
   if (existing.payload_hash !== hash) return new Response("Event collision", { status: 409 });
   if (existing.status === "processed") return Response.json({ ok: true, duplicate: true });
 
-  const staleBefore = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+  // Supabase Edge Functions have a hard 400s wall-clock maximum on paid
+  // plans (150s on free). A 10-minute lease therefore outlives any live worker:
+  // a retry cannot reclaim a claim while the prior invocation can still write.
+  const staleBefore = new Date(Date.now() - 10 * 60 * 1000).toISOString();
   const token = crypto.randomUUID();
   const { data: claimed, error: claimError } = await supabase.from("bridge_webhook_events")
     .update({
@@ -106,36 +113,42 @@ Deno.serve(async (req: Request) => {
     .or(`processing_token.is.null,processing_started_at.lt.${staleBefore}`)
     .select("event_id").maybeSingle();
   if (claimError) return new Response("Persistence failure", { status: 503 });
-  if (!claimed) return Response.json({ ok: true, duplicate: true, in_progress: true });
+  // Do not acknowledge an event while another worker owns its active lease.
+  // A non-2xx response lets Razorpay retry after the current worker finishes
+  // or its lease becomes stale.
+  if (!claimed) return new Response("Webhook event is already being processed", {
+    status: 503,
+    headers: { "Retry-After": "30" },
+  });
 
   try {
     if (eventName === "payment.captured") {
       const payment = payload?.payload?.payment?.entity;
-      if (!payment?.order_id || !payment?.id) return await failEvent(supabase, id, "Capture missing payment identifiers");
+      if (!payment?.order_id || !payment?.id) return await failEvent(supabase, id, token, "Capture missing payment identifiers");
       if (String(payment.status ?? "").toLowerCase() !== "captured") {
-        return await failEvent(supabase, id, "Razorpay payment is not captured");
+        return await failEvent(supabase, id, token, "Razorpay payment is not captured");
       }
 
       const { data: localPayment, error: lookupError } = await supabase.from("bridge_payments")
         .select("id,user_id,title_id,purpose,provider,provider_order_id,provider_payment_id,package_id,amount_paise,currency,status")
         .eq("provider_order_id", payment.order_id).maybeSingle();
-      if (lookupError) return await failEvent(supabase, id, "Bridge payment lookup failed");
+      if (lookupError) return await failEvent(supabase, id, token, "Bridge payment lookup failed");
       if (localPayment) surface = "bridge";
 
       if (surface === "bridge") {
-        if (!localPayment) return await failEvent(supabase, id, "Bridge order not persisted yet");
-        if (localPayment.provider !== "razorpay") return await failEvent(supabase, id, "Bridge payment provider mismatch");
+        if (!localPayment) return await failEvent(supabase, id, token, "Bridge order not persisted yet");
+        if (localPayment.provider !== "razorpay") return await failEvent(supabase, id, token, "Bridge payment provider mismatch");
         if (localPayment.provider_payment_id && localPayment.provider_payment_id !== payment.id) {
-          return await failEvent(supabase, id, "Bridge order is linked to another payment");
+          return await failEvent(supabase, id, token, "Bridge order is linked to another payment");
         }
 
         const providerAmount = Number(payment.amount);
         const providerCurrency = String(payment.currency ?? "").toUpperCase();
         if (!Number.isSafeInteger(providerAmount) || providerAmount !== Number(localPayment.amount_paise)) {
-          return await failEvent(supabase, id, "Payment amount mismatch");
+          return await failEvent(supabase, id, token, "Payment amount mismatch");
         }
         if (providerCurrency !== String(localPayment.currency ?? "").toUpperCase()) {
-          return await failEvent(supabase, id, "Payment currency mismatch");
+          return await failEvent(supabase, id, token, "Payment currency mismatch");
         }
 
         // Other Bridge purposes may record a captured service payment, but cannot grant a title licence.
@@ -143,16 +156,16 @@ Deno.serve(async (req: Request) => {
           const { error } = await supabase.from("bridge_payments").update({
             status: "captured", provider_payment_id: payment.id, verified_at: new Date().toISOString(),
           }).eq("id", localPayment.id);
-          if (error) return await failEvent(supabase, id, "Bridge service payment capture record failed");
+          if (error) return await failEvent(supabase, id, token, "Bridge service payment capture record failed");
         } else {
-          if (!localPayment.title_id) return await failEvent(supabase, id, "Bridge license order has no title");
-          if (localPayment.currency !== "INR") return await failEvent(supabase, id, "Bridge license payment currency must be INR");
+          if (!localPayment.title_id) return await failEvent(supabase, id, token, "Bridge license order has no title");
+          if (localPayment.currency !== "INR") return await failEvent(supabase, id, token, "Bridge license payment currency must be INR");
 
           if (localPayment.status !== "captured") {
             const { error: gateError } = await supabase.rpc("bridge_assert_buyer_publishable", {
               p_title_id: localPayment.title_id,
             });
-            if (gateError) return await failEvent(supabase, id, "Buyer publication gate rejected captured payment");
+            if (gateError) return await failEvent(supabase, id, token, "Buyer publication gate rejected captured payment");
           }
 
           let packageRecord: any = null;
@@ -162,12 +175,28 @@ Deno.serve(async (req: Request) => {
               .eq("id", localPayment.package_id)
               .eq("title_id", localPayment.title_id)
               .maybeSingle();
-            if (error || !data) return await failEvent(supabase, id, "Language licence package lookup failed");
+            if (error || !data) return await failEvent(supabase, id, token, "Language licence package lookup failed");
             if (!["IN_NEGOTIATION", "LICENSED"].includes(data.status)) {
-              return await failEvent(supabase, id, "Language licence package is not in active negotiation");
+              return await failEvent(supabase, id, token, "Language licence package is not in active negotiation");
             }
-            if (data.buyer_user_id && data.buyer_user_id !== localPayment.user_id) {
-              return await failEvent(supabase, id, "Language licence package belongs to another buyer");
+            if (data.buyer_user_id !== localPayment.user_id) {
+              return await failEvent(supabase, id, token, "Language licence package belongs to another buyer");
+            }
+            // Claim the licensed state with a conditional update before recording
+            // payment capture or creating the entitlement. This compare-and-set
+            // prevents a stale payment from overwriting another buyer/payment.
+            const { data: licensedPackage, error: packageClaimError } = await supabase
+              .from("bridge_license_packages")
+              .update({ status: "LICENSED", payment_id: localPayment.id, updated_at: new Date().toISOString() })
+              .eq("id", data.id)
+              .eq("title_id", localPayment.title_id)
+              .eq("buyer_user_id", localPayment.user_id)
+              .in("status", ["IN_NEGOTIATION", "LICENSED"])
+              .or(`payment_id.is.null,payment_id.eq.${localPayment.id}`)
+              .select("id")
+              .maybeSingle();
+            if (packageClaimError || !licensedPackage) {
+              return await failEvent(supabase, id, token, "Language licence package reservation changed or another payment already licensed it");
             }
             packageRecord = data;
           }
@@ -176,7 +205,7 @@ Deno.serve(async (req: Request) => {
           const { data: updated, error: updateError } = await supabase.from("bridge_payments")
             .update({ status: "captured", provider_payment_id: payment.id, verified_at: now })
             .eq("id", localPayment.id).select("id").maybeSingle();
-          if (updateError || !updated) return await failEvent(supabase, id, "Bridge payment update failed");
+          if (updateError || !updated) return await failEvent(supabase, id, token, "Bridge payment update failed");
 
           if (packageRecord) {
             const { error: entitlementError } = await supabase.from("bridge_package_entitlements").upsert({
@@ -185,31 +214,27 @@ Deno.serve(async (req: Request) => {
               buyer_user_id: localPayment.user_id,
               payment_id: localPayment.id,
             }, { onConflict: "package_id,buyer_user_id", ignoreDuplicates: true });
-            if (entitlementError) return await failEvent(supabase, id, "Bridge language package entitlement grant failed");
+            if (entitlementError) return await failEvent(supabase, id, token, "Bridge language package entitlement grant failed");
 
-            const { error: packageUpdateError } = await supabase.from("bridge_license_packages").update({
-              status: "LICENSED", buyer_user_id: localPayment.user_id, payment_id: localPayment.id, updated_at: now,
-            }).eq("id", packageRecord.id);
-            if (packageUpdateError) return await failEvent(supabase, id, "Bridge language package status update failed");
           } else {
             const { error: entitlementError } = await supabase.from("bridge_entitlements").upsert({
               user_id: localPayment.user_id, title_id: localPayment.title_id,
               payment_id: localPayment.id, access_type: "license",
             }, { onConflict: "user_id,title_id,access_type", ignoreDuplicates: true });
-            if (entitlementError) return await failEvent(supabase, id, "Bridge entitlement grant failed");
+            if (entitlementError) return await failEvent(supabase, id, token, "Bridge entitlement grant failed");
 
             const { data: title, error: titleError } = await supabase.from("bridge_titles")
               .select("status").eq("id", localPayment.title_id).maybeSingle();
-            if (titleError) return await failEvent(supabase, id, "Bridge title lookup failed");
+            if (titleError) return await failEvent(supabase, id, token, "Bridge title lookup failed");
             if (title && (title.status === "LIVE_FOR_BUYERS" || title.status === "IN_NEGOTIATION")) {
               const { error: transitionError } = await supabase.from("bridge_titles")
                 .update({ status: "LICENSED", updated_at: now }).eq("id", localPayment.title_id);
-              if (transitionError) return await failEvent(supabase, id, "Bridge title transition failed");
+              if (transitionError) return await failEvent(supabase, id, token, "Bridge title transition failed");
               const { error: eventError } = await supabase.from("bridge_title_events").insert({
                 title_id: localPayment.title_id, from_status: title.status, to_status: "LICENSED",
                 actor_user_id: localPayment.user_id, note: "razorpay captured webhook",
               });
-              if (eventError) return await failEvent(supabase, id, "Bridge title event failed");
+              if (eventError) return await failEvent(supabase, id, token, "Bridge title event failed");
             }
           }
 
@@ -220,7 +245,7 @@ Deno.serve(async (req: Request) => {
             entity_id: packageRecord?.id ?? localPayment.id,
             metadata: { titleId: localPayment.title_id, paymentId: localPayment.id, source: "razorpay-webhook" },
           });
-          if (auditError) return await failEvent(supabase, id, "Bridge audit write failed");
+          if (auditError) return await failEvent(supabase, id, token, "Bridge audit write failed");
 
           const { data: profile } = await supabase.from("bridge_profiles")
             .select("email,email_verified").eq("user_id", localPayment.user_id).maybeSingle();
@@ -236,20 +261,27 @@ Deno.serve(async (req: Request) => {
               text_body: `Payment received and licence entitlement recorded for ${titleName}. Payment reference: ${localPayment.id}. Open https://www.crayonspictures.in/buyer`,
               html_body: `<p>Payment received and licence entitlement recorded for <strong>${escapeHtml(titleName)}</strong>.</p><p>Payment reference: ${escapeHtml(localPayment.id)}</p><p><a href="https://www.crayonspictures.in/buyer">Open Bridge buyer workspace</a></p>`,
             }, { onConflict: "event_key", ignoreDuplicates: true });
-            if (mailQueueError) return await failEvent(supabase, id, "Bridge licence email queue write failed");
+            if (mailQueueError) return await failEvent(supabase, id, token, "Bridge licence email queue write failed");
           }
         }
       }
     }
 
-    const { error: doneError } = await supabase.from("bridge_webhook_events").update({
+    const { data: finalized, error: doneError } = await supabase.from("bridge_webhook_events").update({
       status: "processed", processed_at: new Date().toISOString(),
       processing_token: null, processing_started_at: null,
-    }).eq("event_id", id).eq("processing_token", token);
-    if (doneError) return new Response("Persistence failure", { status: 503 });
+    }).eq("event_id", id).eq("processing_token", token).select("event_id").maybeSingle();
+    if (doneError || !finalized) {
+      // The lease changed while this worker was running; do not acknowledge
+      // completion unless this worker actually finalized its own claim.
+      return new Response("Webhook processing lease was lost", {
+        status: 503,
+        headers: { "Retry-After": "30" },
+      });
+    }
     return Response.json({ ok: true, event: eventName, surface });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unexpected webhook failure";
-    return await failEvent(supabase, id, message);
+    return await failEvent(supabase, id, token, message);
   }
 });
