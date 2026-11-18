@@ -24,11 +24,12 @@ function SupportBody(){
    <p className="mt-2 max-w-3xl text-sm text-muted">Inbound Hostinger message metadata can be converted into an internal case. Only sender, subject and bounded preview metadata are shown. No outbound customer email or invitation is sent.</p>
   </section>
   {q.isPending?<p className="rounded-xl border border-line p-5 text-sm text-muted">Loading support records…</p>:q.isError?<p role="alert" className="rounded-xl border border-line p-5 text-sm text-muted">Support schema or inbound mail records are unavailable. The support migration must be reviewed and applied in the approved STAGING gate before this workspace can operate.</p>:<>
+   <p className="rounded-xl border border-line p-4 text-xs text-muted">{q.data?.mutationsEnabled ? "Support case updates are enabled by a Preview-only server feature flag." : "Case creation and updates are disabled by default. They require the support migration and a separately approved Preview-only feature flag."}</p>
    <section className="space-y-3">
     <div><h3 className="font-display text-lg font-semibold">Untriaged inbound messages</h3><p className="text-xs text-muted">Latest 100 metadata events; no message body or attachments.</p></div>
     {(q.data?.inbound??[]).map(m=><article key={m.id} className="rounded-xl border border-line bg-surface p-4">
      <div className="flex flex-wrap items-start justify-between gap-3"><div className="min-w-0"><p className="font-medium">{m.subject||"(No subject)"}</p><p className="mt-1 text-xs text-muted">{m.sender} · {new Date(m.receivedAt).toLocaleString("en-IN")}</p><p className="mt-2 text-sm text-muted">{m.preview??"No preview available"}</p></div>
-      <button type="button" disabled={create.isPending} onClick={()=>create.mutate(m.id)} className="rounded-full border border-line px-3 py-2 text-xs font-semibold disabled:opacity-50">Create case</button>
+      <button type="button" disabled={!q.data?.mutationsEnabled||create.isPending} onClick={()=>create.mutate(m.id)} className="rounded-full border border-line px-3 py-2 text-xs font-semibold disabled:opacity-50">Create case</button>
      </div>
     </article>)}
     {!q.data?.inbound.length?<p className="rounded-xl border border-line p-5 text-sm text-muted">No untriaged inbound messages.</p>:null}
@@ -42,12 +43,12 @@ function SupportBody(){
       <label className="text-xs text-muted">Priority<select value={c.priority} onChange={e=>update.mutate({caseId:c.id,priority:e.target.value as typeof PRIORITIES[number]})} className="mt-1 h-10 w-full rounded-lg border border-line bg-elevated px-2 text-sm">{PRIORITIES.map(v=><option key={v}>{v}</option>)}</select></label>
       <div className="flex items-end"><span className="text-xs text-muted">Assignment: {c.assignedTo??"Unassigned"}</span></div>
      </div>
-     <div className="flex flex-col gap-2 sm:flex-row"><input value={note[c.id]??""} onChange={e=>setNote(v=>({...v,[c.id]:e.target.value}))} maxLength={4000} placeholder="Internal-only note" className="h-10 min-w-0 flex-1 rounded-lg border border-line bg-elevated px-3 text-sm"/><button type="button" disabled={!note[c.id]?.trim()||update.isPending} onClick={()=>update.mutate({caseId:c.id,internalNote:note[c.id]}, {onSuccess:()=>setNote(v=>({...v,[c.id]:""}))})} className="rounded-full border border-line px-4 py-2 text-xs font-semibold disabled:opacity-50">Add note</button></div>
+     <div className="flex flex-col gap-2 sm:flex-row"><input value={note[c.id]??""} onChange={e=>setNote(v=>({...v,[c.id]:e.target.value}))} maxLength={4000} placeholder="Internal-only note" className="h-10 min-w-0 flex-1 rounded-lg border border-line bg-elevated px-3 text-sm"/><button type="button" disabled={!q.data?.mutationsEnabled||!note[c.id]?.trim()||update.isPending} onClick={()=>update.mutate({caseId:c.id,internalNote:note[c.id]}, {onSuccess:()=>setNote(v=>({...v,[c.id]:""}))})} className="rounded-full border border-line px-4 py-2 text-xs font-semibold disabled:opacity-50">Add note</button></div>
     </article>)}
     {!q.data?.cases.length?<p className="rounded-xl border border-line p-5 text-sm text-muted">No support cases have been created.</p>:null}
    </section>
   </>}
   {create.isError||update.isError?<p role="alert" className="text-sm text-accent">{(create.error??update.error) instanceof Error?(create.error??update.error)?.message:"Support action failed"}</p>:null}
-  <section className="rounded-xl border border-line p-4 text-xs text-muted">Outbound email: DISABLED. No customer replies, attachments, or external invitations are sent from this workspace. Case events and changes are server-side audited.</section>
+  <section className="rounded-xl border border-line p-4 text-xs text-muted">Outbound email: DISABLED. No customer replies, attachments, or external invitations are sent from this workspace. Case writes are feature-gated; case events and changes are server-side audited.</section>
  </div>;
 }
