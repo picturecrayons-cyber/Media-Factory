@@ -15,9 +15,9 @@
 
 - PR: https://github.com/picturecrayons-cyber/Media-Factory/pull/709
 - Branch: `codex/bridge-studio-operations-phase2-20261118`
-- Latest branch commit at time of this document: `4955d9c2fc08bb9904240b8c1f551e6f48dc6978` (documentation-only update after the code-tested commit `f3fbc01de055e10b71f28664011ceb9aa2c1ef92`).
+- Latest implementation commit at time of this document: `e40622f3cf192ea8ddbd7d3ecce0b5f593056eaf`. Latest CI for this exact head is pending.
 - PR remains Draft, open and unmerged.
-- No Production deployment or Production DB write is authorized by this work.
+- Related Loop gateway PR: https://github.com/picturecrayons-cyber/crayons-loop-streaming-platform/pull/249 (Draft / unmerged).\n- No Production deployment or Production DB write is authorized by this work.
 
 ## Module gates
 
@@ -29,12 +29,22 @@
 | Proxy / transcoding | Durable job state, idempotent claim/lease, retry/dead-letter, FFmpeg worker, output probe, checksum, atomic completion | Worker process and queue runtime, sample derivative generated and probed; crash/retry and duplicate-job tests | BLOCKED; no durable worker runtime connected |
 | Finance | Statement ingestion, source provenance, exact amount/currency, matching, discrepancy case lifecycle, dual approval, ledger tie-out | Redacted sample statement; source-to-ledger reconciliation; two distinct approvers; immutable audit; balance proof | BLOCKED; current views remain read-only |
 | Payments | Razorpay sandbox order, captured event, webhook signature/idempotency, entitlement, delivery, outbox/email | Provider sandbox evidence and DB correlation IDs; duplicate webhook replay; failed webhook recovery; no live customer | NOT VERIFIED; no sandbox transaction triggered |
-| Rights | Grant coverage by territory/language/media/model/window; revocation/expiry; legal review and explicit publication authority | Negative and positive policy tests; unauthorized/expired/revoked title cannot become buyer-visible or Loop-published | Code tests exist; full workflow E2E NOT VERIFIED |
+| Rights / Loop Gateway | Grant coverage by territory/language/media/model/window; current QC/Legal approval; destination package bound to active grant and review IDs; checksum-verified `LOOP_HLS_MASTER` only; regional rights are not widened to WORLDWIDE | Negative/positive policy tests; Bridge writes only an authorized projection; Loop catalogue, checkout and protected playback enforce the same territory grant | Implementation added; latest CI pending; runtime E2E NOT VERIFIED |
 | Buyer / licensing | Only legally/QC/rights/packaging-approved listings; buyer-scoped offers/contracts/invoices/deliveries | Six-role session tests; buyer A cannot read buyer B deals/prices; no private master access | NOT VERIFIED |
 | Delivery | Authorized package creation, checksums, recipient/territory/window controls, download audit, retries | End-to-end package generation and controlled test download with checksum and audit trace | NOT VERIFIED |
 | RBAC | Super Admin, Admin, Investor, Creator, Studio, Buyer | Authenticated browser sessions and allow/deny matrix across pages, server actions, APIs, rows, assets and downloads | NOT VERIFIED |
 | Production | Migration compatibility, ordered replay, backup/restore evidence, rollback and release review | Separate Production READ-ONLY inventory, exact migration diff, rollback plan, signed approval and post-deploy verification plan | HOLD / NOT CERTIFIED / NO-GO |
 
+## Bridge → Loop Gateway implementation
+
+- Bridge Distribution Desk no longer assumes every publication is WORLDWIDE. Requested territories, language, exploitation model and explicit start/end dates must be covered by a valid Bridge rights grant.
+- The Distribution Desk can only enable authorization after the title has a READY Crayons Loop destination package tied to the current rights grant, QC case and Legal case.
+- The package must include a `LOOP_HLS_MASTER` asset version with `processing_state='PASSED'`, a valid SHA-256 and a positive byte size. A title's private `master_key` is never copied into Loop `playback_path`.
+- The Loop repository PR #249 applies Bridge territory grants consistently to public catalogue, semantic search, TVOD checkout and protected playback, using the platform-provided `x-vercel-ip-country` header. Regional grants fail closed if country is unavailable; worldwide grants remain global.
+- Loop adds server-only OCI read-PAR signing for Bridge-originated media. Required OCI server variables are documented in Loop `.env.example`; no credentials were added or deployed.
+- Master/poster indicators in Bridge are labelled REGISTERED, not VERIFIED, when they only reflect a stored object key.
+
+**Not yet certified:** OCI credentials and object reachability, HLS playlist/segment delivery, authenticated Loop playback, TVOD order → captured payment → entitlement, and visible catalogue E2E. No titles were seeded or published by this implementation.
 ## Rollback-only Studio workflow smoke
 
 The new `scripts/staging-studio-workflow-smoke.mjs` is a **rollback-only SQL fixture contract smoke**, not an invocation of the application server action:
