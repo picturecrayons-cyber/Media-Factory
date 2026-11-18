@@ -14,7 +14,7 @@ create table if not exists public.loop_merchandising_documents (
 );
 alter table public.loop_merchandising_documents enable row level security;
 revoke all privileges on table public.loop_merchandising_documents from public;
-revoke insert, update, delete on table public.loop_merchandising_documents from anon, authenticated;
+revoke all privileges on table public.loop_merchandising_documents from anon, authenticated;
 grant select (document_key,payload,publish_at,unpublish_at)
   on table public.loop_merchandising_documents to anon, authenticated;
 grant all privileges on table public.loop_merchandising_documents to service_role;
