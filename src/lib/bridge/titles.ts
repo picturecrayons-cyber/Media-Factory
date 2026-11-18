@@ -3,7 +3,7 @@ import { z } from "zod";
 import { randomBytes } from "node:crypto";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql, type Sql } from "@/lib/db";
-import type { AccountType, TitleStatus } from "./types";
+import type { AccountType, MasterLanguage, TitleStatus } from "./types";
 import { MASTER_LANGUAGES, TITLE_STATUSES, type BridgeTitle } from "./types";
 import { assertTransition, nextStatus } from "./lifecycle";
 import { assertPermission, canMutateTitle, canReadTitle, hasPermission, hasStaffPermission, permissionForTransition } from "./rbac";
@@ -25,7 +25,7 @@ type TitleRow = {
   status: string;
   synopsis: string;
   language: string;
-  master_language?: string | null;
+  master_language?: MasterLanguage | null;
   year: number | null;
   runtime_minutes: number | null;
   licensing_fee_paise: number;
