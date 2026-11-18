@@ -1,7 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { listStudioFinancialActivity } from "@/lib/bridge/studio-statements";
+import { formatStudioMinorAmount } from "@/lib/bridge/studio-statement-format";
 
-function formatMinor(amount: number, currency: string) {
+function formatStudioMinorAmount(amount: number, currency: string) {
   if (currency === "INR") {
     return `₹${(amount / 100).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
   }
@@ -53,7 +54,7 @@ export function StudioFinancialActivityDesk() {
                   <p className="text-xs text-muted">{item.category}</p>
                 </td>
                 <td className="px-3 py-3">{item.status}</td>
-                <td className="px-3 py-3 whitespace-nowrap">{formatMinor(item.amountMinor, item.currency)}</td>
+                <td className="px-3 py-3 whitespace-nowrap">{formatStudioMinorAmount(item.amountMinor, item.currency)}</td>
                 <td className="px-3 py-3 text-xs">{item.reference ?? "Not recorded"}</td>
                 <td className="px-3 py-3 whitespace-nowrap text-xs">
                   {item.occurredAt ? new Date(item.occurredAt).toLocaleString("en-IN") : "Not recorded"}
