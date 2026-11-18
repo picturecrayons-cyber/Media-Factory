@@ -75,6 +75,11 @@ function FinanceBody() {
             )}
           </section>
 
+          <section className="rounded-2xl border border-line bg-surface p-4 sm:p-5">
+            <div className="flex flex-wrap items-center justify-between gap-3"><div><h3 className="font-semibold">Bank reconciliation</h3><p className="mt-1 text-xs text-muted">No bank statement feed, bank connector or approved statement import format is configured.</p></div><span className="rounded-full border border-line px-2.5 py-1 text-xs">NOT CONFIGURED</span></div>
+            <p className="mt-3 text-sm text-muted">Bridge payment, invoice and ledger records are not proof of bank settlement. No automatic match, unmatched-item resolution or reconciliation sign-off is claimed.</p>
+          </section>
+
           <section className="space-y-3">
             <div>
               <h3 className="font-display text-lg font-semibold">Recorded settlement summaries</h3>
