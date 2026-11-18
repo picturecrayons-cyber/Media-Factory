@@ -3,8 +3,8 @@
 - Source: Supabase Production `supabase_migrations.schema_migrations`.
 - Project ref: `mlmgugivsyoxzdgwkbpu`.
 - Snapshot date: 2026-11-16.
-- Recorded remote migrations restored to active `supabase/migrations/`: **69**.
-- SQL bytes: **144173** (excluding output trailing newlines).
+- Production baseline migrations restored to active `supabase/migrations/`: **69**; plus **1 pending additive master-language migration** for this PR.
+- Active replay SQL bytes: **144632** (including the 459-byte pending additive migration).
 - Every active SQL file now preserves the exact stored statement text joined with LF, including all trailing spaces and newline characters. No trailing-whitespace normalization is performed. SHA-256 values are calculated from the same exact stored statement text.
 - Source-only PR: no Production migration was applied, repaired or reverted.
 - The local replay temporarily removes the active migrations directory while `supabase start` bootstraps managed services, then restores it for the script's controlled one-by-one replay. The script asserts that the local Supabase migration ledger is still empty before applying the 69 files itself.
@@ -87,6 +87,7 @@
 | 20261115164711 | bridge_production_owner_rls_helper | 1690 | `c304e0569da1b2909b1373f0b6920bbae1fc8c9a45da54be0d01e008e62ffa0a` |
 | 20261115165233 | bridge_production_owner_helper_revoke_anon | 155 | `d4a980b33b895324231304f17fbaf912043d5659c6cf43e78421a00ed568a71e` |
 | 20261116090923 | bridge_title_owner_helper_search_path_hardening_20261116 | 824 | `486eba102805b78a28a4509466eecab3f2557cb4093dac20d619f51c6a946fba` |
+| 20261118123000 | bridge_master_language | 459 | `3a22cd57e41d7b0cbf0a40489c9b448981a9540bec672b0be34768213fc6b53c` |
 
 ## Previously committed files
 
