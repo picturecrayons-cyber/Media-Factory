@@ -21,13 +21,11 @@ export const listSuperAdminInvestorGovernance = createServerFn({ method: "GET" }
         record_count: number | string;
         linked_count: number | string;
         unlinked_count: number | string;
-        total_capital_paise: number | string;
       }>`
         select count(distinct title_id)::int as title_count,
                count(*)::int as record_count,
                count(*) filter (where investor_user_id is not null)::int as linked_count,
-               count(*) filter (where investor_user_id is null)::int as unlinked_count,
-               coalesce(sum(invested_amount_paise), 0)::bigint as total_capital_paise
+               count(*) filter (where investor_user_id is null)::int as unlinked_count
         from bridge_title_investors
       `,
       sql<{
@@ -63,7 +61,6 @@ export const listSuperAdminInvestorGovernance = createServerFn({ method: "GET" }
         recordCount: Number(totals.record_count),
         linkedCount: Number(totals.linked_count),
         unlinkedCount: Number(totals.unlinked_count),
-        totalCapitalPaise: Number(totals.total_capital_paise),
       } : null,
       records: records.map((row) => ({
         reference: row.id,
