@@ -4,7 +4,7 @@ import { useState, type ReactNode } from "react";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import type { BridgeActor } from "@/lib/bridge/session";
-import { listAdminWorkstations } from "@/lib/bridge/admin-workstations";
+import { listFounderControlCentre } from "@/lib/bridge/admin-workstations";
 
 export const Route = createFileRoute("/admin/founder-control-centre")({
   head: () => ({ meta: [{ name: "robots", content: "noindex, nofollow" }] }),
@@ -38,7 +38,7 @@ function FounderBody({ actor }: { actor: BridgeActor }) {
   const [tab, setTab] = useState<Tab>("Prepare");
   const query = useQuery({
     queryKey: ["founder-control-centre"],
-    queryFn: () => listAdminWorkstations(),
+    queryFn: () => listFounderControlCentre(),
     staleTime: 30_000,
   });
   const data = query.data;
