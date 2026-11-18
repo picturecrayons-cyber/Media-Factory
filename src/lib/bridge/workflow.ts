@@ -177,6 +177,7 @@ export const getTitleWorkflow = createServerFn({ method: "GET" })
         agreementReference?: string;
         ownershipReference?: string;
         commercialTerms?: { rightsOwnerSharePct: number; distributorSharePct: number };
+        studioDeclaration?: { accepted: boolean; declarationVersion: string; submittedBy: string; submittedAt: string } | null;
       }>;
     }>`select id,status,territories,languages,window_start,window_end,exclusivity,evidence from bridge_rights_grants where title_id=${data.titleId} order by created_at desc`;
     const qc = await sql<{
