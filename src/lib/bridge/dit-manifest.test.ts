@@ -31,7 +31,7 @@ test("rejects absolute, drive-qualified, traversal and malformed paths", () => {
     "camera/./clip.mov",
     "camera//clip.mov",
     "camera/clip.mov/",
-    "camera\\0clip.mov",
+    "camera\0clip.mov",
   ]) {
     assert.throws(
       () => normalizeDitFiles([{ relativePath, byteSize: 1, sha256: a }]),
