@@ -222,8 +222,14 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
           {stage === "Business" ? (
             <div className="space-y-4">
               <details className="rounded-xl border border-line p-3">
-                <summary className="cursor-pointer text-sm font-semibold">＋ Submit TVOD distribution terms</summary>
-                <p className="mt-2 text-xs text-muted">Worldwide · {title.language} (from Creator submission). Default Bridge term: 5 years. Super Admin may adjust after rights review. Evidence is required before Legal approval.</p>
+                <summary className="cursor-pointer text-sm font-semibold">＋ Create distribution agreement</summary>
+                <p className="mt-2 text-xs text-muted">Worldwide · {title.language} (from Creator submission). Default model for Free Creator: Non-Exclusive Revenue Share. Default Bridge term: 5 years. Evidence is required before independent Legal approval.</p>
+                <div className="mt-3 rounded-xl border border-line bg-elevated p-3 text-sm">
+                  <p className="font-semibold">Default commercial model</p>
+                  <p className="mt-1">Non-Exclusive · Revenue Share</p>
+                  <p>Creator / rights owner: 50% · Crayons Bridge: 50%</p>
+                  <p className="mt-1 text-xs text-muted">The Creator retains ownership. Sublicensing is not included and requires separate Bridge authorization. These defaults do not approve rights or publish the title.</p>
+                </div>
                 {canOperateOnTitle(actor, title, "title.update_own", "title.license") ? (
                   <form
                     className="mt-3 grid gap-3 sm:grid-cols-2"
@@ -261,11 +267,16 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                     )}
                     {input("Agreement reference", agreement, setAgreement)}
                     {input("Ownership evidence reference", ownership, setOwnership)}
-                    {isSuperAdmin ? input("Creator / rights owner share (%)", ownerShare, setOwnerShare, "number") : (
+                    {isSuperAdmin ? (
+                      <div className="space-y-2">
+                        {input("Super Admin proposed Creator / rights owner share (%)", ownerShare, setOwnerShare, "number")}
+                        <p className="text-xs text-muted">Default is 50%. Crayons Bridge share is calculated as {100 - Number(ownerShare || 0)}%. Any change is a proposed commercial override and remains subject to the required approval and audit controls.</p>
+                      </div>
+                    ) : (
                       <div className="rounded-lg border border-line p-3 text-sm">
                         <p className="font-medium">Default revenue split</p>
                         <p>Creator / rights owner 50% · Crayons Bridge 50%</p>
-                        <p className="mt-1 text-xs text-muted">Only Super Admin can approve a different split.</p>
+                        <p className="mt-1 text-xs text-muted">The default cannot be changed by the Creator.</p>
                       </div>
                     )}
                     <label className="flex items-center gap-2 text-sm">
@@ -274,7 +285,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                         checked={exclusive}
                         onChange={(e) => setExclusive(e.target.checked)}
                       />
-                      Exclusive license
+                      Enable exclusive terms (off by default)
                     </label>
                     <button
                       disabled={action.isPending || !start || !end || agreement.trim().length < 8 || ownership.trim().length < 8 || ownerShare === ""}
