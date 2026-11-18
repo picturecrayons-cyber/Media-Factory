@@ -63,13 +63,15 @@ test("Super Admin storage overview is metadata-only and performs SELECTs only", 
   const result = await h.handler({ context }) as {
     summary: Array<{ assetCount: number; verifiedCount: number; totalBytes: number }>;
     recentAssets: Array<{ reference: string; titleName: string | null; verified: boolean }>;
+    lifecycle: { status: string; groups: unknown[] };
   };
   assert.equal(result.summary[0].assetCount, 3);
   assert.equal(result.summary[0].verifiedCount, 2);
   assert.equal(result.summary[0].totalBytes, 4096);
   assert.equal(result.recentAssets[0].reference, "asset-ref");
   assert.equal(result.recentAssets[0].verified, true);
-  assert.equal(h.queries.length, 2);
+  assert.equal(result.lifecycle.status, "AVAILABLE");
+  assert.equal(h.queries.length, 3);
   assert.ok(h.queries.every((query) => !/\b(insert|update|delete)\b/i.test(query)));
   assert.ok(h.queries.every((query) => !/s3_key|owner_user_id|created_by/i.test(query)));
 });
