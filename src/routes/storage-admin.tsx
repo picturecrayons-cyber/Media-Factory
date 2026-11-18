@@ -167,6 +167,10 @@ function StorageBody() {
   );
 }
 
+function Metric({ label, value }: { label: string; value: string }) {
+  return <article className="rounded-xl border border-line bg-surface p-4"><p className="text-xs font-semibold uppercase tracking-wider text-muted">{label}</p><p className="mt-2 text-sm font-semibold break-words">{value}</p></article>;
+}
+
 function formatBytes(value: number) {
   if (!Number.isFinite(value) || value < 0) return "Size unavailable";
   if (value === 0) return "0 B";
