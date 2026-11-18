@@ -336,6 +336,8 @@ Deno.serve(async (req: Request) => {
             p_order_id: loopOrder.provider_order_id,
           });
           if (refundError) return await failEvent(supabase, id, "Loop TVOD refund could not revoke playback entitlement");
+        } else if (surface === "loop") {
+          return await failEvent(supabase, id, "Loop TVOD refund order could not be reconciled");
         }
       }
     }
