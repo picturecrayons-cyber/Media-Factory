@@ -55,8 +55,13 @@ create table if not exists public.loop_user_tvod_entitlements (
 create index if not exists loop_user_tvod_entitlements_user_title_idx
   on public.loop_user_tvod_entitlements(user_id,title_id,status);
 alter table public.loop_user_tvod_entitlements enable row level security;
-revoke all on table public.loop_user_tvod_entitlements from public, anon, authenticated;
+revoke all on table public.loop_user_tvod_entitlements from public, anon;
+revoke insert,update,delete on table public.loop_user_tvod_entitlements from authenticated;
+grant select on table public.loop_user_tvod_entitlements to authenticated;
 grant select,insert,update on table public.loop_user_tvod_entitlements to service_role;
+drop policy if exists loop_tvod_own_read on public.loop_user_tvod_entitlements;
+create policy loop_tvod_own_read on public.loop_user_tvod_entitlements
+  for select to authenticated using ((select auth.uid())=user_id);
 
 create or replace function public.loop_fulfill_captured_rental(p_order_id text,p_payment_id text)
 returns jsonb language plpgsql security invoker set search_path = '' as $$
