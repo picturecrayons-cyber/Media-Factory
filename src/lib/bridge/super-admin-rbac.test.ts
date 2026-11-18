@@ -44,7 +44,7 @@ test("non-Super Admin staff cannot inspect privileged RBAC governance", async ()
 test("live RBAC assignment inventory is visible while role writes remain fail-closed", async () => {
   const handler = harness();
   const result = await handler.assignments({ context: { userId: "operator" } }) as { assignments: unknown[]; mutationsEnabled: boolean; protectedRole: string };
-  assert.deepEqual(result.assignments, []);
+  assert.equal(result.assignments.length, 0);
   assert.equal(result.mutationsEnabled, false);
   assert.equal(result.protectedRole, "super_admin");
   await assert.rejects(handler.update({ context: { userId: "operator" }, data: { userId: "target-user", role: "admin" } }), /disabled until the Preview-only feature flag/);
