@@ -160,12 +160,12 @@ const license = {
   territories: ["WORLDWIDE"],
   languages: ["Malayalam"],
   windowStart: "2026-01-01T00:00:00.000Z",
-  windowEnd: "2099-01-01T00:00:00.000Z",
+  windowEnd: "2031-01-01T00:00:00.000Z",
   exclusivity: "NON_EXCLUSIVE",
   agreementReference: "agreement-123",
   ownershipReference: "ownership-123",
-  rightsOwnerSharePct: 80,
-  distributorSharePct: 20,
+  rightsOwnerSharePct: 50,
+  distributorSharePct: 50,
 };
 
 test("real SQL services persist QC, independently approved license, lifecycle and audit", async () => {
@@ -271,6 +271,37 @@ test("an audit failure rolls back review records and lifecycle", async () => {
     await f.db.close();
   }
 });
+test("Creator submissions enforce the five-year term and default 50:50 split", async () => {
+  const f = await fixture();
+  try {
+    await assert.rejects(
+      f.sql.transaction((tx) => f.save(tx, owner, { ...license, windowEnd: "2032-01-01T00:00:00.000Z" })),
+      /default five-year Bridge term/,
+    );
+    await assert.rejects(
+      f.sql.transaction((tx) => f.save(tx, owner, { ...license, rightsOwnerSharePct: 60, distributorSharePct: 40 })),
+      /default revenue split is 50:50/,
+    );
+    const saved = await f.sql.transaction((tx) => f.save(tx, owner, license));
+    assert.ok(saved.grantId);
+  } finally {
+    await f.db.close();
+  }
+});
+
+test("Super Admin may set an approved non-default revenue split", async () => {
+  const f = await fixture();
+  try {
+    const superAdmin = { ...owner, userId: "root", internalRole: "super_admin" as const };
+    const saved = await f.sql.transaction((tx) =>
+      f.save(tx, superAdmin, { ...license, rightsOwnerSharePct: 60, distributorSharePct: 40 }),
+    ) as { grantId: string };
+    assert.ok(saved.grantId);
+  } finally {
+    await f.db.close();
+  }
+});
+
 test("license constraints reject unsupported territory, bad window and invalid share totals", () => {
   assert.equal(policy.loopLicenseInput.safeParse(license).success, true);
   for (const data of [
