@@ -6,7 +6,7 @@ import { transpileModule, ModuleKind } from "typescript";
 
 function harness(internalRole = "super_admin") {
   const modules: Record<string, unknown> = {
-    "@tanstack/react-start": { createServerFn: () => { const builder = { middleware: () => builder, handler: (handler: unknown) => handler }; return builder; } },
+    "@tanstack/react-start": { createServerFn: () => { const builder = { middleware: () => builder, validator: () => builder, handler: (handler: unknown) => handler }; return builder; } },
     "@/lib/auth/middleware": { authMiddleware: {} },
     "@/lib/db": { getSql: async () => async () => [] },
     "./audit": { writeAudit: async () => {} },
