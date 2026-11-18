@@ -40,6 +40,7 @@ function harness(internalRole = "super_admin") {
       requireVerifiedActor: async () => ({ userId: "operator", emailVerified: true, internalRole }),
     },
     "./guards": { assertNotDevUser: () => {} },
+    "./oci-object-storage.server": { inspectBucketHealth: async () => ({ status: "AVAILABLE", region: "ap-mumbai-1", bucketName: "test-bucket", namespace: "test", timeCreated: null, etag: null, storageTier: "Standard", publicAccessType: "NoPublicAccess", versioning: "Enabled", autoTiering: null, objectEventsEnabled: false, backupVerification: "NOT_CONFIGURED", replicationVerification: "NOT_CONFIGURED" }) },
   };
   const source = readFileSync(new URL("./super-admin-storage.ts", import.meta.url), "utf8");
   const output = transpileModule(source, {
@@ -64,6 +65,7 @@ test("Super Admin storage overview is metadata-only and performs SELECTs only", 
     summary: Array<{ assetCount: number; verifiedCount: number; totalBytes: number }>;
     recentAssets: Array<{ reference: string; titleName: string | null; verified: boolean }>;
     lifecycle: { status: string; groups: unknown[] };
+    providerHealth: { status: string; backupVerification: string };
   };
   assert.equal(result.summary[0].assetCount, 3);
   assert.equal(result.summary[0].verifiedCount, 2);
@@ -71,6 +73,8 @@ test("Super Admin storage overview is metadata-only and performs SELECTs only", 
   assert.equal(result.recentAssets[0].reference, "asset-ref");
   assert.equal(result.recentAssets[0].verified, true);
   assert.equal(result.lifecycle.status, "AVAILABLE");
+  assert.equal(result.providerHealth.status, "AVAILABLE");
+  assert.equal(result.providerHealth.backupVerification, "NOT_CONFIGURED");
   assert.equal(h.queries.length, 3);
   assert.ok(h.queries.every((query) => !/\b(insert|update|delete)\b/i.test(query)));
   assert.ok(h.queries.every((query) => !/s3_key|owner_user_id|created_by/i.test(query)));
