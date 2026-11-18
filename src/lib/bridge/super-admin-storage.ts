@@ -72,7 +72,17 @@ export const listSuperAdminStorageOverview = createServerFn({ method: "GET" })
       rows: [],
     }));
 
+    const providerHealth = await import("./oci-object-storage.server")
+      .then(({ inspectBucketHealth }) => inspectBucketHealth())
+      .catch((error) => ({
+        status: "UNAVAILABLE" as const,
+        reason: error instanceof Error ? error.message : "OCI provider health is unavailable",
+        backupVerification: "NOT_CONFIGURED" as const,
+        replicationVerification: "NOT_CONFIGURED" as const,
+      }));
+
     return {
+      providerHealth,
       lifecycle: {
         status: lifecycle.status,
         groups: lifecycle.rows.map((row) => ({
