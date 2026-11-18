@@ -20,6 +20,28 @@ alter table public.loop_tvod_orders enable row level security;
 revoke all on table public.loop_tvod_orders from public, anon, authenticated;
 grant select,insert,update on table public.loop_tvod_orders to service_role;
 
+-- Keep the canonical Loop payment ledger available for older migration targets as well.
+create table if not exists public.loop_payment_events (
+  id uuid primary key default gen_random_uuid(),
+  event_id text not null unique,
+  event_name text not null,
+  razorpay_payment_id text,
+  user_id uuid references auth.users(id),
+  status text not null default 'received',
+  payload jsonb not null default '{}'::jsonb,
+  received_at timestamptz not null default now(),
+  processed_at timestamptz
+);
+create index if not exists loop_payment_events_payment_idx on public.loop_payment_events(razorpay_payment_id);
+alter table public.loop_payment_events enable row level security;
+revoke all on table public.loop_payment_events from public, anon;
+revoke insert,update,delete on table public.loop_payment_events from authenticated;
+grant select on table public.loop_payment_events to authenticated;
+grant select,insert,update on table public.loop_payment_events to service_role;
+drop policy if exists loop_payment_events_own_read on public.loop_payment_events;
+create policy loop_payment_events_own_read on public.loop_payment_events
+  for select to authenticated using ((select auth.uid())=user_id);
+
 -- Dedicated normalized event ledger avoids coupling this TVOD flow to legacy Loop payment-event shapes.
 create table if not exists public.loop_tvod_payment_events (
   id uuid primary key default gen_random_uuid(),
