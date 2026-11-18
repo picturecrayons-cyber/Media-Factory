@@ -45,6 +45,7 @@ function MerchandisingBody(){
      <input value={b.artworkUrl} onChange={e=>setPayload(p=>({...p,banners:p.banners.map(x=>x.id===b.id?{...x,artworkUrl:e.target.value}:x)}))} placeholder="HTTPS artwork URL" className="h-10 w-full rounded-lg border border-line bg-elevated px-3 text-sm"/>
      <input value={b.destinationTitleId} onChange={e=>setPayload(p=>({...p,banners:p.banners.map(x=>x.id===b.id?{...x,destinationTitleId:e.target.value}:x)}))} placeholder="Authorized Loop title UUID" className="h-10 w-full rounded-lg border border-line bg-elevated px-3 font-mono text-xs"/>
      <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={b.enabled} onChange={e=>setPayload(p=>({...p,banners:p.banners.map(x=>x.id===b.id?{...x,enabled:e.target.checked}:x)}))}/>Enabled</label>
+     <div className="grid gap-2 sm:grid-cols-2"><label className="text-xs text-muted">Show from<input type="datetime-local" value={toLocalInput(b.publishAt)} onChange={e=>setPayload(p=>({...p,banners:p.banners.map(x=>x.id===b.id?{...x,publishAt:fromLocalInput(e.target.value)}:x)}))} className="mt-1 h-9 w-full rounded-lg border border-line bg-elevated px-2"/></label><label className="text-xs text-muted">Hide after<input type="datetime-local" value={toLocalInput(b.unpublishAt)} onChange={e=>setPayload(p=>({...p,banners:p.banners.map(x=>x.id===b.id?{...x,unpublishAt:fromLocalInput(e.target.value)}:x)}))} className="mt-1 h-9 w-full rounded-lg border border-line bg-elevated px-2"/></label></div>
     </article>)}
     {!payload.banners.length?<p className="text-sm text-muted">No banners configured.</p>:null}
    </section>
@@ -56,6 +57,7 @@ function MerchandisingBody(){
      <input value={c.description} onChange={e=>setPayload(p=>({...p,collections:p.collections.map(x=>x.id===c.id?{...x,description:e.target.value}:x)}))} placeholder="Description" className="h-10 w-full rounded-lg border border-line bg-elevated px-3 text-sm"/>
      <textarea value={c.titleIds.join(", ")} onChange={e=>setPayload(p=>({...p,collections:p.collections.map(x=>x.id===c.id?{...x,titleIds:e.target.value.split(",").map(v=>v.trim()).filter(Boolean)}:x)}))} placeholder="Comma-separated authorized Loop title UUIDs" rows={2} className="w-full rounded-lg border border-line bg-elevated px-3 py-2 font-mono text-xs"/>
      <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={c.enabled} onChange={e=>setPayload(p=>({...p,collections:p.collections.map(x=>x.id===c.id?{...x,enabled:e.target.checked}:x)}))}/>Enabled</label>
+     <div className="grid gap-2 sm:grid-cols-2"><label className="text-xs text-muted">Show from<input type="datetime-local" value={toLocalInput(c.publishAt)} onChange={e=>setPayload(p=>({...p,collections:p.collections.map(x=>x.id===c.id?{...x,publishAt:fromLocalInput(e.target.value)}:x)}))} className="mt-1 h-9 w-full rounded-lg border border-line bg-elevated px-2"/></label><label className="text-xs text-muted">Hide after<input type="datetime-local" value={toLocalInput(c.unpublishAt)} onChange={e=>setPayload(p=>({...p,collections:p.collections.map(x=>x.id===c.id?{...x,unpublishAt:fromLocalInput(e.target.value)}:x)}))} className="mt-1 h-9 w-full rounded-lg border border-line bg-elevated px-2"/></label></div>
     </article>)}
     {!payload.collections.length?<p className="text-sm text-muted">No collections configured.</p>:null}
    </section>
@@ -70,4 +72,13 @@ function MerchandisingBody(){
    </section>
   </>}
  </div>;
+}
+
+function toLocalInput(value:string|null){
+ if(!value) return "";
+ const date=new Date(value);
+ return Number.isNaN(date.getTime())?"":new Date(date.getTime()-date.getTimezoneOffset()*60000).toISOString().slice(0,16);
+}
+function fromLocalInput(value:string){
+ return value?new Date(value).toISOString():null;
 }
