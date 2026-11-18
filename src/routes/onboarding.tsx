@@ -102,6 +102,10 @@ function Onboarding() {
   const [displayName, setDisplayName] = useState("");
   const [accountType, setAccountType] = useState<PublicAccountType>("independent_creator");
   const [organizationName, setOrganizationName] = useState("");
+  const [studioInviteToken, setStudioInviteToken] = useState<string | undefined>();
+  const [studioInviteChecked, setStudioInviteChecked] = useState(false);
+  const [acceptingStudioInvite, setAcceptingStudioInvite] = useState(false);
+  const [studioInviteError, setStudioInviteError] = useState<string | null>(null);
 
   const [titleName, setTitleName] = useState("");
   const [originalTitle, setOriginalTitle] = useState("");
@@ -150,14 +154,72 @@ function Onboarding() {
     if (!displayName.trim() && user?.displayName) setDisplayName(user.displayName);
   }, [displayName, user?.displayName]);
 
+  useEffect(() => {
+    try {
+      const token = localStorage.getItem("bridge-studio-invite");
+      if (token) {
+        setStudioInviteToken(token);
+        setAccountType("studio");
+      }
+    } catch {
+      setStudioInviteError("This browser could not read the Studio invitation. Open the invitation link again in this browser.");
+    } finally {
+      setStudioInviteChecked(true);
+    }
+  }, []);
+
   const home = sessionQ.data?.profile ? sessionQ.data.home : null;
+  const studioInviteStarted = useRef(false);
 
   useEffect(() => {
-    if (home) goHome(home, navigate);
-  }, [home, navigate]);
+    if (!home || !studioInviteChecked || !studioInviteToken || studioInviteStarted.current) return;
+    studioInviteStarted.current = true;
+    setAcceptingStudioInvite(true);
+    setStudioInviteError(null);
+    void completeOnboarding({
+      data: {
+        displayName: displayName.trim() || user?.displayName || "Studio member",
+        accountType: "studio",
+        studioInviteToken,
+      },
+    }).then((result) => {
+      try { localStorage.removeItem("bridge-studio-invite"); } catch { /* ignore */ }
+      setStudioInviteToken(undefined);
+      goHome(result.home, navigate);
+    }).catch((err) => {
+      setStudioInviteError(publicOnboardingError(err));
+      setAcceptingStudioInvite(false);
+      studioInviteStarted.current = false;
+    });
+  }, [home, studioInviteChecked, studioInviteToken, displayName, user?.displayName, navigate]);
 
-  if (isPending || (user && sessionQ.isPending) || home) {
-    return <main className="grid min-h-screen place-items-center bg-bg p-6"><p className="text-sm text-muted">{home ? "Opening workspace…" : "Loading Bridge…"}</p></main>;
+  useEffect(() => {
+    if (home && studioInviteChecked && !studioInviteToken && !studioInviteError) {
+      goHome(home, navigate);
+    }
+  }, [home, studioInviteChecked, studioInviteToken, studioInviteError, navigate]);
+
+  if (home && studioInviteError) {
+    return (
+      <main className="grid min-h-screen place-items-center bg-bg p-6">
+        <div className="w-full max-w-md space-y-4 rounded-2xl border border-line bg-surface p-6">
+          <BrandMark />
+          <h1 className="font-display text-2xl font-semibold">Studio invitation not accepted</h1>
+          <p role="alert" className="text-sm text-muted">{studioInviteError}</p>
+          <Button type="button" className="w-full" onClick={() => {
+            try { localStorage.removeItem("bridge-studio-invite"); } catch { /* ignore */ }
+            setStudioInviteToken(undefined);
+            setStudioInviteError(null);
+            goHome(home, navigate);
+          }}>Continue to current workspace</Button>
+        </div>
+      </main>
+    );
+  }
+
+  if (isPending || (user && (sessionQ.isPending || !studioInviteChecked)) ||
+      (home && (acceptingStudioInvite || Boolean(studioInviteToken)))) {
+    return <main className="grid min-h-screen place-items-center bg-bg p-6"><p className="text-sm text-muted">{acceptingStudioInvite || studioInviteToken ? "Accepting Studio invitation…" : home ? "Opening workspace…" : "Loading Bridge…"}</p></main>;
   }
   if (!user) return <RedirectToSignIn />;
 
@@ -238,16 +300,22 @@ function Onboarding() {
     try {
       let inviteToken: string | undefined;
       try { inviteToken = sessionStorage.getItem("bridge-invite") ?? undefined; } catch { /* ignore */ }
-      await completeOnboarding({
+      const result = await completeOnboarding({
         data: {
           displayName: displayName.trim(),
           accountType,
-          organizationName: accountType === "studio" ? organizationName.trim() : undefined,
+          organizationName: accountType === "studio" && !studioInviteToken ? organizationName.trim() : undefined,
           inviteToken,
+          studioInviteToken,
         },
       });
       try { sessionStorage.removeItem("bridge-invite"); } catch { /* ignore */ }
-      void navigate({ to: accountType === "buyer" ? "/buyer" : "/creator", replace: true });
+      if (studioInviteToken) {
+        try { localStorage.removeItem("bridge-studio-invite"); } catch { /* ignore */ }
+        void navigate({ to: result.home || "/studio", replace: true } as any);
+      } else {
+        void navigate({ to: accountType === "buyer" ? "/buyer" : accountType === "studio" ? "/studio" : "/creator", replace: true });
+      }
     } catch (err) {
       setError(publicOnboardingError(err));
     } finally {
@@ -371,8 +439,9 @@ function Onboarding() {
             </label>
           </div>
           {accountType === "studio" ? (
-            <label className="block text-sm font-medium">Studio / company name *
-              <input required value={organizationName} onChange={(e) => setOrganizationName(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5" />
+            <label className="block text-sm font-medium">Studio / company name{studioInviteToken ? "" : " *"}
+              <input required={!studioInviteToken} disabled={Boolean(studioInviteToken)} value={organizationName} onChange={(e) => setOrganizationName(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-elevated px-3.5" />
+              {studioInviteToken ? <span className="mt-1 block text-xs text-muted">The invitation links your verified account to the inviting Studio.</span> : null}
             </label>
           ) : null}
         </section>
