@@ -79,7 +79,8 @@ function StorageBody() {
                 <Metric label="Storage tier" value={overviewQ.data.providerHealth.primary?.storageTier ?? "Not returned"} />
                 <Metric label="Public access" value={overviewQ.data.providerHealth.primary?.publicAccessType ?? "Not returned"} />
                 <Metric label="Versioning" value={overviewQ.data.providerHealth.primary?.versioning ?? "Not returned"} />
-                <Metric label="Object events" value={overviewQ.data.providerHealth.primary?.objectEventsEnabled == null ? "Not returned" : String(overviewQ.data.providerHealth.objectEventsEnabled)} />
+                <Metric label="Object events" value={overviewQ.data.providerHealth.primary?.objectEventsEnabled == null ? "Not returned" : String(overviewQ.data.providerHealth.primary?.objectEventsEnabled)} />
+                <Metric label="Recovery bucket" value={overviewQ.data.providerHealth.recovery.status === "AVAILABLE" ? overviewQ.data.providerHealth.recovery.bucketName ?? "Available" : overviewQ.data.providerHealth.recovery.status} />
               </div>
             ) : (
               <p className="mt-3 text-sm text-muted">{overviewQ.data?.providerHealth.reason ?? "OCI provider health is unavailable."}</p>
