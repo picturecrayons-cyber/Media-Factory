@@ -8,6 +8,9 @@ function harness(internalRole = "super_admin") {
   const modules: Record<string, unknown> = {
     "@tanstack/react-start": { createServerFn: () => { const builder = { middleware: () => builder, handler: (handler: unknown) => handler }; return builder; } },
     "@/lib/auth/middleware": { authMiddleware: {} },
+    "@/lib/db": { getSql: async () => async () => [] },
+    "./audit": { writeAudit: async () => {} },
+    "zod": { z: { enum: () => ({ nullable: () => ({}) }), object: () => ({}) } },
     "./session": { requireVerifiedActor: async () => ({ userId: "operator", emailVerified: true, internalRole }) },
     "./guards": { assertNotDevUser: () => {} },
     "./rbac": {
