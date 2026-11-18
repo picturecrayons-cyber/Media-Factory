@@ -73,7 +73,8 @@ async function testDatabase(): Promise<{ db: TestDb; schema: string }> {
 async function fixture() {
   const { db, schema } = await testDatabase();
   try {
-    await db.exec(`create table bridge_profiles(user_id text primary key);
+    await db.exec(`create role anon; create role authenticated; create role service_role;
+    create table bridge_profiles(user_id text primary key);
     create table bridge_titles(
       id text primary key,
       owner_user_id text,
