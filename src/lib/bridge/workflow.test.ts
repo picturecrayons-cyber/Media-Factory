@@ -73,7 +73,11 @@ async function testDatabase(): Promise<{ db: TestDb; schema: string }> {
 async function fixture() {
   const { db, schema } = await testDatabase();
   try {
-    await db.exec(`create role anon; create role authenticated; create role service_role;
+    await db.exec(`do $ begin
+      if not exists (select 1 from pg_roles where rolname = 'anon') then create role anon; end if;
+      if not exists (select 1 from pg_roles where rolname = 'authenticated') then create role authenticated; end if;
+      if not exists (select 1 from pg_roles where rolname = 'service_role') then create role service_role; end if;
+    end $;
     create table bridge_profiles(user_id text primary key);
     create table bridge_titles(
       id text primary key,
