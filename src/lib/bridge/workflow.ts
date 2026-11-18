@@ -120,6 +120,21 @@ export async function reviewWorkflow(tx: Sql, actor: Actor, data: z.infer<typeof
       throw new Error("Another legal reviewer must approve this license");
     if (data.decision === "APPROVE" && new Date(grant.window_end) <= new Date())
       throw new Error("License has expired");
+    if (data.decision === "APPROVE") {
+      const evidence = await tx<{ document_type: string }>`
+        select distinct d.document_type
+        from bridge_title_document_links l
+        join bridge_creator_documents d on d.id=l.document_id
+        where l.title_id=${data.titleId} and d.status='VERIFIED'
+      `;
+      const types = new Set(evidence.map((item) => item.document_type));
+      if (!types.has("OWNERSHIP_CHAIN_OF_TITLE")) {
+        throw new Error("Verified ownership / chain-of-title document is required before Legal approval");
+      }
+      if (!types.has("FINISHED_FILM_AGREEMENT") && !types.has("DISTRIBUTION_AGREEMENT")) {
+        throw new Error("Verified finished-film or distribution agreement is required before Legal approval");
+      }
+    }
     await tx`insert into bridge_legal_cases(title_id,status,evidence,reviewed_by,reviewed_at)
       values (${data.titleId},${data.decision === "APPROVE" ? "APPROVED" : "REJECTED"},
       ${JSON.stringify([{ grantId: data.grantId, note: data.note }])}::jsonb,${actor.userId},now())`;
