@@ -18,7 +18,7 @@ const authorizeInput = z.object({
   windowStart: z.string().datetime(),
   windowEnd: z.string().datetime(),
   restrictions: z.array(z.string().trim().min(1).max(500)).max(100).default([]),
-  evidenceDocumentId: z.string().uuid(),
+  evidenceDocumentId: z.string().min(8).max(200),
   rightsEvidenceReviewed: z.literal(true),
   approvalReason: z.string().trim().min(12).max(2000),
 }).superRefine((value, ctx) => {
