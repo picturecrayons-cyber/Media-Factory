@@ -65,7 +65,7 @@ function BuyerManagementBody() {
                     <p className="font-medium">{buyer.organizationName || buyer.displayName || "Buyer account"}</p>
                     <p className="mt-1 text-xs text-muted">{buyer.displayName} · {buyer.email}</p>
                   </div>
-                  <span className="text-xs text-muted">{buyer.emailVerified ? "Email verified" : "Email not verified"}</span>
+                  <span className="text-xs text-muted">{buyer.organizationId ? "Organization linked" : "Organization not linked"} · {buyer.emailVerified ? "Email verified" : "Email not verified"}</span>
                 </li>
               ))}
             </ul>
