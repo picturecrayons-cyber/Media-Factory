@@ -143,7 +143,7 @@ test("new and existing publications emit the status accepted by the Loop catalog
     assert.ok(loopTitle);
     assert.equal(loopTitle.values[10], "deliverables/loop/hls/master.m3u8");
     assert.notEqual(loopTitle.values[10], "sealed/master");
-    assert.equal(loopTitle.values[17], 99);
+    assert.equal(loopTitle.values[13], 99);
   }
 });
 
