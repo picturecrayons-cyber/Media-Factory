@@ -240,15 +240,9 @@ export const getTitleRevenue = createServerFn({ method: "GET" })
         coalesce(e.payload->>'amount_paise',e.payload->>'amount',e.payload#>>'{payment,amount}',e.payload#>>'{payload,payment,entity,amount}') as amount_text,
         coalesce(e.payload->>'currency',e.payload#>>'{payment,currency}',e.payload#>>'{payload,payment,entity,currency}') as currency,
         coalesce(e.payload->>'order_id',e.payload->>'razorpay_order_id',e.payload#>>'{payload,payment,entity,order_id}') as order_id
-      from (
-        select event_id,event_name,razorpay_payment_id,status,payload,received_at,processed_at,null::text as loop_title_id
-        from loop_payment_events
-        union all
-        select event_id,event_name,razorpay_payment_id,status,payload,received_at,processed_at,loop_title_id
-        from loop_tvod_payment_events
-      ) e
+      from loop_payment_events e
       left join loop_user_tvod_entitlements t on t.payment_transaction_id=e.razorpay_payment_id
-      join loop_titles l on l.id::text=coalesce(e.payload->>'title_id',e.loop_title_id,t.title_id::text)
+      join loop_titles l on l.id::text=coalesce(e.payload->>'title_id',t.title_id::text)
       where l.bridge_title_id=${data.titleId} and e.status in ('captured','processed') and e.razorpay_payment_id is not null
       order by e.razorpay_payment_id,e.received_at desc limit 200`;
     const receipts = rows.map((r) => ({
