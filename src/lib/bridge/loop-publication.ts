@@ -655,11 +655,13 @@ export const authorizeLoopPublication = createServerFn({ method: "POST" })
       const loopTitleId = existing[0]?.id ?? randomUUID();
 
       // The destination package becomes authorized in the same transaction as publication.
-      await sql`
+      const authorizedPackage = await sql<{ id: string }>`
         update bridge_destination_packages
         set readiness_state='AUTHORIZED',authorized_by=${actor.userId},authorized_at=now()
         where id=${preflight.destinationPackageId} and readiness_state in ('READY','AUTHORIZED','DELIVERED')
+        returning id
       `;
+      if (!authorizedPackage[0]) throw new Error("Certified Loop destination package changed; refresh before publishing");
 
       // 1. Synchronize master publication record in Crayons Loop
       await sql`
