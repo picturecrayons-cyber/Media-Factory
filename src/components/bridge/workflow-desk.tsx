@@ -509,7 +509,11 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                     )}
                     <div className="grid gap-2 sm:grid-cols-2">
                       {input("TVOD rental price (₹, whole rupees)", loopRentalPriceInr, setLoopRentalPriceInr, "number")}
-                      {input("Optional purchase price (₹)", loopPurchasePriceInr, setLoopPurchasePriceInr, "number")}
+                      <label className="grid gap-1 text-sm">
+                        Optional purchase price (₹)
+                        <input type="number" value={loopPurchasePriceInr} onChange={(event) => setLoopPurchasePriceInr(event.target.value)}
+                          className="rounded-lg border border-line bg-elevated p-2" />
+                      </label>
                     </div>
                     {input("Commercial approval note", loopPricingNote, setLoopPricingNote)}
                     {button("Approve TVOD pricing", () =>
