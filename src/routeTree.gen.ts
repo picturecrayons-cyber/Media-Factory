@@ -734,10 +734,16 @@ declare module '@tanstack/react-router' {
 }
 
 interface AdminRouteChildren {
+  AdminAuditRoute: typeof AdminAuditRoute
+  AdminServicesRoute: typeof AdminServicesRoute
+  AdminUsersRoute: typeof AdminUsersRoute
   AdminWorkstationsRoute: typeof AdminWorkstationsRoute
 }
 
 const AdminRouteChildren: AdminRouteChildren = {
+  AdminAuditRoute: AdminAuditRoute,
+  AdminServicesRoute: AdminServicesRoute,
+  AdminUsersRoute: AdminUsersRoute,
   AdminWorkstationsRoute: AdminWorkstationsRoute,
 }
 
