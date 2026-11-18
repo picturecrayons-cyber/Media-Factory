@@ -403,19 +403,29 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
 
     return {
       titles: rows.map((r) => {
-        const coveringGrant = r.loop_title_id
-          ? findCoveringRightsGrant(
-              grants.filter((grant) => grant.title_id === r.id),
-              {
-                destination: "CRAYONS_LOOP",
-                territories: r.territories || [],
-                languages: r.languages || [],
-                exploitationModels: r.exploitation_models || [],
-                windowStart: iso(r.window_start),
-                windowEnd: iso(r.window_end),
-              },
-            )
-          : null;
+        const titleGrants = grants.filter((grant) => grant.title_id === r.id);
+        const requestedTerritories = r.territories?.length ? r.territories : ["IN"];
+        const requestedLanguages = r.languages?.length ? r.languages : [r.language];
+        const requestedModels = r.exploitation_models?.length ? r.exploitation_models : ["TVOD"];
+        const now = new Date();
+        const coveringGrant = titleGrants.find((grant) => {
+          const grantStart = grant.window_start ? new Date(grant.window_start) : null;
+          const candidateStart = r.window_start
+            ? new Date(r.window_start)
+            : grantStart && grantStart > now ? grantStart : now;
+          const grantEnd = grant.window_end ? new Date(grant.window_end) : null;
+          const candidateEnd = r.window_end
+            ? new Date(r.window_end)
+            : grantEnd ?? new Date(candidateStart.getTime() + 24 * 60 * 60 * 1000);
+          return Boolean(findCoveringRightsGrant([grant], {
+            destination: "CRAYONS_LOOP",
+            territories: requestedTerritories,
+            languages: requestedLanguages,
+            exploitationModels: requestedModels,
+            windowStart: candidateStart.toISOString(),
+            windowEnd: candidateEnd.toISOString(),
+          }));
+        });
         const legalGrantIds = Array.isArray(r.legal_grant_ids) ? r.legal_grant_ids : [];
         const legalApproved = Boolean(coveringGrant && legalGrantIds.includes(coveringGrant.id));
         const gatesReady =
