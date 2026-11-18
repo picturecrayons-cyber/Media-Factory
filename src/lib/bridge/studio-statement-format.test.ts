@@ -22,5 +22,5 @@ test("unsafe numeric and malformed values fail closed", () => {
   assert.equal(normalizeStudioMinorAmount(Number.MAX_SAFE_INTEGER + 1), null);
   assert.equal(formatStudioMinorAmount("1.25", "INR"), "Amount unavailable");
   assert.equal(formatStudioMinorAmount("NaN", "INR"), "Amount unavailable");
-  assert.equal(formatStudioMinorAmount(null, "INR"), "Amount unavailable");
+  assert.equal(formatStudioMinorAmount(null, "INR"), "Not reported");
 });
