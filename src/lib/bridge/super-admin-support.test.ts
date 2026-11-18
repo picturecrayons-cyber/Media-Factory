@@ -41,3 +41,12 @@ test("non-Super Admin staff cannot access support case data",async()=>{
  await assert.rejects(h.exports.listSuperAdminSupportDesk({context:{userId:"operator"}}),/Super Admin access required/);
  assert.equal(h.queries.length,0);
 });
+
+test("support case writes remain disabled without the explicit Preview feature flag",async()=>{
+ const h=load();
+ await assert.rejects(
+  h.exports.createSupportCaseFromInbound({context:{userId:"operator"},data:{inboundEventId:"00000000-0000-4000-8000-000000000001",priority:"NORMAL"}}),
+  /Support case writes are disabled/
+ );
+ assert.equal(h.queries.length,0);
+});
