@@ -393,7 +393,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                             );
                           })()}
                         </div>
-                        {selectedGrant.status === "DRAFT" &&
+                        {["SUBMITTED", "DRAFT"].includes(selectedGrant.status) &&
                         title.status === "RIGHTS_REVIEW" &&
                         hasPermission(actor, "title.rights_review") ? (
                           <div className="flex flex-wrap gap-2 border-t border-line pt-3">
