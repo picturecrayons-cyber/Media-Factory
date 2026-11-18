@@ -90,6 +90,27 @@ export const listSuperAdminPaymentOverview = createServerFn({ method: "GET" })
       `,
     ]);
 
+    const recentLedger = await sql<{
+      id: string;
+      title_name: string | null;
+      entry_type: string;
+      classification: string;
+      amount_paise: number | string;
+      currency: string;
+      reference: string | null;
+      created_at: string | Date;
+    }>`
+      select l.id, t.name as title_name, l.entry_type, l.classification,
+             l.amount_paise, l.currency, l.reference, l.created_at
+      from bridge_financial_ledger l
+      left join bridge_titles t on t.id = l.title_id
+      order by l.created_at desc
+      limit 100
+    `.then((rows) => ({ status: "AVAILABLE" as const, rows })).catch(() => ({
+      status: "UNAVAILABLE" as const,
+      rows: [],
+    }));
+
     const invoices = await sql<{
       id: string;
       invoice_number: string;
@@ -196,6 +217,19 @@ export const listSuperAdminPaymentOverview = createServerFn({ method: "GET" })
           currency: row.currency,
           count: Number(row.entry_count),
           totalAmountPaise: Number(row.total_amount_paise),
+        })),
+      },
+      recentLedger: {
+        status: recentLedger.status,
+        rows: recentLedger.rows.map((row) => ({
+          reference: row.id,
+          titleName: row.title_name,
+          entryType: row.entry_type,
+          classification: row.classification,
+          amountPaise: Number(row.amount_paise),
+          currency: row.currency,
+          businessReference: row.reference,
+          createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : String(row.created_at),
         })),
       },
     };
