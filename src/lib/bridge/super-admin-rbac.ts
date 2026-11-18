@@ -3,7 +3,7 @@ import { authMiddleware } from "@/lib/auth/middleware";
 import { assertNotDevUser } from "./guards";
 import { requireVerifiedActor } from "./session";
 import { canGrantInternalRole, permissionsFor, type Actor } from "./rbac";
-import { ACCOUNT_TYPES, INTERNAL_ROLES, PERMISSIONS, type AccountType, type InternalRole } from "./types";
+import { ACCOUNT_TYPES, INTERNAL_ROLES, PERMISSIONS } from "./types";
 
 /** Exposes the checked-in RBAC policy registry; does not read or change user role assignments. */
 export const getSuperAdminRbacGovernance = createServerFn({ method: "GET" })
