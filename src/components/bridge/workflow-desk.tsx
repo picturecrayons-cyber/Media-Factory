@@ -8,6 +8,7 @@ import {
   reviewTitleWorkflow,
 } from "@/lib/bridge/workflow";
 import { advanceTitle } from "@/lib/bridge/titles";
+import { listTitleDocumentEvidence } from "@/lib/bridge/creator-documents";
 import {
   authorizeLoopPublication,
   getLoopPublication,
@@ -42,6 +43,11 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
   const publication = useQuery({
     queryKey: ["loop-pub", title.id],
     queryFn: () => getLoopPublication({ data: { bridgeTitleId: title.id } }),
+    enabled: Boolean(actor.internalRole) || actor.accountType !== "buyer",
+  });
+  const documentEvidence = useQuery({
+    queryKey: ["title-document-evidence", title.id],
+    queryFn: () => listTitleDocumentEvidence({ data: { titleId: title.id } }),
     enabled: Boolean(actor.internalRole) || actor.accountType !== "buyer",
   });
   const canFinance = canOperateOnTitle(actor, title, "title.read_own", "finance.read");
@@ -361,6 +367,8 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                             const checks = [
                               ["Ownership evidence reference recorded", Boolean(evidence?.ownershipReference?.trim())],
                               ["Agreement reference recorded", Boolean(evidence?.agreementReference?.trim())],
+                              ["Verified ownership / chain-of-title document", (documentEvidence.data?.evidence ?? []).some((item) => item.evidence_type === "OWNERSHIP_CHAIN_OF_TITLE")],
+                              ["Verified finished-film / distribution agreement", (documentEvidence.data?.evidence ?? []).some((item) => ["FINISHED_FILM_AGREEMENT", "DISTRIBUTION_AGREEMENT"].includes(item.evidence_type))],
                               ["NON-EXCLUSIVE terms recorded", selectedGrant.exclusivity === "NON_EXCLUSIVE"],
                               ["Revenue-share split recorded and totals 100%", validSplit],
                               ["Territory, language and validity window recorded", selectedGrant.territories.length > 0 && selectedGrant.languages.length > 0 && validWindow],
@@ -383,6 +391,17 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                                   <p>Agreement ref: {evidence?.agreementReference || "Not recorded"}</p>
                                   <p>Rights owner share: {typeof ownerShare === "number" && Number.isInteger(ownerShare) ? `${ownerShare}%` : "Not recorded"}</p>
                                   <p>Distributor share: {typeof distributorShare === "number" && Number.isInteger(distributorShare) ? `${distributorShare}%` : "Not recorded"}</p>
+                                </div>
+                                <div className="space-y-1 border-t border-line pt-2 text-xs">
+                                  <p className="font-semibold">Verified uploaded documents</p>
+                                  {documentEvidence.isPending ? <p className="text-muted">Loading document evidence…</p> : null}
+                                  {documentEvidence.isError ? <p role="alert" className="text-amber-600">Document evidence could not be verified. Legal approval is blocked until it can be checked.</p> : null}
+                                  {(documentEvidence.data?.evidence ?? []).map((item) => (
+                                    <p key={item.id} className="text-muted">{item.file_name} · {item.evidence_type.replaceAll("_", " ")}</p>
+                                  ))}
+                                  {!documentEvidence.isPending && !documentEvidence.isError && !documentEvidence.data?.evidence.length
+                                    ? <p className="text-muted">No verified documents linked to this title.</p>
+                                    : null}
                                 </div>
                                 <p className="text-xs font-medium" role="status">
                                   {checks.every(([, passed]) => passed)
@@ -409,7 +428,11 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                                     grantId: selectedGrant.id,
                                   },
                                 }),
-                              note.trim().length < 8,
+                              note.trim().length < 8 ||
+                                documentEvidence.isPending ||
+                                documentEvidence.isError ||
+                                !(documentEvidence.data?.evidence ?? []).some((item) => item.evidence_type === "OWNERSHIP_CHAIN_OF_TITLE") ||
+                                !(documentEvidence.data?.evidence ?? []).some((item) => ["FINISHED_FILM_AGREEMENT", "DISTRIBUTION_AGREEMENT"].includes(item.evidence_type)),
                             )}
                             {button(
                               "Reject",
