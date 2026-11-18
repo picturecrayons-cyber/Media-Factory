@@ -1,5 +1,5 @@
 -- Private, reusable Creator/Studio legal evidence vault.
--- Objects stay in the private OCI bucket; only verified immutable keys are retained.
+-- Objects stay in the private OCI bucket; only verified object keys are reusable evidence.
 create table if not exists public.bridge_creator_documents (
   id text primary key,
   owner_user_id text not null references public.bridge_profiles(user_id) on delete restrict,
