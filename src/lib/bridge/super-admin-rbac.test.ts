@@ -32,8 +32,8 @@ test("Super Admin RBAC governance reports separate policy matrices without query
   assert.equal(result.internalRoles[0].role, "admin");
   assert.ok(result.internalRoles[1].permissions.includes("audit.read"));
   assert.ok(result.accountTypes.find((row) => row.accountType === "buyer")?.permissions.includes("payment.create_order"));
-  assert.equal(result.assignments, "NOT_QUERIED");
-  assert.equal(result.mutationControls, "NOT_IMPLEMENTED");
+  assert.equal(result.assignments, "AVAILABLE_IN_SEPARATE_LIVE_INVENTORY");
+  assert.match(result.mutationControls, /FEATURE_FLAG_GATED/);
 });
 
 test("non-Super Admin staff cannot inspect privileged RBAC governance", async () => {
