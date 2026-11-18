@@ -4,6 +4,7 @@ import { useState } from "react";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { getSuperAdminRbacGovernance, listSuperAdminRoleAssignments, updateSuperAdminRoleAssignment } from "@/lib/bridge/super-admin-rbac";
+import type { InternalRole } from "@/lib/bridge/types";
 
 export const Route = createFileRoute("/rbac-governance")({ component: RbacGovernance });
 
@@ -106,7 +107,7 @@ function RbacGovernanceBody({ currentUserId }: { currentUserId: string }) {
                      <option value="none">No internal role</option>
                      {data.internalRoles.filter(r=>r.role!=="super_admin").map(r=><option key={r.role} value={r.role}>{r.role.replaceAll("_"," ")}</option>)}
                     </select></td>
-                    <td className="px-4 py-3"><button type="button" disabled={disabled||draft===current} onClick={()=>roleMutation.mutate({userId:profile.userId,role:draft==="none"?null:draft},{onSuccess:()=>setDraftRoles(v=>({...v,[profile.userId]:draft}))})} className="rounded-full border border-line px-3 py-2 text-xs font-semibold disabled:opacity-40">Save role</button>{protectedProfile?<p className="mt-1 text-[10px] text-muted">Protected</p>:null}</td>
+                    <td className="px-4 py-3"><button type="button" disabled={disabled||draft===current} onClick={()=>roleMutation.mutate({userId:profile.userId,role:draft==="none"?null:draft as InternalRole},{onSuccess:()=>setDraftRoles(v=>({...v,[profile.userId]:draft}))})} className="rounded-full border border-line px-3 py-2 text-xs font-semibold disabled:opacity-40">Save role</button>{protectedProfile?<p className="mt-1 text-[10px] text-muted">Protected</p>:null}</td>
                    </tr>;
                   })}
                  </tbody>
