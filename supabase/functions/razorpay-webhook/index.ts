@@ -121,6 +121,11 @@ Deno.serve(async (req: Request) => {
         .eq("provider_order_id", payment.order_id).maybeSingle();
       if (lookupError) return await failEvent(supabase, id, "Bridge payment lookup failed");
       if (localPayment) surface = "bridge";
+      if (!localPayment && surface === "unknown") {
+        const { data: loopOrder } = await supabase.from("loop_tvod_orders")
+          .select("id").eq("provider_order_id", payment.order_id).maybeSingle();
+        if (loopOrder) surface = "loop";
+      }
 
       if (surface === "bridge") {
         if (!localPayment) return await failEvent(supabase, id, "Bridge order not persisted yet");
