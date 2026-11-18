@@ -336,6 +336,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                               new Date(selectedGrant.window_end) > new Date(selectedGrant.window_start) &&
                               new Date(selectedGrant.window_end) > new Date();
                             const checks = [
+                              ["Studio submission declaration recorded when required", title.ownerAccountType !== "studio" || evidence?.studioDeclaration?.accepted === true],
                               ["Ownership evidence reference recorded", Boolean(evidence?.ownershipReference?.trim())],
                               ["Agreement reference recorded", Boolean(evidence?.agreementReference?.trim())],
                               ["NON-EXCLUSIVE terms recorded", selectedGrant.exclusivity === "NON_EXCLUSIVE"],
@@ -356,6 +357,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                                   ))}
                                 </ul>
                                 <div className="grid gap-1 border-t border-line pt-2 text-xs text-muted sm:grid-cols-2">
+                                  {title.ownerAccountType === "studio" ? <p>Studio declaration: {evidence?.studioDeclaration?.accepted ? `Accepted by ${evidence.studioDeclaration.submittedBy} · ${evidence.studioDeclaration.submittedAt}` : "Not recorded"}</p> : null}
                                   <p>Ownership ref: {evidence?.ownershipReference || "Not recorded"}</p>
                                   <p>Agreement ref: {evidence?.agreementReference || "Not recorded"}</p>
                                   <p>Rights owner share: {typeof ownerShare === "number" && Number.isInteger(ownerShare) ? `${ownerShare}%` : "Not recorded"}</p>
