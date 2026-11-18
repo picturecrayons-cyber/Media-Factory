@@ -119,15 +119,38 @@ function DashboardBody() {
           <h3 id="workspaces-heading" className="font-semibold">Business workspaces</h3>
           <p className="mt-1 text-xs text-muted">Executive overview stays here; detailed operational records remain in their dedicated workspaces.</p>
         </div>
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          <Workspace title="Titles & Media" description="Master title library, Creator/Studio submissions, assets, metadata and QC." to="/workspace" />
-          <Workspace title="Rights & Legal" description="Rights evidence, agreements, independent reviews and approval decisions." to="/admin/workstations" />
-          <Workspace title="Buyer Management" description="Independent Buyer accounts and their own licensing access." to="/buyer-management" />
-          <Workspace title="Services & Operations" description="Service operations, delivery and production control entry points." to="/admin/services" />
-          <Workspace title="Revenue & Finance" description="Buyer deals, captured payments, ledger and reconciliation work." to="/admin" />
-          <Workspace title="People & Access" description="Creator, Studio, Buyer and internal roles with controlled access." to="/admin/users" />
-          <Workspace title="Website & Loop Gateway" description="Bridge website CMS and separate Loop publication controls." to="/admin-cms" />
-          <Workspace title="Audit & Security" description="Read-only persisted audit history and security evidence." to="/admin/audit" />
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Workspace
+            title="Title Library"
+            description="Titles, Creator and Studio submissions, assets and metadata."
+            to="/workspace"
+          />
+          <Workspace
+            title="Operations & Approvals"
+            description="QC, rights, service operations and read-only audit."
+            to="/admin/workstations"
+            secondary={[
+              { label: "Services & Operations", to: "/admin/services" },
+              { label: "Audit & Security", to: "/admin/audit" },
+            ]}
+          />
+          <Workspace
+            title="Distribution & Revenue"
+            description="Distribution readiness, Buyer inventory, payments and reconciliation."
+            to="/internal"
+            secondary={[
+              { label: "Revenue & Finance", to: "/admin" },
+              { label: "Buyer Management", to: "/buyer-management" },
+            ]}
+          />
+          <Workspace
+            title="People & Website"
+            description="Creator, Studio and internal access, plus the Bridge website CMS."
+            to="/admin/users"
+            secondary={[
+              { label: "Website CMS", to: "/cms" },
+            ]}
+          />
         </div>
       </section>
 
@@ -157,17 +180,21 @@ function Workspace({
   title: string;
   description: string;
   to: string;
-  secondary?: { label: string; to: string };
+  secondary?: { label: string; to: string }[];
 }) {
   return (
     <article className="flex items-center justify-between gap-3 rounded-sm border border-line px-4 py-4">
       <div className="min-w-0">
         <h4 className="font-semibold">{title}</h4>
         <p className="mt-1 text-xs leading-relaxed text-muted">{description}</p>
-        {secondary ? (
-          <Link to={secondary.to} className="mt-2 inline-block text-xs font-semibold text-muted hover:text-accent">
-            {secondary.label} →
-          </Link>
+        {secondary?.length ? (
+          <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1">
+            {secondary.map((item) => (
+              <Link key={item.to} to={item.to} className="text-xs font-semibold text-muted hover:text-accent">
+                {item.label} →
+              </Link>
+            ))}
+          </div>
         ) : null}
       </div>
       <Link to={to} className="shrink-0 text-sm font-semibold text-accent hover:underline">Open →</Link>
