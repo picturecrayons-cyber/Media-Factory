@@ -94,6 +94,7 @@
 |---|---|---:|---|
 | 20261118100000 | bridge_production_schedule_20261118 | 1863 | `2c00e3129b860c99485a97453018ffa1397399f9d429c13992fb7e33a52609d3` |
 | 20261118110000 | bridge_studio_invites_and_owner_transfer_20261118 | 3077 | `b92976971e05edae1d02fc18381cdbb7e00a7789a5720f97edde0a9b982e6472` |
+| 20261118120000 | bridge_loop_projection_compat | 4144 | `017a12f5682e5fd8b3b271b267c96d0bd0b8b11cccdbeb3ad293871307012436` |
 
 These candidate migrations are checked for exact source integrity and replayed only in the disposable local CI database after the 69 recorded Production migrations. They are not counted as already-applied remote Production migrations.
 
