@@ -29,7 +29,7 @@ export type StudioStatementLine = {
 };
 
 function minorAmountOrNull(value: string | null): string | null {
-  if (value === null || !/^-?\\d+$/.test(value)) return null;
+  if (value === null || !/^-?\d+$/.test(value)) return null;
   try { return BigInt(value).toString(); } catch { return null; }
 }
 
