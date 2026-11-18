@@ -314,7 +314,7 @@ export const getAuthorizedLoopPlayback = createServerFn({ method: "GET" })
       select l.id,l.playback_path,l.access_tier
       from loop_titles l
       join bridge_loop_publications p on p.loop_title_id=l.id and p.bridge_title_id=l.bridge_title_id
-      where l.id=${data.loopTitleId}::uuid
+      where l.id::text=${data.loopTitleId}
         and l.status='approved' and l.listed=true and l.published=true
         and p.authorization_status='authorized' and p.revoked_at is null
         and p.approved_at is not null
