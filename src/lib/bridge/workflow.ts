@@ -37,7 +37,19 @@ export async function saveLoopLicense(
     )
   )
     throw new Error("Forbidden");
-  if (new Date(data.windowEnd) <= new Date()) throw new Error("License window has expired");
+  const windowStart = new Date(data.windowStart);
+  const windowEnd = new Date(data.windowEnd);
+  if (windowEnd <= new Date()) throw new Error("License window has expired");
+  if (actor.internalRole !== "super_admin") {
+    const maximumEnd = new Date(windowStart);
+    maximumEnd.setUTCFullYear(maximumEnd.getUTCFullYear() + 5);
+    if (windowEnd > maximumEnd) {
+      throw new Error("Creator/Studio submissions are limited to the default five-year Bridge term; Super Admin may approve a longer term.");
+    }
+    if (data.rightsOwnerSharePct !== 50 || data.distributorSharePct !== 50) {
+      throw new Error("The default revenue split is 50:50. Only Super Admin may approve a different split.");
+    }
+  }
   const [grant] = await tx<{ id: string }>`insert into bridge_rights_grants
     (title_id,grant_type,territories,languages,media,window_start,window_end,exclusivity,evidence,status,created_by)
     values (${data.titleId},'DISTRIBUTION',${JSON.stringify(data.territories)}::jsonb,${JSON.stringify(data.languages)}::jsonb,
