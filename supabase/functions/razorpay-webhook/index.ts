@@ -242,6 +242,61 @@ Deno.serve(async (req: Request) => {
       }
     }
 
+    if (surface === "loop" && eventName === "payment.captured") {
+      if (!payment?.id || !payment.order_id || String(payment.status ?? "").toLowerCase() !== "captured") {
+        return await failEvent(supabase, id, "Loop capture is missing verified Razorpay payment identifiers");
+      }
+      const { data: rentalOrder, error: rentalLookupError } = await supabase.from("loop_tvod_orders")
+        .select("id,provider_order_id,provider_payment_id,user_id,loop_title_id,amount_paise,currency,status,captured_at")
+        .eq("provider_order_id", payment.order_id).maybeSingle();
+      if (rentalLookupError || !rentalOrder) {
+        return await failEvent(supabase, id, "Loop TVOD order was not persisted before capture");
+      }
+      if (rentalOrder.provider_payment_id && rentalOrder.provider_payment_id !== payment.id) {
+        return await failEvent(supabase, id, "Loop TVOD order is already linked to another payment");
+      }
+      const providerAmount = Number(payment.amount);
+      const providerCurrency = String(payment.currency ?? "").toUpperCase();
+      if (!Number.isSafeInteger(providerAmount) || providerAmount !== Number(rentalOrder.amount_paise)) {
+        return await failEvent(supabase, id, "Loop TVOD payment amount mismatch");
+      }
+      if (providerCurrency !== String(rentalOrder.currency ?? "").toUpperCase() || providerCurrency !== "INR") {
+        return await failEvent(supabase, id, "Loop TVOD payment currency mismatch");
+      }
+      const noteTitleId = payment.notes?.titleId;
+      const noteUserId = payment.notes?.userId;
+      if ((noteTitleId && noteTitleId !== rentalOrder.loop_title_id) ||
+          (noteUserId && noteUserId !== rentalOrder.user_id)) {
+        return await failEvent(supabase, id, "Loop TVOD order notes do not match the persisted buyer/title mapping");
+      }
+      if (rentalOrder.status === "refunded" || rentalOrder.status === "failed") {
+        return await failEvent(supabase, id, "Loop TVOD order is no longer fulfillable");
+      }
+      if (rentalOrder.status !== "fulfilled") {
+        const capturedAt = rentalOrder.captured_at ?? new Date().toISOString();
+        const { data: capturedOrder, error: captureError } = await supabase.from("loop_tvod_orders")
+          .update({
+            status: "captured",
+            provider_payment_id: payment.id,
+            captured_at: capturedAt,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", rentalOrder.id)
+          .neq("status", "refunded")
+          .select("id").maybeSingle();
+        if (captureError || !capturedOrder) {
+          return await failEvent(supabase, id, "Loop TVOD captured payment could not be persisted");
+        }
+      }
+      const { data: fulfillment, error: fulfillmentError } = await supabase.rpc("loop_fulfill_captured_rental", {
+        p_order_id: payment.order_id,
+        p_payment_id: payment.id,
+      });
+      if (fulfillmentError || !fulfillment) {
+        return await failEvent(supabase, id, "Loop TVOD entitlement fulfillment was rejected; manual reconciliation required");
+      }
+    }
+
     const { error: doneError } = await supabase.from("bridge_webhook_events").update({
       status: "processed", processed_at: new Date().toISOString(),
       processing_token: null, processing_started_at: null,
