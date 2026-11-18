@@ -176,8 +176,8 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
             .filter(Boolean),
           exploitationModels: [model],
           accessTier: "TVOD",
-          windowStart: windowStart ? new Date(windowStart).toISOString() : null,
-          windowEnd: windowEnd ? new Date(windowEnd).toISOString() : null,
+          windowStart: windowStart ? new Date(windowStart).toISOString() : "",
+          windowEnd: windowEnd ? new Date(windowEnd).toISOString() : "",
           commercialTerms: {
             rightsOwnerSharePct: Number(rightsOwnerShare) || 0,
             distributorSharePct: Number(distributorShare) || 0,
@@ -453,7 +453,7 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
           <div className="flex items-center gap-3 pt-2">
             <Button
               type="button"
-              disabled={publishMut.isPending}
+              disabled={publishMut.isPending || !selectedTitleId || !territories.trim() || !languages.trim() || !windowStart || !windowEnd || new Date(windowEnd) <= new Date(windowStart)}
               onClick={() => publishMut.mutate(selectedTitleId)}
               className="rounded-full px-5 text-xs font-semibold"
             >
