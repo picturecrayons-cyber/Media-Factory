@@ -78,6 +78,110 @@ async function claimLegacyCreatorIntake(sql: Sql, email: string, bridgeUserId: s
   return { claimed: updated.length > 0, titleCount: updated.length, reason: updated.length ? "claimed" as const : "no_unclaimed_titles" as const };
 }
 
+async function acceptStudioInvitation(sql: Sql, bridgeUserId: string, email: string, token: string) {
+  const hash = createHash("sha256").update(token).digest("hex");
+  const invites = await sql<{
+    id: string;
+    organization_id: string;
+    email: string;
+    membership_role: string;
+    invited_by: string;
+    expires_at: string;
+    accepted_at: string | null;
+    revoked_at: string | null;
+    organization_name: string;
+  }>`
+    select i.id, i.organization_id::text as organization_id, i.email,
+      i.membership_role, i.invited_by, i.expires_at, i.accepted_at,
+      i.revoked_at, o.legal_name as organization_name
+    from bridge_studio_invites i
+    join bridge_organizations o on o.id = i.organization_id and o.status = 'active'
+    where i.token_hash = ${hash}
+    for update of i
+  `;
+  const invite = invites[0];
+  if (!invite || invite.accepted_at || invite.revoked_at || new Date(invite.expires_at) <= new Date()) {
+    throw new Error("Studio invitation is invalid, expired or already used");
+  }
+  if (invite.email.trim().toLowerCase() !== email.trim().toLowerCase()) {
+    throw new Error("Studio invitation email does not match this verified account");
+  }
+
+  const profiles = await sql<{ account_type: string; organization_id: string | null }>`
+    select account_type, organization_id::text as organization_id
+    from bridge_profiles
+    where user_id = ${bridgeUserId}
+    for update
+  `;
+  const profile = profiles[0];
+  if (!profile || profile.account_type !== "studio") {
+    throw new Error("A verified Studio account is required to accept this invitation");
+  }
+  if (profile.organization_id && profile.organization_id !== invite.organization_id) {
+    throw new Error("This Studio account is already bound to a different organization");
+  }
+
+  const otherActive = await sql<{ organization_id: string }>`
+    select organization_id::text as organization_id
+    from bridge_organization_memberships
+    where user_id = ${bridgeUserId}
+      and status = 'active'
+      and organization_id <> ${invite.organization_id}::uuid
+    limit 1
+  `;
+  if (otherActive.length > 0) {
+    throw new Error("This account already has an active Studio membership in another organization");
+  }
+
+  const priorMembership = await sql<{ status: string; membership_role: string }>`
+    select status, membership_role
+    from bridge_organization_memberships
+    where organization_id = ${invite.organization_id}::uuid and user_id = ${bridgeUserId}
+    for update
+  `;
+  if (priorMembership[0] && priorMembership[0].status !== "invited") {
+    throw new Error("This account already has a membership record. Ask the Studio owner to review its status");
+  }
+
+  await sql`
+    update bridge_profiles
+    set organization_id = ${invite.organization_id}::uuid,
+        organization_name = ${invite.organization_name},
+        updated_at = now()
+    where user_id = ${bridgeUserId} and account_type = 'studio'
+  `;
+  await sql`
+    insert into bridge_organization_memberships
+      (organization_id, user_id, membership_role, status, created_by)
+    values (
+      ${invite.organization_id}::uuid, ${bridgeUserId},
+      ${invite.membership_role}, 'active', ${invite.invited_by}
+    )
+    on conflict (organization_id, user_id) do update
+      set membership_role = excluded.membership_role, status = 'active', updated_at = now()
+      where bridge_organization_memberships.status = 'invited'
+  `;
+  const accepted = await sql<{ id: string }>`
+    update bridge_studio_invites
+    set accepted_by = ${bridgeUserId}, accepted_at = now()
+    where id = ${invite.id}::uuid
+      and accepted_at is null and revoked_at is null and expires_at > now()
+    returning id
+  `;
+  if (!accepted[0]) throw new Error("Studio invitation could not be accepted");
+  await writeAudit({
+    actorUserId: bridgeUserId,
+    action: "studio.invitation_accepted",
+    entityType: "bridge_studio_invite",
+    entityId: invite.id,
+    metadata: {
+      organizationId: invite.organization_id,
+      membershipRole: invite.membership_role,
+      invitedBy: invite.invited_by,
+    },
+  }, sql);
+}
+
 async function persistSupabaseIdentityLink(sql: Sql, bridgeUserId: string, authUserId: string) {
   const identities = await sql<{ email: string; display_name: string; auth_email: string }>`
     select bp.email, bp.display_name, au.email as auth_email
@@ -179,6 +283,7 @@ export const completeOnboarding = createServerFn({ method: "POST" })
       accountType: z.enum(ACCOUNT_TYPES),
       organizationName: z.string().max(120).optional(),
       inviteToken: z.string().optional(),
+      studioInviteToken: z.string().min(32).optional(),
     }),
   )
   .handler(async ({ context, data }) => {
@@ -189,10 +294,15 @@ export const completeOnboarding = createServerFn({ method: "POST" })
     if (existing) {
       const email = context.userEmail || existing.email;
       await sql.transaction(async (tx) => {
+        if (data.studioInviteToken) {
+          await acceptStudioInvitation(tx, existing.userId, email, data.studioInviteToken);
+        }
         await persistSupabaseIdentityLink(tx, existing.userId, context.userId);
         await claimLegacyCreatorIntake(tx, email, existing.userId);
       });
-      return { home: workspaceHome(existing), profile: existing };
+      const updated = await loadActor(context.userId);
+      if (!updated) throw new Error("Studio invitation was accepted but the Bridge profile could not be reloaded");
+      return { home: workspaceHome(updated), profile: updated };
     }
 
     // Investor access is granted only after a reviewed access request. Enforce
@@ -204,13 +314,19 @@ export const completeOnboarding = createServerFn({ method: "POST" })
     const email = context.userEmail;
     if (!email) throw new Error("Account email is required from Supabase session");
     const verified = true;
+    if (data.studioInviteToken && data.accountType !== "studio") {
+      throw new Error("A Studio invitation must be accepted into a Studio account");
+    }
+    if (data.studioInviteToken && data.inviteToken) {
+      throw new Error("A Studio invitation cannot be combined with an internal-role invitation");
+    }
 
     // Email uniqueness is a safety boundary, not an ownership signal. If this
     // authenticated identity is not already directly/explicitly linked, never
     // adopt an existing profile merely because the mailbox matches.
     const org =
       data.accountType === "independent_creator" ? null : (data.organizationName ?? "").trim() || null;
-    if (data.accountType !== "independent_creator" && !org) {
+    if (data.accountType !== "independent_creator" && !org && !data.studioInviteToken) {
       throw new Error("Organization name is required");
     }
 
@@ -297,7 +413,9 @@ export const completeOnboarding = createServerFn({ method: "POST" })
           `;
         }
 
-        if (data.accountType === "studio" && !internalRole) {
+        if (data.studioInviteToken) {
+          await acceptStudioInvitation(tx, bridgeUserId, email, data.studioInviteToken);
+        } else if (data.accountType === "studio" && !internalRole) {
           // Create a canonical organization for this new Studio identity. The
           // display name is metadata only; it is never used to join memberships.
           const normalizedOrgName = (org ?? "")
