@@ -81,6 +81,8 @@ function StorageBody() {
                 <Metric label="Versioning" value={overviewQ.data.providerHealth.primary?.versioning ?? "Not returned"} />
                 <Metric label="Object events" value={overviewQ.data.providerHealth.primary?.objectEventsEnabled == null ? "Not returned" : String(overviewQ.data.providerHealth.primary?.objectEventsEnabled)} />
                 <Metric label="Recovery bucket" value={overviewQ.data.providerHealth.recovery.status === "AVAILABLE" ? overviewQ.data.providerHealth.recovery.bucketName ?? "Available" : overviewQ.data.providerHealth.recovery.status} />
+                <Metric label="Provider object count" value={overviewQ.data.providerHealth.primary?.approximateObjectCount == null ? "Not returned" : overviewQ.data.providerHealth.primary.approximateObjectCount.toLocaleString("en-IN")} />
+                <Metric label="Provider bucket size" value={overviewQ.data.providerHealth.primary?.approximateSizeBytes == null ? "Not returned" : formatBytes(overviewQ.data.providerHealth.primary.approximateSizeBytes)} />
               </div>
             ) : (
               <p className="mt-3 text-sm text-muted">{overviewQ.data?.providerHealth.reason ?? "OCI provider health is unavailable."}</p>
