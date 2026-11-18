@@ -10,7 +10,7 @@ test("INR statement amounts preserve paise and Indian digit grouping", () => {
 test("large minor-unit amounts remain exact beyond Number safe integer range", () => {
   assert.equal(
     formatCreatorStatementAmount("900719925474099312345", "INR"),
-    "₹9,00,71,99,25,47,40,99,312.45",
+    "₹90,07,19,92,54,74,09,93,123.45",
   );
 });
 
