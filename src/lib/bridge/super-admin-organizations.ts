@@ -101,10 +101,10 @@ export const createSuperAdminOrganizationInvite = createServerFn({method:"POST"}
       const rows=await tx<{id:string;expires_at:string|Date}>`
         insert into private.bridge_organization_invites
           (organization_id,invitee_email,membership_role,token_hash,invited_by,expires_at)
-        values (${data.organizationId}::uuid,${data.email.trim().toLowerCase()},${data.role},${tokenHash},${context.userId},now()+interval '7 days')
+        values (${data.organizationId}::uuid,${data.email.trim().toLowerCase()},${data.role},${tokenHash},${actor.userId},now()+interval '7 days')
         returning id,expires_at
       `;
-      await writeAudit({actorUserId:context.userId,action:"organization.invite_created",entityType:"bridge_organization_invite",entityId:rows[0].id,metadata:{organizationId:data.organizationId,role:data.role,inviteeEmail:data.email.trim().toLowerCase(),emailSent:false}},tx);
+      await writeAudit({actorUserId:actor.userId,action:"organization.invite_created",entityType:"bridge_organization_invite",entityId:rows[0].id,metadata:{organizationId:data.organizationId,role:data.role,inviteeEmail:data.email.trim().toLowerCase(),emailSent:false}},tx);
       return rows[0];
     });
     return {inviteId:created.id,inviteToken:token,expiresAt:created.expires_at instanceof Date?created.expires_at.toISOString():String(created.expires_at),emailSent:false};
@@ -135,7 +135,7 @@ export const acceptSuperAdminOrganizationInvite = createServerFn({method:"POST"}
       const orgs=await tx<{id:string}>`select id from bridge_organizations where id=${invite.organization_id}::uuid and status='active' limit 1`;
       if(!orgs[0]) throw new Error("Organization is not active");
       const membership = await tx<{ user_id: string }>`insert into bridge_organization_memberships(organization_id,user_id,membership_role,status,created_by)
-        values(${invite.organization_id}::uuid,${actor.userId},${invite.membership_role},'active',${context.userId})
+        values(${invite.organization_id}::uuid,${actor.userId},${invite.membership_role},'active',${actor.userId})
         on conflict(organization_id,user_id) do nothing returning user_id`;
       if (!membership[0]) throw new Error("A membership already exists for this account; ask an administrator to review it");
       await tx`update bridge_profiles set organization_id=${invite.organization_id}::uuid,updated_at=now() where user_id=${actor.userId}`;
@@ -171,7 +171,7 @@ export const updateSuperAdminOrganizationMembership = createServerFn({method:"PO
         await tx`update bridge_profiles set organization_id=null,updated_at=now()
           where user_id=${data.userId} and organization_id=${data.organizationId}::uuid`;
       }
-      await writeAudit({actorUserId:context.userId,action:"organization.membership_changed",entityType:"bridge_organization_membership",entityId:data.userId,metadata:{organizationId:data.organizationId,fromRole:current.membership_role,toRole:data.role,fromStatus:current.status,toStatus:data.status,evidenceReference:data.evidenceReference,evidenceVerified:false}},tx);
+      await writeAudit({actorUserId:actor.userId,action:"organization.membership_changed",entityType:"bridge_organization_membership",entityId:data.userId,metadata:{organizationId:data.organizationId,fromRole:current.membership_role,toRole:data.role,fromStatus:current.status,toStatus:data.status,evidenceReference:data.evidenceReference,evidenceVerified:false}},tx);
     });
     return {updated:true,evidenceVerified:false};
   });
