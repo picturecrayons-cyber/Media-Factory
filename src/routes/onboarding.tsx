@@ -102,6 +102,7 @@ function Onboarding() {
   const [displayName, setDisplayName] = useState("");
   const [accountType, setAccountType] = useState<PublicAccountType>("independent_creator");
   const [organizationName, setOrganizationName] = useState("");
+  const [mandateAccepted, setMandateAccepted] = useState(false);
 
   const [titleName, setTitleName] = useState("");
   const [originalTitle, setOriginalTitle] = useState("");
@@ -244,7 +245,7 @@ function Onboarding() {
           accountType,
           organizationName: accountType === "studio" ? organizationName.trim() : undefined,
           inviteToken,
-          creatorMandateAccepted: accountType === "independent_creator" || accountType === "studio",
+          creatorMandateAccepted: accountType === "independent_creator" || accountType === "studio" ? mandateAccepted : undefined,
         },
       });
       try { sessionStorage.removeItem("bridge-invite"); } catch { /* ignore */ }
@@ -290,6 +291,7 @@ function Onboarding() {
           accountType,
           organizationName: accountType === "studio" ? organizationName.trim() : undefined,
           inviteToken,
+          creatorMandateAccepted: accountType === "independent_creator" || accountType === "studio" ? mandateAccepted : undefined,
         },
       });
 
@@ -381,6 +383,25 @@ function Onboarding() {
           ) : null}
         </section>
 
+          {accountType !== "buyer" ? (
+            <section className="space-y-3 rounded-2xl border border-line p-5">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <h2 className="font-display text-xl font-semibold">Multiplatform Distribution Mandate</h2>
+                  <p className="mt-1 text-xs text-muted">Default enabled after your one-time acceptance. Managed centrally in Crayons Bridge.</p>
+                </div>
+                <span className="rounded-full border border-line px-3 py-1 text-xs font-semibold">DEFAULT ON</span>
+              </div>
+              <p className="text-sm leading-relaxed text-muted">
+                You authorize Bridge to administer distribution requests for Crayons Loop, external OTT, broadcast/TV, TVOD/EST, FAST, festival/educational and buyer delivery within your recorded scope. Each title still needs its own rights evidence, territory, language, media, time window and independent Legal approval. This mandate does not transfer ownership or automatically approve a title.
+              </p>
+              <p className="text-sm text-muted">Sublicensing is OFF by default. It is permitted only when both this mandate and the individual title's approved rights grant explicitly allow it.</p>
+              <label className="flex items-start gap-3 rounded-xl border border-line bg-elevated p-4 text-sm">
+                <input required type="checkbox" checked={mandateAccepted} onChange={(e) => setMandateAccepted(e.target.checked)} className="mt-0.5 accent-current" />
+                <span>I have read and accept the Creator Distribution Mandate (version 1). I understand I can manage or revoke it and that title-level approvals remain separate.</span>
+              </label>
+            </section>
+          ) : null}
         {accountType === "buyer" ? (
           <section className="rounded-2xl border border-line bg-elevated p-5">
             <h2 className="font-display text-xl font-semibold">Buyer access</h2>

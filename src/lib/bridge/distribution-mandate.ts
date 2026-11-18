@@ -5,13 +5,13 @@ export const DISTRIBUTION_MANDATE_VERSION = 1 as const;
 export const DISTRIBUTION_MANDATE_DEFAULTS = {
   enabled: true,
   destinations: [
-    "CRAYONS_LOOP",
-    "EXTERNAL_OTT",
-    "BROADCAST_TV",
-    "TVOD_EST",
+    "Crayons Loop",
+    "External OTT",
+    "Broadcast / TV",
+    "TVOD / EST",
     "FAST",
-    "FESTIVAL_EDUCATIONAL",
-    "BUYER_DELIVERY",
+    "Festival / Educational",
+    "Buyer delivery",
   ],
   media: ["SVOD", "TVOD", "AVOD", "FAST", "BROADCAST", "THEATRICAL", "AIRLINE", "EDUCATIONAL", "FESTIVAL"],
   sublicensingAllowed: false,
@@ -49,4 +49,11 @@ export function canSublicenseWithinMandate(
   titleGrantAllowsSublicensing: boolean,
 ): boolean {
   return mandate.enabled && titleGrantAllowsSublicensing && mandate.sublicensingAllowed;
+}
+
+export function isMediaCovered(
+  mandate: CreatorDistributionMandate,
+  requestedMedia: readonly string[],
+): boolean {
+  return requestedMedia.every((medium) => mandate.media.includes(medium));
 }
