@@ -25,7 +25,8 @@ export function findForeignTitleFilenameMatch(
   currentTitleId: string,
   candidates: TitleFilenameCandidate[],
 ): TitleFilenameCandidate | null {
-  const fileToken = normalizedTitleToken(filename);
+  const basename = filename.split(/[\\/]/).pop() ?? filename;
+  const fileToken = normalizedTitleToken(basename);
   if (!fileToken) return null;
   for (const candidate of candidates) {
     if (candidate.id === currentTitleId) continue;
