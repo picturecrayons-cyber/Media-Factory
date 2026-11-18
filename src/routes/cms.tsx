@@ -212,6 +212,8 @@ function LicensingDesk({ titles }: { titles: Array<any> }) {
 }
 
 function PublishingDesk({ publications }: { publications: Array<any> }) {
+  const candidates = publications.filter((item) => item.ready || item.publication?.published);
+  const blocked = publications.filter((item) => !item.ready && !item.publication?.published);
   return (
     <section className="rounded-3xl border border-line bg-surface p-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -220,56 +222,68 @@ function PublishingDesk({ publications }: { publications: Array<any> }) {
             Publishing desk
           </p>
           <h3 className="mt-1 font-display text-2xl font-semibold">
-            Crayons Loop authorization queue
+            Crayons Loop publishing
           </h3>
           <p className="mt-2 text-sm text-muted">
-            Publication remains gated by active rights coverage, title status and required
-            master/artwork readiness.
+            Only certified candidates are shown first. Blocked titles stay collapsed until you choose to review them.
           </p>
         </div>
         <Link to="/internal">
           <Button>Open distribution controls</Button>
         </Link>
       </div>
+
+      <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <div className="rounded-xl border border-line p-3">
+          <p className="text-xs text-muted">Live in Loop</p>
+          <p className="mt-1 text-2xl font-semibold">{publications.filter((item) => item.publication?.published).length}</p>
+        </div>
+        <div className="rounded-xl border border-line p-3">
+          <p className="text-xs text-muted">Ready to publish</p>
+          <p className="mt-1 text-2xl font-semibold">{publications.filter((item) => item.ready && !item.publication?.published).length}</p>
+        </div>
+        <div className="rounded-xl border border-line p-3 col-span-2 sm:col-span-1">
+          <p className="text-xs text-muted">Needs review</p>
+          <p className="mt-1 text-2xl font-semibold">{blocked.length}</p>
+        </div>
+      </div>
+
       <div className="mt-5 space-y-3">
-        {publications.map((item) => (
-          <article key={item.id} className="rounded-2xl border border-line bg-elevated p-4">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <h4 className="font-semibold">{item.name}</h4>
-                <p className="mt-1 text-xs text-muted">
-                  {item.language} · {String(item.bridgeStatus).replaceAll("_", " ")}
-                </p>
-              </div>
-              <span className="rounded-full border border-line px-3 py-1 text-xs font-semibold">
-                {item.publication?.published ? "LIVE" : item.ready ? "READY" : "BLOCKED"}
-              </span>
+        {candidates.map((item) => (
+          <article key={item.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line p-4">
+            <div className="min-w-0">
+              <h4 className="truncate font-semibold">{item.name}</h4>
+              <p className="mt-1 text-xs text-muted">{item.language} · {String(item.bridgeStatus).replaceAll("_", " ")}</p>
             </div>
-            {!item.ready && item.blockers?.length ? (
-              <ul className="mt-3 space-y-1 text-xs text-muted">
-                {item.blockers.map((b: string) => (
-                  <li key={b}>• {b}</li>
-                ))}
-              </ul>
-            ) : null}
-            <div className="mt-3">
+            <div className="flex items-center gap-3">
+              <span className="text-xs font-semibold">{item.publication?.published ? "LIVE" : "READY"}</span>
               <Link to="/internal" className="text-sm font-semibold text-accent hover:underline">
-                {item.publication?.published
-                  ? "Manage publication"
-                  : item.ready
-                    ? "Authorize publication"
-                    : "Review blockers"}{" "}
-                →
+                {item.publication?.published ? "Manage" : "Authorize"} →
               </Link>
             </div>
           </article>
         ))}
-        {!publications.length ? (
-          <p className="py-8 text-center text-sm text-muted">
-            No publication candidates available.
-          </p>
-        ) : null}
+        {!candidates.length ? <p className="py-5 text-sm text-muted">No titles are certified for Loop publication yet.</p> : null}
       </div>
+
+      {blocked.length ? (
+        <details className="mt-5 rounded-xl border border-line">
+          <summary className="cursor-pointer px-4 py-3 text-sm font-semibold">
+            Review blocked titles ({blocked.length})
+          </summary>
+          <div className="divide-y divide-line">
+            {blocked.map((item) => (
+              <article key={item.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium">{item.name}</p>
+                  <p className="mt-1 text-xs text-muted">{item.blockers?.length ?? 0} outstanding checks · {String(item.bridgeStatus).replaceAll("_", " ")}</p>
+                </div>
+                <Link to="/workspace" className="shrink-0 text-sm font-semibold text-accent hover:underline">Review →</Link>
+              </article>
+            ))}
+          </div>
+        </details>
+      ) : null}
     </section>
   );
 }
