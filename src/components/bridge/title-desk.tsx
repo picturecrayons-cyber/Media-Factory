@@ -29,6 +29,7 @@ export function TitleList({ empty, query = "", canDelete = false }: { empty: str
   }
   if (!titles.length) return <p className="text-sm text-muted">{empty}</p>;
   return (
+    <>
     <ul className="divide-y divide-line rounded-sm border border-line">
       {titles.map((t) => (
         <li key={t.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
@@ -46,7 +47,7 @@ export function TitleList({ empty, query = "", canDelete = false }: { empty: str
           </Link>
           <div className="flex shrink-0 items-center gap-3">
             <StatusChip status={t.status} />
-            {canDelete ? <Button type="button" variant="outline" className="rounded-full" onClick={() => setDeleteTarget({ id: t.id, name: t.name })}>Delete review</Button> : null}
+            {canDelete && t.status === "DRAFT" ? <Button type="button" variant="outline" className="rounded-full" onClick={() => setDeleteTarget({ id: t.id, name: t.name })}>Delete draft</Button> : null}
           </div>
         </li>
       ))}
@@ -55,7 +56,7 @@ export function TitleList({ empty, query = "", canDelete = false }: { empty: str
       <div role="dialog" aria-modal="true" aria-labelledby="title-delete-review-heading" className="mt-4 rounded-2xl border border-amber-500/40 bg-surface p-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h3 id="title-delete-review-heading" className="font-display text-lg font-semibold">Permanent deletion review</h3>
+            <h3 id="title-delete-review-heading" className="font-display text-lg font-semibold">Draft deletion review</h3>
             <p className="mt-1 text-sm text-muted">Title: {deleteTarget.name}</p>
           </div>
           <Button type="button" variant="outline" className="rounded-full" onClick={() => setDeleteTarget(null)}>Close</Button>
@@ -64,7 +65,7 @@ export function TitleList({ empty, query = "", canDelete = false }: { empty: str
         {deletionPreflight.isError ? <p role="alert" className="mt-4 text-sm text-accent">Preflight could not be completed. Deletion remains blocked. {deletionPreflight.error instanceof Error ? deletionPreflight.error.message : ""}</p> : null}
         {deletionPreflight.data ? (
           <div className="mt-4 space-y-3">
-            <p className="text-sm font-semibold text-amber-400">BLOCKED — permanent deletion is not available.</p>
+            <p className="text-sm font-semibold text-amber-400">BLOCKED — draft deletion is not available until draft-only dependencies and storage are verified.</p>
             <p className="text-xs text-muted">Schema-level dependencies are listed below. This check does not count live dependent rows or verify external obligations.</p>
             <ul className="list-disc space-y-1 pl-5 text-sm">
               {deletionPreflight.data.blockers.map((reason) => <li key={reason}>{reason}</li>)}
@@ -80,6 +81,7 @@ export function TitleList({ empty, query = "", canDelete = false }: { empty: str
         ) : null}
       </div>
     ) : null}
+    </>
   );
 }
 
