@@ -152,7 +152,7 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
   const [selectedTitleId, setSelectedTitleId] = useState<string>("");
   const [territories, setTerritories] = useState("IN");
   const [languages, setLanguages] = useState("Malayalam");
-  const [model] = useState<ExploitationModel>("TVOD");
+  const model: ExploitationModel = "TVOD";
   const [windowStart, setWindowStart] = useState("");
   const [windowEnd, setWindowEnd] = useState("");
   const [rightsOwnerShare, setRightsOwnerShare] = useState<string>("80");
