@@ -51,9 +51,9 @@ const verifyFileInput = z.object({
 const signoffInput = z.object({
   sessionId: z.string().uuid(),
   signoffNote: z.string().trim().min(8).max(2000),
-  folderStructurePreserved: z.literal(true),
-  originalFilenamesPreserved: z.literal(true),
-  cameraCardRetained: z.literal(true),
+  folderStructurePreserved: z.boolean(),
+  originalFilenamesPreserved: z.boolean(),
+  cameraCardRetained: z.boolean(),
 });
 
 type DitRoleRow = { membership_role: string };
@@ -510,6 +510,9 @@ export const signOffDitIngestSession = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
     const actor = await requireDitOperator(context.userId);
+    if (data.folderStructurePreserved !== true || data.originalFilenamesPreserved !== true || data.cameraCardRetained !== true) {
+      throw new Error("DIT sign-off requires all three operator attestations to be explicitly confirmed");
+    }
     const sql = await getSql();
     await sql.transaction(async (tx) => {
       const rows = await tx<SessionRow>`
