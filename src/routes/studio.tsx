@@ -6,6 +6,7 @@ import { MyStoryConcepts } from "@/components/bridge/my-story-concepts";
 import { NewSubmissionPanel } from "@/components/bridge/new-submission-panel";
 import { StudioMemberDesk } from "@/components/bridge/studio-member-desk";
 import { DitAgentDesk } from "@/components/bridge/dit-agent-desk";
+import { CreatorDocumentVault } from "@/components/bridge/creator-document-vault";
 
 export const Route = createFileRoute("/studio")({ component: Studio });
 
@@ -41,6 +42,7 @@ function Studio() {
               <a href="#studio-operations" className="rounded-sm border border-line p-4 hover:border-accent"><strong>Production & DIT</strong><p className="mt-1 text-sm text-muted">Production operations and media handover</p></a>
               <Link to="/account" className="rounded-sm border border-line p-4 hover:border-accent"><strong>Account</strong><p className="mt-1 text-sm text-muted">Studio account profile</p></Link>
               <a href="#studio-dit" className="rounded-sm border border-line p-4 hover:border-accent"><strong>DIT Agent</strong><p className="mt-1 text-sm text-muted">Camera-card manifest, checksum evidence and sign-off</p></a>
+              <a href="#studio-documents" className="rounded-sm border border-line p-4 hover:border-accent"><strong>Document Vault</strong><p className="mt-1 text-sm text-muted">Reusable private rights and ownership documents</p></a>
             </section>
 
             <section className="space-y-4">
@@ -60,6 +62,10 @@ function Studio() {
               <MyStoryConcepts />
             </section>
 
+
+            <section id="studio-documents" className="scroll-mt-20">
+              <CreatorDocumentVault />
+            </section>
 
             <section id="studio-members" className="space-y-3">
               <div>
