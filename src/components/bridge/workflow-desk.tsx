@@ -20,6 +20,11 @@ import type { BridgeActor } from "@/lib/bridge/session";
 import type { BridgeTitle } from "@/lib/bridge/types";
 
 const stages = ["Prepare", "Business", "Distribution", "Revenue"] as const;
+
+function toLocalDateTimeInput(value: Date) {
+  const local = new Date(value.getTime() - value.getTimezoneOffset() * 60_000);
+  return local.toISOString().slice(0, 16);
+}
 export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: BridgeActor }) {
   const [stage, setStage] = useState<(typeof stages)[number]>("Prepare");
   const [settlementRef, setSettlementRef] = useState("");
@@ -61,12 +66,17 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
     },
     onError: (e) => setError(e instanceof Error ? e.message : "Action failed"),
   });
-  const [start, setStart] = useState("");
-  const [end, setEnd] = useState("");
+  const [start, setStart] = useState(() => toLocalDateTimeInput(new Date()));
+  const [end, setEnd] = useState(() => {
+    const defaultEnd = new Date();
+    defaultEnd.setFullYear(defaultEnd.getFullYear() + 5);
+    return toLocalDateTimeInput(defaultEnd);
+  });
   const [exclusive, setExclusive] = useState(false);
   const [agreement, setAgreement] = useState("");
   const [ownership, setOwnership] = useState("");
-  const [ownerShare, setOwnerShare] = useState("");
+  const [ownerShare, setOwnerShare] = useState("50");
+  const isSuperAdmin = actor.internalRole === "super_admin";
   const [selectedGrantByAgreement, setSelectedGrantByAgreement] = useState<Record<string, string>>({});
   function downloadStatement() {
     const safe = (v: string) =>
@@ -212,8 +222,8 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
           {stage === "Business" ? (
             <div className="space-y-4">
               <details className="rounded-xl border border-line p-3">
-                <summary className="cursor-pointer text-sm font-semibold">＋ Create TVOD license draft</summary>
-                <p className="mt-2 text-xs text-muted">Worldwide · {title.language}. Legal evidence is required before review.</p>
+                <summary className="cursor-pointer text-sm font-semibold">＋ Submit TVOD distribution terms</summary>
+                <p className="mt-2 text-xs text-muted">Worldwide · {title.language} (from Creator submission). Default Bridge term: 5 years. Super Admin may adjust after rights review. Evidence is required before Legal approval.</p>
                 {canOperateOnTitle(actor, title, "title.update_own", "title.license") ? (
                   <form
                     className="mt-3 grid gap-3 sm:grid-cols-2"
@@ -237,11 +247,27 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                       );
                     }}
                   >
-                    {input("License starts", start, setStart, "datetime-local")}
-                    {input("License ends", end, setEnd, "datetime-local")}
+                    {isSuperAdmin ? (
+                      <>
+                        {input("License starts", start, setStart, "datetime-local")}
+                        {input("License ends", end, setEnd, "datetime-local")}
+                      </>
+                    ) : (
+                      <div className="rounded-lg border border-line p-3 text-sm sm:col-span-2">
+                        <p className="font-medium">Default 5-year Bridge license window</p>
+                        <p className="text-muted">{new Date(start).toLocaleDateString()} – {new Date(end).toLocaleDateString()}</p>
+                        <p className="mt-1 text-xs text-muted">Only Super Admin can change the proposed period. Final dates remain subject to verified ownership and agreement terms.</p>
+                      </div>
+                    )}
                     {input("Agreement reference", agreement, setAgreement)}
                     {input("Ownership evidence reference", ownership, setOwnership)}
-                    {input("Rights owner share (%)", ownerShare, setOwnerShare, "number")}
+                    {isSuperAdmin ? input("Creator / rights owner share (%)", ownerShare, setOwnerShare, "number") : (
+                      <div className="rounded-lg border border-line p-3 text-sm">
+                        <p className="font-medium">Default revenue split</p>
+                        <p>Creator / rights owner 50% · Crayons Bridge 50%</p>
+                        <p className="mt-1 text-xs text-muted">Only Super Admin can approve a different split.</p>
+                      </div>
+                    )}
                     <label className="flex items-center gap-2 text-sm">
                       <input
                         type="checkbox"
@@ -254,7 +280,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                       disabled={action.isPending || !start || !end || agreement.trim().length < 8 || ownership.trim().length < 8 || ownerShare === ""}
                       className="rounded-lg border border-line px-4 py-2 text-sm sm:col-span-2"
                     >
-                      {action.isPending ? "Saving…" : "Save draft"}
+                      {action.isPending ? "Submitting…" : "Save & Submit to Bridge"}
                     </button>
                   </form>
                 ) : null}
@@ -406,7 +432,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                   </section>
                 );
               })}
-              {!grants.length ? <p>No license draft recorded.</p> : null}
+              {!grants.length ? <p>No distribution submission recorded.</p> : null}
             </div>
           ) : null}
           {stage === "Distribution" ? (
@@ -481,7 +507,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
               ) : (
                 <>
                   <p>
-                    Captured rental receipts: {revenue.data?.receipts.length ?? 0}. Settlement
+                    Captured Loop TVOD receipts: {revenue.data?.receipts.length ?? 0}. Settlement
                     requires reconciliation of refunds, fees, tax and agreed terms; no payout is
                     implied.
                   </p>
@@ -499,7 +525,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                           <th>Payment</th>
                           <th>Date</th>
                           <th>Captured amount</th>
-                          <th>Gross producer share · reconciliation pending</th>
+                          <th>Gross rights-holder share · reconciliation pending</th>
                         </tr>
                       </thead>
                       <tbody>
