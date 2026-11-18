@@ -7,18 +7,19 @@ import { NewSubmissionPanel } from "@/components/bridge/new-submission-panel";
 import { StudioMemberDesk } from "@/components/bridge/studio-member-desk";
 import { DitAgentDesk } from "@/components/bridge/dit-agent-desk";
 import { StudioStatementDesk } from "@/components/bridge/studio-statement-desk";
+import { StudioFinancialActivityDesk } from "@/components/bridge/studio-financial-activity-desk";
 import { StudioScheduleDesk } from "@/components/bridge/studio-schedule-desk";
 
 export const Route = createFileRoute("/studio")({ component: Studio });
 
 const studioModules = [
   ["Organization", "Studio identity, verified organization scope and account owner.", "Organization scope is resolved from active membership. Contact Super Admin for membership corrections."],
-  ["Members & Roles", "Manage existing Studio member roles and access.", "Owner/admin role and status updates are audit-logged. New invitations and owner transfer remain disabled."],
+  ["Members & Roles", "Manage Studio membership, invitations and ownership.", "Existing-member role/status updates, email-bound invitations and two-party owner transfer are implemented. Actual invitation delivery and handover require a live verified account test."],
   ["Productions", "Coordinate active productions using canonical Studio-owned titles.", "Studio title and DIT ingest workflows are connected; a separate production schedule is not yet connected."],
   ["QC & Rights", "Track QC, Legal and Rights decisions before commercial release.", "Review decisions remain in the authoritative Admin QC / Legal / Rights workstations; title status alone is not approval."],
   ["Deliveries", "Track delivery jobs, assignments and approval.", "Open the shared Deliveries workspace for persisted jobs and server-authorized actions."],
   ["Schedule", "Coordinate title-linked production and delivery milestones.", "Persisted events are organization-scoped and each status change is audit-logged."],
-  ["Statements", "Review channel statements and their payment schedules.", "Read-only records show estimated, reported and reconciled amounts separately; a PAID status is not bank verification."],
+  ["Statements", "Review channel statements, commercial activity and payment schedules.", "Read-only source records are linked. Evidence-backed bank reconciliation, settlement approval and accounting certification remain outstanding."],
   ["Insights", "Review persisted Studio titles, ingest and delivery activity.", "Only verified database-backed activity is displayed. Audience and commercial analytics remain unconnected."],
   ["Help", "Get support with Studio onboarding and production workflows.", "Use the existing Bridge support channel."],
 ] as const;
@@ -66,7 +67,7 @@ function Studio() {
             <section id="studio-members" className="space-y-3">
               <div>
                 <h3 className="font-display text-xl font-semibold">Members & Roles</h3>
-                <p className="mt-1 text-sm text-muted">Manage existing memberships within this verified Studio organization. Owner transfer, new member invitations and restoration of removed users are disabled.</p>
+                <p className="mt-1 text-sm text-muted">Invite verified Studio accounts, manage existing roles and status, and complete owner handover with separate owner/admin approval.</p>
               </div>
               <StudioMemberDesk />
             </section>
@@ -88,12 +89,17 @@ function Studio() {
               <StudioScheduleDesk actor={actor} />
             </section>
 
-            <section id="studio-statements" className="space-y-3">
+            <section id="studio-statements" className="space-y-5">
               <div>
                 <h3 className="font-display text-xl font-semibold">Studio statements</h3>
                 <p className="mt-1 text-sm text-muted">Read-only channel statements and payment schedule records for this organization.</p>
               </div>
               <StudioStatementDesk />
+              <div className="border-t border-line pt-5">
+                <h3 className="font-display text-lg font-semibold">Commercial activity</h3>
+                <p className="mt-1 text-sm text-muted">Existing payments, ledger entries and contractual service-settlement records linked to Studio titles.</p>
+              </div>
+              <StudioFinancialActivityDesk />
             </section>
 
             <section id="studio-operations" className="space-y-3">
