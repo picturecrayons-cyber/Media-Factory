@@ -11,7 +11,7 @@ function OrganizationInvite(){
  return <RequireBridge allow="studio">{actor=><BridgeShell actor={actor} title="Studio organization invitation"><InviteBody token={token}/></BridgeShell>}</RequireBridge>;
 }
 function InviteBody({token}:{token:string}){
- const accept=useMutation({mutationFn:()=>acceptSuperAdminOrganizationInvite({data:{token}})});
+ const accept=useMutation({mutationFn:()=>acceptSuperAdminOrganizationInvite({data:{token}}),onSuccess:()=>{window.history.replaceState(null,"",window.location.pathname);}});
  return <section className="max-w-2xl rounded-2xl border border-line bg-surface p-5 sm:p-6">
   <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">Verified Studio account required</p>
   <h2 className="mt-2 font-display text-2xl font-semibold">Join an organization</h2>
