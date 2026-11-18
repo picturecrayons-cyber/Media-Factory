@@ -156,7 +156,7 @@ async function acceptStudioInvitation(sql: Sql, bridgeUserId: string, email: str
         updated_at = now()
     where user_id = ${bridgeUserId} and account_type = 'studio'
   `;
-  await sql`
+  const membership = await sql<{ user_id: string }>`
     insert into bridge_organization_memberships
       (organization_id, user_id, membership_role, status, created_by)
     values (
@@ -166,7 +166,11 @@ async function acceptStudioInvitation(sql: Sql, bridgeUserId: string, email: str
     on conflict (organization_id, user_id) do update
       set membership_role = excluded.membership_role, status = 'active', updated_at = now()
       where bridge_organization_memberships.status = 'invited'
+    returning user_id
   `;
+  if (!membership[0]) {
+    throw new Error("Studio membership changed while the invitation was being accepted; ask the owner to review and reissue the invitation");
+  }
   const accepted = await sql<{ id: string }>`
     update bridge_studio_invites
     set accepted_by = ${bridgeUserId}, accepted_at = now()
