@@ -336,7 +336,7 @@ function ProductionAssetsPanel({
 }) {
   const qc = useQueryClient();
   const saveLanguage = useMutation({
-    mutationFn: (nextLanguage: string) => updateTitle({ data: { id: titleId, masterLanguage: nextLanguage } }),
+    mutationFn: (nextLanguage: MasterLanguage | null) => updateTitle({ data: { id: titleId, masterLanguage: nextLanguage } }),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["bridge-title", titleId] });
     },
@@ -363,7 +363,7 @@ function ProductionAssetsPanel({
           id="bridge-master-language"
           value={masterLanguage ?? ""}
           disabled={locked || saveLanguage.isPending}
-          onChange={(event) => saveLanguage.mutate(event.target.value as MasterLanguage)}
+          onChange={(event) => saveLanguage.mutate(event.target.value === "" ? null : event.target.value as MasterLanguage)}
           className="mt-2 h-11 w-full rounded-lg border border-line-strong bg-elevated px-3"
         >
           <option value="">Select master language</option>
