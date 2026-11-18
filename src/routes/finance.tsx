@@ -30,6 +30,7 @@ function FinanceBody() {
   const recentSettlements = overviewQ.data?.recentSettlements ?? [];
   const invoices = overviewQ.data?.invoices;
   const ledger = overviewQ.data?.ledger;
+  const recentLedger = overviewQ.data?.recentLedger;
 
   return (
     <div className="space-y-6">
@@ -122,6 +123,23 @@ function FinanceBody() {
                 </tbody>
               </table>
             </div>
+          </section>
+
+          <section className="space-y-3">
+            <div><h3 className="font-display text-lg font-semibold">Recent accounting ledger entries</h3><p className="text-xs text-muted">Latest 100 redacted ledger records. Internal metadata, idempotency keys and user identifiers are excluded.</p></div>
+            {recentLedger?.status === "AVAILABLE" ? (
+              <div className="overflow-hidden rounded-2xl border border-line">
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[760px] text-left text-sm">
+                    <thead className="border-b border-line text-xs uppercase tracking-wider text-muted"><tr><th className="px-4 py-3">Title / entry</th><th className="px-4 py-3">Classification</th><th className="px-4 py-3">Reference</th><th className="px-4 py-3">Amount</th><th className="px-4 py-3">Recorded</th></tr></thead>
+                    <tbody className="divide-y divide-line">
+                      {recentLedger.rows.map(row=><tr key={row.reference}><td className="px-4 py-3"><p className="font-medium">{row.titleName??"Non-title entry"}</p><p className="mt-1 text-xs text-muted">{row.entryType.replaceAll("_"," ")}</p><p className="mt-1 font-mono text-[10px] text-muted">{row.reference}</p></td><td className="px-4 py-3">{row.classification}</td><td className="px-4 py-3 text-xs text-muted">{row.businessReference??"—"}</td><td className="px-4 py-3 tabular-nums">{formatMoney(row.amountPaise,row.currency)}</td><td className="px-4 py-3 text-xs text-muted">{formatDate(row.createdAt)}</td></tr>)}
+                      {!recentLedger.rows.length?<tr><td colSpan={5} className="px-4 py-8 text-center text-muted">No ledger entries were returned.</td></tr>:null}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ) : <p className="rounded-xl border border-line p-5 text-sm text-muted">Detailed ledger records are unavailable; ledger state is NOT VERIFIED.</p>}
           </section>
 
           <section className="space-y-3">
@@ -225,7 +243,7 @@ function FinanceBody() {
           <li>• Payment oversight does not grant Buyer checkout or order-creation privileges.</li>
           <li>• This page cannot verify, capture, refund or reverse a payment.</li>
           <li>• Customer entitlements remain separate from internal staff permissions.</li>
-          <li>• Invoice creation/voiding, bank reconciliation, journal posting and period close remain separate controls; this page only reads existing invoice and ledger rows.</li>
+          <li>• Invoices are created by the existing captured-service-payment flow; this page only reads issued records. Manual invoice corrections, bank statement matching, journal posting and period close remain separate controls.</li>
           <li>• No Razorpay API calls or live transactions are made by this page.</li>
           <li>• All data is fetched server-side after verified Super Admin authorization.</li>
         </ul>
