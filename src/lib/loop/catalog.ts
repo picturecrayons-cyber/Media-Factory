@@ -235,7 +235,14 @@ export const checkPlaybackEntitlement = createServerFn({ method: "GET" })
 
     // Check title access tier
     const titles = await sql<{ id: string; access_tier: string }>`
-      select id, access_tier from loop_titles where id = ${data.loopTitleId} limit 1
+      select l.id,l.access_tier
+      from loop_titles l
+      join bridge_loop_publications p on p.loop_title_id=l.id and p.bridge_title_id=l.bridge_title_id
+      where l.id=${data.loopTitleId} and l.status='approved' and l.listed=true and l.published=true
+        and p.authorization_status='authorized' and p.revoked_at is null
+        and (p.window_start is null or p.window_start<=now())
+        and (p.window_end is null or p.window_end>now())
+      limit 1
     `;
     const title = titles[0];
     if (!title) {
