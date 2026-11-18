@@ -1,28 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { listCreatorRoyalties } from "@/lib/bridge/creator-royalties";
 
-function formatMinorAmount(amount: string, currency: string) {
-  let minor: bigint;
-  try {
-    minor = BigInt(amount);
-  } catch {
-    return "Amount unavailable";
-  }
-  if (currency === "INR") {
-    const major = minor / 100n;
-    const fraction = (minor % 100n).toString().padStart(2, "0");
-    return `₹${new Intl.NumberFormat("en-IN", { maximumFractionDigits: 0 }).format(major)}.${fraction}`;
-  }
-  return `${minor.toString()} ${currency} minor units`;
-}
-
-function formatDate(value: string | null) {
-  if (!value) return "Not recorded";
-  const date = new Date(value);
-  return Number.isNaN(date.getTime())
-    ? "Not recorded"
-    : date.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
-}
+import { formatCreatorMinorAmount, formatCreatorRoyaltyDate } from "@/lib/bridge/creator-royalties-format";
 
 export function CreatorRoyaltiesDesk({ actorUserId }: { actorUserId: string }) {
   const query = useQuery({
@@ -67,13 +46,13 @@ export function CreatorRoyaltiesDesk({ actorUserId }: { actorUserId: string }) {
                   <p className="font-medium">{record.titleName}</p>
                   <p className="text-xs text-muted">{record.titleId}</p>
                 </td>
-                <td className="px-3 py-3 whitespace-nowrap">{formatMinorAmount(record.revenueReceivedMinor, record.currency)}</td>
-                <td className="px-3 py-3 whitespace-nowrap font-medium">{formatMinorAmount(record.creatorPayableMinor, record.currency)}</td>
+                <td className="px-3 py-3 whitespace-nowrap">{formatCreatorMinorAmount(record.revenueReceivedMinor, record.currency)}</td>
+                <td className="px-3 py-3 whitespace-nowrap font-medium">{formatCreatorMinorAmount(record.creatorPayableMinor, record.currency)}</td>
                 <td className="px-3 py-3">{record.status.replaceAll("_", " ")}</td>
                 <td className="px-3 py-3">{record.evidenceCount === null ? "Not structured" : `${record.evidenceCount} reference(s)`}</td>
                 <td className="px-3 py-3 whitespace-nowrap text-xs">
-                  <p>Recorded: {formatDate(record.recordedAt)}</p>
-                  <p className="mt-1 text-muted">Settled: {formatDate(record.settledAt)}</p>
+                  <p>Recorded: {formatCreatorRoyaltyDate(record.recordedAt)}</p>
+                  <p className="mt-1 text-muted">Settled: {formatCreatorRoyaltyDate(record.settledAt)}</p>
                 </td>
               </tr>
             ))}
