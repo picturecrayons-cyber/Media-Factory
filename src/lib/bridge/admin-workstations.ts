@@ -144,3 +144,26 @@ export const setBuyerPublicationGate = createServerFn({ method: "POST" })
     const result=await sql<{ok:boolean}>`select public.bridge_title_buyer_visibility(${data.titleId}) as ok`;
     return {ok:true,gate:data.gate,decision:data.decision,publishable:result[0]?.ok===true};
   });
+
+
+/**
+ * Super Admin read-only data projection for the Founder Control Centre.
+ * Deliberately excludes OCI object keys, signed URLs and payment secrets.
+ */
+export const listFounderControlCentre = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }) => {
+    const actor = await actorFor(context.userId);
+    if (actor.internalRole !== "super_admin") throw new Error("Forbidden");
+    const sql = await getSql();
+    const [titles, assets, qc, legal, rights, packages, publications] = await Promise.all([
+      sql`select id, name, status, language, updated_at from bridge_titles order by updated_at desc limit 200`,
+      sql`select id, title_id, kind, content_type, byte_size, created_at from bridge_assets order by created_at desc limit 300`,
+      sql`select id, title_id, status, reviewed_by, reviewed_at, created_at from bridge_qc_cases order by created_at desc limit 200`,
+      sql`select id, title_id, status, classification, reviewed_by, reviewed_at, created_at from bridge_legal_cases order by created_at desc limit 200`,
+      sql`select id, title_id, grant_type, territories, languages, media, window_start, window_end, exclusivity, status, created_at from bridge_rights_grants order by created_at desc limit 200`,
+      sql`select id, title_id, destination, package_version, readiness_state, commercial_model, authorized_at, revenue_share_percent from bridge_destination_packages order by created_at desc limit 200`,
+      sql`select id, bridge_title_id, authorization_status, territories, languages, exploitation_models, window_start, window_end, approved_at, revoked_at, updated_at from bridge_loop_publications order by updated_at desc limit 200`,
+    ]);
+    return JSON.parse(JSON.stringify({ titles, assets, qc, legal, rights, packages, publications }, (_, value) => typeof value === "bigint" ? value.toString() : value));
+  });
