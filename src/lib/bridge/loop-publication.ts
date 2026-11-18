@@ -660,9 +660,10 @@ export const certifyLoopDestinationPackage = createServerFn({ method: "POST" })
     return sql.transaction(async (tx) => {
       const rows = await tx<{
         id: string; title_id: string; readiness_state: string; rights_grant_id: string;
-        qc_case_id: string; legal_case_id: string; asset_version_ids: string[];
+        qc_case_id: string; legal_case_id: string; asset_version_ids: string[]; rental_price_inr: string | null;
       }>`
-        select id,title_id,readiness_state,rights_grant_id,qc_case_id,legal_case_id,asset_version_ids
+        select id,title_id,readiness_state,rights_grant_id,qc_case_id,legal_case_id,asset_version_ids,
+               monetization->>'rentalPriceInr' as rental_price_inr
         from bridge_destination_packages where id=${data.packageId} and destination='CRAYONS_LOOP' for update
       `;
       const pkg = rows[0];
@@ -675,6 +676,15 @@ export const certifyLoopDestinationPackage = createServerFn({ method: "POST" })
       const title = titleRows[0];
       if (!title || !["LICENSING_READY","LIVE_FOR_BUYERS","IN_NEGOTIATION","LICENSED","DELIVERED"].includes(title.status)) {
         throw new Error("Title must remain Legal-cleared and licensing-ready");
+      }
+      const pricingRows = await tx<{ status: string; access_tier: string; rental_price_inr: number }>`
+        select status,access_tier,rental_price_inr from bridge_loop_consumer_pricing
+        where bridge_title_id=${pkg.title_id} limit 1
+      `;
+      const pricing = pricingRows[0];
+      if (!pricing || pricing.status !== "APPROVED" || pricing.access_tier !== "TVOD" ||
+          Number(pkg.rental_price_inr) !== Number(pricing.rental_price_inr)) {
+        throw new Error("Package pricing is missing, revoked or changed; prepare a new package version");
       }
       const gates = await tx<{ ott: string; packaging: string; curation: string; delivery: string }>`
         select ott_preparation_status as ott,packaging_status as packaging,
