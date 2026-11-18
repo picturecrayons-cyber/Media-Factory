@@ -11,17 +11,17 @@ test("Loop publication readiness GET is strictly read-only", () => {
   assert.notEqual(end, -1, "readiness function must end before publication authorization");
   const readiness = source.slice(start, end);
 
-  assert.match(readiness, /createServerFn\\(\\{ method: "GET" \\}\\)/);
-  assert.doesNotMatch(readiness, /\\.catch\\(\\(\\) => \\{\\}\\)/);
+  assert.match(readiness, /createServerFn\(\{ method: "GET" \}\)/);
+  assert.doesNotMatch(readiness, /\.catch\(\(\) => \{\}\)/);
 
   // The handler uses typed sql<{...}> template tags; include the optional
   // generic result type when extracting every SQL template.
-  const statements = [...readiness.matchAll(/\\bsql(?:<[\\s\\S]*?>)?\\s*\\x60([\\s\\S]*?)\\x60/g)].map((match) =>
+  const statements = [...readiness.matchAll(/\bsql(?:<[\s\S]*?>)?\s*\x60([\s\S]*?)\x60/g)].map((match) =>
     match[1].trim(),
   );
   assert.ok(statements.length > 0, "readiness must retain its database reads");
   for (const statement of statements) {
-    assert.match(statement, /^select\\b/i, "every SQL statement in the GET handler must be SELECT-only");
-    assert.doesNotMatch(statement, /\\b(insert|update|delete|merge|truncate|alter|drop|create|grant|revoke)\\b/i);
+    assert.match(statement, /^select\b/i, "every SQL statement in the GET handler must be SELECT-only");
+    assert.doesNotMatch(statement, /\b(insert|update|delete|merge|truncate|alter|drop|create|grant|revoke)\b/i);
   }
 });
