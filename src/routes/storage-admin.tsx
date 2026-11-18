@@ -67,6 +67,32 @@ function StorageBody() {
             )}
           </section>
 
+          <section className="space-y-3">
+            <div>
+              <h3 className="font-display text-lg font-semibold">Storage lifecycle & retention metadata</h3>
+              <p className="text-xs text-muted">Application policy fields only. These values do not prove OCI object state, backup success or provider-side retention enforcement.</p>
+            </div>
+            {overviewQ.data?.lifecycle.status === "AVAILABLE" ? (
+              overviewQ.data.lifecycle.groups.length ? (
+                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                  {overviewQ.data.lifecycle.groups.map((row) => (
+                    <article key={row.tier + row.businessState + row.restoreState} className="rounded-xl border border-line bg-surface p-4">
+                      <p className="text-xs font-semibold uppercase tracking-wider text-muted">{row.tier} · {row.businessState.replaceAll("_", " ")}</p>
+                      <p className="mt-2 text-xl font-semibold tabular-nums">{row.assetCount.toLocaleString("en-IN")} assets</p>
+                      <p className="mt-2 text-xs text-muted">Restore state: {row.restoreState}</p>
+                      <p className="mt-1 text-xs text-muted">Legal holds: {row.legalHoldCount} · Commercial holds: {row.commercialHoldCount}</p>
+                      <p className="mt-1 text-xs text-muted">Retention date passed: {row.retentionDueCount}</p>
+                    </article>
+                  ))}
+                </div>
+              ) : (
+                <p className="rounded-xl border border-line p-5 text-sm text-muted">No storage lifecycle metadata rows are available.</p>
+              )
+            ) : (
+              <p className="rounded-xl border border-line p-5 text-sm text-muted">Storage lifecycle metadata is unavailable in this environment. Retention and hold status are NOT VERIFIED.</p>
+            )}
+          </section>
+
           <section className="overflow-hidden rounded-2xl border border-line">
             <div className="border-b border-line px-4 py-4 sm:px-5">
               <h3 className="font-semibold">Recent asset records</h3>
