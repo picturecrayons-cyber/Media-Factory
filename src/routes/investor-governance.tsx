@@ -107,6 +107,14 @@ function InvestorGovernanceBody() {
   );
 }
 
+function formatMoney(paise: number, currency: string) {
+  try {
+    return new Intl.NumberFormat("en-IN", { style: "currency", currency, maximumFractionDigits: 0 }).format(paise / 100);
+  } catch {
+    return `${currency} ${(paise / 100).toLocaleString("en-IN")}`;
+  }
+}
+
 function Metric({ label, value }: { label: string; value: string }) {
   return (
     <article className="rounded-xl border border-line bg-surface p-4">
