@@ -28,7 +28,7 @@ function harness(internalRole = "super_admin") {
 
 test("Super Admin RBAC governance reports separate policy matrices without querying assignments", async () => {
   const handler = harness();
-  const result = await handler.policy({ context: { userId: "operator" } } as { internalRoles: Array<{ role: string; permissions: string[] }>; accountTypes: Array<{ accountType: string; permissions: string[] }>; assignments: string; mutationControls: string };
+  const result = await handler.policy({ context: { userId: "operator" } }) as { internalRoles: Array<{ role: string; permissions: string[] }>; accountTypes: Array<{ accountType: string; permissions: string[] }>; assignments: string; mutationControls: string };
   assert.equal(result.internalRoles[0].role, "admin");
   assert.ok(result.internalRoles[1].permissions.includes("audit.read"));
   assert.ok(result.accountTypes.find((row) => row.accountType === "buyer")?.permissions.includes("payment.create_order"));
