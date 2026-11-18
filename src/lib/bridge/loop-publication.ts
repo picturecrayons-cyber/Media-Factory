@@ -169,6 +169,19 @@ export async function verifyDistributionPreflight(
   if (!reviews[0]?.qc_ok) reasons.push("Recorded QC approval for the current assets is required.");
   if (!reviews[0]?.legal_ok) reasons.push("Recorded legal approval for this license is required.");
 
+  let destinationPackageId: string | null = null;
+  if (rightsGrantId) {
+    const packages = await sql<{ id: string }>`
+      select id from bridge_destination_packages
+      where title_id=${titleId} and destination='CRAYONS_LOOP'
+        and rights_grant_id=${rightsGrantId}
+        and readiness_state in ('READY','AUTHORIZED','DELIVERED')
+      order by package_version desc limit 1
+    `;
+    destinationPackageId = packages[0]?.id ?? null;
+  }
+  if (!destinationPackageId) reasons.push("A certified READY Crayons Loop destination package is required.");
+
   // Publication is blocked until every explicit consumer-release certification is recorded.
   const gateRows = await sql<{
     ott_preparation_status: string | null;
@@ -215,6 +228,7 @@ export async function verifyDistributionPreflight(
     reasons,
     title,
     rightsGrantId,
+    destinationPackageId,
     commercialTerms,
   };
 }
@@ -426,14 +440,14 @@ export const prepareLoopDestinationPackage = createServerFn({ method: "POST" })
         where title_id=${title.id} and status='VALID'
         order by created_at desc
       `;
-      const grant = findCoveringRightsGrant(grants, {
+      const grant = grants.find((candidate) => findCoveringRightsGrant([candidate], {
         destination: "CRAYONS_LOOP",
         territories: ["WORLDWIDE"],
         languages: [title.language],
         exploitationModels: ["TVOD"],
-        windowStart: grants[0]?.window_start ? iso(grants[0].window_start) : null,
-        windowEnd: grants[0]?.window_end ? iso(grants[0].window_end) : null,
-      });
+        windowStart: candidate.window_start ? iso(candidate.window_start) : null,
+        windowEnd: candidate.window_end ? iso(candidate.window_end) : null,
+      }));
       if (!grant) throw new Error("No current VALID rights grant covers Crayons Loop WORLDWIDE TVOD");
 
       const qcRows = await tx<{ id: string }>`
@@ -629,6 +643,13 @@ export const authorizeLoopPublication = createServerFn({ method: "POST" })
       }>`select id from loop_titles where bridge_title_id = ${title.id} limit 1`;
       const loopTitleId = existing[0]?.id ?? randomUUID();
 
+      // The destination package becomes authorized in the same transaction as publication.
+      await sql`
+        update bridge_destination_packages
+        set readiness_state='AUTHORIZED',authorized_by=${actor.userId},authorized_at=now()
+        where id=${preflight.destinationPackageId} and readiness_state in ('READY','AUTHORIZED','DELIVERED')
+      `;
+
       // 1. Synchronize master publication record in Crayons Loop
       await sql`
       insert into loop_titles (
@@ -642,6 +663,7 @@ export const authorizeLoopPublication = createServerFn({ method: "POST" })
           source: "crayons-bridge-master-distribution",
           lane: loopStageType(title.content_type),
           rightsGrantId: preflight.rightsGrantId,
+          destinationPackageId: preflight.destinationPackageId,
           authorizedBy: actor.userId,
           commercialTerms: preflight.commercialTerms || null,
         })}::jsonb,
@@ -671,6 +693,7 @@ export const authorizeLoopPublication = createServerFn({ method: "POST" })
           commercialTerms: preflight.commercialTerms || null,
           authorizedOperator: actor.userId,
           rightsGrantId: preflight.rightsGrantId,
+          destinationPackageId: preflight.destinationPackageId,
         })}::jsonb,
         now()
       )
