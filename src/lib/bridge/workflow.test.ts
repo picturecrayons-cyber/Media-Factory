@@ -149,6 +149,7 @@ async function fixture() {
       "./rbac": rbac,
       "./asset-roles": assetRoles,
       "./titles": {},
+      "./sublicensing": {},
     "./env": {bridgeEnv:{}},
       "./workflow-policy": policy,
     };
