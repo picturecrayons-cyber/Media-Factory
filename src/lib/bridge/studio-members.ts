@@ -243,6 +243,23 @@ export const createStudioInvite = createServerFn({ method: "POST" })
       if (other.length) throw new Error("This account already has an active membership in another organization");
     }
 
+    const expiredInvites = await sql<{ id: string }>`
+      update bridge_studio_invites set revoked_at = now()
+      where organization_id = ${actor.organizationId}::uuid
+        and lower(trim(email)) = ${email}
+        and accepted_at is null and revoked_at is null and expires_at <= now()
+      returning id::text as id
+    `;
+    for (const expired of expiredInvites) {
+      await sql`
+        insert into bridge_audit_logs (actor_user_id, action, entity_type, entity_id, metadata)
+        values (
+          ${actor.userId}, 'studio.invitation_expired', 'bridge_studio_invite', ${expired.id},
+          ${JSON.stringify({ organizationId: actor.organizationId, email })}
+        )
+      `;
+    }
+
     const token = randomBytes(32).toString("hex");
     const tokenHash = createHash("sha256").update(token).digest("hex");
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
