@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
-import { listAdminWorkstations } from "@/lib/bridge/admin-workstations";
+import { listAuditLogs } from "@/lib/bridge/titles";
 
 export const Route = createFileRoute("/admin/audit")({ component: AuditWorkspace });
 
@@ -28,14 +28,14 @@ function AuditWorkspace() {
 
 function AuditLedger() {
   const query = useQuery({
-    queryKey: ["admin-workstations"],
-    queryFn: () => listAdminWorkstations(),
+    queryKey: ["bridge-audit"],
+    queryFn: () => listAuditLogs(),
     retry: 1,
   });
   if (query.isPending) return <p className="text-sm text-muted">Loading persisted audit records…</p>;
   if (query.isError || !query.data) return <p role="alert" className="rounded-sm border border-line p-4 text-sm">Audit history is unavailable. No empty state is assumed.</p>;
 
-  const logs = query.data.audit ?? [];
+  const logs = query.data.logs ?? [];
   return (
     <section className="overflow-hidden rounded-sm border border-line">
       <div className="border-b border-line px-4 py-3">
@@ -51,10 +51,10 @@ function AuditLedger() {
             <tbody className="divide-y divide-line">
               {logs.map((log: any) => (
                 <tr key={log.id}>
-                  <td className="whitespace-nowrap px-3 py-3">{String(log.created_at ?? "—")}</td>
+                  <td className="whitespace-nowrap px-3 py-3">{String(log.createdAt ?? "—")}</td>
                   <td className="px-3 py-3 font-medium">{log.action}</td>
-                  <td className="px-3 py-3">{log.entity_type}:{log.entity_id}</td>
-                  <td className="break-all px-3 py-3 text-xs text-muted">{log.actor_user_id}</td>
+                  <td className="px-3 py-3">{log.entityType}:{log.entityId}</td>
+                  <td className="break-all px-3 py-3 text-xs text-muted">{log.actorUserId}</td>
                 </tr>
               ))}
             </tbody>
