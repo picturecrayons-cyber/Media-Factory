@@ -182,9 +182,12 @@ export const getLoopTitleDetails = createServerFn({ method: "GET" })
       from loop_titles l
       join bridge_loop_publications p on p.loop_title_id = l.id
       where (l.id = ${data.slugOrId} or l.slug = ${data.slugOrId})
-        and p.authorization_status = 'authorized'
+        and lower(p.authorization_status) in ('authorized', 'live')
         and l.published = true
+        and l.listed = true
         and l.status = 'approved'
+        and (p.window_start is null or p.window_start <= now())
+        and (p.window_end is null or p.window_end > now())
       limit 1
     `;
 
@@ -207,8 +210,12 @@ export const getLoopTitleDetails = createServerFn({ method: "GET" })
       from loop_titles l
       join bridge_loop_publications p on p.loop_title_id = l.id
       where l.id != ${title.id}
-        and p.authorization_status = 'authorized'
+        and lower(p.authorization_status) in ('authorized', 'live')
         and l.published = true
+        and l.listed = true
+        and l.status = 'approved'
+        and (p.window_start is null or p.window_start <= now())
+        and (p.window_end is null or p.window_end > now())
       limit 6
     `;
 
@@ -229,8 +236,20 @@ export const checkPlaybackEntitlement = createServerFn({ method: "GET" })
     const sql = await getSql();
 
     // Check title access tier
+    // A consumer entitlement is never sufficient without a currently active
+    // Bridge publication. This check applies to FREE, SVOD and TVOD alike.
     const titles = await sql<{ id: string; access_tier: string }>`
-      select id, access_tier from loop_titles where id = ${data.loopTitleId} limit 1
+      select l.id, l.access_tier
+      from loop_titles l
+      join bridge_loop_publications p on p.loop_title_id = l.id
+      where l.id = ${data.loopTitleId}
+        and lower(p.authorization_status) in ('authorized', 'live')
+        and l.status = 'approved'
+        and l.listed = true
+        and l.published = true
+        and (p.window_start is null or p.window_start <= now())
+        and (p.window_end is null or p.window_end > now())
+      limit 1
     `;
     const title = titles[0];
     if (!title) {
