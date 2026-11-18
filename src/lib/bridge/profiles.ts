@@ -4,7 +4,7 @@ import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql, type Sql } from "@/lib/db";
 import { ACCOUNT_TYPES, INTERNAL_ROLES } from "./types";
 import { writeAudit } from "./audit";
-import { loadActor, requireVerifiedActor } from "./session";
+import { loadActor, requireActor, requireVerifiedActor } from "./session";
 import { verificationProfileId } from "./verification-profile-id";
 import { assertPermission, canGrantInternalRole, workspaceHome } from "./rbac";
 import { createHash, randomBytes } from "node:crypto";
@@ -392,9 +392,11 @@ export const requestEmailVerification = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
     assertNotDevUser(context.userId);
-    const actor = await requireVerifiedActor(context.userId);
+    // Require an authenticated Bridge profile, but not prior email verification;
+    // this endpoint is the path that sends the verification challenge.
+    const actor = await requireActor(context.userId);
     const bridgeUserId = verificationProfileId(actor);
-    const email = actor!.email;
+    const email = actor.email;
     if (!email) throw new Error("No email on account");
     const { token, hash } = tokenPair();
     const id = randomBytes(16).toString("hex");

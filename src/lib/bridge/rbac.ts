@@ -114,6 +114,15 @@ export function canAccessDashboard(actor: Actor): boolean {
   return actor.emailVerified && actor.internalRole === "super_admin";
 }
 
+/** Determines who may enter the Buyer Desk route; the shared email gate still blocks unverified sessions from its content. */
+export function canEnterBuyerDeskRoute(actor: Actor): boolean {
+  if (actor.internalRole === "super_admin") return actor.emailVerified;
+  return actor.internalRole === null &&
+    actor.accountType === "buyer" &&
+    ACCOUNT_PERMISSIONS.buyer.includes("payment.create_order") &&
+    ACCOUNT_PERMISSIONS.buyer.includes("entitlement.read_own");
+}
+
 /** Broad internal workstation datasets are restricted to verified Admin roles. */
 export function canAccessAdminWorkstations(actor: Actor): boolean {
   return actor.emailVerified &&
