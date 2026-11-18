@@ -18,6 +18,7 @@ function harness(
     curation_status: "APPROVED",
     delivery_status: "READY",
   },
+  packageReady = true,
 ) {
   const writes: { query: string; values: unknown[] }[] = [];
   const title = {
@@ -39,6 +40,12 @@ function harness(
     if (query.includes("from bridge_rights_grants")) return grants;
     if (query.includes("as qc_ok")) return [{ qc_ok: true, legal_ok: true }];
     if (query.includes("from bridge_title_gate_certifications")) return [gates];
+    if (query.includes("from bridge_destination_packages")) return packageReady ? [{ id: "package-1" }] : [];
+    if (query.includes("update bridge_destination_packages")) {
+      if (!packageReady) return [];
+      writes.push({ query, values });
+      return [{ id: "package-1" }];
+    }
     if (query.includes("select id from bridge_titles")) return [title];
     if (query.includes("select id from loop_titles"))
       return existing ? [{ id: "loop-existing" }] : [];
@@ -138,6 +145,12 @@ test("status alignment never bypasses operator, rights or commercial coverage", 
   }
 });
 
+
+test("publication requires a certified Loop destination package", async () => {
+  const h = harness([grant], true, false, undefined, false);
+  await assert.rejects(h.authorize({ context, data }), /certified READY Crayons Loop destination package/);
+  assert.equal(h.writes.length, 0);
+});
 
 test("publication requires all four release certifications", async () => {
   const incompleteGateSets = [
