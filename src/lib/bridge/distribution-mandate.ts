@@ -24,6 +24,7 @@ export const distributionMandateSchema = z.object({
   media: z.array(z.string().min(2).max(40)).min(1).max(20),
   acceptedAt: z.string().datetime(),
   consentTextVersion: z.literal("creator-distribution-mandate-v1"),
+  sublicensingAllowed: z.literal(false),
 });
 
 export type CreatorDistributionMandate = z.infer<typeof distributionMandateSchema>;
