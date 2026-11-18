@@ -50,7 +50,41 @@ export const listSuperAdminStorageOverview = createServerFn({ method: "GET" })
       `,
     ]);
 
+    const lifecycle = await sql<{
+      storage_tier: string;
+      storage_business_state: string;
+      restore_state: string;
+      asset_count: number | string;
+      legal_hold_count: number | string;
+      commercial_hold_count: number | string;
+      retention_due_count: number | string;
+    }>`
+      select storage_tier, storage_business_state, restore_state,
+             count(*)::int as asset_count,
+             count(*) filter (where legal_hold)::int as legal_hold_count,
+             count(*) filter (where commercial_hold)::int as commercial_hold_count,
+             count(*) filter (where retention_until is not null and retention_until < now())::int as retention_due_count
+      from bridge_assets
+      group by storage_tier, storage_business_state, restore_state
+      order by storage_tier, storage_business_state, restore_state
+    `.then((rows) => ({ status: "AVAILABLE" as const, rows })).catch(() => ({
+      status: "UNAVAILABLE" as const,
+      rows: [],
+    }));
+
     return {
+      lifecycle: {
+        status: lifecycle.status,
+        groups: lifecycle.rows.map((row) => ({
+          tier: row.storage_tier,
+          businessState: row.storage_business_state,
+          restoreState: row.restore_state,
+          assetCount: Number(row.asset_count),
+          legalHoldCount: Number(row.legal_hold_count),
+          commercialHoldCount: Number(row.commercial_hold_count),
+          retentionDueCount: Number(row.retention_due_count),
+        })),
+      },
       summary: groups.map((row) => ({
         kind: row.kind,
         assetCount: Number(row.asset_count),
