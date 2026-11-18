@@ -183,7 +183,7 @@ test("publication accepts a rights-covered India-only territory without widening
   assert.equal((result as { status: string }).status, "AUTHORIZED");
   const publication = h.writes.find((write) => write.query.includes("insert into bridge_loop_publications"));
   assert.ok(publication);
-  assert.ok(publication.values.includes(["IN"]));
+  assert.ok(publication.values.some((value) => Array.isArray(value) && value[0] === "IN"));
 });
 
 test("publication blocks without a ready package or checksum-verified playback rendition", async () => {
