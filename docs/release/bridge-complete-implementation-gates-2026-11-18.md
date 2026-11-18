@@ -15,7 +15,7 @@
 
 - PR: https://github.com/picturecrayons-cyber/Media-Factory/pull/709
 - Branch: `codex/bridge-studio-operations-phase2-20261118`
-- Latest implementation commit at time of this document: `b230e155d7c971991c23dcb29e694dbe6bc7b73e`
+- Latest implementation commit at time of this document: `df975008f87fc4dc991340a3593ce16cdea72975`
 - PR remains Draft, open and unmerged.
 - No Production deployment or Production DB write is authorized by this work.
 
@@ -37,7 +37,7 @@
 
 ## Rollback-only Studio workflow smoke
 
-The new `scripts/staging-studio-workflow-smoke.mjs`:
+The new `scripts/staging-studio-workflow-smoke.mjs` is a **rollback-only SQL fixture contract smoke**, not an invocation of the application server action:
 
 1. Requires `BRIDGE_STAGING_PROJECT_REF=jbymleftneggcgutlcqu`.
 2. Requires `BRIDGE_STAGING_SUPABASE_URL` to resolve to that exact Testing project.
@@ -55,7 +55,7 @@ Run only after the STAGING test gate is explicitly approved:
 npm run test:staging-studio-workflows
 ```
 
-The smoke is a database lifecycle check, **not** an authenticated server-action/browser E2E. It does not send email, create Auth users, or contact OCI.
+The smoke is a database SQL-contract simulation, **not** an application lifecycle test and **not** an authenticated server-action/browser E2E. It does not invoke `acceptStudioInvitation`, send email, create Supabase Auth users, exercise RLS as an authenticated user, or contact OCI. Its PASS can never be promoted to invitation runtime E2E PASS.
 
 ## Release rules
 
