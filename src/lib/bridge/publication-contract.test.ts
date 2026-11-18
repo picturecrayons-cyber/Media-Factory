@@ -143,9 +143,8 @@ test("new and existing publications emit the status accepted by the Loop catalog
     assert.ok(loopTitle);
     assert.equal(loopTitle.values[10], "deliverables/loop/hls/master.m3u8");
     assert.notEqual(loopTitle.values[10], "sealed/master");
-    assert.equal(loopTitle.values[13], true, "Loop title is listed only after Bridge authorization");
-    assert.equal(loopTitle.values[14], true, "Loop title is published only after Bridge authorization");
-    assert.equal(loopTitle.values[16], data.accessTier, "Loop title access tier matches the authorized TVOD contract");
+    assert.match(loopTitle.query, /true, true, false/);
+    assert.equal(loopTitle.values[13], data.accessTier, "Loop title access tier matches the authorized TVOD contract");
   }
 });
 
