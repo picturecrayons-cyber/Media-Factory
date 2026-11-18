@@ -7,7 +7,7 @@ import { BridgeShell } from "@/components/bridge/shell";
 import { StatusChip } from "@/components/bridge/status-rail";
 import { Button } from "@/components/ui/button";
 import { getBearerToken } from "@/lib/auth/client";
-import { listTitles } from "@/lib/bridge/titles";
+import { listBuyerCatalogueForInspection, listTitles } from "@/lib/bridge/titles";
 import {
   createLicenseOrder,
   listOwnEntitlements,
@@ -56,7 +56,13 @@ function Buyer() {
           <p className="mb-6 max-w-2xl text-sm leading-relaxed text-muted">
             Discover licensing-ready titles, open a listing, then license only after captured payment.
           </p>
-          <BuyerBody userId={actor.userId} />
+          {actor.internalRole === "super_admin" ? (
+            <p role="status" className="mb-4 rounded-sm border border-line bg-surface px-4 py-3 text-sm text-muted">
+              Super Admin inspection mode — catalogue and listing details are read-only. Buyer orders,
+              Razorpay checkout, payment verification and entitlement access are unavailable.
+            </p>
+          ) : null}
+          <BuyerBody userId={actor.userId} readOnly={actor.internalRole === "super_admin"} />
         </BridgeShell>
       )}
     </RequireBridge>
@@ -151,7 +157,7 @@ async function withTimeout<T>(operation: Promise<T>, label: string, timeoutMs = 
   }
 }
 
-function BuyerBody({ userId }: { userId: string }) {
+function BuyerBody({ userId, readOnly = false }: { userId: string; readOnly?: boolean }) {
   const qc = useQueryClient();
   const [tab, setTab] = useState<"discover" | "listing" | "licenses">("discover");
   const [view, setView] = useState<"gallery" | "list">("gallery");
@@ -162,7 +168,7 @@ function BuyerBody({ userId }: { userId: string }) {
   const entitlementsKey = ["bridge-buyer-entitlements", userId] as const;
   const titlesQ = useQuery({
     queryKey: titlesKey,
-    queryFn: () => withTimeout(listTitles(), "Buyer catalogue"),
+    queryFn: () => withTimeout(readOnly ? listBuyerCatalogueForInspection() : listTitles(), "Buyer catalogue"),
     retry: 1,
   });
   const titles = titlesQ.data?.titles ?? [];
@@ -179,17 +185,19 @@ function BuyerBody({ userId }: { userId: string }) {
     queryKey: ["bridge-buyer-poster-artwork", userId, posterTitleIds],
     queryFn: ({ signal }) =>
       withTimeout(fetchBuyerPosterArtwork(posterTitleIds, signal), "Buyer artwork", 120_000),
-    enabled: tab !== "licenses" && view === "gallery" && posterTitleIds.length > 0,
+    enabled: !readOnly && tab !== "licenses" && view === "gallery" && posterTitleIds.length > 0,
     retry: 1,
   });
   const entQ = useQuery({
     queryKey: entitlementsKey,
     queryFn: () => withTimeout(listOwnEntitlements(), "Buyer licenses"),
+    enabled: !readOnly,
     retry: 1,
   });
-  const entitled = new Set(entQ.data?.entitlements.map((e) => e.titleId));
+  const entitled = new Set(readOnly ? [] : entQ.data?.entitlements.map((e) => e.titleId) ?? []);
   const order = useMutation({
     mutationFn: async (titleId: string) => {
+      if (readOnly) throw new Error("Super Admin inspection is read-only; Buyer orders are disabled.");
       const created = await createLicenseOrder({
         data: { titleId, idempotencyKey: `lic-${titleId}-${Date.now()}` },
       });
@@ -229,19 +237,19 @@ function BuyerBody({ userId }: { userId: string }) {
 
   const licensed = visible.filter((t) => entitled.has(t.id));
   const artworkByTitle = postersQ.data ?? new Map<string, Blob>();
-  if (titlesQ.isPending || entQ.isPending) {
-    return <p role="status" aria-live="polite">Loading your Buyer catalogue and licenses…</p>;
+  if (titlesQ.isPending || (!readOnly && entQ.isPending)) {
+    return <p role="status" aria-live="polite">{readOnly ? "Loading buyer-visible catalogue…" : "Loading your Buyer catalogue and licenses…"}</p>;
   }
-  if (titlesQ.isError || entQ.isError) {
+  if (titlesQ.isError || (!readOnly && entQ.isError)) {
     return (
       <section role="alert" className="space-y-3 rounded-sm border border-line p-4">
         <p className="font-medium">Buyer data could not be loaded.</p>
         {titlesQ.isError ? <p className="text-sm text-muted">Catalogue: {titlesQ.error.message}</p> : null}
-        {entQ.isError ? <p className="text-sm text-muted">Licenses: {entQ.error.message}</p> : null}
+        {!readOnly && entQ.isError ? <p className="text-sm text-muted">Licenses: {entQ.error.message}</p> : null}
         <button
           type="button"
           className="underline"
-          onClick={() => void Promise.all([titlesQ.refetch(), entQ.refetch()])}
+          onClick={() => void Promise.all([titlesQ.refetch(), ...(readOnly ? [] : [entQ.refetch()])])}
         >
           Retry both checks
         </button>
@@ -254,10 +262,14 @@ function BuyerBody({ userId }: { userId: string }) {
       <div className="grid gap-3 sm:grid-cols-3">
         <Stat label="Discover" value={String(titles.length)} note="Live for buyers" />
         <Stat label="Listing" value={String(visible.length)} note="Matching this search" />
-        <Stat label="Licenses" value={String(licensed.length)} note="Captured entitlements" />
+        {readOnly ? (
+          <Stat label="Access" value="Read-only" note="Buyer entitlements not queried" />
+        ) : (
+          <Stat label="Licenses" value={String(licensed.length)} note="Captured entitlements" />
+        )}
       </div>
       <div className="flex flex-wrap gap-2">
-        {(["discover", "listing", "licenses"] as const).map((id) => (
+        {(readOnly ? (["discover", "listing"] as const) : (["discover", "listing", "licenses"] as const)).map((id) => (
           <button key={id} type="button" onClick={() => setTab(id)} className={`rounded-sm border px-3 py-1.5 text-sm capitalize ${tab === id ? "border-accent text-accent" : "border-line text-muted"}`}>
             {id}
           </button>
@@ -282,7 +294,7 @@ function BuyerBody({ userId }: { userId: string }) {
         <TitleList titles={licensed} entitled={entitled} order={order} empty="No licenses yet. Discover a title and complete payment." />
       ) : view === "gallery" ? (
         <div className="space-y-4">
-          <TitleGallery titles={pageTitles} artworkByTitle={artworkByTitle} entitled={entitled} order={order} />
+          <TitleGallery titles={pageTitles} artworkByTitle={artworkByTitle} entitled={entitled} order={order} readOnly={readOnly} />
           {visible.length > BUYER_GALLERY_PAGE_SIZE ? (
             <div className="flex items-center justify-between gap-3 border-t border-line pt-4">
               <button
@@ -306,7 +318,7 @@ function BuyerBody({ userId }: { userId: string }) {
           ) : null}
         </div>
       ) : (
-        <TitleList titles={visible} entitled={entitled} order={order} empty="No titles match this search." />
+        <TitleList titles={visible} entitled={entitled} order={order} empty="No titles match this search." readOnly={readOnly} />
       )}
       {tab !== "licenses" && postersQ.isError && titles.length > 0 ? (
         <p role="status" className="text-xs text-muted">Poster artwork is temporarily unavailable. You can still open title details.</p>
@@ -363,11 +375,13 @@ function TitleGallery({
   artworkByTitle,
   entitled,
   order,
+  readOnly = false,
 }: {
   titles: BuyerTitleCard[];
   artworkByTitle: Map<string, Blob>;
   entitled: Set<string>;
   order: { isPending: boolean; mutate: (id: string) => void };
+  readOnly?: boolean;
 }) {
   if (!titles.length) return <p className="text-sm text-muted">No titles match this search.</p>;
 
@@ -388,9 +402,13 @@ function TitleGallery({
             <div className="space-y-3 p-4">
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
-                  <Link to="/title/$id" params={{ id: title.id }} className="font-semibold leading-snug hover:text-accent">
-                    {title.name}
-                  </Link>
+                  {readOnly ? (
+                    <span className="font-semibold leading-snug">{title.name}</span>
+                  ) : (
+                    <Link to="/title/$id" params={{ id: title.id }} className="font-semibold leading-snug hover:text-accent">
+                      {title.name}
+                    </Link>
+                  )}
                   <p className="mt-1 text-xs text-muted">{details || "Details pending"}</p>
                 </div>
                 <StatusChip status={title.status as never} />
@@ -404,7 +422,9 @@ function TitleGallery({
                     ? `${formatLicensingFeePaise(title.licensingFeePaise)} licensing fee`
                     : "Commercial terms on request"}
                 </p>
-                {entitled.has(title.id) ? (
+                {readOnly ? (
+                  <span className="shrink-0 text-xs font-semibold text-muted">Inspection only</span>
+                ) : entitled.has(title.id) ? (
                   <span className="shrink-0 text-sm font-semibold text-accent">Licensed</span>
                 ) : (
                   <Button
@@ -458,19 +478,19 @@ function BuyerPosterImage({ blob, title }: { blob: Blob | undefined; title: stri
   );
 }
 
-function TitleList({ titles, entitled, order, empty }: { titles: BuyerTitleCard[]; entitled: Set<string>; order: { isPending: boolean; mutate: (id: string) => void }; empty: string }) {
+function TitleList({ titles, entitled, order, empty, readOnly = false }: { titles: BuyerTitleCard[]; entitled: Set<string>; order: { isPending: boolean; mutate: (id: string) => void }; empty: string; readOnly?: boolean }) {
   if (!titles.length) return <p className="text-sm text-muted">{empty}</p>;
   return (
     <ul className="divide-y divide-line rounded-sm border border-line">
       {titles.map((t) => (
         <li key={t.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-4">
           <div>
-            <Link to="/title/$id" params={{ id: t.id }} className="font-medium hover:text-accent">{t.name}</Link>
+            {readOnly ? <span className="font-medium">{t.name}</span> : <Link to="/title/$id" params={{ id: t.id }} className="font-medium hover:text-accent">{t.name}</Link>}
             <p className="text-sm text-muted">{t.language}{t.licensingFeePaise > 0 ? ` · ${formatLicensingFeePaise(t.licensingFeePaise)}` : " · fee unset"}</p>
           </div>
           <div className="flex items-center gap-3">
             <StatusChip status={t.status as never} />
-            {entitled.has(t.id) ? <span className="text-sm text-accent">Licensed</span> : <Button disabled={order.isPending || t.licensingFeePaise <= 0} onClick={() => order.mutate(t.id)}>License</Button>}
+            {readOnly ? <span className="text-xs font-semibold text-muted">Inspection only</span> : entitled.has(t.id) ? <span className="text-sm text-accent">Licensed</span> : <Button disabled={order.isPending || t.licensingFeePaise <= 0} onClick={() => order.mutate(t.id)}>License</Button>}
           </div>
         </li>
       ))}
