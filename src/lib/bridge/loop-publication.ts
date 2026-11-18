@@ -767,6 +767,9 @@ export const authorizeLoopPublication = createServerFn({ method: "POST" })
       }
 
       const title = preflight.title;
+      if (!preflight.consumerPricing || data.accessTier !== preflight.consumerPricing.access_tier) {
+        throw new Error("Publication access tier must match explicitly approved consumer pricing");
+      }
       const existing = await sql<{
         id: string;
       }>`select id from loop_titles where bridge_title_id = ${title.id} limit 1`;
@@ -801,7 +804,7 @@ export const authorizeLoopPublication = createServerFn({ method: "POST" })
       insert into loop_titles (
         id, bridge_title_id, slug, title, synopsis, content_type, language, year,
         duration_minutes, poster_path, playback_path, metadata, status, listed,
-        published, featured, access_tier, updated_at
+        published, featured, access_tier, tvod_rental_price, tvod_purchase_price, updated_at
       ) values (
         ${loopTitleId}, ${title.id}, ${title.slug}, ${title.name}, ${title.synopsis}, ${loopStageType(title.content_type)},
         ${title.language}, ${title.year}, ${title.runtime_minutes}, ${title.poster_key}, ${title.master_key},
@@ -812,9 +815,13 @@ export const authorizeLoopPublication = createServerFn({ method: "POST" })
           destinationPackageId: preflight.destinationPackageId,
           authorizedBy: actor.userId,
           commercialTerms: preflight.commercialTerms || null,
+          consumerPricing: preflight.consumerPricing,
         })}::jsonb,
         ${"approved"}, true, true, false,
-        ${data.accessTier}, now()
+        ${preflight.consumerPricing.access_tier},
+        ${Number(preflight.consumerPricing.rental_price_inr)},
+        ${preflight.consumerPricing.purchase_price_inr == null ? 0 : Number(preflight.consumerPricing.purchase_price_inr)},
+        now()
       )
       on conflict (bridge_title_id) do update set
         slug = excluded.slug, title = excluded.title, synopsis = excluded.synopsis,
@@ -822,6 +829,7 @@ export const authorizeLoopPublication = createServerFn({ method: "POST" })
         language = excluded.language, year = excluded.year, duration_minutes = excluded.duration_minutes,
         poster_path = excluded.poster_path, playback_path = excluded.playback_path,
         status = 'approved', listed = true, published = true, access_tier = excluded.access_tier,
+        tvod_rental_price = excluded.tvod_rental_price, tvod_purchase_price = excluded.tvod_purchase_price,
         metadata = excluded.metadata, updated_at = now()
     `;
 
@@ -837,6 +845,7 @@ export const authorizeLoopPublication = createServerFn({ method: "POST" })
         ${JSON.stringify({
           destination: "CRAYONS_LOOP",
           commercialTerms: preflight.commercialTerms || null,
+          consumerPricing: preflight.consumerPricing,
           authorizedOperator: actor.userId,
           rightsGrantId: preflight.rightsGrantId,
           destinationPackageId: preflight.destinationPackageId,
@@ -868,6 +877,7 @@ export const authorizeLoopPublication = createServerFn({ method: "POST" })
             windowStart: data.windowStart,
             windowEnd: data.windowEnd,
             commercialTerms: preflight.commercialTerms,
+            consumerPricing: preflight.consumerPricing,
           },
         },
         sql,
