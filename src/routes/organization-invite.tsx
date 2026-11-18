@@ -5,12 +5,9 @@ import { BridgeShell } from "@/components/bridge/shell";
 import { Button } from "@/components/ui/button";
 import { acceptSuperAdminOrganizationInvite } from "@/lib/bridge/super-admin-organizations";
 
-export const Route=createFileRoute("/organization-invite")({
- validateSearch:(search:Record<string,unknown>)=>({token:typeof search.token==="string"?search.token:""}),
- component:OrganizationInvite,
-});
+export const Route=createFileRoute("/organization-invite")({component:OrganizationInvite});
 function OrganizationInvite(){
- const {token}=Route.useSearch();
+ const token=typeof window!=="undefined" ? new URLSearchParams(window.location.hash.slice(1)).get("token")??"" : "";
  return <RequireBridge allow="studio">{actor=><BridgeShell actor={actor} title="Studio organization invitation"><InviteBody token={token}/></BridgeShell>}</RequireBridge>;
 }
 function InviteBody({token}:{token:string}){
