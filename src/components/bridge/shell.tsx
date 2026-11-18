@@ -22,7 +22,7 @@ function navigationFor(actor: BridgeActor): NavItem[] {
 
     if (actor.internalRole === "super_admin") {
       items.unshift({ to: "/dashboard", label: "Founder Centre" });
-      items.push({ to: "/cms", label: "Bridge CMS" }, { to: "/loop-cms", label: "Loop CMS" }, { to: "/finance", label: "Finance" }, { to: "/storage-admin", label: "Storage & Assets" }, { to: "/investor-governance", label: "Investor Governance" }, { to: "/organization-governance", label: "Organizations" });
+      items.push({ to: "/cms", label: "Bridge CMS" }, { to: "/loop-cms", label: "Loop CMS" }, { to: "/finance", label: "Finance" }, { to: "/storage-admin", label: "Storage & Assets" }, { to: "/investor-governance", label: "Investor Governance" }, { to: "/organization-governance", label: "Organizations" }, { to: "/rbac-governance", label: "RBAC Policy" });
     }
 
     return [...items, { to: "/account", label: "Account" }];
