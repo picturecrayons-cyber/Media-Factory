@@ -69,8 +69,13 @@ const names = (await readdir(MIGRATIONS_DIR))
   .sort((a, b) => a.localeCompare(b));
 
 if (names.length !== EXPECTED_MIGRATIONS + PENDING_MIGRATIONS.size) {
+  const pendingNames = [...PENDING_MIGRATIONS.keys()].sort((a, b) => a.localeCompare(b));
   throw new Error(
-    `Expected ${EXPECTED_MIGRATIONS} recorded migrations plus ${PENDING_MIGRATIONS.size} pending PR migrations; found ${names.length}`,
+    [
+      `Migration inventory mismatch: expected ${EXPECTED_MIGRATIONS} recorded Production migrations + ${pendingNames.length} pending PR migrations = ${EXPECTED_MIGRATIONS + pendingNames.length}; found ${names.length}.`,
+      `Pending PR migrations: ${pendingNames.join(", ")}`,
+      `Discovered migration files: ${names.join(", ")}`,
+    ].join("\\n"),
   );
 }
 if (new Set(names).size !== names.length) {
