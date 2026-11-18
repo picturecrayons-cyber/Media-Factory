@@ -2,14 +2,6 @@ import { useQuery } from "@tanstack/react-query";
 import { listStudioStatements } from "@/lib/bridge/studio-statements";
 import { formatStudioMinorAmount } from "@/lib/bridge/studio-statement-format";
 
-function formatStudioMinorAmount(amount: number | null, currency: string) {
-  if (amount === null) return "Not reported";
-  if (currency === "INR") {
-    return `₹${(amount / 100).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
-  }
-  return `${amount.toLocaleString("en-IN")} ${currency} minor units`;
-}
-
 export function StudioStatementDesk() {
   const query = useQuery({
     queryKey: ["bridge-studio-statements"],
