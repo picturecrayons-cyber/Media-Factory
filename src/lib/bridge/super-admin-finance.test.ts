@@ -88,6 +88,7 @@ test("Super Admin payment overview returns aggregate and redacted recent records
     recentSettlements: Array<{ reference: string; status: string }>;
     invoices: { status: string; rows: unknown[] };
     ledger: { status: string; groups: unknown[] };
+    recentLedger: { status: string; rows: unknown[] };
   };
   assert.equal(result.summary[0].paymentCount, 2);
   assert.equal(result.summary[0].totalAmountPaise, 250000);
@@ -98,7 +99,8 @@ test("Super Admin payment overview returns aggregate and redacted recent records
   assert.equal(result.recentSettlements[0].reference, "settlement-ref");
   assert.equal(result.invoices.status, "AVAILABLE");
   assert.equal(result.ledger.status, "AVAILABLE");
-  assert.ok(h.queries.length === 6);
+  assert.equal(result.recentLedger.status, "AVAILABLE");
+  assert.ok(h.queries.length === 7);
   assert.ok(h.queries.every((query) => !/\b(insert|update|delete)\b/i.test(query)));
   assert.ok(h.queries.every((query) => !/email|user_id|customer/i.test(query)));
 });
