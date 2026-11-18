@@ -46,12 +46,10 @@ function DashboardBody() {
 
   const titles = titlesQ.data?.titles ?? [];
   const needsDecision = titles.filter((title) => title.status in DECISION_STATES);
-  const liveTitles = titles.filter((title) =>
-    ["LIVE_FOR_BUYERS", "IN_NEGOTIATION", "LICENSED", "DELIVERED"].includes(title.status),
+  const authorizedListings = titles.filter((title) => title.status === "LIVE_FOR_BUYERS").length;
+  const commercialDeals = titles.filter((title) =>
+    ["IN_NEGOTIATION", "LICENSED", "DELIVERED"].includes(title.status),
   ).length;
-  const rightsReview = titles.filter((title) => title.status === "RIGHTS_REVIEW").length;
-  const qcReview = titles.filter((title) => title.status === "QC_REVIEW").length;
-  const licensingReady = titles.filter((title) => title.status === "LICENSING_READY").length;
   const failed = titlesQ.isError;
   const value = (count: number) => titlesQ.isPending || failed ? "—" : String(count);
 
@@ -63,16 +61,21 @@ function DashboardBody() {
           <h2 className="mt-1 font-display text-3xl font-semibold">Founder Centre</h2>
           <p className="mt-1 text-sm text-muted">Your daily overview. Open a workspace only when action is needed.</p>
         </div>
-        <Link to="/workspace" className="rounded-sm bg-accent px-4 py-2 text-sm font-semibold text-[#041018]">
-          Open title library
-        </Link>
+        <div className="flex flex-wrap gap-2">
+          <Link to="/workspace" className="rounded-sm bg-accent px-4 py-2 text-sm font-semibold text-[#041018]">
+            Open title library
+          </Link>
+          <Link to="/admin/services" className="rounded-sm border border-line px-4 py-2 text-sm font-semibold">
+            Open services
+          </Link>
+        </div>
       </header>
 
       <section aria-label="Business overview" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Metric label="Title records" value={value(titles.length)} />
-        <Metric label="QC reviews" value={value(qcReview)} />
-        <Metric label="Rights reviews" value={value(rightsReview)} />
-        <Metric label="Live / commercial" value={value(liveTitles)} />
+        <Metric label="Master titles" value={value(titles.length)} />
+        <Metric label="Pending review" value={value(needsDecision.length)} />
+        <Metric label="Titles marked LIVE_FOR_BUYERS" value={value(authorizedListings)} />
+        <Metric label="Titles in commercial deal states" value={value(commercialDeals)} />
       </section>
 
       <section className="overflow-hidden rounded-sm border border-line" aria-labelledby="attention-heading">
@@ -113,19 +116,46 @@ function DashboardBody() {
 
       <section aria-labelledby="workspaces-heading" className="space-y-3">
         <div>
-          <h3 id="workspaces-heading" className="font-semibold">Workspaces</h3>
-          <p className="mt-1 text-xs text-muted">Four places to run the business. Detailed tools stay inside each workspace.</p>
+          <h3 id="workspaces-heading" className="font-semibold">Business workspaces</h3>
+          <p className="mt-1 text-xs text-muted">Executive overview stays here; detailed operational records remain in their dedicated workspaces.</p>
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
-          <Workspace title="Title Library" description="Titles, Creator and Studio submissions, assets and metadata." to="/workspace" />
-          <Workspace title="Operations & Approvals" description="QC, Legal, review queues and audit." to="/admin/workstations" />
-          <Workspace title="Distribution & Revenue" description="Buyer desk, licensing, Loop publication and finance." to="/buyer" />
-          <Workspace title="People & Website" description="Access, internal users and website CMS." to="/internal" secondary={{ label: "Website CMS", to: "/cms" }} />
+          <Workspace
+            title="Title Library"
+            description="Titles, Creator and Studio submissions, assets and metadata."
+            to="/workspace"
+          />
+          <Workspace
+            title="Operations & Approvals"
+            description="QC, rights, service operations and read-only audit."
+            to="/admin/workstations"
+            secondary={[
+              { label: "Services & Operations", to: "/admin/services" },
+              { label: "Audit & Security", to: "/admin/audit" },
+            ]}
+          />
+          <Workspace
+            title="Distribution & Revenue"
+            description="Distribution readiness, Buyer inventory, payments and reconciliation."
+            to="/internal"
+            secondary={[
+              { label: "Revenue & Finance", to: "/admin" },
+              { label: "Buyer Management", to: "/buyer-management" },
+            ]}
+          />
+          <Workspace
+            title="People & Website"
+            description="Creator, Studio and internal access, plus the Bridge website CMS."
+            to="/admin/users"
+            secondary={[
+              { label: "Website CMS", to: "/cms" },
+            ]}
+          />
         </div>
       </section>
 
       <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4 text-xs text-muted">
-        <span>{titlesQ.isPending || failed ? "Portfolio status unavailable" : `${licensingReady} titles ready for licensing review`}</span>
+        <span>Bridge authorizes. Loop delivers. Buyer access remains title- and scope-specific.</span>
         <Link to="/admin/workstations" className="font-semibold text-accent hover:underline">Open operations →</Link>
       </footer>
     </div>
@@ -150,17 +180,21 @@ function Workspace({
   title: string;
   description: string;
   to: string;
-  secondary?: { label: string; to: string };
+  secondary?: { label: string; to: string }[];
 }) {
   return (
     <article className="flex items-center justify-between gap-3 rounded-sm border border-line px-4 py-4">
       <div className="min-w-0">
         <h4 className="font-semibold">{title}</h4>
         <p className="mt-1 text-xs leading-relaxed text-muted">{description}</p>
-        {secondary ? (
-          <Link to={secondary.to} className="mt-2 inline-block text-xs font-semibold text-muted hover:text-accent">
-            {secondary.label} →
-          </Link>
+        {secondary?.length ? (
+          <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1">
+            {secondary.map((item) => (
+              <Link key={item.to} to={item.to} className="text-xs font-semibold text-muted hover:text-accent">
+                {item.label} →
+              </Link>
+            ))}
+          </div>
         ) : null}
       </div>
       <Link to={to} className="shrink-0 text-sm font-semibold text-accent hover:underline">Open →</Link>
