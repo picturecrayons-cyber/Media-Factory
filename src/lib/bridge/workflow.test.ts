@@ -288,7 +288,7 @@ test("Creator submissions enforce the five-year term and default 50:50 split", a
       f.sql.transaction((tx) => f.save(tx, owner, { ...license, rightsOwnerSharePct: 60, distributorSharePct: 40 })),
       /default revenue split is 50:50/,
     );
-    const saved = await f.sql.transaction((tx) => f.save(tx, owner, license));
+    const saved = (await f.sql.transaction((tx) => f.save(tx, owner, license))) as { grantId: string };
     assert.ok(saved.grantId);
   } finally {
     await f.db.close();
