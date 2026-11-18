@@ -152,6 +152,37 @@ try {
     const sql = await readFile(join(MIGRATIONS_DIR, name), "utf8");
     await client.query("BEGIN");
     try {
+      if (name === "20261118120000_bridge_identity_link_fk_parity_20261118.sql") {
+        // Synthetic pre-migration identity fixture: tests that an existing
+        // legacy user/profile/link survives the FK target change in disposable CI.
+        const fixtureAuthId = "00000000-0000-4000-8000-000000000703";
+        const fixtureBridgeUserId = "bridge-identity-fk-parity-fixture";
+        await client.query(
+          `insert into public."user" ("id", "name", "email", "emailVerified")
+           values ($1, $2, $3, true)`,
+          [fixtureBridgeUserId, "Identity FK Replay Fixture", "identity-fk-replay@example.invalid"],
+        );
+        await client.query(
+          `insert into auth.users
+             (id, aud, role, email, encrypted_password, email_confirmed_at,
+              created_at, updated_at, raw_app_meta_data, raw_user_meta_data)
+           values ($1::uuid, 'authenticated', 'authenticated', $2, '', now(),
+                   now(), now(), '{}'::jsonb, '{}'::jsonb)`,
+          [fixtureAuthId, "identity-fk-replay@example.invalid"],
+        );
+        await client.query(
+          `insert into public.bridge_profiles
+             (user_id, email, display_name, account_type, email_verified)
+           values ($1, $2, $3, 'independent_creator', true)`,
+          [fixtureBridgeUserId, "identity-fk-replay@example.invalid", "Identity FK Replay Fixture"],
+        );
+        await client.query(
+          `insert into public.bridge_loop_identity_links
+             (bridge_user_id, auth_user_id, verification_method, verified_at, verified_by)
+           values ($1, $2::uuid, 'manual_documented_review', now(), 'disposable_ci_fixture')`,
+          [fixtureBridgeUserId, fixtureAuthId],
+        );
+      }
       // Production contains this legacy trigger helper, but it is not part
       // of the 69-row migration ledger (it predates the recorded history).
       // Recreate that verified baseline object only in the disposable replay DB
@@ -447,9 +478,47 @@ try {
     console.log(`[migration-replay] applied ${name}`);
   }
 
+  // Re-run the forward-only identity FK migration to prove it is safe when
+  // the target FK is already present (the current Testing DB contract).
+  const identityFkMigration = await readFile(
+    join(MIGRATIONS_DIR, "20261118120000_bridge_identity_link_fk_parity_20261118.sql"),
+    "utf8",
+  );
+  await client.query(identityFkMigration);
+  const identityFkState = await client.query(`
+    select
+      c.confrelid = 'public.bridge_profiles'::regclass as targets_bridge_profiles,
+      (select count(*)::int
+       from public.bridge_loop_identity_links l
+       left join public.bridge_profiles p on p.user_id = l.bridge_user_id
+       where p.user_id is null) as orphan_links
+    from pg_constraint c
+    join pg_attribute a on a.attrelid = c.conrelid
+      and a.attname = 'bridge_user_id' and a.attnum = any(c.conkey)
+    where c.conrelid = 'public.bridge_loop_identity_links'::regclass
+      and c.contype = 'f'
+  `);
+  if (
+    identityFkState.rows.length !== 1 ||
+    !identityFkState.rows[0].targets_bridge_profiles ||
+    identityFkState.rows[0].orphan_links !== 0
+  ) {
+    throw new Error("Bridge identity FK parity/idempotency verification failed: " + JSON.stringify(identityFkState.rows));
+  }
+  const preservedIdentityFixture = await client.query(
+    `select count(*)::int as preserved_count
+     from public.bridge_loop_identity_links
+     where bridge_user_id = 'bridge-identity-fk-parity-fixture'
+       and auth_user_id = '00000000-0000-4000-8000-000000000703'::uuid`,
+  );
+  if (preservedIdentityFixture.rows[0]?.preserved_count !== 1) {
+    throw new Error("Identity FK migration did not preserve the synthetic identity link");
+  }
+  console.log("[migration-replay] verified identity FK targets bridge_profiles, preserves an existing link, and is idempotent");
+
   // Production's current Bridge Data API security baseline is not fully
-  // represented by the 69-row migration ledger. Recreate it locally after
-  // replay from read-only Production catalog evidence only.
+  // represented by the 69-row recovered ledger. The replay also includes the
+  // one proposed, not-yet-applied identity FK migration from this branch.
   await client.query(`
     do $bridge_rls_baseline$
     declare table_record record;
@@ -732,7 +801,7 @@ try {
   }
 
   console.log(
-    `[migration-replay] PASS: all ${names.length} Production-ledger migrations replayed in a fresh local Supabase stack.`,
+    `[migration-replay] PASS: all ${names.length} active migration files (69 recovered Production-ledger entries plus one proposed forward migration) replayed in a fresh local Supabase stack.`,
   );
 } finally {
   client.release();

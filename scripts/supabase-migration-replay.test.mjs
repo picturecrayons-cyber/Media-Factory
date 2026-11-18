@@ -32,6 +32,18 @@ test("core Bridge client policies are authenticated-only and identity/owner scop
   assert.match(replaySource, /anon_select/);
 });
 
+
+test("identity-link FK migration is guarded, forward-only, and replay-verified", () => {
+  assert.match(replaySource, /EXPECTED_MIGRATIONS = 70/);
+  assert.match(replaySource, /identityFkMigration/);
+  assert.match(replaySource, /identityFkState\.rows\[0\]\.targets_bridge_profiles/);
+  const manifest = readFileSync(
+    fileURLToPath(new URL("../docs/release/bridge-supabase-migration-reconciliation-2026-11-16.md", import.meta.url)),
+    "utf8",
+  );
+  assert.match(manifest, /20261118120000 \| bridge_identity_link_fk_parity_20261118/);
+});
+
 const rejectedTargets = [
   ["hosted Supabase", "postgresql://postgres:secret@db.example.supabase.co:5432/postgres"],
   ["remote database IP", "postgresql://postgres:secret@203.0.113.10:5432/postgres"],

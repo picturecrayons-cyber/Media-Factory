@@ -137,3 +137,11 @@ Production contains six pre-ledger tables that are not created by any of the 69 
 - `public.bridge_buyer_interest`: exact Production columns, UUID primary key, submission FK, interest-state check/index, RLS enabled with no client policies. Production has zero rows; none are copied into CI.
 
 The replay runner recreates all six empty pre-ledger table schemas and their verified baseline access settings only in the fresh local database; it inserts no live data and uses no remote Supabase credentials. The local stack uses dedicated Postgres/API ports 55432/55431 to avoid collisions with parallel CI jobs. It validates RLS and the exact expected policies on all six tables: `deny_client_access` on the three server-only tables, both verified policies on `bridge_story_concept_submissions`, no client policies on `bridge_buyer_interest`, and the internal-only `bridge_delivery_jobs` policy. These fixtures do not create a new Production migration and do not change the Production schema.
+
+## Forward-only identity FK parity migration — 2026-11-18
+
+This is a new migration added after the 2026-11-16 Production snapshot above. It is not represented as an already-applied Production migration. The guarded migration changes only the identity-link FK target, preserves existing rows and legacy auth tables, and aborts if any link lacks a matching Bridge profile or the live FK target is unexpected.
+
+| Version | Name | SQL bytes | SHA-256 |
+|---|---|---:|---|
+| 20261118120000 | bridge_identity_link_fk_parity_20261118 | 3262 | `07b9442b0b1e3fbe745b52ccc5a7a7823a7941d6ad7b806e3597821feeb2edcb` |
