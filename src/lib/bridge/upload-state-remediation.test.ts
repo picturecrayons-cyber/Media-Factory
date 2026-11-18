@@ -251,6 +251,15 @@ test("subtitle filenames that clearly identify another canonical title are rejec
   assert.equal(match?.id, "jananam-id");
 });
 
+test("subtitle title matching uses the object-key basename", () => {
+  const match = findForeignTitleFilenameMatch(
+    "bridge/owner/title-123/subtitle/Jananam_1947_Pranayam_Thudarunnu_English_CC.srt",
+    "malayalakkara-id",
+    [{ id: "jananam-id", name: "Jananam 1947 Pranayam Thudarunnu" }],
+  );
+  assert.equal(match?.id, "jananam-id");
+});
+
 test("subtitle filename guard ignores the current title and ambiguous generic filenames", () => {
   assert.equal(
     findForeignTitleFilenameMatch(
