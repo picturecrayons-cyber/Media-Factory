@@ -33,12 +33,14 @@ export const listSuperAdminSupportDesk = createServerFn({ method: "GET" }).middl
     cases: cases.map(r=>({id:r.id,caseNumber:Number(r.case_number),requesterEmail:r.requester_email,subject:r.subject,status:r.status,priority:r.priority,assignedTo:r.assigned_to,createdAt:r.created_at instanceof Date?r.created_at.toISOString():String(r.created_at),updatedAt:r.updated_at instanceof Date?r.updated_at.toISOString():String(r.updated_at)})),
     inbound: inbound.map(r=>({id:r.id,sender:r.sender,subject:r.subject,preview:r.preview,receivedAt:r.received_at instanceof Date?r.received_at.toISOString():String(r.received_at)})),
     outboundEmail: "DISABLED",
+    mutationsEnabled: process.env.BRIDGE_SUPER_ADMIN_SUPPORT_WRITES === "true",
   };
 });
 export const createSupportCaseFromInbound = createServerFn({ method: "POST" }).middleware([authMiddleware])
   .validator(z.object({inboundEventId:z.string().uuid(),priority:z.enum(priorities).default("NORMAL")}))
   .handler(async ({context,data})=>{
     await guard(context.userId);
+    if (process.env.BRIDGE_SUPER_ADMIN_SUPPORT_WRITES !== "true") throw new Error("Support case writes are disabled");
     const sql=await getSql();
     const result=await sql.transaction(async tx=>{
       const rows=await tx<{id:string;case_number:number|string}>`
@@ -62,6 +64,7 @@ export const updateSuperAdminSupportCase = createServerFn({method:"POST"}).middl
     .refine(v=>Boolean(v.status||v.priority||v.internalNote),"At least one update is required"))
   .handler(async ({context,data})=>{
     await guard(context.userId);
+    if (process.env.BRIDGE_SUPER_ADMIN_SUPPORT_WRITES !== "true") throw new Error("Support case writes are disabled");
     const sql=await getSql();
     await sql.transaction(async tx=>{
       const rows=await tx<{status:string;priority:string}>`select status,priority from private.bridge_support_cases where id=${data.caseId}::uuid for update`;
