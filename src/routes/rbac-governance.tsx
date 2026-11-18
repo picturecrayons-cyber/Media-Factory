@@ -1,8 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
-import { getSuperAdminRbacGovernance } from "@/lib/bridge/super-admin-rbac";
+import { getSuperAdminRbacGovernance, listSuperAdminRoleAssignments, updateSuperAdminRoleAssignment } from "@/lib/bridge/super-admin-rbac";
 
 export const Route = createFileRoute("/rbac-governance")({ component: RbacGovernance });
 
@@ -11,14 +12,28 @@ function RbacGovernance() {
     <RequireBridge allow="super_admin">
       {(actor) => (
         <BridgeShell actor={actor} title="RBAC governance">
-          <RbacGovernanceBody />
+          <RbacGovernanceBody currentUserId={actor.userId} />
         </BridgeShell>
       )}
     </RequireBridge>
   );
 }
 
-function RbacGovernanceBody() {
+function RbacGovernanceBody({ currentUserId }: { currentUserId: string }) {
+  const qc = useQueryClient();
+  const [draftRoles, setDraftRoles] = useState<Record<string, string>>({});
+  const assignmentsQ = useQuery({
+    queryKey: ["super-admin-rbac-assignments"],
+    queryFn: () => listSuperAdminRoleAssignments(),
+    retry: false,
+  });
+  const roleMutation = useMutation({
+    mutationFn: (data: { userId: string; role: string | null }) => updateSuperAdminRoleAssignment({ data }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["super-admin-rbac-assignments"] });
+      qc.invalidateQueries({ queryKey: ["super-admin-rbac-governance"] });
+    },
+  });
   const query = useQuery({
     queryKey: ["super-admin-rbac-governance"],
     queryFn: () => getSuperAdminRbacGovernance(),
@@ -62,6 +77,44 @@ function RbacGovernanceBody() {
                 </div>
               </article>
             ))}
+          </section>
+
+          <section className="space-y-3">
+            <div><h3 className="font-display text-lg font-semibold">Live user role assignments</h3><p className="text-xs text-muted">Canonical Bridge profiles. Super Admin assignments are protected and cannot be granted or changed here.</p></div>
+            {assignmentsQ.isPending ? <p className="rounded-xl border border-line p-5 text-sm text-muted">Loading user assignments…</p> :
+             assignmentsQ.isError ? <p role="alert" className="rounded-xl border border-line p-5 text-sm text-muted">Live role assignments are unavailable.</p> :
+             <>
+              <p className="rounded-xl border border-line p-4 text-sm text-muted">
+                {assignmentsQ.data?.mutationsEnabled ? "Audited role changes are enabled by a Preview-only server feature flag." : "Role changes are fail-closed and currently disabled. They require an explicit Preview-only deployment setting and verified target identity."}
+              </p>
+              <div className="overflow-hidden rounded-2xl border border-line">
+               <div className="overflow-x-auto">
+                <table className="w-full min-w-[900px] text-left text-sm">
+                 <thead className="border-b border-line text-xs uppercase tracking-wider text-muted"><tr><th className="px-4 py-3">Profile</th><th className="px-4 py-3">Account type</th><th className="px-4 py-3">Email verified</th><th className="px-4 py-3">Current role</th><th className="px-4 py-3">Change role</th><th className="px-4 py-3">Action</th></tr></thead>
+                 <tbody className="divide-y divide-line">
+                  {(assignmentsQ.data?.assignments??[]).map(profile=>{
+                   const current=profile.internalRole??"none";
+                   const draft=draftRoles[profile.userId]??current;
+                   const protectedProfile=profile.internalRole==="super_admin";
+                   const disabled=!assignmentsQ.data?.mutationsEnabled||protectedProfile||!profile.emailVerified||profile.userId===currentUserId||roleMutation.isPending;
+                   return <tr key={profile.userId}>
+                    <td className="px-4 py-3"><p className="font-medium">{profile.displayName}</p><p className="text-xs text-muted">{profile.email}</p></td>
+                    <td className="px-4 py-3">{profile.accountType}</td>
+                    <td className="px-4 py-3">{profile.emailVerified?"Verified":"Unverified"}</td>
+                    <td className="px-4 py-3">{current.replaceAll("_"," ")}</td>
+                    <td className="px-4 py-3"><select aria-label={`Role for ${profile.email}`} value={draft} disabled={disabled} onChange={e=>setDraftRoles(v=>({...v,[profile.userId]:e.target.value}))} className="h-9 rounded-lg border border-line bg-elevated px-2 text-xs">
+                     <option value="none">No internal role</option>
+                     {data.internalRoles.filter(r=>r.role!=="super_admin").map(r=><option key={r.role} value={r.role}>{r.role.replaceAll("_"," ")}</option>)}
+                    </select></td>
+                    <td className="px-4 py-3"><button type="button" disabled={disabled||draft===current} onClick={()=>roleMutation.mutate({userId:profile.userId,role:draft==="none"?null:draft},{onSuccess:()=>setDraftRoles(v=>({...v,[profile.userId]:draft}))})} className="rounded-full border border-line px-3 py-2 text-xs font-semibold disabled:opacity-40">Save role</button>{protectedProfile?<p className="mt-1 text-[10px] text-muted">Protected</p>:null}</td>
+                   </tr>;
+                  })}
+                 </tbody>
+                </table>
+               </div>
+              </div>
+              {roleMutation.isError?<p role="alert" className="text-sm text-accent">{roleMutation.error instanceof Error?roleMutation.error.message:"Role update failed"}</p>:null}
+             </>}
           </section>
 
           <section className="space-y-3">
