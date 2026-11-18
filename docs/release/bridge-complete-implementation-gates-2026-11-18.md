@@ -15,7 +15,7 @@
 
 - PR: https://github.com/picturecrayons-cyber/Media-Factory/pull/709
 - Branch: `codex/bridge-studio-operations-phase2-20261118`
-- Latest implementation commit at time of this document: `f3fbc01de055e10b71f28664011ceb9aa2c1ef92`
+- Latest branch commit at time of this document: `4955d9c2fc08bb9904240b8c1f551e6f48dc6978` (documentation-only update after the code-tested commit `f3fbc01de055e10b71f28664011ceb9aa2c1ef92`).
 - PR remains Draft, open and unmerged.
 - No Production deployment or Production DB write is authorized by this work.
 
@@ -23,9 +23,9 @@
 
 | Module | Implementation / verification required | Acceptance evidence | Status |
 |---|---|---|---|
-| Studio membership | Invite creation, verified-email acceptance, revoke/expiry, member role/status, owner transfer | Pure policy tests now cover verified identity, email match, expiry, revoke and replay; authenticated owner/admin browser flow and cross-org denial still need isolated Auth identities | Code tests added; CI NOT VERIFIED; runtime E2E BLOCKED |
-| Studio fixture harness | SQL-only schema/fixture contract simulation with rollback | `npm run test:staging-studio-workflows` against approved Testing DB; all rows rolled back | IMPLEMENTED; CI/runtime NOT VERIFIED; not app E2E |
-| DIT | Primary upload, independent Recovery copy, object metadata, read-back bytes and SHA-256, sign-off; manifest path/checksum validation | Unit tests for deterministic manifest hashing, traversal/collision rejection, checksum/size validation added to CI; real copy evidence still requires isolated source + approved STAGING OCI credentials | Code tests added; CI NOT VERIFIED; OCI E2E NOT VERIFIED; no OCI writes made |
+| Studio membership | Invite creation, verified-email acceptance, revoke/expiry, member role/status, owner transfer | Pure policy tests now cover verified identity, email match, expiry, revoke and replay; authenticated owner/admin browser flow and cross-org denial still need isolated Auth identities | Code tests PASS in CI; runtime E2E BLOCKED |
+| Studio fixture harness | SQL-only schema/fixture contract simulation with rollback | `npm run test:staging-studio-workflows` against approved Testing DB; all rows rolled back | IMPLEMENTED; CI syntax check PASS; STAGING execution not approved; not app E2E |
+| DIT | Primary upload, independent Recovery copy, object metadata, read-back bytes and SHA-256, sign-off; manifest path/checksum validation | Unit tests for deterministic manifest hashing, traversal/collision rejection, checksum/size validation added to CI; real copy evidence still requires isolated source + approved STAGING OCI credentials | Manifest unit tests PASS in CI; OCI E2E NOT VERIFIED; no OCI writes made |
 | Proxy / transcoding | Durable job state, idempotent claim/lease, retry/dead-letter, FFmpeg worker, output probe, checksum, atomic completion | Worker process and queue runtime, sample derivative generated and probed; crash/retry and duplicate-job tests | BLOCKED; no durable worker runtime connected |
 | Finance | Statement ingestion, source provenance, exact amount/currency, matching, discrepancy case lifecycle, dual approval, ledger tie-out | Redacted sample statement; source-to-ledger reconciliation; two distinct approvers; immutable audit; balance proof | BLOCKED; current views remain read-only |
 | Payments | Razorpay sandbox order, captured event, webhook signature/idempotency, entitlement, delivery, outbox/email | Provider sandbox evidence and DB correlation IDs; duplicate webhook replay; failed webhook recovery; no live customer | NOT VERIFIED; no sandbox transaction triggered |
