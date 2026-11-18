@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { z } from "zod";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import { assertNotDevUser } from "./guards";
@@ -69,7 +70,8 @@ export const listSuperAdminOrganizationGovernance = createServerFn({ method: "GE
         status: row.status,
         createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : String(row.created_at),
       })),
-      invitationWorkflow: "NOT_IMPLEMENTED",
+      invitationWorkflow: process.env.BRIDGE_SUPER_ADMIN_ORG_WRITES === "true" ? "PREVIEW_ENABLED" : "DISABLED",
+      mutationsEnabled: process.env.BRIDGE_SUPER_ADMIN_ORG_WRITES === "true",
     };
   });
 
