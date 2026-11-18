@@ -150,7 +150,7 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
 
   // Authorization Form State
   const [selectedTitleId, setSelectedTitleId] = useState<string>("");
-  const [territories, setTerritories] = useState("IN");
+  const [territories, setTerritories] = useState("");
   const [languages, setLanguages] = useState("Malayalam");
   const model: ExploitationModel = "TVOD";
   const [windowStart, setWindowStart] = useState("");
@@ -386,12 +386,12 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
 
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 text-xs">
             <label className="block space-y-1">
-              <span className="font-semibold text-muted">Territories (comma-separated)</span>
+              <span className="font-semibold text-muted">Rights-covered territories (comma-separated)</span>
               <input
                 value={territories}
                 onChange={(e) => setTerritories(e.target.value)}
                 className="h-9 w-full rounded-xl border border-line bg-elevated px-3 text-fg focus:outline-none"
-                placeholder="IN, AE, US"
+                placeholder="Loaded from the active rights grant"
               />
             </label>
 
@@ -599,7 +599,10 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
                   <Button
                     type="button"
                     disabled={!t.ready}
-                    onClick={() => setSelectedTitleId(t.id)}
+                    onClick={() => {
+                      setTerritories(t.suggestedTerritories.join(", "));
+                      setSelectedTitleId(t.id);
+                    }}
                     className="rounded-full text-xs font-semibold px-4 h-9"
                   >
                     {pub ? "Re-authorize & Distribute" : "Distribute to Crayons Loop"}
