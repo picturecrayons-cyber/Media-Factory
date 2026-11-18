@@ -7,13 +7,11 @@ import { requireVerifiedActor } from "./session";
 import { writeAudit } from "./audit";
 
 const itemWindowShape={publishAt:z.string().datetime().nullable(),unpublishAt:z.string().datetime().nullable()};
-const itemWindow=z.object(itemWindowShape)
-  .refine(v=>!v.publishAt||!v.unpublishAt||new Date(v.unpublishAt)>new Date(v.publishAt),"Unpublish must be after publish");
 const payloadSchema=z.object({
   hero:z.object({title:z.string().trim().min(1).max(120),subtitle:z.string().trim().max(280),featuredTitleId:z.string().uuid().nullable()}),
   banners:z.array(z.object({id:z.string().uuid(),title:z.string().trim().min(1).max(120),subtitle:z.string().max(280),artworkUrl:z.string().url().refine(v=>v.startsWith("https://"),"Artwork URL must use HTTPS"),destinationTitleId:z.string().uuid(),sortOrder:z.number().int().min(0).max(1000),enabled:z.boolean(),...itemWindowShape})).max(20),
-  collections:z.array(z.object({id:z.string().uuid(),title:z.string().trim().min(1).max(100),description:z.string().max(280),titleIds:z.array(z.string().uuid()).max(100),sortOrder:z.number().int().min(0).max(1000),enabled:z.boolean(),...itemWindow.shape})).max(30),
-});
+  collections:z.array(z.object({id:z.string().uuid(),title:z.string().trim().min(1).max(100),description:z.string().max(280),titleIds:z.array(z.string().uuid()).max(100),sortOrder:z.number().int().min(0).max(1000),enabled:z.boolean(),...itemWindowShape})).max(30),
+}).refine(v=>[...v.banners,...v.collections].every(item=>!item.publishAt||!item.unpublishAt||new Date(item.unpublishAt)>new Date(item.publishAt)),"Every item unpublish date must be after its publish date");
 const scheduleShape={publishAt:z.string().datetime(),unpublishAt:z.string().datetime().nullable()};
 const scheduleSchema=z.object(scheduleShape)
   .refine(v=>!v.unpublishAt||new Date(v.unpublishAt)>new Date(v.publishAt),"Unpublish must be after publish");
