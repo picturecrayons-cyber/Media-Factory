@@ -233,7 +233,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                             ownershipReference: ownership,
                             rightsOwnerSharePct: Number(ownerShare),
                             distributorSharePct: 100 - Number(ownerShare),
-                            studioDeclaration: actor.accountType === "studio" ? studioDeclaration : undefined,
+                            studioDeclaration: actor.accountType === "studio" && studioDeclaration ? true : undefined,
                           },
                         }),
                       );
