@@ -15,7 +15,7 @@
 
 - PR: https://github.com/picturecrayons-cyber/Media-Factory/pull/709
 - Branch: `codex/bridge-studio-operations-phase2-20261118`
-- Latest implementation commit at time of this document: `df975008f87fc4dc991340a3593ce16cdea72975`
+- Latest implementation commit at time of this document: `6042fd0be28332244760ab5ef7af98f8788fdd5c`
 - PR remains Draft, open and unmerged.
 - No Production deployment or Production DB write is authorized by this work.
 
@@ -23,9 +23,9 @@
 
 | Module | Implementation / verification required | Acceptance evidence | Status |
 |---|---|---|---|
-| Studio membership | Invite creation, verified-email acceptance, revoke/expiry, member role/status, owner transfer | Two distinct verified test identities; authenticated owner/admin browser flow; audit rows; cross-org denial | BLOCKED pending isolated auth identities and runtime E2E |
-| Studio fixture harness | Schema contract, invite email binding, token-hash-only storage, owner/admin handover, audit and rollback | `npm run test:staging-studio-workflows` against approved Testing DB; all rows rolled back | IMPLEMENTED; CI/runtime NOT VERIFIED |
-| DIT | Primary upload, independent Recovery copy, object metadata, read-back bytes and SHA-256, sign-off | Real isolated source fixture + approved STAGING OCI credentials; matching byte count and digest from both copies | NOT VERIFIED; no OCI writes made |
+| Studio membership | Invite creation, verified-email acceptance, revoke/expiry, member role/status, owner transfer | Pure policy tests now cover verified identity, email match, expiry, revoke and replay; authenticated owner/admin browser flow and cross-org denial still need isolated Auth identities | Code tests added; CI NOT VERIFIED; runtime E2E BLOCKED |
+| Studio fixture harness | SQL-only schema/fixture contract simulation with rollback | `npm run test:staging-studio-workflows` against approved Testing DB; all rows rolled back | IMPLEMENTED; CI/runtime NOT VERIFIED; not app E2E |
+| DIT | Primary upload, independent Recovery copy, object metadata, read-back bytes and SHA-256, sign-off; manifest path/checksum validation | Unit tests for deterministic manifest hashing, traversal/collision rejection, checksum/size validation added to CI; real copy evidence still requires isolated source + approved STAGING OCI credentials | Code tests added; CI NOT VERIFIED; OCI E2E NOT VERIFIED; no OCI writes made |
 | Proxy / transcoding | Durable job state, idempotent claim/lease, retry/dead-letter, FFmpeg worker, output probe, checksum, atomic completion | Worker process and queue runtime, sample derivative generated and probed; crash/retry and duplicate-job tests | BLOCKED; no durable worker runtime connected |
 | Finance | Statement ingestion, source provenance, exact amount/currency, matching, discrepancy case lifecycle, dual approval, ledger tie-out | Redacted sample statement; source-to-ledger reconciliation; two distinct approvers; immutable audit; balance proof | BLOCKED; current views remain read-only |
 | Payments | Razorpay sandbox order, captured event, webhook signature/idempotency, entitlement, delivery, outbox/email | Provider sandbox evidence and DB correlation IDs; duplicate webhook replay; failed webhook recovery; no live customer | NOT VERIFIED; no sandbox transaction triggered |
