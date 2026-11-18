@@ -12,7 +12,7 @@ create table if not exists public.bridge_sublicense_authorizations (
   window_start timestamptz not null,
   window_end timestamptz not null,
   restrictions jsonb not null default '[]'::jsonb check (jsonb_typeof(restrictions) = 'array'),
-  evidence_document_id uuid not null references public.bridge_creator_documents(id) on delete restrict,
+  evidence_document_id text not null references public.bridge_creator_documents(id) on delete restrict,
   status text not null default 'AUTHORIZED' check (status in ('AUTHORIZED','SUSPENDED','REVOKED','EXPIRED')),
   created_by text not null,
   created_at timestamptz not null default now(),
