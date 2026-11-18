@@ -1,10 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { listOwnCreatorStatements } from "@/lib/bridge/creator-statements";
-
-function money(amountPaise: number, currency: string) {
-  if (currency === "INR") return `₹${(amountPaise / 100).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
-  return `${amountPaise.toLocaleString("en-IN")} ${currency} minor units`;
-}
+import { formatCreatorStatementAmount, sumCreatorStatementAmounts } from "@/lib/bridge/creator-statement-format";
 
 function formatDate(value: string) {
   const date = new Date(value);
@@ -32,12 +28,18 @@ export function CreatorStatementDesk() {
   const paid = lines.filter((line) => line.status === "PAID");
   const pending = lines.filter((line) => line.status === "PENDING" || line.status === "ON_HOLD");
   const approved = lines.filter((line) => line.status === "APPROVED");
+  const payableTotals = sumCreatorStatementAmounts(lines);
+  const paidTotals = sumCreatorStatementAmounts(paid);
 
   return (
     <div className="mt-4 space-y-4">
-      <div className="grid gap-3 sm:grid-cols-3">
-        <Metric label="Recorded payable" value={money(lines.reduce((sum, line) => sum + line.amountPaise, 0), lines[0]?.currency ?? "INR")} note="Explicit Creator settlement allocations only" />
-        <Metric label="Paid status" value={money(paid.reduce((sum, line) => sum + line.amountPaise, 0), paid[0]?.currency ?? "INR")} note={`${paid.length} records marked PAID`} />
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        {payableTotals.length ? payableTotals.map((total) => (
+          <Metric key={`payable-${total.currency}`} label={`Recorded payable · ${total.currency}`} value={formatCreatorStatementAmount(total.amountMinor, total.currency)} note="Explicit Creator settlement allocations only" />
+        )) : <Metric label="Recorded payable" value="No allocation recorded" note="No amount inferred from title or licensing values" />}
+        {paidTotals.map((total) => (
+          <Metric key={`paid-${total.currency}`} label={`Paid status · ${total.currency}`} value={formatCreatorStatementAmount(total.amountMinor, total.currency)} note={`${paid.length} records marked PAID across currencies`} />
+        ))}
         <Metric label="Awaiting action" value={String(pending.length + approved.length)} note="Pending, on-hold or approved records" />
       </div>
 
@@ -55,7 +57,7 @@ export function CreatorStatementDesk() {
               <tr key={line.id} className="border-b border-line/70">
                 <td className="px-3 py-3"><p className="font-medium">{line.titleName}</p><p className="text-xs text-muted">{line.titleId}</p></td>
                 <td className="px-3 py-3">{line.basis}{line.percentageBps === null ? "" : ` · ${(line.percentageBps / 100).toFixed(2)}%`}</td>
-                <td className="px-3 py-3 whitespace-nowrap font-medium">{money(line.amountPaise, line.currency)}</td>
+                <td className="px-3 py-3 whitespace-nowrap font-medium">{formatCreatorStatementAmount(line.amountPaise, line.currency)}</td>
                 <td className="px-3 py-3">{line.status}</td>
                 <td className="px-3 py-3 whitespace-nowrap">{formatDate(line.createdAt)}</td>
                 <td className="px-3 py-3 whitespace-nowrap">{line.paidAt ? formatDate(line.paidAt) : "Not recorded"}</td>
@@ -65,7 +67,7 @@ export function CreatorStatementDesk() {
         </div>
       )}
       <p className="text-xs leading-5 text-muted">
-        Read-only allocation records from the Bridge settlement ledger. PAID is an application status and timestamp, not independent bank confirmation. No title licensing fee is treated as Creator income; bank reconciliation and tax/accounting certification are separate controls.
+        Read-only allocation records from the Bridge settlement ledger. PAID is an application status and timestamp, not independent bank confirmation. Currency totals are never combined. No title licensing fee is treated as Creator income; bank reconciliation and tax/accounting certification are separate controls.
       </p>
     </div>
   );
