@@ -46,7 +46,26 @@ export async function getBuyerGateStatus(titleId: string): Promise<BuyerGateStat
 
 export async function assertBuyerPublishable(titleId: string) {
   const sql = await getSql();
-  const status = await getBuyerGateStatus(titleId);
-  if (!status.publishable) throw new Error("Buyer publication blocked: one or more server-side readiness gates are incomplete");
+  const subtitleAssets = await sql<{ s3_key: string }>`
+    select s3_key from bridge_assets where title_id = ${titleId} and kind = 'subtitle' and coalesce(byte_size, 0) > 0
+  `;
+  const otherTitles = await sql<{ id: string; slug: string; name: string; name_ml: string | null }>`
+    select id,slug,name,name_ml from bridge_titles where id <> ${titleId}
+  `;
+  const hasForeignSubtitle = subtitleAssets.some((asset) =>
+    findForeignTitleFilenameMatch(
+      asset.s3_key,
+      titleId,
+      otherTitles.map((candidate) => ({
+        id: candidate.id,
+        slug: candidate.slug,
+        name: candidate.name,
+        nameMl: candidate.name_ml,
+      })),
+    ),
+  );
+  if (hasForeignSubtitle) {
+    throw new Error("Buyer publication blocked: a subtitle asset appears to belong to another title");
+  }
   await sql`select public.bridge_assert_buyer_publishable(${titleId})`;
 }
