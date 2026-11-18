@@ -51,7 +51,7 @@ function InvestorGovernanceBody() {
               <Metric label="Investor records" value={summary.recordCount.toLocaleString("en-IN")} />
               <Metric label="Linked accounts" value={summary.linkedCount.toLocaleString("en-IN")} />
               <Metric label="Unlinked records" value={summary.unlinkedCount.toLocaleString("en-IN")} />
-              <Metric label="Recorded capital" value={formatMoney(summary.totalCapitalPaise, "INR")} />
+              
             </section>
           ) : null}
 
@@ -116,6 +116,3 @@ function Metric({ label, value }: { label: string; value: string }) {
   );
 }
 
-function formatMoney(paise: number, currency: string) {
-  return new Intl.NumberFormat("en-IN", { style: "currency", currency, maximumFractionDigits: 0 }).format(paise / 100);
-}
