@@ -123,7 +123,7 @@ function DashboardBody() {
           <Workspace title="Titles & Media" description="Master title library, Creator/Studio submissions, assets, metadata and QC." to="/workspace" />
           <Workspace title="Rights & Legal" description="Rights evidence, agreements, independent reviews and approval decisions." to="/admin/workstations" />
           <Workspace title="Buyer Management" description="Independent Buyer accounts and their own licensing access." to="/buyer-management" />
-          <Workspace title="Distribution Control" description="Loop authorization, destinations, delivery and publication state." to="/admin/services" />
+          <Workspace title="Services & Operations" description="Service operations, delivery and production control entry points." to="/admin/services" />
           <Workspace title="Revenue & Finance" description="Buyer deals, captured payments, ledger and reconciliation work." to="/admin" />
           <Workspace title="People & Access" description="Creator, Studio, Buyer and internal roles with controlled access." to="/admin/users" />
           <Workspace title="Website & Loop Gateway" description="Bridge website CMS and separate Loop publication controls." to="/admin-cms" />
