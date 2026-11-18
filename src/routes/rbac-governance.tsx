@@ -29,7 +29,7 @@ function RbacGovernanceBody({ currentUserId }: { currentUserId: string }) {
     retry: false,
   });
   const roleMutation = useMutation({
-    mutationFn: (data: { userId: string; role: string | null }) => updateSuperAdminRoleAssignment({ data }),
+    mutationFn: (data: { userId: string; role: InternalRole | null }) => updateSuperAdminRoleAssignment({ data }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["super-admin-rbac-assignments"] });
       qc.invalidateQueries({ queryKey: ["super-admin-rbac-governance"] });
