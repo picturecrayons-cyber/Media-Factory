@@ -550,6 +550,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                     destinationPackage.isPending,
                   ) : null}
                   <p className="text-xs text-muted">Package preparation uses the current PASSED master and artwork only. READY requires all four release certifications plus active QC, Legal and rights evidence.</p>
+                  </div>
                 </div>
               ) : null}
               <p>
