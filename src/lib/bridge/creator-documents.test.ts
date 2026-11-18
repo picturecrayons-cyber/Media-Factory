@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { sameOwner, isSupportedCreatorDocumentMimeType, hasPdfMagicBytes } from "./creator-document-policy.ts";
+import { sameOwner, isSupportedCreatorDocumentMimeType, hasPdfMagicBytes, canDownloadCreatorDocument } from "./creator-document-policy.ts";
 
 test("Creator document vault is isolated to the owning Creator account", () => {
   const document = {
@@ -35,4 +35,11 @@ test("PDF uploads must contain the actual PDF file signature, not only a PDF MIM
   assert.equal(hasPdfMagicBytes(new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31])), true);
   assert.equal(hasPdfMagicBytes(new Uint8Array([0x3c, 0x68, 0x74, 0x6d, 0x6c, 0x3e])), false);
   assert.equal(hasPdfMagicBytes(new Uint8Array([0x25, 0x50, 0x44])), false);
+});
+
+test("document downloads require ownership, linked-title review scope, or Super Admin", () => {
+  assert.equal(canDownloadCreatorDocument({ ownerAccess: true, linkedTitleAccess: false, isSuperAdmin: false }), true);
+  assert.equal(canDownloadCreatorDocument({ ownerAccess: false, linkedTitleAccess: true, isSuperAdmin: false }), true);
+  assert.equal(canDownloadCreatorDocument({ ownerAccess: false, linkedTitleAccess: false, isSuperAdmin: true }), true);
+  assert.equal(canDownloadCreatorDocument({ ownerAccess: false, linkedTitleAccess: false, isSuperAdmin: false }), false);
 });
