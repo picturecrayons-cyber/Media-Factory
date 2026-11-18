@@ -76,9 +76,11 @@ jobs:
 
       - run: npm ci
 
-      - uses: supabase/setup-cli@v1
+      # Keep this isolated migration replay on the maintained CLI v2
+      # channel; v3 changes local/remote command defaults.
+      - uses: supabase/setup-cli@v3
         with:
-          version: latest
+          version: v2.stable
 
       # Supabase CLI automatically applies files in supabase/migrations during
       # start. Hide the recovered ledger temporarily so the custom replay can
