@@ -62,3 +62,14 @@ test("verified user with a throwing profile retry does not sign out", async () =
     signIn: async () => { assert.fail("must preserve session"); },
   }), /Profile service unavailable/);
 });
+
+
+test("workspace gate bounds profile lookup and preserves session on timeout", () => {
+  const source = readFileSync(new URL("../../components/bridge/gate.tsx", import.meta.url), "utf8");
+  assert.match(source, /withTimeout\(getBridgeSession\(\), 12_000/);
+  assert.match(source, /setLoadingTimedOut\(true\)/);
+  assert.match(source, /window\.location\.reload\(\)/);
+  assert.match(source, /saved sign-in session has not been cleared/);
+  assert.match(source, /signOut\(\{ scope: "local" \}\)/);
+  assert.match(source, /outcome === "unavailable"/);
+});

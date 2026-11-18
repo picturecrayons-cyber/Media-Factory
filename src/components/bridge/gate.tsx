@@ -1,6 +1,7 @@
 import { Link, Navigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
+import { withTimeout } from "@/lib/auth/with-timeout";
 import { RedirectToSignIn } from "@/lib/auth/gates";
 import { retryWorkspaceSession } from "@/lib/auth/workspace-session-retry";
 import { supabase } from "@/lib/supabase";
@@ -32,13 +33,25 @@ export function RequireBridge({
   const qc = useQueryClient();
   const [retrying, setRetrying] = useState(false);
   const [retryError, setRetryError] = useState<string | null>(null);
+  const [loadingTimedOut, setLoadingTimedOut] = useState(false);
   const { user, isPending } = useCurrentUserState();
   const sessionQ = useQuery({
     queryKey: ["bridge-session", user?.id],
-    queryFn: () => getBridgeSession(),
+    queryFn: () => withTimeout(getBridgeSession(), 12_000, "Workspace session lookup timed out."),
     enabled: !isPending && Boolean(user),
     retry: false,
   });
+  const loading = isPending || Boolean(user && sessionQ.isPending);
+
+  useEffect(() => {
+    if (!loading) {
+      setLoadingTimedOut(false);
+      return;
+    }
+    const timeout = window.setTimeout(() => setLoadingTimedOut(true), 15_000);
+    return () => window.clearTimeout(timeout);
+  }, [loading]);
+
   const verifyMail = useMutation({
     mutationFn: () => requestEmailVerification(),
     onSuccess: () => {
@@ -46,10 +59,22 @@ export function RequireBridge({
     },
   });
 
-  if (isPending || (user && sessionQ.isPending)) {
+  if (loading && !loadingTimedOut) {
     return (
       <Frame>
         <p className="text-sm text-muted">Opening your desk…</p>
+      </Frame>
+    );
+  }
+  if (loadingTimedOut) {
+    return (
+      <Frame>
+        <h1 className="font-display text-2xl">Workspace is taking too long</h1>
+        <p role="alert" className="text-sm text-muted">
+          Bridge could not finish restoring your session. Your saved sign-in session has not been cleared. Check your connection and retry.
+        </p>
+        <Button type="button" onClick={() => window.location.reload()}>Retry workspace</Button>
+        <Link to="/login" className="block text-sm text-accent underline-offset-4 hover:underline">Sign in</Link>
       </Frame>
     );
   }
