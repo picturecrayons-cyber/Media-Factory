@@ -28,11 +28,20 @@ function firstString(source: UnknownRecord, keys: string[]): string | null {
 
 function normalizeSender(value: string): string {
   const sender = value.trim();
-  const address = sender.match(/<([^<>]+)>/)?.[1]?.trim() ?? sender;
-  if (
-    sender.length > 320 ||
-    !/^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(address)
-  ) {
+  if (!sender || sender.length > 320) {
+    throw new Error("Invalid sender");
+  }
+
+  let address = sender;
+  if (sender.includes("<") || sender.includes(">")) {
+    // If an angle-bracket form is used, require the entire value to match it.
+    // This rejects valid addresses embedded in leading/trailing junk.
+    const match = sender.match(/^([^<>]*)<([^<>]+)>$/);
+    if (!match) throw new Error("Invalid sender");
+    address = match[2].trim();
+  }
+
+  if (!/^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(address)) {
     throw new Error("Invalid sender");
   }
   return sender;
@@ -51,6 +60,58 @@ export function isValidHostingerBearer(
   const expectedBytes = Buffer.from(expectedSecret.trim(), "utf8");
   return suppliedBytes.length === expectedBytes.length &&
     timingSafeEqual(suppliedBytes, expectedBytes);
+}
+
+/**
+ * Hostinger's dashboard Test action sends a metadata-only envelope:
+ * { event, id, timestamp, data: { date, from, messageId, subject } }.
+ * It has no mailbox or message object and must never create an inbox record.
+ * Real deliveries continue through parseHostingerIncomingPayload below.
+ */
+export function isHostingerTestDeliveryPayload(value: unknown): boolean {
+  const payload = asRecord(value);
+  if (!payload || payload.event !== "message.received") return false;
+
+  const topLevelKeys = Object.keys(payload).sort();
+  if (
+    topLevelKeys.length !== 4 ||
+    topLevelKeys.join("|") !== "data|event|id|timestamp"
+  ) {
+    return false;
+  }
+
+  const data = asRecord(payload.data);
+  if (!data) return false;
+  const dataKeys = Object.keys(data).sort();
+  if (dataKeys.length !== 4 || dataKeys.join("|") !== "date|from|messageId|subject") {
+    return false;
+  }
+
+  if (
+    typeof payload.id !== "string" ||
+    payload.id.trim().length < 1 ||
+    payload.id.length > 256 ||
+    typeof payload.timestamp !== "string" ||
+    !Number.isFinite(Date.parse(payload.timestamp)) ||
+    typeof data.date !== "string" ||
+    !Number.isFinite(Date.parse(data.date)) ||
+    typeof data.from !== "string" ||
+    typeof data.messageId !== "string" ||
+    data.messageId.trim().length < 1 ||
+    data.messageId.length > 256 ||
+    typeof data.subject !== "string" ||
+    data.subject.length > 998
+  ) {
+    return false;
+  }
+
+  try {
+    normalizeSender(data.from);
+  } catch {
+    return false;
+  }
+
+  return true;
 }
 
 export function parseHostingerIncomingPayload(
