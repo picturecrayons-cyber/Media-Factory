@@ -166,17 +166,18 @@ test("certified Loop publication advances a licensing-ready Bridge title to buye
   assert.ok(event);
   assert.ok(event.values.includes("LICENSING_READY"));
   assert.ok(event.values.includes("LIVE_FOR_BUYERS"));
+  assert.equal((event.values as unknown[]).includes("LICENSING_READY"), true);
 });
 
 test("publication fails closed without explicitly approved TVOD pricing", async () => {
   const h = harness([grant], true, false, undefined, true, "LICENSED", false);
-  await assert.rejects(h.authorize({ context, data }), /Super Admin-approved TVOD consumer pricing/);
+  await assert.rejects(h.authorize({ context, data }), /Super Admin-approved TVOD rental pricing/);
   assert.equal(h.writes.length, 0);
 });
 
 test("publication requires a certified Loop destination package", async () => {
   const h = harness([grant], true, false, undefined, false);
-  await assert.rejects(h.authorize({ context, data }), /certified READY Crayons Loop destination package/);
+  await assert.rejects(h.authorize({ context, data }), /latest Crayons Loop destination package must be certified READY/);
   assert.equal(h.writes.length, 0);
 });
 
