@@ -20,7 +20,7 @@ function assertWritesEnabled(){
 export const listSuperAdminSupportDesk=createServerFn({method:"GET"}).middleware([authMiddleware]).handler(async({context})=>{
  await guard(context.userId);
  const sql=await getSql();
- const [cases,inbound,staff,events]=await Promise.all([
+ const [cases,inbound,events,staff]=await Promise.all([
   sql<{id:string;case_number:number|string;requester_email:string;subject:string;status:string;priority:string;assigned_to:string|null;created_at:string|Date;updated_at:string|Date}>`
    select id,case_number,requester_email,subject,status,priority,assigned_to,created_at,updated_at
    from private.bridge_support_cases
