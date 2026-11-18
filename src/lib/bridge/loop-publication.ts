@@ -277,21 +277,6 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
     assertPermission(actor, "title.read_catalog");
     const sql = await getSql();
 
-    // Auto-reevaluate any expired distribution windows
-    await sql`
-      update bridge_loop_publications
-      set authorization_status = 'expired', updated_at = now()
-      where window_end is not null and window_end < now() and authorization_status in ('authorized', 'live')
-    `.catch(() => {});
-
-    await sql`
-      update loop_titles
-      set status = 'expired', published = false, listed = false, updated_at = now()
-      where bridge_title_id in (
-        select bridge_title_id from bridge_loop_publications where authorization_status = 'expired'
-      ) and published = true
-    `.catch(() => {});
-
     const rows = await sql<{
       id: string;
       slug: string;
@@ -324,9 +309,15 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
     }>`
       select b.id, b.slug, b.name, b.status, b.language, b.master_key, b.poster_key,
              b.synopsis, b.year, b.runtime_minutes,
-             p.loop_title_id, p.authorization_status, p.window_start, p.window_end,
-             p.territories, p.languages, p.exploitation_models,
-             l.status as loop_status, l.listed, l.published, l.playback_path,
+             p.loop_title_id,
+             case when p.window_end is not null and p.window_end < now()
+                       and p.authorization_status in ('authorized','live')
+                  then 'expired' else p.authorization_status end as authorization_status,
+             p.window_start, p.window_end, p.territories, p.languages, p.exploitation_models,
+             case when p.window_end is not null and p.window_end < now() then 'expired' else l.status end as loop_status,
+             case when p.window_end is not null and p.window_end < now() then false else l.listed end as listed,
+             case when p.window_end is not null and p.window_end < now() then false else l.published end as published,
+             l.playback_path,
              exists(
                select 1 from bridge_qc_cases q
                where q.title_id=b.id and q.status='PASSED'
