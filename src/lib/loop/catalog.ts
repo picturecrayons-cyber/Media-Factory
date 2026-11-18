@@ -87,10 +87,10 @@ export const getLoopCatalog = createServerFn({ method: "GET" })
         p.authorization_status, p.window_start, p.window_end
       from loop_titles l
       join bridge_loop_publications p on p.loop_title_id = l.id
-      where p.authorization_status = 'authorized'
+      where p.authorization_status = 'authorized' and p.revoked_at is null
         and l.published = true
         and l.listed = true
-        and l.status = 'approved'
+        and l.status = 'approved' and l.listed = true
         and (p.window_start is null or p.window_start <= now())
         and (p.window_end is null or p.window_end >= now())
       order by l.featured desc, l.created_at desc
@@ -183,7 +183,7 @@ export const getLoopTitleDetails = createServerFn({ method: "GET" })
       from loop_titles l
       join bridge_loop_publications p on p.loop_title_id = l.id
       where (l.id = ${data.slugOrId} or l.slug = ${data.slugOrId})
-        and p.authorization_status = 'authorized'
+        and p.authorization_status = 'authorized' and p.revoked_at is null
         and l.published = true
         and l.status = 'approved'
         and (p.window_start is null or p.window_start <= now())
@@ -210,7 +210,7 @@ export const getLoopTitleDetails = createServerFn({ method: "GET" })
       from loop_titles l
       join bridge_loop_publications p on p.loop_title_id = l.id
       where l.id != ${title.id}
-        and p.authorization_status = 'authorized'
+        and p.authorization_status = 'authorized' and p.revoked_at is null
         and l.published = true and l.listed = true and l.status='approved'
         and (p.window_start is null or p.window_start <= now())
         and (p.window_end is null or p.window_end > now())
