@@ -40,7 +40,7 @@ function OrganizationGovernanceBody() {
   return (
     <div className="space-y-6">
       <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">Governance · read only</p>
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">Governance · feature-gated writes</p>
         <h2 className="mt-2 font-display text-2xl font-semibold sm:text-3xl">Organizations & memberships</h2>
         <p className="mt-2 max-w-3xl text-sm leading-relaxed text-muted">
           Displays canonical organization and membership records. Invitation and membership mutations are server-side audited but fail-closed behind a Preview-only feature flag. No invitation email is sent.
