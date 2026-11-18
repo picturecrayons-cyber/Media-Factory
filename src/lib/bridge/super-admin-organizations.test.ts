@@ -42,7 +42,7 @@ test("organization governance reads canonical records only and never sends invit
   assert.equal(result.organizations[0].memberCount, 2);
   assert.equal(result.memberships[0].userReference, "user-1");
   assert.equal(result.memberships[0].role, "owner");
-  assert.equal(result.invitationWorkflow, "NOT_IMPLEMENTED");
+  assert.equal(result.invitationWorkflow, "DISABLED");
   assert.equal(h.queries.length, 2);
   assert.ok(h.queries.every((query) => !/\b(insert|update|delete)\b/i.test(query)));
   assert.ok(h.queries.every((query) => !/email|invite/i.test(query)));
