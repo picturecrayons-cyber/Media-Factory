@@ -459,7 +459,7 @@ export const updateTitle = createServerFn({ method: "POST" })
         name_ml = ${data.nameMl ?? title.nameMl},
         synopsis = ${data.synopsis ?? title.synopsis},
         language = ${data.language ?? title.language},
-        master_language = ${data.masterLanguage === undefined ? title.masterLanguage : data.masterLanguage},
+        master_language = ${data.masterLanguage === undefined ? title.masterLanguage ?? null : data.masterLanguage},
         year = ${data.year === undefined ? title.year : data.year},
         runtime_minutes = ${data.runtimeMinutes === undefined ? title.runtimeMinutes : data.runtimeMinutes},
         licensing_fee_paise = ${data.licensingFeePaise ?? title.licensingFeePaise},
