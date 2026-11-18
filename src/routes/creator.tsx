@@ -7,6 +7,7 @@ import { TitleList } from "@/components/bridge/title-desk";
 import { MyStoryConcepts } from "@/components/bridge/my-story-concepts";
 import { NewSubmissionPanel } from "@/components/bridge/new-submission-panel";
 import { listTitles } from "@/lib/bridge/titles";
+import { CreatorRoyaltiesDesk } from "@/components/bridge/creator-royalties-desk";
 
 export const Route = createFileRoute("/creator")({ component: Creator });
 
@@ -22,7 +23,7 @@ const SECTIONS = [
   ["My Assets", "#assets"],
   ["Review & Corrections", "#review"],
   ["Delivery Status", "#delivery"],
-  ["Statements", "#statements"],
+  ["Royalties", "#royalties"],
 ] as const;
 
 function Creator() {
@@ -266,17 +267,16 @@ function CreatorDashboard({
         )}
       </section>
 
-      <section id="statements" className="scroll-mt-20 rounded-2xl border border-line bg-surface p-5 sm:p-6">
-        <p className="text-xs font-semibold uppercase tracking-widest text-muted">Creator finance</p>
-        <h2 className="mt-1 font-display text-2xl font-semibold">Statements</h2>
-        <p className="mt-3 max-w-3xl text-sm leading-relaxed text-muted">
-          Creator earnings, commissions, adjustments and downloadable statements are shown only when
-          verified creator-payable ledger and reconciliation data are available. Title licensing values
-          are not treated as creator earnings.
-        </p>
-        <p className="mt-4 inline-flex rounded-full border border-line px-3 py-1 text-xs font-semibold text-muted">
-          NOT VERIFIED · No statement feed connected
-        </p>
+      <section id="royalties" className="scroll-mt-20 space-y-3 rounded-2xl border border-line bg-surface p-5 sm:p-6">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-widest text-muted">Creator finance</p>
+          <h2 className="mt-1 font-display text-2xl font-semibold">Royalties & Statements</h2>
+          <p className="mt-2 max-w-3xl text-sm leading-relaxed text-muted">
+            Read-only creator-payable settlement records from titles owned by this account. No earnings
+            are estimated from licensing fees, title status or unverified commercial activity.
+          </p>
+        </div>
+        <CreatorRoyaltiesDesk actorUserId={actor.userId} />
       </section>
 
       <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-line pt-5 text-xs text-muted">
