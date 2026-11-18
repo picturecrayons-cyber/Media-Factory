@@ -393,6 +393,203 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
     };
   });
 
+const loopPackageInput = z.object({ bridgeTitleId: z.string().min(8) });
+
+/** Build a private, versioned Loop destination package from the title's current verified assets. */
+export const prepareLoopDestinationPackage = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(loopPackageInput)
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    assertPermission(actor, "loop.publish");
+    const sql = await getSql();
+    return sql.transaction(async (tx) => {
+      const titles = await tx<{
+        id: string; status: string; name: string; slug: string; synopsis: string;
+        language: string; year: number | null; runtime_minutes: number | null;
+        content_type: string; master_key: string | null; poster_key: string | null;
+      }>`
+        select id,status,name,slug,synopsis,language,year,runtime_minutes,content_type,master_key,poster_key
+        from bridge_titles where id=${data.bridgeTitleId} for update
+      `;
+      const title = titles[0];
+      if (!title) throw new Error("Title not found");
+      if (!["LICENSING_READY","LIVE_FOR_BUYERS","IN_NEGOTIATION","LICENSED","DELIVERED"].includes(title.status)) {
+        throw new Error("Loop package preparation requires a Legal-cleared LICENSING_READY title");
+      }
+      if (!title.master_key || !title.poster_key) throw new Error("Current verified master and poster are required");
+
+      const grants = await tx<BridgeRightsGrant & { evidence: Array<{ commercialTerms?: CommercialTermsSummary }> }>`
+        select id,status,territories,languages,media,window_start,window_end,exclusivity,evidence
+        from bridge_rights_grants
+        where title_id=${title.id} and status='VALID'
+        order by created_at desc
+      `;
+      const grant = findCoveringRightsGrant(grants, {
+        destination: "CRAYONS_LOOP",
+        territories: ["WORLDWIDE"],
+        languages: [title.language],
+        exploitationModels: ["TVOD"],
+        windowStart: grants[0]?.window_start ? iso(grants[0].window_start) : null,
+        windowEnd: grants[0]?.window_end ? iso(grants[0].window_end) : null,
+      });
+      if (!grant) throw new Error("No current VALID rights grant covers Crayons Loop WORLDWIDE TVOD");
+
+      const qcRows = await tx<{ id: string }>`
+        select id from bridge_qc_cases
+        where title_id=${title.id} and status='PASSED'
+          and reviewer_findings->0->>'masterKey'=${title.master_key}
+          and reviewer_findings->0->>'posterKey'=${title.poster_key}
+        order by reviewed_at desc limit 1
+      `;
+      if (!qcRows[0]) throw new Error("QC approval for the current master and poster is required");
+      const legalRows = await tx<{ id: string }>`
+        select id from bridge_legal_cases
+        where title_id=${title.id} and status='APPROVED'
+          and evidence->0->>'grantId'=${grant.id}
+        order by reviewed_at desc limit 1
+      `;
+      if (!legalRows[0]) throw new Error("Independent Legal approval for the selected rights grant is required");
+
+      const assets = await tx<{ id: string; asset_group: string; s3_key: string }>`
+        select id,asset_group,s3_key from bridge_asset_versions
+        where title_id=${title.id} and processing_state='PASSED'
+          and ((asset_group='VIDEO' and s3_key=${title.master_key})
+            or (asset_group='ARTWORK' and s3_key=${title.poster_key}))
+      `;
+      const video = assets.find((asset) => asset.asset_group === "VIDEO" && asset.s3_key === title.master_key);
+      const artwork = assets.find((asset) => asset.asset_group === "ARTWORK" && asset.s3_key === title.poster_key);
+      if (!video || !artwork) throw new Error("Current master and artwork must have PASSED asset-version records");
+      const assetVersionIds = [video.id, artwork.id];
+
+      const existing = await tx<{ id: string; readiness_state: string; asset_version_ids: string[] }>`
+        select id,readiness_state,asset_version_ids from bridge_destination_packages
+        where title_id=${title.id} and destination='CRAYONS_LOOP' and rights_grant_id=${grant.id}
+        order by package_version desc limit 1
+      `;
+      if (existing[0] && JSON.stringify(existing[0].asset_version_ids) === JSON.stringify(assetVersionIds)) {
+        return { packageId: existing[0].id, readinessState: existing[0].readiness_state, reused: true as const };
+      }
+
+      const versions = await tx<{ next_version: number }>`
+        select coalesce(max(package_version),0)+1 as next_version
+        from bridge_destination_packages where title_id=${title.id} and destination='CRAYONS_LOOP'
+      `;
+      const packageId = randomUUID();
+      const commercialTerms = grants.find((item) => item.id === grant.id)?.evidence?.[0]?.commercialTerms ?? null;
+      await tx`
+        insert into bridge_destination_packages
+          (id,title_id,destination,package_version,rights_grant_id,qc_case_id,legal_case_id,
+           asset_version_ids,consumer_metadata,monetization,readiness_state)
+        values
+          (${packageId},${title.id},'CRAYONS_LOOP',${Number(versions[0]?.next_version ?? 1)},
+           ${grant.id},${qcRows[0].id},${legalRows[0].id},
+           ${JSON.stringify(assetVersionIds)}::jsonb,
+           ${JSON.stringify({
+             bridgeTitleId: title.id, slug: title.slug, title: title.name, synopsis: title.synopsis,
+             contentType: loopStageType(title.content_type), language: title.language, year: title.year,
+             durationMinutes: title.runtime_minutes, posterAssetVersionId: artwork.id,
+           })}::jsonb,
+           ${JSON.stringify({ model: "TVOD", accessTier: "TVOD", commercialTerms })}::jsonb,
+           'HOLD')
+      `;
+      await writeAudit({
+        actorUserId: actor.userId,
+        action: "distribution.loop_package_prepared",
+        entityType: "bridge_destination_package",
+        entityId: packageId,
+        metadata: { titleId: title.id, rightsGrantId: grant.id, qcCaseId: qcRows[0].id, legalCaseId: legalRows[0].id, assetVersionIds },
+      }, tx);
+      return { packageId, readinessState: "HOLD" as const, reused: false as const };
+    });
+  });
+
+export const getLoopDestinationPackage = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .validator(loopPackageInput)
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    assertPermission(actor, "title.read_catalog");
+    const sql = await getSql();
+    const rows = await sql<{
+      id: string; package_version: number; readiness_state: string; rights_grant_id: string;
+      qc_case_id: string; legal_case_id: string; asset_version_ids: string[];
+      consumer_metadata: Record<string, unknown>; created_at: string | Date;
+    }>`
+      select id,package_version,readiness_state,rights_grant_id,qc_case_id,legal_case_id,
+             asset_version_ids,consumer_metadata,created_at
+      from bridge_destination_packages
+      where title_id=${data.bridgeTitleId} and destination='CRAYONS_LOOP'
+      order by package_version desc limit 1
+    `;
+    return { package: rows[0] ?? null };
+  });
+
+export const certifyLoopDestinationPackage = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({ packageId: z.string().uuid() }))
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    assertPermission(actor, "loop.publish");
+    const sql = await getSql();
+    return sql.transaction(async (tx) => {
+      const rows = await tx<{
+        id: string; title_id: string; readiness_state: string; rights_grant_id: string;
+        qc_case_id: string; legal_case_id: string; asset_version_ids: string[];
+      }>`
+        select id,title_id,readiness_state,rights_grant_id,qc_case_id,legal_case_id,asset_version_ids
+        from bridge_destination_packages where id=${data.packageId} and destination='CRAYONS_LOOP' for update
+      `;
+      const pkg = rows[0];
+      if (!pkg) throw new Error("Loop destination package not found");
+      if (pkg.readiness_state === "READY") return { packageId: pkg.id, readinessState: "READY" as const };
+      if (pkg.readiness_state !== "HOLD") throw new Error("Only a HOLD package can be certified READY");
+      const gates = await tx<{ ott: string; packaging: string; curation: string; delivery: string }>`
+        select ott_preparation_status as ott,packaging_status as packaging,
+               curation_status as curation,delivery_status as delivery
+        from bridge_title_gate_certifications where title_id=${pkg.title_id} limit 1
+      `;
+      const gate = gates[0];
+      if (!gate || gate.ott !== "READY" || gate.packaging !== "COMPLETE" || gate.curation !== "APPROVED" || gate.delivery !== "READY") {
+        throw new Error("OTT, packaging, curation and delivery certifications must all pass before package readiness");
+      }
+      const evidence = await tx<{ valid_grant: boolean; qc_ok: boolean; legal_ok: boolean }>`
+        select
+          exists(select 1 from bridge_rights_grants where id=${pkg.rights_grant_id} and title_id=${pkg.title_id} and status='VALID' and window_end>now()) as valid_grant,
+          exists(select 1 from bridge_qc_cases where id=${pkg.qc_case_id} and title_id=${pkg.title_id} and status='PASSED') as qc_ok,
+          exists(select 1 from bridge_legal_cases where id=${pkg.legal_case_id} and title_id=${pkg.title_id} and status='APPROVED'
+            and evidence->0->>'grantId'=${pkg.rights_grant_id}) as legal_ok
+      `;
+      if (!evidence[0]?.valid_grant || !evidence[0]?.qc_ok || !evidence[0]?.legal_ok) {
+        throw new Error("The selected rights, QC or Legal approval is no longer valid");
+      }
+      const assetIds = Array.isArray(pkg.asset_version_ids) ? pkg.asset_version_ids : [];
+      if (assetIds.length < 2) throw new Error("Package must contain the current master and artwork asset versions");
+      const assets = await tx<{ id: string; asset_group: string }>`
+        select id,asset_group from bridge_asset_versions
+        where title_id=${pkg.title_id} and id=any(${assetIds}::uuid[]) and processing_state='PASSED'
+      `;
+      if (assets.length !== assetIds.length || !assets.some((asset) => asset.asset_group === "VIDEO") || !assets.some((asset) => asset.asset_group === "ARTWORK")) {
+        throw new Error("Every package asset must remain PASSED and include video master plus artwork");
+      }
+      await tx`
+        update bridge_destination_packages set readiness_state='READY'
+        where id=${pkg.id} and readiness_state='HOLD'
+      `;
+      await writeAudit({
+        actorUserId: actor.userId,
+        action: "distribution.loop_package_ready",
+        entityType: "bridge_destination_package",
+        entityId: pkg.id,
+        metadata: { titleId: pkg.title_id, assetVersionIds: assetIds },
+      }, tx);
+      return { packageId: pkg.id, readinessState: "READY" as const };
+    });
+  });
+
 export const authorizeLoopPublication = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(publishInput)
