@@ -1,3 +1,20 @@
+-- Explicit Super Admin approval of consumer TVOD pricing; never rely on legacy Loop price defaults.
+create table if not exists public.bridge_loop_consumer_pricing (
+  bridge_title_id text primary key references public.bridge_titles(id) on delete cascade,
+  access_tier text not null default 'TVOD' check (access_tier='TVOD'),
+  rental_price_inr numeric(10,2) not null check (rental_price_inr > 0),
+  purchase_price_inr numeric(10,2) check (purchase_price_inr is null or purchase_price_inr > 0),
+  status text not null default 'APPROVED' check (status in ('APPROVED','REVOKED')),
+  approved_by text not null references public.bridge_profiles(user_id) on delete restrict,
+  approved_at timestamptz not null,
+  approval_note text not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+alter table public.bridge_loop_consumer_pricing enable row level security;
+revoke all on table public.bridge_loop_consumer_pricing from public,anon,authenticated;
+grant select,insert,update on table public.bridge_loop_consumer_pricing to service_role;
+
 -- Paid Loop TVOD rental orders. A pending order never creates playback entitlement.
 -- Text identity columns keep this migration compatible with legacy text IDs and the current UUID Loop schema.
 create table if not exists public.loop_tvod_orders (
