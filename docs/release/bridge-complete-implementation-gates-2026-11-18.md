@@ -45,6 +45,14 @@
 - Master/poster indicators in Bridge are labelled REGISTERED, not VERIFIED, when they only reflect a stored object key.
 
 **Not yet certified:** OCI credentials and object reachability, HLS playlist/segment delivery, authenticated Loop playback, TVOD order → captured payment → entitlement, and visible catalogue E2E. No titles were seeded or published by this implementation.
+## Loop projection schema reconciliation
+
+- READ-ONLY catalog inspection on STAGING DB `jbymleftneggcgutlcqu` found that `loop_titles` has the newer Loop field names (`release_year`, `runtime_minutes`, `age_rating`, `poster_url`, `is_listed`, `is_published`, `price_paise`) while Bridge/Loop gateway integration expects the canonical projection fields (`year`, `duration_minutes`, `maturity_rating`, `poster_path`, `playback_path`, `listed`, `published`, `tvod_rental_price`).
+- PRODUCTION DB `mlmgugivsyoxzdgwkbpu` was inspected READ-ONLY and already has the canonical projection columns expected by the integration. No Production changes were made.
+- Added `supabase/migrations/20261118120000_bridge_loop_projection_compat.sql` as an additive, idempotent compatibility migration. It preserves existing Loop fields, backfills metadata aliases without overwriting populated canonical values, keeps new publication flags false by default, and deliberately does not infer a TVOD rental price from licensing fees or paise values.
+- The migration has **not** been applied to STAGING or PRODUCTION. STAGING DB action remains pending explicit migration gate; Access: READ-ONLY until approved; Risk: schema mutation on the shared Testing project. PRODUCTION DB action: READ-ONLY; Risk: none from this inspection.
+- STAGING `loop_titles` has RLS enabled and a deny-all policy for `anon` and `authenticated`; service_role has table privileges. RLS is not FORCE. This is not a substitute for server-side Bridge grant checks.
+
 ## Rollback-only Studio workflow smoke
 
 The new `scripts/staging-studio-workflow-smoke.mjs` is a **rollback-only SQL fixture contract smoke**, not an invocation of the application server action:
