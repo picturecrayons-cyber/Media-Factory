@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { sameOwner, isSupportedCreatorDocumentMimeType } from "./creator-document-policy.ts";
+import { sameOwner, isSupportedCreatorDocumentMimeType, hasPdfMagicBytes } from "./creator-document-policy.ts";
 
 test("Creator document vault is isolated to the owning Creator account", () => {
   const document = {
@@ -29,4 +29,10 @@ test("legal evidence upload accepts PDF only", () => {
   assert.equal(isSupportedCreatorDocumentMimeType("application/pdf"), true);
   assert.equal(isSupportedCreatorDocumentMimeType("text/html"), false);
   assert.equal(isSupportedCreatorDocumentMimeType("application/octet-stream"), false);
+});
+
+test("PDF uploads must contain the actual PDF file signature, not only a PDF MIME header", () => {
+  assert.equal(hasPdfMagicBytes(new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31])), true);
+  assert.equal(hasPdfMagicBytes(new Uint8Array([0x3c, 0x68, 0x74, 0x6d, 0x6c, 0x3e])), false);
+  assert.equal(hasPdfMagicBytes(new Uint8Array([0x25, 0x50, 0x44])), false);
 });
