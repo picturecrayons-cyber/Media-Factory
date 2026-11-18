@@ -26,6 +26,8 @@ function FinanceBody() {
   });
   const summary = overviewQ.data?.summary ?? [];
   const recent = overviewQ.data?.recentPayments ?? [];
+  const settlementSummary = overviewQ.data?.settlementSummary ?? [];
+  const recentSettlements = overviewQ.data?.recentSettlements ?? [];
 
   return (
     <div className="space-y-6">
@@ -68,6 +70,56 @@ function FinanceBody() {
             ) : (
               <p className="rounded-xl border border-line p-5 text-sm text-muted">No payment rows were returned by the current query.</p>
             )}
+          </section>
+
+          <section className="space-y-3">
+            <div>
+              <h3 className="font-display text-lg font-semibold">Recorded settlement summaries</h3>
+              <p className="text-xs text-muted">Values are recorded in Bridge settlement rows only; no bank, gateway or accounting reconciliation is performed.</p>
+            </div>
+            {settlementSummary.length ? (
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                {settlementSummary.map((row) => (
+                  <article key={row.status + row.currency} className="rounded-xl border border-line bg-surface p-4">
+                    <p className="text-xs font-semibold uppercase tracking-wider text-muted">{row.status.replaceAll("_", " ")} · {row.currency}</p>
+                    <p className="mt-2 text-xl font-semibold tabular-nums">{row.count.toLocaleString("en-IN")} records</p>
+                    <p className="mt-3 text-xs text-muted">Revenue received: {formatMoney(row.revenueReceivedPaise, row.currency)}</p>
+                    <p className="mt-1 text-xs text-muted">Creator payable: {formatMoney(row.creatorPayablePaise, row.currency)}</p>
+                    <p className="mt-1 text-xs text-muted">Investor payable: {formatMoney(row.investorPayablePaise, row.currency)}</p>
+                    <p className="mt-1 text-xs text-muted">Bridge share: {formatMoney(row.bridgeSharePaise, row.currency)}</p>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <p className="rounded-xl border border-line p-5 text-sm text-muted">No settlement summary rows are currently available.</p>
+            )}
+          </section>
+
+          <section className="overflow-hidden rounded-2xl border border-line">
+            <div className="border-b border-line px-4 py-4 sm:px-5">
+              <h3 className="font-semibold">Recent settlement records</h3>
+              <p className="mt-1 text-xs text-muted">Latest 50 records. Private evidence payloads and creator/investor identity details are excluded.</p>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[820px] text-left text-sm">
+                <thead className="border-b border-line text-xs uppercase tracking-wider text-muted">
+                  <tr><th className="px-4 py-3">Title / reference</th><th className="px-4 py-3">Status</th><th className="px-4 py-3">Revenue</th><th className="px-4 py-3">Creator payable</th><th className="px-4 py-3">Investor payable</th><th className="px-4 py-3">Settled</th></tr>
+                </thead>
+                <tbody className="divide-y divide-line">
+                  {recentSettlements.map((row) => (
+                    <tr key={row.reference}>
+                      <td className="px-4 py-3"><p className="font-medium">{row.titleName}</p><p className="mt-1 font-mono text-[10px] text-muted">{row.reference}</p></td>
+                      <td className="px-4 py-3">{row.status}</td>
+                      <td className="px-4 py-3 tabular-nums">{formatMoney(row.revenueReceivedPaise, row.currency)}</td>
+                      <td className="px-4 py-3 tabular-nums">{formatMoney(row.creatorPayablePaise, row.currency)}</td>
+                      <td className="px-4 py-3 tabular-nums">{formatMoney(row.investorPayablePaise, row.currency)}</td>
+                      <td className="px-4 py-3 text-xs text-muted">{row.settledAt ? formatDate(row.settledAt) : "Not marked settled"}</td>
+                    </tr>
+                  ))}
+                  {!recentSettlements.length ? <tr><td colSpan={6} className="px-4 py-8 text-center text-muted">No settlement records are currently available.</td></tr> : null}
+                </tbody>
+              </table>
+            </div>
           </section>
 
           <section className="overflow-hidden rounded-2xl border border-line">
@@ -118,7 +170,7 @@ function FinanceBody() {
           <li>• Payment oversight does not grant Buyer checkout or order-creation privileges.</li>
           <li>• This page cannot verify, capture, refund or reverse a payment.</li>
           <li>• Customer entitlements remain separate from internal staff permissions.</li>
-          <li>• Settlement, invoice and ledger reconciliation are not certified by payment-row totals.</li>
+          <li>• Invoice issuance, bank reconciliation and ledger close are not implemented or certified by these recorded settlement rows.</li>
           <li>• No Razorpay API calls or live transactions are made by this page.</li>
           <li>• All data is fetched server-side after verified Super Admin authorization.</li>
         </ul>
