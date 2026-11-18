@@ -125,9 +125,9 @@ function DashboardBody() {
           <Workspace title="Buyer Management" description="Independent Buyer accounts and their own licensing access." to="/buyer-management" />
           <Workspace title="Distribution Control" description="Loop authorization, destinations, delivery and publication state." to="/internal" />
           <Workspace title="Revenue & Finance" description="Buyer deals, captured payments, ledger and reconciliation work." to="/admin" />
-          <Workspace title="People & Access" description="Creator, Studio, Buyer and internal roles with controlled access." to="/internal" />
+          <Workspace title="People & Access" description="Creator, Studio, Buyer and internal roles with controlled access." to="/admin/users" />
           <Workspace title="Website & Loop Gateway" description="Bridge website CMS and separate Loop publication controls." to="/cms" />
-          <Workspace title="Audit & Security" description="Operational history, access decisions and audit evidence." to="/internal" />
+          <Workspace title="Audit & Security" description="Read-only persisted audit history and security evidence." to="/admin/audit" />
         </div>
       </section>
 
