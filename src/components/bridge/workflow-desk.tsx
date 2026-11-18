@@ -12,6 +12,8 @@ import { listTitleDocumentEvidence } from "@/lib/bridge/creator-documents";
 import {
   authorizeLoopPublication,
   certifyLoopDestinationPackage,
+  configureLoopConsumerPricing,
+  getLoopConsumerPricing,
   getLoopDestinationPackage,
   getLoopPublication,
   prepareLoopDestinationPackage,
@@ -53,6 +55,11 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
     queryFn: () => getLoopDestinationPackage({ data: { bridgeTitleId: title.id } }),
     enabled: Boolean(actor.internalRole) && hasPermission(actor, "title.read_catalog"),
   });
+  const loopConsumerPricing = useQuery({
+    queryKey: ["loop-consumer-pricing", title.id],
+    queryFn: () => getLoopConsumerPricing({ data: { bridgeTitleId: title.id } }),
+    enabled: Boolean(actor.internalRole) && hasPermission(actor, "title.read_catalog"),
+  });
   const documentEvidence = useQuery({
     queryKey: ["title-document-evidence", title.id],
     queryFn: () => listTitleDocumentEvidence({ data: { titleId: title.id } }),
@@ -73,6 +80,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
         qc.invalidateQueries({ queryKey: ["bridge-title", title.id] }),
         qc.invalidateQueries({ queryKey: ["loop-pub", title.id] }),
         qc.invalidateQueries({ queryKey: ["loop-package", title.id] }),
+        qc.invalidateQueries({ queryKey: ["loop-consumer-pricing", title.id] }),
         qc.invalidateQueries({ queryKey: ["bridge-titles"] }),
         qc.invalidateQueries({ queryKey: ["loop-publication-readiness"] }),
         qc.invalidateQueries({ queryKey: ["bridge-audit"] }),
@@ -93,6 +101,9 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
   const [ownerShare, setOwnerShare] = useState("50");
   const isSuperAdmin = actor.internalRole === "super_admin";
   const [selectedGrantByAgreement, setSelectedGrantByAgreement] = useState<Record<string, string>>({});
+  const [loopRentalPriceInr, setLoopRentalPriceInr] = useState("");
+  const [loopPurchasePriceInr, setLoopPurchasePriceInr] = useState("");
+  const [loopPricingNote, setLoopPricingNote] = useState("");
   function downloadStatement() {
     const safe = (v: string) =>
       '"' + (/^[=+@-]/.test(v) ? "'" : "") + v.replaceAll('"', '""') + '"';
@@ -483,8 +494,40 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                 </p>
               )}
               {hasPermission(actor, "loop.publish") ? (
-                <div className="space-y-2 rounded-lg border border-line p-3">
-                  <h4 className="text-sm font-semibold">Loop destination package</h4>
+                <div className="space-y-3 rounded-lg border border-line p-3">
+                  <div className="space-y-2">
+                    <h4 className="text-sm font-semibold">Approved consumer pricing</h4>
+                    {loopConsumerPricing.data?.pricing?.status === "APPROVED" ? (
+                      <p className="text-xs text-muted">
+                        Approved TVOD rental: ₹{Number(loopConsumerPricing.data.pricing.rental_price_inr).toFixed(0)}
+                        {loopConsumerPricing.data.pricing.purchase_price_inr == null
+                          ? " · Purchase not enabled"
+                          : ` · Purchase: ₹${Number(loopConsumerPricing.data.pricing.purchase_price_inr).toFixed(0)}`}
+                      </p>
+                    ) : (
+                      <p className="text-xs text-muted">No approved consumer price. Legacy default prices are ignored and cannot be used for checkout.</p>
+                    )}
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      {input("TVOD rental price (₹, whole rupees)", loopRentalPriceInr, setLoopRentalPriceInr, "number")}
+                      {input("Optional purchase price (₹)", loopPurchasePriceInr, setLoopPurchasePriceInr, "number")}
+                    </div>
+                    {input("Commercial approval note", loopPricingNote, setLoopPricingNote)}
+                    {button("Approve TVOD pricing", () =>
+                      configureLoopConsumerPricing({
+                        data: {
+                          bridgeTitleId: title.id,
+                          rentalPriceInr: Number(loopRentalPriceInr),
+                          purchasePriceInr: loopPurchasePriceInr.trim() ? Number(loopPurchasePriceInr) : null,
+                          approvalNote: loopPricingNote,
+                        },
+                      }),
+                      !Number.isInteger(Number(loopRentalPriceInr)) || Number(loopRentalPriceInr) <= 0 ||
+                        (loopPurchasePriceInr.trim() !== "" && (!Number.isInteger(Number(loopPurchasePriceInr)) || Number(loopPurchasePriceInr) <= 0)) ||
+                        loopPricingNote.trim().length < 8 || loopConsumerPricing.isPending,
+                    )}
+                  </div>
+                  <div className="space-y-2 border-t border-line pt-3">
+                    <h4 className="text-sm font-semibold">Loop destination package</h4>
                   {destinationPackage.isPending ? <p className="text-xs text-muted">Loading package…</p> : null}
                   {destinationPackage.isError ? <p role="alert" className="text-xs text-amber-600">Package status unavailable: {destinationPackage.error.message}</p> : null}
                   {destinationPackage.data?.package ? (
@@ -496,7 +539,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                   ) : null}
                   {button("Prepare / refresh Loop package", () =>
                     prepareLoopDestinationPackage({ data: { bridgeTitleId: title.id } }),
-                    destinationPackage.isPending,
+                    destinationPackage.isPending || loopConsumerPricing.data?.pricing?.status !== "APPROVED",
                   )}
                   {destinationPackage.data?.package?.readiness_state === "HOLD" ? button("Certify package READY", () =>
                     certifyLoopDestinationPackage({ data: { packageId: destinationPackage.data!.package!.id } }),
@@ -509,7 +552,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                 Publish copies the approved title metadata, artwork and media reference into the
                 shared Loop catalog. Catalog publication alone does not prove consumer playback.
               </p>
-              {valid && hasPermission(actor, "loop.publish")
+              {valid && loopConsumerPricing.data?.pricing?.status === "APPROVED" && hasPermission(actor, "loop.publish")
                 ? button("Publish approved license to Loop", () =>
                     authorizeLoopPublication({
                       data: {
@@ -527,6 +570,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                   )
                 : null}
               {!valid ? <p>Blocked: approved, unexpired Loop license required.</p> : null}
+              {valid && loopConsumerPricing.data?.pricing?.status !== "APPROVED" ? <p>Blocked: Super Admin must approve the consumer TVOD price before package publication.</p> : null}
               {pub && hasPermission(actor, "loop.revoke") ? (
                 <div className="flex gap-2">
                   {button("Suspend", () =>
