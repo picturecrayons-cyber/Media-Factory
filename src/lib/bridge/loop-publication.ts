@@ -376,26 +376,43 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
     return {
       titles: rows.map((r) => {
         const titleGrants = grants.filter((grant) => grant.title_id === r.id);
-        const requestedTerritories = r.territories?.length ? r.territories : ["IN"];
         const requestedLanguages = r.languages?.length ? r.languages : [r.language];
         const requestedModels = r.exploitation_models?.length ? r.exploitation_models : ["TVOD"];
         const now = new Date();
-        const coveringGrant = titleGrants.find((grant) => {
+        const candidateWindow = (grant: (typeof titleGrants)[number]) => {
           const grantStart = grant.window_start ? new Date(grant.window_start) : null;
-          const candidateStart = r.window_start
+          const start = r.window_start
             ? new Date(r.window_start)
             : grantStart && grantStart > now ? grantStart : now;
           const grantEnd = grant.window_end ? new Date(grant.window_end) : null;
-          const candidateEnd = r.window_end
+          const end = r.window_end
             ? new Date(r.window_end)
-            : grantEnd ?? new Date(candidateStart.getTime() + 24 * 60 * 60 * 1000);
+            : grantEnd ?? new Date(start.getTime() + 24 * 60 * 60 * 1000);
+          return { start, end };
+        };
+        const rightsMatchedGrant = titleGrants.find((grant) => {
+          const { start, end } = candidateWindow(grant);
+          return grant.territories.length > 0 && Boolean(findCoveringRightsGrant([grant], {
+            destination: "CRAYONS_LOOP",
+            territories: grant.territories,
+            languages: requestedLanguages,
+            exploitationModels: requestedModels,
+            windowStart: start.toISOString(),
+            windowEnd: end.toISOString(),
+          }));
+        });
+        const requestedTerritories = r.territories?.length
+          ? r.territories
+          : rightsMatchedGrant?.territories ?? [];
+        const coveringGrant = titleGrants.find((grant) => {
+          const { start, end } = candidateWindow(grant);
           return Boolean(findCoveringRightsGrant([grant], {
             destination: "CRAYONS_LOOP",
             territories: requestedTerritories,
             languages: requestedLanguages,
             exploitationModels: requestedModels,
-            windowStart: candidateStart.toISOString(),
-            windowEnd: candidateEnd.toISOString(),
+            windowStart: start.toISOString(),
+            windowEnd: end.toISOString(),
           }));
         });
         const legalGrantIds = Array.isArray(r.legal_grant_ids) ? r.legal_grant_ids : [];
@@ -455,15 +472,16 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
           hasPoster: Boolean(r.poster_key),
           ready: isReady,
           blockers,
+          suggestedTerritories: rightsMatchedGrant?.territories ?? [],
           publication: r.loop_title_id
             ? {
                 destination: "CRAYONS_LOOP" as const,
                 loopTitleId: r.loop_title_id,
                 authorizationStatus: (r.authorization_status?.toUpperCase() ||
                   "PENDING") as DistributionAuthorizationStatus,
-                territories: r.territories || ["IN"],
+                territories: r.territories || rightsMatchedGrant?.territories || [],
                 languages: r.languages || [r.language],
-                exploitationModels: r.exploitation_models || ["SVOD"],
+                exploitationModels: r.exploitation_models || ["TVOD"],
                 windowStart: iso(r.window_start),
                 windowEnd: iso(r.window_end),
                 loopStatus: r.loop_status,
@@ -517,7 +535,7 @@ export const authorizeLoopPublication = createServerFn({ method: "POST" })
       insert into loop_titles (
         id, bridge_title_id, slug, title, synopsis, content_type, language, year,
         duration_minutes, poster_path, playback_path, metadata, status, listed,
-        published, featured, access_tier, tvod_rental_price, updated_at
+        published, featured, access_tier, updated_at
       ) values (
         ${loopTitleId}, ${title.id}, ${title.slug}, ${title.name}, ${title.synopsis}, ${loopStageType(title.content_type)},
         ${title.language}, ${title.year}, ${title.runtime_minutes}, ${title.poster_key}, ${preflight.playbackRendition?.s3_key ?? null},
@@ -533,7 +551,7 @@ export const authorizeLoopPublication = createServerFn({ method: "POST" })
           commercialTerms: preflight.commercialTerms || null,
         })}::jsonb,
         ${"approved"}, true, true, false,
-        ${data.accessTier}, ${99}, now()
+        ${data.accessTier}, now()
       )
       on conflict (bridge_title_id) do update set
         slug = excluded.slug, title = excluded.title, synopsis = excluded.synopsis,
@@ -541,7 +559,6 @@ export const authorizeLoopPublication = createServerFn({ method: "POST" })
         language = excluded.language, year = excluded.year, duration_minutes = excluded.duration_minutes,
         poster_path = excluded.poster_path, playback_path = excluded.playback_path,
         status = 'approved', listed = true, published = true, access_tier = excluded.access_tier,
-        tvod_rental_price = excluded.tvod_rental_price,
         metadata = excluded.metadata, updated_at = now()
     `;
 
