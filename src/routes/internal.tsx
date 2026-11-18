@@ -531,9 +531,9 @@ function DistributionDesk({ canPublish, canRevoke }: { canPublish: boolean; canR
                     <strong className={t.hasMaster ? "text-emerald-400" : "text-amber-400"}>
                       {t.hasMaster ? "VERIFIED" : "MISSING"}
                     </strong>{" "}
-                    · Artwork:{" "}
+                    · Artwork asset:{" "}
                     <strong className={t.hasPoster ? "text-emerald-400" : "text-amber-400"}>
-                      {t.hasPoster ? "READY" : "MISSING"}
+                      {t.hasPoster ? "REGISTERED" : "MISSING"}
                     </strong>
                   </p>
                 </div>
