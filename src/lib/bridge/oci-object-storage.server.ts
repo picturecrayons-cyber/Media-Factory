@@ -442,3 +442,32 @@ export async function fetchObjectResponse(key: string, bucket?: string) {
   // 15-second control-plane deadline.
   return signedFetch({ cfg, method: "GET", path, timeoutMs: 120_000 });
 }
+
+/** Read-only OCI bucket metadata probe. Does not list or mutate objects. */
+export async function inspectBucketHealth() {
+  const cfg = config();
+  const namespace = await resolveNamespace(cfg);
+  const path = `/n/${encodeURIComponent(namespace)}/b/${encodeURIComponent(cfg.bucket)}`;
+  const res = await signedFetch({ cfg, method: "GET", path, timeoutMs: 10_000 });
+  if (!res.ok) throw new Error(`OCI bucket health probe failed (${res.status})`);
+  const bucket = await res.json() as {
+    name?: string; namespace?: string; compartmentId?: string; timeCreated?: string;
+    etag?: string; storageTier?: string; publicAccessType?: string; versioning?: string;
+    autoTiering?: string; objectEventsEnabled?: boolean;
+  };
+  return {
+    status: "AVAILABLE" as const,
+    region: cfg.region,
+    bucketName: bucket.name ?? cfg.bucket,
+    namespace: bucket.namespace ?? namespace,
+    timeCreated: bucket.timeCreated ?? null,
+    etag: bucket.etag ?? null,
+    storageTier: bucket.storageTier ?? null,
+    publicAccessType: bucket.publicAccessType ?? null,
+    versioning: bucket.versioning ?? null,
+    autoTiering: bucket.autoTiering ?? null,
+    objectEventsEnabled: bucket.objectEventsEnabled ?? null,
+    backupVerification: "NOT_CONFIGURED" as const,
+    replicationVerification: "NOT_CONFIGURED" as const,
+  };
+}
