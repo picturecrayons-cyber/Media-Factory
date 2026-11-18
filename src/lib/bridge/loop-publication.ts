@@ -499,6 +499,71 @@ export const authorizeLoopPublication = createServerFn({ method: "POST" })
     });
   });
 
+/** Explicit, auditable expiry transition. GET/readiness paths must never call this. */
+export const expireLoopPublication = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({
+    bridgeTitleId: z.string().min(1),
+    reason: z.string().min(8).max(500),
+  }))
+  .handler(async ({ context, data }) => {
+    assertNotDevUser(context.userId);
+    const actor = await requireVerifiedActor(context.userId);
+    assertPermission(actor, "loop.revoke");
+    return (await getSql()).transaction(async (sql) => {
+      const rows = await sql<{
+        loop_title_id: string;
+        authorization_status: string;
+        window_end: string | Date | null;
+      }>`
+        select loop_title_id, authorization_status, window_end
+        from bridge_loop_publications
+        where bridge_title_id = ${data.bridgeTitleId}
+        for update
+      `;
+      const publication = rows[0];
+      if (!publication) throw new Error("Distribution record not found");
+      if (!publication.window_end || new Date(publication.window_end).getTime() > Date.now()) {
+        throw new Error("Publication window has not expired; no state changed.");
+      }
+      if (!["authorized", "live"].includes(publication.authorization_status.toLowerCase())) {
+        throw new Error("Only an active publication can transition to EXPIRED.");
+      }
+
+      const updated = await sql<{ id: string }>`
+        update bridge_loop_publications
+        set authorization_status = 'expired', updated_at = now()
+        where bridge_title_id = ${data.bridgeTitleId}
+          and lower(authorization_status) in ('authorized', 'live')
+          and window_end is not null
+          and window_end <= now()
+        returning id
+      `;
+      if (!updated[0]) throw new Error("Publication changed; refresh before retrying.");
+
+      await sql`
+        update loop_titles
+        set status = 'expired', listed = false, published = false, updated_at = now()
+        where id = ${publication.loop_title_id}
+      `;
+
+      await writeAudit({
+        actorUserId: actor.userId,
+        action: "distribution.expire_loop",
+        entityType: "bridge_title",
+        entityId: data.bridgeTitleId,
+        metadata: {
+          loopTitleId: publication.loop_title_id,
+          previousAuthorizationStatus: publication.authorization_status,
+          windowEnd: iso(publication.window_end),
+          reason: data.reason,
+        },
+      }, sql);
+
+      return { ok: true, status: "EXPIRED" as const };
+    });
+  });
+
 export const suspendLoopPublication = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(z.object({ bridgeTitleId: z.string().min(1), reason: z.string().optional() }))
