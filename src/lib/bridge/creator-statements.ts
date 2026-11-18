@@ -10,7 +10,7 @@ export type CreatorStatementLine = {
   titleName: string;
   basis: string;
   percentageBps: number | null;
-  amountPaise: number;
+  amountPaise: string;
   currency: string;
   status: "PENDING" | "ON_HOLD" | "APPROVED" | "PAID" | "CANCELLED" | string;
   createdAt: string;
@@ -40,7 +40,7 @@ export const listOwnCreatorStatements = createServerFn({ method: "GET" })
       title_name: string;
       basis: string;
       percentage_bps: number | null;
-      amount_paise: number | string;
+      amount_paise: string;
       currency: string;
       status: string;
       created_at: string | Date;
@@ -53,7 +53,7 @@ export const listOwnCreatorStatements = createServerFn({ method: "GET" })
         t.name as title_name,
         s.basis,
         s.percentage_bps,
-        s.amount_paise,
+        s.amount_paise::text as amount_paise,
         o.currency,
         s.status,
         s.created_at,
@@ -83,7 +83,7 @@ export const listOwnCreatorStatements = createServerFn({ method: "GET" })
         titleName: row.title_name,
         basis: row.basis,
         percentageBps: row.percentage_bps,
-        amountPaise: Number(row.amount_paise),
+        amountPaise: row.amount_paise,
         currency: row.currency,
         status: row.status,
         createdAt: iso(row.created_at) ?? "",
