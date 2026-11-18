@@ -22,13 +22,13 @@ function harness(internalRole = "super_admin") {
   const source = readFileSync(new URL("./super-admin-rbac.ts", import.meta.url), "utf8");
   const output = transpileModule(source, { compilerOptions: { module: ModuleKind.CommonJS } }).outputText;
   const exports: Record<string, (args: unknown) => Promise<unknown>> = {};
-  runInNewContext(output, { exports, require: (name: string) => { assert.ok(name in modules, `Unexpected dependency: ${name}`); return modules[name]; } });
-  return exports.getSuperAdminRbacGovernance;
+  runInNewContext(output, { exports, process: { env: {} }, require: (name: string) => { assert.ok(name in modules, `Unexpected dependency: ${name}`); return modules[name]; } });
+  return { policy: exports.getSuperAdminRbacGovernance, assignments: exports.listSuperAdminRoleAssignments, update: exports.updateSuperAdminRoleAssignment };
 }
 
 test("Super Admin RBAC governance reports separate policy matrices without querying assignments", async () => {
   const handler = harness();
-  const result = await handler({ context: { userId: "operator" } }) as { internalRoles: Array<{ role: string; permissions: string[] }>; accountTypes: Array<{ accountType: string; permissions: string[] }>; assignments: string; mutationControls: string };
+  const result = await handler.policy({ context: { userId: "operator" } } as { internalRoles: Array<{ role: string; permissions: string[] }>; accountTypes: Array<{ accountType: string; permissions: string[] }>; assignments: string; mutationControls: string };
   assert.equal(result.internalRoles[0].role, "admin");
   assert.ok(result.internalRoles[1].permissions.includes("audit.read"));
   assert.ok(result.accountTypes.find((row) => row.accountType === "buyer")?.permissions.includes("payment.create_order"));
@@ -38,5 +38,14 @@ test("Super Admin RBAC governance reports separate policy matrices without query
 
 test("non-Super Admin staff cannot inspect privileged RBAC governance", async () => {
   const handler = harness("admin");
-  await assert.rejects(handler({ context: { userId: "operator" } }), /Super Admin access required/);
+  await assert.rejects(handler.policy({ context: { userId: "operator" } }), /Super Admin access required/);
+});
+
+test("live RBAC assignment inventory is visible while role writes remain fail-closed", async () => {
+  const handler = harness();
+  const result = await handler.assignments({ context: { userId: "operator" } }) as { assignments: unknown[]; mutationsEnabled: boolean; protectedRole: string };
+  assert.deepEqual(result.assignments, []);
+  assert.equal(result.mutationsEnabled, false);
+  assert.equal(result.protectedRole, "super_admin");
+  await assert.rejects(handler.update({ context: { userId: "operator" }, data: { userId: "target-user", role: "admin" } }), /disabled until the Preview-only feature flag/);
 });
