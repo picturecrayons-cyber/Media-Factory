@@ -244,6 +244,7 @@ function Onboarding() {
           accountType,
           organizationName: accountType === "studio" ? organizationName.trim() : undefined,
           inviteToken,
+          creatorMandateAccepted: accountType === "independent_creator" || accountType === "studio",
         },
       });
       try { sessionStorage.removeItem("bridge-invite"); } catch { /* ignore */ }

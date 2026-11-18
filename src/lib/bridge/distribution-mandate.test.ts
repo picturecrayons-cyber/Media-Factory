@@ -12,6 +12,7 @@ test("default creator mandate is active, versioned and bounded", () => {
   assert.ok(mandate.destinations.includes("CRAYONS_LOOP"));
   assert.ok(mandate.destinations.includes("EXTERNAL_OTT"));
   assert.equal(mandate.sublicensingAllowed, false);
+  assert.equal(mandate.consentTextVersion, "creator-distribution-mandate-v1");
 });
 
 test("a title cannot exceed the account mandate destination scope", () => {
