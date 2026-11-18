@@ -195,7 +195,7 @@ function Onboarding() {
 
   useEffect(() => {
     if (home && studioInviteChecked && !studioInviteToken && !studioInviteError) {
-      goHome(home, navigate);
+      if (home) goHome(home, navigate);
     }
   }, [home, studioInviteChecked, studioInviteToken, studioInviteError, navigate]);
 
