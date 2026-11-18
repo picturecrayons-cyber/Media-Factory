@@ -521,6 +521,17 @@ export const prepareLoopDestinationPackage = createServerFn({ method: "POST" })
         throw new Error("Loop package preparation requires a Legal-cleared LICENSING_READY title");
       }
       if (!title.master_key || !title.poster_key) throw new Error("Current verified master and poster are required");
+      const pricingRows = await tx<{
+        access_tier: string; rental_price_inr: number; purchase_price_inr: number | null; status: string;
+      }>`
+        select access_tier,rental_price_inr,purchase_price_inr,status
+        from bridge_loop_consumer_pricing where bridge_title_id=${title.id} limit 1
+      `;
+      const pricing = pricingRows[0];
+      if (!pricing || pricing.status !== "APPROVED" || pricing.access_tier !== "TVOD" ||
+          !Number.isInteger(Number(pricing.rental_price_inr)) || Number(pricing.rental_price_inr) <= 0) {
+        throw new Error("Explicit Super Admin-approved TVOD consumer pricing is required before package preparation");
+      }
 
       const grants = await tx<BridgeRightsGrant & { evidence: Array<{ commercialTerms?: CommercialTermsSummary }> }>`
         select id,status,territories,languages,media,window_start,window_end,exclusivity,evidence
@@ -565,12 +576,14 @@ export const prepareLoopDestinationPackage = createServerFn({ method: "POST" })
       if (!video || !artwork) throw new Error("Current master and artwork must have PASSED asset-version records");
       const assetVersionIds = [video.id, artwork.id];
 
-      const existing = await tx<{ id: string; readiness_state: string; asset_version_ids: string[] }>`
-        select id,readiness_state,asset_version_ids from bridge_destination_packages
+      const existing = await tx<{ id: string; readiness_state: string; asset_version_ids: string[]; rental_price_inr: string | null }>`
+        select id,readiness_state,asset_version_ids,monetization->>'rentalPriceInr' as rental_price_inr
+        from bridge_destination_packages
         where title_id=${title.id} and destination='CRAYONS_LOOP' and rights_grant_id=${grant.id}
         order by package_version desc limit 1
       `;
-      if (existing[0] && JSON.stringify(existing[0].asset_version_ids) === JSON.stringify(assetVersionIds)) {
+      if (existing[0] && JSON.stringify(existing[0].asset_version_ids) === JSON.stringify(assetVersionIds) &&
+          Number(existing[0].rental_price_inr) === Number(pricing.rental_price_inr)) {
         return { packageId: existing[0].id, readinessState: existing[0].readiness_state, reused: true as const };
       }
 
@@ -592,8 +605,15 @@ export const prepareLoopDestinationPackage = createServerFn({ method: "POST" })
              bridgeTitleId: title.id, slug: title.slug, title: title.name, synopsis: title.synopsis,
              contentType: loopStageType(title.content_type), language: title.language, year: title.year,
              durationMinutes: title.runtime_minutes, posterAssetVersionId: artwork.id,
+             accessTier: pricing.access_tier, rentalPriceInr: Number(pricing.rental_price_inr),
+             purchasePriceInr: pricing.purchase_price_inr == null ? null : Number(pricing.purchase_price_inr),
            })}::jsonb,
-           ${JSON.stringify({ model: "TVOD", accessTier: "TVOD", commercialTerms })}::jsonb,
+           ${JSON.stringify({
+             model: "TVOD", accessTier: pricing.access_tier,
+             rentalPriceInr: Number(pricing.rental_price_inr),
+             purchasePriceInr: pricing.purchase_price_inr == null ? null : Number(pricing.purchase_price_inr),
+             commercialTerms,
+           })}::jsonb,
            'HOLD')
       `;
       await writeAudit({
