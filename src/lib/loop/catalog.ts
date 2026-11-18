@@ -254,12 +254,15 @@ export const checkPlaybackEntitlement = createServerFn({ method: "GET" })
     }
 
     // Check SVOD Subscription
-    const subs = await sql<{ id: number; plan_key: string; expires_at: string | Date | null }>`
-      select id, plan_key, expires_at
-      from loop_subscriptions
-      where user_id = ${context.userId}
-        and status = 'active'
-        and (expires_at is null or expires_at > now())
+    const subs = await sql<{ id: string; plan_key: string | null; expires_at: string | Date | null }>`
+      select s.id::text as id,
+        coalesce(to_jsonb(s)->>'plan_key',(select p.plan_key from loop_plans p where p.id::text=to_jsonb(s)->>'plan_id')) as plan_key,
+        coalesce(nullif(to_jsonb(s)->>'expires_at','')::timestamptz,
+                 nullif(to_jsonb(s)->>'current_period_end','')::timestamptz) as expires_at
+      from loop_subscriptions s
+      where s.user_id::text=${context.userId} and s.status='active'
+        and coalesce(nullif(to_jsonb(s)->>'expires_at','')::timestamptz,
+                     nullif(to_jsonb(s)->>'current_period_end','')::timestamptz)>now()
       limit 1
     `;
 
@@ -328,9 +331,10 @@ export const getAuthorizedLoopPlayback = createServerFn({ method: "GET" })
     let accessType = "FREE";
     if (title.access_tier === "SVOD") {
       const subs = await sql<{ id: string }>`
-        select id from loop_subscriptions
-        where user_id=${context.userId} and status='active'
-          and (expires_at is null or expires_at>now())
+        select s.id::text as id from loop_subscriptions s
+        where s.user_id::text=${context.userId} and s.status='active'
+          and coalesce(nullif(to_jsonb(s)->>'expires_at','')::timestamptz,
+                       nullif(to_jsonb(s)->>'current_period_end','')::timestamptz)>now()
         limit 1
       `;
       if (!subs[0]) throw new Error("An active Loop Pass subscription is required");
