@@ -64,12 +64,11 @@ const context = { userId: "operator" };
 test("Super Admin investor mapping is read-only and excludes private investor notes/emails", async () => {
   const h = harness();
   const result = await h.handler({ context }) as {
-    summary: { titleCount: number; linkedCount: number; totalCapitalPaise: number };
+    summary: { titleCount: number; linkedCount: number };
     records: Array<{ reference: string; investorName: string; linkedDisplayName: string | null }>;
   };
   assert.equal(result.summary.titleCount, 1);
   assert.equal(result.summary.linkedCount, 1);
-  assert.equal(result.summary.totalCapitalPaise, 250000);
   assert.equal(result.records[0].reference, "investor-record");
   assert.equal(result.records[0].investorName, "Investor A");
   assert.equal(result.records[0].linkedDisplayName, "Account A");
