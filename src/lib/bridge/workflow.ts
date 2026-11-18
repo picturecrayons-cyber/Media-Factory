@@ -64,7 +64,7 @@ export async function saveLoopLicense(
           },
         },
       ])}::jsonb,'SUBMITTED',${actor.userId}) returning id`;
-  await audit(tx, actor.userId, data.titleId, "license.loop_draft", { grantId: grant.id });
+  await audit(tx, actor.userId, data.titleId, "license.loop_submitted", { grantId: grant.id });
   return { grantId: grant.id };
 }
 
