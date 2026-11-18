@@ -1,7 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
-import { RequireSuperAdminOperations } from "@/components/bridge/super-admin-operations-gate";
 
 export const Route = createFileRoute("/admin/services")({ component: ServicesWorkspace });
 
