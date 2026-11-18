@@ -132,6 +132,8 @@ begin
   if not exists (
     select 1 from public.loop_titles t
     join public.bridge_loop_publications p on p.loop_title_id::text=t.id::text and p.bridge_title_id=t.bridge_title_id
+    join public.bridge_loop_consumer_pricing cp on cp.bridge_title_id=p.bridge_title_id
+      and cp.status='APPROVED' and cp.access_tier='TVOD' and cp.rental_price_inr=t.tvod_rental_price
     where t.id::text=rental.loop_title_id and t.status='approved' and t.listed and t.published and t.access_tier='TVOD'
       and pg_catalog.round(t.tvod_rental_price::numeric * 100)::bigint = rental.amount_paise
       and p.authorization_status='authorized' and p.revoked_at is null and p.approved_at is not null
