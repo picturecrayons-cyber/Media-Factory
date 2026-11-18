@@ -8,8 +8,8 @@ function load(role="super_admin") {
   const queries:string[]=[];
   const sql=async(strings:TemplateStringsArray)=>{
     const query=strings.join(" "); queries.push(query);
-    if(query.includes("from private.bridge_support_cases")) return [{id:"case-1",case_number:4,requester_email:"masked@example.test",subject:"Question",status:"OPEN",priority:"NORMAL",assigned_to:null,created_at:new Date(),updated_at:new Date()}];
     if(query.includes("from private.bridge_inbound_mail_events")) return [{id:"event-1",sender:"sender@example.test",subject:"Help",preview:"Short preview",received_at:new Date()}];
+    if(query.includes("from private.bridge_support_cases")) return [{id:"case-1",case_number:4,requester_email:"masked@example.test",subject:"Question",status:"OPEN",priority:"NORMAL",assigned_to:null,created_at:new Date(),updated_at:new Date()}];
     return [];
   };
   const modules:Record<string,unknown>={
