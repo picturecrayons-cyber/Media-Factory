@@ -31,7 +31,7 @@ function harness(internalRole = "super_admin") {
   const source = readFileSync(new URL("./super-admin-organizations.ts", import.meta.url), "utf8");
   const output = transpileModule(source, { compilerOptions: { module: ModuleKind.CommonJS } }).outputText;
   const exports: Record<string, (args: unknown) => Promise<unknown>> = {};
-  runInNewContext(output, { exports, require: (name: string) => { assert.ok(name in modules, `Unexpected dependency: ${name}`); return modules[name]; } });
+  runInNewContext(output, { exports, process: { env: {} }, require: (name: string) => { assert.ok(name in modules, `Unexpected dependency: ${name}`); return modules[name]; } });
   return { handler: exports.listSuperAdminOrganizationGovernance, queries };
 }
 const context = { userId: "operator" };
