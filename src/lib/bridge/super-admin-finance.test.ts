@@ -17,6 +17,9 @@ function harness(internalRole = "super_admin") {
         total_amount_paise: 250000,
       }];
     }
+    if (query.includes("from bridge_title_settlements")) {
+      return [{ status: "PENDING", currency: "INR", settlement_count: 1, revenue_received_paise: 50000, creator_payable_paise: 30000, investor_payable_paise: 10000, bridge_share_paise: 10000 }];
+    }
     if (query.includes("from bridge_payments p")) {
       return [{
         id: "payment-ref",
@@ -29,6 +32,9 @@ function harness(internalRole = "super_admin") {
         created_at: new Date("2026-11-18T00:00:00.000Z"),
         verified_at: new Date("2026-11-18T00:01:00.000Z"),
       }];
+    }
+    if (query.includes("from bridge_title_settlements s")) {
+      return [{ id: "settlement-ref", title_name: "Test Film", revenue_received_paise: 50000, creator_payable_paise: 30000, investor_payable_paise: 10000, bridge_share_paise: 10000, currency: "INR", status: "PENDING", settled_at: null, created_at: new Date("2026-11-18T00:00:00.000Z") }];
     }
     return [];
   };
@@ -75,12 +81,17 @@ test("Super Admin payment overview returns aggregate and redacted recent records
   const result = await h.handler({ context }) as {
     summary: Array<{ paymentCount: number; totalAmountPaise: number }>;
     recentPayments: Array<{ reference: string; titleName: string | null }>;
+    settlementSummary: Array<{ count: number; investorPayablePaise: number }>;
+    recentSettlements: Array<{ reference: string; status: string }>;
   };
   assert.equal(result.summary[0].paymentCount, 2);
   assert.equal(result.summary[0].totalAmountPaise, 250000);
   assert.equal(result.recentPayments[0].reference, "payment-ref");
   assert.equal(result.recentPayments[0].titleName, "Test Film");
-  assert.ok(h.queries.length === 2);
+  assert.equal(result.settlementSummary[0].count, 1);
+  assert.equal(result.settlementSummary[0].investorPayablePaise, 10000);
+  assert.equal(result.recentSettlements[0].reference, "settlement-ref");
+  assert.ok(h.queries.length === 4);
   assert.ok(h.queries.every((query) => !/\b(insert|update|delete)\b/i.test(query)));
   assert.ok(h.queries.every((query) => !/email|user_id|customer/i.test(query)));
 });
