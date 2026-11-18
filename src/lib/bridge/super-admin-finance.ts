@@ -5,9 +5,9 @@ import { assertNotDevUser } from "./guards";
 import { requireVerifiedActor } from "./session";
 
 /**
- * Read-only operational payment oversight for Super Admin.
- * Deliberately omits buyer identity, email, checkout credentials and entitlement data.
- * It does not call Razorpay or mutate payment, invoice, ledger or entitlement records.
+ * Read-only operational payment and settlement oversight for Super Admin.
+ * Omits buyer identity, email, checkout credentials, private settlement evidence and entitlement data.
+ * Does not call Razorpay or mutate payment, invoice, ledger or entitlement records.
  */
 export const listSuperAdminPaymentOverview = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
@@ -19,7 +19,7 @@ export const listSuperAdminPaymentOverview = createServerFn({ method: "GET" })
     }
 
     const sql = await getSql();
-    const [groups, recent, settlements] = await Promise.all([
+    const [groups, recent, settlementGroups, recentSettlements] = await Promise.all([
       sql<{
         status: string;
         currency: string;
@@ -49,6 +49,7 @@ export const listSuperAdminPaymentOverview = createServerFn({ method: "GET" })
         left join bridge_titles t on t.id = p.title_id
         order by p.created_at desc
         limit 25
+      `,
       sql<{
         status: string;
         currency: string;
@@ -87,7 +88,6 @@ export const listSuperAdminPaymentOverview = createServerFn({ method: "GET" })
         order by s.created_at desc
         limit 50
       `,
-      `,
     ]);
 
     return {
@@ -112,7 +112,7 @@ export const listSuperAdminPaymentOverview = createServerFn({ method: "GET" })
             ? row.verified_at.toISOString()
             : String(row.verified_at),
       })),
-      settlementSummary: settlements.filter((row) => "settlement_count" in row).map((row) => ({
+      settlementSummary: settlementGroups.map((row) => ({
         status: row.status,
         currency: row.currency,
         count: Number(row.settlement_count),
@@ -121,7 +121,7 @@ export const listSuperAdminPaymentOverview = createServerFn({ method: "GET" })
         investorPayablePaise: Number(row.investor_payable_paise),
         bridgeSharePaise: Number(row.bridge_share_paise),
       })),
-      recentSettlements: settlements.filter((row) => "id" in row).map((row) => ({
+      recentSettlements: recentSettlements.map((row) => ({
         reference: row.id,
         titleName: row.title_name,
         revenueReceivedPaise: Number(row.revenue_received_paise),
