@@ -12,6 +12,7 @@ async function guard(userId:string){
  assertNotDevUser(userId);
  const actor=await requireVerifiedActor(userId);
  if(actor.internalRole!=="super_admin") throw new Error("Super Admin access required");
+ return actor;
 }
 function assertWritesEnabled(){
  if(process.env.BRIDGE_SUPPORT_WRITES_ENABLED!=="true") throw new Error("Support case writes are disabled until the Preview-only feature flag is explicitly enabled");
@@ -53,12 +54,12 @@ export const listSuperAdminSupportDesk=createServerFn({method:"GET"}).middleware
 export const createSupportCaseFromInbound=createServerFn({method:"POST"}).middleware([authMiddleware])
  .validator(z.object({inboundEventId:z.string().uuid(),priority:z.enum(priorities).default("NORMAL")}))
  .handler(async({context,data})=>{
-  await guard(context.userId); assertWritesEnabled();
+  const actor=await guard(context.userId); assertWritesEnabled();
   const sql=await getSql();
   const result=await sql.transaction(async tx=>{
    const rows=await tx<{id:string;case_number:number|string}>`
     insert into private.bridge_support_cases(source_event_id,requester_email,subject,priority,created_by)
-    select id,sender,subject,${data.priority},${context.userId} from private.bridge_inbound_mail_events
+    select id,sender,subject,${data.priority},${actor.userId} from private.bridge_inbound_mail_events
     where id=${data.inboundEventId}::uuid on conflict(source_event_id) do nothing returning id,case_number
    `;
    if(!rows[0]){
@@ -66,7 +67,7 @@ export const createSupportCaseFromInbound=createServerFn({method:"POST"}).middle
     if(!existing[0]) throw new Error("Inbound message not found");
     return {...existing[0],duplicate:true};
    }
-   await tx`insert into private.bridge_support_case_events(case_id,actor_user_id,event_type,to_value) values(${rows[0].id}::uuid,${context.userId},'CREATED','OPEN')`;
+   await tx`insert into private.bridge_support_case_events(case_id,actor_user_id,event_type,to_value) values(${rows[0].id}::uuid,${actor.userId},'CREATED','OPEN')`;
    await writeAudit({actorUserId:context.userId,action:"support.case_created",entityType:"bridge_support_case",entityId:rows[0].id,metadata:{sourceEventId:data.inboundEventId,priority:data.priority}},tx);
    return {...rows[0],duplicate:false};
   });
@@ -78,7 +79,7 @@ export const updateSuperAdminSupportCase=createServerFn({method:"POST"}).middlew
   internalNote:z.string().trim().max(4000).optional(),assignedTo:z.string().min(1).nullable().optional(),
  }).refine(v=>Boolean(v.status||v.priority||v.internalNote||v.assignedTo!==undefined),"At least one case update is required"))
  .handler(async({context,data})=>{
-  await guard(context.userId); assertWritesEnabled();
+  const actor=await guard(context.userId); assertWritesEnabled();
   const sql=await getSql();
   await sql.transaction(async tx=>{
    const rows=await tx<{status:string;priority:string;assigned_to:string|null}>`
@@ -87,11 +88,11 @@ export const updateSuperAdminSupportCase=createServerFn({method:"POST"}).middlew
    const current=rows[0]; if(!current) throw new Error("Support case not found");
    if(data.status&&data.status!==current.status){
     await tx`update private.bridge_support_cases set status=${data.status},resolved_at=case when ${data.status} in ('RESOLVED','CLOSED') then now() else null end,updated_at=now() where id=${data.caseId}::uuid`;
-    await tx`insert into private.bridge_support_case_events(case_id,actor_user_id,event_type,from_value,to_value) values(${data.caseId}::uuid,${context.userId},'STATUS_CHANGED',${current.status},${data.status})`;
+    await tx`insert into private.bridge_support_case_events(case_id,actor_user_id,event_type,from_value,to_value) values(${data.caseId}::uuid,${actor.userId},'STATUS_CHANGED',${current.status},${data.status})`;
    }
    if(data.priority&&data.priority!==current.priority){
     await tx`update private.bridge_support_cases set priority=${data.priority},updated_at=now() where id=${data.caseId}::uuid`;
-    await tx`insert into private.bridge_support_case_events(case_id,actor_user_id,event_type,from_value,to_value) values(${data.caseId}::uuid,${context.userId},'PRIORITY_CHANGED',${current.priority},${data.priority})`;
+    await tx`insert into private.bridge_support_case_events(case_id,actor_user_id,event_type,from_value,to_value) values(${data.caseId}::uuid,${actor.userId},'PRIORITY_CHANGED',${current.priority},${data.priority})`;
    }
    if(data.assignedTo!==undefined&&data.assignedTo!==current.assigned_to){
     if(data.assignedTo!==null){
@@ -99,9 +100,9 @@ export const updateSuperAdminSupportCase=createServerFn({method:"POST"}).middlew
      if(!assignees[0]) throw new Error("Assignee must be a verified internal staff profile");
     }
     await tx`update private.bridge_support_cases set assigned_to=${data.assignedTo},updated_at=now() where id=${data.caseId}::uuid`;
-    await tx`insert into private.bridge_support_case_events(case_id,actor_user_id,event_type,from_value,to_value) values(${data.caseId}::uuid,${context.userId},'ASSIGNED',${current.assigned_to},${data.assignedTo})`;
+    await tx`insert into private.bridge_support_case_events(case_id,actor_user_id,event_type,from_value,to_value) values(${data.caseId}::uuid,${actor.userId},'ASSIGNED',${current.assigned_to},${data.assignedTo})`;
    }
-   if(data.internalNote) await tx`insert into private.bridge_support_case_events(case_id,actor_user_id,event_type,note) values(${data.caseId}::uuid,${context.userId},'INTERNAL_NOTE',${data.internalNote})`;
+   if(data.internalNote) await tx`insert into private.bridge_support_case_events(case_id,actor_user_id,event_type,note) values(${data.caseId}::uuid,${actor.userId},'INTERNAL_NOTE',${data.internalNote})`;
    await writeAudit({actorUserId:context.userId,action:"support.case_updated",entityType:"bridge_support_case",entityId:data.caseId,metadata:{status:data.status??null,priority:data.priority??null,assignedTo:data.assignedTo??null,internalNoteAdded:Boolean(data.internalNote)}},tx);
   });
   return {updated:true};
