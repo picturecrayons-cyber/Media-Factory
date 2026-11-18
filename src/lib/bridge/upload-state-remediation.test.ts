@@ -6,6 +6,7 @@ import { PGlite } from "@electric-sql/pglite";
 import { ASSET_KINDS, type AssetKind } from "./types.ts";
 import { persistVerifiedAsset } from "./asset-confirmation.ts";
 import { validateOttIngestFile } from "./ott-ingest-spec.ts";
+import { findForeignTitleFilenameMatch } from "./asset-title-association.ts";
 
 test("all 9 supported asset types are valid in OTT ingest specification", () => {
   const expectedKinds: AssetKind[] = [
@@ -237,7 +238,6 @@ test("persistence failure does not advance migration queue state", async () => {
   assert.match(successBlock, /set status = 'VERIFIED'/);
 });
 
-import { findForeignTitleFilenameMatch } from "./asset-title-association.ts";
 
 test("subtitle filenames that clearly identify another canonical title are rejected before upload", () => {
   const match = findForeignTitleFilenameMatch(
