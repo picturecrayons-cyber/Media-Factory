@@ -116,15 +116,18 @@ export function DitAgentDesk({ actor }: { actor: StudioActor }) {
       };
       await Promise.all(Array.from({ length: Math.min(2, sourceManifest.files.length) }, () => worker()));
 
+      const copyResults = [];
       for (const type of ["PRIMARY", "RECOVERY"] as const) {
-        await recordDitCopyVerification({ data: {
+        const result = await recordDitCopyVerification({ data: {
           sessionId: sessionId,
           copyType: type,
           copyRoot: type === "PRIMARY" ? "OCI Primary Vault" : "OCI Recovery Vault",
           manifest: sourceManifest,
         } });
+        copyResults.push(result);
       }
-      return { sessionId };
+      if (copyResults.length !== 2 || copyResults.some((result) => !result.verified)) throw new Error("Camera-card transfer did not complete verified Primary and Recovery copies");
+      return { sessionId, verifiedFiles: sourceManifest.files.length, verifiedCopies: copyResults.length };
     },
     onSuccess: async () => {
       setSourceManifest(null);
@@ -141,12 +144,13 @@ export function DitAgentDesk({ actor }: { actor: StudioActor }) {
     },
   });
   const signoffMutation = useMutation({
-    mutationFn: (args: { sessionId: string; signoffNote: string }) =>
+    mutationFn: (args: { sessionId: string; signoffNote: string; attestations: Attestations }) =>
       signOffDitIngestSession({ data: {
-        ...args,
-        folderStructurePreserved: true,
-        originalFilenamesPreserved: true,
-        cameraCardRetained: true,
+        sessionId: args.sessionId,
+        signoffNote: args.signoffNote,
+        folderStructurePreserved: args.attestations.folders,
+        originalFilenamesPreserved: args.attestations.names,
+        cameraCardRetained: args.attestations.card,
       } }),
     onSuccess: refresh,
   });
@@ -302,7 +306,7 @@ export function DitAgentDesk({ actor }: { actor: StudioActor }) {
                   <textarea className="mt-3 min-h-20 w-full rounded-lg border border-line bg-bg p-3 text-sm" placeholder="DIT sign-off note (minimum 8 characters)" value={signoffNotes[session.id] ?? ""} onChange={(event) => setSignoffNotes((current) => ({ ...current, [session.id]: event.target.value }))} />
                   <div className="mt-3 flex flex-wrap items-center gap-3">
                     <Button size="sm" disabled={!primary?.verified || !recovery?.verified || !att.folders || !att.names || !att.card || (signoffNotes[session.id] ?? "").trim().length < 8 || signoffMutation.isPending}
-                      onClick={() => signoffMutation.mutate({ sessionId: session.id, signoffNote: signoffNotes[session.id] ?? "" })}>Sign off ingest</Button>
+                      onClick={() => signoffMutation.mutate({ sessionId: session.id, signoffNote: signoffNotes[session.id] ?? "", attestations: att })}>Sign off ingest</Button>
                     <span className="text-xs text-muted">Both checksum matches and all three operator attestations are required.</span>
                   </div>
                   {signoffMutation.error ? <p role="alert" className="mt-2 text-sm text-red-600">{signoffMutation.error.message}</p> : null}
@@ -315,7 +319,7 @@ export function DitAgentDesk({ actor }: { actor: StudioActor }) {
         })}
       </section>
       <p className="rounded-xl border border-line p-4 text-xs leading-5 text-muted">
-        Production boundary: the browser uploads original camera files directly to the OCI Primary Vault. Bridge copies each file to a separately configured OCI Recovery Vault, reads both objects back and verifies SHA-256 against the registered source manifest before it permits DIT sign-off.
+        Production boundary: OCI upload, Recovery copy, object read-back and SHA-256 matching are verified server-side for every file. DIT sign-off also requires the operator’s three recorded folder, filename and camera-card attestations.
       </p>
     </div>
   );
