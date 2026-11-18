@@ -33,7 +33,7 @@ function StorageBody() {
         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">Governance · read only</p>
         <h2 className="mt-2 font-display text-2xl font-semibold sm:text-3xl">Storage metadata overview</h2>
         <p className="mt-2 max-w-3xl text-sm leading-relaxed text-muted">
-          Bridge asset metadata only. This page does not contact OCI or another storage provider, expose object keys or signed URLs, or upload, move, overwrite or delete files.
+          Bridge asset metadata plus a read-only OCI bucket metadata probe. No object keys, signed URLs or credentials are exposed; no objects are changed.
         </p>
       </section>
 
@@ -65,6 +65,26 @@ function StorageBody() {
             ) : (
               <p className="rounded-xl border border-line p-5 text-sm text-muted">No asset rows were returned by the current query.</p>
             )}
+          </section>
+
+          <section className="rounded-2xl border border-line bg-surface p-4 sm:p-5">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div><h3 className="font-semibold">OCI provider bucket health</h3><p className="mt-1 text-xs text-muted">Signed, read-only bucket metadata request. No object listing or mutation.</p></div>
+              <span className="rounded-full border border-line px-2.5 py-1 text-xs">{overviewQ.data?.providerHealth.status ?? "NOT VERIFIED"}</span>
+            </div>
+            {overviewQ.data?.providerHealth.status === "AVAILABLE" ? (
+              <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                <Metric label="Bucket" value={overviewQ.data.providerHealth.bucketName} />
+                <Metric label="Region" value={overviewQ.data.providerHealth.region} />
+                <Metric label="Storage tier" value={overviewQ.data.providerHealth.storageTier ?? "Not returned"} />
+                <Metric label="Public access" value={overviewQ.data.providerHealth.publicAccessType ?? "Not returned"} />
+                <Metric label="Versioning" value={overviewQ.data.providerHealth.versioning ?? "Not returned"} />
+                <Metric label="Object events" value={overviewQ.data.providerHealth.objectEventsEnabled == null ? "Not returned" : String(overviewQ.data.providerHealth.objectEventsEnabled)} />
+              </div>
+            ) : (
+              <p className="mt-3 text-sm text-muted">{overviewQ.data?.providerHealth.reason ?? "OCI provider health is unavailable."}</p>
+            )}
+            <p className="mt-3 text-xs text-muted">Backup verification: {overviewQ.data?.providerHealth.backupVerification ?? "NOT VERIFIED"} · Replication verification: {overviewQ.data?.providerHealth.replicationVerification ?? "NOT VERIFIED"}</p>
           </section>
 
           <section className="space-y-3">
@@ -138,7 +158,7 @@ function StorageBody() {
           <li>• This workspace is metadata-only and read-only.</li>
           <li>• No upload, deletion, overwrite, move or restore action is exposed.</li>
           <li>• Recorded byte totals are not provider billing or quota measurements.</li>
-          <li>• Object integrity, replication and backup health are not certified here.</li>
+          <li>• OCI bucket metadata is probed; backup restore tests and replication destination checks remain NOT CONFIGURED.</li>
           <li>• Asset ownership and title-level access rules remain unchanged.</li>
           <li>• Destructive storage operations require a separate reviewed workflow and explicit approval.</li>
         </ul>
