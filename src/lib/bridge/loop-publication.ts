@@ -530,7 +530,7 @@ export const getLoopDestinationPackage = createServerFn({ method: "GET" })
     const rows = await sql<{
       id: string; package_version: number; readiness_state: string; rights_grant_id: string;
       qc_case_id: string; legal_case_id: string; asset_version_ids: string[];
-      consumer_metadata: Record<string, unknown>; created_at: string | Date;
+      consumer_metadata: string; created_at: string;
     }>`
       select id,package_version,readiness_state,rights_grant_id,qc_case_id,legal_case_id,
              asset_version_ids,consumer_metadata::text as consumer_metadata,created_at::text as created_at
