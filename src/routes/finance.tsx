@@ -28,6 +28,8 @@ function FinanceBody() {
   const recent = overviewQ.data?.recentPayments ?? [];
   const settlementSummary = overviewQ.data?.settlementSummary ?? [];
   const recentSettlements = overviewQ.data?.recentSettlements ?? [];
+  const invoices = overviewQ.data?.invoices;
+  const ledger = overviewQ.data?.ledger;
 
   return (
     <div className="space-y-6">
@@ -122,6 +124,59 @@ function FinanceBody() {
             </div>
           </section>
 
+          <section className="space-y-3">
+            <div>
+              <h3 className="font-display text-lg font-semibold">Invoices</h3>
+              <p className="text-xs text-muted">Existing service invoices only. This view does not issue, void or mark invoices paid.</p>
+            </div>
+            {invoices?.status === "AVAILABLE" ? (
+              <div className="overflow-hidden rounded-2xl border border-line">
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[760px] text-left text-sm">
+                    <thead className="border-b border-line text-xs uppercase tracking-wider text-muted">
+                      <tr><th className="px-4 py-3">Invoice</th><th className="px-4 py-3">Status</th><th className="px-4 py-3">Subtotal</th><th className="px-4 py-3">Tax</th><th className="px-4 py-3">Total</th><th className="px-4 py-3">Issued / paid</th></tr>
+                    </thead>
+                    <tbody className="divide-y divide-line">
+                      {invoices.rows.map((row) => (
+                        <tr key={row.reference}>
+                          <td className="px-4 py-3"><p className="font-medium">{row.invoiceNumber}</p><p className="mt-1 font-mono text-[10px] text-muted">{row.reference}</p></td>
+                          <td className="px-4 py-3">{row.status}</td>
+                          <td className="px-4 py-3 tabular-nums">{formatMoney(row.subtotalPaise, row.currency)}</td>
+                          <td className="px-4 py-3 tabular-nums">{formatMoney(row.taxPaise, row.currency)}</td>
+                          <td className="px-4 py-3 tabular-nums">{formatMoney(row.totalPaise, row.currency)}</td>
+                          <td className="px-4 py-3 text-xs text-muted"><p>{formatDate(row.issuedAt)}</p><p className="mt-1">Paid: {row.paidAt ? formatDate(row.paidAt) : "—"}</p></td>
+                        </tr>
+                      ))}
+                      {!invoices.rows.length ? <tr><td colSpan={6} className="px-4 py-8 text-center text-muted">No invoice rows were returned.</td></tr> : null}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ) : (
+              <p className="rounded-xl border border-line p-5 text-sm text-muted">Invoice records are unavailable; invoice state is NOT VERIFIED.</p>
+            )}
+          </section>
+
+          <section className="space-y-3">
+            <div>
+              <h3 className="font-display text-lg font-semibold">Accounting ledger summary</h3>
+              <p className="text-xs text-muted">Recorded ledger rows grouped by currency, entry type and classification. No reconciliation or journal posting occurs here.</p>
+            </div>
+            {ledger?.status === "AVAILABLE" ? (
+              ledger.groups.length ? (
+                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                  {ledger.groups.map((row) => (
+                    <article key={row.currency + row.entryType + row.classification} className="rounded-xl border border-line bg-surface p-4">
+                      <p className="text-xs font-semibold uppercase tracking-wider text-muted">{row.entryType.replaceAll("_", " ")} · {row.classification} · {row.currency}</p>
+                      <p className="mt-2 text-xl font-semibold tabular-nums">{formatMoney(row.totalAmountPaise, row.currency)}</p>
+                      <p className="mt-1 text-xs text-muted">{row.count.toLocaleString("en-IN")} entries</p>
+                    </article>
+                  ))}
+                </div>
+              ) : <p className="rounded-xl border border-line p-5 text-sm text-muted">No ledger entries were returned.</p>
+            ) : <p className="rounded-xl border border-line p-5 text-sm text-muted">Ledger records are unavailable; accounting ledger state is NOT VERIFIED.</p>}
+          </section>
+
           <section className="overflow-hidden rounded-2xl border border-line">
             <div className="border-b border-line px-4 py-4 sm:px-5">
               <h3 className="font-semibold">Recent payment records</h3>
@@ -170,7 +225,7 @@ function FinanceBody() {
           <li>• Payment oversight does not grant Buyer checkout or order-creation privileges.</li>
           <li>• This page cannot verify, capture, refund or reverse a payment.</li>
           <li>• Customer entitlements remain separate from internal staff permissions.</li>
-          <li>• Invoice issuance, bank reconciliation and ledger close are not implemented or certified by these recorded settlement rows.</li>
+          <li>• Invoice creation/voiding, bank reconciliation, journal posting and period close remain separate controls; this page only reads existing invoice and ledger rows.</li>
           <li>• No Razorpay API calls or live transactions are made by this page.</li>
           <li>• All data is fetched server-side after verified Super Admin authorization.</li>
         </ul>
