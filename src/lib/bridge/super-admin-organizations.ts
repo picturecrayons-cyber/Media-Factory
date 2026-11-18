@@ -72,3 +72,100 @@ export const listSuperAdminOrganizationGovernance = createServerFn({ method: "GE
       invitationWorkflow: "NOT_IMPLEMENTED",
     };
   });
+
+import { createHash, randomBytes } from "node:crypto";
+import { bridgeEnv } from "./env";
+const membershipRole = z.enum(["admin","member","producer","dit"]);
+function assertOrganizationWritesEnabled() {
+  if (process.env.BRIDGE_SUPER_ADMIN_ORG_WRITES !== "true") {
+    throw new Error("Organization invitations and membership changes are disabled until the Preview-only feature flag is explicitly enabled");
+  }
+}
+
+export const createSuperAdminOrganizationInvite = createServerFn({method:"POST"})
+  .middleware([authMiddleware])
+  .validator(z.object({organizationId:z.string().uuid(),email:z.string().email(),role:membershipRole}))
+  .handler(async({context,data})=>{
+    assertNotDevUser(context.userId);
+    const actor=await requireVerifiedActor(context.userId);
+    if(actor.internalRole!=="super_admin") throw new Error("Super Admin access required");
+    assertOrganizationWritesEnabled();
+    const sql=await getSql();
+    const orgs=await sql<{id:string;status:string}>`select id,status from bridge_organizations where id=${data.organizationId}::uuid limit 1`;
+    if(!orgs[0]||orgs[0].status!=="active") throw new Error("Active organization not found");
+    const token=randomBytes(32).toString("hex");
+    const tokenHash=createHash("sha256").update(token).digest("hex");
+    const rows=await sql<{id:string;expires_at:string|Date}>`
+      insert into private.bridge_organization_invites
+        (organization_id,invitee_email,membership_role,token_hash,invited_by,expires_at)
+      values (${data.organizationId}::uuid,${data.email.trim().toLowerCase()},${data.role},${tokenHash},${context.userId},now()+interval '7 days')
+      returning id,expires_at
+    `;
+    const origin=bridgeEnv.appUrl();
+    if(!origin) throw new Error("Bridge application origin is not configured");
+    const inviteUrl=new URL("/organization-invite",origin);
+    inviteUrl.searchParams.set("token",token);
+    await writeAudit({actorUserId:context.userId,action:"organization.invite_created",entityType:"bridge_organization_invite",entityId:rows[0].id,metadata:{organizationId:data.organizationId,role:data.role,inviteeEmail:data.email.trim().toLowerCase(),emailSent:false}});
+    return {inviteId:rows[0].id,inviteUrl:inviteUrl.toString(),expiresAt:rows[0].expires_at instanceof Date?rows[0].expires_at.toISOString():String(rows[0].expires_at),emailSent:false};
+  });
+
+export const acceptSuperAdminOrganizationInvite = createServerFn({method:"POST"})
+  .middleware([authMiddleware])
+  .validator(z.object({token:z.string().regex(/^[a-f0-9]{64}$/i)}))
+  .handler(async({context,data})=>{
+    assertNotDevUser(context.userId);
+    const actor=await requireVerifiedActor(context.userId);
+    if(!actor.emailVerified||!actor.email) throw new Error("Verified email is required");
+    if(actor.accountType!=="studio"||actor.internalRole) throw new Error("A verified Studio account is required");
+    assertOrganizationWritesEnabled();
+    const hash=createHash("sha256").update(data.token).digest("hex");
+    const sql=await getSql();
+    return sql.transaction(async tx=>{
+      const rows=await tx<{id:string;organization_id:string;invitee_email:string;membership_role:string;expires_at:string|Date;accepted_at:string|Date|null;revoked_at:string|Date|null}>`
+        select id,organization_id,invitee_email,membership_role,expires_at,accepted_at,revoked_at
+        from private.bridge_organization_invites where token_hash=${hash} for update
+      `;
+      const invite=rows[0];
+      if(!invite||invite.accepted_at||invite.revoked_at||new Date(invite.expires_at).getTime()<Date.now()) throw new Error("Organization invitation is invalid, expired or already used");
+      if(invite.invitee_email.trim().toLowerCase()!==actor.email.trim().toLowerCase()) throw new Error("Invitation email does not match the verified account");
+      const profiles=await tx<{organization_id:string|null}>`select organization_id from bridge_profiles where user_id=${actor.userId} for update`;
+      if(!profiles[0]) throw new Error("Bridge profile not found");
+      if(profiles[0].organization_id&&profiles[0].organization_id!==invite.organization_id) throw new Error("Account is already linked to another organization");
+      const orgs=await tx<{id:string}>`select id from bridge_organizations where id=${invite.organization_id}::uuid and status='active' limit 1`;
+      if(!orgs[0]) throw new Error("Organization is not active");
+      await tx`insert into bridge_organization_memberships(organization_id,user_id,membership_role,status,created_by)
+        values(${invite.organization_id}::uuid,${actor.userId},${invite.membership_role},'active',${context.userId})
+        on conflict(organization_id,user_id) do update set membership_role=excluded.membership_role,status='active',updated_at=now()`;
+      await tx`update bridge_profiles set organization_id=${invite.organization_id}::uuid,updated_at=now() where user_id=${actor.userId}`;
+      await tx`update private.bridge_organization_invites set accepted_by=${actor.userId},accepted_at=now() where id=${invite.id}::uuid`;
+      await writeAudit({actorUserId:actor.userId,action:"organization.invite_accepted",entityType:"bridge_organization_invite",entityId:invite.id,metadata:{organizationId:invite.organization_id,role:invite.membership_role}},tx);
+      return {accepted:true,organizationId:invite.organization_id,role:invite.membership_role};
+    });
+  });
+
+export const updateSuperAdminOrganizationMembership = createServerFn({method:"POST"})
+  .middleware([authMiddleware])
+  .validator(z.object({organizationId:z.string().uuid(),userId:z.string().min(1),role:membershipRole,status:z.enum(["active","suspended","removed"]),evidenceReference:z.string().trim().min(8).max(256)}))
+  .handler(async({context,data})=>{
+    assertNotDevUser(context.userId);
+    const actor=await requireVerifiedActor(context.userId);
+    if(actor.internalRole!=="super_admin") throw new Error("Super Admin access required");
+    assertOrganizationWritesEnabled();
+    const sql=await getSql();
+    await sql.transaction(async tx=>{
+      const rows=await tx<{membership_role:string;status:string;internal_role:string|null;email_verified:boolean}>`
+        select m.membership_role,m.status,p.internal_role,p.email_verified
+        from bridge_organization_memberships m join bridge_profiles p on p.user_id=m.user_id
+        where m.organization_id=${data.organizationId}::uuid and m.user_id=${data.userId} for update
+      `;
+      const current=rows[0];
+      if(!current) throw new Error("Organization membership not found");
+      if(current.membership_role==="owner") throw new Error("Organization owner membership is protected");
+      if(current.internal_role==="super_admin") throw new Error("Super Admin profile membership cannot be changed here");
+      if(!current.email_verified) throw new Error("Member email must be verified");
+      await tx`update bridge_organization_memberships set membership_role=${data.role},status=${data.status},updated_at=now()
+        where organization_id=${data.organizationId}::uuid and user_id=${data.userId}`;
+      await writeAudit({actorUserId:context.userId,action:"organization.membership_changed",entityType:"bridge_organization_membership",entityId:data.userId,metadata:{organizationId:data.organizationId,fromRole:current.membership_role,toRole:data.role,fromStatus:current.status,toStatus:data.status,evidenceReference:data.evidenceReference,evidenceVerified:false}},tx);
+    });
+    return {updated:true,evidenceVerified:false};
+  });
