@@ -29,12 +29,12 @@ function load(role="super_admin") {
 }
 test("Super Admin support desk reads case and inbound metadata only",async()=>{
  const h=load();
- const result=await h.exports.listSuperAdminSupportDesk({context:{userId:"operator"}}) as {cases:Array<{id:string;status:string}>;inbound:Array<{id:string;preview:string}>;outboundEmail:string;mutationsEnabled:boolean;staff:unknown[]};
+ const result=await h.exports.listSuperAdminSupportDesk({context:{userId:"operator"}}) as {cases:Array<{id:string;status:string}>;inbound:Array<{id:string;preview:string}>;outboundEmail:string;mutationsEnabled:boolean;staff:unknown[];events:unknown[]};
  assert.equal(result.cases[0].status,"OPEN");
  assert.equal(result.inbound[0].preview,"Short preview");
  assert.equal(result.outboundEmail,"DISABLED");
  assert.equal(result.mutationsEnabled,false);
- assert.equal(h.queries.length,3);
+ assert.equal(h.queries.length,4);
  assert.ok(h.queries.every(q=>!/\b(insert|update|delete)\b/i.test(q)));
 });
 test("non-Super Admin staff cannot access support case data",async()=>{
