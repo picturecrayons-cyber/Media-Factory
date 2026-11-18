@@ -444,10 +444,11 @@ export async function fetchObjectResponse(key: string, bucket?: string) {
 }
 
 /** Read-only OCI bucket metadata probe. Does not list or mutate objects. */
-export async function inspectBucketHealth() {
+export async function inspectBucketHealth(bucketName?: string) {
   const cfg = config();
+  const selectedBucket = bucketName?.trim() || cfg.bucket;
   const namespace = await resolveNamespace(cfg);
-  const path = `/n/${encodeURIComponent(namespace)}/b/${encodeURIComponent(cfg.bucket)}`;
+  const path = `/n/${encodeURIComponent(namespace)}/b/${encodeURIComponent(selectedBucket)}`;
   const res = await signedFetch({ cfg, method: "GET", path, timeoutMs: 10_000 });
   if (!res.ok) throw new Error(`OCI bucket health probe failed (${res.status})`);
   const bucket = await res.json() as {
@@ -458,7 +459,7 @@ export async function inspectBucketHealth() {
   return {
     status: "AVAILABLE" as const,
     region: cfg.region,
-    bucketName: bucket.name ?? cfg.bucket,
+    bucketName: bucket.name ?? selectedBucket,
     namespace: bucket.namespace ?? namespace,
     timeCreated: bucket.timeCreated ?? null,
     etag: bucket.etag ?? null,
@@ -470,4 +471,13 @@ export async function inspectBucketHealth() {
     backupVerification: "NOT_CONFIGURED" as const,
     replicationVerification: "NOT_CONFIGURED" as const,
   };
+}
+
+/** Read-only probe for the separately configured DIT recovery bucket. */
+export async function inspectRecoveryBucketHealth() {
+  const recoveryBucket = bridgeEnv.ociRecoveryBucket();
+  if (!recoveryBucket) {
+    return { status: "NOT_CONFIGURED" as const, bucketName: null };
+  }
+  return inspectBucketHealth(recoveryBucket);
 }
