@@ -129,7 +129,7 @@ function OrganizationGovernanceBody() {
                       </td>
                     </tr>
                   ))}
-                  {!memberships.length ? <tr><td colSpan={5} className="px-4 py-8 text-center text-muted">No membership records are currently available.</td></tr> : null}
+                  {!memberships.length ? <tr><td colSpan={6} className="px-4 py-8 text-center text-muted">No membership records are currently available.</td></tr> : null}
                 </tbody>
               </table>
             </div>
