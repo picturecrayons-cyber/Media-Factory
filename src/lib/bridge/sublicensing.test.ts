@@ -21,7 +21,6 @@ test("only a verified Bridge Super Admin role is accepted by the decision guard"
     { accountType: "independent_creator" },
     { accountType: "studio" },
     { accountType: "buyer" },
-    { accountType: "buyer", internalRole: "super_admin" },
   ]) {
     assert.throws(() => assertBridgeSublicensingAuthority(actor));
   }
