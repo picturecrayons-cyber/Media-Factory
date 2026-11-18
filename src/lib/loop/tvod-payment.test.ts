@@ -34,6 +34,14 @@ test("TVOD fulfillment fails closed on revoked publication, price mismatch and d
   assert.match(migration, /grant execute on function public\.loop_fulfill_captured_rental\(text,text\) to service_role/);
 });
 
+test("verified Loop refunds revoke entitlements and refund-before-capture is reconciled", () => {
+  assert.match(webhook, /eventName === "refund\.processed"/);
+  assert.match(webhook, /loop_refund_captured_rental/);
+  assert.match(webhook, /Loop TVOD refund order could not be reconciled/);
+  assert.match(migration, /refund_before_capture/);
+  assert.match(migration, /status='REFUNDED'/);
+});
+
 test("public Loop catalog never exposes raw OCI playback keys", () => {
   assert.match(catalog, /playbackPath: null/);
   assert.match(catalog, /getAuthorizedLoopPlayback/);
