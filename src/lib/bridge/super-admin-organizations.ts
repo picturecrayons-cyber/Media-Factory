@@ -97,14 +97,17 @@ export const createSuperAdminOrganizationInvite = createServerFn({method:"POST"}
     if(!orgs[0]||orgs[0].status!=="active") throw new Error("Active organization not found");
     const token=randomBytes(32).toString("hex");
     const tokenHash=createHash("sha256").update(token).digest("hex");
-    const rows=await sql<{id:string;expires_at:string|Date}>`
-      insert into private.bridge_organization_invites
-        (organization_id,invitee_email,membership_role,token_hash,invited_by,expires_at)
-      values (${data.organizationId}::uuid,${data.email.trim().toLowerCase()},${data.role},${tokenHash},${context.userId},now()+interval '7 days')
-      returning id,expires_at
-    `;
-    await writeAudit({actorUserId:context.userId,action:"organization.invite_created",entityType:"bridge_organization_invite",entityId:rows[0].id,metadata:{organizationId:data.organizationId,role:data.role,inviteeEmail:data.email.trim().toLowerCase(),emailSent:false}});
-    return {inviteId:rows[0].id,inviteToken:token,expiresAt:rows[0].expires_at instanceof Date?rows[0].expires_at.toISOString():String(rows[0].expires_at),emailSent:false};
+    const created=await sql.transaction(async tx=>{
+      const rows=await tx<{id:string;expires_at:string|Date}>`
+        insert into private.bridge_organization_invites
+          (organization_id,invitee_email,membership_role,token_hash,invited_by,expires_at)
+        values (${data.organizationId}::uuid,${data.email.trim().toLowerCase()},${data.role},${tokenHash},${context.userId},now()+interval '7 days')
+        returning id,expires_at
+      `;
+      await writeAudit({actorUserId:context.userId,action:"organization.invite_created",entityType:"bridge_organization_invite",entityId:rows[0].id,metadata:{organizationId:data.organizationId,role:data.role,inviteeEmail:data.email.trim().toLowerCase(),emailSent:false}},tx);
+      return rows[0];
+    });
+    return {inviteId:created.id,inviteToken:token,expiresAt:created.expires_at instanceof Date?created.expires_at.toISOString():String(created.expires_at),emailSent:false};
   });
 
 export const acceptSuperAdminOrganizationInvite = createServerFn({method:"POST"})
