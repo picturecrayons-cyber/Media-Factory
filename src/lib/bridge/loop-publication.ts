@@ -594,13 +594,18 @@ export const prepareLoopDestinationPackage = createServerFn({ method: "POST" })
       if (!video || !artwork) throw new Error("Current master and artwork must have PASSED asset-version records");
       const assetVersionIds = [video.id, artwork.id];
 
-      const existing = await tx<{ id: string; readiness_state: string; asset_version_ids: string[]; rental_price_inr: string | null }>`
-        select id,readiness_state,asset_version_ids,monetization->>'rentalPriceInr' as rental_price_inr
+      const existing = await tx<{
+        id: string; readiness_state: string; asset_version_ids: string[]; rental_price_inr: string | null;
+        qc_case_id: string; legal_case_id: string;
+      }>`
+        select id,readiness_state,asset_version_ids,monetization->>'rentalPriceInr' as rental_price_inr,
+               qc_case_id,legal_case_id
         from bridge_destination_packages
         where title_id=${title.id} and destination='CRAYONS_LOOP' and rights_grant_id=${grant.id}
         order by package_version desc limit 1
       `;
       if (existing[0] && JSON.stringify(existing[0].asset_version_ids) === JSON.stringify(assetVersionIds) &&
+          existing[0].qc_case_id === qcRows[0].id && existing[0].legal_case_id === legalRows[0].id &&
           Number(existing[0].rental_price_inr) === Number(pricing.rental_price_inr)) {
         return { packageId: existing[0].id, readinessState: existing[0].readiness_state, reused: true as const };
       }
