@@ -561,6 +561,13 @@ export const certifyLoopDestinationPackage = createServerFn({ method: "POST" })
       if (!pkg) throw new Error("Loop destination package not found");
       if (pkg.readiness_state === "READY") return { packageId: pkg.id, readinessState: "READY" as const };
       if (pkg.readiness_state !== "HOLD") throw new Error("Only a HOLD package can be certified READY");
+      const titleRows = await tx<{ status: string; master_key: string | null; poster_key: string | null }>`
+        select status,master_key,poster_key from bridge_titles where id=${pkg.title_id} limit 1
+      `;
+      const title = titleRows[0];
+      if (!title || !["LICENSING_READY","LIVE_FOR_BUYERS","IN_NEGOTIATION","LICENSED","DELIVERED"].includes(title.status)) {
+        throw new Error("Title must remain Legal-cleared and licensing-ready");
+      }
       const gates = await tx<{ ott: string; packaging: string; curation: string; delivery: string }>`
         select ott_preparation_status as ott,packaging_status as packaging,
                curation_status as curation,delivery_status as delivery
@@ -573,7 +580,9 @@ export const certifyLoopDestinationPackage = createServerFn({ method: "POST" })
       const evidence = await tx<{ valid_grant: boolean; qc_ok: boolean; legal_ok: boolean }>`
         select
           exists(select 1 from bridge_rights_grants where id=${pkg.rights_grant_id} and title_id=${pkg.title_id} and status='VALID' and window_end>now()) as valid_grant,
-          exists(select 1 from bridge_qc_cases where id=${pkg.qc_case_id} and title_id=${pkg.title_id} and status='PASSED') as qc_ok,
+          exists(select 1 from bridge_qc_cases q where q.id=${pkg.qc_case_id} and q.title_id=${pkg.title_id} and q.status='PASSED'
+            and q.reviewer_findings->0->>'masterKey'=${title.master_key}
+            and q.reviewer_findings->0->>'posterKey'=${title.poster_key}) as qc_ok,
           exists(select 1 from bridge_legal_cases where id=${pkg.legal_case_id} and title_id=${pkg.title_id} and status='APPROVED'
             and evidence->0->>'grantId'=${pkg.rights_grant_id}) as legal_ok
       `;
@@ -582,12 +591,14 @@ export const certifyLoopDestinationPackage = createServerFn({ method: "POST" })
       }
       const assetIds = Array.isArray(pkg.asset_version_ids) ? pkg.asset_version_ids : [];
       if (assetIds.length < 2) throw new Error("Package must contain the current master and artwork asset versions");
-      const assets = await tx<{ id: string; asset_group: string }>`
-        select id,asset_group from bridge_asset_versions
+      const assets = await tx<{ id: string; asset_group: string; s3_key: string }>`
+        select id,asset_group,s3_key from bridge_asset_versions
         where title_id=${pkg.title_id} and id=any(${assetIds}::uuid[]) and processing_state='PASSED'
       `;
-      if (assets.length !== assetIds.length || !assets.some((asset) => asset.asset_group === "VIDEO") || !assets.some((asset) => asset.asset_group === "ARTWORK")) {
-        throw new Error("Every package asset must remain PASSED and include video master plus artwork");
+      if (assets.length !== assetIds.length ||
+          !assets.some((asset) => asset.asset_group === "VIDEO" && asset.s3_key === title.master_key) ||
+          !assets.some((asset) => asset.asset_group === "ARTWORK" && asset.s3_key === title.poster_key)) {
+        throw new Error("Every package asset must remain PASSED and include the current video master plus current artwork");
       }
       await tx`
         update bridge_destination_packages set readiness_state='READY'
