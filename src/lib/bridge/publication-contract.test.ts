@@ -161,7 +161,7 @@ test("certified Loop publication advances a licensing-ready Bridge title to buye
   assert.equal((result as { status: string }).status, "AUTHORIZED");
   const advance = h.writes.find((write) => write.query.includes("update bridge_titles"));
   assert.ok(advance);
-  assert.ok(advance.values.includes("LIVE_FOR_BUYERS"));
+  assert.match(advance.query, /status=\x27LIVE_FOR_BUYERS\x27/);
   const event = h.writes.find((write) => write.query.includes("insert into bridge_title_events"));
   assert.ok(event);
   assert.ok(event.values.includes("LICENSING_READY"));
