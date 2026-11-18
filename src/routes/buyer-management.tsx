@@ -41,8 +41,8 @@ function BuyerManagementBody() {
       </header>
 
       <section className="grid gap-3 sm:grid-cols-2">
-        <Metric label="Buyer user accounts" value={profilesQ.isPending || profilesQ.isError ? "—" : String(buyers.length)} />
-        <Metric label="Recorded organization names" value={profilesQ.isPending || profilesQ.isError ? "—" : String(organizationNames.size)} />
+        <Metric label="Buyer profiles (latest 200)" value={profilesQ.isPending || profilesQ.isError ? "—" : String(buyers.length)} />
+        <Metric label="Distinct organization names" value={profilesQ.isPending || profilesQ.isError ? "—" : String(organizationNames.size)} />
       </section>
 
       {profilesQ.isPending ? (
@@ -55,7 +55,7 @@ function BuyerManagementBody() {
         <section className="overflow-hidden rounded-sm border border-line">
           <div className="border-b border-line px-4 py-3">
             <h3 className="font-semibold">Buyer accounts</h3>
-            <p className="mt-1 text-xs text-muted">Read-only account inventory from the existing Bridge profile registry.</p>
+            <p className="mt-1 text-xs text-muted">Read-only profile inventory from the latest 200 records returned by the existing Bridge profile registry; this is not a complete organization or membership register.</p>
           </div>
           {buyers.length ? (
             <ul className="divide-y divide-line">
@@ -81,7 +81,7 @@ function BuyerManagementBody() {
       <section className="rounded-sm border border-line bg-surface px-4 py-4">
         <h3 className="font-semibold">Authorization boundary</h3>
         <p className="mt-1 text-sm leading-relaxed text-muted">
-          This initial view is intentionally read-only. Buyer organizations, memberships, contracts, title grants,
+          This initial view is intentionally read-only and limited to the profile registry result window. Buyer organizations, memberships, contracts, title grants,
           delivery packages, payments and audit history must remain separately scoped and server-authorized.
           Buyer A/B/C/D are illustrative labels only, never permanent account IDs.
         </p>
