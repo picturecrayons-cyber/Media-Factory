@@ -68,7 +68,7 @@ export const createSupportCaseFromInbound=createServerFn({method:"POST"}).middle
     return {...existing[0],duplicate:true};
    }
    await tx`insert into private.bridge_support_case_events(case_id,actor_user_id,event_type,to_value) values(${rows[0].id}::uuid,${actor.userId},'CREATED','OPEN')`;
-   await writeAudit({actorUserId:context.userId,action:"support.case_created",entityType:"bridge_support_case",entityId:rows[0].id,metadata:{sourceEventId:data.inboundEventId,priority:data.priority}},tx);
+   await writeAudit({actorUserId:actor.userId,action:"support.case_created",entityType:"bridge_support_case",entityId:rows[0].id,metadata:{sourceEventId:data.inboundEventId,priority:data.priority}},tx);
    return {...rows[0],duplicate:false};
   });
   return {caseId:result.id,caseNumber:Number(result.case_number),duplicate:result.duplicate};
@@ -103,7 +103,7 @@ export const updateSuperAdminSupportCase=createServerFn({method:"POST"}).middlew
     await tx`insert into private.bridge_support_case_events(case_id,actor_user_id,event_type,from_value,to_value) values(${data.caseId}::uuid,${actor.userId},'ASSIGNED',${current.assigned_to},${data.assignedTo})`;
    }
    if(data.internalNote) await tx`insert into private.bridge_support_case_events(case_id,actor_user_id,event_type,note) values(${data.caseId}::uuid,${actor.userId},'INTERNAL_NOTE',${data.internalNote})`;
-   await writeAudit({actorUserId:context.userId,action:"support.case_updated",entityType:"bridge_support_case",entityId:data.caseId,metadata:{status:data.status??null,priority:data.priority??null,assignedTo:data.assignedTo??null,internalNoteAdded:Boolean(data.internalNote)}},tx);
+   await writeAudit({actorUserId:actor.userId,action:"support.case_updated",entityType:"bridge_support_case",entityId:data.caseId,metadata:{status:data.status??null,priority:data.priority??null,assignedTo:data.assignedTo??null,internalNoteAdded:Boolean(data.internalNote)}},tx);
   });
   return {updated:true};
  });
