@@ -2,13 +2,6 @@ import { useQuery } from "@tanstack/react-query";
 import { listStudioFinancialActivity } from "@/lib/bridge/studio-statements";
 import { formatStudioMinorAmount } from "@/lib/bridge/studio-statement-format";
 
-function formatStudioMinorAmount(amount: number, currency: string) {
-  if (currency === "INR") {
-    return `₹${(amount / 100).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
-  }
-  return `${amount.toLocaleString("en-IN")} ${currency} minor units`;
-}
-
 export function StudioFinancialActivityDesk() {
   const query = useQuery({
     queryKey: ["bridge-studio-financial-activity"],
