@@ -94,6 +94,14 @@ describe("PRD authorization matrix", () => {
     assert.equal(canMutateTitle(viewer(), foreign, "title.update_own", "title.qc_review"), false);
   });
 
+  it("permanent title deletion review is reserved for verified Super Admin", () => {
+    assert.equal(hasPermission(superAdmin(), "title.delete"), true);
+    assert.equal(hasPermission(admin(), "title.delete"), false);
+    assert.equal(hasPermission(viewer(), "title.delete"), false);
+    assert.equal(hasPermission(creator(), "title.delete"), false);
+    assert.equal(hasPermission(actor("unverified-super", "independent_creator", "super_admin", false), "title.delete"), false);
+  });
+
   it("Super Admin receives every registered permission while remaining email-verified", () => {
     const privileged = superAdmin();
     for (const permission of PERMISSIONS) {
