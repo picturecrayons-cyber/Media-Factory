@@ -135,9 +135,10 @@ export const acceptSuperAdminOrganizationInvite = createServerFn({method:"POST"}
       if(profiles[0].organization_id&&profiles[0].organization_id!==invite.organization_id) throw new Error("Account is already linked to another organization");
       const orgs=await tx<{id:string}>`select id from bridge_organizations where id=${invite.organization_id}::uuid and status='active' limit 1`;
       if(!orgs[0]) throw new Error("Organization is not active");
-      await tx`insert into bridge_organization_memberships(organization_id,user_id,membership_role,status,created_by)
+      const membership = await tx<{ user_id: string }>`insert into bridge_organization_memberships(organization_id,user_id,membership_role,status,created_by)
         values(${invite.organization_id}::uuid,${actor.userId},${invite.membership_role},'active',${context.userId})
-        on conflict(organization_id,user_id) do update set membership_role=excluded.membership_role,status='active',updated_at=now()`;
+        on conflict(organization_id,user_id) do nothing returning user_id`;
+      if (!membership[0]) throw new Error("A membership already exists for this account; ask an administrator to review it");
       await tx`update bridge_profiles set organization_id=${invite.organization_id}::uuid,updated_at=now() where user_id=${actor.userId}`;
       await tx`update private.bridge_organization_invites set accepted_by=${actor.userId},accepted_at=now() where id=${invite.id}::uuid`;
       await writeAudit({actorUserId:actor.userId,action:"organization.invite_accepted",entityType:"bridge_organization_invite",entityId:invite.id,metadata:{organizationId:invite.organization_id,role:invite.membership_role}},tx);
@@ -167,6 +168,10 @@ export const updateSuperAdminOrganizationMembership = createServerFn({method:"PO
       if(!current.email_verified) throw new Error("Member email must be verified");
       await tx`update bridge_organization_memberships set membership_role=${data.role},status=${data.status},updated_at=now()
         where organization_id=${data.organizationId}::uuid and user_id=${data.userId}`;
+      if (data.status === "removed") {
+        await tx`update bridge_profiles set organization_id=null,updated_at=now()
+          where user_id=${data.userId} and organization_id=${data.organizationId}::uuid`;
+      }
       await writeAudit({actorUserId:context.userId,action:"organization.membership_changed",entityType:"bridge_organization_membership",entityId:data.userId,metadata:{organizationId:data.organizationId,fromRole:current.membership_role,toRole:data.role,fromStatus:current.status,toStatus:data.status,evidenceReference:data.evidenceReference,evidenceVerified:false}},tx);
     });
     return {updated:true,evidenceVerified:false};
