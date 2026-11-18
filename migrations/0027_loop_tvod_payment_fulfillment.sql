@@ -116,7 +116,7 @@ begin
     select 1 from public.loop_titles t
     join public.bridge_loop_publications p on p.loop_title_id::text=t.id::text and p.bridge_title_id=t.bridge_title_id
     where t.id::text=rental.loop_title_id and t.status='approved' and t.listed and t.published and t.access_tier='TVOD'
-      and pg_catalog.round(t.tvod_rental_price * 100)::bigint = rental.amount_paise
+      and pg_catalog.round(t.tvod_rental_price::numeric * 100)::bigint = rental.amount_paise
       and p.authorization_status='authorized' and p.revoked_at is null and p.approved_at is not null
       and p.window_start <= rental.captured_at and p.window_end > rental.captured_at
       and 'WORLDWIDE'=any(p.territories) and 'TVOD'=any(p.exploitation_models)
