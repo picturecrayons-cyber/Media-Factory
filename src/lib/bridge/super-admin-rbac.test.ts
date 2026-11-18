@@ -30,7 +30,7 @@ test("Super Admin RBAC governance reports separate policy matrices without query
   const handler = harness();
   const result = await handler.policy({ context: { userId: "operator" } }) as { internalRoles: Array<{ role: string; permissions: string[] }>; accountTypes: Array<{ accountType: string; permissions: string[] }>; assignments: string; mutationControls: string };
   assert.equal(result.internalRoles[0].role, "admin");
-  assert.ok(result.internalRoles[1].permissions.includes("audit.read"));
+  assert.equal(result.internalRoles[1].role, "super_admin");
   assert.ok(result.accountTypes.find((row) => row.accountType === "buyer")?.permissions.includes("payment.create_order"));
   assert.equal(result.assignments, "AVAILABLE_IN_SEPARATE_LIVE_INVENTORY");
   assert.match(result.mutationControls, /FEATURE_FLAG_GATED/);
