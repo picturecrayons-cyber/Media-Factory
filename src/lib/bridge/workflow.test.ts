@@ -73,7 +73,8 @@ async function testDatabase(): Promise<{ db: TestDb; schema: string }> {
 async function fixture() {
   const { db, schema } = await testDatabase();
   try {
-    await db.exec(`create table bridge_titles(
+    await db.exec(`create table bridge_profiles(user_id text primary key);
+    create table bridge_titles(
       id text primary key,
       owner_user_id text,
       owner_account_type text not null default 'independent_creator',
@@ -98,12 +99,28 @@ async function fixture() {
         "utf8",
       ).replaceAll("public.", `${schema}.`),
     );
-    await db.exec(`insert into bridge_titles(id,owner_user_id,status,master_key,poster_key,updated_at)
+    await db.exec(
+      readFileSync(
+        new URL("../../../migrations/0026_bridge_creator_document_vault.sql", import.meta.url),
+        "utf8",
+      ).replaceAll("public.", `${schema}.`),
+    );
+    await db.exec(`insert into bridge_profiles(user_id) values ('owner'),('legal'),('qc');
+    insert into bridge_titles(id,owner_user_id,status,master_key,poster_key,updated_at)
       values('title-123','owner','QC_REVIEW','sealed/master','sealed/poster',now());
     insert into bridge_assets values
       ('master','title-123','master','sealed/master',100),
       ('legacy-poster','title-123','poster','older/unreferenced-poster',100),
-      ('poster-vertical','title-123','poster_vertical','sealed/poster',100);`);
+      ('poster-vertical','title-123','poster_vertical','sealed/poster',100);
+    insert into bridge_creator_documents
+      (id,owner_user_id,owner_account_type,document_type,file_name,content_type,byte_size,storage_key,status,created_by,verified_at)
+    values
+      ('ownership-doc','owner','independent_creator','OWNERSHIP_CHAIN_OF_TITLE','ownership.pdf','application/pdf',100,'sealed/ownership.pdf','VERIFIED','owner',now()),
+      ('distribution-doc','owner','independent_creator','DISTRIBUTION_AGREEMENT','distribution.pdf','application/pdf',100,'sealed/distribution.pdf','VERIFIED','owner',now());
+    insert into bridge_title_document_links(id,title_id,document_id,evidence_type,linked_by)
+    values
+      ('ownership-link','title-123','ownership-doc','OWNERSHIP_CHAIN_OF_TITLE','owner'),
+      ('distribution-link','title-123','distribution-doc','DISTRIBUTION_AGREEMENT','owner');`);
     function adapter(query: (text: string, params?: unknown[]) => Promise<{ rows: unknown[] }>) {
       const sql = (async (strings: TemplateStringsArray, ...params: unknown[]) => {
         let text = strings[0];
