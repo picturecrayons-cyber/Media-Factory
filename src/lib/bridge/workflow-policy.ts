@@ -12,6 +12,7 @@ export const loopLicenseInput = z
     ownershipReference: z.string().trim().min(8).max(500),
     rightsOwnerSharePct: z.number().int().min(0).max(100),
     distributorSharePct: z.number().int().min(0).max(100),
+    studioDeclaration: z.literal(true).optional(),
   })
   .superRefine((v, ctx) => {
     if (v.territories[0] !== "WORLDWIDE")
@@ -21,6 +22,10 @@ export const loopLicenseInput = z
     if (v.rightsOwnerSharePct + v.distributorSharePct !== 100)
       ctx.addIssue({ code: "custom", message: "Revenue shares must total 100%" });
   });
+
+export function assertStudioDeclaration(accountType: string, accepted: boolean | undefined): void {
+  if (accountType === "studio" && accepted !== true) throw new Error("Studio declaration must be explicitly accepted before submission");
+}
 
 export function publicationIsActive(
   status: string | undefined,
