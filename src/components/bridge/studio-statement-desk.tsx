@@ -1,7 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { listStudioStatements } from "@/lib/bridge/studio-statements";
+import { formatStudioMinorAmount } from "@/lib/bridge/studio-statement-format";
 
-function formatMinor(amount: number | null, currency: string) {
+function formatStudioMinorAmount(amount: number | null, currency: string) {
   if (amount === null) return "Not reported";
   if (currency === "INR") {
     return `₹${(amount / 100).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
@@ -58,16 +59,16 @@ export function StudioStatementDesk() {
                   {statement.reconciledAt ? <p className="text-xs text-muted">Reconciled {new Date(statement.reconciledAt).toLocaleDateString("en-IN")}</p> : null}
                 </td>
                 <td className="px-3 py-3 whitespace-nowrap">
-                  {statement.reportedGrossMinor === null ? formatMinor(statement.estimateAmountMinor, statement.currency) : formatMinor(statement.reportedGrossMinor, statement.currency)}
+                  {statement.reportedGrossMinor === null ? formatStudioMinorAmount(statement.estimateAmountMinor, statement.currency) : formatStudioMinorAmount(statement.reportedGrossMinor, statement.currency)}
                   {statement.reportedGrossMinor === null && statement.estimateAmountMinor !== null ? <p className="text-xs text-muted">Estimate only</p> : null}
                 </td>
-                <td className="px-3 py-3 whitespace-nowrap">{formatMinor(statement.adjustmentsMinor, statement.currency)}</td>
-                <td className="px-3 py-3 whitespace-nowrap">{formatMinor(statement.netAmountMinor, statement.currency)}</td>
+                <td className="px-3 py-3 whitespace-nowrap">{formatStudioMinorAmount(statement.adjustmentsMinor, statement.currency)}</td>
+                <td className="px-3 py-3 whitespace-nowrap">{formatStudioMinorAmount(statement.netAmountMinor, statement.currency)}</td>
                 <td className="px-3 py-3">
                   <p>{statement.paymentStatus ?? "No payment schedule"}</p>
                   {statement.paymentDueAt ? <p className="text-xs text-muted">Due {statement.paymentDueAt}</p> : null}
                   {statement.paymentPostedAt ? <p className="text-xs text-muted">Posted {new Date(statement.paymentPostedAt).toLocaleDateString("en-IN")}</p> : null}
-                  {statement.paymentStatus === "PAID" ? <p className="text-xs text-muted">Recorded paid: {formatMinor(statement.paidAmountMinor, statement.currency)}</p> : null}
+                  {statement.paymentStatus === "PAID" ? <p className="text-xs text-muted">Recorded paid: {formatStudioMinorAmount(statement.paidAmountMinor, statement.currency)}</p> : null}
                 </td>
               </tr>
             ))}
