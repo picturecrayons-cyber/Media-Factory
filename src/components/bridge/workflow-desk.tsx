@@ -11,7 +11,10 @@ import { advanceTitle } from "@/lib/bridge/titles";
 import { listTitleDocumentEvidence } from "@/lib/bridge/creator-documents";
 import {
   authorizeLoopPublication,
+  certifyLoopDestinationPackage,
+  getLoopDestinationPackage,
   getLoopPublication,
+  prepareLoopDestinationPackage,
   revokeLoopPublication,
   suspendLoopPublication,
 } from "@/lib/bridge/loop-publication";
@@ -45,6 +48,11 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
     queryFn: () => getLoopPublication({ data: { bridgeTitleId: title.id } }),
     enabled: Boolean(actor.internalRole) || actor.accountType !== "buyer",
   });
+  const destinationPackage = useQuery({
+    queryKey: ["loop-package", title.id],
+    queryFn: () => getLoopDestinationPackage({ data: { bridgeTitleId: title.id } }),
+    enabled: Boolean(actor.internalRole) && hasPermission(actor, "title.read_catalog"),
+  });
   const documentEvidence = useQuery({
     queryKey: ["title-document-evidence", title.id],
     queryFn: () => listTitleDocumentEvidence({ data: { titleId: title.id } }),
@@ -64,6 +72,7 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
         qc.invalidateQueries({ queryKey: ["title-workflow", title.id] }),
         qc.invalidateQueries({ queryKey: ["bridge-title", title.id] }),
         qc.invalidateQueries({ queryKey: ["loop-pub", title.id] }),
+        qc.invalidateQueries({ queryKey: ["loop-package", title.id] }),
         qc.invalidateQueries({ queryKey: ["bridge-titles"] }),
         qc.invalidateQueries({ queryKey: ["loop-publication-readiness"] }),
         qc.invalidateQueries({ queryKey: ["bridge-audit"] }),
@@ -473,6 +482,29 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                     : "No active distribution window"}
                 </p>
               )}
+              {hasPermission(actor, "loop.publish") ? (
+                <div className="space-y-2 rounded-lg border border-line p-3">
+                  <h4 className="text-sm font-semibold">Loop destination package</h4>
+                  {destinationPackage.isPending ? <p className="text-xs text-muted">Loading package…</p> : null}
+                  {destinationPackage.isError ? <p role="alert" className="text-xs text-amber-600">Package status unavailable: {destinationPackage.error.message}</p> : null}
+                  {destinationPackage.data?.package ? (
+                    <p className="text-xs text-muted">
+                      Version {destinationPackage.data.package.package_version} · {destinationPackage.data.package.readiness_state} · {destinationPackage.data.package.asset_version_ids.length} verified asset versions
+                    </p>
+                  ) : !destinationPackage.isPending && !destinationPackage.isError ? (
+                    <p className="text-xs text-muted">No Loop package prepared yet.</p>
+                  ) : null}
+                  {button("Prepare / refresh Loop package", () =>
+                    prepareLoopDestinationPackage({ data: { bridgeTitleId: title.id } }),
+                    destinationPackage.isPending,
+                  )}
+                  {destinationPackage.data?.package?.readiness_state === "HOLD" ? button("Certify package READY", () =>
+                    certifyLoopDestinationPackage({ data: { packageId: destinationPackage.data!.package!.id } }),
+                    destinationPackage.isPending,
+                  ) : null}
+                  <p className="text-xs text-muted">Package preparation uses the current PASSED master and artwork only. READY requires all four release certifications plus active QC, Legal and rights evidence.</p>
+                </div>
+              ) : null}
               <p>
                 Publish copies the approved title metadata, artwork and media reference into the
                 shared Loop catalog. Catalog publication alone does not prove consumer playback.
