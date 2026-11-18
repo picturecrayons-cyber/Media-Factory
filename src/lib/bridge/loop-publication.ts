@@ -663,6 +663,21 @@ export const authorizeLoopPublication = createServerFn({ method: "POST" })
       `;
       if (!authorizedPackage[0]) throw new Error("Certified Loop destination package changed; refresh before publishing");
 
+      // A fully certified Loop publication makes a licensing-ready Bridge title buyer-visible.
+      // The database trigger re-checks every buyer gate against the just-authorized package.
+      if (title.status === "LICENSING_READY") {
+        const advanced = await sql<{ id: string }>`
+          update bridge_titles set status='LIVE_FOR_BUYERS',updated_at=now()
+          where id=${title.id} and status='LICENSING_READY'
+          returning id
+        `;
+        if (!advanced[0]) throw new Error("Bridge title lifecycle changed; refresh before publishing");
+        await sql`
+          insert into bridge_title_events(title_id,from_status,to_status,actor_user_id,note)
+          values (${title.id},'LICENSING_READY','LIVE_FOR_BUYERS',${actor.userId},'Certified Crayons Loop destination package published')
+        `;
+      }
+
       // 1. Synchronize master publication record in Crayons Loop
       await sql`
       insert into loop_titles (
