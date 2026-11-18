@@ -19,7 +19,7 @@ function ServicesWorkspace() {
               <WorkspaceLink to="/internal" title="Distribution & Operations" detail="Existing Loop destination, delivery and operator workflows." />
               <WorkspaceLink to="/admin/workstations" title="Production Control" detail="Existing QC, rights, assets, buyer gates and delivery workstation." />
               <WorkspaceLink to="/admin" title="Commercial & Finance" detail="Existing administrative overview and finance services." />
-              <WorkspaceLink to="/cms" title="Website CMS" detail="Bridge website content controls." />
+              <WorkspaceLink to="/admin-cms" title="Website CMS" detail="Bridge website content controls." />
             </section>
             <p className="rounded-sm border border-line p-4 text-xs text-muted">No service, QC, legal, title, payment, entitlement or publication action is executed by this entry page. Existing server-side permissions and release gates remain in force.</p>
             <Link to="/dashboard" className="inline-block border-t border-line pt-4 text-sm text-accent hover:underline">Founder Centre →</Link>
