@@ -17,8 +17,7 @@ create table if not exists private.bridge_support_cases (
   resolved_at timestamptz
 );
 create unique index if not exists bridge_support_cases_source_event_uidx
-  on private.bridge_support_cases(source_event_id)
-  where source_event_id is not null;
+  on private.bridge_support_cases(source_event_id);
 create index if not exists bridge_support_cases_queue_idx
   on private.bridge_support_cases(status, priority, updated_at desc);
 
