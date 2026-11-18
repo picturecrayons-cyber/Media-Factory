@@ -1,6 +1,6 @@
 -- Bridge -> Loop compatibility projection.
 -- STAGING DB: additive schema alignment only; no title is published by this migration.
--- PRODUCTION DB: the canonical Loop projection columns already exist; IF NOT EXISTS makes this a no-op there.
+-- PRODUCTION DB: canonical projection columns already exist; additions are IF NOT EXISTS and legacy backfills are conditional.
 -- Existing Loop columns remain intact. Browser access remains denied by the existing RLS policy.
 -- Rental price is deliberately NOT inferred from price_paise or Bridge licensing fees.
 
@@ -20,18 +20,36 @@ alter table public.loop_titles
   add column if not exists featured boolean not null default false,
   add column if not exists tvod_rental_price numeric;
 
--- Preserve legacy catalogue metadata without overwriting an already populated canonical value.
-update public.loop_titles
-set description = coalesce(description, synopsis),
-    year = coalesce(year, release_year),
-    duration_minutes = coalesce(duration_minutes, runtime_minutes),
-    maturity_rating = coalesce(maturity_rating, age_rating),
-    poster_path = coalesce(poster_path, poster_url),
-    backdrop_path = coalesce(backdrop_path, backdrop_url),
-    trailer_path = coalesce(trailer_path, trailer_url),
-    listed = coalesce(listed, is_listed, false),
-    published = coalesce(published, is_published, false),
-    metadata = coalesce(metadata, '{}'::jsonb);
+-- Only copy legacy aliases when those source columns exist in this environment.
+-- This makes the migration replay-safe across the older Testing schema and canonical Production schema.
+do $$
+begin
+  if exists (select 1 from information_schema.columns where table_schema='public' and table_name='loop_titles' and column_name='release_year') then
+    execute 'update public.loop_titles set year = coalesce(year, release_year)';
+  end if;
+  if exists (select 1 from information_schema.columns where table_schema='public' and table_name='loop_titles' and column_name='runtime_minutes') then
+    execute 'update public.loop_titles set duration_minutes = coalesce(duration_minutes, runtime_minutes)';
+  end if;
+  if exists (select 1 from information_schema.columns where table_schema='public' and table_name='loop_titles' and column_name='age_rating') then
+    execute 'update public.loop_titles set maturity_rating = coalesce(maturity_rating, age_rating)';
+  end if;
+  if exists (select 1 from information_schema.columns where table_schema='public' and table_name='loop_titles' and column_name='poster_url') then
+    execute 'update public.loop_titles set poster_path = coalesce(poster_path, poster_url)';
+  end if;
+  if exists (select 1 from information_schema.columns where table_schema='public' and table_name='loop_titles' and column_name='backdrop_url') then
+    execute 'update public.loop_titles set backdrop_path = coalesce(backdrop_path, backdrop_url)';
+  end if;
+  if exists (select 1 from information_schema.columns where table_schema='public' and table_name='loop_titles' and column_name='trailer_url') then
+    execute 'update public.loop_titles set trailer_path = coalesce(trailer_path, trailer_url)';
+  end if;
+  if exists (select 1 from information_schema.columns where table_schema='public' and table_name='loop_titles' and column_name='is_listed') then
+    execute 'update public.loop_titles set listed = is_listed';
+  end if;
+  if exists (select 1 from information_schema.columns where table_schema='public' and table_name='loop_titles' and column_name='is_published') then
+    execute 'update public.loop_titles set published = is_published';
+  end if;
+end
+$$;
 
 -- Keep new consumer publication flags fail-closed for future rows.
 alter table public.loop_titles
