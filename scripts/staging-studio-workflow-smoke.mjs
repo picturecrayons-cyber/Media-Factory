@@ -123,11 +123,11 @@ async function main() {
         (organization_id, email, membership_role, invited_by, token_hash, expires_at)
       values ($1, $2, 'producer', $3, $4, now() + interval '7 days')
       returning id::text as id
-    `, [orgId, adminEmail, ownerId, tokenHash]);
+    `, [orgId, outsiderEmail, ownerId, tokenHash]);
     assert.notEqual(tokenHash, rawToken, "only a token hash is persisted");
     assert.equal((await client.query(
       "select id from public.bridge_studio_invites where token_hash = $1 and email = $2 and accepted_at is null and revoked_at is null and expires_at > now()",
-      [tokenHash, outsiderEmail],
+      [tokenHash, ownerEmail],
     )).rowCount, 0, "a different verified email must not accept this invitation");
     const accepted = await client.query(`
       update public.bridge_studio_invites i
@@ -140,6 +140,11 @@ async function main() {
       returning i.id
     `, [invite.rows[0].id, tokenHash]);
     assert.equal(accepted.rowCount, 1, "only the matching verified email can accept an unexpired invite");
+    await client.query("update public.bridge_profiles set organization_id = $1 where user_id = $2 and email_verified = true", [orgId, outsiderId]);
+    await client.query("insert into public.bridge_organization_memberships (organization_id, user_id, membership_role, status) values ($1, $2, 'producer', 'active')", [orgId, outsiderId]);
+    const invitedMembership = await client.query("select membership_role, status from public.bridge_organization_memberships where organization_id = $1 and user_id = $2", [orgId, outsiderId]);
+    assert.equal(invitedMembership.rows[0]?.membership_role, "producer", "accepted invitation must provision the invited Studio role");
+    assert.equal(invitedMembership.rows[0]?.status, "active", "accepted invitation must activate the invited Studio membership");
     await client.query(`
       insert into public.bridge_audit_logs
         (actor_user_id, action, entity_type, entity_id, metadata)
@@ -162,8 +167,8 @@ async function main() {
     `, [adminId, transfer.rows[0].id, JSON.stringify({ organizationId: orgId, previousOwnerUserId: ownerId, newOwnerUserId: adminId, synthetic: true })]);
 
     const roles = await client.query(
-      "select user_id, membership_role from public.bridge_organization_memberships where organization_id = $1 order by user_id",
-      [orgId],
+      "select user_id, membership_role from public.bridge_organization_memberships where organization_id = $1 and user_id = any($2::text[]) order by user_id",
+      [orgId, [ownerId, adminId]],
     );
     assert.deepEqual(
       Object.fromEntries(roles.rows.map((row) => [row.user_id, row.membership_role])),
