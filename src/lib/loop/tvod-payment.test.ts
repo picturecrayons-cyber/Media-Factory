@@ -10,6 +10,7 @@ const migration = readFileSync(new URL("../../../supabase/migrations/20261118130
 test("TVOD checkout persists a pending order and never grants entitlement before capture", () => {
   assert.match(subscriptions, /api\.razorpay\.com\/v1\/orders/);
   assert.match(subscriptions, /insert into loop_tvod_orders/);
+  assert.match(subscriptions, /bridge_loop_consumer_pricing/);
   assert.match(subscriptions, /status\)\s*values[\s\S]*'pending'/);
   assert.doesNotMatch(subscriptions, /insert into loop_entitlements/);
 });
@@ -28,7 +29,9 @@ test("TVOD webhook validates capture identity, amount and currency before fulfil
 test("TVOD fulfillment fails closed on revoked publication, price mismatch and duplicate capture", () => {
   assert.match(migration, /p\.authorization_status='authorized'/);
   assert.match(migration, /t\.access_tier='TVOD'/);
-  assert.match(migration, /tvod_rental_price \* 100/);
+  assert.match(migration, /tvod_rental_price::numeric \* 100/);
+  assert.match(migration, /bridge_loop_consumer_pricing/);
+  assert.match(migration, /cp\.status='APPROVED'/);
   assert.match(migration, /prior_event\.status='processed'/);
   assert.match(migration, /prior_event\.status='refunded'/);
   assert.match(migration, /grant execute on function public\.loop_fulfill_captured_rental\(text,text\) to service_role/);
@@ -44,6 +47,8 @@ test("verified Loop refunds revoke entitlements and refund-before-capture is rec
 
 test("public Loop catalog never exposes raw OCI playback keys", () => {
   assert.match(catalog, /playbackPath: null/);
+  assert.match(catalog, /tvodRentalPrice: Number\(r\.tvod_rental_price \?\? 0\)/);
+  assert.match(catalog, /tvodPurchasePrice: Number\(r\.tvod_purchase_price \?\? 0\)/);
   assert.match(catalog, /getAuthorizedLoopPlayback/);
   assert.match(catalog, /signDownload/);
   assert.match(catalog, /loop_user_tvod_entitlements/);
