@@ -74,8 +74,8 @@ function DashboardBody() {
       <section aria-label="Business overview" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Metric label="Master titles" value={value(titles.length)} />
         <Metric label="Pending review" value={value(needsDecision.length)} />
-        <Metric label="Authorized buyer listings" value={value(authorizedListings)} />
-        <Metric label="Commercial deals" value={value(commercialDeals)} />
+        <Metric label="Titles marked LIVE_FOR_BUYERS" value={value(authorizedListings)} />
+        <Metric label="Titles in commercial deal states" value={value(commercialDeals)} />
       </section>
 
       <section className="overflow-hidden rounded-sm border border-line" aria-labelledby="attention-heading">
