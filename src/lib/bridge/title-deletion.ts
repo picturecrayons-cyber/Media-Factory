@@ -23,6 +23,9 @@ export const inspectTitleDeletion = createServerFn({ method: "GET" })
 
     const title = await loadTitle(data.id);
     if (!title) throw new Error("Not found");
+    if (title.status !== "DRAFT") {
+      throw new Error("Only unsubmitted DRAFT titles can enter the draft deletion workflow.");
+    }
 
     const sql = await getSql();
     const foreignKeys = await sql<{
@@ -60,10 +63,10 @@ export const inspectTitleDeletion = createServerFn({ method: "GET" })
       status: "BLOCKED" as const,
       foreignKeys,
       blockers: [
-        "Legal, contractual, accounting, dispute, and preservation retention clearance has not been evidenced.",
+        "Draft-only legal, contractual, accounting, dispute, and preservation retention clearance has not been evidenced.",
         "OCI primary and recovery object inventory, versions, checksums, retention, and restore proof have not been verified.",
         "Referencing foreign keys are listed, but live dependent-row counts and external-system dependencies have not been reconciled.",
-        "A transactional archive, restore, and verified storage-cleanup workflow is not implemented.",
+        "A draft-only transactional cleanup workflow and verified OCI object cleanup/restore workflow are not implemented.",
       ],
       destructiveActionAvailable: false as const,
     };
