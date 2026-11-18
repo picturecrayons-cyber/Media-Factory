@@ -406,3 +406,7 @@ export const recordSettlementEvidence = createServerFn({ method: "POST" })
       return { status: "EXTERNAL_EVIDENCE_UNVERIFIED" as const };
     });
   });
+
+
+// Expose the Bridge-only decision commands through the existing workflow module.
+export { authorizeBridgeSublicense, revokeBridgeSublicense } from "./sublicensing";
