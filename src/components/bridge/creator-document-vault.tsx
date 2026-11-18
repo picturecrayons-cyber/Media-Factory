@@ -200,8 +200,18 @@ export function CreatorDocumentVault() {
           <h3 className="font-semibold">Your documents</h3>
           <span className="text-xs text-muted">Only your Creator account or Studio organization documents</span>
         </div>
-        {documentsQ.isPending ? <p className="text-sm text-muted">Loading documents…</p> : null}
-        {documentsQ.isError ? <p role="alert" className="text-sm text-muted">Documents could not be loaded. Refresh and retry.</p> : null}
+        {documentsQ.isPending ? <p className="text-sm text-muted">Loading private documents…</p> : null}
+        {documentsQ.isError ? (
+          <div role="alert" className="rounded-lg border border-amber-500/40 bg-amber-500/5 p-4 text-sm">
+            <p className="font-semibold">Private document list is unavailable.</p>
+            <p className="mt-1 text-muted">{message(documentsQ.error)}</p>
+            <p className="mt-2 text-xs text-muted">No document access was granted. Confirm that this account has a verified Creator identity or an active Studio organization mapping, then retry.</p>
+            <button type="button" onClick={() => void documentsQ.refetch()} disabled={documentsQ.isFetching}
+              className="mt-3 rounded-lg border border-line px-3 py-2 text-sm font-semibold disabled:opacity-50">
+              {documentsQ.isFetching ? "Retrying…" : "Retry document list"}
+            </button>
+          </div>
+        ) : null}
         {!documentsQ.isPending && !documentsQ.isError && !documentsQ.data?.documents.length
           ? <p className="rounded-lg border border-dashed border-line p-4 text-sm text-muted">No documents uploaded yet.</p>
           : null}
@@ -220,7 +230,13 @@ export function CreatorDocumentVault() {
         <div className="space-y-2 border-t border-line pt-4">
           <h3 className="font-semibold">Evidence linked to selected title</h3>
           {evidenceQ.isPending ? <p className="text-sm text-muted">Loading linked evidence…</p> : null}
-          {evidenceQ.isError ? <p className="text-sm text-muted">Linked evidence could not be loaded.</p> : null}
+          {evidenceQ.isError ? (
+          <div role="alert" className="rounded-lg border border-amber-500/40 p-3 text-sm">
+            <p>Linked evidence is unavailable: {message(evidenceQ.error)}</p>
+            <button type="button" onClick={() => void evidenceQ.refetch()} disabled={evidenceQ.isFetching}
+              className="mt-2 text-sm font-semibold text-accent underline disabled:opacity-50">Retry linked evidence</button>
+          </div>
+        ) : null}
           {(evidenceQ.data?.evidence ?? []).map((item) => (
             <div key={item.id} className="rounded-lg border border-line p-3 text-sm">
               <p className="font-medium">{item.file_name}</p>
