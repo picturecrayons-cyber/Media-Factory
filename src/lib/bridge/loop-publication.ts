@@ -255,10 +255,21 @@ export async function verifyDistributionPreflight(
           and asset_group = 'VIDEO'
           and asset_type = 'LOOP_HLS_MASTER'
           and processing_state = 'PASSED'
-          and checksum_sha256 ~ '^[a-f0-9]{64}
+          and checksum_sha256 ~ '^[a-f0-9]{64}$'
+          and byte_size > 0
+        order by version desc, created_at desc
+        limit 1
+      `
+    : [];
+  const playbackRendition = renditionRows[0] ?? null;
+  if (!playbackRendition) {
+    reasons.push("The approved destination package must include a checksum-verified LOOP_HLS_MASTER rendition.");
+  }
+
+  const licenses = rightsGrantId
     ? await sql<{ evidence: Array<{ commercialTerms?: CommercialTermsSummary }> }>`
-    select evidence from bridge_rights_grants where id=${rightsGrantId}
-  `
+        select evidence from bridge_rights_grants where id=${rightsGrantId}
+      `
     : [];
   const commercialTerms = licenses[0]?.evidence?.[0]?.commercialTerms;
   if (
