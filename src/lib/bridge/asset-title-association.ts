@@ -9,10 +9,10 @@ function normalizedTitleToken(value: string): string {
   return value
     .normalize("NFKD")
     .toLowerCase()
-    .replace(/\\.[^.]+$/, "")
+    .replace(/\.[^.]+$/, "")
     .replace(/[^a-z0-9]+/g, " ")
     .trim()
-    .replace(/\\s+/g, " ");
+    .replace(/\s+/g, " ");
 }
 
 /**
