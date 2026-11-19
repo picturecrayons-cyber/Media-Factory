@@ -1,6 +1,14 @@
+import pgConnectionString from "pg-connection-string";
+
+const { parse: parsePgConnectionString } = pgConnectionString;
+
 const TARGET_OVERRIDE_PARAMETERS = new Set([
   "host", "hostaddr", "port", "user", "username", "database", "dbname",
   "service", "servicefile",
+]);
+const TARGET_OPTIONS = new Set([
+  "host", "hostaddr", "port", "user", "username", "database", "databaseName",
+  "service", "servicefile", "connectionString",
 ]);
 
 export function assertProductionDatabaseTarget(supabaseUrlValue, databaseUrlValue, expectedRef) {
@@ -12,7 +20,7 @@ export function assertProductionDatabaseTarget(supabaseUrlValue, databaseUrlValu
   } catch {
     throw new Error("Production Supabase and PostgreSQL URLs must both be valid URLs.");
   }
-  const projectMatch = supabaseUrl.hostname.toLowerCase().match(/^([a-z0-9]{20})\.supabase\.co$/);
+  const projectMatch = supabaseUrl.hostname.toLowerCase().match(/^([a-z0-9]{20})\\.supabase\\.co$/);
   if (!projectMatch || projectMatch[1] !== expectedRef) {
     throw new Error("Supabase API URL does not identify the expected Production project.");
   }
@@ -20,38 +28,44 @@ export function assertProductionDatabaseTarget(supabaseUrlValue, databaseUrlValu
     throw new Error("Production database binding must use postgres:// or postgresql://.");
   }
 
-  // node-postgres parses connection-string query parameters after URL parsing.
-  // Reject every parameter capable of replacing the authority's routing identity.
+  // Reject routing overrides, then validate the same parsed connection parameters
+  // that node-postgres uses for its actual connection.
   for (const key of databaseUrl.searchParams.keys()) {
     if (TARGET_OVERRIDE_PARAMETERS.has(key.toLowerCase())) {
       throw new Error(`PostgreSQL connection string contains a forbidden target override parameter: ${key}.`);
     }
   }
 
-  const host = databaseUrl.hostname.toLowerCase();
-  let username;
-  let databaseName;
+  let effective;
   try {
-    username = decodeURIComponent(databaseUrl.username);
-    databaseName = decodeURIComponent(databaseUrl.pathname.replace(/^\//, ""));
+    effective = parsePgConnectionString(databaseUrlValue);
   } catch {
-    throw new Error("Production database binding has invalid encoded credentials or database name.");
+    throw new Error("Production PostgreSQL connection string could not be parsed safely.");
   }
+
+  const host = typeof effective.host === "string" ? effective.host.toLowerCase() : "";
+  const username = typeof effective.user === "string" ? effective.user : "";
+  const databaseName = typeof effective.database === "string" ? effective.database : "";
+  const port = Number(effective.port || 5432);
   if (databaseName !== "postgres") {
     throw new Error("Production database binding must target the postgres database.");
   }
-  const port = Number(databaseUrl.port || 5432);
   const directHostMatches = host === `db.${expectedRef}.supabase.co` && username === "postgres" && port === 5432;
-  const poolerHostMatches = /^aws-\d+-[a-z0-9-]+\.pooler\.supabase\.com$/.test(host);
+  const poolerHostMatches = /^aws-\\d+-[a-z0-9-]+\\.pooler\\.supabase\\.com$/.test(host);
   const poolerIdentityMatches = poolerHostMatches && username === `postgres.${expectedRef}` && (port === 5432 || port === 6543);
   if (!directHostMatches && !poolerIdentityMatches) {
-    throw new Error("PostgreSQL connection does not prove the expected Supabase Production host and username; refusing to connect.");
+    throw new Error("Effective PostgreSQL connection host, username, port, or database does not match the expected Production target; refusing to connect.");
   }
   return true;
 }
 
 export function createGuardedProductionPool(Pool, supabaseUrl, databaseUrl, expectedRef, options = {}) {
   assertProductionDatabaseTarget(supabaseUrl, databaseUrl, expectedRef);
+  for (const key of Object.keys(options)) {
+    if (TARGET_OPTIONS.has(key)) {
+      throw new Error(`PostgreSQL pool options cannot override the guarded Production target: ${key}.`);
+    }
+  }
   return new Pool({ connectionString: databaseUrl, ...options });
 }
 
@@ -74,5 +88,5 @@ export function isCanonicalMasterVerified(masterKey, objects) {
 }
 
 export function classifyObjectError(message) {
-  return /\(404\)/.test(String(message)) ? "NOT_FOUND" : "ERROR";
+  return /\\(404\\)/.test(String(message)) ? "NOT_FOUND" : "ERROR";
 }
