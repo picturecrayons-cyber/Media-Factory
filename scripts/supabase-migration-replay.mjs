@@ -18,6 +18,8 @@ const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const MIGRATIONS_DIR = resolve(SCRIPT_DIR, "../supabase/migrations");
 const DATABASE_URL = process.env.SUPABASE_REPLAY_DATABASE_URL?.trim();
 const EXPECTED_MIGRATIONS = 70;
+const CANDIDATE_MIGRATION =
+  "20261120120000_malayalakkara_conditional_submission.sql";
 const FIXTURE_MIGRATION =
   "20261113090535_map_verified_streamvista_studio_owner_20261113.sql";
 const FIXTURE_USER_ID = "bridge-migration-replay-fixture";
@@ -50,16 +52,23 @@ if (
   );
 }
 
-const names = (await readdir(MIGRATIONS_DIR))
+const allNames = (await readdir(MIGRATIONS_DIR))
   .filter((name) => /^\d{14}_[a-z0-9_]+\.sql$/.test(name))
   .sort((a, b) => a.localeCompare(b));
+const candidateNames = allNames.filter((name) => name === CANDIDATE_MIGRATION);
+const names = allNames.filter((name) => name !== CANDIDATE_MIGRATION);
 
-if (names.length !== EXPECTED_MIGRATIONS) {
+if (candidateNames.length !== 1) {
   throw new Error(
-    `Expected ${EXPECTED_MIGRATIONS} versioned migrations; found ${names.length}`,
+    `Expected exactly one allowlisted candidate migration ${CANDIDATE_MIGRATION}; found ${candidateNames.length}`,
   );
 }
-if (new Set(names).size !== names.length) {
+if (names.length !== EXPECTED_MIGRATIONS) {
+  throw new Error(
+    `Expected ${EXPECTED_MIGRATIONS} versioned Production-ledger migrations; found ${names.length}`,
+  );
+}
+if (new Set(allNames).size !== allNames.length) {
   throw new Error("Duplicate migration filenames detected");
 }
 
@@ -447,6 +456,81 @@ try {
     console.log(`[migration-replay] applied ${name}`);
   }
 
+  // Apply the allowlisted PR candidate after the exact Production ledger.
+  // It is replayed separately and is never counted as an already-applied migration.
+  const candidateSql = await readFile(join(MIGRATIONS_DIR, CANDIDATE_MIGRATION), "utf8");
+  const candidateBaseline = await client.query(
+    "select to_regclass('public.bridge_conditional_submissions') is not null as already_exists",
+  );
+  if (candidateBaseline.rows[0].already_exists) {
+    throw new Error("Candidate table already exists before isolated candidate replay");
+  }
+  await client.query("BEGIN");
+  try {
+    await client.query(candidateSql);
+    const candidateCheck = await client.query(`
+      select
+        c.relrowsecurity as rls_enabled,
+        exists (
+          select 1 from pg_constraint
+          where conrelid = 'public.bridge_conditional_submissions'::regclass
+            and conname = 'bridge_conditional_submissions_malayalakkara_only'
+        ) as title_scope_constraint,
+        exists (
+          select 1 from pg_constraint
+          where conrelid = 'public.bridge_conditional_submissions'::regclass
+            and conname = 'bridge_conditional_submissions_one_time_per_title'
+        ) as one_time_constraint,
+        exists (
+          select 1 from pg_indexes
+          where schemaname = 'public'
+            and tablename = 'bridge_conditional_submissions'
+            and indexname = 'bridge_conditional_submissions_one_time_per_title'
+        ) as one_time_index,
+        has_table_privilege('anon', 'public.bridge_conditional_submissions', 'SELECT') as anon_select,
+        has_table_privilege('anon', 'public.bridge_conditional_submissions', 'INSERT') as anon_insert,
+        has_table_privilege('anon', 'public.bridge_conditional_submissions', 'UPDATE') as anon_update,
+        has_table_privilege('anon', 'public.bridge_conditional_submissions', 'DELETE') as anon_delete,
+        has_table_privilege('authenticated', 'public.bridge_conditional_submissions', 'SELECT') as authenticated_select,
+        has_table_privilege('authenticated', 'public.bridge_conditional_submissions', 'INSERT') as authenticated_insert,
+        has_table_privilege('authenticated', 'public.bridge_conditional_submissions', 'UPDATE') as authenticated_update,
+        has_table_privilege('authenticated', 'public.bridge_conditional_submissions', 'DELETE') as authenticated_delete,
+        has_table_privilege('service_role', 'public.bridge_conditional_submissions', 'SELECT') as service_select,
+        has_table_privilege('service_role', 'public.bridge_conditional_submissions', 'INSERT') as service_insert,
+        has_table_privilege('service_role', 'public.bridge_conditional_submissions', 'UPDATE') as service_update,
+        has_table_privilege('service_role', 'public.bridge_conditional_submissions', 'DELETE') as service_delete
+      from pg_class c
+      where c.oid = 'public.bridge_conditional_submissions'::regclass
+    `);
+    const verified = candidateCheck.rows[0];
+    if (
+      !verified?.rls_enabled ||
+      !verified.title_scope_constraint ||
+      !verified.one_time_constraint ||
+      !verified.one_time_index ||
+      verified.anon_select ||
+      verified.anon_insert ||
+      verified.anon_update ||
+      verified.anon_delete ||
+      verified.authenticated_select ||
+      verified.authenticated_insert ||
+      verified.authenticated_update ||
+      verified.authenticated_delete ||
+      !verified.service_select ||
+      !verified.service_insert ||
+      !verified.service_update ||
+      !verified.service_delete
+    ) {
+      throw new Error("Conditional submission candidate schema/security verification failed: " +
+        JSON.stringify(verified));
+    }
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw new Error(`Candidate migration failed: ${CANDIDATE_MIGRATION}: ${error?.message || error}`);
+  }
+  console.log(`[migration-replay] applied and verified isolated candidate ${CANDIDATE_MIGRATION}; Production ledger remains ${names.length}`);
+
   // Production's current Bridge Data API security baseline is not fully
   // represented by the 69-row migration ledger. Recreate it locally after
   // replay from read-only Production catalog evidence only.
@@ -732,7 +816,7 @@ try {
   }
 
   console.log(
-    `[migration-replay] PASS: all ${names.length} Production-ledger migrations replayed in a fresh local Supabase stack.`,
+    `[migration-replay] PASS: all ${names.length} Production-ledger migrations plus isolated candidate ${CANDIDATE_MIGRATION} replayed in a fresh local Supabase stack.`,
   );
 } finally {
   client.release();

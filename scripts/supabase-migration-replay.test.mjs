@@ -60,3 +60,20 @@ for (const [label, databaseUrl] of rejectedTargets) {
     assert.doesNotMatch(result.stderr, /ECONNREFUSED|ENOTFOUND|ETIMEDOUT/);
   });
 }
+
+
+test("conditional submission migration is replayed as an isolated candidate, not counted as Production history", () => {
+  assert.match(replaySource, /const EXPECTED_MIGRATIONS = 70/);
+  assert.match(replaySource, /const CANDIDATE_MIGRATION =\s*"20261120120000_malayalakkara_conditional_submission\.sql"/);
+  assert.match(replaySource, /const names = allNames\.filter\(\(name\) => name !== CANDIDATE_MIGRATION\)/);
+  assert.match(replaySource, /candidateSql/);
+  assert.match(replaySource, /bridge_conditional_submissions_one_time_per_title/);
+  assert.match(replaySource, /bridge_conditional_submissions_malayalakkara_only/);
+  assert.match(replaySource, /anon_update/);
+  assert.match(replaySource, /anon_delete/);
+  assert.match(replaySource, /authenticated_select/);
+  assert.match(replaySource, /authenticated_insert/);
+  assert.match(replaySource, /authenticated_update/);
+  assert.match(replaySource, /authenticated_delete/);
+  assert.match(replaySource, /service_select/);
+});

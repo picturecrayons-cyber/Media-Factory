@@ -4,7 +4,14 @@ on:
   push:
     branches: ["main", "feat/crayons-bridge-production", "fix/bridge-production-gate-20260923", "fix/bridge-final-production-gate-20260924", "fix/canonical-supabase-url-resolution-20261024", "fix/signup-role-dashboards-rbac-20261024", "fix/workspace-studio-rbac-20261024"]
   pull_request:
-    branches: ["main", "fix/canonical-supabase-url-resolution-20261024", "fix/signup-role-dashboards-rbac-20261024", "fix/workspace-studio-rbac-20261024"]
+    branches: ["main", "feat/malayalakkara-conditional-submission-20261120", "fix/canonical-supabase-url-resolution-20261024", "fix/signup-role-dashboards-rbac-20261024", "fix/workspace-studio-rbac-20261024"]
+    paths:
+      - "src/lib/bridge/conditional-submission.ts"
+      - "src/components/bridge/workflow-desk.tsx"
+      - "supabase/migrations/20261120120000_malayalakkara_conditional_submission.sql"
+      - "scripts/supabase-migration-replay.mjs"
+      - "scripts/supabase-migration-replay.test.mjs"
+      - ".github/workflows/ci.yml"
   workflow_dispatch:
 
 jobs:
@@ -76,9 +83,12 @@ jobs:
 
       - run: npm ci
 
-      - uses: supabase/setup-cli@v1
-        with:
-          version: latest
+      - name: Install pinned Supabase CLI
+        run: |
+          curl -fsSL https://github.com/supabase/cli/releases/download/v2.81.3/supabase_linux_amd64.tar.gz -o "$RUNNER_TEMP/supabase.tar.gz"
+          tar -xzf "$RUNNER_TEMP/supabase.tar.gz" -C "$RUNNER_TEMP"
+          sudo install "$RUNNER_TEMP/supabase" /usr/local/bin/supabase
+          supabase --version
 
       # Supabase CLI automatically applies files in supabase/migrations during
       # start. Hide the recovered ledger temporarily so the custom replay can
