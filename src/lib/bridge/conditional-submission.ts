@@ -98,3 +98,28 @@ export const submitMalayalakkaraConditionalRequest = createServerFn({ method: "P
       return { submissionId: record.id, status: record.status, alreadySubmitted: false as const };
     });
   });
+
+
+export const getMalayalakkaraConditionalSubmission = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .validator(z.object({ titleId: z.literal(MALAYALAKKARA_RESIDENCY_ID) }))
+  .handler(async ({ context, data }) => {
+    const actor = await requireVerifiedActor(context.userId);
+    const sql = await getSql();
+    const [title] = await sql<{ id: string; owner_user_id: string }>`
+      select id, owner_user_id from bridge_titles where id = ${data.titleId}
+    `;
+    if (!title || title.owner_user_id !== actor.userId) {
+      throw new Error("Not found");
+    }
+    const [submission] = await sql<{ id: string; status: string; submitted_at: string | Date }>`
+      select id::text, status, submitted_at
+      from bridge_conditional_submissions
+      where title_id = ${data.titleId}
+        and submission_kind = 'CONDITIONAL_LEGAL_VERIFICATION'
+      limit 1
+    `;
+    return submission
+      ? { submissionId: submission.id, status: submission.status, submittedAt: new Date(submission.submitted_at).toISOString() }
+      : null;
+  });
