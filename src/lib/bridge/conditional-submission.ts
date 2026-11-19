@@ -46,7 +46,7 @@ export const submitMalayalakkaraConditionalRequest = createServerFn({ method: "P
         limit 1
       `;
       if (existing.length) {
-        return { submissionId: existing[0].id, status: existing[0].status, alreadySubmitted: true as const };
+        throw new Error("A one-time conditional submission has already been recorded");
       }
 
       const [record] = await tx<{ id: string; status: string }>`
