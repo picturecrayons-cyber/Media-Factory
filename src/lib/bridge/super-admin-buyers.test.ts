@@ -65,7 +65,7 @@ export const listSuperAdminBuyerManagement = createServerFn({ method: "GET" })
       sql`select p.user_id, p.email, p.display_name, p.account_type, p.organization_name, p.organization_id, p.email_verified, p.created_at, p.updated_at from public.bridge_profiles p where p.account_type='buyer' order by p.created_at desc nulls last limit 500`,
       sql`select o.id, o.legal_name, o.status, o.created_at, count(distinct m.user_id)::int as member_count, count(distinct p.user_id) filter (where p.account_type='buyer')::int as buyer_count from public.bridge_organizations o left join public.bridge_organization_memberships m on m.organization_id=o.id and m.status='active' left join public.bridge_profiles p on p.user_id=m.user_id group by o.id order by o.created_at desc limit 200`,
       sql`select status, count(*)::int as count from public.bridge_license_packages group by status order by status`,
-      sql`select status, count(*)::int as count, coalesce(sum(amount_paise) filter (where status='captured'),0)::bigint as amount_paise from public.bridge_payments where purpose='title_license' group by status order by status`,
+      sql`select status, count(*)::int as count, coalesce(sum(amount_paise) filter (where status='captured'),0)::bigint as amount_paise from public.bridge_payments group by status order by status`,
       sql`select access_type, count(*)::int as count from public.bridge_entitlements group by access_type order by access_type`,
       sql`select created_at, action, entity_type, entity_id, actor_user_id from public.bridge_audit_logs where action like 'buyer.%' or action like 'organization.%' or action like 'payment.%' or action like 'licensing.%' order by created_at desc limit 100`
     ]);
@@ -104,7 +104,7 @@ export const listSuperAdminBuyerManagement = createServerFn({ method: "GET" })
   return { list: exports.listSuperAdminBuyerManagement as (arg: unknown) => Promise<any>, statements };
 }
 
-const context = { userId: "admin-1" };
+const context = { userId: "auth-user-1" };
 
 test("Buyer management returns independent profiles and organization membership separately", async () => {
   const h = harness();
