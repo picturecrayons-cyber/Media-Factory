@@ -61,7 +61,7 @@ export function StoryConceptForm() {
           rightsHolderName,
           rightsBasis: rightsBasis as "ORIGINAL_AUTHOR" | "ASSIGNED" | "LICENSED" | "PUBLIC_DOMAIN" | "OTHER",
           thirdPartyMaterialsIncluded,
-          rightsDeclarationAccepted: true,
+          rightsDeclarationAccepted,
         },
       }),
     onSuccess: (res) => {
