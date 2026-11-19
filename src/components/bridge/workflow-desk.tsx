@@ -8,7 +8,7 @@ import {
   reviewTitleWorkflow,
 } from "@/lib/bridge/workflow";
 import { advanceTitle } from "@/lib/bridge/titles";
-import { MALAYALAKKARA_RESIDENCY_ID, submitMalayalakkaraConditionalRequest } from "@/lib/bridge/conditional-submission";
+import { MALAYALAKKARA_RESIDENCY_ID, getMalayalakkaraConditionalSubmission, submitMalayalakkaraConditionalRequest } from "@/lib/bridge/conditional-submission";
 import {
   authorizeLoopPublication,
   getLoopPublication,
@@ -24,6 +24,11 @@ const stages = ["Prepare", "Business", "Distribution", "Revenue"] as const;
 export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: BridgeActor }) {
   const [stage, setStage] = useState<(typeof stages)[number]>("Prepare");
   const [conditionalSubmissionStatus, setConditionalSubmissionStatus] = useState("");
+  const conditionalSubmission = useQuery({
+    queryKey: ["conditional-submission", title.id],
+    queryFn: () => getMalayalakkaraConditionalSubmission({ data: { titleId: MALAYALAKKARA_RESIDENCY_ID } }),
+    enabled: title.id === MALAYALAKKARA_RESIDENCY_ID && canOperateOnTitle(actor, title, "title.update_own"),
+  });
   const [settlementRef, setSettlementRef] = useState("");
   const [invoiceRef, setInvoiceRef] = useState("");
   const [statementRef, setStatementRef] = useState("");
