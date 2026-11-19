@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { readFileSync } from "node:fs";
 import { sameOwner, isSupportedCreatorDocumentMimeType, hasPdfMagicBytes, canDownloadCreatorDocument, canManageStudioDocuments, canReviewTitleDocuments } from "./creator-document-policy.ts";
 
 test("Creator document vault is isolated to the owning Creator account", () => {
@@ -51,6 +52,15 @@ test("PDF uploads must contain the actual PDF file signature, not only a PDF MIM
   assert.equal(hasPdfMagicBytes(new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31])), true);
   assert.equal(hasPdfMagicBytes(new Uint8Array([0x3c, 0x68, 0x74, 0x6d, 0x6c, 0x3e])), false);
   assert.equal(hasPdfMagicBytes(new Uint8Array([0x25, 0x50, 0x44])), false);
+});
+
+test("Legal Reviewer document downloads require an explicit title assignment", () => {
+  const source = readFileSync(new URL("./creator-documents.ts", import.meta.url), "utf8");
+  assert.match(source, /actor\.internalRole !== "super_admin"/);
+  assert.match(source, /internal_role='legal_reviewer'/);
+  assert.match(source, /bridge_title_document_review_assignments/);
+  assert.match(source, /a\.reviewer_user_id=\$\{actor\.userId\}/);
+  assert.match(source, /a\.status='ACTIVE'/);
 });
 
 test("document downloads require ownership, linked-title review scope, or Super Admin", () => {
