@@ -22,7 +22,7 @@ export function assertProductionDatabaseTarget(supabaseUrlValue, databaseUrlValu
     throw new Error("Production database binding has an invalid encoded username.");
   }
   const directHostMatches = host === `db.${expectedRef}.supabase.co`;
-  const poolerHostMatches = /^aws-\\d+-[a-z0-9-]+\\.pooler\\.supabase\\.com$/.test(host);
+  const poolerHostMatches = /^aws-\d+-[a-z0-9-]+\.pooler\.supabase\.com$/.test(host);
   const poolerUsernameMatches = poolerHostMatches && username.split(".").includes(expectedRef);
   if (!directHostMatches && !poolerUsernameMatches) {
     throw new Error("PostgreSQL connection does not prove the expected Supabase Production project; refusing to connect.");
@@ -32,7 +32,7 @@ export function assertProductionDatabaseTarget(supabaseUrlValue, databaseUrlValu
 
 export function compareObjectSizes(databaseByteSize, actualByteSize) {
   if (databaseByteSize === null || databaseByteSize === undefined) {
-    return { status: "UNRECORDED", matches: false };
+  return { status: "UNRECORDED", matches: false };
   }
   const expected = Number(databaseByteSize);
   if (!Number.isSafeInteger(expected) || !Number.isSafeInteger(actualByteSize) || expected < 0 || actualByteSize < 0) {
