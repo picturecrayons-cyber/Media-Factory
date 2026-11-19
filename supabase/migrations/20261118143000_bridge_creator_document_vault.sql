@@ -29,7 +29,7 @@ create table if not exists public.bridge_creator_documents (
   updated_at timestamptz not null default now(),
   check (
     (owner_account_type = 'independent_creator' and owner_organization_id is null)
-    or owner_account_type = 'studio'
+    or (owner_account_type = 'studio' and owner_organization_id is not null)
   )
 );
 
