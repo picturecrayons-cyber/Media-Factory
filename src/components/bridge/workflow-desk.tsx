@@ -6,6 +6,7 @@ import {
   recordSettlementEvidence,
   submitLoopLicense,
   reviewTitleWorkflow,
+  authorizeBridgeSublicense,
 } from "@/lib/bridge/workflow";
 import { advanceTitle } from "@/lib/bridge/titles";
 import { listTitleDocumentEvidence } from "@/lib/bridge/creator-documents";
@@ -31,6 +32,12 @@ function toLocalDateTimeInput(value: Date) {
   const local = new Date(value.getTime() - value.getTimezoneOffset() * 60_000);
   return local.toISOString().slice(0, 16);
 }
+function formatOptionalDate(value: string | Date | null | undefined) {
+  if (!value) return "Not set";
+  const date = new Date(value);
+  return Number.isFinite(date.getTime()) ? date.toLocaleDateString() : "Not set";
+}
+
 export function WorkflowDesk({ title, actor, qcSubmissionReady = false }: {
   title: BridgeTitle;
   actor: BridgeActor;
@@ -105,6 +112,16 @@ export function WorkflowDesk({ title, actor, qcSubmissionReady = false }: {
   const [ownerShare, setOwnerShare] = useState("50");
   const isSuperAdmin = actor.internalRole === "super_admin";
   const [selectedGrantByAgreement, setSelectedGrantByAgreement] = useState<Record<string, string>>({});
+  const [sublicenseLicensee, setSublicenseLicensee] = useState("");
+  const [sublicenseLicenseeRef, setSublicenseLicenseeRef] = useState("");
+  const [sublicenseTerritories, setSublicenseTerritories] = useState("WORLDWIDE");
+  const [sublicenseLanguages, setSublicenseLanguages] = useState(title.language);
+  const [sublicenseMedia, setSublicenseMedia] = useState("TVOD");
+  const [sublicenseStart, setSublicenseStart] = useState(start);
+  const [sublicenseEnd, setSublicenseEnd] = useState(end);
+  const [sublicenseRestrictions, setSublicenseRestrictions] = useState("");
+  const [sublicenseEvidenceId, setSublicenseEvidenceId] = useState("");
+  const [sublicenseReason, setSublicenseReason] = useState("");
   const [loopRentalPriceInr, setLoopRentalPriceInr] = useState("");
   const [loopPurchasePriceInr, setLoopPurchasePriceInr] = useState("");
   const [loopPricingNote, setLoopPricingNote] = useState("");
@@ -352,7 +369,7 @@ export function WorkflowDesk({ title, actor, qcSubmissionReady = false }: {
                       >
                         {agreementGrants.map((grant, index) => (
                           <option key={grant.id} value={grant.id}>
-                            {index + 1}. {grant.status} · {grant.exclusivity} · {grant.languages.join(", ")} · {new Date(grant.window_start).toLocaleDateString()}
+                            {index + 1}. {grant.status} · {grant.exclusivity} · {grant.languages.join(", ")} · Window: {formatOptionalDate(grant.window_start)}
                           </option>
                         ))}
                       </select>
@@ -366,7 +383,7 @@ export function WorkflowDesk({ title, actor, qcSubmissionReady = false }: {
                           <span>· {selectedGrant.languages.join(", ")}</span>
                         </div>
                         <p className="text-xs text-muted">
-                          {selectedGrant.window_start} → {selectedGrant.window_end}
+                          {formatOptionalDate(selectedGrant.window_start)} → {formatOptionalDate(selectedGrant.window_end)}
                         </p>
                         <p className="break-all text-xs text-muted">Grant record: {selectedGrant.id}</p>
                         <div className="space-y-2 rounded-lg border border-line bg-surface p-3">
@@ -486,6 +503,68 @@ export function WorkflowDesk({ title, actor, qcSubmissionReady = false }: {
                 );
               })}
               {!grants.length ? <p>No distribution submission recorded.</p> : null}
+              {isSuperAdmin ? (
+                <section className="space-y-3 rounded-xl border border-line p-3">
+                  <h3 className="font-semibold">Bridge-only sublicensing decision</h3>
+                  <p className="text-xs text-muted">
+                    This is separate from Creator/Studio submission and Loop publication. Use only after confirming that the signed title agreement expressly permits onward sublicensing. Every scope field must stay within the selected VALID rights grant.
+                  </p>
+                  {valid ? (
+                    <>
+                      <p className="break-all text-xs text-muted">Underlying VALID grant: {valid.id}</p>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        {input("Downstream licensee", sublicenseLicensee, setSublicenseLicensee)}
+                        {input("Licensee / contract reference", sublicenseLicenseeRef, setSublicenseLicenseeRef)}
+                        {input("Territories (comma-separated; within grant)", sublicenseTerritories, setSublicenseTerritories)}
+                        {input("Languages (comma-separated; within grant)", sublicenseLanguages, setSublicenseLanguages)}
+                        {input("Media / exploitation (comma-separated; within grant)", sublicenseMedia, setSublicenseMedia)}
+                        {input("Sublicense starts", sublicenseStart, setSublicenseStart, "datetime-local")}
+                        {input("Sublicense ends", sublicenseEnd, setSublicenseEnd, "datetime-local")}
+                      </div>
+                      <label className="grid gap-1 text-sm">
+                        Restrictions (one per line)
+                        <textarea value={sublicenseRestrictions} onChange={(event) => setSublicenseRestrictions(event.target.value)}
+                          className="min-h-20 rounded-lg border border-line bg-elevated p-2" />
+                      </label>
+                      <label className="grid gap-1 text-sm">
+                        Verified title-linked agreement evidence
+                        <select value={sublicenseEvidenceId} onChange={(event) => setSublicenseEvidenceId(event.target.value)}
+                          className="rounded-lg border border-line bg-elevated p-2">
+                          <option value="">Select verified agreement</option>
+                          {(documentEvidence.data?.evidence ?? [])
+                            .filter((item) => ["FINISHED_FILM_AGREEMENT", "DISTRIBUTION_AGREEMENT"].includes(item.evidence_type))
+                            .map((item) => <option key={item.id} value={item.id}>{item.file_name} · {item.evidence_type.replaceAll("_", " ")}</option>)}
+                        </select>
+                      </label>
+                      {input("Super Admin decision reason (confirm express onward-rights clause)", sublicenseReason, setSublicenseReason)}
+                      {button("Authorize sublicense in Bridge", () =>
+                        authorizeBridgeSublicense({
+                          data: {
+                            titleId: title.id,
+                            rightsGrantId: valid.id,
+                            downstreamLicensee: sublicenseLicensee.trim(),
+                            downstreamLicenseeReference: sublicenseLicenseeRef.trim(),
+                            territories: sublicenseTerritories.split(",").map((value) => value.trim()).filter(Boolean),
+                            languages: sublicenseLanguages.split(",").map((value) => value.trim()).filter(Boolean),
+                            media: sublicenseMedia.split(",").map((value) => value.trim()).filter(Boolean),
+                            windowStart: new Date(sublicenseStart).toISOString(),
+                            windowEnd: new Date(sublicenseEnd).toISOString(),
+                            restrictions: sublicenseRestrictions.split("\n").map((value) => value.trim()).filter(Boolean),
+                            evidenceDocumentId: sublicenseEvidenceId,
+                            rightsEvidenceReviewed: true,
+                            approvalReason: sublicenseReason.trim(),
+                          },
+                        }),
+                        !sublicenseLicensee.trim() || !sublicenseLicenseeRef.trim() ||
+                          !sublicenseEvidenceId || sublicenseReason.trim().length < 12 ||
+                          !sublicenseStart || !sublicenseEnd || documentEvidence.isPending || documentEvidence.isError,
+                      )}
+                    </>
+                  ) : (
+                    <p className="text-xs text-muted">A VALID title-specific rights grant is required before Bridge can record a sublicense.</p>
+                  )}
+                </section>
+              ) : null}
             </div>
           ) : null}
           {stage === "Distribution" ? (

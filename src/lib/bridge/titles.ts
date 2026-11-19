@@ -265,16 +265,19 @@ export const createTitle = createServerFn({ method: "POST" })
       ) {
         throw new Error("Complete the rights package and authorization evidence details before submitting.");
       }
+      if (data.sublicensingAllowed === true) {
+        throw new Error("Sublicensing cannot be granted during title submission. A separate Bridge Super Admin decision is required after independent Legal approval and verified agreement evidence.");
+      }
       if (!actor.internalRole) {
         await assertAccountMandateScope(
           sql,
           actor,
           data.intendedDestinations!,
           data.media!,
-          data.sublicensingAllowed === true,
+          false,
         );
       }
-            const windowStart = new Date(data.windowStart);
+      const windowStart = new Date(data.windowStart);
       const windowEnd = new Date(data.windowEnd);
       if (!Number.isFinite(windowStart.getTime()) || !Number.isFinite(windowEnd.getTime()) || windowEnd <= windowStart) {
         throw new Error("Rights window dates are invalid.");
@@ -335,7 +338,7 @@ export const createTitle = createServerFn({ method: "POST" })
             ${rightsPackage.windowStart}, ${rightsPackage.windowEnd},
             ${data.exclusivity ?? "NON_EXCLUSIVE"},
             ${JSON.stringify(data.holdbacks ?? [])}::jsonb,
-            ${data.sublicensingAllowed ?? false}, ${data.promotionalRights ?? false},
+            ${false}, ${data.promotionalRights ?? false},
             '[]'::jsonb, ${evidence}::jsonb, 'DRAFT', ${actor.userId}
           )
         `;

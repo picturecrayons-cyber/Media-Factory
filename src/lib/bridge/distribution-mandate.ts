@@ -4,16 +4,9 @@ export const DISTRIBUTION_MANDATE_VERSION = 1 as const;
 
 export const DISTRIBUTION_MANDATE_DEFAULTS = {
   enabled: true,
-  destinations: [
-    "Crayons Loop",
-    "External OTT",
-    "Broadcast / TV",
-    "TVOD / EST",
-    "FAST",
-    "Festival / Educational",
-    "Buyer delivery",
-  ],
+  destinations: ["Crayons Loop", "External OTT", "Broadcast / TV", "TVOD / EST", "FAST", "Festival / Educational", "Buyer delivery"],
   media: ["SVOD", "TVOD", "AVOD", "FAST", "BROADCAST", "THEATRICAL", "AIRLINE", "EDUCATIONAL", "FESTIVAL"],
+  // Creator/Studio acceptance never grants onward-sublicensing authority.
   sublicensingAllowed: false,
 } as const;
 
@@ -38,23 +31,30 @@ export function createDefaultDistributionMandate(acceptedAt: string): CreatorDis
   });
 }
 
-export function isDestinationCovered(
-  mandate: CreatorDistributionMandate,
-  requestedDestinations: readonly string[],
-): boolean {
+export function isDestinationCovered(mandate: CreatorDistributionMandate, requestedDestinations: readonly string[]): boolean {
   return requestedDestinations.every((destination) => mandate.destinations.includes(destination));
 }
 
-export function canSublicenseWithinMandate(
-  mandate: CreatorDistributionMandate,
-  titleGrantAllowsSublicensing: boolean,
-): boolean {
-  return mandate.enabled && titleGrantAllowsSublicensing && mandate.sublicensingAllowed;
+/** A Creator/Studio mandate can never authorize onward sublicensing. */
+export function canSublicenseWithinMandate(mandate: CreatorDistributionMandate, titleGrantAllowsSublicensing: boolean): boolean {
+  return mandate.enabled && mandate.sublicensingAllowed && titleGrantAllowsSublicensing;
 }
 
-export function isMediaCovered(
-  mandate: CreatorDistributionMandate,
-  requestedMedia: readonly string[],
-): boolean {
+/** Only the verified Bridge Super Admin decision layer may issue a sublicense. */
+export function assertBridgeSublicensingAuthority(actor: { internalRole?: string | null; accountType?: string | null }) {
+  if (actor.internalRole !== "super_admin") {
+    throw new Error("Only Crayons Bridge Super Admin may authorize sublicensing.");
+  }
+}
+
+/** A Bridge decision is still constrained by the rights holder's title-specific grant. */
+export function canBridgeAuthorizeSublicensing(
+  actor: { internalRole?: string | null; accountType?: string | null },
+  titleGrantAllowsSublicensing: boolean,
+) {
+  return actor.internalRole === "super_admin" && titleGrantAllowsSublicensing;
+}
+
+export function isMediaCovered(mandate: CreatorDistributionMandate, requestedMedia: readonly string[]): boolean {
   return requestedMedia.every((medium) => mandate.media.includes(medium));
 }
