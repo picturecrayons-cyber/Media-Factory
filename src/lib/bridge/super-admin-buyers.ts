@@ -50,7 +50,11 @@ export const listSuperAdminBuyerManagement = createServerFn({ method: "GET" })
         group by o.id
         order by o.created_at desc
         limit 200
-      `,
+      `.catch((error) => {
+        const message = error instanceof Error ? error.message : String(error);
+        if (!/42P01|does not exist|undefined table/i.test(message)) throw error;
+        return [] as Array<{id:string;legal_name:string;status:string;member_count:number|string;buyer_count:number|string;created_at:string|Date}>;
+      }),
       sql<{ status: string; count: number | string }>`
         select status, count(*)::int as count
         from public.bridge_license_packages
