@@ -23,7 +23,7 @@ export function hasPdfMagicBytes(bytes: Uint8Array) {
     bytes[3] === 0x46 && bytes[4] === 0x2d;
 }
 
-/** Only an active Studio owner may create or link reusable organization documents. */
+/** Only an active Studio owner or admin may access reusable organization documents. */
 export function canManageStudioDocuments(input: {
   accountType: string;
   organizationId?: string | null;
