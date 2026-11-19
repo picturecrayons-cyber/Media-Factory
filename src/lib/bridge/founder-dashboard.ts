@@ -104,6 +104,19 @@ export type FounderOperationalSnapshot = {
   distributionPackages: { readiness_state: string; count: number }[];
   loopPublications: { authorization_status: string; count: number }[];
   serviceOrders: StatusCount[];
+  titleStatuses: StatusCount[];
+  assets: { kind: string; count: number }[];
+  assetProcessing: StatusCount[];
+  profiles: { account_type: string; internal_role: string; count: number }[];
+  organizations: StatusCount[];
+  buyerInterest: StatusCount[];
+  activeBuyerAccess: number;
+  pendingInvites: number;
+  cmsRecords: number;
+  auditActivity: { action: string; count: number }[];
+  webhooks: StatusCount[];
+  ingestSessions: StatusCount[];
+  ledger: { entry_type: string; classification: string; count: number; amount_paise: number }[];
 };
 
 /**
@@ -244,6 +257,117 @@ export const getFounderOperationalSnapshot = createServerFn({ method: "GET" })
             from bridge_service_orders
             group by status
           ) s
+        ), '[]'::jsonb),
+        'titleStatuses', coalesce((
+          select jsonb_agg(jsonb_build_object('status', s.status, 'count', s.record_count))
+          from (
+            select status, count(*)::int as record_count
+            from bridge_titles
+            where coalesce(submission_type, 'finished_film') = 'finished_film'
+            group by status
+          ) s
+        ), '[]'::jsonb),
+        'assets', coalesce((
+          select jsonb_agg(jsonb_build_object('kind', s.kind, 'count', s.record_count))
+          from (
+            select kind, count(*)::int as record_count
+            from bridge_assets a
+            where a.title_id in (
+              select id from bridge_titles
+              where coalesce(submission_type, 'finished_film') = 'finished_film'
+            )
+            group by kind
+          ) s
+        ), '[]'::jsonb),
+        'assetProcessing', coalesce((
+          select jsonb_agg(jsonb_build_object('status', s.processing_state, 'count', s.record_count))
+          from (
+            select av.processing_state, count(*)::int as record_count
+            from bridge_asset_versions av
+            where av.title_id in (
+              select id from bridge_titles
+              where coalesce(submission_type, 'finished_film') = 'finished_film'
+            )
+            group by av.processing_state
+          ) s
+        ), '[]'::jsonb),
+        'profiles', coalesce((
+          select jsonb_agg(jsonb_build_object(
+            'account_type', s.account_type,
+            'internal_role', coalesce(s.internal_role, 'none'),
+            'count', s.record_count
+          ))
+          from (
+            select account_type, internal_role, count(*)::int as record_count
+            from bridge_profiles
+            group by account_type, internal_role
+          ) s
+        ), '[]'::jsonb),
+        'organizations', coalesce((
+          select jsonb_agg(jsonb_build_object('status', s.status, 'count', s.record_count))
+          from (
+            select status, count(*)::int as record_count
+            from bridge_organizations
+            group by status
+          ) s
+        ), '[]'::jsonb),
+        'buyerInterest', coalesce((
+          select jsonb_agg(jsonb_build_object('status', s.interest_level, 'count', s.record_count))
+          from (
+            select interest_level, count(*)::int as record_count
+            from bridge_buyer_interest
+            group by interest_level
+          ) s
+        ), '[]'::jsonb),
+        'activeBuyerAccess', (
+          select count(*)::int from bridge_buyer_title_access
+          where revoked_at is null and (expires_at is null or expires_at > now())
+        ),
+        'pendingInvites', (
+          select count(*)::int from bridge_invites
+          where accepted_at is null and expires_at > now()
+        ),
+        'cmsRecords', (select count(*)::int from bridge_site_content),
+        'auditActivity', coalesce((
+          select jsonb_agg(jsonb_build_object('action', s.action, 'count', s.record_count))
+          from (
+            select action, count(*)::int as record_count
+            from bridge_audit_logs
+            where created_at >= now() - interval '30 days'
+            group by action
+            order by count(*) desc
+            limit 8
+          ) s
+        ), '[]'::jsonb),
+        'webhooks', coalesce((
+          select jsonb_agg(jsonb_build_object('status', s.status, 'count', s.record_count))
+          from (
+            select status, count(*)::int as record_count
+            from bridge_webhook_events
+            group by status
+          ) s
+        ), '[]'::jsonb),
+        'ingestSessions', coalesce((
+          select jsonb_agg(jsonb_build_object('status', s.status, 'count', s.record_count))
+          from (
+            select status, count(*)::int as record_count
+            from bridge_dit_ingest_sessions
+            group by status
+          ) s
+        ), '[]'::jsonb),
+        'ledger', coalesce((
+          select jsonb_agg(jsonb_build_object(
+            'entry_type', s.entry_type,
+            'classification', s.classification,
+            'count', s.record_count,
+            'amount_paise', s.total_paise
+          ))
+          from (
+            select entry_type, classification, count(*)::int as record_count,
+              coalesce(sum(amount_paise), 0)::bigint as total_paise
+            from bridge_financial_ledger
+            group by entry_type, classification
+          ) s
         ), '[]'::jsonb)
       ) as snapshot
     `;
@@ -259,5 +383,18 @@ export const getFounderOperationalSnapshot = createServerFn({ method: "GET" })
       distributionPackages: [],
       loopPublications: [],
       serviceOrders: [],
+      titleStatuses: [],
+      assets: [],
+      assetProcessing: [],
+      profiles: [],
+      organizations: [],
+      buyerInterest: [],
+      activeBuyerAccess: 0,
+      pendingInvites: 0,
+      cmsRecords: 0,
+      auditActivity: [],
+      webhooks: [],
+      ingestSessions: [],
+      ledger: [],
     };
   });
