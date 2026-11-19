@@ -17,7 +17,7 @@ const { Pool } = pg;
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const MIGRATIONS_DIR = resolve(SCRIPT_DIR, "../supabase/migrations");
 const DATABASE_URL = process.env.SUPABASE_REPLAY_DATABASE_URL?.trim();
-const EXPECTED_MIGRATIONS = 70;
+const EXPECTED_MIGRATIONS = 71;
 const FIXTURE_MIGRATION =
   "20261113090535_map_verified_streamvista_studio_owner_20261113.sql";
 const FIXTURE_USER_ID = "bridge-migration-replay-fixture";
@@ -153,7 +153,7 @@ try {
     await client.query("BEGIN");
     try {
       // Production contains this legacy trigger helper, but it is not part
-      // of the 69-row migration ledger (it predates the recorded history).
+      // of the recorded Production migration ledger (it predates the recorded history).
       // Recreate that verified baseline object only in the disposable replay DB
       // before the historical migration alters its search_path.
       if (name === "20261006154551_harden_authz_server_only_surfaces_20261006.sql") {
@@ -217,7 +217,7 @@ try {
       }
 
       // Three server-only tables exist in the Production baseline but are
-      // intentionally absent from the 69-row Supabase migration ledger.
+      // intentionally absent from the recorded Supabase migration ledger.
       // Recreate their verified, empty schemas only in this disposable local
       // replay DB. The historical deep-clean migration below adds the deny
       // policies, so this fixture enables RLS but does not create policies.
@@ -278,7 +278,7 @@ try {
         console.log("[migration-replay] restored two verified empty pre-ledger server-only table baselines locally");
       }
 
-      // The Story/Concept module predates the 69-row migration ledger.
+      // The Story/Concept module predates the recorded Production migration ledger.
       // Production has three rows in bridge_story_concept_submissions; recreate
       // only the schema/policies/grants locally and never copy those records.
       if (name === "20261113090257_bridge_story_concept_nonrow_privileges_20261113.sql") {
@@ -376,7 +376,7 @@ try {
         console.log("[migration-replay] restored Story/Concept pre-ledger schema and RLS baseline locally; no Production rows copied");
       }
 
-      // The Delivery Desk table predates the 69-row migration ledger.
+      // The Delivery Desk table predates the recorded Production migration ledger.
       // Recreate its empty schema and existing internal-only RLS policy locally;
       // the Production table currently has zero rows, and no live data is copied.
       if (name === "20261114135437_bridge_delivery_job_ownership_20261114.sql") {
@@ -448,7 +448,7 @@ try {
   }
 
   // Production's current Bridge Data API security baseline is not fully
-  // represented by the 69-row migration ledger. Recreate it locally after
+  // represented by the recorded Production migration ledger. Recreate it locally after
   // replay from read-only Production catalog evidence only.
   await client.query(`
     do $bridge_rls_baseline$
