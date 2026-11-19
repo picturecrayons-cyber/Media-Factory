@@ -4,7 +4,7 @@ import { RequireBridge } from "@/components/bridge/gate";
 import { BridgeShell } from "@/components/bridge/shell";
 import { listTitles } from "@/lib/bridge/titles";
 import { BRIDGE_LOOP_LANES, loopStageType } from "@/lib/bridge/loop-lanes";
-import { getDashboardSession } from "@/lib/bridge/session";
+import { getFounderTrackedProductions } from "@/lib/bridge/founder-dashboard";
 
 export const Route = createFileRoute("/dashboard")({
   head: () => ({ meta: [{ name: "robots", content: "noindex, nofollow" }] }),
@@ -56,16 +56,6 @@ const ADMIN_MODULES = [
   },
 ] as const;
 
-const FOUNDER_TRACKED_PRODUCTIONS = [
-  { key: "malayalakkara-residency", label: "Malayalakkara Residency" },
-  { key: "jananam-1947-pranayam-thudarunnu", label: "Jananam 1947 Pranayam Thudarunnu" },
-  { key: "pranayam-1947", label: "Pranayam 1947" },
-] as const;
-
-function titleKey(value: string | null | undefined): string {
-  return String(value || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
-}
-
 const ACTION_GUIDANCE: Record<string, string> = {
   QC_REVIEW: "QC review is pending",
   RIGHTS_REVIEW: "Rights review is pending",
@@ -73,30 +63,27 @@ const ACTION_GUIDANCE: Record<string, string> = {
 };
 
 function DashboardBody() {
-  const dashboardQ = useQuery({
-    queryKey: ["bridge-dashboard-session"],
-    queryFn: () => getDashboardSession(),
-    retry: false,
-  });
+  // RequireBridge has already completed the verified Super Admin check.
+  // Do not repeat the same auth/profile lookup here: a second session request
+  // previously left the live Founder Centre stuck at "Checking access…".
   const titlesQ = useQuery({
     queryKey: ["bridge-titles"],
     queryFn: () => listTitles(),
-    enabled: dashboardQ.isSuccess,
     retry: 1,
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: true,
   });
-
-  if (dashboardQ.isPending) return <p className="text-sm text-muted">Checking access…</p>;
-  if (dashboardQ.isError) return <p role="alert" className="text-sm text-accent">Super admin access required.</p>;
+  const founderProductionsQ = useQuery({
+    queryKey: ["bridge-founder-tracked-productions"],
+    queryFn: () => getFounderTrackedProductions(),
+    retry: 1,
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: true,
+  });
 
   const titles = titlesQ.data?.titles ?? [];
   const actionItems = titles.filter((title) => title.status in ACTION_GUIDANCE);
-  const founderProductions = FOUNDER_TRACKED_PRODUCTIONS.map((tracked) => ({
-    ...tracked,
-    record: titles.find((title) =>
-      titleKey(title.name) === titleKey(tracked.label) ||
-      titleKey(title.slug).includes(titleKey(tracked.key)),
-    ) ?? null,
-  }));
+  const founderProductions = founderProductionsQ.data?.productions ?? [];
   const liveOrCommercial = titles.filter((title) =>
     ["LIVE_FOR_BUYERS", "IN_NEGOTIATION", "LICENSED", "DELIVERED"].includes(title.status),
   );
@@ -257,9 +244,9 @@ function DashboardBody() {
             Open title workspace →
           </Link>
         </div>
-        {titlesQ.isPending ? (
+        {founderProductionsQ.isPending ? (
           <p className="rounded-sm border border-line px-4 py-5 text-sm text-muted">Loading production workflow…</p>
-        ) : reportingUnavailable ? (
+        ) : founderProductionsQ.isError ? (
           <p role="alert" className="rounded-sm border border-line px-4 py-5 text-sm text-accent">
             Workflow records could not be verified. Refresh to retry; no completion status is assumed.
           </p>
@@ -268,19 +255,33 @@ function DashboardBody() {
             {founderProductions.map((item) => (
               <article key={item.key} className="rounded-sm border border-line p-4">
                 <h4 className="font-semibold">{item.label}</h4>
-                {item.record ? (
+                {item.matchStatus === "found" && item.record ? (
                   <>
                     <p className="mt-3 text-xs uppercase tracking-widest text-muted">Current workflow stage</p>
                     <p className="mt-1 text-sm font-semibold text-accent">
                       {item.record.status.replaceAll("_", " ")}
                     </p>
                     <p className="mt-2 break-all font-mono text-[10px] text-muted">Record: {item.record.id}</p>
+                    <p className="mt-2 text-sm text-muted">
+                      Creator / Producer: {item.record.ownerDisplayName || item.record.ownerOrganizationName || "Not available"}
+                    </p>
+                    {item.record.credits.length > 0 ? (
+                      <ul className="mt-2 space-y-1 text-xs text-muted">
+                        {item.record.credits.slice(0, 4).map((credit, index) => (
+                          <li key={`${credit.role}-${credit.name}-${index}`}>{credit.role}: {credit.name}</li>
+                        ))}
+                      </ul>
+                    ) : null}
                   </>
+                ) : item.matchStatus === "ambiguous" ? (
+                  <p className="mt-3 text-sm text-accent">
+                    Multiple matching records found ({item.matchCount}). Manual record reconciliation is required; no record was selected.
+                  </p>
                 ) : (
-                  <p className="mt-3 text-sm text-muted">No matching canonical Bridge title record found.</p>
+                  <p className="mt-3 text-sm text-muted">No exact canonical Bridge title record found.</p>
                 )}
                 <Link to="/workspace" className="mt-4 inline-flex text-xs font-semibold text-accent hover:underline">
-                  Open workflow record →
+                  Open title workspace →
                 </Link>
               </article>
             ))}
