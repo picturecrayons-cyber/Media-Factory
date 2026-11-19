@@ -7,6 +7,12 @@ import { requireVerifiedActor } from "./session";
 import { loadTitle } from "./titles";
 import { writeAudit } from "./audit";
 import { assertNotDevUser } from "./guards";
+import {
+  canCreateOwnershipClaim,
+  canTriageOwnershipClaim,
+  canLegallyReviewOwnershipClaim,
+  canReadOwnershipClaim,
+} from "./ownership-claims-policy";
 
 const EVIDENCE_CATEGORIES = [
   "SIGNED_OWNERSHIP_DECLARATION",
@@ -75,19 +81,19 @@ function iso(value: string | Date): string {
 }
 
 function assertCreatorClaimant(actor: Awaited<ReturnType<typeof requireVerifiedActor>>) {
-  if (!actor.emailVerified || actor.accountType !== "independent_creator" || actor.internalRole !== null) {
+  if (!canCreateOwnershipClaim(actor)) {
     throw new Error("Only a verified independent Creator account can submit an ownership claim.");
   }
 }
 
 function assertSuperAdmin(actor: Awaited<ReturnType<typeof requireVerifiedActor>>) {
-  if (!actor.emailVerified || actor.internalRole !== "super_admin") {
+  if (!canTriageOwnershipClaim(actor)) {
     throw new Error("Verified Super Admin access required.");
   }
 }
 
 function assertLegalReviewer(actor: Awaited<ReturnType<typeof requireVerifiedActor>>) {
-  if (!actor.emailVerified || actor.internalRole !== "legal_reviewer") {
+  if (!canLegallyReviewOwnershipClaim(actor)) {
     throw new Error("Verified Legal Reviewer access required.");
   }
 }
@@ -402,7 +408,7 @@ export const listOwnershipClaimsForReview = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
-    if (actor.internalRole !== "super_admin" && actor.internalRole !== "legal_reviewer") {
+    if (!canTriageOwnershipClaim(actor) && !canLegallyReviewOwnershipClaim(actor)) {
       throw new Error("Ownership evidence review access required.");
     }
     const sql = await getSql();
@@ -497,11 +503,10 @@ export const requestOwnershipClaimEvidenceDownload = createServerFn({ method: "P
     `;
     const evidence = rows[0];
     if (!evidence || evidence.status !== "VERIFIED") throw new Error("Evidence not found.");
-    const claimant = evidence.claimant_user_id === actor.userId &&
-      actor.accountType === "independent_creator" &&
-      actor.internalRole === null;
-    const reviewer = actor.internalRole === "super_admin" || actor.internalRole === "legal_reviewer";
-    if (!claimant && !reviewer) throw new Error("Not found.");
+    if (!canReadOwnershipClaim(actor, {
+      claimantUserId: evidence.claimant_user_id,
+      status: "VERIFIED",
+    })) throw new Error("Not found.");
     const { signDownload } = await import("./oci-object-storage.server");
     const signed = await signDownload({ key: evidence.object_key, expiresIn: 300 });
     await writeAudit({
