@@ -31,7 +31,11 @@ function toLocalDateTimeInput(value: Date) {
   const local = new Date(value.getTime() - value.getTimezoneOffset() * 60_000);
   return local.toISOString().slice(0, 16);
 }
-export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: BridgeActor }) {
+export function WorkflowDesk({ title, actor, qcSubmissionReady = false }: {
+  title: BridgeTitle;
+  actor: BridgeActor;
+  qcSubmissionReady?: boolean;
+}) {
   const [stage, setStage] = useState<(typeof stages)[number]>("Prepare");
   const [settlementRef, setSettlementRef] = useState("");
   const [invoiceRef, setInvoiceRef] = useState("");
@@ -217,8 +221,14 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
                                 : "QC_REVIEW",
                         },
                       }),
+                    title.status === "PREPARING" && !qcSubmissionReady,
                   )
                 : null}
+              {title.status === "PREPARING" && !qcSubmissionReady ? (
+                <p role="status" className="rounded-lg border border-amber-500/40 p-3 text-sm text-muted">
+                  QC submission is blocked. Bridge needs a storage-verified main-film master and verified artwork linked to this exact title.
+                </p>
+              ) : null}
               {title.status === "QC_REVIEW" && hasPermission(actor, "title.qc_review") ? (
                 <>
                   {input(
