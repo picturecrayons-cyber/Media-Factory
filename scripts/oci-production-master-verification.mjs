@@ -46,9 +46,10 @@ const report = {
 try {
   const client = await pool.connect();
   let candidates;
+  let titleRows;
   try {
     await client.query("BEGIN READ ONLY");
-    const titleRows = await client.query(
+    titleRows = await client.query(
       `SELECT id::text AS id, name, status, owner_user_id::text AS owner_user_id, master_key
          FROM public.bridge_titles
         WHERE id::text = ANY($1::text[])
