@@ -61,6 +61,7 @@ type ClaimRow = {
   updated_at: string | Date;
   title_name?: string;
   title_status?: string;
+  declaration_text?: string;
   claimant_display_name?: string | null;
 };
 
