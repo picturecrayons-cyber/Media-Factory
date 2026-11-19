@@ -1,0 +1,56 @@
+name: Bridge Production OCI Master Verification
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test-guards:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+      - run: npm ci
+      - name: Test Production OCI verification guards
+        run: node --test scripts/oci-production-master-verification.test.mjs
+
+  verify-production-masters:
+    if: github.event_name == 'workflow_dispatch'
+    needs: test-guards
+    # Configure this GitHub Environment with required reviewers and PRODUCTION_* secrets.
+    # This job performs database reads and OCI HEAD requests only; it does not write either system.
+    environment: bridge-production-readonly
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+      - run: npm ci
+      - name: Verify existing Production master objects (read-only)
+        env:
+          SUPABASE_URL: ${{ secrets.PRODUCTION_SUPABASE_URL }}
+          DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+          OCI_TENANCY_OCID: ${{ secrets.PRODUCTION_OCI_TENANCY_OCID }}
+          OCI_USER_OCID: ${{ secrets.PRODUCTION_OCI_USER_OCID }}
+          OCI_FINGERPRINT: ${{ secrets.PRODUCTION_OCI_FINGERPRINT }}
+          OCI_PRIVATE_KEY: ${{ secrets.PRODUCTION_OCI_PRIVATE_KEY }}
+          OCI_REGION: ap-mumbai-1
+          OCI_NAMESPACE: ${{ secrets.PRODUCTION_OCI_NAMESPACE }}
+          OCI_BUCKET_NAME: bucket-20260526-1544
+        run: node --experimental-strip-types scripts/oci-production-master-verification.mjs
+      - name: Upload verification report
+        if: always() && hashFiles('oci-production-master-verification-report.json') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: bridge-production-oci-master-verification
+          path: oci-production-master-verification-report.json
+          retention-days: 14
