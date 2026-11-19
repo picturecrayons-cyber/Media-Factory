@@ -432,12 +432,14 @@ export const listCreatorAssetRegister = createServerFn({ method: "GET" })
       content_type: string | null;
       byte_size: number | string | null;
       created_by: string | null;
+      owner_user_id: string;
       created_at: string | Date;
     }>`
       select
         a.id,
         a.title_id,
         t.name as title_name,
+        t.owner_user_id,
         a.kind,
         a.content_type,
         a.byte_size,
@@ -452,7 +454,7 @@ export const listCreatorAssetRegister = createServerFn({ method: "GET" })
     return {
       assets: rows
         .filter((row) => canListCreatorAssetsForTitle(actor, {
-          ownerUserId: actor.userId,
+          ownerUserId: row.owner_user_id,
           status: "RIGHTS_REVIEW",
         }))
         .map((row) => ({
