@@ -36,10 +36,11 @@ export function StudioMemberDesk() {
   if (membersQuery.isPending) return <p className="text-sm text-muted">Loading verified Studio members…</p>;
   if (membersQuery.isError || !membersQuery.data) return <p role="alert" className="text-sm text-muted">Studio membership data is unavailable for this account.</p>;
   const { members, currentUserId, managerRole } = membersQuery.data;
+  const canManage = managerRole === "owner" || managerRole === "admin";
   const activeAdmins = members.filter((m) => m.membershipRole === "admin" && m.status === "active" && m.userId !== currentUserId);
 
   function controls(member: StudioMember) {
-    const locked = member.membershipRole === "owner" || member.userId === currentUserId || member.status === "removed" || update.isPending;
+    const locked = !canManage || member.membershipRole === "owner" || member.userId === currentUserId || member.status === "removed" || update.isPending;
     return <div className="flex flex-wrap gap-2">
       <select aria-label={`Role for ${member.displayName}`} className="rounded-sm border border-line bg-bg px-2 py-1 text-xs" value={member.membershipRole} disabled={locked || (managerRole !== "owner" && member.membershipRole === "admin")} onChange={(e) => update.mutate({ memberUserId: member.userId, membershipRole: e.target.value as "admin" | "producer" | "dit" | "member", status: member.status as "active" | "suspended" | "removed" })}>
         {managerRole === "owner" ? <option value="admin">Admin</option> : null}
@@ -55,7 +56,7 @@ export function StudioMemberDesk() {
     <div className="overflow-x-auto rounded-sm border border-line">
       <table className="w-full min-w-[760px] text-left text-sm">
         <thead><tr className="border-b border-line text-xs text-muted"><th className="px-3 py-2">Member</th><th className="px-3 py-2">Email</th><th className="px-3 py-2">Role / status</th><th className="px-3 py-2">Manage</th></tr></thead>
-        <tbody>{members.map((m) => <tr key={m.userId} className="border-b border-line/70"><td className="px-3 py-3">{m.displayName || m.userId}</td><td className="px-3 py-3">{m.email}</td><td className="px-3 py-3">{m.membershipRole} · {m.status}</td><td className="px-3 py-3">{controls(m)}</td></tr>)}</tbody>
+        <tbody>{members.map((m) => <tr key={m.userId} className="border-b border-line/70"><td className="px-3 py-3">{m.displayName || m.userId}</td><td className="px-3 py-3">{m.email}</td><td className="px-3 py-3">{m.membershipRole} · {m.status}</td><td className="px-3 py-3">{canManage ? controls(m) : <span className="text-xs text-muted">View only</span>}</td></tr>)}</tbody>
       </table>
     </div>
     {update.isError ? <p role="alert" className="text-sm text-red-600">{update.error.message}</p> : null}
