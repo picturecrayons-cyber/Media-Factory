@@ -6,7 +6,7 @@ import { getSql } from "@/lib/db";
 import { assertNotDevUser } from "./guards";
 import { requireVerifiedActor } from "./session";
 import { loadTitle } from "./titles";
-import { canReadTitle, canOperateOnTitle, hasPermission } from "./rbac";
+import { canOperateOnTitle, hasPermission } from "./rbac";
 import { writeAudit } from "./audit";
 import { sameOwner, canDownloadCreatorDocument, canManageStudioDocuments, canReviewTitleDocuments } from "./creator-document-policy";
 
@@ -240,7 +240,23 @@ export const listTitleDocumentEvidence = createServerFn({ method: "GET" })
     const actor = await requireVerifiedActor(context.userId);
     assertDocumentManagementRole(actor);
     const title = await loadTitle(data.titleId);
-    if (!title || !canReadTitle(actor, title)) throw new Error("Not found");
+    if (!title) throw new Error("Not found");
+    const ownerAccess = canOperateOnTitle(actor, title, "title.update_own");
+    const isSuperAdmin = actor.internalRole === "super_admin";
+    let reviewerAccess = false;
+    if (actor.internalRole === "legal_reviewer" && hasPermission(actor, "title.rights_review")) {
+      const sql = await getSql();
+      const assignments = await sql<{ allowed: boolean }>`
+        select exists (
+          select 1 from bridge_title_document_review_assignments
+          where title_id=${title.id}
+            and reviewer_user_id=${actor.userId}
+            and status='ACTIVE'
+        ) as allowed
+      `;
+      reviewerAccess = Boolean(assignments[0]?.allowed);
+    }
+    if (!ownerAccess && !reviewerAccess && !isSuperAdmin) throw new Error("Not found");
     const sql = await getSql();
     const rows = await sql<{
       id: string; document_id: string; evidence_type: string; file_name: string;
