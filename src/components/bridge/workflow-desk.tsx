@@ -8,6 +8,7 @@ import {
   reviewTitleWorkflow,
 } from "@/lib/bridge/workflow";
 import { advanceTitle } from "@/lib/bridge/titles";
+import { MALAYALAKKARA_RESIDENCY_ID, submitMalayalakkaraConditionalRequest } from "@/lib/bridge/conditional-submission";
 import {
   authorizeLoopPublication,
   getLoopPublication,
@@ -22,6 +23,7 @@ import type { BridgeTitle } from "@/lib/bridge/types";
 const stages = ["Prepare", "Business", "Distribution", "Revenue"] as const;
 export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: BridgeActor }) {
   const [stage, setStage] = useState<(typeof stages)[number]>("Prepare");
+  const [conditionalSubmissionStatus, setConditionalSubmissionStatus] = useState("");
   const [settlementRef, setSettlementRef] = useState("");
   const [invoiceRef, setInvoiceRef] = useState("");
   const [statementRef, setStatementRef] = useState("");
@@ -141,6 +143,21 @@ export function WorkflowDesk({ title, actor }: { title: BridgeTitle; actor: Brid
           </button>
         ))}
       </nav>
+      {title.id === MALAYALAKKARA_RESIDENCY_ID && canOperateOnTitle(actor, title, "title.update_own") ? (
+        <div className="rounded-xl border border-line p-3 space-y-2">
+          <h3 className="text-sm font-semibold">One-time conditional submission</h3>
+          <p className="text-xs text-muted">Submission only. Rights remain unapproved; sublicensing and publication remain disabled pending independent Legal verification.</p>
+          {conditionalSubmissionStatus ? (
+            <p role="status" className="text-sm">{conditionalSubmissionStatus}</p>
+          ) : button("Submit for Legal Verification", async () => {
+              const result = await submitMalayalakkaraConditionalRequest({
+                data: { titleId: MALAYALAKKARA_RESIDENCY_ID, confirmation: "CONDITIONAL_SUBMISSION_ONLY" },
+              });
+              setConditionalSubmissionStatus(result.status);
+              return result;
+            })}
+        </div>
+      ) : null}
       {error ? (
         <p role="alert" className="text-sm text-red-500">
           {error}
