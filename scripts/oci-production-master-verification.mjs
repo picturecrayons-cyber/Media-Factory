@@ -3,7 +3,7 @@ import { writeFile } from "node:fs/promises";
 import pg from "pg";
 import { verifyObject } from "../src/lib/bridge/oci-object-storage.server.ts";
 import {
-  assertProductionDatabaseTarget,
+  createGuardedProductionPool,
   compareObjectSizes,
   isCanonicalMasterVerified,
   classifyObjectError,
@@ -25,18 +25,22 @@ function required(name) {
 
 const supabaseUrl = required("SUPABASE_URL");
 const databaseUrl = required("DATABASE_URL");
-assertProductionDatabaseTarget(supabaseUrl, databaseUrl, EXPECTED_PROJECT_REF);
 assert.equal(process.env.OCI_BUCKET_NAME, EXPECTED_BUCKET, "Unexpected OCI bucket; refusing to continue");
 assert.equal(process.env.OCI_REGION, EXPECTED_REGION, "Unexpected OCI region; refusing to continue");
 
 const { Pool } = pg;
-const pool = new Pool({
-  connectionString: databaseUrl,
-  max: 1,
-  connectionTimeoutMillis: 15000,
-  idleTimeoutMillis: 5000,
-  application_name: "bridge-production-readonly-oci-master-verification",
-});
+const pool = createGuardedProductionPool(
+  Pool,
+  supabaseUrl,
+  databaseUrl,
+  EXPECTED_PROJECT_REF,
+  {
+    max: 1,
+    connectionTimeoutMillis: 15000,
+    idleTimeoutMillis: 5000,
+    application_name: "bridge-production-readonly-oci-master-verification",
+  },
+);
 
 const report = {
   generatedAt: new Date().toISOString(),
