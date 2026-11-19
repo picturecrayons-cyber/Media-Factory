@@ -67,10 +67,10 @@ test("public Loop catalog never exposes raw OCI playback keys", () => {
 });
 
 test("TVOD capture binds one provider payment ID atomically to the persisted order", () => {
-  assert.match(webhook, /provider_payment_id\\.is\\.null,provider_payment_id\\.eq\.\\$\\{payment\.id\\}/);
+  assert.ok(webhook.includes('.or(`provider_payment_id.is.null,provider_payment_id.eq.${payment.id}`)'));
   assert.match(webhook, /Loop TVOD captured payment could not be persisted/);
 });
 test("TVOD refund webhook fails closed when payment or refund identity is missing", () => {
-  assert.match(webhook, /!paymentId \\|\\| !refundId/);
+  assert.ok(webhook.includes("if (!paymentId || !refundId)"));
   assert.match(webhook, /Refund event is missing required payment_id or refund id/);
 });
