@@ -45,16 +45,16 @@ test("TVOD fulfillment fails closed on revoked publication, price mismatch and d
 });
 
 test("verified Loop refunds are idempotent, cumulative and revoke playback only on full refund", () => {
-  assert.match(webhook, /eventName === "refund\\.processed"/);
+  assert.match(webhook, /eventName === "refund\.processed"/);
   assert.match(webhook, /loop_refund_captured_rental/);
   assert.match(webhook, /p_refund_amount_paise: refundAmountPaise/);
   assert.match(webhook, /Loop TVOD refund order could not be reconciled/);
-  assert.match(migration, /create table if not exists public\\.loop_tvod_refunds/);
-  assert.match(migration, /sum\\(amount_paise\\)/);
+  assert.match(migration, /create table if not exists public\.loop_tvod_refunds/);
+  assert.match(migration, /sum\(amount_paise\)/);
   assert.match(migration, /fully_refunded/);
   assert.match(migration, /refund_before_fulfillment/);
   assert.match(migration, /status='REFUNDED'/);
-  assert.doesNotMatch(migration, /drop function if exists public\\.loop_refund_captured_rental\\(text,text\\)/);
+  assert.doesNotMatch(migration, /drop function if exists public\.loop_refund_captured_rental\(text,text\)/);
 });
 
 test("public Loop catalog never exposes raw OCI playback keys", () => {
