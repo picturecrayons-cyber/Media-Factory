@@ -18,13 +18,16 @@ function harness(
     curation_status: "APPROVED",
     delivery_status: "READY",
   },
+  legalReviewerRole = "legal_reviewer",
+  legalReviewerUserId = "independent-reviewer",
+  titleStatus = "LICENSED",
 ) {
   const writes: { query: string; values: unknown[] }[] = [];
   const title = {
     id: "title-1",
     slug: "film",
     name: "Film",
-    status: "LICENSED",
+    status: titleStatus,
     language: "Malayalam",
     master_key: "sealed/master",
     poster_key: "sealed/poster",
@@ -37,7 +40,14 @@ function harness(
         { evidence: [{ commercialTerms: { rightsOwnerSharePct: 80, distributorSharePct: 20 } }] },
       ];
     if (query.includes("from bridge_rights_grants")) return grants;
-    if (query.includes("as qc_ok")) return [{ qc_ok: true, legal_ok: true }];
+    if (query.includes("as qc_ok")) {
+      return [{
+        qc_ok: true,
+        legal_ok:
+          legalReviewerRole === "legal_reviewer" &&
+          legalReviewerUserId !== values[values.length - 1],
+      }];
+    }
     if (query.includes("from bridge_title_gate_certifications")) return [gates];
     if (query.includes("select id from bridge_titles")) return [title];
     if (query.includes("select id from loop_titles"))
@@ -83,7 +93,11 @@ function harness(
       return modules[name];
     },
   });
-  return { authorize: exports.authorizeLoopPublication, writes };
+  return {
+    authorize: exports.authorizeLoopPublication,
+    listReadiness: exports.listLoopPublicationReadiness,
+    writes,
+  };
 }
 
 const grant = {
@@ -151,4 +165,35 @@ test("publication requires all four release certifications", async () => {
     await assert.rejects(h.authorize({ context, data }), /Distribution Authorization Blocked/);
     assert.equal(h.writes.length, 0);
   }
+});
+
+
+test("publication readiness GET performs no database writes", async () => {
+  const h = harness([grant]);
+  await h.listReadiness({ context });
+  assert.equal(
+    h.writes.length,
+    0,
+    "read-only readiness inspection must not update publication or Loop title rows",
+  );
+});
+
+
+test("publication requires an independent verified Legal Reviewer", async () => {
+  const scenarios = [
+    { role: "super_admin", reviewer: "independent-reviewer" },
+    { role: "legal_reviewer", reviewer: "operator" },
+  ];
+  for (const scenario of scenarios) {
+    const h = harness([grant], true, false, undefined, scenario.role, scenario.reviewer);
+    await assert.rejects(h.authorize({ context, data }), /Distribution Authorization Blocked/);
+    assert.equal(h.writes.length, 0);
+  }
+});
+
+
+test("publication is blocked while title is only in negotiation", async () => {
+  const h = harness([grant], true, false, undefined, "legal_reviewer", "independent-reviewer", "IN_NEGOTIATION");
+  await assert.rejects(h.authorize({ context, data }), /Distribution Authorization Blocked/);
+  assert.equal(h.writes.length, 0);
 });

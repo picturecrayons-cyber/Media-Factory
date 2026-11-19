@@ -76,18 +76,25 @@ function iso(v: string | Date | null) {
   return v instanceof Date ? v.toISOString() : String(v);
 }
 
+function hasExpiredWindow(windowEnd: string | Date | null, now = new Date()) {
+  if (!windowEnd) return false;
+  const end = new Date(windowEnd);
+  return Number.isFinite(end.getTime()) && end.getTime() <= now.getTime();
+}
+
 /** Pre-flight verification checking rights, assets, QC and operator authority */
 export async function verifyDistributionPreflight(
   sql: Sql,
   titleId: string,
-  rightsRequest?: {
+  rightsRequest: {
     destination: "CRAYONS_LOOP";
     territories: string[];
     languages: string[];
     exploitationModels: string[];
     windowStart?: string | null;
     windowEnd?: string | null;
-  },
+  } | undefined,
+  finalApproverUserId: string,
 ) {
   const titles = await sql<{
     id: string;
@@ -128,7 +135,6 @@ export async function verifyDistributionPreflight(
   const validRightsStatuses = [
     "LICENSING_READY",
     "LIVE_FOR_BUYERS",
-    "IN_NEGOTIATION",
     "LICENSED",
     "DELIVERED",
   ];
@@ -163,8 +169,18 @@ export async function verifyDistributionPreflight(
     select exists(select 1 from bridge_qc_cases q where q.title_id=${titleId} and q.status='PASSED'
       and q.reviewer_findings->0->>'masterKey'=${title.master_key}
       and q.reviewer_findings->0->>'posterKey'=${title.poster_key}) as qc_ok,
-    exists(select 1 from bridge_legal_cases l where l.title_id=${titleId} and l.status='APPROVED'
-      and l.evidence->0->>'grantId'=${rightsGrantId}) as legal_ok
+    exists(
+      select 1
+      from bridge_legal_cases l
+      join bridge_profiles reviewer on reviewer.user_id = l.reviewed_by
+      where l.title_id=${titleId}
+        and l.status='APPROVED'
+        and l.evidence->0->>'grantId'=${rightsGrantId}
+        and l.reviewed_at is not null
+        and l.reviewed_by <> ${finalApproverUserId}
+        and reviewer.internal_role = 'legal_reviewer'
+        and reviewer.email_verified is true
+    ) as legal_ok
   `;
   if (!reviews[0]?.qc_ok) reasons.push("Recorded QC approval for the current assets is required.");
   if (!reviews[0]?.legal_ok) reasons.push("Recorded legal approval for this license is required.");
@@ -227,21 +243,8 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
     assertPermission(actor, "title.read_catalog");
     const sql = await getSql();
 
-    // Auto-reevaluate any expired distribution windows
-    await sql`
-      update bridge_loop_publications
-      set authorization_status = 'expired', updated_at = now()
-      where window_end is not null and window_end < now() and authorization_status in ('authorized', 'live')
-    `.catch(() => {});
-
-    await sql`
-      update loop_titles
-      set status = 'expired', published = false, listed = false, updated_at = now()
-      where bridge_title_id in (
-        select bridge_title_id from bridge_loop_publications where authorization_status = 'expired'
-      ) and published = true
-    `.catch(() => {});
-
+    // GET readiness is observational only. Expiry is projected in the response below;
+    // state transitions belong to an explicit audited mutation, never a read request.
     const rows = await sql<{
       id: string;
       slug: string;
@@ -303,6 +306,9 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
 
     return {
       titles: rows.map((r) => {
+        const expiredWindow = hasExpiredWindow(r.window_end);
+        const publicationExpired =
+          expiredWindow && ["AUTHORIZED", "LIVE"].includes((r.authorization_status || "").toUpperCase());
         const coveringGrant = r.loop_title_id
           ? findCoveringRightsGrant(
               grants.filter((grant) => grant.title_id === r.id),
@@ -331,7 +337,6 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
           [
             "LICENSING_READY",
             "LIVE_FOR_BUYERS",
-            "IN_NEGOTIATION",
             "LICENSED",
             "DELIVERED",
           ].includes(r.status) &&
@@ -351,7 +356,6 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
           ![
             "LICENSING_READY",
             "LIVE_FOR_BUYERS",
-            "IN_NEGOTIATION",
             "LICENSED",
             "DELIVERED",
           ].includes(r.status)
@@ -375,16 +379,17 @@ export const listLoopPublicationReadiness = createServerFn({ method: "GET" })
             ? {
                 destination: "CRAYONS_LOOP" as const,
                 loopTitleId: r.loop_title_id,
-                authorizationStatus: (r.authorization_status?.toUpperCase() ||
-                  "PENDING") as DistributionAuthorizationStatus,
+                authorizationStatus: (publicationExpired
+                  ? "EXPIRED"
+                  : r.authorization_status?.toUpperCase() || "PENDING") as DistributionAuthorizationStatus,
                 territories: r.territories || ["IN"],
                 languages: r.languages || [r.language],
                 exploitationModels: r.exploitation_models || ["SVOD"],
                 windowStart: iso(r.window_start),
                 windowEnd: iso(r.window_end),
-                loopStatus: r.loop_status,
-                listed: Boolean(r.listed),
-                published: Boolean(r.published),
+                loopStatus: publicationExpired ? "expired" : r.loop_status,
+                listed: publicationExpired ? false : Boolean(r.listed),
+                published: publicationExpired ? false : Boolean(r.published),
                 playbackPath: r.playback_path,
               }
             : null,
@@ -421,7 +426,7 @@ export const authorizeLoopPublication = createServerFn({ method: "POST" })
         exploitationModels: data.exploitationModels,
         windowStart: data.windowStart,
         windowEnd: data.windowEnd,
-      });
+      }, actor.userId);
       if (!preflight.eligible || !preflight.title) {
         throw new Error(`Distribution Authorization Blocked: ${preflight.reasons.join(" · ")}`);
       }
@@ -627,7 +632,7 @@ export const extendDistributionWindow = createServerFn({ method: "POST" })
         exploitationModels: publication.exploitation_models,
         windowStart: iso(publication.window_start),
         windowEnd: data.newWindowEnd,
-      });
+      }, actor.userId);
       if (!preflight.eligible) {
         throw new Error(`Distribution Extension Blocked: ${preflight.reasons.join(" · ")}`);
       }
