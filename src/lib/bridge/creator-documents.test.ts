@@ -26,7 +26,7 @@ test("Studio document access requires the exact active organization scope", () =
   assert.equal(sameOwner({ userId: "studio-member-a", accountType: "independent_creator", organizationId: "org-a" }, document), false);
 });
 
-test("only an active Studio owner can manage reusable organization documents", () => {
+test("only an active Studio owner or admin can manage reusable organization documents", () => {
   assert.equal(canManageStudioDocuments({ accountType: "studio", organizationId: "org-a", organizationRole: "owner" }), true);
   assert.equal(canManageStudioDocuments({ accountType: "studio", organizationId: "org-a", organizationRole: "admin" }), true);
   assert.equal(canManageStudioDocuments({ accountType: "studio", organizationId: "org-a", organizationRole: "member" }), false);
