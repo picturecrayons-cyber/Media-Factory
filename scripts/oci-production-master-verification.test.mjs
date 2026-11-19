@@ -46,6 +46,14 @@ test("rejects a direct-host username that is not the trusted Production role", (
   assert.equal(poolConstructed, false);
 });
 
+test("rejects case-changed direct database usernames", () => {
+  assert.throws(() => assertProductionDatabaseTarget(api, `postgresql://POSTGRES:secret@db.${ref}.supabase.co:5432/postgres`, ref), /host and username/);
+});
+
+test("rejects an unexpected direct database port", () => {
+  assert.throws(() => assertProductionDatabaseTarget(api, `postgresql://postgres:secret@db.${ref}.supabase.co:6543/postgres`, ref), /host and username/);
+});
+
 test("rejects a pooler username that does not pin the Production project", () => {
   assert.throws(() => assertProductionDatabaseTarget(api, "postgresql://postgres.otherproject:secret@aws-0-ap-south-1.pooler.supabase.com:6543/postgres", ref), /host and username/);
 });
