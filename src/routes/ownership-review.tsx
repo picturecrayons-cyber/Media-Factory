@@ -113,7 +113,12 @@ function OwnershipReviewBody({ actor }: { actor: BridgeActor }) {
               <div>
                 <p className="text-xs uppercase tracking-widest text-accent">{claim.status.replaceAll("_", " ")}</p>
                 <h2 className="mt-1 font-display text-xl font-semibold">{claim.titleName}</h2>
-                <p className="mt-1 text-sm text-muted">Claimant: {claim.claimantDisplayName || "Verified Creator account"} · Producer / entity: {claim.producerEntityName}</p>
+                <p className="mt-1 text-sm text-muted">Claimant: {claim.claimantDisplayName || "Creator account"} · Producer / entity: {claim.producerEntityName}</p>
+                <p className="mt-1 text-xs text-muted">
+                  {claim.claimantAccountType === "independent_creator" && claim.claimantEmailVerifiedAtSubmission
+                    ? "Independent Creator account · email verified at claim submission"
+                    : "Claimant account verification snapshot unavailable"}
+                </p>
               </div>
               <span className="rounded-full border border-line px-3 py-1 text-xs text-muted">{claim.titleStatus}</span>
             </div>
