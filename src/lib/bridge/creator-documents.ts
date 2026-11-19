@@ -126,6 +126,7 @@ export const listCreatorDocuments = createServerFn({ method: "GET" })
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
     assertCreatorOrStudio(actor);
+    assertDocumentManagementRole(actor);
     const sql = await getSql();
     const rows = await sql<{
       id: string; document_type: string; file_name: string; content_type: string;
@@ -237,6 +238,7 @@ export const listTitleDocumentEvidence = createServerFn({ method: "GET" })
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
+    assertDocumentManagementRole(actor);
     const title = await loadTitle(data.titleId);
     if (!title || !canReadTitle(actor, title)) throw new Error("Not found");
     const sql = await getSql();
@@ -259,6 +261,7 @@ export const requestCreatorDocumentDownload = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     assertNotDevUser(context.userId);
     const actor = await requireVerifiedActor(context.userId);
+    assertDocumentManagementRole(actor);
     const sql = await getSql();
     const rows = await sql<{
       id: string; owner_user_id: string; owner_account_type: string;
