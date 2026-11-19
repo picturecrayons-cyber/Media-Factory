@@ -6,7 +6,7 @@ create table if not exists public.bridge_creator_documents (
   id text primary key,
   owner_user_id text not null references public.bridge_profiles(user_id) on delete restrict,
   owner_account_type text not null check (owner_account_type in ('independent_creator', 'studio')),
-  owner_organization_id text,
+  owner_organization_id uuid references public.bridge_organizations(id) on delete restrict,
   document_type text not null check (document_type in (
     'FINISHED_FILM_AGREEMENT',
     'STORY_CONCEPT_AGREEMENT',
