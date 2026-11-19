@@ -346,8 +346,15 @@ export const updateStoryConceptCuration = createServerFn({ method: "POST" })
         }
       }
 
-      if (nextStatus === "APPROVED" && !current.rights_declaration_accepted_at) {
-        throw new Error("A verified rights declaration is required before Story / Concept approval");
+      const rightsDeclarationComplete = Boolean(
+        current.rights_declaration_accepted_at &&
+        current.rights_holder_name?.trim() &&
+        current.rights_basis &&
+        current.third_party_materials_included !== null &&
+        current.third_party_materials_included !== undefined
+      );
+      if (nextStatus === "APPROVED" && !rightsDeclarationComplete) {
+        throw new Error("A complete, accepted rights declaration is required before Story / Concept approval");
       }
 
       if (nextStatus === "INTRODUCED_TO_BUYERS" && !current.fee_certified_at) {
