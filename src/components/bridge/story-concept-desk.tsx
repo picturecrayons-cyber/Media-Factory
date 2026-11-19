@@ -13,9 +13,6 @@ const STATUS_LABEL: Record<string, string> = {
   APPROVED: "Approved",
   REJECTED: "Rejected",
   INTRODUCED_TO_BUYERS: "Introduced to buyers",
-  PENDING_REVIEW: "Pending review",
-  CHANGES_REQUESTED: "Changes requested",
-  BUYER_EVALUATION_APPROVED: "Buyer evaluation approved",
 };
 
 function statusLabel(value: string | null | undefined): string {
@@ -75,7 +72,8 @@ export function StoryConceptDesk() {
           {concepts.map((c) => {
             const noteValue = internalNotes[c.id] ?? c.admin_notes ?? "";
             const noteChanged = noteValue !== (c.admin_notes ?? "");
-            const canReview = ["PENDING", "UNDER_REVIEW", "PENDING_REVIEW", "CHANGES_REQUESTED"].includes(c.curation_status);
+            const canReview = ["PENDING", "UNDER_REVIEW"].includes(c.curation_status);
+            const rightsVerified = Boolean(c.rights_declaration_accepted_at);
             return (
               <article key={c.id} className="rounded-2xl border border-line bg-surface p-4 sm:p-5">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -153,38 +151,20 @@ export function StoryConceptDesk() {
                   >
                     Save internal note
                   </Button>
-                  {canReview && (c.curation_status === "PENDING" || c.curation_status === "PENDING_REVIEW") ? (
+                  {c.curation_status === "PENDING" ? (
                     <Button
                       size="sm"
                       disabled={update.isPending}
-                      onClick={() => update.mutate({ id: c.id, status: c.curation_status === "PENDING" ? "UNDER_REVIEW" : "UNDER_REVIEW" })}
+                      onClick={() => update.mutate({ id: c.id, status: "UNDER_REVIEW" })}
                     >
                       Start review
                     </Button>
                   ) : null}
-                  {c.curation_status === "CHANGES_REQUESTED" ? (
+                  {canReview ? (
                     <>
                       <Button
                         size="sm"
-                        disabled={update.isPending}
-                        onClick={() => update.mutate({ id: c.id, status: "PENDING_REVIEW", adminNotes: noteValue.trim() || undefined })}
-                      >
-                        Reopen review
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={update.isPending}
-                        onClick={() => update.mutate({ id: c.id, status: "REJECTED", adminNotes: noteValue.trim() || undefined })}
-                      >
-                        Reject
-                      </Button>
-                    </>
-                  ) : canReview ? (
-                    <>
-                      <Button
-                        size="sm"
-                        disabled={update.isPending}
+                        disabled={update.isPending || !rightsVerified}
                         onClick={() => update.mutate({ id: c.id, status: "APPROVED", adminNotes: noteValue.trim() || undefined })}
                       >
                         Approve
@@ -193,19 +173,16 @@ export function StoryConceptDesk() {
                         size="sm"
                         variant="outline"
                         disabled={update.isPending}
-                        onClick={() => update.mutate({ id: c.id, status: "CHANGES_REQUESTED", adminNotes: noteValue.trim() || undefined })}
-                      >
-                        Request changes
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={update.isPending}
                         onClick={() => update.mutate({ id: c.id, status: "REJECTED", adminNotes: noteValue.trim() || undefined })}
                       >
                         Reject
                       </Button>
                     </>
+                  ) : null}
+                  {!rightsVerified && canReview ? (
+                    <p className="self-center text-xs text-accent">
+                      Approval locked: rights declaration is not verified.
+                    </p>
                   ) : null}
                   {c.curation_status === "APPROVED" && !c.fee_certified_at ? (
                     <p className="self-center text-xs text-muted">
