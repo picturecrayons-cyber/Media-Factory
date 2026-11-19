@@ -313,9 +313,6 @@ export const updateStoryConceptCuration = createServerFn({ method: "POST" })
         "APPROVED",
         "REJECTED",
         "INTRODUCED_TO_BUYERS",
-        "PENDING_REVIEW",
-        "CHANGES_REQUESTED",
-        "BUYER_EVALUATION_APPROVED",
       ]).optional(),
       adminNotes: z.string().max(2000).optional(),
     }).refine((value) => value.status !== undefined || value.adminNotes !== undefined, {
@@ -330,9 +327,12 @@ export const updateStoryConceptCuration = createServerFn({ method: "POST" })
     const sql = await getSql();
     return sql.transaction(async (tx) => {
       const existing = await tx<ConceptRow>`
-        select * from bridge_story_concept_submissions
-        where id = ${data.id}
-        for update
+        select c.*
+        from bridge_story_concept_submissions c
+        join bridge_titles t on t.id = c.title_id
+        where c.id = ${data.id}
+          and t.submission_type = 'story_concept'
+        for update of c
       `;
       const current = existing[0];
       if (!current) throw new Error("Not found");
@@ -346,10 +346,11 @@ export const updateStoryConceptCuration = createServerFn({ method: "POST" })
         }
       }
 
-      if (
-        (nextStatus === "INTRODUCED_TO_BUYERS" || nextStatus === "BUYER_EVALUATION_APPROVED") &&
-        !current.fee_certified_at
-      ) {
+      if (nextStatus === "APPROVED" && !current.rights_declaration_accepted_at) {
+        throw new Error("A verified rights declaration is required before Story / Concept approval");
+      }
+
+      if (nextStatus === "INTRODUCED_TO_BUYERS" && !current.fee_certified_at) {
         throw new Error("Fee certification is required before buyer / investor evaluation can be unlocked");
       }
 
@@ -361,17 +362,9 @@ export const updateStoryConceptCuration = createServerFn({ method: "POST" })
             when ${data.adminNotes !== undefined} then ${data.adminNotes ?? null}
             else admin_notes
           end,
-          reviewed_by = case
-            when ${data.status !== undefined} then ${actor.userId}
-            else reviewed_by
-          end,
-          reviewed_at = case
-            when ${data.status !== undefined} then now()
-            else reviewed_at
-          end,
           updated_at = now(),
           introduced_to_buyers_at = case
-            when ${nextStatus} in ('INTRODUCED_TO_BUYERS', 'BUYER_EVALUATION_APPROVED')
+            when ${nextStatus} = 'INTRODUCED_TO_BUYERS'
               then coalesce(introduced_to_buyers_at, now())
             else introduced_to_buyers_at
           end
