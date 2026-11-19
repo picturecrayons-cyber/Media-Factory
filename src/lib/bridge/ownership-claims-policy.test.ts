@@ -42,6 +42,7 @@ test("Super Admin intake and Legal review remain separate roles", () => {
 test("claim evidence is visible only to the claimant, Super Admin or Legal Reviewer", () => {
   assert.equal(canReadOwnershipClaim(creator, claim), true);
   assert.equal(canReadOwnershipClaim(makeActor("other-creator"), claim), false);
+  assert.equal(canReadOwnershipClaim(makeActor("producer-profile", "buyer"), claim), false);
   assert.equal(canReadOwnershipClaim(makeActor("super", "independent_creator", "super_admin"), claim), true);
   assert.equal(canReadOwnershipClaim(makeActor("legal", "independent_creator", "legal_reviewer"), claim), true);
   assert.equal(canReadOwnershipClaim(makeActor("admin", "independent_creator", "admin"), claim), false);
