@@ -218,10 +218,11 @@ export async function signDownload(opts: { key: string; expiresIn?: number }) {
   return { url: signed.url, key: opts.key, bucket: signed.bucket, method: "GET" as const };
 }
 
-export async function verifyObject(key: string, expectedContentType?: string | null) {
+export async function verifyObject(key: string, expectedContentType?: string | null, bucket?: string) {
   const cfg = config();
   const namespace = await resolveNamespace(cfg);
-  const path = `/n/${encodeURIComponent(namespace)}/b/${encodeURIComponent(cfg.bucket)}/o/${encodedObjectName(key)}`;
+  const targetBucket = bucket?.trim() || cfg.bucket;
+  const path = `/n/${encodeURIComponent(namespace)}/b/${encodeURIComponent(targetBucket)}/o/${encodedObjectName(key)}`;
   const res = await signedFetch({ cfg, method: "HEAD", path });
   if (!res.ok) throw new Error(`OCI object verification failed (${res.status})`);
   const contentLength = Number(res.headers.get("content-length") || 0);
