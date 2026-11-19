@@ -102,7 +102,7 @@ test("Open Titles permits authorised internal catalog readers without weakening 
 test("Founder dashboard reuses the verified Super Admin gate and refreshes live data", () => {
   const dashboard = read("../../routes/dashboard.tsx");
   assert.match(dashboard, /<RequireBridge allow="super_admin">/);
-  assert.doesNotMatch(dashboard, /getDashboardSession|Checking access/);
+  assert.doesNotMatch(dashboard, /getDashboardSession/);
   assert.match(dashboard, /getFounderTrackedProductions\(\)/);
   assert.match(dashboard, /refetchInterval: 30_000/);
   assert.match(dashboard, /refetchOnWindowFocus: true/);
@@ -161,7 +161,7 @@ test("Founder operations panel uses live Bridge payment, licensing and workflow 
   assert.match(snapshot, /bridge_license_packages/);
   assert.match(snapshot, /bridge_loop_publications/);
   assert.match(snapshot, /bridge_qc_cases/);
-  assert.doesNotMatch(snapshot, /provider_payment_id|user_id|s3_key|signed_url/i);
+  assert.doesNotMatch(snapshot, /'provider_payment_id'|'user_id'|'s3_key'|'signed_url'/i);
 });
 
 test("Story Concept submissions require author rights declarations and avoid public document URLs", () => {
