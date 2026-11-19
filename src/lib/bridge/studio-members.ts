@@ -325,22 +325,24 @@ export const cancelStudioOwnershipTransfer = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     const { actor, sql, managerRole } = await requireStudioManager(context.userId);
     if (managerRole !== "owner") throw new Error("Only the current Studio owner can cancel an ownership transfer");
-    const rows = await sql`
-      update bridge_studio_ownership_transfers set status = 'CANCELLED', cancelled_at = now()
-      where id = ${data.transferId}::uuid
-        and organization_id = ${actor.organizationId}::uuid
-        and current_owner_user_id = ${actor.userId}
-        and status = 'PENDING'
-      returning id
-    `;
-    if (!rows.length) throw new Error("Pending Studio ownership transfer was not found");
-    await sql`
-      insert into bridge_audit_logs (actor_user_id, action, entity_type, entity_id, metadata)
-      values (
-        ${actor.userId}, 'studio.ownership_transfer_cancelled',
-        'bridge_studio_ownership_transfer', ${data.transferId},
-        ${JSON.stringify({ organizationId: actor.organizationId })}
-      )
-    `;
+    await sql.transaction(async (tx) => {
+      const rows = await tx`
+        update bridge_studio_ownership_transfers set status = 'CANCELLED', cancelled_at = now()
+        where id = ${data.transferId}::uuid
+          and organization_id = ${actor.organizationId}::uuid
+          and current_owner_user_id = ${actor.userId}
+          and status = 'PENDING'
+        returning id
+      `;
+      if (!rows.length) throw new Error("Pending Studio ownership transfer was not found");
+      await tx`
+        insert into bridge_audit_logs (actor_user_id, action, entity_type, entity_id, metadata)
+        values (
+          ${actor.userId}, 'studio.ownership_transfer_cancelled',
+          'bridge_studio_ownership_transfer', ${data.transferId},
+          ${JSON.stringify({ organizationId: actor.organizationId })}
+        )
+      `;
+    });
     return { transferId: data.transferId, status: "CANCELLED" as const };
   });
