@@ -5,27 +5,29 @@ import type { BridgeActor } from "@/lib/bridge/session";
 import { cn } from "@/lib/cn";
 
 type NavItem = { to: string; label: string };
+type Navigation = { primary: NavItem[]; more: NavItem[] };
 
-function navigationFor(actor: BridgeActor): NavItem[] {
+function navigationFor(actor: BridgeActor): Navigation {
   if (actor.internalRole) {
-    const items: NavItem[] = [
+    const primary: NavItem[] = [
       { to: "/internal", label: "Operations" },
       { to: "/workspace", label: "Titles" },
     ];
+    const more: NavItem[] = [{ to: "/account", label: "Account" }];
 
     if (actor.internalRole === "admin" || actor.internalRole === "super_admin") {
-      items.push(
+      more.unshift(
         { to: "/admin", label: "Admin" },
         { to: "/admin-cms", label: "Website CMS" },
       );
     }
 
     if (actor.internalRole === "super_admin") {
-      items.unshift({ to: "/dashboard", label: "Founder Centre" });
-      items.push({ to: "/cms", label: "Loop Gateway" });
+      primary.unshift({ to: "/dashboard", label: "Founder Centre" });
+      more.splice(2, 0, { to: "/cms", label: "Loop Gateway" });
     }
 
-    return [...items, { to: "/account", label: "Account" }];
+    return { primary, more };
   }
 
   const accountNavigation: Record<BridgeActor["accountType"], NavItem[]> = {
@@ -43,7 +45,10 @@ function navigationFor(actor: BridgeActor): NavItem[] {
     investor: [{ to: "/investor", label: "Portfolio" }],
   };
 
-  return [...accountNavigation[actor.accountType], { to: "/account", label: "Account" }];
+  return {
+    primary: accountNavigation[actor.accountType],
+    more: [{ to: "/account", label: "Account" }],
+  };
 }
 
 function NavLink({ item }: { item: NavItem }) {
@@ -55,6 +60,34 @@ function NavLink({ item }: { item: NavItem }) {
     >
       {item.label}
     </Link>
+  );
+}
+
+function NavigationLinks({ navigation }: { navigation: Navigation }) {
+  return (
+    <>
+      {navigation.primary.map((item) => <NavLink key={item.to} item={item} />)}
+      {navigation.more.length > 0 ? (
+        <details className="group relative shrink-0">
+          <summary className="bridge-nav-item flex cursor-pointer list-none items-center gap-2 whitespace-nowrap [&::-webkit-details-marker]:hidden">
+            More
+            <span aria-hidden="true" className="text-[10px] transition-transform group-open:rotate-180">▾</span>
+          </summary>
+          <div className="absolute right-0 top-full z-[60] mt-2 min-w-48 rounded-xl border border-line bg-surface p-2 shadow-xl">
+            {navigation.more.map((item) => (
+              <Link
+                key={item.to}
+                to={item.to}
+                className="block rounded-lg px-3 py-2.5 text-sm text-muted transition hover:bg-elevated hover:text-fg"
+                activeProps={{ className: "block rounded-lg bg-elevated px-3 py-2.5 text-sm font-semibold text-fg" }}
+              >
+                {item.label}
+              </Link>
+            ))}
+          </div>
+        </details>
+      ) : null}
+    </>
   );
 }
 
@@ -74,13 +107,14 @@ export function BrandMark({ className }: { className?: string }) {
 }
 
 export function BridgeShell({ actor, title, children }: { actor: BridgeActor; title: string; children: ReactNode }) {
+  const navigation = navigationFor(actor);
   return (
     <div className="min-h-screen bg-bg text-fg">
       <header className="sticky top-0 z-50 border-b border-line bg-surface/88 backdrop-blur-xl">
         <div className="mx-auto flex max-w-[1440px] items-center gap-6 px-4 py-3.5 sm:px-6 lg:px-8">
           <BrandMark />
-          <nav aria-label="Primary navigation" className="hidden flex-1 items-center gap-1 overflow-x-auto md:flex">
-            {navigationFor(actor).map((item) => <NavLink key={item.to} item={item} />)}
+          <nav aria-label="Primary navigation" className="hidden flex-1 items-center gap-1 overflow-visible md:flex">
+            <NavigationLinks navigation={navigation} />
           </nav>
           <a href="https://crayonsloop.in/" target="_blank" rel="noreferrer" className="hidden text-sm font-semibold text-muted transition hover:text-fg lg:inline">Open Crayons Loop ↗</a>
           <div className="ml-auto flex items-center gap-3">
@@ -88,8 +122,8 @@ export function BridgeShell({ actor, title, children }: { actor: BridgeActor; ti
             <UserButton />
           </div>
         </div>
-        <nav aria-label="Mobile primary navigation" className="flex gap-1 overflow-x-auto border-t border-line px-4 py-2 md:hidden">
-          {navigationFor(actor).map((item) => <NavLink key={item.to} item={item} />)}
+        <nav aria-label="Mobile primary navigation" className="flex gap-1 overflow-visible border-t border-line px-4 py-2 md:hidden">
+          <NavigationLinks navigation={navigation} />
         </nav>
       </header>
       <main className="mx-auto max-w-[1440px] px-4 py-6 sm:px-6 lg:px-8">
