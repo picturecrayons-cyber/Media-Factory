@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { assertProductionDatabaseTarget, compareObjectSizes, isCanonicalMasterVerified } from "./oci-production-master-verification-lib.mjs";
+import { assertProductionDatabaseTarget, compareObjectSizes, isCanonicalMasterVerified, classifyObjectError } from "./oci-production-master-verification-lib.mjs";
 
 const ref = "mlmgugivsyoxzdgwkbpu";
 const api = `https://${ref}.supabase.co`;
@@ -39,4 +39,12 @@ test("requires master_key to resolve to an existing size-matched candidate", () 
   assert.equal(isCanonicalMasterVerified(null, objects), false);
   assert.equal(isCanonicalMasterVerified("master-b", objects), false);
   assert.equal(isCanonicalMasterVerified("master-a", [{ objectKey: "master-a", result: "NOT_FOUND", sizeStatus: "MATCH" }]), false);
+});
+
+test("classifies an OCI 404 as a missing object", () => {
+  assert.equal(classifyObjectError("OCI object verification failed (404)"), "NOT_FOUND");
+});
+
+test("classifies non-404 OCI failures as errors", () => {
+  assert.equal(classifyObjectError("OCI object verification failed (401)"), "ERROR");
 });
