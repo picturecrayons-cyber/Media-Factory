@@ -78,8 +78,13 @@ export const listSuperAdminBuyerManagement = createServerFn({ method: "GET" })
     ]);
 
     const buyerIds = buyers.map((row) => row.user_id);
-    const membershipRows = buyerIds.length
-      ? await sql<{
+    let membershipRows: Array<{
+      organization_id: string; user_id: string; membership_role: string; status: string;
+      legal_name: string;
+    }> = [];
+    if (buyerIds.length) {
+      try {
+        membershipRows = await sql<{
           organization_id: string; user_id: string; membership_role: string; status: string;
           legal_name: string;
         }>`
@@ -88,8 +93,15 @@ export const listSuperAdminBuyerManagement = createServerFn({ method: "GET" })
           join public.bridge_organizations o on o.id=m.organization_id
           where m.user_id = any(${buyerIds}::text[])
           order by o.legal_name, m.user_id
-        `
-      : [];
+        `;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (!/42P01|does not exist|undefined table/i.test(message)) throw error;
+        // Buyer identities remain available when optional organization records have
+        // not been provisioned. Do not treat their free-text organization label as
+        // verified membership.
+      }
+    }
 
     const membershipByUser = new Map<string, typeof membershipRows>();
     for (const row of membershipRows) {
